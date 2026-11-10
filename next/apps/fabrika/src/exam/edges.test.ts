@@ -5,8 +5,8 @@ import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
-import {Effect, Exit} from "effect";
-import {afterAll, describe, expect, it} from "vitest";
+import {afterAll, describe, expect, it} from "@effect/vitest";
+import {Effect, Exit, Schema} from "effect";
 import {asks} from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
@@ -23,16 +23,37 @@ const run = (base: Record<string, string>, head: Record<string, string>) =>
 	Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
 
 describe("asks", () => {
-	it("lists one new edge comment in a product file, with its line, rules and reason", () => {
-		expect(run({[PRODUCT]: file()}, {[PRODUCT]: file(EDGE, CALL)})).toEqual([
-			{
-				path: PRODUCT,
-				line: 3,
-				rules: "fabrika/no-promises",
-				reason: "edge: a Durable Object answers a Promise",
-			},
-		]);
-	});
+	it.effect.prop(
+		"lists one new edge comment in a product file, with its line, rules and reason",
+		{
+			generated: Schema.NonEmptyString.check(
+				Schema.isPattern(/^[^\r\n]+$/),
+				Schema.makeFilter((s) => s.trim() === s),
+			),
+		},
+		({generated}) =>
+			Effect.forEach(
+				["a Durable Object answers a Promise", generated],
+				(value) =>
+					Effect.sync(() => {
+						expect(
+							run(
+								{[PRODUCT]: file()},
+								{[PRODUCT]: file(EDGE.replace("a Durable Object answers a Promise", value), CALL)},
+							),
+						).toEqual([
+							{
+								path: PRODUCT,
+								line: 3,
+								rules: "fabrika/no-promises",
+								reason: `edge: ${value}`,
+							},
+						]);
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
+	);
 
 	it("lists an edge comment in a new file", () => {
 		expect(run({}, {[PRODUCT]: file(EDGE, CALL)})).toHaveLength(1);

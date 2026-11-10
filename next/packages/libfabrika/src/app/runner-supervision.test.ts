@@ -34,10 +34,12 @@ import {
 } from "../coordination/process.test-support.ts";
 import {Activity, Down, ProcessEvent, Recipient} from "../coordination/process.ts";
 import {RecoveryStore} from "../coordination/recovery-store.ts";
+import {Recovery} from "../coordination/recovery.ts";
 import {Ledger, LedgerError} from "../data/ledger.ts";
 import {InputId, lineFor, valueFor} from "../data/log.ts";
 import {type Sql} from "../data/referee.ts";
 import {SpanSink} from "../data/sink.ts";
+import {processIds} from "../id.test-support.ts";
 import {
 	Alarm,
 	CheckedWriter,
@@ -46,6 +48,7 @@ import {
 	Recording,
 	WatcherManager,
 } from "./entry.ts";
+import {Refusal} from "./program.ts";
 import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const NAME = "counter:1";
@@ -98,11 +101,13 @@ const world = (
 	platformActivity = false,
 	wakeAt: number | null = null,
 	limits: Limits = {},
+	refusalReason = "bad_msg",
+	initialProcess = A,
 ) => {
 	const ledger = storage(),
 		state = storage(),
 		authority = storage();
-	const next = ids(...PIDS);
+	const next = ids(initialProcess, ...PIDS.filter((process) => process !== initialProcess));
 	const controls = {
 		throws: true,
 		savedThrows: false,
@@ -219,7 +224,8 @@ const world = (
 			state: {v: 1, schema: Model, upgrades: []},
 			msg: Msg,
 			view: {data: Model, select: (s: Model) => s},
-			refuse: (_s: Model, m: typeof Msg.Type) => (m.type === "refuse" ? {reason: "bad_msg"} : null),
+			refuse: (_s: Model, m: typeof Msg.Type) =>
+				m.type === "refuse" ? {reason: refusalReason} : null,
 			inputs: {
 				add: {_tag: "write", schema: Msg, description: "Add", personOnly},
 				poison: {_tag: "write", schema: Msg, description: "Poison", personOnly: false},
@@ -302,7 +308,7 @@ const world = (
 			}),
 		).pipe(Layer.provide(Mailbox.layer));
 		return runnerLayer(
-			{id: A, name: NAME, program: "counter", build: controls.build, owner: person},
+			{id: initialProcess, name: NAME, program: "counter", build: controls.build, owner: person},
 			{
 				policy: limits.policy ?? policy,
 				recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3},
@@ -318,7 +324,7 @@ const world = (
 			Layer.provideMerge(
 				Layer.mergeAll(
 					loader,
-					ProcessStore.layer(state.sql, {process: A, storage: activityStorage}),
+					ProcessStore.layer(state.sql, {process: initialProcess, storage: activityStorage}),
 					checked,
 					Layer.succeed(WatcherManager, {publish: () => Effect.void}),
 					Layer.succeed(Alarm, {
@@ -404,6 +410,95 @@ const recover = (w: ReturnType<typeof world>) =>
 		yield* TestClock.setTime(deadline!);
 		yield* ProgramRunner.use((r) => r.due(deadline!)).pipe(Effect.provide(w.layer()));
 	});
+
+describe("T337 down event identity, next/", () => {
+	const DownPolicy = Recovery.cases.down.mapFields(({_tag, process, ...fields}) => fields);
+	it.effect.prop(
+		"public down and saved Recovery.down share one policy-sensitive id through retry and reopen",
+		{process: processIds, down: DownPolicy},
+		({process, down}) =>
+			Effect.gen(function* () {
+				const publicId = (policy: typeof DownPolicy.Type) =>
+					Effect.gen(function* () {
+						const w = world(false, false, null, {}, "bad_msg", process);
+						yield* w.boot;
+						yield* ProcessManager.use((p) =>
+							Effect.gen(function* () {
+								yield* p.exit(process, policy.reason, from());
+								yield* p.down(process, policy, from());
+								yield* p.down(process, policy, from());
+							}),
+						).pipe(Effect.provide(w.manager()));
+						w.reopen();
+						yield* ProcessManager.use((p) => p.down(process, policy, from())).pipe(
+							Effect.provide(w.manager()),
+						);
+						const rows = w.ledger.rows().filter((row) => row._tag === "down");
+						expect(rows).toHaveLength(1);
+						return rows[0]!.id;
+					});
+				const expected = yield* publicId(down);
+				// Each changed field must change identity. This kills a process-only id plant.
+				const changed = yield* Effect.forEach(
+					[
+						{...down, reason: `${down.reason}x`},
+						{...down, crashes: down.crashes + 1},
+						{...down, until: down.until + 1},
+					],
+					publicId,
+					{concurrency: 1},
+				);
+				for (const id of changed) expect(id).not.toBe(expected);
+
+				const w = world(false, false, null, {}, "bad_msg", process);
+				yield* w.boot;
+				yield* ProcessManager.use((p) => p.exit(process, down.reason, from())).pipe(
+					Effect.provide(w.manager()),
+				);
+				const recovery = () => RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3});
+				yield* RecoveryStore.use((s) =>
+					s.save({
+						v: 1,
+						name: NAME,
+						policy,
+						seq: 0,
+						build: BUILD,
+						recovery: Recovery.cases.down.make({process, ...down}),
+						pending: {type: "down", process, from: from()},
+						attempt: null,
+						restarts: [],
+						observations: [],
+						receipts: [],
+					}),
+				).pipe(Effect.provide(recovery()));
+				// Lose the runner's answer after the real down append, then resume its saved action.
+				w.controls.cut = "after_down";
+				yield* ProgramRunner.use((r) => Effect.exit(r.open("first"))).pipe(
+					Effect.provide(w.layer()),
+				);
+				expect(w.controls.hits).toEqual(["after_down"]);
+				const first = w.ledger.rows().filter((row) => row._tag === "down");
+				w.reopen();
+				yield* ProgramRunner.use((r) => Effect.exit(r.open("retry"))).pipe(
+					Effect.provide(w.layer()),
+				);
+				w.reopen();
+				yield* ProgramRunner.use((r) => Effect.exit(r.open("reopen"))).pipe(
+					Effect.provide(w.layer()),
+				);
+				const retried = w.ledger.rows().filter((row) => row._tag === "down");
+				// Crossing callers on the same reopened store must also find that one event.
+				yield* ProcessManager.use((p) => p.down(process, down, from())).pipe(
+					Effect.provide(w.manager()),
+				);
+				expect(first).toHaveLength(1);
+				expect(retried).toEqual(first);
+				expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
+				expect(first[0]!.id).toBe(expected);
+			}),
+		{arbitrary: {seed: 119120, runs: 40}},
+	);
+});
 
 describe("P34 runner supervision", () => {
 	for (const pending of ["fresh", "saved retry"] as const) {
@@ -1208,126 +1303,146 @@ describe("P34 runner supervision", () => {
 		);
 	});
 
-	it.effect(
+	it.effect.prop(
 		"p80 bounded objects plant, keep every input in one row: a good step writes flat supervision bytes after 1 or 50 good letters without losing receipts",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				// Identify P11's tables before supervision creates any. Audit all other tables,
-				// whether recovery uses one JSON row or separate rows for letters and observations.
-				yield* ProcessStore.use((s) => s.load).pipe(Effect.provide(w.layer()));
-				const tables = () =>
-					w.state.sql.exec(
-						"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-					);
-				const processTables = new Set(tables().map((row) => String(row.name)));
-				const poison = w.input();
-				yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
-				w.reopen();
-				yield* recover(w);
-				const goodId = (n: number) => `good-${String(n).padStart(3, "0")}`;
-				const good = (n: number) =>
-					ProgramRunner.use((r) => r.msg(w.input(goodId(n), {type: "add", n: 1}))).pipe(
-						Effect.tap((answer) =>
-							Effect.sync(() => expect(answer).toMatchObject({_tag: "accepted", pos: n})),
-						),
-						Effect.provide(w.layer()),
-					);
-				yield* good(1);
-				const recoveryTables = tables().filter((row) => !processTables.has(String(row.name)));
-				expect(recoveryTables.length, "audit must cover real supervision storage").toBeGreaterThan(
-					0,
-				);
-				const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
-				w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
-				for (const [index, {name}] of recoveryTables.entries()) {
-					const table = quote(String(name));
-					const columns = w.state.sql.exec(`PRAGMA table_info(${table})`);
-					for (const event of ["INSERT", "UPDATE", "DELETE"]) {
-						const record = event === "DELETE" ? "OLD" : "NEW";
-						const bytes = columns
-							.map(({name}) => `coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`)
-							.join(" + ");
-						w.state.sql.exec(
-							`CREATE TEMP TRIGGER ${quote(`p34_write_${index}_${event}`)} AFTER ${event} ON ${table}
-							BEGIN INSERT INTO p34_supervision_writes (bytes) VALUES (${bytes}); END`,
-						);
-					}
-				}
-				const measure = (n: number) =>
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["poison", generated],
+				(value) =>
 					Effect.gen(function* () {
-						w.state.sql.exec("DELETE FROM p34_supervision_writes");
-						yield* good(n);
-						const [row] = w.state.sql.exec(
-							"SELECT coalesce(sum(bytes),0) AS bytes FROM p34_supervision_writes",
-						);
-						return Number(row?.bytes);
-					});
-				// Sum full row images written by SQL, not the difference in database size.
-				// A growing JSON row adds a constant size but rewrites all the older inputs.
-				const afterOne = yield* measure(2);
-				for (let n = 3; n <= 50; n++) yield* good(n);
-				const afterFifty = yield* measure(51);
+						const w = world();
+						yield* w.boot;
+						// Identify P11's tables before supervision creates any. Audit all other tables,
+						// whether recovery uses one JSON row or separate rows for letters and observations.
+						yield* ProcessStore.use((s) => s.load).pipe(Effect.provide(w.layer()));
+						const tables = () =>
+							w.state.sql.exec(
+								"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+							);
+						const processTables = new Set(tables().map((row) => String(row.name)));
+						const poison = w.input(value);
+						yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						yield* recover(w);
+						const goodId = (n: number) => `good-${String(n).padStart(3, "0")}`;
+						const good = (n: number) =>
+							ProgramRunner.use((r) => r.msg(w.input(goodId(n), {type: "add", n: 1}))).pipe(
+								Effect.tap((answer) =>
+									Effect.sync(() => expect(answer).toMatchObject({_tag: "accepted", pos: n})),
+								),
+								Effect.provide(w.layer()),
+							);
+						yield* good(1);
+						const recoveryTables = tables().filter((row) => !processTables.has(String(row.name)));
+						expect(
+							recoveryTables.length,
+							"audit must cover real supervision storage",
+						).toBeGreaterThan(0);
+						const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+						w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
+						for (const [index, {name}] of recoveryTables.entries()) {
+							const table = quote(String(name));
+							const columns = w.state.sql.exec(`PRAGMA table_info(${table})`);
+							for (const event of ["INSERT", "UPDATE", "DELETE"]) {
+								const record = event === "DELETE" ? "OLD" : "NEW";
+								const bytes = columns
+									.map(
+										({name}) =>
+											`coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`,
+									)
+									.join(" + ");
+								w.state.sql.exec(
+									`CREATE TEMP TRIGGER ${quote(`p34_write_${index}_${event}`)} AFTER ${event} ON ${table}
+							BEGIN INSERT INTO p34_supervision_writes (bytes) VALUES (${bytes}); END`,
+								);
+							}
+						}
+						const measure = (n: number) =>
+							Effect.gen(function* () {
+								w.state.sql.exec("DELETE FROM p34_supervision_writes");
+								yield* good(n);
+								const [row] = w.state.sql.exec(
+									"SELECT coalesce(sum(bytes),0) AS bytes FROM p34_supervision_writes",
+								);
+								return Number(row?.bytes);
+							});
+						// Sum full row images written by SQL, not the difference in database size.
+						// A growing JSON row adds a constant size but rewrites all the older inputs.
+						const afterOne = yield* measure(2);
+						for (let n = 3; n <= 50; n++) yield* good(n);
+						const afterFifty = yield* measure(51);
 
-				const recovery = () => RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3});
-				w.reopen();
-				yield* Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 2}))).toMatchObject({
-						_tag: "refused",
-						reason: "id_reused",
-					});
-					expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 1}))).toMatchObject({
-						_tag: "accepted",
-						pos: 1,
-					});
-				}).pipe(Effect.provide(w.layer()));
-				expect(
-					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
-				).toMatchObject({tries: 1, errors: ["TypeError"], result: null});
-				yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
-				w.reopen();
-				expect(
-					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
-				).toMatchObject({tries: 2, errors: ["TypeError", "RangeError"], result: null});
-				yield* recover(w);
-				expect(
-					yield* ProgramRunner.use((r) => r.msg(poison)).pipe(Effect.provide(w.layer())),
-				).toMatchObject({_tag: "refused", reason: "dead"});
-				w.reopen();
-				expect(
-					yield* RecoveryStore.use((s) => s.input(poison.id)).pipe(Effect.provide(recovery())),
-				).toEqual(poison);
-				expect(
-					yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(Effect.provide(recovery())),
-				).toMatchObject({
-					tries: 3,
-					errors: ["TypeError", "RangeError", "TypeError"],
-					result: {_tag: "refused", reason: "dead"},
-				});
-				yield* Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					expect(yield* r.msg(poison)).toMatchObject({_tag: "refused", reason: "dead"});
-					expect(
-						yield* r.msg({
-							...poison,
-							envelope: {...poison.envelope, input: {type: "poison", key: "changed"}},
-						}),
-					).toMatchObject({_tag: "refused", reason: "id_reused"});
-					expect(w.controls.steps).toEqual(["poison", "poison", "poison"]);
-					expect((yield* inbox).map((row) => row.id)).toEqual(
-						Array.from({length: 51}, (_, n) => goodId(n + 1)),
-					);
-					expect((yield* dead).map((row) => row.body)).toMatchObject([{m: poison.id, tries: 3}]);
-				}).pipe(Effect.provide(w.layer()));
-				// Fixed-width IDs and identical good bodies. Allow 256 bytes for decimal
-				// metadata gaining digits across all writes; never an allowance per old letter.
-				expect(
-					Math.abs(afterFifty - afterOne),
-					`supervision bytes per good step: after 1=${afterOne}, after 50=${afterFifty}`,
-				).toBeLessThanOrEqual(256);
-			}),
+						const recovery = () =>
+							RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3});
+						w.reopen();
+						yield* Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 2}))).toMatchObject({
+								_tag: "refused",
+								reason: "id_reused",
+							});
+							expect(yield* r.msg(w.input(goodId(1), {type: "add", n: 1}))).toMatchObject({
+								_tag: "accepted",
+								pos: 1,
+							});
+						}).pipe(Effect.provide(w.layer()));
+						expect(
+							yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(
+								Effect.provide(recovery()),
+							),
+						).toMatchObject({tries: 1, errors: ["TypeError"], result: null});
+						yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
+						w.reopen();
+						expect(
+							yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(
+								Effect.provide(recovery()),
+							),
+						).toMatchObject({tries: 2, errors: ["TypeError", "RangeError"], result: null});
+						yield* recover(w);
+						expect(
+							yield* ProgramRunner.use((r) => r.msg(poison)).pipe(Effect.provide(w.layer())),
+						).toMatchObject({_tag: "refused", reason: "dead"});
+						w.reopen();
+						expect(
+							yield* RecoveryStore.use((s) => s.input(poison.id)).pipe(Effect.provide(recovery())),
+						).toEqual(poison);
+						expect(
+							yield* RecoveryStore.use((s) => s.receipt(poison.id)).pipe(
+								Effect.provide(recovery()),
+							),
+						).toMatchObject({
+							tries: 3,
+							errors: ["TypeError", "RangeError", "TypeError"],
+							result: {_tag: "refused", reason: "dead"},
+						});
+						yield* Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(poison)).toMatchObject({_tag: "refused", reason: "dead"});
+							expect(
+								yield* r.msg({
+									...poison,
+									envelope: {...poison.envelope, input: {type: "poison", key: "changed"}},
+								}),
+							).toMatchObject({_tag: "refused", reason: "id_reused"});
+							expect(w.controls.steps).toEqual([value, value, value]);
+							expect((yield* inbox).map((row) => row.id)).toEqual(
+								Array.from({length: 51}, (_, n) => goodId(n + 1)),
+							);
+							expect((yield* dead).map((row) => row.body)).toMatchObject([
+								{m: poison.id, tries: 3},
+							]);
+						}).pipe(Effect.provide(w.layer()));
+						// Fixed-width IDs and identical good bodies. Allow 256 bytes for decimal
+						// metadata gaining digits across all writes; never an allowance per old letter.
+						expect(
+							Math.abs(afterFifty - afterOne),
+							`supervision bytes per good step: after 1=${afterOne}, after 50=${afterFifty}`,
+						).toBeLessThanOrEqual(256);
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect(
@@ -1384,87 +1499,115 @@ describe("P34 runner supervision", () => {
 			}),
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 plant, reset by process or allow try four: third throw records ordered original classes once",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				for (let n = 1; n <= 3; n++) {
-					yield* Effect.gen(function* () {
-						const r = yield* ProgramRunner;
-						const answer = yield* Effect.exit(r.msg(w.input()));
-						expect(answer).toMatchObject(
-							n < 3
-								? {_tag: "Failure"}
-								: {
-										_tag: "Success",
-										value: {_tag: "refused", reason: "dead"},
-									},
-						);
-					}).pipe(Effect.provide(w.layer()));
-					w.reopen();
-					if (n < 3) yield* recover(w);
-				}
-				yield* Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					expect(yield* dead).toMatchObject([
-						{
-							stream: `${W}/dead`,
-							body: {
-								tries: 3,
-								limit: 3,
-								m: "poison",
-								build: BUILD,
-								errors: ["TypeError", "RangeError", "TypeError"],
-							},
-						},
-					]);
-					expect(yield* r.msg(w.input())).toMatchObject({_tag: "refused", reason: "dead"});
-					expect(w.controls.steps).toEqual(["poison", "poison", "poison"]);
-					expect(yield* inbox).toEqual([]);
-					// The sender has stopped retrying. Read the original body through the real durable store.
-					const path = "../coordination/recovery-store.ts";
-					type Store = {input: (letter: string) => Effect.Effect<unknown, LedgerError>};
-					const {
-						RecoveryStore: S,
-					}: {
-						RecoveryStore: Context.Service<Store, Store> & {
-							layer: (sql: Sql, who: {name: string; capacity: number}) => LayerType.Layer<Store>;
-						};
-					} = yield* Effect.promise(() => import(path));
-					expect(
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["poison", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						for (let n = 1; n <= 3; n++) {
+							yield* Effect.gen(function* () {
+								const r = yield* ProgramRunner;
+								const answer = yield* Effect.exit(r.msg(w.input(value)));
+								expect(answer).toMatchObject(
+									n < 3
+										? {_tag: "Failure"}
+										: {
+												_tag: "Success",
+												value: {_tag: "refused", reason: "dead"},
+											},
+								);
+							}).pipe(Effect.provide(w.layer()));
+							w.reopen();
+							if (n < 3) yield* recover(w);
+						}
 						yield* Effect.gen(function* () {
-							return yield* (yield* S).input("poison");
-						}).pipe(Effect.provide(S.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3}))),
-					).toMatchObject({id: "poison", envelope: {input: {type: "poison", key: "poison"}}});
-				}).pipe(Effect.provide(w.layer()));
-			}),
+							const r = yield* ProgramRunner;
+							expect(yield* dead).toMatchObject([
+								{
+									stream: `${W}/dead`,
+									body: {
+										tries: 3,
+										limit: 3,
+										m: value,
+										build: BUILD,
+										errors: ["TypeError", "RangeError", "TypeError"],
+									},
+								},
+							]);
+							expect(yield* r.msg(w.input(value))).toMatchObject({
+								_tag: "refused",
+								reason: "dead",
+							});
+							expect(w.controls.steps).toEqual([value, value, value]);
+							expect(yield* inbox).toEqual([]);
+							// The sender has stopped retrying. Read the original body through the real durable store.
+							const path = "../coordination/recovery-store.ts";
+							type Store = {input: (letter: string) => Effect.Effect<unknown, LedgerError>};
+							const {
+								RecoveryStore: S,
+							}: {
+								RecoveryStore: Context.Service<Store, Store> & {
+									layer: (
+										sql: Sql,
+										who: {name: string; capacity: number},
+									) => LayerType.Layer<Store>;
+								};
+							} = yield* Effect.promise(() => import(path));
+							expect(
+								yield* Effect.gen(function* () {
+									return yield* (yield* S).input(value);
+								}).pipe(Effect.provide(S.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3}))),
+							).toMatchObject({id: value, envelope: {input: {type: "poison", key: value}}});
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 plant, global count or reset on unrelated mail: interleaved IDs keep independent counts",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				for (const id of ["a", "b", "a"]) {
-					yield* ProgramRunner.use((r) => failed(r.msg(w.input(id)))).pipe(
-						Effect.provide(w.layer()),
-					);
-					w.reopen();
-					yield* recover(w);
-					yield* ProgramRunner.use((r) =>
-						r.msg(w.input(`good-${id}-${w.controls.steps.length}`, {type: "add", n: 1})),
-					).pipe(Effect.provide(w.layer()));
-				}
-				yield* Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					expect(yield* r.msg(w.input("a"))).toMatchObject({_tag: "refused", reason: "dead"});
-					expect((yield* dead).map((row) => row.body)).toMatchObject([{m: "a", tries: 3}]);
-					expect(w.controls.steps.filter((id) => id === "b")).toHaveLength(1);
-				}).pipe(Effect.provide(w.layer()));
-			}),
+		{
+			generated: Schema.NonEmptyString.check(
+				Schema.isMaxLength(200),
+				Schema.makeFilter((s) => s !== "b" && !s.startsWith("good-")),
+			),
+		},
+		({generated}) =>
+			Effect.forEach(
+				["a", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						for (const id of [value, "b", value]) {
+							yield* ProgramRunner.use((r) => failed(r.msg(w.input(id)))).pipe(
+								Effect.provide(w.layer()),
+							);
+							w.reopen();
+							yield* recover(w);
+							yield* ProgramRunner.use((r) =>
+								r.msg(w.input(`good-${id}-${w.controls.steps.length}`, {type: "add", n: 1})),
+							).pipe(Effect.provide(w.layer()));
+						}
+						yield* Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							expect(yield* r.msg(w.input(value))).toMatchObject({
+								_tag: "refused",
+								reason: "dead",
+							});
+							expect((yield* dead).map((row) => row.body)).toMatchObject([{m: value, tries: 3}]);
+							expect(w.controls.steps.filter((id) => id === "b")).toHaveLength(1);
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect(
@@ -1492,81 +1635,102 @@ describe("P34 runner supervision", () => {
 			}),
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 plant, ignore invalid step output: malformed fresh data consumes the same three-attempt allowance",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				w.controls.invalid = true;
-				for (let n = 0; n < 3; n++) {
-					yield* Effect.gen(function* () {
-						const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input())));
-						if (n < 2) expect(Exit.isFailure(answer)).toBe(true);
-						else
-							expect(answer).toMatchObject({
-								_tag: "Success",
-								value: {_tag: "refused", reason: "dead"},
-							});
-						expect(yield* inbox).toEqual([]);
-					}).pipe(Effect.provide(w.layer()));
-					w.reopen();
-					if (n < 2) yield* recover(w);
-				}
-			}),
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["poison", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						w.controls.invalid = true;
+						for (let n = 0; n < 3; n++) {
+							yield* Effect.gen(function* () {
+								const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input(value))));
+								if (n < 2) expect(Exit.isFailure(answer)).toBe(true);
+								else
+									expect(answer).toMatchObject({
+										_tag: "Success",
+										value: {_tag: "refused", reason: "dead"},
+									});
+								expect(yield* inbox).toEqual([]);
+							}).pipe(Effect.provide(w.layer()));
+							w.reopen();
+							if (n < 2) yield* recover(w);
+						}
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 plant, count refusal or a failed Cmd as poison: only fresh preparation failures consume attempts",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				yield* Effect.gen(function* () {
-					const r = yield* ProgramRunner;
-					for (let n = 0; n < 4; n++)
-						expect(yield* r.msg(w.input("refusal", {type: "refuse"}))).toMatchObject({
-							_tag: "refused",
-							reason: "bad_msg",
-						});
-					yield* r.msg(w.input("work", {type: "work"}));
-					expect(yield* dead).toEqual([]);
-					expect((yield* lives).filter((row) => row._tag === "exited")).toEqual([]);
-					expect(w.controls.cmds).toBe(1);
-				}).pipe(Effect.provide(w.layer()));
-			}),
+		{generated: Refusal.fields.reason},
+		({generated}) =>
+			Effect.forEach(
+				["bad_msg", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world(false, false, null, {}, value);
+						yield* w.boot;
+						yield* Effect.gen(function* () {
+							const r = yield* ProgramRunner;
+							for (let n = 0; n < 4; n++)
+								expect(yield* r.msg(w.input("refusal", {type: "refuse"}))).toMatchObject({
+									_tag: "refused",
+									reason: value,
+								});
+							yield* r.msg(w.input("work", {type: "work"}));
+							expect(yield* dead).toEqual([]);
+							expect((yield* lives).filter((row) => row._tag === "exited")).toEqual([]);
+							expect(w.controls.cmds).toBe(1);
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 p55 plant, skip or dead-letter saved input: failure preserves the inbox and checkpoint",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				yield* ProgramRunner.use((r) => r.msg(w.input("good", {type: "add", n: 7}))).pipe(
-					Effect.provide(w.layer()),
-				);
-				let before: unknown;
-				yield* Effect.gen(function* () {
-					const saved = yield* ProcessStore.use((s) => s.load);
-					before = saved;
-					yield* accepted("saved-bad", {type: "add", n: 9}, saved);
-				}).pipe(Effect.provide(w.layer()));
-				w.controls.savedThrows = true;
-				w.reopen();
-				yield* Effect.gen(function* () {
-					yield* failed(ProgramRunner.use((r) => r.open("wake")));
-					// P34 amendment: inside the restart budget the wake exits, waits and writes no down.
-					expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
-					expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
-						{body: {process: A, reason: "saved_letter"}},
-					]);
-					expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
-					expect((yield* inbox).map((row) => row.id)).toEqual(["good", "saved-bad"]);
-					expect(yield* ProcessStore.use((s) => s.load)).toEqual(before);
-					expect(yield* dead).toEqual([]);
-				}).pipe(Effect.provide(w.layer()));
-			}),
+		{generated: Schema.Int},
+		({generated}) =>
+			Effect.forEach(
+				[9, generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						yield* ProgramRunner.use((r) => r.msg(w.input("good", {type: "add", n: 7}))).pipe(
+							Effect.provide(w.layer()),
+						);
+						let before: unknown;
+						yield* Effect.gen(function* () {
+							const saved = yield* ProcessStore.use((s) => s.load);
+							before = saved;
+							yield* accepted("saved-bad", {type: "add", n: value}, saved);
+						}).pipe(Effect.provide(w.layer()));
+						w.controls.savedThrows = true;
+						w.reopen();
+						yield* Effect.gen(function* () {
+							yield* failed(ProgramRunner.use((r) => r.open("wake")));
+							// P34 amendment: inside the restart budget the wake exits, waits and writes no down.
+							expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
+							expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
+								{body: {process: A, reason: "saved_letter"}},
+							]);
+							expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
+							expect((yield* inbox).map((row) => row.id)).toEqual(["good", "saved-bad"]);
+							expect(yield* ProcessStore.use((s) => s.load)).toEqual(before);
+							expect(yield* dead).toEqual([]);
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect(

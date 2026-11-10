@@ -23,7 +23,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Cause, Effect, Exit, Layer, Option, Redacted, Stream, Tracer} from "effect";
+import {Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {processId, processIds} from "../id.test-support.ts";
@@ -32,7 +32,7 @@ import {RecordManager} from "./records.ts";
 import type {Sql} from "./referee.ts";
 import {SinkError, SpanSink} from "./sink.ts";
 import {nodeSql} from "./sqlite.ts";
-import type {Chain, SpanRow} from "./trace.ts";
+import {type Chain, ProcessId, type SpanRow} from "./trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -187,7 +187,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
 	);
 
 	// Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
-	it.effect.each([
+	for (const [label, original] of [
 		["old eight-hex id", "3f9a0c21"],
 		...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${"0".repeat(24)}`] as const),
 		["first character 8", `process_8${"0".repeat(25)}`],
@@ -198,31 +198,47 @@ describe("T246, P37 decodes TypeID process ids", () => {
 		["leading space", ` ${P1}`],
 		["trailing space", `${P1} `],
 		["trailing newline", `${P1}\n`],
-	] as const)(
-		"a stored process with %s fails bad_row, keeps its row, and sends nothing",
-		([, process]) => {
-			const {db, sql} = home();
-			return Effect.gen(function* () {
-				yield* step("runner.step", {"fab.process": P1});
-				expect(count(db, "unsent")).toBe(1);
-				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
-				const exit = yield* Effect.exit(flush);
-				expect(Exit.isFailure(exit), "P37 must reject the stored process id before sending").toBe(
-					true,
-				);
-				const error = Exit.match(exit, {onFailure: Cause.squash, onSuccess: () => undefined});
-				expect(error).toBeInstanceOf(SinkError);
-				expect(error).toMatchObject({reason: "bad_row", held: 0});
-				expect(count(db, "unsent")).toBe(1);
-				expect(yield* recorded(job(P1))).toEqual([]);
-				expect(yield* recorded(job(process))).toEqual([]);
-				sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
-				expect(yield* flush).toEqual({sent: 1});
-				expect(count(db, "unsent")).toBe(0);
-				expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
-			}).pipe(Effect.provide(world(sql)));
-		},
-	);
+	] as const)
+		it.effect.prop(
+			`a stored process with ${label} fails bad_row, keeps its row, and sends nothing`,
+			{
+				generated: Schema.String.check(
+					Schema.makeFilter((process) => !Schema.is(ProcessId)(process)),
+				),
+			},
+			({generated}) =>
+				Effect.forEach(
+					[original, generated],
+					(process) => {
+						const {db, sql} = home();
+						return Effect.gen(function* () {
+							yield* step("runner.step", {"fab.process": P1});
+							expect(count(db, "unsent")).toBe(1);
+							sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, process);
+							const exit = yield* Effect.exit(flush);
+							expect(
+								Exit.isFailure(exit),
+								"P37 must reject the stored process id before sending",
+							).toBe(true);
+							const error = Exit.match(exit, {
+								onFailure: Cause.squash,
+								onSuccess: () => undefined,
+							});
+							expect(error).toBeInstanceOf(SinkError);
+							expect(error).toMatchObject({reason: "bad_row", held: 0});
+							expect(count(db, "unsent")).toBe(1);
+							expect(yield* recorded(job(P1))).toEqual([]);
+							expect(yield* recorded(job(process))).toEqual([]);
+							sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
+							expect(yield* flush).toEqual({sent: 1});
+							expect(count(db, "unsent")).toBe(0);
+							expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
+						}).pipe(Effect.provide(world(sql)));
+					},
+					{concurrency: 1, discard: true},
+				),
+			{arbitrary: {seed: 119120, runs: 12}},
+		);
 });
 
 describe("p98, a span that ends is never dropped", () => {
@@ -425,47 +441,56 @@ describe("p98, a span that ends is never dropped", () => {
 		},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a RecordManager that fails leaves every unsent row; a lost answer's resend adds nothing",
-		() => {
-			const {db, sql} = home();
-			return Effect.gen(function* () {
-				for (let n = 0; n < 4; n++) yield* step("runner.step", {"fab.process": P1, "fab.n": n});
-				const real = yield* RecordManager;
-				const down = {
-					...real,
-					write: () => Effect.fail(new SinkError({reason: "unreachable", held: 0})),
-				};
-				const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
-				expect(failed).toBeInstanceOf(SinkError);
-				expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(4);
-				expect(yield* recorded(job(P1))).toEqual([]);
+		{generated: SinkError.fields.reason},
+		({generated}) =>
+			Effect.forEach(
+				["unreachable", generated],
+				(value) => {
+					const {db, sql} = home();
+					return Effect.gen(function* () {
+						for (let n = 0; n < 4; n++) yield* step("runner.step", {"fab.process": P1, "fab.n": n});
+						const real = yield* RecordManager;
+						const down = {
+							...real,
+							write: () => Effect.fail(new SinkError({reason: value, held: 0})),
+						};
+						const failed = yield* Effect.flip(
+							flush.pipe(Effect.provideService(RecordManager, down)),
+						);
+						expect(failed).toBeInstanceOf(SinkError);
+						expect(count(db, "unsent"), "unsent is deleted only after a good answer").toBe(4);
+						expect(yield* recorded(job(P1))).toEqual([]);
 
-				// The part takes the write, and the answer is lost on the way back.
-				let lose = 1;
-				const lossy = {
-					...real,
-					write: (...args: Parameters<typeof real.write>) =>
-						real
-							.write(...args)
-							.pipe(
-								Effect.flatMap((written) =>
-									lose-- > 0
-										? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
-										: Effect.succeed(written),
-								),
-							),
-				};
-				yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
-				expect(count(db, "unsent")).toBe(4);
-				expect(yield* flush).toEqual({sent: 4});
-				const rows = yield* recorded(job(P1));
-				expect(rows).toHaveLength(4);
-				expect(new Set(ids(rows)).size, "the resend wrote nothing twice").toBe(4);
-				expect(count(db, "unsent")).toBe(0);
-				expect(yield* flush).toEqual({sent: 0});
-			}).pipe(Effect.provide(world(sql)));
-		},
+						// The part takes the write, and the answer is lost on the way back.
+						let lose = 1;
+						const lossy = {
+							...real,
+							write: (...args: Parameters<typeof real.write>) =>
+								real
+									.write(...args)
+									.pipe(
+										Effect.flatMap((written) =>
+											lose-- > 0
+												? Effect.fail(new SinkError({reason: value, held: 0}))
+												: Effect.succeed(written),
+										),
+									),
+						};
+						yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
+						expect(count(db, "unsent")).toBe(4);
+						expect(yield* flush).toEqual({sent: 4});
+						const rows = yield* recorded(job(P1));
+						expect(rows).toHaveLength(4);
+						expect(new Set(ids(rows)).size, "the resend wrote nothing twice").toBe(4);
+						expect(count(db, "unsent")).toBe(0);
+						expect(yield* flush).toEqual({sent: 0});
+					}).pipe(Effect.provide(world(sql)));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect("flush follows a part's roll and the next batch starts at the new part", () => {
@@ -483,158 +508,202 @@ describe("p98, a span that ends is never dropped", () => {
 		}).pipe(Effect.provide(world(sql, RecordManager.memory(16 * 1024))));
 	});
 
-	it.effect(
+	it.effect.prop(
 		"a write that meets SQLITE_FULL once: the step's flush fails with storage, the span lands later",
-		() => {
-			const {db, sql: real} = home();
-			const {sql, arm} = filling(real);
-			return Effect.gen(function* () {
-				yield* step("runner.step", {"fab.process": P1, "fab.n": 0});
-				arm(1);
-				const exit = yield* Effect.exit(step("runner.step", {"fab.process": P1, "fab.n": 1}));
-				expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
-				const error = yield* Effect.flip(flush);
-				expect(error).toBeInstanceOf(SinkError);
-				expect(error.reason).toBe("storage");
-				expect(error.held).toBe(1);
-				expect(yield* recorded(job(P1)), "flush fails before it sends anything").toEqual([]);
-				yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
-				expect(count(db, "unsent"), "the held span landed at the next end").toBe(3);
-				expect(yield* flush).toEqual({sent: 3});
-				const rows = yield* recorded(job(P1));
-				expect(rows.map((r) => r.attributes["fab.n"]).sort()).toEqual([0, 1, 2]);
-			}).pipe(Effect.provide(world(sql)));
-		},
+		{generated: Schema.Int},
+		({generated}) =>
+			Effect.forEach(
+				[0, generated],
+				(value) => {
+					const {db, sql: real} = home();
+					const {sql, arm} = filling(real);
+					return Effect.gen(function* () {
+						yield* step("runner.step", {"fab.process": P1, "fab.n": value});
+						arm(1);
+						const exit = yield* Effect.exit(step("runner.step", {"fab.process": P1, "fab.n": 1}));
+						expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
+						const error = yield* Effect.flip(flush);
+						expect(error).toBeInstanceOf(SinkError);
+						expect(error.reason).toBe("storage");
+						expect(error.held).toBe(1);
+						expect(yield* recorded(job(P1)), "flush fails before it sends anything").toEqual([]);
+						yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
+						expect(count(db, "unsent"), "the held span landed at the next end").toBe(3);
+						expect(yield* flush).toEqual({sent: 3});
+						const rows = yield* recorded(job(P1));
+						expect(rows.map((r) => r.attributes["fab.n"]).sort()).toEqual([value, 1, 2].sort());
+					}).pipe(Effect.provide(world(sql)));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a disk that stays full: every flush fails, held counts every span, none goes missing",
-		() => {
-			const {db, sql: real} = home();
-			const {sql, arm} = filling(real);
-			return Effect.gen(function* () {
-				yield* step("warm", {});
-				arm(Number.POSITIVE_INFINITY);
-				for (let n = 0; n < 5; n++) yield* step("runner.step", {"fab.n": n});
-				expect((yield* Effect.flip(flush)).held).toBe(5);
-				for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
-				const error = yield* Effect.flip(flush);
-				expect(error.reason).toBe("storage");
-				expect(error.held).toBe(8);
-				expect(count(db, "unsent")).toBe(1);
-				arm(0);
-				yield* step("runner.step", {"fab.n": 8});
-				expect(yield* flush).toEqual({sent: 10});
-				const rows = yield* recorded(spans);
-				expect(rows.map((r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
-					[0, 1, 2, 3, 4, 5, 6, 7, 8, "warm"].sort(),
-				);
-			}).pipe(Effect.provide(world(sql)));
-		},
+		{generated: Schema.String},
+		({generated}) =>
+			Effect.forEach(
+				["warm", generated],
+				(value) => {
+					const {db, sql: real} = home();
+					const {sql, arm} = filling(real);
+					return Effect.gen(function* () {
+						yield* step(value, {});
+						arm(Number.POSITIVE_INFINITY);
+						for (let n = 0; n < 5; n++) yield* step("runner.step", {"fab.n": n});
+						expect((yield* Effect.flip(flush)).held).toBe(5);
+						for (let n = 5; n < 8; n++) yield* step("runner.step", {"fab.n": n});
+						const error = yield* Effect.flip(flush);
+						expect(error.reason).toBe("storage");
+						expect(error.held).toBe(8);
+						expect(count(db, "unsent")).toBe(1);
+						arm(0);
+						yield* step("runner.step", {"fab.n": 8});
+						expect(yield* flush).toEqual({sent: 10});
+						const rows = yield* recorded(spans);
+						expect(rows.map((r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
+							[0, 1, 2, 3, 4, 5, 6, 7, 8, "warm"].sort(),
+						);
+					}).pipe(Effect.provide(world(sql)));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a real full file (max_page_count): unsent plus held is every span, and all land once it has room",
-		() => {
-			const {db, sql} = home();
-			return Effect.gen(function* () {
-				yield* step("warm", {});
-				const pages = Number(db.prepare("PRAGMA page_count").get()?.["page_count"]);
-				db.exec(`PRAGMA max_page_count = ${pages}`);
-				const made = 120;
-				for (let n = 0; n < made; n++)
-					yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
-				const error = yield* Effect.flip(flush);
-				expect(error.reason).toBe("storage");
-				expect(error.held).toBeGreaterThan(0);
-				expect(count(db, "unsent") + error.held).toBe(made + 1);
-				expect(yield* recorded(spans)).toEqual([]);
-				db.exec("PRAGMA max_page_count = 1073741823");
-				yield* step("runner.step", {"fab.n": made});
-				expect(yield* flush).toEqual({sent: made + 2});
-				const rows = yield* recorded(spans);
-				expect(new Set(ids(rows)).size).toBe(made + 2);
-			}).pipe(Effect.provide(world(sql)));
-		},
+		{generated: Schema.Int.check(Schema.isBetween({minimum: 120, maximum: 256}))},
+		({generated}) =>
+			Effect.forEach(
+				[120, generated],
+				(value) => {
+					const {db, sql} = home();
+					return Effect.gen(function* () {
+						yield* step("warm", {});
+						const pages = Number(db.prepare("PRAGMA page_count").get()?.["page_count"]);
+						db.exec(`PRAGMA max_page_count = ${pages}`);
+						const made = value;
+						for (let n = 0; n < made; n++)
+							yield* step("runner.step", {"fab.n": n, "fab.pad": "p".repeat(100)});
+						const error = yield* Effect.flip(flush);
+						expect(error.reason).toBe("storage");
+						expect(error.held).toBeGreaterThan(0);
+						expect(count(db, "unsent") + error.held).toBe(made + 1);
+						expect(yield* recorded(spans)).toEqual([]);
+						db.exec("PRAGMA max_page_count = 1073741823");
+						yield* step("runner.step", {"fab.n": made});
+						expect(yield* flush).toEqual({sent: made + 2});
+						const rows = yield* recorded(spans);
+						expect(new Set(ids(rows)).size).toBe(made + 2);
+					}).pipe(Effect.provide(world(sql)));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a second flush after a storage failure still fails while spans are held, and sends nothing",
-		() => {
-			const {db, sql: real} = home();
-			const {sql, arm} = filling(real);
-			return Effect.gen(function* () {
-				yield* step("warm", {});
-				arm(Number.POSITIVE_INFINITY);
-				yield* step("runner.step", {"fab.n": 0});
-				expect((yield* Effect.flip(flush)).held).toBe(1);
-				arm(0);
-				const again = yield* Effect.flip(flush);
-				expect(again.reason, "no end since, but the span is still only in memory").toBe("storage");
-				expect(again.held).toBe(1);
-				expect(yield* recorded(spans), "the second flush sent nothing").toEqual([]);
-				expect(count(db, "unsent")).toBe(1);
-				yield* step("runner.step", {"fab.n": 1});
-				expect(yield* flush).toEqual({sent: 3});
-			}).pipe(Effect.provide(world(sql)));
-		},
+		{generated: Schema.Int},
+		({generated}) =>
+			Effect.forEach(
+				[0, generated],
+				(value) => {
+					const {db, sql: real} = home();
+					const {sql, arm} = filling(real);
+					return Effect.gen(function* () {
+						yield* step("warm", {});
+						arm(Number.POSITIVE_INFINITY);
+						yield* step("runner.step", {"fab.n": value});
+						expect((yield* Effect.flip(flush)).held).toBe(1);
+						arm(0);
+						const again = yield* Effect.flip(flush);
+						expect(again.reason, "no end since, but the span is still only in memory").toBe(
+							"storage",
+						);
+						expect(again.held).toBe(1);
+						expect(yield* recorded(spans), "the second flush sent nothing").toEqual([]);
+						expect(count(db, "unsent")).toBe(1);
+						yield* step("runner.step", {"fab.n": 1});
+						expect(yield* flush).toEqual({sent: 3});
+					}).pipe(Effect.provide(world(sql)));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"after a roll, rows the old part already holds are not written again to the next part",
-		() => {
-			const {db, sql} = home();
-			return Effect.gen(function* () {
-				yield* step("runner.step", {"fab.process": P1, "fab.n": 0});
-				yield* step("runner.step", {"fab.process": P1, "fab.n": 1});
-				const real = yield* RecordManager;
-				// Part 0 takes both rows, and the answer is lost on the way back.
-				let lose = 1;
-				const lossy = {
-					...real,
-					write: (...args: Parameters<typeof real.write>) =>
-						real
-							.write(...args)
-							.pipe(
-								Effect.flatMap((written) =>
-									lose-- > 0
-										? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
-										: Effect.succeed(written),
-								),
-							),
-				};
-				yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
-				expect(count(db, "unsent")).toBe(2);
-				// Part 0 is now past its 1-byte cap: the resend with one new row rolls it.
-				yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
-				expect(yield* flush).toEqual({sent: 3});
-				const rows = yield* recorded(job(P1));
-				expect(rows.map((r) => r.attributes["fab.n"])).toEqual([0, 1, 2]);
-				expect(count(db, "unsent")).toBe(0);
-				expect(Number(db.prepare(`SELECT part FROM parts`).get()?.["part"])).toBe(1);
-			}).pipe(Effect.provide(world(sql, RecordManager.memory(1))));
-		},
+		{generated: Schema.Int},
+		({generated}) =>
+			Effect.forEach(
+				[0, generated],
+				(value) => {
+					const {db, sql} = home();
+					return Effect.gen(function* () {
+						yield* step("runner.step", {"fab.process": P1, "fab.n": value});
+						yield* step("runner.step", {"fab.process": P1, "fab.n": 1});
+						const real = yield* RecordManager;
+						// Part 0 takes both rows, and the answer is lost on the way back.
+						let lose = 1;
+						const lossy = {
+							...real,
+							write: (...args: Parameters<typeof real.write>) =>
+								real
+									.write(...args)
+									.pipe(
+										Effect.flatMap((written) =>
+											lose-- > 0
+												? Effect.fail(new SinkError({reason: "unreachable", held: 0}))
+												: Effect.succeed(written),
+										),
+									),
+						};
+						yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
+						expect(count(db, "unsent")).toBe(2);
+						// Part 0 is now past its 1-byte cap: the resend with one new row rolls it.
+						yield* step("runner.step", {"fab.process": P1, "fab.n": 2});
+						expect(yield* flush).toEqual({sent: 3});
+						const rows = yield* recorded(job(P1));
+						expect(rows.map((r) => r.attributes["fab.n"])).toEqual([value, 1, 2]);
+						expect(count(db, "unsent")).toBe(0);
+						expect(Number(db.prepare(`SELECT part FROM parts`).get()?.["part"])).toBe(1);
+					}).pipe(Effect.provide(world(sql, RecordManager.memory(1))));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"building touches nothing: on a Sql that always throws it builds, and traced work still succeeds",
-		() => {
-			const throwing: Sql = {
-				exec: () => {
-					throw full();
+		{generated: Schema.Unknown},
+		({generated}) =>
+			Effect.forEach(
+				[full(), generated],
+				(value) => {
+					const throwing: Sql = {
+						exec: () => {
+							throw value;
+						},
+						transaction: () => {
+							throw value;
+						},
+						size: () => 0,
+					};
+					return Effect.gen(function* () {
+						expect(yield* traced("runner.step", {"fab.process": P1}, Effect.succeed(7))).toBe(7);
+						const error = yield* Effect.flip(flush);
+						expect(error.reason).toBe("storage");
+						expect(error.held).toBe(1);
+					}).pipe(Effect.provide(world(throwing)));
 				},
-				transaction: () => {
-					throw full();
-				},
-				size: () => 0,
-			};
-			return Effect.gen(function* () {
-				expect(yield* traced("runner.step", {"fab.process": P1}, Effect.succeed(7))).toBe(7);
-				const error = yield* Effect.flip(flush);
-				expect(error.reason).toBe("storage");
-				expect(error.held).toBe(1);
-			}).pipe(Effect.provide(world(throwing)));
-		},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 });
 

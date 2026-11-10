@@ -83,24 +83,30 @@ describe("P10 JSON-RPC", () => {
 		}),
 	);
 	for (const mode of ["ok", "refused"] as const)
-		it.effect(`p23: ${mode} has one matching reply`, () =>
-			Effect.gen(function* () {
-				const answer =
-					mode === "ok"
-						? T.Answer.cases.ok.make({result: {rows: [1]}})
-						: T.Answer.cases.refused.make({reason: "stale"});
-				const route = vi.fn(() => Effect.succeed(answer));
-				const result = yield* T.answerFrame(frame(), online(), admit, route);
-				expect(result.send).not.toBeNull();
-				const reply = JSON.parse(result.send!);
-				expect(reply).toMatchObject({jsonrpc: "2.0", id: "r1"});
-				expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
-					mode === "ok" ? {rows: [1]} : {reason: "stale"},
-				);
-				expect(route).toHaveBeenCalledOnce();
-				assert(result.attached._tag === "online");
-				expect(result.attached.waits).toEqual([]);
-			}),
+		it.effect.prop(
+			`p23: ${mode} has one matching reply`,
+			{generated: T.Answer.cases.refused},
+			({generated}) =>
+				Effect.forEach(
+					[T.Answer.cases.refused.make({reason: "stale"}), generated],
+					(value) =>
+						Effect.gen(function* () {
+							const answer = mode === "ok" ? T.Answer.cases.ok.make({result: {rows: [1]}}) : value;
+							const route = vi.fn(() => Effect.succeed(answer));
+							const result = yield* T.answerFrame(frame(), online(), admit, route);
+							expect(result.send).not.toBeNull();
+							const reply = JSON.parse(result.send!);
+							expect(reply).toMatchObject({jsonrpc: "2.0", id: "r1"});
+							expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
+								mode === "ok" ? {rows: [1]} : {reason: value.reason},
+							);
+							expect(route).toHaveBeenCalledOnce();
+							assert(result.attached._tag === "online");
+							expect(result.attached.waits).toEqual([]);
+						}),
+					{concurrency: 1, discard: true},
+				),
+			{arbitrary: {seed: 119120, runs: 12}},
 		);
 	for (const mode of ["failure", "defect"] as const)
 		it.effect(`p23: ${mode} sends nothing and permits a real retry`, () =>

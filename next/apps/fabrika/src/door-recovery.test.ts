@@ -726,108 +726,124 @@ describe("P34 door recovery", () => {
 			}),
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p80 plant, dedupe by text or lose terminal reply: three fresh attempts survive reopen and stop the outbox",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				for (let n = 0; n < 3; n++) {
-					yield* Effect.gen(function* () {
-						const client = yield* w.online();
-						const d = yield* Door;
-						expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject(
-							n < 2
-								? {_tag: "Failure"}
-								: {_tag: "Success", value: {_tag: "refused", reason: "dead"}},
-						);
-					}).pipe(Effect.provide(w.layer()));
-					w.reopen();
-					if (n < 2) yield* recover(w);
-				}
-				yield* Effect.gen(function* () {
-					const client = yield* w.online();
-					const d = yield* Door;
-					expect(yield* d.route(client, "process.send", request())).toMatchObject({
-						_tag: "refused",
-						reason: "dead",
-					});
-					expect(w.steps()).toBe(3);
-					expect(yield* d.route(client, "process.send", request(false))).toMatchObject({
-						_tag: "refused",
-						reason: "id_reused",
-					});
-					const grant = C.Grant.make({
-						id: "other-caller",
-						key: w.other.raw,
-						for: PERSON,
-						to: "project-a",
-						as: "window",
-						saw: {
-							code: "1234",
-							label: "Other browser",
-							where: "test",
-							how: "compare",
-							check: "touch",
-							has: ["verify"],
-						},
-						sentAt: from().sentAt,
-					});
-					const text = C.grantText(grant);
-					expect(yield* d.grant({text, armored: w.window.sign(text)})).toMatchObject({
-						_tag: "applied",
-					});
-					const other = yield* w.online(w.other);
-					expect(yield* d.route(other, "process.send", request())).toMatchObject({
-						_tag: "refused",
-						reason: "id_reused",
-					});
-					expect(w.steps()).toBe(3);
-				}).pipe(Effect.provide(w.layer()));
-			}),
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["poison", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						for (let n = 0; n < 3; n++) {
+							yield* Effect.gen(function* () {
+								const client = yield* w.online();
+								const d = yield* Door;
+								expect(
+									yield* Effect.exit(d.route(client, "process.send", request(true, value))),
+								).toMatchObject(
+									n < 2
+										? {_tag: "Failure"}
+										: {_tag: "Success", value: {_tag: "refused", reason: "dead"}},
+								);
+							}).pipe(Effect.provide(w.layer()));
+							w.reopen();
+							if (n < 2) yield* recover(w);
+						}
+						yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							expect(yield* d.route(client, "process.send", request(true, value))).toMatchObject({
+								_tag: "refused",
+								reason: "dead",
+							});
+							expect(w.steps()).toBe(3);
+							expect(yield* d.route(client, "process.send", request(false, value))).toMatchObject({
+								_tag: "refused",
+								reason: "id_reused",
+							});
+							const grant = C.Grant.make({
+								id: "other-caller",
+								key: w.other.raw,
+								for: PERSON,
+								to: "project-a",
+								as: "window",
+								saw: {
+									code: "1234",
+									label: "Other browser",
+									where: "test",
+									how: "compare",
+									check: "touch",
+									has: ["verify"],
+								},
+								sentAt: from().sentAt,
+							});
+							const text = C.grantText(grant);
+							expect(yield* d.grant({text, armored: w.window.sign(text)})).toMatchObject({
+								_tag: "applied",
+							});
+							const other = yield* w.online(w.other);
+							expect(yield* d.route(other, "process.send", request(true, value))).toMatchObject({
+								_tag: "refused",
+								reason: "id_reused",
+							});
+							expect(w.steps()).toBe(3);
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"p69 plant, retarget every old parent: fresh retry gets a checked new parent while queued old work stays refused",
-		() =>
-			Effect.gen(function* () {
-				const w = world();
-				yield* w.boot;
-				yield* Effect.gen(function* () {
-					const client = yield* w.online();
-					const d = yield* Door;
-					yield* Effect.exit(d.route(client, "process.send", request()));
-					const old = w.deliveries[0]!.parent;
-					const p = yield* C.ProcessManager;
-					if (yield* p.isLive(P1)) yield* p.exit(P1, "crashed", from());
-					yield* p.start(
-						C.Start.cases.again.make({
-							id: "replacement",
-							name: NAME,
-							after: P1,
-							reason: "crashed",
-							code: {program: "counter", hash: "build-a"},
-						}),
-						from(),
-					);
-					w.controls.throws = false;
-					yield* Effect.exit(d.route(client, "process.send", request()));
-					expect(w.deliveries.at(-1)?.process).toBe(P2);
-					const fresh = w.deliveries.at(-1)!.parent;
-					expect(fresh).not.toBe(old);
-					expect(
-						yield* Effect.flip(
-							d
-								.signer(old, P2, "saved")
-								.pipe(Effect.provideService(C.SignRequest, {id: "old-queued"})),
-						),
-					).toMatchObject({reason: "not_delivered"});
-					expect(
-						yield* d
-							.signer(fresh, P2, "saved")
-							.pipe(Effect.provideService(C.SignRequest, {id: "fresh-write"})),
-					).toMatchObject({parent: fresh, by: {key: w.window.fingerprint}});
-				}).pipe(Effect.provide(w.layer()));
-			}),
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["poison", generated],
+				(value) =>
+					Effect.gen(function* () {
+						const w = world();
+						yield* w.boot;
+						yield* Effect.gen(function* () {
+							const client = yield* w.online();
+							const d = yield* Door;
+							yield* Effect.exit(d.route(client, "process.send", request(true, value)));
+							const old = w.deliveries[0]!.parent;
+							const p = yield* C.ProcessManager;
+							if (yield* p.isLive(P1)) yield* p.exit(P1, "crashed", from());
+							yield* p.start(
+								C.Start.cases.again.make({
+									id: "replacement",
+									name: NAME,
+									after: P1,
+									reason: "crashed",
+									code: {program: "counter", hash: "build-a"},
+								}),
+								from(),
+							);
+							w.controls.throws = false;
+							yield* Effect.exit(d.route(client, "process.send", request(true, value)));
+							expect(w.deliveries.at(-1)?.process).toBe(P2);
+							const fresh = w.deliveries.at(-1)!.parent;
+							expect(fresh).not.toBe(old);
+							expect(
+								yield* Effect.flip(
+									d
+										.signer(old, P2, "saved")
+										.pipe(Effect.provideService(C.SignRequest, {id: "old-queued"})),
+								),
+							).toMatchObject({reason: "not_delivered"});
+							expect(
+								yield* d
+									.signer(fresh, P2, "saved")
+									.pipe(Effect.provideService(C.SignRequest, {id: "fresh-write"})),
+							).toMatchObject({parent: fresh, by: {key: w.window.fingerprint}});
+						}).pipe(Effect.provide(w.layer()));
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 });

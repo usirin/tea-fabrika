@@ -18,7 +18,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Duration, Effect, Exit, Layer, Stream, Tracer} from "effect";
+import {Duration, Effect, Exit, Layer, Schema, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {Doorbell, Ledger, LedgerError, type LedgerCalls} from "./ledger.ts";
@@ -197,36 +197,43 @@ describe("p95, every call is one span, names and numbers only", () => {
 		}).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
 	});
 
-	it.effect(
+	it.effect.prop(
 		"a resend and each refusal still end one ledger.append span, with answer and reason",
-		() => {
-			const {tracer, tags} = capture();
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				const referee = yield* Referee;
-				yield* ledger.append("a", "w-1", line());
-				yield* ledger.append("a", "w-1", line({sentAt: "later"}));
-				yield* ledger.append("a", "w-1", line({body: "another"}));
-				yield* ledger.append("a", "w-2", line({seen: 50}));
-				yield* referee.append("a", "w-3", {...line(), arrivedAt: 1});
-				yield* referee.append("a", "w-4", line({parent: "not an input id"}));
-				expect(
-					tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("reason")]]),
-				).toEqual([
-					["w-1", "placed", undefined],
-					["w-1", "resent", undefined],
-					["w-1", "refused", "id_reused"],
-					["w-2", "refused", "seen_ahead"],
-					["w-3", "refused", "bad_line"],
-					["w-4", "refused", "bad_parent"],
-				]);
-			}).pipe(
-				Effect.provide(
-					Layer.merge(onSql(fresh()), Referee.layer(fresh()).pipe(Layer.provide(quiet))),
-				),
-				Effect.withTracer(tracer),
-			);
-		},
+		{generated: Schema.String},
+		({generated}) =>
+			Effect.forEach(
+				["later", generated],
+				(value) => {
+					const {tracer, tags} = capture();
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const referee = yield* Referee;
+						yield* ledger.append("a", "w-1", line());
+						yield* ledger.append("a", "w-1", line({sentAt: value}));
+						yield* ledger.append("a", "w-1", line({body: "another"}));
+						yield* ledger.append("a", "w-2", line({seen: 50}));
+						yield* referee.append("a", "w-3", {...line(), arrivedAt: 1});
+						yield* referee.append("a", "w-4", line({parent: "not an input id"}));
+						expect(
+							tags("ledger.append").map((t) => [t[ID], t[tag("answer")], t[tag("reason")]]),
+						).toEqual([
+							["w-1", "placed", undefined],
+							["w-1", "resent", undefined],
+							["w-1", "refused", "id_reused"],
+							["w-2", "refused", "seen_ahead"],
+							["w-3", "refused", "bad_line"],
+							["w-4", "refused", "bad_parent"],
+						]);
+					}).pipe(
+						Effect.provide(
+							Layer.merge(onSql(fresh()), Referee.layer(fresh()).pipe(Layer.provide(quiet))),
+						),
+						Effect.withTracer(tracer),
+					);
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect("lag counts the stream's entries past after, not the log's revs", () => {
@@ -415,123 +422,164 @@ describe("p95, every call is one span, names and numbers only", () => {
 		await fc.assert(fc.asyncProperty(names, run), {seed: SEED, numRuns: 30});
 	});
 
-	it.effect(
+	it.effect.prop(
 		"a storage failure's span fails, holds the SQLite error code, and its message in no tag",
-		() => {
-			const {tracer, tags, failed, all} = capture();
-			const message = "database or disk is full: message-marker";
-			const full = Object.assign(new Error(message), {
-				code: "ERR_SQLITE_ERROR",
-				errcode: 13,
-				errstr: "database or disk is full",
-			});
-			const broken: Sql = {
-				exec: () => {
-					throw full;
+		{generated: Schema.String},
+		({generated}) =>
+			Effect.forEach(
+				["database or disk is full: message-marker", generated],
+				(value) => {
+					const {tracer, tags, failed, all} = capture();
+					const message =
+						value === "database or disk is full: message-marker"
+							? value
+							: `message-marker:${value}`;
+					const full = Object.assign(new Error(message), {
+						code: "ERR_SQLITE_ERROR",
+						errcode: 13,
+						errstr: "database or disk is full",
+					});
+					const broken: Sql = {
+						exec: () => {
+							throw full;
+						},
+						transaction: () => {
+							throw full;
+						},
+						size: () => {
+							throw full;
+						},
+					};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
+						expect(error.reason).toBe("storage");
+						expect(failed("ledger.append")).toEqual([true]);
+						const values = Object.values(tags("ledger.append")[0] ?? {});
+						expect(values.some((value) => value === full.code || value === full.errcode)).toBe(
+							true,
+						);
+						expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
+					}).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
 				},
-				transaction: () => {
-					throw full;
-				},
-				size: () => {
-					throw full;
-				},
-			};
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
-				expect(error.reason).toBe("storage");
-				expect(failed("ledger.append")).toEqual([true]);
-				const values = Object.values(tags("ledger.append")[0] ?? {});
-				expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
-				expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
-			}).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
-		},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a storage failure tags each call's span with fab.ledger.reason, fab.ledger.code and error.type",
-		() => {
-			const {tracer, tags} = capture();
-			const full = Object.assign(new Error("database or disk is full"), {
-				code: "ERR_SQLITE_ERROR",
-				errcode: 13,
-			});
-			const broken: Sql = {
-				exec: () => {
-					throw full;
+		{generated: Schema.Int},
+		({generated}) =>
+			Effect.forEach(
+				[13, generated],
+				(value) => {
+					const {tracer, tags} = capture();
+					const full = Object.assign(new Error("database or disk is full"), {
+						code: "ERR_SQLITE_ERROR",
+						errcode: value,
+					});
+					const broken: Sql = {
+						exec: () => {
+							throw full;
+						},
+						transaction: () => {
+							throw full;
+						},
+						size: () => {
+							throw full;
+						},
+					};
+					const keys = {[tag("reason")]: "storage", [tag("code")]: value, [ERROR]: "Error"};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						yield* Effect.flip(ledger.append("a", "w-1", line()));
+						yield* Effect.flip(Stream.runCollect(ledger.read("a", 0)));
+						yield* Effect.flip(ledger.wait("a", 0));
+						expect(tags("ledger.append")).toEqual([expect.objectContaining(keys)]);
+						expect(tags("ledger.read")).toEqual([expect.objectContaining(keys)]);
+						expect(tags("ledger.wait")).toEqual([expect.objectContaining(keys)]);
+					}).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
 				},
-				transaction: () => {
-					throw full;
-				},
-				size: () => {
-					throw full;
-				},
-			};
-			const keys = {[tag("reason")]: "storage", [tag("code")]: 13, [ERROR]: "Error"};
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				yield* Effect.flip(ledger.append("a", "w-1", line()));
-				yield* Effect.flip(Stream.runCollect(ledger.read("a", 0)));
-				yield* Effect.flip(ledger.wait("a", 0));
-				expect(tags("ledger.append")).toEqual([expect.objectContaining(keys)]);
-				expect(tags("ledger.read")).toEqual([expect.objectContaining(keys)]);
-				expect(tags("ledger.wait")).toEqual([expect.objectContaining(keys)]);
-			}).pipe(Effect.provide(onSql(broken)), Effect.withTracer(tracer));
-		},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a storage failure with no SQLite code tags its class as error.type and no fab.ledger.code",
-		() => {
-			const {tracer, tags} = capture();
-			const odd: Sql = {
-				exec: () => {
-					throw new TypeError("a blob column, which the ledger never writes");
+		{generated: Schema.String},
+		({generated}) =>
+			Effect.forEach(
+				["a blob column, which the ledger never writes", generated],
+				(value) => {
+					const {tracer, tags} = capture();
+					const odd: Sql = {
+						exec: () => {
+							throw new TypeError(value);
+						},
+						transaction: (step) => step(),
+						size: () => 0,
+					};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
+						expect(error.reason).toBe("storage");
+						const [span = {}] = tags("ledger.append");
+						expect(span).toEqual(
+							expect.objectContaining({[tag("reason")]: "storage", [ERROR]: "TypeError"}),
+						);
+						expect(Object.keys(span)).not.toContain(tag("code"));
+					}).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
 				},
-				transaction: (step) => step(),
-				size: () => 0,
-			};
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
-				expect(error.reason).toBe("storage");
-				const [span = {}] = tags("ledger.append");
-				expect(span).toEqual(
-					expect.objectContaining({[tag("reason")]: "storage", [ERROR]: "TypeError"}),
-				);
-				expect(Object.keys(span)).not.toContain(tag("code"));
-			}).pipe(Effect.provide(onSql(odd)), Effect.withTracer(tracer));
-		},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"a full disk on node:sqlite keeps SQLite's own code, 13, in the span, not the code of a ROLLBACK SQLite already did",
-		() => {
-			const {tracer, tags, failed} = capture();
-			const db = freshDb();
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				expect(yield* ledger.append("a", "w-1", line())).toEqual({_tag: "placed", rev: 1, pos: 1});
-				// No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
-				// the whole transaction back by itself, so a ROLLBACK after it finds none.
-				const {page_count: pages} = db.prepare("PRAGMA page_count").get() ?? {};
-				db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
-				const error = yield* Effect.flip(
-					ledger.append("a", "w-2", line({body: {note: "y".repeat(100_000)}})),
-				);
-				expect(error).toBeInstanceOf(LedgerError);
-				expect(error.reason).toBe("storage");
-				expect(failed("ledger.append")).toEqual([false, true]);
-				expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
-				expect(tags("ledger.append")[1]).toEqual(
-					expect.objectContaining({[tag("reason")]: "storage"}),
-				);
-				expect(error.message ?? "").not.toMatch(/no transaction is active/);
-				// With room again, the failed step left nothing behind and the next append is placed.
-				db.exec("PRAGMA max_page_count = 1073741823");
-				expect(yield* ledger.append("a", "w-3", line())).toEqual({_tag: "placed", rev: 2, pos: 2});
-			}).pipe(Effect.provide(onSql(nodeSql(db))), Effect.withTracer(tracer));
-		},
+		{generated: Schema.Int.check(Schema.isBetween({minimum: 100000, maximum: 200000}))},
+		({generated}) =>
+			Effect.forEach(
+				[100000, generated],
+				(value) => {
+					const {tracer, tags, failed} = capture();
+					const db = freshDb();
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						expect(yield* ledger.append("a", "w-1", line())).toEqual({
+							_tag: "placed",
+							rev: 1,
+							pos: 1,
+						});
+						// No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
+						// the whole transaction back by itself, so a ROLLBACK after it finds none.
+						const {page_count: pages} = db.prepare("PRAGMA page_count").get() ?? {};
+						db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
+						const error = yield* Effect.flip(
+							ledger.append("a", "w-2", line({body: {note: "y".repeat(value)}})),
+						);
+						expect(error).toBeInstanceOf(LedgerError);
+						expect(error.reason).toBe("storage");
+						expect(failed("ledger.append")).toEqual([false, true]);
+						expect(tags("ledger.append")[1]?.[tag("code")]).toBe(13);
+						expect(tags("ledger.append")[1]).toEqual(
+							expect.objectContaining({[tag("reason")]: "storage"}),
+						);
+						expect(error.message ?? "").not.toMatch(/no transaction is active/);
+						// With room again, the failed step left nothing behind and the next append is placed.
+						db.exec("PRAGMA max_page_count = 1073741823");
+						expect(yield* ledger.append("a", "w-3", line())).toEqual({
+							_tag: "placed",
+							rev: 2,
+							pos: 2,
+						});
+					}).pipe(Effect.provide(onSql(nodeSql(db))), Effect.withTracer(tracer));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	/** A doorbell whose ring to `dies` dies with a defect, as a thin class that throws would. */
@@ -611,32 +659,43 @@ describe("p95, every call is one span, names and numbers only", () => {
 		},
 	);
 
-	it.effect(
+	it.effect.prop(
 		"Ledger.remote ends one ledger.call span per call, failed with its reason when the call fails",
-		() => {
-			const {tracer, tags, failed} = capture();
-			const reject = () => Promise.reject(new Error("the object went away"));
-			const stub: LedgerCalls = {
-				append: () => Promise.resolve({_tag: "placed", rev: 1, pos: 1}),
-				read: reject,
-				wait: () => Promise.resolve({_tag: "soon"}),
-			};
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				yield* ledger.append("a", "w-1", line());
-				yield* Effect.flip(Stream.runCollect(ledger.read("a", 0)));
-				yield* Effect.flip(ledger.wait("a", 0));
-				const calls = tags("ledger.call");
-				expect(calls).toHaveLength(3);
-				expect(failed("ledger.call")).toEqual([false, true, true]);
-				expect(calls.map((t) => t[tag("reader")])).toEqual([READER, READER, READER]);
-				expect(calls.map((t) => t[tag("reason")])).toEqual([undefined, "unreachable", "bad_row"]);
-				expect(calls.map((t) => Object.values(t))).toEqual([
-					expect.arrayContaining(["append"]),
-					expect.arrayContaining(["read"]),
-					expect.arrayContaining(["wait"]),
-				]);
-			}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})), Effect.withTracer(tracer));
-		},
+		{generated: Schema.Unknown},
+		({generated}) =>
+			Effect.forEach(
+				[new Error("the object went away"), generated],
+				(value) => {
+					const {tracer, tags, failed} = capture();
+					const reject = () => Promise.reject(value);
+					const stub: LedgerCalls = {
+						append: () => Promise.resolve({_tag: "placed", rev: 1, pos: 1}),
+						read: reject,
+						wait: () => Promise.resolve({_tag: "soon"}),
+					};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						yield* ledger.append("a", "w-1", line());
+						yield* Effect.flip(Stream.runCollect(ledger.read("a", 0)));
+						yield* Effect.flip(ledger.wait("a", 0));
+						const calls = tags("ledger.call");
+						expect(calls).toHaveLength(3);
+						expect(failed("ledger.call")).toEqual([false, true, true]);
+						expect(calls.map((t) => t[tag("reader")])).toEqual([READER, READER, READER]);
+						expect(calls.map((t) => t[tag("reason")])).toEqual([
+							undefined,
+							"unreachable",
+							"bad_row",
+						]);
+						expect(calls.map((t) => Object.values(t))).toEqual([
+							expect.arrayContaining(["append"]),
+							expect.arrayContaining(["read"]),
+							expect.arrayContaining(["wait"]),
+						]);
+					}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})), Effect.withTracer(tracer));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 });

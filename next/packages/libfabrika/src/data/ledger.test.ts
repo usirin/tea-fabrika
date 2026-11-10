@@ -19,7 +19,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Duration, Effect, Layer, ManagedRuntime, References, Stream, Tracer} from "effect";
+import {Duration, Effect, Layer, ManagedRuntime, References, Schema, Stream, Tracer} from "effect";
 import {TestClock} from "effect/testing";
 import * as fc from "fast-check";
 import {processId} from "../id.test-support.ts";
@@ -513,44 +513,61 @@ describe("p20, failures are typed, and pass", () => {
 		},
 	];
 
-	it.effect("a stub whose calls reject gives unreachable on append, read and wait", () => {
-		const reject = () => Promise.reject(new Error("the object went away"));
-		const stub: LedgerCalls = {append: reject, read: reject, wait: reject};
-		return Effect.gen(function* () {
-			const ledger = yield* Ledger;
-			const errors = [
-				yield* Effect.flip(ledger.append("a", "w-1", line())),
-				yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
-				yield* Effect.flip(ledger.wait("a", 0)),
-			];
-			for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-			expect(errors.map((error) => error.reason)).toEqual([
-				"unreachable",
-				"unreachable",
-				"unreachable",
-			]);
-		}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
-	});
+	it.effect.prop(
+		"a stub whose calls reject gives unreachable on append, read and wait",
+		{generated: Schema.Unknown},
+		({generated}) =>
+			Effect.forEach(
+				[new Error("the object went away"), generated],
+				(value) => {
+					const reject = () => Promise.reject(value);
+					const stub: LedgerCalls = {append: reject, read: reject, wait: reject};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const errors = [
+							yield* Effect.flip(ledger.append("a", "w-1", line())),
+							yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
+							yield* Effect.flip(ledger.wait("a", 0)),
+						];
+						for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+						expect(errors.map((error) => error.reason)).toEqual([
+							"unreachable",
+							"unreachable",
+							"unreachable",
+						]);
+					}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
+	);
 
-	it.effect(
+	it.effect.prop(
 		"a stub that answers what does not decode gives bad_row on append, read and wait",
-		() => {
-			const stub: LedgerCalls = {
-				append: () => Promise.resolve({_tag: "placed", rev: "one"}),
-				read: () => Promise.resolve([{id: "w-1"}]),
-				wait: () => Promise.resolve({_tag: "soon"}),
-			};
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				const errors = [
-					yield* Effect.flip(ledger.append("a", "w-1", line())),
-					yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
-					yield* Effect.flip(ledger.wait("a", 0)),
-				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
-			}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
-		},
+		{generated: Schema.String},
+		({generated}) =>
+			Effect.forEach(
+				["one", generated],
+				(value) => {
+					const stub: LedgerCalls = {
+						append: () => Promise.resolve({_tag: "placed", rev: value}),
+						read: () => Promise.resolve([{id: "w-1"}]),
+						wait: () => Promise.resolve({_tag: "soon"}),
+					};
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						const errors = [
+							yield* Effect.flip(ledger.append("a", "w-1", line())),
+							yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
+							yield* Effect.flip(ledger.wait("a", 0)),
+						];
+						for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+						expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
+					}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it.effect(
@@ -580,95 +597,139 @@ describe("p20, failures are typed, and pass", () => {
 		},
 	);
 
-	it("a SQL throw on one call gives storage, and the next call on the same runtime works", async () => {
-		const {sql, arm} = throwingOnce(fresh());
-		const runtime = ManagedRuntime.make(onSql(sql));
-		const append = (id: string) => Ledger.use((ledger) => ledger.append("a", id, line()));
-		expect(await runtime.runPromise(append("w-1"))).toEqual(placed(1, 1));
-		arm();
-		const failed = await runtime.runPromise(Effect.flip(append("w-2")));
-		expect(failed).toBeInstanceOf(LedgerError);
-		expect(failed.reason).toBe("storage");
-		expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
-		arm();
-		const read = await runtime.runPromise(Effect.flip(readAll("a")));
-		expect(read.reason).toBe("storage");
-		arm();
-		const waited = await runtime.runPromise(
-			Effect.flip(Ledger.use((ledger) => ledger.wait("a", 9))),
-		);
-		expect(waited.reason).toBe("storage");
-		expect((await runtime.runPromise(readAll("a"))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
-		await runtime.dispose();
-	});
+	it.effect.prop(
+		"a SQL throw on one call gives storage, and the next call on the same runtime works",
+		{generated: Schema.NonEmptyString.check(Schema.isMaxLength(256))},
+		({generated}) =>
+			Effect.forEach(
+				["a", generated],
+				(value) =>
+					Effect.promise(async () => {
+						const {sql, arm} = throwingOnce(fresh());
+						const runtime = ManagedRuntime.make(onSql(sql));
+						const append = (id: string) => Ledger.use((ledger) => ledger.append(value, id, line()));
+						expect(await runtime.runPromise(append("w-1"))).toEqual(placed(1, 1));
+						arm();
+						const failed = await runtime.runPromise(Effect.flip(append("w-2")));
+						expect(failed).toBeInstanceOf(LedgerError);
+						expect(failed.reason).toBe("storage");
+						expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
+						arm();
+						const read = await runtime.runPromise(Effect.flip(readAll(value)));
+						expect(read.reason).toBe("storage");
+						arm();
+						const waited = await runtime.runPromise(
+							Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9))),
+						);
+						expect(waited.reason).toBe("storage");
+						expect((await runtime.runPromise(readAll(value))).map((e) => e.id)).toEqual([
+							"w-1",
+							"w-3",
+						]);
+						await runtime.dispose();
+					}),
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
+	);
 
-	it.effect.each([
+	for (const [label, original] of [
 		["an Error", sqliteFull()],
 		["text", "disk full"],
 		["a number", 13],
 		["null", null],
 		["undefined", undefined],
-	] as const)(
-		"no Layer fails at build: a Sql throwing %s still builds, and each call answers storage",
-		([, thrown]) =>
-			Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				const errors = [
-					yield* Effect.flip(ledger.append("a", "w-1", line())),
-					yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
-					yield* Effect.flip(ledger.wait("a", 0)),
-				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.reason)).toEqual(["storage", "storage", "storage"]);
-			}).pipe(
-				Effect.provide(
-					onSql({
-						exec: () => {
-							throw thrown;
-						},
-						transaction: (step) => step(),
-						size: () => 0,
-					}),
+	] as const)
+		it.effect.prop(
+			`no Layer fails at build: a Sql throwing ${label} still builds, and each call answers storage`,
+			{generated: Schema.Unknown},
+			({generated}) =>
+				Effect.forEach(
+					[original, generated],
+					(thrown) =>
+						Effect.gen(function* () {
+							const ledger = yield* Ledger;
+							const errors = [
+								yield* Effect.flip(ledger.append("a", "w-1", line())),
+								yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
+								yield* Effect.flip(ledger.wait("a", 0)),
+							];
+							for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+							expect(errors.map((error) => error.reason)).toEqual([
+								"storage",
+								"storage",
+								"storage",
+							]);
+						}).pipe(
+							Effect.provide(
+								onSql({
+									exec: () => {
+										throw thrown;
+									},
+									transaction: (step) => step(),
+									size: () => 0,
+								}),
+							),
+						),
+					{concurrency: 1, discard: true},
 				),
-			),
-	);
+			{arbitrary: {seed: 119120, runs: 12}},
+		);
 
-	it.effect(
+	it.effect.prop(
 		"a stored row that does not decode gives bad_row, not storage, on a read and on its id's resend",
-		() => {
-			const db = openDb(freshPath());
-			// Rows the referee never wrote, planted past it straight in SQLite: one whose body is not
-			// JSON, one whose `_tag` is empty. Every other column holds what an entry may hold.
-			const plant = (rev: number, stream: string, id: string, kind: string, body: string) =>
-				db
-					.prepare(
-						`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
+		{
+			generated: Schema.String.check(
+				Schema.makeFilter((s) => {
+					try {
+						JSON.parse(s);
+						return false;
+					} catch {
+						return true;
+					}
+				}),
+			),
+		},
+		({generated}) =>
+			Effect.forEach(
+				["{not json", generated],
+				(value) => {
+					const db = openDb(freshPath());
+					// Rows the referee never wrote, planted past it straight in SQLite: one whose body is not
+					// JSON, one whose `_tag` is empty. Every other column holds what an entry may hold.
+					const plant = (rev: number, stream: string, id: string, kind: string, body: string) =>
+						db
+							.prepare(
+								`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen,
 							parent, "traceId", build, "_tag", body) VALUES (?, ?, 1, ?, 0, 'SHA256:writer-a', 'owner', 'x', 0,
 							NULL, ?, 'b-7c1d073', ?, ?)`,
-					)
-					.run(rev, stream, id, TRACE, kind, body);
-			return Effect.gen(function* () {
-				const ledger = yield* Ledger;
-				expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
-				plant(2, "a", "w-2", "saved", "{not json");
-				plant(3, "b", "w-3", "", JSON.stringify({note: "n-7f3a"}));
-				const errors = [
-					yield* Effect.flip(readAll("a")),
-					yield* Effect.flip(readAll("b")),
-					yield* Effect.flip(ledger.append("a", "w-2", line())),
-					yield* Effect.flip(ledger.append("b", "w-3", line())),
-				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
-				expect(errors.map((error) => error.reason)).toEqual([
-					"bad_row",
-					"bad_row",
-					"bad_row",
-					"bad_row",
-				]);
-				// The rows that do decode still read.
-				expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
-			}).pipe(Effect.provide(onSql(nodeSql(db))));
-		},
+							)
+							.run(rev, stream, id, TRACE, kind, body);
+					return Effect.gen(function* () {
+						const ledger = yield* Ledger;
+						expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
+						plant(2, "a", "w-2", "saved", value);
+						plant(3, "b", "w-3", "", JSON.stringify({note: "n-7f3a"}));
+						const errors = [
+							yield* Effect.flip(readAll("a")),
+							yield* Effect.flip(readAll("b")),
+							yield* Effect.flip(ledger.append("a", "w-2", line())),
+							yield* Effect.flip(ledger.append("b", "w-3", line())),
+						];
+						for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+						expect(errors.map((error) => error.reason)).toEqual([
+							"bad_row",
+							"bad_row",
+							"bad_row",
+							"bad_row",
+						]);
+						// The rows that do decode still read.
+						expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
+					}).pipe(Effect.provide(onSql(nodeSql(db))));
+				},
+				{concurrency: 1, discard: true},
+			),
+		{arbitrary: {seed: 119120, runs: 12}},
 	);
 
 	it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", () => {

@@ -1,6 +1,6 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import {describe, expect, it} from "@effect/vitest";
-import {Schema} from "effect";
+import {Effect, Schema} from "effect";
 
 const Model = Schema.Struct({count: Schema.Int, step: Schema.Int});
 const old = {v: 1, model: {n: 7}, build: "old-build", after: 12};
@@ -46,38 +46,53 @@ describe("S3 saved state and named upgrades", () => {
 			expect(calls).toEqual(ran);
 		});
 	for (const fault of ["gap", "duplicate", "future", "throw", "decode", "zero"] as const)
-		it(`plant, accept ${fault}: failed upgrades leave the original saved bytes intact`, async () => {
-			const {Saved} = await import("./state.ts");
-			const raw = {...old, v: fault === "future" ? 4 : fault === "zero" ? 0 : 1};
-			const before = JSON.stringify(raw);
-			const normal = state();
-			const upgrades =
-				fault === "gap"
-					? normal.upgrades.slice(1)
-					: fault === "duplicate"
-						? [...normal.upgrades, normal.upgrades[0]!]
-						: fault === "throw"
-							? [
-									{
-										name: "broken",
-										from: 1,
-										run: () => {
-											throw new Error("upgrade detail");
-										},
-									},
-									normal.upgrades[1]!,
-								]
-							: fault === "decode"
-								? [
-										normal.upgrades[0]!,
-										{name: "bad_model", from: 2, run: () => ({count: "bad", step: 1})},
-									]
-								: normal.upgrades;
-			expect(() => Saved.upgrade(raw, {...normal, upgrades}, "new-build")).toThrowError(
-				expect.objectContaining({_tag: "ProgramDown", reason: "saved_state"}),
-			);
-			expect(JSON.stringify(raw)).toBe(before);
-		});
+		it.effect.prop(
+			`plant, accept ${fault}: failed upgrades leave the original saved bytes intact`,
+			{generated: Schema.Int},
+			({generated}) =>
+				Effect.forEach(
+					[7, generated],
+					(value) =>
+						Effect.promise(async () => {
+							const {Saved} = await import("./state.ts");
+							const raw = {
+								...old,
+								model: {n: value},
+								v: fault === "future" ? 4 : fault === "zero" ? 0 : 1,
+							};
+							const before = JSON.stringify(raw);
+							const normal = state();
+							const upgrades =
+								fault === "gap"
+									? normal.upgrades.slice(1)
+									: fault === "duplicate"
+										? [...normal.upgrades, normal.upgrades[0]!]
+										: fault === "throw"
+											? [
+													{
+														name: "broken",
+														from: 1,
+														run: () => {
+															throw new Error("upgrade detail");
+														},
+													},
+													normal.upgrades[1]!,
+												]
+											: fault === "decode"
+												? [
+														normal.upgrades[0]!,
+														{name: "bad_model", from: 2, run: () => ({count: "bad", step: 1})},
+													]
+												: normal.upgrades;
+							expect(() => Saved.upgrade(raw, {...normal, upgrades}, "new-build")).toThrowError(
+								expect.objectContaining({_tag: "ProgramDown", reason: "saved_state"}),
+							);
+							expect(JSON.stringify(raw)).toBe(before);
+						}),
+					{concurrency: 1, discard: true},
+				),
+			{arbitrary: {seed: 119120, runs: 12}},
+		);
 	it("plant, upgrade in place: even a mutating failed upgrade cannot destroy saved bytes", async () => {
 		const {Saved} = await import("./state.ts");
 		const raw = JSON.parse(JSON.stringify(old));
