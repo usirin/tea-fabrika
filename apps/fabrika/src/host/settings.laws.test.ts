@@ -201,7 +201,15 @@ it("L1: silent watch still hears every save within the bound", async () => {
 });
 
 it("L2: mixed event hints preserve file order and the poll floor", async () => {
-  const hints = fc.array(fc.constantFrom("sent", "dropped", "late", "twice", "other"), { minLength: 1, maxLength: 8 });
+  const hints = fc.array(
+    fc.record({
+      kind: fc.constantFrom("sent", "dropped", "late", "twice", "other"),
+      before: fc.integer({ min: 0, max: 999 }),
+      first: fc.integer({ min: 0, max: 1100 }),
+      second: fc.integer({ min: 0, max: 1100 }),
+    }),
+    { minLength: 1, maxLength: 8 },
+  );
   await fc.assert(
     fc.asyncProperty(saves, hints, (steps, events) =>
       go(
@@ -213,29 +221,38 @@ it("L2: mixed event hints preserve file order and the poll floor", async () => {
           yield* advance(50);
           const history: { _tag: string; value?: string }[] = [{ _tag: "none" }, { _tag: "read", value: "first" }];
 
+          let now = 50;
+          // Stop at each possible poll/settle boundary, without extending the save's bound.
+          const until = Effect.fnUntraced(function* (end: number) {
+            while (now < end) {
+              const next = Math.min(end, (Math.floor(now / 50) + 1) * 50);
+              yield* advance(next - now);
+              now = next;
+            }
+          });
+
           for (const [i, step] of steps.entries()) {
+            const hint = events[i % events.length]!; // hints has minLength: 1
+            yield* until(now + hint.before);
             yield* save(h.fs, step);
             history.push(answer(step));
-            const hint = events[i % events.length];
+            const saved = now;
+            const offsets =
+              hint.kind === "dropped" ? [] : hint.kind === "twice" ? [hint.first, hint.second] : [hint.first];
+            const times = new Set([1050, ...offsets, ...offsets.map((offset) => offset + 50)]);
 
-            if (hint === "sent" || hint === "twice") {
-              yield* h.event();
-            }
+            for (const offset of [...times].sort((a, b) => a - b)) {
+              yield* until(saved + offset);
 
-            if (hint === "twice") {
-              yield* h.event();
-            }
+              for (const event of offsets) {
+                if (event === offset) {
+                  yield* h.event(hint.kind === "other" ? "/settings/other.toml" : file);
+                }
+              }
 
-            if (hint === "other") {
-              yield* h.event("/settings/other.toml");
-            }
-
-            yield* bound;
-            expect(h.got.at(-1)).toEqual(answer(step));
-
-            if (hint === "late") {
-              yield* h.event();
-              yield* advance(50);
+              if (offset === 1050) {
+                expect(h.got.at(-1)).toEqual(answer(step));
+              }
             }
           }
 
@@ -252,7 +269,14 @@ it("L2: mixed event hints preserve file order and the poll floor", async () => {
         }),
       ),
     ),
-    runs,
+    {
+      ...runs,
+      // pinned: review 1 found a late hint and a spaced duplicate postponing a poll's answer.
+      examples: [
+        [[{ kind: "write", text: "late" }], [{ kind: "late", before: 951, first: 1039, second: 0 }]],
+        [[{ kind: "write", text: "twice" }], [{ kind: "twice", before: 951, first: 1000, second: 1039 }]],
+      ],
+    },
   );
 });
 
@@ -355,7 +379,10 @@ it("L6: a tick between two write parts waits for the settled text", async () => 
 it("L7: each new answer logs the file and the way it was heard", async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.array(fc.record({ text: fc.string(), event: fc.boolean() }), { minLength: 2, maxLength: 8 }),
+      fc.array(fc.record({ text: fc.string(), event: fc.boolean(), before: fc.integer({ min: 0, max: 999 }) }), {
+        minLength: 2,
+        maxLength: 8,
+      }),
       (steps) =>
         go(
           Effect.gen(function* () {
@@ -363,29 +390,50 @@ it("L7: each new answer logs the file and the way it was heard", async () => {
             const expected = [{ file: name, by: "start" }];
 
             for (const [i, step] of steps.entries()) {
-              // Unique text makes each save a new answer. Poll-aligned steps distinguish watch from poll.
+              // Each iteration starts on a tick; keep offset zero and also reach the next tick's settle.
+              yield* advance(step.before);
+              // Unique text makes each save a new answer.
               yield* h.fs.writeFileString(file, `${i}:${step.text}`);
 
               if (step.event) {
                 yield* h.event();
               }
 
-              yield* advance(50);
+              const toTick = 1000 - step.before;
+              yield* advance(Math.min(50, toTick));
 
-              if (step.event) {
-                expect(h.got.at(-1)).toEqual({ _tag: "read", value: `${i}:${step.text}` });
+              if (toTick < 50) {
+                yield* advance(50 - toTick);
               }
 
-              yield* advance(950);
-              yield* advance(50);
+              const atSettle = h.got.at(-1);
+
+              yield* advance(Math.max(0, toTick - 50));
+              yield* advance(Math.min(50, toTick));
               expected.push({ file: name, by: step.event ? "watch" : "poll" });
               expect(h.logs).toEqual(expected);
               expect(h.logs).toHaveLength(h.got.length);
+
+              if (step.event) {
+                expect(atSettle).toEqual({ _tag: "read", value: `${i}:${step.text}` });
+              }
+
               yield* advance(950);
             }
           }),
         ),
     ),
-    runs,
+    {
+      ...runs,
+      // pinned: review 1 found that the tick at 1000 replaced the watch hint from 980.
+      examples: [
+        [
+          [
+            { text: "overlap", event: true, before: 980 },
+            { text: "silent", event: false, before: 0 },
+          ],
+        ],
+      ],
+    },
   );
 });
