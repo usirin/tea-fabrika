@@ -1,3 +1,11 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./mutbox.ts?raw";
+import "./mutbox-entry.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./mutbox.Dockerfile?raw";
+import "../../mutation/scripts/run.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/sample.ts?raw";
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
@@ -25,6 +33,9 @@ import {afterAll, describe, expect, it} from "vitest";
 import {
 	claudeProfile,
 	claudeTail,
+	mutboxAnswer,
+	mutboxTail,
+	relatedIn,
 	commitsSaid,
 	endName,
 	freshBox,
@@ -633,5 +644,77 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
 		rmSync(dir, {recursive: true, force: true});
 		expect(r.status).toBe(2);
 		expect(r.stderr).toContain("--electron is for --agent claude");
+	});
+});
+
+describe("drive runs a mutation step's Stryker in the container first, today's tooling", () => {
+	const paths = fc.array(fc.stringMatching(/^[a-z]{1,8}(\/[a-z]{1,8}){0,2}\.test\.ts$/), {
+		minLength: 1,
+		maxLength: 3,
+	});
+
+	// Plant: read RELATED from the middle of a sentence, so prose that names it starts a run.
+	it("the brief's related tests are one RELATED= line of its own, or none", () => {
+		fc.assert(
+			fc.property(paths, fc.constantFrom("", "Use the mutation skill.\n"), (tests, before) => {
+				const line = `RELATED=${tests.join(",")}`;
+				expect(relatedIn(`${before}${line}\nSeed 119120.\n`)).toBe(tests.join(","));
+				expect(relatedIn(`${before}Set ${line} first.\n`)).toBeUndefined();
+				expect(relatedIn(`${before}RELATED: ${tests.join(", ")}\n`)).toBeUndefined();
+			}),
+			options,
+		);
+	});
+
+	// Plant: read a missing or broken answer as done, so the agent starts with no report.
+	it("only mutbox's own done, skip or stuck line counts; anything else is stuck", () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom("done", "skip", "stuck"),
+				fc.string(),
+				fc.string(),
+				fc.string(),
+				(outcome, reason, detail, noise) => {
+					const line = JSON.stringify({outcome, reason, detail, ticket: "1"});
+					expect(mutboxAnswer(`${noise.replaceAll("\n", " ")}\n${line}\n`).outcome).toBe(outcome);
+					expect(mutboxAnswer(JSON.stringify({outcome: "passed", reason, detail})).outcome).toBe(
+						"stuck",
+					);
+					expect(mutboxAnswer(`${line}\nnot json`).outcome).toBe("stuck");
+					expect(mutboxAnswer(line.slice(0, -1)).outcome).toBe("stuck");
+					expect(mutboxAnswer("").outcome).toBe("stuck");
+				},
+			),
+			options,
+		);
+	});
+
+	// Plant: leave the report's path out, or tell the agent to run Stryker itself.
+	it("the agent is told where the report is, not to run Stryker, and when to answer skip", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^\/[a-z/]{1,20}\.json$/), fc.boolean(), (report, skip) => {
+				const told = mutboxTail(report, skip);
+				expect(told).toContain(report);
+				expect(told).toContain("Do not run Stryker");
+				expect(told.includes("answer: skip")).toBe(skip);
+			}),
+			options,
+		);
+	});
+
+	// scenario: the real command line, since the refusal happens before any pure function.
+	// Plant: start the agent when the brief names no related tests.
+	it("scenario: a mutation step with no related tests is a usage error before anything starts", () => {
+		const dir = mkdtempSync(join(tmpdir(), "drive-mutbox-"));
+		const brief = join(dir, "brief.md");
+		writeFileSync(brief, "Use the mutation skill. RELATED: a.test.ts\n");
+		const r = spawnSync(
+			process.execPath,
+			[join(import.meta.dirname, "drive.ts"), "l", "mutation", brief, "--agent", "claude"],
+			{encoding: "utf8", env: {...process.env, BOXES: join(dir, "boxes")}},
+		);
+		rmSync(dir, {recursive: true, force: true});
+		expect(r.status).toBe(2);
+		expect(r.stderr).toContain("RELATED=<paths>");
 	});
 });

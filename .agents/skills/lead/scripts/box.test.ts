@@ -1,3 +1,11 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./mutbox.ts?raw";
+import "./mutbox-entry.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./mutbox.Dockerfile?raw";
+import "../../mutation/scripts/run.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/sample.ts?raw";
 // Declare script reads for Vitest's affected walk, including transitive calls.
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
