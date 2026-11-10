@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
-import { Mailbox, Writer } from "@kampus/libfabrika/coordination";
-import { Doorbell, Ledger } from "@kampus/libfabrika/data";
+import { Mailbox, Owner, ProcessManager, Recipient, Start, Writer } from "@kampus/libfabrika/coordination";
+import { Doorbell, Ledger, LedgerTransaction } from "@kampus/libfabrika/data";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
@@ -135,6 +135,9 @@ describe("p22 real counter in the runner", () => {
     opened.push(ledgerDb);
     let storeDb = new DatabaseSync(join(folder, "process.db"));
     opened.push(storeDb);
+    // Ticket 402: the brain's process table, in its own ledger, survives the wake too.
+    let managerDb = new DatabaseSync(join(folder, "manager.db"));
+    opened.push(managerDb);
     const seen = new Map<string, { rev: number; view: unknown }>();
     const expected = Schema.Struct({ count: Schema.Int });
     const data = () =>
@@ -162,15 +165,62 @@ describe("p22 real counter in the runner", () => {
           };
         }),
       );
-      return A.ProgramRunner.layer({
-        id: PROCESS,
-        name: NAME,
-        program: "counter",
+      // Ticket 402: every runner is supervised. The real manager's first start names PROCESS; a
+      // wake finds it already live. Receipts live in the same Sql as ProcessStore.
+      const from = {
+        by: "SHA256:brain",
+        for: "brain",
+        sentAt: "2026-11-08T00:00:00Z",
+        seen: 0,
+        parent: null,
+        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
         build: "counter-build",
-        owner: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
-      }).pipe(
+      };
+      const manager = Layer.effectDiscard(
+        ProcessManager.use((m) =>
+          m.status(NAME).pipe(
+            Effect.catch(() =>
+              m.start(
+                Start.cases.first.make({
+                  id: `boot:${NAME}`,
+                  name: NAME,
+                  code: { program: "counter", hash: "counter-build" },
+                }),
+                from,
+              ),
+            ),
+          ),
+        ).pipe(Effect.orDie),
+      ).pipe(
+        Layer.provideMerge(
+          ProcessManager.layer(
+            {
+              by: "SHA256:brain",
+              owner: Owner.cases.brain.make({}),
+              recipient: Recipient.cases.client.make({ client: "brain", session: PROCESS }),
+            },
+            Effect.succeed(PROCESS),
+          ),
+        ),
+        Layer.provide(
+          LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+            Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+          ),
+        ),
+      );
+      return A.ProgramRunner.layer(
+        {
+          id: PROCESS,
+          name: NAME,
+          program: "counter",
+          build: "counter-build",
+          owner: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
+        },
+        { recovery: { sql: nodeSql(storeDb), name: NAME, capacity: 1024 ** 3 } },
+      ).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
+            manager,
             A.ProgramLoader.layer({ counter }, {}),
             C.ProcessStore.layer(nodeSql(storeDb), { process: PROCESS }),
             checked,
@@ -222,10 +272,13 @@ describe("p22 real counter in the runner", () => {
     );
     ledgerDb.close();
     storeDb.close();
+    managerDb.close();
     ledgerDb = new DatabaseSync(join(folder, "ledger.db"));
     opened.push(ledgerDb);
     storeDb = new DatabaseSync(join(folder, "process.db"));
     opened.push(storeDb);
+    managerDb = new DatabaseSync(join(folder, "manager.db"));
+    opened.push(managerDb);
     await Effect.runPromise(
       Effect.gen(function* () {
         const r: Runner = yield* A.ProgramRunner;

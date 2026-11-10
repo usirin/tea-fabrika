@@ -75,6 +75,7 @@ Any other actionable finding is one finding row with proof: never a ticket, a fi
 mention, and never a security hole.
 Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
 unchanged. Do not start another review round for it.
+End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
 
@@ -127,7 +128,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge` |
+| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
@@ -189,6 +190,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   commit, so the lead knows which step to send it to. A build that
   answers `done` with no commit is done only with a `laws: green <paths>` line (every law already
   green at its start); else it is `stuck:no_commit`, as a tests step with no commit always is.
+  It takes exactly one `answer:` line outside a code fence: none, two or more, or one that names no
+  verb is `stuck:no_answer`. So is a review's `done` without a merge-ready first line, or with a
+  `changes: <n>` line, n above 0 (ticket 557).
 - A box has no network, so it cannot refresh `pnpm-lock.yaml`. When a step's commits change a
   locked field of a workspace `package.json` (its name or dependencies) or `pnpm-workspace.yaml`
   and leave the lockfile alone, drive answers `ask` (`lockfile`, exit 20) whatever the step said,

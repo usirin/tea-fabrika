@@ -14,7 +14,9 @@
 #   - no auto-merge: it waits for check, e2e, next, commits and the tests on the pushed sha, then
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only). A PR
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
-#     again first, then `gh stack merge <pr> --squash --yes` lands it
+#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands on
+#     purpose (0049): gh refuses BEHIND on its own side and never asks GitHub, so the squash goes
+#     to the REST merge endpoint with `sha` as the head pin, and no override flag
 #   - just before the squash it looks at main once more: when main moved after the checks,
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
 #     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
@@ -436,6 +438,15 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 		now=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefOid -q .headRefOid)
 		[ "$now" = "$tip" ] || { echo "pr $pr: head moved to $now after the checks at $tip" >&2; exit 1; }
 		gh stack merge "$pr" --squash --yes >/dev/null
+		;;
+	# gh 2.62.0 says this when it reads merge state BEHIND, and stops before any call. freshmain.ts
+	# has just passed lint on this head merged with main, so it lands behind main on purpose (0049).
+	# The REST endpoint takes `sha` as the head pin: a newer head is a 409, and GitHub's own rules
+	# still decide (a 405). It is a write, so it is never retried.
+	*"the head branch is not up to date with the base branch"*)
+		said=$(gh api -X PUT "repos/$GH_REPO/pulls/$pr/merge" -f merge_method=squash -f sha="$tip" 2>&1) ||
+			{ echo "pr $pr: merge behind main refused at $tip: $said" >&2; exit 1; }
+		echo "pr $pr: landed behind main on purpose (0049)"
 		;;
 	*) echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
 	esac
