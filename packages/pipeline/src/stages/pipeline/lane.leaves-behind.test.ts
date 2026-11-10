@@ -41,7 +41,10 @@ describe("a lane, on what the real agents answered", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	// P18
@@ -109,7 +112,11 @@ describe("a lane, on what the real agents answered", () => {
 				nodeModules: MODULES,
 				reads: [dirname(dirname(dirname(MODULES)))],
 			});
-			for (const [key, value] of Object.entries(fakeEnv(dir))) vi.stubEnv(key, value);
+
+			for (const [key, value] of Object.entries(fakeEnv(dir))) {
+				vi.stubEnv(key, value);
+			}
+
 			const lines: string[] = [];
 			const line = (n: number) =>
 				runLane(n, (said) => Effect.sync(() => void lines.push(said))).pipe(
@@ -123,11 +130,17 @@ describe("a lane, on what the real agents answered", () => {
 					yield* file("Read names in another form", "Upper case.", OWNER, OTHER);
 					// The other lane first: it reads main at the same commit, and waits at its yes.
 					yield* Effect.forkScoped(line(OTHER));
+
 					for (;;) {
 						const other = yield* readNumbered(OTHER);
-						if (other.timeline.some((e) => e.fact.type === "asked")) break;
+
+						if (other.timeline.some((e) => e.fact.type === "asked")) {
+							break;
+						}
+
 						yield* Effect.sleep("50 millis");
 					}
+
 					const person = yield* Effect.forkScoped(answering(YES));
 					yield* Effect.raceFirst(line(NUMBER), Fiber.join(person));
 					return {lines: [...lines], left: leftBehind(dir)};

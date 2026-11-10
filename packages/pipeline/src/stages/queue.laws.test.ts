@@ -22,6 +22,7 @@ type Msg = MsgOf<Machine>;
 const ctx = stubCtxThrowingProxy<undefined>();
 /** A few items, so one is told twice, done while it waits, and dropped while it is worked. */
 const item = fc.constantFrom("o/r#1", "o/r#2", "o/r#3", "o/r#4");
+
 /** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
 	told: arbRecordMsg("told", {item}),
@@ -29,6 +30,7 @@ const table: MsgArbitraryTable<Msg> = {
 	cleared: arbRecordMsg("cleared", {item}),
 	dropped: arbRecordMsg("dropped", {item}),
 };
+
 const lists = fc.array(arbMsg(table, {weights: {told: 3}}), {maxLength: 30, size: "max"});
 /** A queue a run kept before it was killed: one item worked and owed its tidy-up, two waiting. */
 const KEPT: Waiting = {items: ["o/r#2", "o/r#3"], clearing: ["o/r#1"]};
@@ -39,6 +41,7 @@ const keepsEvery = (machine: Machine, loaded: Waiting | null, runs = 150) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("build:r1", null));
 			const store = handle.store("queue", "queue", queueKind.state);
+
 			for (const s of foldEvents(machine, ctx, loaded, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -62,6 +65,7 @@ describe("the work queue is kept", () => {
 				const store = handle.store("queue", "queue", queueKind.state);
 				const loaded = store.migrate(await store.load());
 				expect(loaded).toEqual({items, clearing: []});
+
 				for (const s of foldEvents(queue, ctx, loaded as Waiting, list).states) {
 					await store.save(s);
 					expect(store.migrate(await store.load())).toEqual(s);

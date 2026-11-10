@@ -25,7 +25,11 @@ it("T237-R2-3: summon with no repo explains how to choose one inside the app", a
 				Effect.provideService(HostJobs, {...jobs, owner: "t1", by: "user:owner"}),
 				Effect.provideService(Programs, programList([])),
 			);
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
 			yield* tell(started.run, "line", "summon fake as scout");
 			const [done] = yield* ready.upTo(1);
 			return {status: done?.status, text: printed.values.map((p) => p.text).join("\n")};

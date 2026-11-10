@@ -35,6 +35,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 		value: {_tag: "ControlError", reason},
 	});
 };
+
 const deploy = (port: number) => (local: Context.Context<never>) =>
 	Effect.gen(function* () {
 		const plugin = [...local.mapUnsafe.values()].find(
@@ -44,7 +45,7 @@ const deploy = (port: number) => (local: Context.Context<never>) =>
 		yield* plugin.start({"fabrika-control": port});
 	});
 
-for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as const)
+for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as const) {
 	it(`stage ${mode} exit has its exact ControlError reason`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.uuid(), async (id) => {
@@ -57,11 +58,21 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
 							? `remote-${id}`
 							: mode;
 				const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-					if (mode === "unreachable") throw new Error(id);
-					if (mode === "json") return new Response(`{${id}`);
-					if (mode === "schema") return Response.json({error: {reason: [id]}});
+					if (mode === "unreachable") {
+						throw new Error(id);
+					}
+
+					if (mode === "json") {
+						return new Response(`{${id}`);
+					}
+
+					if (mode === "schema") {
+						return Response.json({error: {reason: [id]}});
+					}
+
 					return Response.json({error: {reason}});
 				});
+
 				try {
 					const exit = await Effect.runPromiseExit(
 						Effect.scoped(
@@ -87,12 +98,14 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
 			{seed: 119120, numRuns: 10},
 		);
 	});
+}
 
 it("stage reports start_timeout when deployment never opens the control listener", async () => {
 	await fc.assert(
 		fc.asyncProperty(fc.uuid(), async (build) => {
 			const home = mkdtempSync(join(tmpdir(), "p12-time-"));
 			vi.stubEnv("FABRIKA_HOME", home);
+
 			try {
 				const exit = await Effect.runPromise(
 					Effect.scoped(
@@ -127,7 +140,7 @@ it("stage reports start_timeout when deployment never opens the control listener
 	);
 });
 
-for (const mode of ["exit", "spawn"] as const)
+for (const mode of ["exit", "spawn"] as const) {
 	it(`stage returns sample reason to tracing when RSS ${mode} fails and keeps the brain alive`, async () => {
 		await fc.assert(
 			fc.asyncProperty(fc.integer({min: 1, max: 255}), async (code) => {
@@ -139,7 +152,10 @@ for (const mode of ["exit", "spawn"] as const)
 						const span = Tracer.nativeTracer.span(...args);
 						const end = span.end.bind(span);
 						span.end = (time, exit) => {
-							if (span.name === "brain.checkMemory") samples.push(exit);
+							if (span.name === "brain.checkMemory") {
+								samples.push(exit);
+							}
+
 							end(time, exit);
 						};
 						return span;
@@ -153,7 +169,7 @@ for (const mode of ["exit", "spawn"] as const)
 				const spawner = Layer.succeed(
 					ChildProcessSpawner.ChildProcessSpawner,
 					ChildProcessSpawner.make(() => {
-						if (mode === "spawn")
+						if (mode === "spawn") {
 							return Effect.fail(
 								PlatformError.systemError({
 									module: "ChildProcess",
@@ -161,6 +177,8 @@ for (const mode of ["exit", "spawn"] as const)
 									_tag: "PermissionDenied",
 								}),
 							);
+						}
+
 						return Effect.succeed(
 							ChildProcessSpawner.makeHandle({
 								pid: ChildProcessSpawner.ProcessId(27003),
@@ -178,6 +196,7 @@ for (const mode of ["exit", "spawn"] as const)
 						);
 					}),
 				);
+
 				try {
 					const exit = await Effect.runPromiseExit(
 						Effect.scoped(
@@ -211,3 +230,4 @@ for (const mode of ["exit", "spawn"] as const)
 			{seed: 119120, numRuns: 5},
 		);
 	});
+}

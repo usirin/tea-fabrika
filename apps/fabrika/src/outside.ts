@@ -36,9 +36,15 @@ const SCHEMES: ReadonlySet<string> = new Set(["http:", "https:"]);
  */
 export const outsideOf = (url: string): Outward => {
 	const parsed = URL.parse(url);
-	if (parsed === null) return {kind: "refused", why: "not a URL"};
-	if (!SCHEMES.has(parsed.protocol))
+
+	if (parsed === null) {
+		return {kind: "refused", why: "not a URL"};
+	}
+
+	if (!SCHEMES.has(parsed.protocol)) {
 		return {kind: "refused", why: `${parsed.protocol} is not http or https`};
+	}
+
 	return {kind: "open", url: Outside(parsed.href)};
 };
 
@@ -60,6 +66,10 @@ export const openOutside = (asked: {readonly url: string; readonly from: string}
 		const out: Outward = isDesk(asked.from)
 			? outsideOf(asked.url)
 			: {kind: "refused", why: `${asked.from} is not the app's own page`};
-		if (out.kind === "open") yield* (yield* Browser).open(out.url);
+
+		if (out.kind === "open") {
+			yield* (yield* Browser).open(out.url);
+		}
+
 		return out;
 	});

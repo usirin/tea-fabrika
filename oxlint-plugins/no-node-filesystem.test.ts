@@ -6,10 +6,15 @@ import * as fc from "fast-check";
 import {expect, it} from "vitest";
 
 const root = join(import.meta.dirname, "..");
+
 it("every native filesystem import form is refused only in next/ product files", () => {
 	const folder = mkdtempSync(join(root, "next/.p12-fs-"));
+
 	try {
-		for (const area of ["product", "exam", "e2e"]) mkdirSync(join(folder, area));
+		for (const area of ["product", "exam", "e2e"]) {
+			mkdirSync(join(folder, area));
+		}
+
 		fc.assert(
 			fc.property(
 				fc.constantFrom(
@@ -43,7 +48,11 @@ it("every native filesystem import form is refused only in next/ product files",
 						["exam/plant.ts", false],
 						["e2e/plant.ts", false],
 					] as const;
-					for (const [name] of files) writeFileSync(join(folder, name), forms.join("\n"));
+
+					for (const [name] of files) {
+						writeFileSync(join(folder, name), forms.join("\n"));
+					}
+
 					const out = spawnSync(
 						join(root, "node_modules/.bin/oxlint"),
 						["--format=json", ...files.map(([name]) => relative(root, join(folder, name)))],
@@ -56,6 +65,7 @@ it("every native filesystem import form is refused only in next/ product files",
 							labels: Array<{span: {line: number}}>;
 						}>;
 					};
+
 					for (const [name, banned] of files) {
 						const diagnostics = report.diagnostics.filter(
 							(d) => d.code === "fabrika(no-node-filesystem)" && d.filename.endsWith(name),

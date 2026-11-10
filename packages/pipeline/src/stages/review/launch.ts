@@ -56,7 +56,11 @@ export function planOf(argv: readonly string[]): Plan | null {
 	const [pr, ...more] = named;
 	const rubrics = given("--rubrics");
 	const repo = given("--repo");
-	if (pr === undefined || rubrics === null || repo === null) return null;
+
+	if (pr === undefined || rubrics === null || repo === null) {
+		return null;
+	}
+
 	const budget = given("--budget");
 	return {
 		prs: [pr, ...more],
@@ -83,14 +87,23 @@ export const flagsOf = (plan: Plan) => ({
  */
 export function checked(plan: Plan, program: ReviewProgram = reviewProgram): BadShape | undefined {
 	const flags = flagsOf(plan);
+
 	for (const name of Object.keys(program.flags) as (keyof typeof flags)[]) {
 		const why = program.flags[name].shape.problem(flags[name]);
-		if (why !== undefined) return {kind: "bad_shape", name, why};
+
+		if (why !== undefined) {
+			return {kind: "bad_shape", name, why};
+		}
 	}
+
 	for (const pr of plan.prs) {
 		const why = program.inputs.pr.shape.problem(pr);
-		if (why !== undefined) return {kind: "bad_shape", name: "pr", why};
+
+		if (why !== undefined) {
+			return {kind: "bad_shape", name: "pr", why};
+		}
 	}
+
 	return undefined;
 }
 
@@ -117,7 +130,11 @@ export const launch = (
 ) =>
 	Effect.gen(function* () {
 		const bad = checked(plan, program);
-		if (bad !== undefined) return bad;
+
+		if (bad !== undefined) {
+			return bad;
+		}
+
 		return yield* reviewEach(plan, parts, listeners, program);
 	});
 
@@ -133,17 +150,29 @@ const reviewEach = (
 			id: `review:${randomUUID()}`,
 			storage: memoryStorage(),
 		});
-		if (started.kind === "bad_shape") return started;
+
+		if (started.kind === "bad_shape") {
+			return started;
+		}
+
 		const {run, close} = started;
+
 		// Offered: a list longer than the input holds waits for review to read, like a file piped into a command.
 		for (const pr of plan.prs) {
 			const word = yield* offer(run, "pr", pr);
-			if (word !== "queued")
+
+			if (word !== "queued") {
 				return yield* Effect.die(new Error(`review did not take ${pr}: ${word}`));
+			}
 		}
+
 		close("pr");
 		const end = yield* run.ended;
-		if (end.kind === "failed") return yield* Effect.failCause(end.cause);
+
+		if (end.kind === "failed") {
+			return yield* Effect.failCause(end.cause);
+		}
+
 		return {kind: "ran"} as const;
 	}).pipe(
 		Effect.scoped,

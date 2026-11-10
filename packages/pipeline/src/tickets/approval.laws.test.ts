@@ -13,6 +13,7 @@ const owner: Writer = {kind: "user", id: "owner"};
 const agent: Writer = {kind: "agent", id: "plan", for: "owner"};
 
 const writer = fc.constantFrom<Writer>(owner, agent, {kind: "agent", id: "review"});
+
 const fact = fc.oneof(
 	fc.constant<Fact>({type: "commented", body: "Seen it."}),
 	fc.constant<Fact>({type: "commented", body: "Skip part 2.", asks: "changes"}),
@@ -87,7 +88,11 @@ const ticketOf = (title: string, body: string) => {
 		[],
 		[{pos: 1, ticket: 1, by: owner, at: 0, fact: {type: "filed", title, body}}],
 	).tickets;
-	if (ticket === undefined) throw new Error("the ticket did not fold");
+
+	if (ticket === undefined) {
+		throw new Error("the ticket did not fold");
+	}
+
 	return ticket;
 };
 
@@ -102,6 +107,7 @@ const answer = (text?: Hash) => ({
 const title = fc
 	.string({minLength: 1, maxLength: 20})
 	.filter((t) => /^\S(.*\S)?$/.test(t) && !/[\r\n]/.test(t));
+
 const body = fc.string({maxLength: 40});
 
 describe("an approval", () => {

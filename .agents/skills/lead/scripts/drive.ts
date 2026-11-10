@@ -108,6 +108,7 @@ const drive = outcomesOf({
 		"step_said",
 	],
 });
+
 type Outcome = typeof drive.schema.Type;
 
 /**
@@ -121,6 +122,7 @@ const BOX_CHECKS = [
 	"shared_ticket",
 	"root_not_ancestor",
 ] as const;
+
 const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = {readonly kind: "refused"; readonly check: Check};
@@ -203,6 +205,7 @@ const Read = Schema.Struct({
 type Read = typeof Read.Type;
 
 const Done = Schema.Struct({ok: Schema.Boolean, detail: Schema.String});
+
 /** What box.sh new did: made the box, refused it at a named start check, or failed. */
 const Started = Schema.TaggedUnion({
 	made: {},
@@ -212,11 +215,13 @@ const Started = Schema.TaggedUnion({
 
 const boxNew = act("box_new", {input: Ask, ok: Started, err: ["unknown"]});
 const stepRead = gather("step_read", {input: Ask, ok: Read, err: ["unknown"]});
+
 const backupPush = act("backup_push", {
 	input: Schema.Struct({ask: Ask, head: Schema.String}),
 	ok: Done,
 	err: ["unknown"],
 });
+
 const Entry = Schema.Struct({
 	ask: Ask,
 	outcome: Schema.String,
@@ -225,6 +230,7 @@ const Entry = Schema.Struct({
 	exit: Schema.Number,
 	keep: Schema.Boolean,
 });
+
 const record = act("record", {input: Entry, ok: Done, err: ["unknown"]});
 
 type Cmds =
@@ -256,6 +262,7 @@ type Model =
 			readonly head: string;
 			readonly kept: boolean;
 	  };
+
 type Msg = {readonly type: "start"; readonly ask: Ask} | Drafted;
 
 // ---------------------------------------------------------------- the Check
@@ -268,18 +275,27 @@ const answerOf = (step: StepName, report: string) => {
 		.split("\n")
 		.map((l) => l.trim())
 		.filter(Boolean);
+
 	for (const line of lines.toReversed()) {
 		const m = ANSWER.exec(line);
+
 		if (m) {
 			const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
 			const why = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
 			return {verb, to: m[2]?.toLowerCase() ?? "", why};
 		}
 	}
+
 	const first = (lines[0] ?? "").replace(/^[`*#\s]+/, "");
-	if (step === "review" && /^merge-ready/i.test(first))
+
+	if (step === "review" && /^merge-ready/i.test(first)) {
 		return {verb: "done", to: "", why: "merge-ready"};
-	if (step === "review" && /^changes/i.test(first)) return {verb: "send", to: "build", why: first};
+	}
+
+	if (step === "review" && /^changes/i.test(first)) {
+		return {verb: "send", to: "build", why: first};
+	}
+
 	return null;
 };
 
@@ -289,12 +305,17 @@ const GREEN = /^[`* \t]*laws:[ \t]*green\b[`* \t:]*(.*)$/im;
  * The head is the tests step's, already checked, and the mutation step's baseline reruns them. */
 const greenOf = (report: string) => {
 	const m = GREEN.exec(report);
-	if (m === null) return null;
+
+	if (m === null) {
+		return null;
+	}
+
 	return (m[1] ?? "").replace(/[`*\s]+$/, "") || "laws named";
 };
 
 type Judged = {readonly outcome: Outcome; readonly why: string};
 type Ended = {readonly outcome: End; readonly why: string};
+
 const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Judged => ({
 	outcome: {kind: "stuck", why},
 	why: text,
@@ -302,20 +323,35 @@ const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Jud
 
 /** The Check, pure: what the reads found wins over what the step said. */
 const decide = (ask: Ask, read: Read): Judged => {
-	if (read.head === null) return stuck("fetch_failed", read.problem ?? "fetch failed");
-	if (read.problem !== null) return stuck("read_failed", read.problem);
-	if (ask.step === "review" && read.head !== ask.base)
+	if (read.head === null) {
+		return stuck("fetch_failed", read.problem ?? "fetch failed");
+	}
+
+	if (read.problem !== null) {
+		return stuck("read_failed", read.problem);
+	}
+
+	if (ask.step === "review" && read.head !== ask.base) {
 		return stuck("review_committed", `the review moved the head to ${read.head.slice(0, 8)}`);
-	if (read.unsigned.length > 0) return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
-	if (read.leaks.length > 0)
+	}
+
+	if (read.unsigned.length > 0) {
+		return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
+	}
+
+	if (read.leaks.length > 0) {
 		return stuck("leak", `added lines leak, nothing pushed: ${read.leaks.slice(0, 10).join(" ")}`);
-	if (ask.step === "build" && read.exam.length > 0)
+	}
+
+	if (ask.step === "build" && read.exam.length > 0) {
 		return {
 			outcome: {kind: "send", to: "tests", why: "exam_paths"},
 			why: `the build touched exam paths: ${read.exam.join(" ")}`,
 		};
+	}
+
 	// A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
-	if (read.manifests.length > 0)
+	if (read.manifests.length > 0) {
 		return {
 			outcome: {kind: "ask", who: "lead", for: "lockfile"},
 			why:
@@ -325,25 +361,40 @@ const decide = (ask: Ask, read: Read): Judged => {
 				`commit pnpm-lock.yaml as a lead commit with stepcommit.sh, push it with botpush.mjs, ` +
 				`then run ${ask.step} again`,
 		};
-	if (ask.step === "plan" && read.plancheck !== null)
+	}
+
+	if (ask.step === "plan" && read.plancheck !== null) {
 		return {
 			outcome: {kind: "send", to: "plan", why: "plancheck"},
 			why: `plancheck --draft: ${read.plancheck}`,
 		};
+	}
+
 	const said = answerOf(ask.step, read.report);
-	if (said === null) return stuck("no_answer", "no answer line in the report");
+
+	if (said === null) {
+		return stuck("no_answer", "no answer line in the report");
+	}
+
 	switch (said.verb) {
 		case "done":
 			if (ask.step === "build" && read.commits === 0) {
 				const green = greenOf(read.report);
-				if (green === null) return stuck("no_commit", "answered done with no commit");
+
+				if (green === null) {
+					return stuck("no_commit", "answered done with no commit");
+				}
+
 				return {
 					outcome: {kind: "done", part: false, head: read.head},
 					why: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
 				};
 			}
-			if (ask.step === "tests" && read.commits === 0)
+
+			if (ask.step === "tests" && read.commits === 0) {
 				return stuck("no_commit", "answered done with no commit");
+			}
+
 			return {outcome: {kind: "done", part: false, head: read.head}, why: said.why};
 		case "send": {
 			const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
@@ -383,7 +434,10 @@ export const freshBox = (
 ): string => {
 	for (let i = n; ; i += 1) {
 		const box = `${lane}-${step}${i}`;
-		if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) return box;
+
+		if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) {
+			return box;
+		}
 	}
 };
 
@@ -399,6 +453,7 @@ export const reportOf = (path: string, started: number, mtime: number | null): s
 
 type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
+
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
 const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []): Step => {
@@ -425,22 +480,36 @@ export const machine = defineMachine({
 	subs: [draft],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
-			if (m.ask.step === "plan") return [{phase: "drafting", ask: m.ask}, []];
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
+			if (m.ask.step === "plan") {
+				return [{phase: "drafting", ask: m.ask}, []];
+			}
+
 			const asked = boxNew({...m.ask, intent: intentOf("box_new", m.ask.box)});
 			return [{phase: "starting", ask: m.ask}, [asked]];
 		},
 		box_new_ok: (s, m): Step => {
-			if (s.phase !== "starting") return stay(s);
+			if (s.phase !== "starting") {
+				return stay(s);
+			}
+
 			const started = m.value;
-			if (started._tag === "refused")
+
+			if (started._tag === "refused") {
 				return recordIt(
 					s.ask,
 					{outcome: {kind: "refused", check: started.check}, why: started.detail},
 					s.ask.base,
 				);
-			if (started._tag === "failed")
+			}
+
+			if (started._tag === "failed") {
 				return recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base);
+			}
+
 			return [{phase: "drafting", ask: s.ask}, []];
 		},
 		box_new_err: (s): Step =>
@@ -448,30 +517,42 @@ export const machine = defineMachine({
 				? recordIt(s.ask, stuck("box_failed", "box.sh new threw"), s.ask.base)
 				: stay(s),
 		drafted: (s, m): Step => {
-			if (s.phase !== "drafting") return stay(s);
-			if (m.timedOut)
+			if (s.phase !== "drafting") {
+				return stay(s);
+			}
+
+			if (m.timedOut) {
 				return recordIt(
 					s.ask,
 					stuck("timeout", `stopped after ${s.ask.minutes} minutes`),
 					s.ask.base,
 				);
-			if (m.code !== 0)
+			}
+
+			if (m.code !== 0) {
 				return recordIt(
 					s.ask,
 					stuck("agent_failed", `${s.ask.agent} exited ${m.code}; see ${s.ask.err}`),
 					s.ask.base,
 				);
+			}
+
 			return [{phase: "reading", ask: s.ask}, [stepRead(s.ask)]];
 		},
 		step_read_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const j = decide(s.ask, m.value);
 			const head = m.value.head ?? s.ask.base;
+
 			if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
 				const asked = backupPush({ask: s.ask, head, intent: intentOf("push", s.ask.box)});
 				const pushing = {outcome: j.outcome, why: j.why, head, left: m.value.left};
 				return [{phase: "pushing", ask: s.ask, ...pushing}, [asked]];
 			}
+
 			return recordIt(s.ask, j, head, m.value.left);
 		},
 		step_read_err: (s): Step =>
@@ -479,8 +560,14 @@ export const machine = defineMachine({
 				? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base)
 				: stay(s),
 		backup_push_ok: (s, m): Step => {
-			if (s.phase !== "pushing") return stay(s);
-			if (!m.value.ok) return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.left);
+			if (s.phase !== "pushing") {
+				return stay(s);
+			}
+
+			if (!m.value.ok) {
+				return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.left);
+			}
+
 			return recordIt(s.ask, {outcome: s.outcome, why: s.why}, s.head, s.left);
 		},
 		backup_push_err: (s): Step =>
@@ -488,8 +575,14 @@ export const machine = defineMachine({
 				? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.left)
 				: stay(s),
 		record_ok: (s, m): Step => {
-			if (s.phase !== "recording") return stay(s);
-			if (m.value.ok) return [{...s, phase: "over"}, []];
+			if (s.phase !== "recording") {
+				return stay(s);
+			}
+
+			if (m.value.ok) {
+				return [{...s, phase: "over"}, []];
+			}
+
 			const outcome: Outcome = {kind: "stuck", why: "record_failed"};
 			return [{...s, phase: "over", outcome, why: `${s.why} (${m.value.detail})`, kept: true}, []];
 		},
@@ -511,12 +604,13 @@ export const machine = defineMachine({
 
 // ---------------------------------------------------------------- the world
 
-type Env = {readonly MAIN: string; readonly BOXES: string; readonly GH_REPO: string};
+export type Env = {readonly MAIN: string; readonly BOXES: string; readonly GH_REPO: string};
 
-const sh = (cmd: string, args: readonly string[], cwd?: string) => {
+export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 	const r = spawnSync(cmd, args, {cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024});
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
+
 const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
 
 /** This run's report, or `null` when it wrote none. */
@@ -526,14 +620,18 @@ const writtenReport = (ask: Ask) => {
 };
 
 /** The paths env.sh gives every lead script. */
-const loadEnv = (): Env => {
+export const loadEnv = (): Env => {
 	const r = sh("sh", [
 		"-c",
 		'. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"',
 		join(HERE, "env.sh"),
 	]);
 	const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
-	if (r.code !== 0 || !MAIN) throw new Error(`env.sh failed: ${r.err}`);
+
+	if (r.code !== 0 || !MAIN) {
+		throw new Error(`env.sh failed: ${r.err}`);
+	}
+
 	return {MAIN, BOXES, GH_REPO};
 };
 
@@ -563,17 +661,24 @@ const leaksIn = (diff: string, repo: string): string[] => {
 	const hits: string[] = [];
 	let path: string | null = null;
 	let line = 0;
+
 	for (const raw of diff.split("\n")) {
-		if (raw.startsWith("+++ ")) path = raw.startsWith("+++ b/") ? raw.slice(6) : null;
-		else if (raw.startsWith("@@")) line = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0);
-		else if (raw.startsWith("+") && path !== null) {
+		if (raw.startsWith("+++ ")) {
+			path = raw.startsWith("+++ b/") ? raw.slice(6) : null;
+		} else if (raw.startsWith("@@")) {
+			line = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0);
+		} else if (raw.startsWith("+") && path !== null) {
 			const text = raw.slice(1).replaceAll(repo, "");
 			const low = text.toLowerCase();
-			if (SHAPES.some((s) => s.test(text)) || words.some((w) => low.includes(w)))
+
+			if (SHAPES.some((s) => s.test(text)) || words.some((w) => low.includes(w))) {
 				hits.push(`${path}:${line}`);
+			}
+
 			line += 1;
 		}
 	}
+
 	return hits;
 };
 
@@ -585,12 +690,25 @@ const unsignedIn = (env: Env, ask: Ask, head: string): string[] => {
 		.filter(Boolean);
 	return shas.flatMap((sha) => {
 		const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
-		if (r.code !== 0) return [`${sha.slice(0, 8)} has no step note`];
+
+		if (r.code !== 0) {
+			return [`${sha.slice(0, 8)} has no step note`];
+		}
+
 		const note = JSON.parse(r.out) as {_tag?: string; step?: string; ticket?: string};
-		if (note._tag !== "attested") return [`${sha.slice(0, 8)} note is not attested`];
-		if (note.step !== expect) return [`${sha.slice(0, 8)} signed ${note.step}, not ${expect}`];
-		if (String(note.ticket) !== ask.ticket)
+
+		if (note._tag !== "attested") {
+			return [`${sha.slice(0, 8)} note is not attested`];
+		}
+
+		if (note.step !== expect) {
+			return [`${sha.slice(0, 8)} signed ${note.step}, not ${expect}`];
+		}
+
+		if (String(note.ticket) !== ask.ticket) {
 			return [`${sha.slice(0, 8)} signed for ticket ${note.ticket}, not ${ask.ticket}`];
+		}
+
 		return [];
 	});
 };
@@ -630,22 +748,38 @@ const signClaude = (env: Env, ask: Ask) => {
 	};
 	const side = `refs/drive/${ask.box}`;
 	const f = git("fetch", "-q", "-f", join(env.BOXES, ask.box), `refs/heads/${ask.branch}:${side}`);
-	if (f.code !== 0) return f;
+
+	if (f.code !== 0) {
+		return f;
+	}
+
 	const made = git("rev-parse", side).out.trim();
 	git("update-ref", "-d", side);
 	const paths = git("diff", "--name-only", "--no-renames", ask.base, made)
 		.out.split("\n")
 		.filter(Boolean);
-	if (paths.length === 0) return git("update-ref", `refs/heads/${ask.branch}`, ask.base);
+
+	if (paths.length === 0) {
+		return git("update-ref", `refs/heads/${ask.branch}`, ask.base);
+	}
+
 	const said = git("log", "-1", "--format=%s", made).out.trim();
 	const prefix = `T${ask.ticket} ${ask.step}:`;
 	const subject = said.startsWith(prefix) ? said : `${prefix} ${said || "the step's work"}`;
 	const wt = join(env.BOXES, `${ask.box}-sign`);
 	const add = git("worktree", "add", "-q", "--detach", wt, ask.base);
-	if (add.code !== 0) return add;
+
+	if (add.code !== 0) {
+		return add;
+	}
+
 	try {
 		const restore = sh("git", ["-C", wt, "restore", `--source=${made}`, "--worktree", "--", "."]);
-		if (restore.code !== 0) return restore;
+
+		if (restore.code !== 0) {
+			return restore;
+		}
+
 		const r = spawnSync(
 			"sh",
 			[
@@ -669,8 +803,11 @@ const signClaude = (env: Env, ask: Ask) => {
 				},
 			},
 		);
-		if (r.status !== 0)
+
+		if (r.status !== 0) {
 			return {code: r.status ?? -1, out: "", err: `stepcommit: ${r.stdout}${r.stderr}`};
+		}
+
 		const head = sh("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
 		return git("update-ref", `refs/heads/${ask.branch}`, head);
 	} finally {
@@ -681,6 +818,7 @@ const signClaude = (env: Env, ask: Ask) => {
 /** How a Claude run was paid, from its init line: no API key means the subscription. */
 const billingOf = (events: string) => {
 	const first = readFileSync(events, "utf8").split("\n", 1)[0] ?? "";
+
 	try {
 		return (JSON.parse(first) as {apiKeySource?: string}).apiKeySource === "none"
 			? "subscription"
@@ -696,7 +834,10 @@ const billingOf = (events: string) => {
  * agent wrote runs as drive. A box git cannot read counts as holding work.
  */
 export const leftIn = (box: string, branch: string): string[] => {
-	if (!existsSync(box)) return [];
+	if (!existsSync(box)) {
+		return [];
+	}
+
 	const git = (...args: string[]) => {
 		const r = spawnSync("git", ["-C", box, ...args], {encoding: "utf8", env: SAFE_GIT});
 		return {code: r.status ?? -1, out: r.stdout ?? ""};
@@ -721,7 +862,11 @@ export const leftIn = (box: string, branch: string): string[] => {
 		`refs/heads/${branch}`,
 		"--remotes",
 	);
-	if (status.code !== 0 || off.code !== 0) return ["a git state drive could not read"];
+
+	if (status.code !== 0 || off.code !== 0) {
+		return ["a git state drive could not read"];
+	}
+
 	const files = status.out.split("\0").filter(Boolean).length;
 	const commits = Number(off.out.trim());
 	return [
@@ -746,14 +891,21 @@ export const commitsSaid = (
  * check's no; any other failure, or a line naming no known check, is the box failing.
  */
 export const startedOf = (code: number, err: string): typeof Started.Type => {
-	if (code === 0) return {_tag: "made"};
+	if (code === 0) {
+		return {_tag: "made"};
+	}
+
 	const line = err
 		.split("\n")
 		.toReversed()
 		.map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))
 		.find((m) => m !== null);
 	const check = BOX_CHECKS.find((c) => c === line?.[1]);
-	if (code === 3 && line && check) return {_tag: "refused", check, detail: line[2] ?? ""};
+
+	if (code === 3 && line && check) {
+		return {_tag: "refused", check, detail: line[2] ?? ""};
+	}
+
 	return {_tag: "failed", detail: `box.sh new: ${tail(err)}`};
 };
 
@@ -796,6 +948,7 @@ const handlers = (env: Env) => {
 					plancheck: null,
 					report,
 				};
+
 				if (ask.step === "plan") {
 					const r = sh(
 						"sh",
@@ -809,6 +962,7 @@ const handlers = (env: Env) => {
 						problem: null,
 					};
 				}
+
 				// A review commits nothing: its branch lands on a side ref and the lane's branch is left alone.
 				const ref = ask.step === "review" ? `refs/drive/${ask.box}` : `refs/heads/${ask.branch}`;
 				const f =
@@ -817,25 +971,40 @@ const handlers = (env: Env) => {
 						: ask.agent === "claude"
 							? signClaude(env, ask)
 							: box("fetch", ask.box, ask.branch, "--sign", ask.step, "--ticket", ask.ticket);
-				if (f.code !== 0)
+
+				if (f.code !== 0) {
 					return {
 						...empty,
 						head: null,
 						problem: `fetch: ${tail(f.err)}`,
 					};
+				}
+
 				const head = git("rev-parse", ref).out.trim();
-				if (ask.step === "review") git("update-ref", "-d", ref);
+
+				if (ask.step === "review") {
+					git("update-ref", "-d", ref);
+				}
+
 				const failed = (what: string, r: {code: number; err: string}) => ({
 					...empty,
 					head,
 					problem: `${what}: ${tail(r.err)}`,
 				});
 				const count = git("rev-list", "--count", `${ask.base}..${head}`);
-				if (count.code !== 0) return failed("rev-list", count);
+
+				if (count.code !== 0) {
+					return failed("rev-list", count);
+				}
+
 				const commits = Number(count.out.trim());
 				// Every path any commit touched, so a change undone by a later commit still counts.
 				const touched = git("log", "--format=", "--name-only", `${ask.base}..${head}`);
-				if (touched.code !== 0) return failed("git log", touched);
+
+				if (touched.code !== 0) {
+					return failed("git log", touched);
+				}
+
 				const names = [...new Set(touched.out.split("\n").filter(Boolean))];
 				const at = (rev: string, path: string) => {
 					const r = git("show", `${rev}:${path}`);
@@ -857,14 +1026,22 @@ const handlers = (env: Env) => {
 								join(env.MAIN, "exam-paths.json"),
 								...names,
 							]);
-				if (examRun.code > 1) return failed("exam.py", examRun);
+
+				if (examRun.code > 1) {
+					return failed("exam.py", examRun);
+				}
+
 				const exam = examRun.out
 					.split("\n")
 					.filter(Boolean)
 					.map((l) => l.split("\t")[0] ?? l);
 				// Each commit's own added lines, so nothing a later commit removed slips past.
 				const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
-				if (diff.code !== 0) return failed("git log -p", diff);
+
+				if (diff.code !== 0) {
+					return failed("git log -p", diff);
+				}
+
 				// The repo's own commit check verifies the signatures; this step's name is checked here.
 				const check =
 					commits === 0
@@ -881,7 +1058,11 @@ const handlers = (env: Env) => {
 								],
 								env.MAIN,
 							);
-				if (check.code > 1) return failed("commits check", check);
+
+				if (check.code > 1) {
+					return failed("commits check", check);
+				}
+
 				// Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
 				const laneSteps = stepsIn(env, ask.root, head);
 				const holds = checkHolds(check.code, check.out, laneSteps);
@@ -920,6 +1101,7 @@ const handlers = (env: Env) => {
 				const {ask} = e;
 				const notes: string[] = [];
 				const ended = new Date().toISOString();
+
 				// The field row, held beside the boxes until a field PR lands it.
 				if (existsSync(ask.events)) {
 					const row = rowOf(e.outcome);
@@ -953,9 +1135,14 @@ const handlers = (env: Env) => {
 									row,
 									why,
 								]);
-					if (r.code === 0) appendFileSync(join(env.BOXES, `${ask.lane}-rows.jsonl`), r.out);
-					else notes.push(`no field row: ${tail(r.err, 1)}`);
+
+					if (r.code === 0) {
+						appendFileSync(join(env.BOXES, `${ask.lane}-rows.jsonl`), r.out);
+					} else {
+						notes.push(`no field row: ${tail(r.err, 1)}`);
+					}
 				}
+
 				const ok = notes.length === 0;
 				const outcome = ok ? e.outcome : "stuck:record_failed";
 				const keep = e.keep || !ok;
@@ -996,12 +1183,14 @@ const handlers = (env: Env) => {
 					join(env.BOXES, "state", `${ask.lane}.md`),
 					`- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}, head ${e.head.slice(0, 8)}. ${e.why}\n`,
 				);
+
 				if (!keep && ask.step !== "plan" && ask.box) {
 					rmSync(join(env.BOXES, ask.box), {recursive: true, force: true});
 					rmSync(join(env.BOXES, `${ask.box}-gitdata`), {recursive: true, force: true});
 					// Its facts go with it, so no later stepcommit reads a dead box's plan hash.
 					rmSync(join(env.BOXES, "state", `${ask.box}.box`), {force: true});
 				}
+
 				return {ok, detail: notes.join("; ")};
 			}),
 	};
@@ -1085,10 +1274,14 @@ const claudeArgs = (env: Env, ask: Ask) => {
 /** Claude's report is the `result` of its last stream-json line. */
 const saveClaudeReport = (ask: Ask) => {
 	const lines = existsSync(ask.events) ? readFileSync(ask.events, "utf8").split("\n") : [];
+
 	for (const line of lines.toReversed()) {
 		try {
 			const d = JSON.parse(line) as {type?: string; result?: string};
-			if (d.type === "result") return writeFileSync(ask.report, d.result ?? "");
+
+			if (d.type === "result") {
+				return writeFileSync(ask.report, d.result ?? "");
+			}
 		} catch {}
 	}
 };
@@ -1130,7 +1323,11 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 			let force: ReturnType<typeof setTimeout> | undefined;
 			const stopAll = () => {
 				const group = child.pid === undefined ? undefined : -child.pid;
-				if (group === undefined) return;
+
+				if (group === undefined) {
+					return;
+				}
+
 				try {
 					process.kill(group, "SIGTERM");
 					force = setTimeout(() => {
@@ -1149,8 +1346,15 @@ const draftRunner = (env: Env) => (sub: DraftSub) =>
 				clearTimeout(force);
 				closeSync(out);
 				closeSync(err);
-				if (typeof input === "number") closeSync(input);
-				if (claude) saveClaudeReport(ask);
+
+				if (typeof input === "number") {
+					closeSync(input);
+				}
+
+				if (claude) {
+					saveClaudeReport(ask);
+				}
+
 				resume(Effect.succeed({type: "drafted", code, timedOut}));
 			});
 			return Effect.sync(() => {
@@ -1204,9 +1408,12 @@ const freeGb = (path: string): number | null => {
 const holderOf = (porcelain: string, branch: string): string | null => {
 	for (const block of porcelain.split("\n\n")) {
 		const lines = block.split("\n");
-		if (lines.includes(`branch refs/heads/${branch}`))
+
+		if (lines.includes(`branch refs/heads/${branch}`)) {
 			return lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "";
+		}
 	}
+
 	return null;
 };
 
@@ -1257,6 +1464,7 @@ const alive = (pid: number) => {
 const takeElectron = (env: Env) =>
 	Effect.gen(function* () {
 		const lock = join(env.BOXES, "state", "electron.lock");
+
 		for (;;) {
 			try {
 				writeFileSync(lock, String(process.pid), {flag: "wx"});
@@ -1264,8 +1472,12 @@ const takeElectron = (env: Env) =>
 				return;
 			} catch {
 				const owner = Number(readFileSync(lock, "utf8").trim());
-				if (alive(owner)) yield* Effect.sleep("20 seconds");
-				else rmSync(lock, {force: true});
+
+				if (alive(owner)) {
+					yield* Effect.sleep("20 seconds");
+				} else {
+					rmSync(lock, {force: true});
+				}
 			}
 		}
 	});
@@ -1274,26 +1486,33 @@ const main = () => {
 	const args = process.argv.slice(2);
 	const [lane = "", step = "", brief = ""] = args;
 	const agent = flag(args, "--agent") ?? "codex";
+
 	if (
 		!/^[a-z0-9][a-z0-9-]*$/.test(lane) ||
 		!(STEPS as readonly string[]).includes(step) ||
 		!(AGENTS as readonly string[]).includes(agent) ||
 		!existsSync(brief)
-	)
+	) {
 		usage();
+	}
+
 	if (step === "mutation" && agent !== "claude") {
 		console.error("drive.ts: mutation binds ports and starts Electron; run it with --agent claude");
 		process.exit(2);
 	}
+
 	const electron = args.includes("--electron");
+
 	if (electron && agent !== "claude") {
 		console.error("drive.ts: --electron is for --agent claude; a Codex box cannot start Electron");
 		process.exit(2);
 	}
+
 	if (agent === "codex" && flag(args, "--model") !== undefined) {
 		console.error("drive.ts: --model is for --agent claude; a Codex box reads CODEX_MODEL");
 		process.exit(2);
 	}
+
 	const env = loadEnv();
 	mkdirSync(join(env.BOXES, "state"), {recursive: true});
 	const statePath = join(env.BOXES, "state", `${lane}.json`);
@@ -1301,19 +1520,27 @@ const main = () => {
 		? (JSON.parse(readFileSync(statePath, "utf8")) as Lane)
 		: null;
 	const ticket = flag(args, "--ticket") ?? saved?.ticket;
+
 	if (!ticket) {
 		console.error(`drive.ts: no ticket for lane ${lane} yet; pass --ticket`);
 		process.exit(2);
 	}
+
 	const branch = flag(args, "--branch") ?? saved?.branch ?? `fabrikalfa/${lane}`;
 	const plan = flag(args, "--plan") ?? saved?.plan ?? join(env.BOXES, `${lane}-PLAN.md`);
-	if (!branch.startsWith("fabrikalfa/")) usage();
+
+	if (!branch.startsWith("fabrikalfa/")) {
+		usage();
+	}
+
 	sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
+
 	// A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
 	if (step === "plan" && flag(args, "--from") !== undefined) {
 		console.error("drive.ts: a plan reads the main checkout; it takes no --from");
 		process.exit(2);
 	}
+
 	// With no --from, a lane whose branch or -wip backup is on origin continues from the newest
 	// tip, unless the saved head has moved past it (`startHead`). A box started at main on a
 	// branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
@@ -1341,10 +1568,12 @@ const main = () => {
 		"--verify",
 		`${from}^{commit}`,
 	]).out.trim();
+
 	if (!base) {
 		console.error(`drive.ts: ${from} is not a commit in the main checkout`);
 		process.exit(2);
 	}
+
 	// The lane's root: where its base left main, moved up past a caught-up main (lane.ts).
 	const root = laneRoot(
 		saved?.root,
@@ -1352,10 +1581,12 @@ const main = () => {
 		base,
 		isAncestor,
 	);
+
 	if (!root) {
 		console.error(`drive.ts: ${base.slice(0, 8)} shares no history with origin/main`);
 		process.exit(2);
 	}
+
 	const s = step as StepName;
 	const box = freshBox(
 		lane,
@@ -1389,12 +1620,14 @@ const main = () => {
 	const count = (pattern: string) =>
 		sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
 	const agents = count("^codex exec") + count("drive-claude-settings");
+
 	if (args.includes("--plan-only")) {
 		console.log(
 			JSON.stringify({outcome: "plan-only", ...ask, agents, electron: holdsElectron(s, electron)}),
 		);
 		return;
 	}
+
 	if (agents >= 8) {
 		console.log(
 			JSON.stringify({
@@ -1404,6 +1637,7 @@ const main = () => {
 		);
 		process.exit(3);
 	}
+
 	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
 	// naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
 	const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
@@ -1413,6 +1647,7 @@ const main = () => {
 	});
 	process.stderr.write(gc.stdout ?? "");
 	const free = freeGb(env.BOXES);
+
 	if (free === null || free < MIN_FREE_GB) {
 		const said = free === null ? "df could not read the free space" : `${free} GB free`;
 		const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
@@ -1424,11 +1659,13 @@ const main = () => {
 		);
 		process.exit(3);
 	}
+
 	// A plan reads the main checkout and a review fetches to a side ref; every other step fetches the
 	// lane's branch at the end. Refuse now, not after the agent ran (themes tests, 2026-11-09).
 	if (s !== "plan" && s !== "review") {
 		const list = sh("git", ["-C", env.MAIN, "worktree", "list", "--porcelain"]);
 		const holder = list.code === 0 ? holderOf(list.out, branch) : "";
+
 		if (holder !== null) {
 			const said =
 				list.code === 0
@@ -1444,6 +1681,7 @@ const main = () => {
 			process.exit(check ? 3 : 30);
 		}
 	}
+
 	const verdict =
 		s === "review"
 			? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n"
@@ -1454,10 +1692,17 @@ const main = () => {
 	);
 
 	const program = Effect.gen(function* () {
-		if (holdsElectron(s, electron)) yield* takeElectron(env);
+		if (holdsElectron(s, electron)) {
+			yield* takeElectron(env);
+		}
+
 		// One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
-		if (s === "tests" || s === "build" || s === "mutation")
-			while (sh("pgrep", ["-x", "tsgo"]).code === 0) yield* Effect.sleep("20 seconds");
+		if (s === "tests" || s === "build" || s === "mutation") {
+			while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
+				yield* Effect.sleep("20 seconds");
+			}
+		}
+
 		const h = handlers(env);
 		const handle = yield* run(machine, {
 			ctx: undefined,
@@ -1468,7 +1713,11 @@ const main = () => {
 		const runtime = yield* handle.ready;
 		yield* runtime.dispatch({type: "start", ask});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`drive stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`drive stopped in ${end.phase}`);
+		}
+
 		const line = {
 			outcome: endName(end.outcome),
 			lane,
@@ -1502,4 +1751,6 @@ const main = () => {
 	});
 };
 
-if (import.meta.main) main();
+if (import.meta.main) {
+	main();
+}

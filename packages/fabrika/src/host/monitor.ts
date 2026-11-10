@@ -115,6 +115,7 @@ export interface MonitorStepped {
 }
 
 const ask = (w: Watch): MonitorCmd => ({type: "monitor", ref: refOf(w), target: w.target});
+
 const asking = (w: Watch): Watch => ({
 	...w,
 	n: w.n + 1,
@@ -122,16 +123,24 @@ const asking = (w: Watch): Watch => ({
 	incarnation: null,
 	due: null,
 });
+
 const swap = (s: Monitors, from: Watch, to: Watch): Monitors => ({
 	...s,
 	watches: s.watches.map((x) => (x === from ? to : x)),
 });
+
 const byRef = (s: Monitors, ref: string) => s.watches.find((w) => refOf(w) === ref);
 
 /** `w` learns every incarnation up to `to` has ended: the ones it had not reported, or none. */
 const learn = (w: Watch, to: number): {readonly watch: Watch; readonly from: number | null} => {
-	if (w.endedTo === null) return {watch: {...w, endedTo: to}, from: null};
-	if (to <= w.endedTo) return {watch: w, from: null};
+	if (w.endedTo === null) {
+		return {watch: {...w, endedTo: to}, from: null};
+	}
+
+	if (to <= w.endedTo) {
+		return {watch: w, from: null};
+	}
+
 	return {watch: {...w, endedTo: to}, from: w.endedTo + 1};
 };
 
@@ -139,9 +148,13 @@ export const update =
 	(settings: MonitorSettings) =>
 	(s: Monitors, m: MonitorMsg): MonitorStepped => {
 		const none = (monitors: Monitors): MonitorStepped => ({monitors, cmds: [], outcome: null});
+
 		switch (m.type) {
 			case "watch": {
-				if (s.watches.some((w) => w.target === m.target)) return none(s);
+				if (s.watches.some((w) => w.target === m.target)) {
+					return none(s);
+				}
+
 				const w = asking({
 					target: m.target,
 					n: 0,
@@ -161,12 +174,17 @@ export const update =
 				};
 			case "monitored": {
 				const w = byRef(s, m.ref);
-				if (w === undefined || w.status !== "asking") return none(s);
+
+				if (w === undefined || w.status !== "asking") {
+					return none(s);
+				}
+
 				if (m.how !== "on" || m.incarnation === null) {
 					const misses = w.misses + 1;
 					const due = m.at + retryDelayOf(settings, misses);
 					return none(swap(s, w, {...w, status: "waiting", due, misses}));
 				}
+
 				// On incarnation j: every one before it has ended.
 				const {watch, from} = learn(w, m.incarnation - 1);
 				const on = {...watch, status: "on" as const, incarnation: m.incarnation, misses: 0};
@@ -179,16 +197,24 @@ export const update =
 			}
 			case "retry_due": {
 				const w = byRef(s, m.ref);
-				if (w === undefined || w.status !== "waiting") return none(s);
+
+				if (w === undefined || w.status !== "waiting") {
+					return none(s);
+				}
+
 				const again = asking(w);
 				return {monitors: swap(s, w, again), cmds: [ask(again)], outcome: null};
 			}
 			case "down": {
-				if (m.rev <= s.cursor) return none(s);
+				if (m.rev <= s.cursor) {
+					return none(s);
+				}
+
 				const read = {...s, cursor: m.rev};
 				const {type: _, rev: __, ...down} = m;
 				const w = read.watches.find((x) => x.target === m.target);
-				if (w === undefined)
+
+				if (w === undefined) {
 					return {
 						monitors: read,
 						cmds: [],
@@ -197,10 +223,13 @@ export const update =
 								? {kind: "noproc", ...down}
 								: {kind: "down", missed: 0, ...down},
 					};
+				}
+
 				const {watch, from} = learn(w, m.incarnation);
+
 				// Down at j: j and every one before it have ended. The monitor's own answer already
 				// moved the watch on to a retry, so a `noproc` never moves it.
-				if (m.reason === "noproc")
+				if (m.reason === "noproc") {
 					return {
 						monitors: swap(read, w, watch),
 						cmds: [],
@@ -209,15 +238,20 @@ export const update =
 								? {kind: "noproc", ...down}
 								: {kind: "gap", target: w.target, from, to: m.incarnation},
 					};
+				}
+
 				// Two monitors may see one death (a monitor whose answer was lost, then its retry): the
 				// second reports nothing, but still moves the watch on if it is the current one.
 				const fresh = w.endedTo === null || from !== null;
 				const outcome: MonitorOutcome = fresh
 					? {kind: "down", missed: from === null ? 0 : m.incarnation - from, ...down}
 					: null;
+
 				// Only the current monitor moves the watch on; an older one's DOWN only reports.
-				if (refOf(w) !== m.ref || w.status === "waiting")
+				if (refOf(w) !== m.ref || w.status === "waiting") {
 					return {monitors: swap(read, w, watch), cmds: [], outcome};
+				}
+
 				const again = asking(watch);
 				return {monitors: swap(read, w, again), cmds: [ask(again)], outcome};
 			}

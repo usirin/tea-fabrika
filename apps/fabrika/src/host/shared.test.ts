@@ -73,20 +73,31 @@ import {pathsOf} from "./socket.ts";
 const users = new Map<string, {id: number; keys: string[]}>();
 /** The path of every call the Worker made to the fake GitHub: a login asks `/user/<id>` once. */
 const calls: string[] = [];
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	calls.push(url.pathname);
-	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
+
+	if (url.host !== "api.github.com") {
+		return new Response("not here", {status: 502});
+	}
+
 	const byId = /^\/user\/([0-9]+)$/.exec(url.pathname);
+
 	if (byId !== null) {
 		const found = [...users].find(([, u]) => u.id === Number(byId[1]));
 		return found === undefined
 			? Response.json({message: "Not Found"}, {status: 404})
 			: Response.json({id: found[1].id, login: found[0]});
 	}
+
 	const m = /^\/users\/([^/]+)(\/keys)?$/.exec(url.pathname);
 	const u = m?.[1] === undefined ? undefined : users.get(decodeURIComponent(m[1]));
-	if (u === undefined) return Response.json({message: "Not Found"}, {status: 404});
+
+	if (u === undefined) {
+		return Response.json({message: "Not Found"}, {status: 404});
+	}
+
 	return m?.[2] === undefined
 		? Response.json({id: u.id, login: m?.[1]})
 		: Response.json(u.keys.map((key, i) => ({id: i + 1, key})));
@@ -114,8 +125,11 @@ const keyFor = async (login: string, id: number) => {
 
 beforeAll(async () => {
 	root = mkdtempSync(join(tmpdir(), "fabrika-two-"));
-	for (const name of ["alice", "bob", "carol", "dave"])
+
+	for (const name of ["alice", "bob", "carol", "dave"]) {
 		mkdirSync(join(root, name), {recursive: true});
+	}
+
 	await keyFor("alice", 7);
 	await keyFor("bob", 8);
 	await keyFor("carol", 9);
@@ -153,10 +167,18 @@ const trackerOn = <E>(
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()}).pipe(
 			Effect.provideContext(services),
 		);
-		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the tracker did not start");
+		}
+
 		const {run: r} = started;
 		const view = viewOf(tracker);
-		if (view === undefined) return yield* Effect.die("the tracker has no view");
+
+		if (view === undefined) {
+			return yield* Effect.die("the tracker has no view");
+		}
+
 		type Inputs = (typeof tracker)["inputs"];
 		const say = <K extends keyof Inputs & string>(
 			input: K,
@@ -513,6 +535,7 @@ describe("a host's session on the server", () => {
 				];
 			}).pipe(Effect.scoped),
 		);
+
 		// The refusal is kept, so the second call fails the same and logs in no more (http.test.ts).
 		for (const e of seen) {
 			expect(e).toMatchObject({_tag: "LedgerUnreachable", method: "read"});

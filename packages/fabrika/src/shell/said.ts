@@ -28,36 +28,55 @@ export const runSaid = (shell: Shell, st: SaidStatement): Effect.Effect<Said> =>
 				why,
 				...(guess === undefined ? {} : {didYouMean: guess}),
 			});
-			for (const line of lines) shell.print("err", line);
+
+			for (const line of lines) {
+				shell.print("err", line);
+			}
+
 			return {status: 2, exit: false};
 		};
 		const [mention] = st.mentions;
-		if (mention === undefined) return refuse(0, "say whom to: @name, then what to say");
+
+		if (mention === undefined) {
+			return refuse(0, "say whom to: @name, then what to say");
+		}
+
 		// Only a person talks to an agent: an agent's tsh never starts a paid turn.
-		if (writerOf(shell.by ?? "")?.kind !== "user")
+		if (writerOf(shell.by ?? "")?.kind !== "user") {
 			return refuse(mention.at.start - 1, "only a person talks to a summoned agent");
+		}
+
 		const entry = shell.list.get(TURN);
 		const known = (yield* shell.summons.list).map((s) => s.name);
-		if (entry === undefined || known.length === 0)
+
+		if (entry === undefined || known.length === 0) {
 			return refuse(
 				mention.at.start - 1,
 				"no agent is summoned here: summon <agent> as <name> starts one",
 			);
+		}
+
 		const name =
 			mention.name === "" ? (known.length === 1 ? (known[0] ?? "") : null) : mention.name;
-		if (name === null)
+
+		if (name === null) {
 			return refuse(
 				mention.at.start - 1,
 				`@ alone is for the one agent summoned, and there are ${known.length}: ${known.map((n) => `@${n}`).join(" ")}`,
 			);
+		}
+
 		if (!known.includes(name)) {
 			// Upper case is never folded: the lower-case name is the guess (S3).
 			const lower = name.toLowerCase();
 			const guess = known.includes(lower) ? lower : didYouMean(name, known);
 			return refuse(mention.at.start, `no agent named ${name}`, guess);
 		}
-		if (st.prose.text.trim() === "")
+
+		if (st.prose.text.trim() === "") {
 			return refuse(st.prose.at.start, `say what to tell ${name}, after @${name}`);
+		}
+
 		const line: Line = {
 			stages: [
 				{

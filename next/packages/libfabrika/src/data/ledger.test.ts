@@ -39,18 +39,27 @@ const folder = mkdtempSync(join(tmpdir(), "p6-ledger-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
 const freshPath = (): string => join(folder, `ledger-${++files}.db`);
+
 const openDb = (path: string): DatabaseSync => {
 	const db = new DatabaseSync(path);
 	opened.push(db);
 	return db;
 };
+
 const fresh = (): Sql => nodeSql(openDb(freshPath()));
+
 afterAll(() => {
-	for (const db of opened.splice(0)) if (db.isOpen) db.close();
+	for (const db of opened.splice(0)) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
 
 type Rung = {readonly to: string; readonly stream: string; readonly rev: number};
+
 const bell = () => {
 	const rang: Array<Rung> = [];
 	const layer = Layer.succeed(Doorbell, {
@@ -61,7 +70,9 @@ const bell = () => {
 	});
 	return {rang, layer};
 };
+
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
 	Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(doorbell));
 
@@ -77,8 +88,10 @@ const line = (over: Partial<Line> = {}): Line => ({
 	body: {note: "n-7f3a", base: 3},
 	...over,
 });
+
 const placed = (rev: number, pos: number) => ({_tag: "placed", rev, pos});
 const refused = (why: string) => ({_tag: "refused", why});
+
 const readAll = (stream: string, after = 0) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, after)));
 
@@ -106,11 +119,15 @@ const sqliteFull = (): Error =>
 		errcode: 13,
 		errstr: "database or disk is full",
 	});
+
 /** A Sql whose next call throws once `arm` is called, then works again. */
 const throwingOnce = (sql: Sql) => {
 	let armed = false;
 	const trip = (): void => {
-		if (!armed) return;
+		if (!armed) {
+			return;
+		}
+
 		armed = false;
 		throw sqliteFull();
 	};
@@ -129,6 +146,7 @@ const throwingOnce = (sql: Sql) => {
 		},
 	};
 };
+
 /** A tracer that keeps every span it makes, so a test can count the ones that ended. */
 const capture = () => {
 	const spans: Array<Tracer.NativeSpan> = [];
@@ -225,10 +243,12 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				const answers = [];
+
 				for (const n of [1, 2, 3]) {
 					answers.push(yield* ledger.append("a", `a-${n}`, line({body: n})));
 					answers.push(yield* ledger.append("b", `b-${n}`, line({body: n})));
 				}
+
 				expect(answers).toEqual([
 					placed(1, 1),
 					placed(2, 1),
@@ -267,10 +287,15 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 			let head = 0;
 			const answers = commands.map(({stream, id, body, ahead}) => {
 				const first = kept.get(`${stream} ${id}`);
+
 				if (first !== undefined) {
 					return first.body === body ? placed(first.rev, first.pos) : refused("id_reused");
 				}
-				if (ahead > 0) return refused("seen_ahead");
+
+				if (ahead > 0) {
+					return refused("seen_ahead");
+				}
+
 				const list = streams.get(stream) ?? [];
 				const entry = {id, body, rev: ++head, pos: list.length + 1};
 				kept.set(`${stream} ${id}`, entry);
@@ -287,19 +312,24 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 						const answers = [];
 						let head = 0;
 						const ids = new Set<string>();
+
 						for (const {stream, id, body, ahead} of commands) {
 							// A new id may be sent ahead of the head; a resend always sends a seen in range.
 							const known = ids.has(`${stream} ${id}`);
 							const seen = known ? head : head + ahead;
 							const answer = yield* ledger.append(stream, id, line({body, seen}));
+
 							if (answer._tag === "placed") {
 								ids.add(`${stream} ${id}`);
 								head = Math.max(head, answer.rev);
 							}
+
 							answers.push(answer);
 						}
+
 						const expected = model(commands);
 						expect(answers).toEqual(expected.answers);
+
 						for (const stream of ["a", "b", "c"]) {
 							const entries = yield* readAll(stream);
 							expect(
@@ -340,7 +370,11 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 				const first = openDb(path);
 				yield* Effect.gen(function* () {
 					const ledger = yield* Ledger;
-					for (const n of [1, 2, 3, 4, 5]) yield* ledger.append("a", `w-${n}`, line());
+
+					for (const n of [1, 2, 3, 4, 5]) {
+						yield* ledger.append("a", `w-${n}`, line());
+					}
+
 					expect(yield* ledger.wait("b", 5)).toEqual({_tag: "parked"});
 				}).pipe(Effect.provide(onSql(nodeSql(first))));
 				first.close();
@@ -379,6 +413,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 				).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
 				const revs = answers.map((answer) => (answer._tag === "placed" ? answer.rev : -1));
 				expect([...revs].sort((x, y) => x - y)).toEqual(writes.map((i) => i + 1));
+
 				for (const stream of ["s0", "s1", "s2"]) {
 					const entries = yield* readAll(stream);
 					expect(entries.map((e) => e.pos)).toEqual(Array.from({length: 20}, (_, i) => i + 1));
@@ -429,14 +464,19 @@ describe("p93, seen is bounded by the log's head", () => {
 					Effect.gen(function* () {
 						const ledger = yield* Ledger;
 						let head = 0;
+
 						for (const [i, {stream, offset}] of writes.entries()) {
 							const seen = Math.max(0, head + offset);
 							const answer = yield* ledger.append(stream, `w-${i}`, line({seen}));
 							expect(answer).toEqual(
 								seen > head ? refused("seen_ahead") : placed(head + 1, expect.any(Number)),
 							);
-							if (answer._tag === "placed") head = answer.rev;
+
+							if (answer._tag === "placed") {
+								head = answer.rev;
+							}
 						}
+
 						const entries = [...(yield* readAll("a")), ...(yield* readAll("b"))];
 						expect(entries).toHaveLength(head);
 						expect(entries.filter((e) => e.seen >= e.rev)).toEqual([]);
@@ -454,7 +494,11 @@ describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () 
 		const {tracer, ended} = capture();
 		return Effect.gen(function* () {
 			const ledger = yield* Ledger;
-			for (let n = 1; n <= 300; n++) yield* ledger.append("a", `w-${n}`, line());
+
+			for (let n = 1; n <= 300; n++) {
+				yield* ledger.append("a", `w-${n}`, line());
+			}
+
 			const before = calls();
 			const stream = ledger.read("a", 0);
 			expect(calls()).toBe(before);
@@ -495,7 +539,11 @@ describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () 
 				"٢٠٢٦-١١-٠٧",
 				"1762549801311",
 			];
-			for (const [i, sentAt] of sent.entries()) yield* ledger.append("a", `w-${i}`, line({sentAt}));
+
+			for (const [i, sentAt] of sent.entries()) {
+				yield* ledger.append("a", `w-${i}`, line({sentAt}));
+			}
+
 			expect((yield* readAll("a")).map((e) => e.sentAt)).toEqual(sent);
 		}).pipe(Effect.provide(onSql(fresh()))),
 	);
@@ -523,7 +571,11 @@ describe("p20, failures are typed, and pass", () => {
 				yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
 				yield* Effect.flip(ledger.wait("a", 0)),
 			];
-			for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+
+			for (const error of errors) {
+				expect(error).toBeInstanceOf(LedgerError);
+			}
+
 			expect(errors.map((error) => error.why)).toEqual([
 				"unreachable",
 				"unreachable",
@@ -547,7 +599,11 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
 					yield* Effect.flip(ledger.wait("a", 0)),
 				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+
+				for (const error of errors) {
+					expect(error).toBeInstanceOf(LedgerError);
+				}
+
 				expect(errors.map((error) => error.why)).toEqual(["bad_row", "bad_row", "bad_row"]);
 			}).pipe(Effect.provide(Ledger.remote(stub, {reader: READER})));
 		},
@@ -618,7 +674,11 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
 					yield* Effect.flip(ledger.wait("a", 0)),
 				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+
+				for (const error of errors) {
+					expect(error).toBeInstanceOf(LedgerError);
+				}
+
 				expect(errors.map((error) => error.why)).toEqual(["storage", "storage", "storage"]);
 			}).pipe(
 				Effect.provide(
@@ -658,7 +718,11 @@ describe("p20, failures are typed, and pass", () => {
 					yield* Effect.flip(ledger.append("a", "w-2", line())),
 					yield* Effect.flip(ledger.append("b", "w-3", line())),
 				];
-				for (const error of errors) expect(error).toBeInstanceOf(LedgerError);
+
+				for (const error of errors) {
+					expect(error).toBeInstanceOf(LedgerError);
+				}
+
 				expect(errors.map((error) => error.why)).toEqual([
 					"bad_row",
 					"bad_row",
@@ -694,8 +758,11 @@ describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () =>
 				expect(first).toBeGreaterThan(0);
 				// With SQLite's default rollback journal, the file holds exactly page_count pages.
 				expect(first).toBe(statSync(path).size);
-				for (let n = 1; n <= 50; n++)
+
+				for (let n = 1; n <= 50; n++) {
 					yield* ledger.append("a", `w-${n}`, line({body: {note: "x".repeat(4_000)}}));
+				}
+
 				const after = sql.size();
 				expect(after).toBeGreaterThan(first + 50 * 4_000);
 				expect(after).toBe(statSync(path).size);

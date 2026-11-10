@@ -52,10 +52,12 @@ export const laneRunner = (writer: Writer): Layer.Layer<LaneRunner, never, Ledge
 				run: (n, say) =>
 					Effect.gen(function* () {
 						const home = process.env.FABRIKA_HOME;
+
 						if (home === undefined || home === "") {
 							yield* say("pipeline runs in the app: this host was started on no home.");
 							return;
 						}
+
 						const ignorer = ignorerFile();
 						const shipped = shippedFolder();
 						yield* laneCode.pipe(

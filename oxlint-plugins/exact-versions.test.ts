@@ -11,22 +11,29 @@ const home = mkdtempSync(join(tmpdir(), "exact-versions-"));
 afterAll(() => rmSync(home, {recursive: true, force: true}));
 
 let trees = 0;
+
 /** Runs the check on a new git tree holding these files, each staged unless listed in `untracked`. */
 const run = (files: Readonly<Record<string, string>>, untracked: readonly string[] = []) => {
 	trees += 1;
 	const tree = join(home, String(trees));
 	mkdirSync(tree);
 	spawnSync("git", ["init", "-q"], {cwd: tree});
+
 	for (const [path, text] of Object.entries(files)) {
 		mkdirSync(dirname(join(tree, path)), {recursive: true});
 		writeFileSync(join(tree, path), text);
-		if (!untracked.includes(path)) spawnSync("git", ["add", path], {cwd: tree});
+
+		if (!untracked.includes(path)) {
+			spawnSync("git", ["add", path], {cwd: tree});
+		}
 	}
+
 	const ran = spawnSync("node", [SCRIPT, tree], {encoding: "utf8"});
 	return {status: ran.status, said: ran.stdout + ran.stderr};
 };
 
 const WORKSPACE = "catalog:\n  a: 1.2.3\n";
+
 const inPackage = (field: string, version: string) =>
 	run({
 		"pnpm-workspace.yaml": WORKSPACE,

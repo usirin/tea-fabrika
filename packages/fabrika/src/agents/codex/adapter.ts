@@ -83,13 +83,24 @@ export const flagsOf = (config: Record<string, unknown>, prefix = ""): string[] 
 
 /** Whether Codex's strict mode takes a JSON Schema: every object closed, every field required. */
 export const strictOk = (schema: unknown): boolean => {
-	if (Array.isArray(schema)) return schema.every(strictOk);
-	if (typeof schema !== "object" || schema === null) return true;
+	if (Array.isArray(schema)) {
+		return schema.every(strictOk);
+	}
+
+	if (typeof schema !== "object" || schema === null) {
+		return true;
+	}
+
 	const node = schema as Record<string, unknown>;
+
 	if (node.type === "object" && typeof node.properties === "object" && node.properties !== null) {
 		const required = Array.isArray(node.required) ? node.required : [];
-		if (!Object.keys(node.properties).every((k) => required.includes(k))) return false;
+
+		if (!Object.keys(node.properties).every((k) => required.includes(k))) {
+			return false;
+		}
 	}
+
 	return Object.values(node).every(strictOk);
 };
 
@@ -98,6 +109,7 @@ const Usage = Schema.Struct({
 	cached_input_tokens: Schema.optional(Schema.Number),
 	output_tokens: Schema.Number,
 });
+
 const Item = Schema.Struct({
 	id: Schema.String,
 	type: Schema.String,
@@ -107,6 +119,7 @@ const Item = Schema.Struct({
 	aggregated_output: Schema.optional(Schema.String),
 	status: Schema.optional(Schema.String),
 });
+
 /** The events of `codex exec --json` this adapter reads. Others are let through as nothing. */
 const Event = Schema.Union([
 	Schema.Struct({type: Schema.Literal("thread.started"), thread_id: Schema.String}),
@@ -115,13 +128,19 @@ const Event = Schema.Union([
 	Schema.Struct({type: Schema.Literal("turn.failed"), error: Schema.optional(Schema.Unknown)}),
 	Schema.Struct({type: Schema.Literal("error"), message: Schema.optional(Schema.String)}),
 ]);
+
 const readEvent = Schema.decodeUnknownOption(Schema.fromJsonString(Event));
 
 /** One line of Codex's stream, as raw updates. Pure. A failure is its message. */
 export const rawOfLine = (line: string): Raw[] | {readonly broke: string} => {
 	const read = readEvent(line);
-	if (Option.isNone(read)) return [];
+
+	if (Option.isNone(read)) {
+		return [];
+	}
+
 	const e = read.value;
+
 	switch (e.type) {
 		case "thread.started":
 			return [{_tag: "opened", own: e.thread_id}];
@@ -137,8 +156,14 @@ export const rawOfLine = (line: string): Raw[] | {readonly broke: string} => {
 						},
 					];
 		case "item.completed":
-			if (e.item.type === "agent_message") return [{_tag: "said", text: e.item.text ?? ""}];
-			if (e.item.type === "reasoning") return [];
+			if (e.item.type === "agent_message") {
+				return [{_tag: "said", text: e.item.text ?? ""}];
+			}
+
+			if (e.item.type === "reasoning") {
+				return [];
+			}
+
 			return [
 				{
 					_tag: "tool",
@@ -192,7 +217,11 @@ export const codexEnvOf = (parent: Env, home: string): Record<string, string> =>
  */
 export const codexFolders = (codex: string, owner: string, env: Env): string[] => {
 	const found = codex.includes(sep) ? resolve(codex) : onPath(codex, env);
-	if (found === undefined) return [];
+
+	if (found === undefined) {
+		return [];
+	}
+
 	const real = Option.liftThrowable((p: string) => realpathSync(p))(found);
 	const packages = `${owner}/.codex/packages`;
 	const target = Option.isSome(real) ? real.value : found;
@@ -229,7 +258,11 @@ export const codexAdapter = (
 						[login],
 					);
 					const tooBig = fenceTooBig(profile.permissions.fenced.filesystem);
-					if (tooBig !== null) return yield* Effect.fail(failed("contain", tooBig));
+
+					if (tooBig !== null) {
+						return yield* Effect.fail(failed("contain", tooBig));
+					}
+
 					// Our session, not the folder, names the home: a thread lives in the home it was made in.
 					const home = codexHomeOf(`session:${turn.session}`, parent);
 					yield* codexHome(home, login).pipe(
@@ -244,10 +277,13 @@ export const codexAdapter = (
 					);
 					const strict = strictOk(turn.schema);
 					const schemaFile = `${home}/answer-schema.json`;
-					if (strict)
+
+					if (strict) {
 						yield* fs
 							.writeFileString(schemaFile, JSON.stringify(turn.schema))
 							.pipe(Effect.mapError((e) => failed("start", String(e))));
+					}
+
 					const args = [
 						"exec",
 						"--json",

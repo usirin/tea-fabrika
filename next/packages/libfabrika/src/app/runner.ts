@@ -113,6 +113,7 @@ const RESERVED = new Set([
 const WRITE = "write";
 const WriteCmd = Schema.Struct({stream: Schema.NonEmptyString, write: Write});
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
+
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
 	...Incoming.fields,
@@ -123,6 +124,7 @@ const decodeDelivery = Schema.decodeUnknownEffect(Delivery);
 const Typed = Schema.Struct({type: Schema.String});
 const decodeTyped = Schema.decodeUnknownOption(Typed);
 const decodeDown = Schema.decodeUnknownOption(Down);
+
 const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
 	return yield* sha256(
 		new TextEncoder().encode(
@@ -248,11 +250,17 @@ export class ProgramRunner extends Context.Service<
 
 				const fault = (cut: string) => options?.fault?.(cut) ?? Effect.void;
 				const coordinator = Effect.gen(function* () {
-					if (Option.isNone(manager)) return yield* new LedgerError({why: "unreachable"});
+					if (Option.isNone(manager)) {
+						return yield* new LedgerError({why: "unreachable"});
+					}
+
 					return manager.value;
 				});
 				const saveRecovery = Effect.fnUntraced(function* (next: Supervision) {
-					if (recovery !== null) yield* recovery.save(next);
+					if (recovery !== null) {
+						yield* recovery.save(next);
+					}
+
 					supervision = next;
 				});
 				const currentRecovery = Effect.suspend(() =>
@@ -292,16 +300,27 @@ export class ProgramRunner extends Context.Service<
 				const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
 					const running = supervision === null || supervision.recovery._tag === "live";
 					const until = retryAt ?? waitUntil(supervision);
+
 					// Loading supplies the live program's wake; do not clear it before then.
-					if (running && live === null && until === null) return;
+					if (running && live === null && until === null) {
+						return;
+					}
+
 					const wake = running ? (live?.wake ?? null) : null;
 					const next = wake === null ? until : until === null ? wake : Math.min(wake, until);
-					if (alarmAt === next) return;
+
+					if (alarmAt === next) {
+						return;
+					}
+
 					yield* alarm.set(next);
 					alarmAt = next;
 				});
 				const adopt = Effect.fnUntraced(function* (id: string, build: string) {
-					if (process.id === id && process.build === build) return;
+					if (process.id === id && process.build === build) {
+						return;
+					}
+
 					store = yield* rootStore.select(id);
 					process = {...process, id, build};
 					live = null;
@@ -311,15 +330,24 @@ export class ProgramRunner extends Context.Service<
 					while (supervision !== null && supervision.pending !== null) {
 						const s: Supervision = supervision;
 						const action = s.pending;
-						if (action === null) break;
+
+						if (action === null) {
+							break;
+						}
+
 						const p = yield* coordinator;
 						const meta = action.from ?? (yield* from(null, yield* traceId));
+
 						switch (action.type) {
 							case "dead": {
 								const receipt = s.receipts.find(
 									(r) => r.process === action.process && r.result !== null,
 								);
-								if (receipt === undefined) return yield* new LedgerError({why: "bad_row"});
+
+								if (receipt === undefined) {
+									return yield* new LedgerError({why: "bad_row"});
+								}
+
 								yield* p
 									.dead(
 										action.process,
@@ -347,7 +375,10 @@ export class ProgramRunner extends Context.Service<
 								break;
 							}
 							case "exit": {
-								if (s.recovery._tag !== "ending") return yield* new LedgerError({why: "bad_row"});
+								if (s.recovery._tag !== "ending") {
+									return yield* new LedgerError({why: "bad_row"});
+								}
+
 								const why =
 									s.restart !== undefined
 										? "restart"
@@ -359,6 +390,7 @@ export class ProgramRunner extends Context.Service<
 								yield* p.exit(action.process, why, meta);
 								yield* fault("after_exit");
 								const status = yield* p.status(process.name);
+
 								if (s.restart !== undefined) {
 									const request = Start.cases.again.make({
 										id: s.restart.id,
@@ -382,22 +414,33 @@ export class ProgramRunner extends Context.Service<
 										pending: next.pending === null ? null : {...next.pending, from: meta},
 									});
 								}
+
 								live = null;
 								retry = [];
 								break;
 							}
 							case "down": {
-								if (s.recovery._tag !== "down") return yield* new LedgerError({why: "bad_row"});
+								if (s.recovery._tag !== "down") {
+									return yield* new LedgerError({why: "bad_row"});
+								}
+
 								yield* p.down(action.process, s.recovery, meta);
 								yield* fault("after_down");
 								yield* saveRecovery({...s, pending: null});
 								break;
 							}
 							case "start": {
-								if (s.recovery._tag !== "starting") return yield* new LedgerError({why: "bad_row"});
+								if (s.recovery._tag !== "starting") {
+									return yield* new LedgerError({why: "bad_row"});
+								}
+
 								const status = yield* p.status(s.name);
+
 								// The successor waits its backoff: the alarm resumes it when due.
-								if (action.until !== undefined && status.at < action.until) return;
+								if (action.until !== undefined && status.at < action.until) {
+									return;
+								}
+
 								const timing = {
 									[PROCESS]: action.process,
 									[tag("until")]: action.until ?? status.at,
@@ -429,13 +472,18 @@ export class ProgramRunner extends Context.Service<
 								break;
 							}
 							case "checkpoint": {
-								if (action.after === undefined) return yield* new LedgerError({why: "bad_row"});
+								if (action.after === undefined) {
+									return yield* new LedgerError({why: "bad_row"});
+								}
+
 								const previous = yield* rootStore.select(action.after);
 								const next = yield* rootStore.select(action.process);
 								const checkpoint = yield* previous.load;
+
 								if (s.restart !== undefined && checkpoint !== null) {
 									// Keep the accepted turn in the index without carrying its rejected model.
 									const prepared = Schema.decodeUnknownOption(Turn)(checkpoint.turn);
+
 									if (
 										Option.isSome(prepared) &&
 										(yield* previous.placedByAny(prepared.value.id)) === null
@@ -445,6 +493,7 @@ export class ProgramRunner extends Context.Service<
 												.read(s.name, checkpoint.saved.after)
 												.pipe(Stream.filter((letter) => letter.id === prepared.value.id)),
 										);
+
 										if (Option.isSome(accepted)) {
 											const {id, rev, pos} = accepted.value;
 											yield* previous.save(checkpoint, [{id, rev, pos}]);
@@ -452,8 +501,11 @@ export class ProgramRunner extends Context.Service<
 									}
 								} else if ((yield* next.load) === null) {
 									// The turn is the acceptance marker until its letter is indexed.
-									if (checkpoint !== null) yield* next.save({...checkpoint, cmds: []});
+									if (checkpoint !== null) {
+										yield* next.save({...checkpoint, cmds: []});
+									}
 								}
+
 								yield* fault("after_checkpoint");
 								const status = yield* p.status(s.name);
 								const {restart: _restart, ...kept} = s;
@@ -476,7 +528,10 @@ export class ProgramRunner extends Context.Service<
 					yield* resume().pipe(
 						Effect.onError(() =>
 							Effect.gen(function* () {
-								if (supervision?.pending === null || supervision === null) return;
+								if (supervision?.pending === null || supervision === null) {
+									return;
+								}
+
 								const at = yield* Clock.currentTimeMillis;
 								yield* setAlarm(at + supervision.policy.backoff.minMs);
 							}),
@@ -489,7 +544,10 @@ export class ProgramRunner extends Context.Service<
 					at: number,
 					content?: unknown,
 				) {
-					if (supervision === null) return;
+					if (supervision === null) {
+						return;
+					}
+
 					const s = supervision;
 					const meta = yield* from(null, yield* traceId);
 					let next = moved(s, {type: "threw", failure, at});
@@ -509,10 +567,14 @@ export class ProgramRunner extends Context.Service<
 						observations,
 						pending: next.pending === null ? null : {...next.pending, from: meta},
 					};
+
 					if (failure._tag === "fresh") {
 						const old = s.receipts.find((r) => r.letter === failure.letter);
-						if (old === undefined || next.pending === null)
+
+						if (old === undefined || next.pending === null) {
 							return yield* new LedgerError({why: "bad_row"});
+						}
+
 						const errors = [...old.errors, failure.error];
 						const terminal = errors.length >= deliveries(s);
 						const receipt = {
@@ -530,8 +592,10 @@ export class ProgramRunner extends Context.Service<
 							pending: {...next.pending, type: terminal ? "dead" : "exit"},
 						};
 					}
+
 					yield* saveRecovery(next);
-					if (failure._tag !== "interrupted")
+
+					if (failure._tag !== "interrupted") {
 						yield* Effect.exit(
 							// The original failure text belongs only in P37's deletable content.
 							Effect.fail(content).pipe(
@@ -547,14 +611,20 @@ export class ProgramRunner extends Context.Service<
 								}),
 							),
 						);
+					}
+
 					yield* fault("after_observation");
 					yield* store.activity(Activity.cases.idle.make({process: failure.process}));
 					yield* continueRecovery();
 				});
 				const ensure = Effect.fnUntraced(function* (time?: number) {
-					if (recovery === null) return;
+					if (recovery === null) {
+						return;
+					}
+
 					const p = yield* coordinator;
 					const status = yield* p.status(initial.name);
+
 					if (supervision === null) {
 						const policy = yield* Effect.try({
 							try: () => {
@@ -567,7 +637,8 @@ export class ProgramRunner extends Context.Service<
 							catch: () => new LedgerError({why: "bad_row"}),
 						});
 						supervision = yield* recovery.load;
-						if (supervision === null)
+
+						if (supervision === null) {
 							supervision = supervisor.init(null, {
 								policy,
 								process: status.state.process,
@@ -575,7 +646,9 @@ export class ProgramRunner extends Context.Service<
 								build: status.state.code.hash,
 								at: status.at,
 							})[0];
+						}
 					}
+
 					const s = supervision;
 					// Another starter placed a successor while this one waited: adopt it.
 					const waited =
@@ -584,6 +657,7 @@ export class ProgramRunner extends Context.Service<
 							: waitUntil(s) !== null && s.recovery._tag === "starting"
 								? s.recovery.after
 								: null;
+
 					if (status.state._tag === "live" && waited !== null && status.state.process !== waited) {
 						yield* saveRecovery({
 							...s,
@@ -592,13 +666,18 @@ export class ProgramRunner extends Context.Service<
 							pending: {type: "checkpoint", after: waited, process: status.state.process},
 						});
 					}
+
 					yield* continueRecovery();
 					const resumed = yield* currentRecovery;
-					if (resumed.recovery._tag === "live")
+
+					if (resumed.recovery._tag === "live") {
 						yield* adopt(resumed.recovery.process, resumed.build);
+					}
+
 					if (!woke) {
 						const marker = yield* store.readActivity;
 						const attempt = resumed.attempt?.process === process.id ? resumed.attempt : null;
+
 						if (
 							resumed.recovery._tag === "live" &&
 							((marker?._tag === "stepping" && marker.process === process.id) || attempt !== null)
@@ -616,9 +695,12 @@ export class ProgramRunner extends Context.Service<
 								status.at,
 							);
 						}
+
 						woke = true;
 					}
+
 					const waiting = yield* currentRecovery;
+
 					if (
 						time !== undefined &&
 						waiting.recovery._tag === "down" &&
@@ -626,6 +708,7 @@ export class ProgramRunner extends Context.Service<
 					) {
 						const s = waiting;
 						const next = ownCode(moved(s, {type: "due", at: status.at}));
+
 						if (next.recovery._tag === "starting") {
 							yield* saveRecovery({
 								...next,
@@ -637,11 +720,17 @@ export class ProgramRunner extends Context.Service<
 							yield* continueRecovery();
 						}
 					}
+
 					const latest = yield* currentRecovery;
+
 					if (latest.recovery._tag === "live") {
 						const healthy = moved(latest, {type: "healthy", at: status.at});
-						if (healthy !== latest) yield* saveRecovery(healthy);
+
+						if (healthy !== latest) {
+							yield* saveRecovery(healthy);
+						}
 					}
+
 					yield* setAlarm();
 				});
 
@@ -663,18 +752,26 @@ export class ProgramRunner extends Context.Service<
 						} as const;
 						yield* saveRecovery({...supervision, seq: attempt.seq, attempt});
 					}
+
 					yield* store.activity(
 						Activity.cases.stepping.make({process: process.id, letter, build: process.build}),
 					);
 					const result = yield* Effect.suspend(f).pipe(Effect.exit);
+
 					if (supervision !== null && result._tag === "Failure") {
 						const attempt = supervision.attempt;
-						if (attempt === null) return yield* new LedgerError({why: "bad_row"});
+
+						if (attempt === null) {
+							return yield* new LedgerError({why: "bad_row"});
+						}
+
 						if (Cause.hasInterrupts(result.cause)) {
 							yield* observed(Failure.cases.interrupted.make(attempt), attempt.at);
 							return yield* Effect.failCause(result.cause);
 						}
+
 						const wrapped = Cause.squash(result.cause);
+
 						if (wrapped instanceof ProgramDown && wrapped.source !== undefined) {
 							yield* saveRecovery({...supervision, attempt: null});
 							yield* store
@@ -682,6 +779,7 @@ export class ProgramRunner extends Context.Service<
 								.pipe(Effect.ignore);
 							return yield* wrapped;
 						}
+
 						const original =
 							wrapped instanceof ProgramDown && Object.hasOwn(wrapped, "cause")
 								? wrapped.cause
@@ -706,7 +804,11 @@ export class ProgramRunner extends Context.Service<
 							? wrapped
 							: new ProgramDown({why, cause: original});
 					}
-					if (supervision !== null) yield* saveRecovery({...supervision, attempt: null});
+
+					if (supervision !== null) {
+						yield* saveRecovery({...supervision, attempt: null});
+					}
+
 					return yield* result.pipe(
 						Effect.onExit((exit) =>
 							store
@@ -730,6 +832,7 @@ export class ProgramRunner extends Context.Service<
 				const load = Effect.fnUntraced(function* () {
 					const loaded = yield* loader.load(process.program, process.build);
 					const program = loaded.declaration;
+
 					if (supervision !== null && supervision.maxDeliveries !== program.maxDeliveries) {
 						const {maxDeliveries: _old, ...rest} = supervision;
 						yield* saveRecovery(
@@ -738,7 +841,9 @@ export class ProgramRunner extends Context.Service<
 								: {...rest, maxDeliveries: program.maxDeliveries},
 						);
 					}
+
 					const saved = yield* store.load;
+
 					if (saved === null) {
 						const boot = yield* stepped(yield* loaded.execution.init(null), "load");
 						const fresh: Live = {
@@ -753,13 +858,19 @@ export class ProgramRunner extends Context.Service<
 						};
 						return {live: fresh, dirty: false};
 					}
+
 					const decoded = decodeDispatched(saved.cmds);
-					if (Result.isFailure(decoded)) return yield* new ProgramDown({why: "saved_state"});
+
+					if (Result.isFailure(decoded)) {
+						return yield* new ProgramDown({why: "saved_state"});
+					}
+
 					const cmds = decoded.success;
 					const {saved: next, ran} = yield* loaded.execution.upgrade(saved.saved);
 					const boot = yield* stepped(yield* loaded.execution.init(next.model), "saved_state");
 					const upgraded = saved.saved.v !== next.v || ran.length > 0;
-					if (upgraded)
+
+					if (upgraded) {
 						yield* store.record(
 							`upgrade:${saved.saved.v}-${next.v}:${next.after}`,
 							RuntimeRecord.cases["state.upgraded"].make({
@@ -771,6 +882,8 @@ export class ProgramRunner extends Context.Service<
 							}),
 							yield* from(null, yield* traceId),
 						);
+					}
+
 					const pos =
 						next.after === 0
 							? 0
@@ -804,14 +917,17 @@ export class ProgramRunner extends Context.Service<
 				const publish = Effect.fnUntraced(function* (before: Live, after: Live) {
 					if (after.pos !== before.pos) {
 						const patch = diff(before.view, after.view);
-						for (const client of clients)
+
+						for (const client of clients) {
 							yield* watchers.publish(client, {
 								type: "patch",
 								base: before.pos,
 								rev: after.pos,
 								patch,
 							});
+						}
 					}
+
 					yield* setAlarm();
 				});
 
@@ -825,9 +941,15 @@ export class ProgramRunner extends Context.Service<
 				) {
 					const letters = yield* Stream.runCollect(mailbox.read(process.name, state.after));
 					const saved = yield* store.load;
-					if (letters.length === 0 && options.dirty !== true)
+
+					if (letters.length === 0 && options.dirty !== true) {
 						return {state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>()};
-					if (saved === null) yield* store.save(checkpoint(state, null));
+					}
+
+					if (saved === null) {
+						yield* store.save(checkpoint(state, null));
+					}
+
 					let model = state.model;
 					let view = state.view;
 					let wake = state.wake;
@@ -844,15 +966,23 @@ export class ProgramRunner extends Context.Service<
 							: [],
 					);
 					let mine = Option.none<History>();
+
 					for (const letter of letters) {
 						const signal = inSignalSpace(letter.id);
-						if (signal && !signals.has(letter.id)) continue;
+
+						if (signal && !signals.has(letter.id)) {
+							continue;
+						}
+
 						const down = signal ? decodeDown(letter.m) : Option.none();
+
 						if (
 							signal &&
 							!Option.exists(down, (m) => m.to._tag === "process" && m.to.process === process.id)
-						)
+						) {
 							continue;
+						}
+
 						const own = inRunnerSpace(letter.id) && letter.id.startsWith(`${process.id}/`);
 						const accepted =
 							signal ||
@@ -873,7 +1003,11 @@ export class ProgramRunner extends Context.Service<
 									"saved_letter",
 								)
 							: yield* receive(state, model, letter.m);
-						if (folded._tag === "refused") continue;
+
+						if (folded._tag === "refused") {
+							continue;
+						}
+
 						yield* store.record(
 							`step:${letter.id}`,
 							RuntimeRecord.cases.stepped.make({
@@ -887,8 +1021,11 @@ export class ProgramRunner extends Context.Service<
 						view = folded.view;
 						wake = folded.wake;
 						placed.push({id: letter.id, rev: letter.rev, pos: letter.pos});
-						if (own && letter.id.endsWith("/answer"))
+
+						if (own && letter.id.endsWith("/answer")) {
 							cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
+						}
+
 						const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
 							id: `${process.id}/${letter.pos}/${index}`,
 							cmd,
@@ -898,11 +1035,13 @@ export class ProgramRunner extends Context.Service<
 							build: process.build,
 						}));
 						cmds = [...cmds, ...dispatched];
+
 						if (letter.id === options.mine) {
 							mine = Option.some(letter);
 							fresh.push(...dispatched);
 						}
 					}
+
 					const last = letters.at(-1);
 					const next: Live = {
 						...state,
@@ -921,8 +1060,11 @@ export class ProgramRunner extends Context.Service<
 
 				const receive = Effect.fnUntraced(function* (state: Live, model: unknown, m: unknown) {
 					const port = inputPort(state, m);
-					if (port === undefined || !port.write || port.personOnly || hasParent(m))
+
+					if (port === undefined || !port.write || port.personOnly || hasParent(m)) {
 						return Step.cases.refused.make({why: "bad_msg"});
+					}
+
 					const refused = Step.cases.refused.make({why: "bad_msg"});
 					return yield* state.loaded.execution.admit(m).pipe(
 						Effect.flatMap((admitted) =>
@@ -938,14 +1080,20 @@ export class ProgramRunner extends Context.Service<
 				/** The live process, loaded and caught up. */
 				const ready = Effect.fnUntraced(function* () {
 					yield* ensure();
-					if (supervision !== null && supervision.recovery._tag !== "live")
+
+					if (supervision !== null && supervision.recovery._tag !== "live") {
 						return yield* new ProgramDown({why: "saved_letter"});
+					}
+
 					let state: Live;
-					if (live !== null) state = (yield* catchUp(live)).state;
-					else {
+
+					if (live !== null) {
+						state = (yield* catchUp(live)).state;
+					} else {
 						const {live: loaded, dirty} = yield* load();
 						state = (yield* catchUp(loaded, {dirty})).state;
 					}
+
 					live = state;
 					yield* setAlarm();
 					return state;
@@ -999,22 +1147,34 @@ export class ProgramRunner extends Context.Service<
 				/** A checked write: the fact must be declared, not reserved, and match its schema. */
 				const write = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
 					const input = decodeWriteCmd(job.cmd);
-					if (Result.isFailure(input)) return yield* err(job, "bad_cmd");
+
+					if (Result.isFailure(input)) {
+						return yield* err(job, "bad_cmd");
+					}
+
 					const {stream, write: asked} = input.success;
 					const fact = asked.fact;
 					const kind = typeof fact._tag === "string" ? fact._tag : null;
 					const writes = state.loaded.declaration.writes;
 					const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
-					if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact))
+
+					if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact)) {
 						return yield* err(job, "bad_cmd");
+					}
+
 					if (
 						brainOnly({stream, id: job.id, tag: kind}) ||
 						stream === "door" ||
 						stream.startsWith("door/") ||
 						(stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
-					)
+					) {
 						return yield* err(job, "forbidden");
-					if (!(yield* state.loaded.execution.check(kind, fact))) return yield* err(job, "bad_cmd");
+					}
+
+					if (!(yield* state.loaded.execution.check(kind, fact))) {
+						return yield* err(job, "bad_cmd");
+					}
+
 					const commit = (links: ReadonlyArray<Tracer.SpanLink>) =>
 						Effect.fn("runner.write", {
 							attributes: {
@@ -1029,11 +1189,17 @@ export class ProgramRunner extends Context.Service<
 					const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> =
 						Effect.gen(function* () {
 							if (asked._tag === "own") {
-								if (policy.personOnly) return yield* new SigningRefused({why: "person_only"});
+								if (policy.personOnly) {
+									return yield* new SigningRefused({why: "person_only"});
+								}
+
 								return yield* commit([])(checked.own(job.id, stream, fact));
 							}
-							if (checked.sign === undefined && Option.isNone(sessions))
+
+							if (checked.sign === undefined && Option.isNone(sessions)) {
 								return yield* Effect.die(new Error("a caused write needs a SessionManager"));
+							}
+
 							const session = yield* checked.sign !== undefined
 								? checked.sign(job.id, asked.parent, kind)
 								: Option.getOrThrow(sessions)
@@ -1055,8 +1221,15 @@ export class ProgramRunner extends Context.Service<
 								),
 						),
 					);
-					if (Result.isFailure(answer)) return yield* err(job, answer.failure);
-					if (answer.success._tag === "refused") return yield* err(job, answer.success.why);
+
+					if (Result.isFailure(answer)) {
+						return yield* err(job, answer.failure);
+					}
+
+					if (answer.success._tag === "refused") {
+						return yield* err(job, answer.success.why);
+					}
+
 					return yield* ok(job, answer.success);
 				});
 
@@ -1065,14 +1238,23 @@ export class ProgramRunner extends Context.Service<
 					const type = cmdType(job);
 					const declared = state.loaded.declaration.cmds.includes(type);
 					const run = state.loaded.handler(type);
-					if (!declared || Option.isNone(run)) return yield* err(job, "bad_cmd");
+
+					if (!declared || Option.isNone(run)) {
+						return yield* err(job, "bad_cmd");
+					}
+
 					// The handler's own failure ends its span failed, with the message as deletable content.
 					const exit = yield* cmdSpan(job, run.value(job.cmd)).pipe(Effect.exit);
+
 					if (exit._tag === "Failure") {
 						// An interrupted handler stays dispatched: nobody knows whether it acted.
-						if (Cause.hasInterrupts(exit.cause)) return yield* Effect.interrupt;
+						if (Cause.hasInterrupts(exit.cause)) {
+							return yield* Effect.interrupt;
+						}
+
 						return yield* err(job, "handler_failed");
 					}
+
 					const outcome: Outcome<unknown, unknown> = exit.value;
 					// The box checks the declared tag and encodes the answer (main's P11 encoding); an Err
 					// also carries its tag as `why`, as the runner's own errors do.
@@ -1098,18 +1280,25 @@ export class ProgramRunner extends Context.Service<
 					if (
 						!job.id.startsWith(`${process.id}/`) ||
 						(supervision !== null && supervision.recovery._tag !== "live")
-					)
+					) {
 						return [];
+					}
+
 					const origin = process;
 					const originStore = store;
 					const state = live;
-					if (state === null) return [];
+
+					if (state === null) {
+						return [];
+					}
+
 					const m = yield* cmdType(job) === WRITE
 						? cmdSpan(job, write(state, job))
 						: handle(state, job);
 					return yield* permit.withPermit(
 						Effect.gen(function* () {
 							const answer = `${job.id}/answer`;
+
 							if (
 								origin.id !== process.id ||
 								(supervision !== null && supervision.recovery._tag !== "live")
@@ -1124,7 +1313,8 @@ export class ProgramRunner extends Context.Service<
 									{...(yield* from(job.parent, job.traceId)), build: origin.build},
 								);
 								const old = yield* originStore.load;
-								if (old !== null)
+
+								if (old !== null) {
 									yield* originStore.save({
 										...old,
 										cmds: old.cmds.filter(
@@ -1135,14 +1325,20 @@ export class ProgramRunner extends Context.Service<
 												cmd.id !== job.id,
 										),
 									});
+								}
+
 								return [];
 							}
+
 							const current = yield* ready();
 							const sent = yield* mailbox
 								.send(process.name, answer, m, yield* from(job.parent, job.traceId))
 								.pipe(Effect.provideService(RunnerMail, {process: process.id, name: process.name}));
-							if (sent._tag === "refused")
+
+							if (sent._tag === "refused") {
 								return yield* new LedgerError({why: "refused", message: sent.why});
+							}
+
 							return (yield* catchUp(current, {mine: answer})).fresh;
 						}),
 					);
@@ -1173,7 +1369,10 @@ export class ProgramRunner extends Context.Service<
 						const {answer, jobs} = yield* permit.withPermit(
 							Effect.gen(function* () {
 								// The platform consumes the alarm before due enters this wrapper.
-								if (time !== undefined) alarmAt = undefined;
+								if (time !== undefined) {
+									alarmAt = undefined;
+								}
+
 								yield* ensure(time);
 								const {answer, jobs} = yield* turn;
 								return {answer, jobs: [...takeRetry(), ...jobs]};
@@ -1206,13 +1405,21 @@ export class ProgramRunner extends Context.Service<
 						open(
 							Effect.gen(function* () {
 								const state = yield* ready();
-								if (client.length === 0 || client.length > 256)
+
+								if (client.length === 0 || client.length > 256) {
 									return yield* new RunnerError({why: "bad_client"});
+								}
+
 								clients.delete(client);
+
 								if (clients.size >= 1024) {
 									const oldest = clients.values().next();
-									if (!oldest.done) clients.delete(oldest.value);
+
+									if (!oldest.done) {
+										clients.delete(oldest.value);
+									}
 								}
+
 								clients.add(client);
 								yield* watchers.publish(client, {
 									type: "whole",
@@ -1230,6 +1437,7 @@ export class ProgramRunner extends Context.Service<
 								);
 								yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
 								const receipt = supervision?.receipts.find((r) => r.letter === input.id);
+
 								if (receipt !== undefined) {
 									const digest =
 										receipt.digest ??
@@ -1237,24 +1445,33 @@ export class ProgramRunner extends Context.Service<
 											Effect.mapError(() => new LedgerError({why: "bad_row"})),
 											Effect.flatMap(inputDigest),
 										));
-									if ((yield* inputDigest(input)) !== digest)
+
+									if ((yield* inputDigest(input)) !== digest) {
 										return {answer: Sent.cases.refused.make({why: "id_reused"}), jobs: []};
-									if (receipt.result !== null)
+									}
+
+									if (receipt.result !== null) {
 										return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
+									}
 								}
+
 								return yield* accept(yield* ready(), input);
 							}),
 						),
 					due: (time: number) =>
 						due(
 							Effect.gen(function* () {
-								if (supervision !== null && supervision.recovery._tag !== "live")
+								if (supervision !== null && supervision.recovery._tag !== "live") {
 									return {answer: undefined, jobs: []};
+								}
+
 								const state = yield* ready();
+
 								if (state.wake === null || state.wake > time) {
 									yield* setAlarm();
 									return {answer: undefined, jobs: []};
 								}
+
 								const id = `${process.id}/due/${time}`;
 								const sent = yield* mailbox
 									.send(
@@ -1266,8 +1483,11 @@ export class ProgramRunner extends Context.Service<
 									.pipe(
 										Effect.provideService(RunnerMail, {process: process.id, name: process.name}),
 									);
-								if (sent._tag === "refused")
+
+								if (sent._tag === "refused") {
 									return yield* new LedgerError({why: "refused", message: sent.why});
+								}
+
 								const {fresh} = yield* catchUp(state, {mine: id});
 								return {answer: undefined, jobs: fresh};
 							}),
@@ -1276,15 +1496,25 @@ export class ProgramRunner extends Context.Service<
 					restart: (request: {readonly id: string; readonly build: string}) =>
 						restart(
 							Effect.gen(function* () {
-								if (recovery === null) return yield* new LedgerError({why: "unreachable"});
+								if (recovery === null) {
+									return yield* new LedgerError({why: "unreachable"});
+								}
+
 								const s = yield* currentRecovery;
 								const prior = s.requests?.find((r) => r.id === request.id);
+
 								if (prior !== undefined) {
-									if (prior.build !== request.build)
+									if (prior.build !== request.build) {
 										return yield* new RunnerError({why: "bad_input"});
-									if (s.recovery._tag === "live") yield* ready();
+									}
+
+									if (s.recovery._tag === "live") {
+										yield* ready();
+									}
+
 									return {answer: undefined, jobs: []};
 								}
+
 								const p = yield* coordinator;
 								const status = yield* p.status(process.name);
 								const after = status.state.process;
@@ -1296,6 +1526,7 @@ export class ProgramRunner extends Context.Service<
 									code: {program: process.program, hash: request.build},
 								});
 								const meta = yield* from(null, yield* traceId);
+
 								if (status.state._tag === "live") {
 									const failure = Failure.cases.interrupted.make({
 										process: after,
@@ -1309,7 +1540,7 @@ export class ProgramRunner extends Context.Service<
 										recovery: Recovery.cases.ending.make({process: after, failure}),
 										pending: {type: "exit", process: after, from: meta},
 									});
-								} else
+								} else {
 									yield* saveRecovery({
 										...s,
 										build: request.build,
@@ -1317,6 +1548,8 @@ export class ProgramRunner extends Context.Service<
 										recovery: Recovery.cases.starting.make({after, request: start}),
 										pending: {type: "start", process: after, from: meta},
 									});
+								}
+
 								yield* continueRecovery();
 								yield* ready();
 								return {answer: undefined, jobs: []};
@@ -1336,23 +1569,34 @@ export class ProgramRunner extends Context.Service<
 						if (
 							brainOnly({stream: `${process.name}/inbox`, id: input.id, tag: "send"}) ||
 							hasParent(input.envelope.input)
-						)
+						) {
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
+						}
+
 						const prior = (yield* store.placed(input.id)) ?? (yield* store.placedByAny(input.id));
-						if (prior !== null)
+
+						if (prior !== null) {
 							return {answer: Sent.cases.accepted.make({rev: prior.rev, pos: prior.pos}), jobs: []};
+						}
+
 						const port = inputPort(state, input.envelope.input);
+
 						if (
 							port === undefined ||
 							!port.write ||
 							(port.personOnly && input.envelope.by._tag !== "person")
-						)
+						) {
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
+						}
+
 						const m = stamp(input.envelope.input, input.envelope.id);
+
 						// The port's schema runs inside the box; Schemas do not cross its RPC (P12).
-						if (!(yield* state.loaded.execution.admit(m)))
+						if (!(yield* state.loaded.execution.admit(m))) {
 							return {answer: Sent.cases.refused.make({why: "bad_msg"}), jobs: []};
-						if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id))
+						}
+
+						if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id)) {
 							yield* saveRecovery({
 								...supervision,
 								receipts: [
@@ -1370,11 +1614,15 @@ export class ProgramRunner extends Context.Service<
 									},
 								],
 							});
+						}
+
 						const preparation = yield* Effect.result(
 							step("step", input.id, () => state.loaded.execution.step(state.model, m)),
 						);
+
 						if (Result.isFailure(preparation)) {
 							const terminal = supervision?.receipts.find((r) => r.letter === input.id)?.result;
+
 							if (
 								preparation.failure instanceof ProgramDown &&
 								preparation.failure.source === undefined &&
@@ -1382,28 +1630,36 @@ export class ProgramRunner extends Context.Service<
 								terminal !== undefined &&
 								supervision !== null &&
 								deadDone(supervision)
-							)
+							) {
 								return {answer: Sent.cases.refused.make({why: "dead"}), jobs: []};
+							}
+
 							return yield* Effect.fail(preparation.failure);
 						}
+
 						const prepared = preparation.success;
+
 						if (prepared._tag === "refused") {
 							const {_tag: _case, ...why} = prepared;
 							return {answer: Sent.cases.refused.make(why), jobs: []};
 						}
+
 						// Reading an old delivery never authorizes a new write with a legacy input ID.
 						const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
 							Effect.mapError(() => new RunnerError({why: "bad_input"})),
 						);
 						yield* store.save(checkpoint(state, Turn.cases.prepared.make({id: input.id})));
 						const appended = yield* checked.append(incoming);
+
 						if (appended._tag === "refused") {
 							yield* store.save(checkpoint(state, null));
 							return {answer: Sent.cases.refused.make({why: appended.why}), jobs: []};
 						}
+
 						// The inbox now holds the accepted input. Failed deliveries keep their original body.
 						if (supervision !== null) {
 							const receipt = supervision.receipts.find((r) => r.letter === input.id);
+
 							if (receipt !== undefined && receipt.tries === 0) {
 								const digest = receipt.digest ?? (yield* inputDigest(input));
 								yield* saveRecovery({
@@ -1414,6 +1670,7 @@ export class ProgramRunner extends Context.Service<
 								});
 							}
 						}
+
 						const {fresh} = yield* catchUp(state, {mine: input.id, dirty: true});
 						return {
 							answer: Sent.cases.accepted.make({rev: appended.rev, pos: appended.pos}),
@@ -1442,8 +1699,10 @@ const cmdType = (job: Dispatched): string =>
 	Option.match(decodeTyped(job.cmd), {onNone: () => "", onSome: (c) => c.type});
 
 const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+
 const stamp = (m: unknown, parent: string): unknown =>
 	typeof m === "object" && m !== null ? {...m, parent} : m;
+
 const inputPort = (state: Live, m: unknown) =>
 	Option.match(decodeTyped(m), {
 		onNone: () => undefined,

@@ -17,6 +17,7 @@ import {type Shown, shownOf} from "./machine.ts";
 
 /** One value told to one of the tracker's inputs, by its name. */
 type Inputs = (typeof tracker)["inputs"];
+
 type Say = <K extends keyof Inputs & string>(
 	input: K,
 	value: PayloadOf<Inputs[K]>,
@@ -55,7 +56,11 @@ const session = (
 ) =>
 	Effect.gen(function* () {
 		const started = yield* start(tracker, {}, {}, {id, storage: memoryStorage()});
-		if (started.kind !== "running") return yield* Effect.die("the tracker did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("the tracker did not start");
+		}
+
 		const {run} = started;
 		const say: Say = (input, value): Effect.Effect<Word> => offer(run, input, value);
 		const until = (ok: (shown: Shown) => boolean) =>

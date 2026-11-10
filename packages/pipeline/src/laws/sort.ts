@@ -41,10 +41,12 @@ const KEY = "k";
 const TRIES = 2;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1, note: "n"};
 const TICKET: SortTicket = {url: URL, number: 5, state: "open", title: "t", body: "b"};
+
 const CONTEXT: SortContext = {
 	earlier: [{number: 2, title: "e", state: "closed", reason: null}],
 	plans: [{number: 9, tickets: [9], summary: "p", approved: false}],
 };
+
 const SPENT: Spend = {...noSpend, costUsd: 1, turns: 1};
 
 /** What the sorter may hand back, by a short name. */
@@ -119,12 +121,25 @@ export function sortLaws<S extends SortState>(): readonly Law<S, Msg, SortCmd>[]
 			null,
 			(brief, {prev, next}) => {
 				const now = briefOf(next) ?? brief;
-				if (next.phase !== "over" || prev.phase === "over") return now;
+
+				if (next.phase !== "over" || prev.phase === "over") {
+					return now;
+				}
+
 				const {outcome, report} = next;
-				if (outcome.kind === "stuck" || outcome.kind === "skip") return now;
-				if (report.answer === null || now === null) return broke(`${outcome.kind} with no answer`);
-				if (sortProblems({sort: report.answer}, now).length > 0)
+
+				if (outcome.kind === "stuck" || outcome.kind === "skip") {
+					return now;
+				}
+
+				if (report.answer === null || now === null) {
+					return broke(`${outcome.kind} with no answer`);
+				}
+
+				if (sortProblems({sort: report.answer}, now).length > 0) {
 					return broke(`${outcome.kind} on an answer the Check fails`);
+				}
+
 				return structuralHash(outcomeOf(report.answer)) === structuralHash(outcome)
 					? now
 					: broke(`answered ${report.answer.answer}, and ended ${outcome.kind}`);
@@ -143,14 +158,25 @@ export function sortLaws<S extends SortState>(): readonly Law<S, Msg, SortCmd>[]
 						msg.value.state === "open" &&
 						msg.value.title === first.title &&
 						msg.value.body === first.body);
-				if (writesIn(cmds).length > 0 && !door) return broke("a write went out before the door");
+
+				if (writesIn(cmds).length > 0 && !door) {
+					return broke("a write went out before the door");
+				}
+
 				return next.phase === "idle" ? false : door;
 			},
 		),
 		law<S, Msg, SortCmd>("every write is one the answer makes, in its order", ({next, cmds}) => {
 			const sent = writesIn(cmds);
-			if (sent.length === 0) return null;
-			if (next.phase !== "writing") return `${sent.length} writes sent from ${next.phase}`;
+
+			if (sent.length === 0) {
+				return null;
+			}
+
+			if (next.phase !== "writing") {
+				return `${sent.length} writes sent from ${next.phase}`;
+			}
+
 			const want = writesFor(next.ticket, next.answer)[next.wrote];
 			return sent.length === 1 && structuralHash(sent[0]) === structuralHash(want)
 				? null
@@ -159,12 +185,22 @@ export function sortLaws<S extends SortState>(): readonly Law<S, Msg, SortCmd>[]
 		law<S, Msg, SortCmd>(
 			"an answer ends only once every write it makes went out",
 			({prev, next}) => {
-				if (next.phase !== "over" || prev.phase === "over") return null;
-				const {outcome, report} = next;
-				if (outcome.kind === "stuck" || outcome.kind === "skip" || report.answer === null)
+				if (next.phase !== "over" || prev.phase === "over") {
 					return null;
+				}
+
+				const {outcome, report} = next;
+
+				if (outcome.kind === "stuck" || outcome.kind === "skip" || report.answer === null) {
+					return null;
+				}
+
 				const ticket = ticketOf(prev);
-				if (ticket === null) return "ended with no ticket read";
+
+				if (ticket === null) {
+					return "ended with no ticket read";
+				}
+
 				const want = writesFor(ticket, report.answer);
 				return structuralHash(report.wrote) === structuralHash(want)
 					? null
@@ -199,7 +235,11 @@ export function sortLaws<S extends SortState>(): readonly Law<S, Msg, SortCmd>[]
 					(msg.type === "sort_finished" || msg.type === "sort_failed") &&
 					structuralHash(prev) !== structuralHash(next);
 				const now = took ? spent + msg.spend.costUsd : spent;
-				if (next.phase !== "over" || prev.phase === "over") return now;
+
+				if (next.phase !== "over" || prev.phase === "over") {
+					return now;
+				}
+
 				return next.report.spend.costUsd === now
 					? now
 					: broke(`${now} spent, and the report says ${next.report.spend.costUsd}`);
@@ -256,13 +296,18 @@ export const takesAnyRun: Update<SortState, Msg, SortCmd> = (s, m) => {
 		const id = runIdOf(s);
 		return id === null ? sortUpdate(s, m) : sortUpdate(s, {...m, id});
 	}
+
 	return sortUpdate(s, m);
 };
 
 /** The close is left out of a no: the ticket says no and stays open. */
 export const leavesANoOpen: Update<SortState, Msg, SortCmd> = (s, m) => {
 	const [next, cmds] = sortUpdate(s, m);
-	if (next.phase !== "writing" || next.answer.answer !== "no") return [next, cmds];
+
+	if (next.phase !== "writing" || next.answer.answer !== "no") {
+		return [next, cmds];
+	}
+
 	const writes = next.writes.filter((w) => w.op !== "close");
 	return [{...next, writes}, cmds];
 };

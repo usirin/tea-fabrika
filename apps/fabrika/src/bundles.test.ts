@@ -33,9 +33,17 @@ const NOT_AT_START =
 const heavyAtStart = (files: Metafile["inputs"] | Metafile["outputs"], entry: string) => {
 	const seen = new Set<string>();
 	const walk = (file: string) => {
-		if (seen.has(file)) return;
+		if (seen.has(file)) {
+			return;
+		}
+
 		seen.add(file);
-		for (const i of files[file]?.imports ?? []) if (i.kind !== "dynamic-import") walk(i.path);
+
+		for (const i of files[file]?.imports ?? []) {
+			if (i.kind !== "dynamic-import") {
+				walk(i.path);
+			}
+		}
 	};
 	walk(entry);
 	return [...seen].filter((file) => NOT_AT_START.test(file));
@@ -52,7 +60,11 @@ describe("the app's bundles", () => {
 		async (_name, options) => {
 			const done = await build({...common(here), ...options, write: false, logLevel: "silent"});
 			expect(done.errors).toEqual([]);
-			if (options.platform !== "node") return;
+
+			if (options.platform !== "node") {
+				return;
+			}
+
 			for (const output of done.outputFiles ?? []) {
 				const file = join(out, basename(output.path));
 				writeFileSync(file, output.text);

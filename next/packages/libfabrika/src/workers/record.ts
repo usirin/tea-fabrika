@@ -5,6 +5,7 @@ import {workerSql} from "../data/worker-sql.ts";
 type Part = ReturnType<typeof recordPart>;
 type Rows = Parameters<Part["write"]>[0];
 type Deletion = Parameters<Part["deleteContent"]>[1];
+
 const part = Effect.fnUntraced(function* (
 	ctx: DurableObjectState,
 	bytes: number | undefined,
@@ -15,9 +16,14 @@ const part = Effect.fnUntraced(function* (
 		Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
 	)(ctx.id.name).pipe(Effect.mapError(() => new SinkError({why: "bad_row", held: 0})));
 	const expected = chain._tag === "spans" ? `spans/${at}` : `job/${chain.process}/${at}`;
-	if (name !== expected) return yield* new SinkError({why: "bad_row", held: 0});
+
+	if (name !== expected) {
+		return yield* new SinkError({why: "bad_row", held: 0});
+	}
+
 	return recordPart(workerSql(ctx.storage), chain, at, bytes ?? 1_000_000_000);
 });
+
 export const recordWrite = Effect.fn(function* (
 	ctx: DurableObjectState,
 	bytes: number | undefined,
@@ -27,6 +33,7 @@ export const recordWrite = Effect.fn(function* (
 ) {
 	return yield* (yield* part(ctx, bytes, chain, at)).write(rows);
 });
+
 export const recordRead = Effect.fn(function* (
 	ctx: DurableObjectState,
 	bytes: number | undefined,
@@ -36,6 +43,7 @@ export const recordRead = Effect.fn(function* (
 ) {
 	return yield* (yield* part(ctx, bytes, chain, at)).read(after);
 });
+
 export const recordContent = Effect.fn(function* (
 	ctx: DurableObjectState,
 	bytes: number | undefined,
@@ -45,6 +53,7 @@ export const recordContent = Effect.fn(function* (
 ) {
 	return yield* (yield* part(ctx, bytes, chain, at)).content(id);
 });
+
 export const recordDelete = Effect.fn(function* (
 	ctx: DurableObjectState,
 	bytes: number | undefined,

@@ -82,9 +82,17 @@ export const whenOf = (at: number, now: number): string => {
 	const then = new Date(at);
 	const today = new Date(now);
 	const time = then.toLocaleTimeString("en-GB", {hour: "2-digit", minute: "2-digit"});
-	if (then.toDateString() === today.toDateString()) return time;
+
+	if (then.toDateString() === today.toDateString()) {
+		return time;
+	}
+
 	const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-	if (then.toDateString() === yesterday.toDateString()) return `yesterday ${time}`;
+
+	if (then.toDateString() === yesterday.toDateString()) {
+		return `yesterday ${time}`;
+	}
+
 	const day = then.toLocaleDateString("en-GB", {
 		day: "numeric",
 		month: "short",
@@ -224,17 +232,24 @@ function ListPage(props: {
 	const counted = {open: counts.open, closed: counts.closed, all: counts.open + counts.closed};
 
 	const toList = () => {
-		if (picked === undefined) pageRef.current?.focus();
-		else rows.current.get(picked)?.focus();
+		if (picked === undefined) {
+			pageRef.current?.focus();
+		} else {
+			rows.current.get(picked)?.focus();
+		}
 	};
 
 	// Where the focus goes on coming to the list: the first areas' first row while that step shows,
 	// else the row picked, or the title when there is none. Once, on coming to the list: a new view
 	// must not pull the focus back.
 	const focusStart = useEffectEvent(() => {
-		if (stepRef.current !== null) stepRef.current.querySelector("input")?.focus();
-		else if (picked === undefined) titleRef.current?.focus();
-		else rows.current.get(picked)?.focus();
+		if (stepRef.current !== null) {
+			stepRef.current.querySelector("input")?.focus();
+		} else if (picked === undefined) {
+			titleRef.current?.focus();
+		} else {
+			rows.current.get(picked)?.focus();
+		}
 	});
 	useEffect(() => {
 		focusStart();
@@ -244,7 +259,10 @@ function ListPage(props: {
 	const stepShows = page.onboarding !== null;
 	const shown = useRef(stepShows);
 	const stepGone = useEffectEvent(() => {
-		if (shown.current && !stepShows) toList();
+		if (shown.current && !stepShows) {
+			toList();
+		}
+
 		shown.current = stepShows;
 	});
 	useEffect(() => {
@@ -256,7 +274,10 @@ function ListPage(props: {
 	const shownRows = order.join("\n");
 	const refocus = useEffectEvent(() => {
 		const at = document.activeElement;
-		if (at === null || at === document.body) toList();
+
+		if (at === null || at === document.body) {
+			toList();
+		}
 	});
 	useEffect(() => {
 		refocus();
@@ -265,7 +286,11 @@ function ListPage(props: {
 	const file = (e?: FormEvent) => {
 		e?.preventDefault();
 		const t = draft.title.trim();
-		if (t === "") return titleRef.current?.focus();
+
+		if (t === "") {
+			return titleRef.current?.focus();
+		}
+
 		act({type: "file", value: {title: t, body: draft.body.trimEnd()}});
 		draft.setTitle("");
 		draft.setBody("");
@@ -277,23 +302,38 @@ function ListPage(props: {
 			file();
 		} else if (e.key === "Escape") {
 			e.preventDefault();
-			if (picked === undefined) e.currentTarget.blur();
-			else rows.current.get(picked)?.focus();
+
+			if (picked === undefined) {
+				e.currentTarget.blur();
+			} else {
+				rows.current.get(picked)?.focus();
+			}
 		}
 	};
 	const move = (by: number) => {
 		const at = order.indexOf(picked ?? "");
 		const next = order[Math.min(order.length - 1, Math.max(0, at + by))];
-		if (next === undefined) return;
+
+		if (next === undefined) {
+			return;
+		}
+
 		pick(next);
 		rows.current.get(next)?.focus();
 	};
 	const show = (s: Show) => act({type: "query", value: {status: s, find: props.find}});
 	/** The list's own keys, anywhere on the page but in a box being typed in. */
 	const onListKey = (e: KeyboardEvent) => {
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) {
+			return;
+		}
+
 		const target = e.target as HTMLElement;
-		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+
+		if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
+			return;
+		}
+
 		const keys: Readonly<Record<string, () => void>> = {
 			ArrowDown: () => move(1),
 			j: () => move(1),
@@ -307,18 +347,28 @@ function ListPage(props: {
 			q: () => act({type: "quit", value: null}),
 		};
 		const key = keys[e.key];
-		if (key === undefined) return;
+
+		if (key === undefined) {
+			return;
+		}
+
 		e.preventDefault();
 		key();
 	};
 	const onFindKey = (e: KeyboardEvent<HTMLInputElement>) => {
-		if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "Enter") return;
+		if (e.key !== "Escape" && e.key !== "ArrowDown" && e.key !== "Enter") {
+			return;
+		}
+
 		e.preventDefault();
 		toList();
 	};
 	const keep = (row: string) => (el: HTMLElement | null) => {
-		if (el === null) rows.current.delete(row);
-		else rows.current.set(row, el);
+		if (el === null) {
+			rows.current.delete(row);
+		} else {
+			rows.current.set(row, el);
+		}
 	};
 	const searching = props.find.trim() !== "";
 
@@ -383,7 +433,9 @@ function ListPage(props: {
 						if (e.key === "Enter" && !isSubmit(e)) {
 							e.preventDefault();
 							bodyRef.current?.focus();
-						} else onComposerKey(e);
+						} else {
+							onComposerKey(e);
+						}
 					}}
 					spellCheck={false}
 					autoComplete="off"
@@ -571,12 +623,22 @@ function FirstAreas(props: {
 	const tick = (name: string) =>
 		setTicked((all) => {
 			const next = new Set(all);
-			if (!next.delete(name)) next.add(name);
+
+			if (!next.delete(name)) {
+				next.add(name);
+			}
+
 			return next;
 		});
 	const make = () => {
-		if (made.length === 0) return;
-		for (const value of made) act({type: "make_area", value});
+		if (made.length === 0) {
+			return;
+		}
+
+		for (const value of made) {
+			act({type: "make_area", value});
+		}
+
 		props.done();
 	};
 	const skip = () => {
@@ -585,12 +647,20 @@ function FirstAreas(props: {
 	};
 	/** ↑ ↓ move between the rows and the box; Enter makes; Esc empties the box, then skips. */
 	const onKey = (e: KeyboardEvent<HTMLFieldSetElement>) => {
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) {
+			return;
+		}
+
 		const target = e.target as HTMLElement;
-		if (target.tagName !== "INPUT") return;
+
+		if (target.tagName !== "INPUT") {
+			return;
+		}
+
 		const stops = [...e.currentTarget.querySelectorAll("input")];
 		const at = stops.indexOf(target as HTMLInputElement);
 		const by = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+
 		if (by !== 0) {
 			e.preventDefault();
 			stops[Math.min(stops.length - 1, Math.max(0, at + by))]?.focus();
@@ -599,8 +669,12 @@ function FirstAreas(props: {
 			make();
 		} else if (e.key === "Escape") {
 			e.preventDefault();
-			if (target.getAttribute("type") === "text" && typed !== "") setTyped("");
-			else skip();
+
+			if (target.getAttribute("type") === "text" && typed !== "") {
+				setTyped("");
+			} else {
+				skip();
+			}
 		}
 	};
 	return (
@@ -669,10 +743,18 @@ const emptyOf = (
 	searching: boolean,
 	counts: {readonly open: number; readonly closed: number},
 ): string => {
-	if (searching) return "No ticket has that in its title.";
-	if (show === "closed") return "No closed tickets.";
-	if (show === "open" && counts.closed > 0)
+	if (searching) {
+		return "No ticket has that in its title.";
+	}
+
+	if (show === "closed") {
+		return "No closed tickets.";
+	}
+
+	if (show === "open" && counts.closed > 0) {
 		return "No open tickets. Press x to see the closed ones.";
+	}
+
 	return "No tickets yet. Type a title above and press Ctrl+Enter to file the first one.";
 };
 
@@ -774,14 +856,21 @@ function TicketPage(props: {
 
 	/** Esc goes back to the list, from anywhere on the page. A comment half written stays. */
 	const onPageKey = (e: KeyboardEvent) => {
-		if (e.key !== "Escape") return;
+		if (e.key !== "Escape") {
+			return;
+		}
+
 		e.preventDefault();
 		back();
 	};
 	/** "Comment", or with `asks: "changes"`, "Request changes": the person says which, nothing guesses. */
 	const comment = (e?: FormEvent, asks?: "changes") => {
 		e?.preventDefault();
-		if (draft.trim() === "") return;
+
+		if (draft.trim() === "") {
+			return;
+		}
+
 		const body = draft.trimEnd();
 		act({
 			type: "comment",
@@ -863,7 +952,10 @@ function TicketPage(props: {
 							value={draft}
 							onChange={(e) => setDraft(e.target.value)}
 							onKeyDown={(e) => {
-								if (!isSubmit(e)) return onPageKey(e);
+								if (!isSubmit(e)) {
+									return onPageKey(e);
+								}
+
 								e.preventDefault();
 								comment();
 							}}
@@ -1077,7 +1169,10 @@ type Whose = {readonly by: Row["by"]; readonly whose?: string | undefined};
  * before the door, which does not say whose.
  */
 export const agentOf = ({by, whose}: Whose): string | null => {
-	if (by.kind === "user") return null;
+	if (by.kind === "user") {
+		return null;
+	}
+
 	return "for" in by ? `${whose ?? by.for}'s agent` : "agent";
 };
 

@@ -152,7 +152,10 @@ const store: {
 
 const changed = () => {
 	store.version += 1;
-	for (const listener of store.listeners) listener();
+
+	for (const listener of store.listeners) {
+		listener();
+	}
 };
 
 const subscribe = (listener: () => void) => {
@@ -168,23 +171,31 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+
 const editKeys = (message: EditorMsg) => {
-	if (store.keysEditor === null) return;
+	if (store.keysEditor === null) {
+		return;
+	}
+
 	const [next, cmds] = applyCell<Editor, EditorMsg, EditorCmd>(
 		editorMachine,
 		store.keysEditor,
 		message,
 	);
 	store.keysEditor = next;
-	for (const command of cmds)
+
+	for (const command of cmds) {
 		toHost({
 			type: "keys.edit",
 			edit: command.edit,
 			request: `${store.keySession}:${command.request}`,
 			said: Date.now(),
 		});
+	}
+
 	changed();
 };
+
 /** What the page tells the app itself: on the desk's port, read by main and not passed on. */
 const toApp = (m: ToApp) => window.fabrika.send("desk", m);
 /** One of a run's own inputs, on its port, as its window sends them (View, below). */
@@ -194,7 +205,11 @@ const toRun = (run: string, msg: unknown) => window.fabrika.send(`run:${run}`, {
 const follow = (run: string) =>
 	window.fabrika.onMessage(`run:${run}`, (raw) => {
 		const read = readToWindow(raw);
-		if (read.kind === "refused") return console.warn(`fabrika: refused a view: ${read.why}`);
+
+		if (read.kind === "refused") {
+			return console.warn(`fabrika: refused a view: ${read.why}`);
+		}
+
 		store.views.set(run, read.msg);
 		changed();
 	});
@@ -207,20 +222,36 @@ const follows = (desk: Desk) => {
 	const all = desk.at === "open" ? desk.workspaces.flatMap((ws) => tilesOf(ws)) : [];
 	const tiles = new Set(all.flatMap((t) => (t.shows.kind === "window" ? [] : [t.id])));
 	const runs = new Set(all.flatMap((t) => (t.shows.run === null ? [] : [t.shows.run.id])));
-	for (const tile of tiles)
-		if (!terminals.has(tile) && ghostty !== null) terminals.set(tile, terminalFor(ghostty, tile));
+
+	for (const tile of tiles) {
+		if (!terminals.has(tile) && ghostty !== null) {
+			terminals.set(tile, terminalFor(ghostty, tile));
+		}
+	}
+
 	for (const [tile, term] of terminals) {
-		if (tiles.has(tile)) continue;
+		if (tiles.has(tile)) {
+			continue;
+		}
+
 		term.dispose();
 		terminals.delete(tile);
 	}
+
 	for (const run of runs) {
-		if (followed.has(run)) continue;
+		if (followed.has(run)) {
+			continue;
+		}
+
 		followed.add(run);
 		follow(run);
 	}
+
 	for (const run of followed) {
-		if (runs.has(run)) continue;
+		if (runs.has(run)) {
+			continue;
+		}
+
 		followed.delete(run);
 		store.views.delete(run);
 		window.fabrika.forget(`run:${run}`);
@@ -237,11 +268,18 @@ let told = "";
  * change, as to a host attached anew.
  */
 const tellArea = (again = false) => {
-	if (measured === null) return;
+	if (measured === null) {
+		return;
+	}
+
 	const width = Math.round(measured.clientWidth);
 	const height = Math.round(measured.clientHeight);
 	const now = `${width}x${height}`;
-	if (now === told && !again) return;
+
+	if (now === told && !again) {
+		return;
+	}
+
 	told = now;
 	toHost({type: "area", width, height});
 };
@@ -250,9 +288,15 @@ const sizes = new ResizeObserver(() => tellArea());
 
 /** The workspace's ref: measured while it is drawn. */
 const measure = (el: HTMLDivElement | null) => {
-	if (measured !== null) sizes.unobserve(measured);
+	if (measured !== null) {
+		sizes.unobserve(measured);
+	}
+
 	measured = el;
-	if (el !== null) sizes.observe(el);
+
+	if (el !== null) {
+		sizes.observe(el);
+	}
 };
 
 /** The keys while the host decides. */
@@ -271,7 +315,11 @@ const focusOver = (target: EventTarget | null): "in" | "moved in" => {
 	const box = document.querySelector<HTMLElement>(
 		".keys-dialog[role='dialog'], .keys-dialog [role='dialog'], [data-over]",
 	);
-	if (box === null || (target instanceof Element && box.contains(target))) return "in";
+
+	if (box === null || (target instanceof Element && box.contains(target))) {
+		return "in";
+	}
+
 	(box.querySelector<HTMLElement>("input") ?? box).focus();
 	return "moved in";
 };
@@ -296,7 +344,10 @@ const midKey = (): MidKey => {
  * answer is in, so a key can be held while it is already open.
  */
 const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "moved in" => {
-	if (keyGoesTo(store.frame.over, name, store.keys.prefix, midKey()) !== "over") return "desk";
+	if (keyGoesTo(store.frame.over, name, store.keys.prefix, midKey()) !== "over") {
+		return "desk";
+	}
+
 	return focusOver(target);
 };
 
@@ -307,11 +358,16 @@ const keyForOver = (name: string, target: EventTarget | null): "desk" | "in" | "
 const pressAgain = (key: Key) => {
 	const p = key.press;
 	const target = document.activeElement ?? document.body;
-	if (keyForOver(key.name, target) === "moved in") return;
+
+	if (keyForOver(key.name, target) === "moved in") {
+		return;
+	}
+
 	replaying = true;
-	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta)
+
+	if (editable(target) && p.key.length === 1 && !p.ctrl && !p.alt && !p.meta) {
 		document.execCommand("insertText", false, p.key);
-	else
+	} else {
 		target.dispatchEvent(
 			new KeyboardEvent("keydown", {
 				key: p.key,
@@ -326,6 +382,8 @@ const pressAgain = (key: Key) => {
 				cancelable: true,
 			}),
 		);
+	}
+
 	replaying = false;
 };
 
@@ -334,11 +392,17 @@ const holdStep = (msg: HoldMsg): boolean => {
 	const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
 	hold = next;
 	let live = false;
+
 	for (const c of cmds) {
-		if (c.type === "press") toHost({type: "press", id: c.id, key: c.key});
-		else if (!c.held) live = true;
-		else pressAgain(c.key);
+		if (c.type === "press") {
+			toHost({type: "press", id: c.id, key: c.key});
+		} else if (!c.held) {
+			live = true;
+		} else {
+			pressAgain(c.key);
+		}
 	}
+
 	return live;
 };
 
@@ -352,22 +416,30 @@ let noteTimer: ReturnType<typeof setTimeout> | undefined;
  */
 const frameStep = (m: FrameMsg): boolean => {
 	const next = frameUpdate(store.frame, m);
-	if (next === store.frame) return false;
+
+	if (next === store.frame) {
+		return false;
+	}
+
 	const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
 	const isKeys = next.over.kind === "palette" && next.over.title === "keys";
+
 	if (wasKeys && !isKeys) {
 		toHost({type: "keys.close"});
 		store.keysEditor = null;
 	}
+
 	if (!wasKeys && isKeys) {
 		store.keySession = crypto.randomUUID();
 		store.keysEditor = editorMachine.init(store.keys, undefined)[0];
 		toHost({type: "keys.open"});
 	}
+
 	if (next.note !== null && next.note !== store.frame.note) {
 		clearTimeout(noteTimer);
 		noteTimer = setTimeout(() => frameStep({type: "unnote"}), NOTE_MS);
 	}
+
 	store.frame = next;
 	changed();
 	return true;
@@ -387,15 +459,21 @@ const cycleFocus = (to: "next" | "previous") => {
 		screen,
 		document.querySelector<HTMLElement>(".bottomline button"),
 	].filter((el): el is HTMLElement => el !== null && el.getClientRects().length > 0);
-	if (regions.length < 2)
+
+	if (regions.length < 2) {
 		regions.unshift(document.querySelector<HTMLElement>(".desk") ?? document.body);
+	}
+
 	const at = regions.findIndex((el) =>
 		el.matches(".desk") ? el === document.activeElement : el.contains(document.activeElement),
 	);
 	const target = regions[(at + (to === "next" ? 1 : regions.length - 1)) % regions.length];
-	if (target === screen && tile !== null && tile.shows.run === null)
+
+	if (target === screen && tile !== null && tile.shows.run === null) {
 		terminals.get(tile.id)?.focus();
-	else target?.focus();
+	} else {
+		target?.focus();
+	}
 };
 
 /** What info mode says of a part of the page: the words of the nearest `data-info`, or `null`. */
@@ -424,7 +502,10 @@ const focusWords = (): string | null =>
 
 /** Ctrl-B pressed: note the bottom line's item focus is on, if any, before the key takes it away. */
 const noteKeyedFrom = (at: EventTarget | null) => {
-	if (at === document.body) return;
+	if (at === document.body) {
+		return;
+	}
+
 	const item =
 		at instanceof Element
 			? at.closest<HTMLElement>(".bottomline [data-item]")?.dataset.item
@@ -436,7 +517,11 @@ const noteKeyedFrom = (at: EventTarget | null) => {
 const focusBack = () => {
 	const from = keyedFrom;
 	keyedFrom = null;
-	if (from === null || document.activeElement !== document.body) return;
+
+	if (from === null || document.activeElement !== document.body) {
+		return;
+	}
+
 	const items = document.querySelectorAll<HTMLElement>(".bottomline [data-item]");
 	[...items].find((el) => el.dataset.item === from.item)?.focus();
 };
@@ -444,8 +529,13 @@ const focusBack = () => {
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
 	const read = readToPage(raw);
-	if (read.kind === "refused") return console.warn(`fabrika: refused a message: ${read.why}`);
+
+	if (read.kind === "refused") {
+		return console.warn(`fabrika: refused a message: ${read.why}`);
+	}
+
 	const m = read.msg;
+
 	switch (m.type) {
 		case "keys":
 			store.keys = {prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file};
@@ -457,14 +547,20 @@ const heard = (raw: unknown) => {
 			});
 			return changed();
 		case "keys.saved":
-			if (!m.request.startsWith(`${store.keySession}:`)) return;
+			if (!m.request.startsWith(`${store.keySession}:`)) {
+				return;
+			}
+
 			return editKeys({
 				type: "saved",
 				request: m.request.slice(store.keySession.length + 1),
 				version: m.version,
 			});
 		case "keys.failed":
-			if (m.request !== "open" && !m.request.startsWith(`${store.keySession}:`)) return;
+			if (m.request !== "open" && !m.request.startsWith(`${store.keySession}:`)) {
+				return;
+			}
+
 			return editKeys({
 				type: "failed",
 				request: m.request === "open" ? "open" : m.request.slice(store.keySession.length + 1),
@@ -484,8 +580,10 @@ const heard = (raw: unknown) => {
 			store.host = m.now;
 			return changed();
 		case "show":
-			if (m.what === "focus-next" || m.what === "focus-previous")
+			if (m.what === "focus-next" || m.what === "focus-previous") {
 				return cycleFocus(m.what === "focus-next" ? "next" : "previous");
+			}
+
 			return m.what === "info"
 				? frameStep({type: "info", focus: focusWords()})
 				: frameStep({type: "show", what: m.what});
@@ -502,13 +600,20 @@ const heard = (raw: unknown) => {
 			return;
 		case "link":
 			store.link = m.now;
+
 			// Off a host, a key held for its answer gets none: the hold lets them go.
 			if (!attached(m.now)) {
 				holdStep({type: "down"});
-				if (store.keysEditor !== null) frameStep({type: "close"});
+
+				if (store.keysEditor !== null) {
+					frameStep({type: "close"});
+				}
 			}
 			// On one, it may be a host that never heard the workspace's size.
-			else tellArea(true);
+			else {
+				tellArea(true);
+			}
+
 			return changed();
 	}
 };
@@ -548,7 +653,10 @@ const swallow = (e: KeyboardEvent) => {
  * from the menu, so Cmd-W does not reach Close Window.
  */
 const onKey = (e: KeyboardEvent) => {
-	if (replaying) return;
+	if (replaying) {
+		return;
+	}
+
 	const pressed = {
 		key: e.key,
 		code: e.code,
@@ -560,41 +668,65 @@ const onKey = (e: KeyboardEvent) => {
 		altGraph: e.getModifierState("AltGraph"),
 	};
 	const rawName = keyName(pressed);
+
 	if (MAC && rawName !== null && THE_MACS.has(rawName)) {
 		e.stopPropagation();
 		return;
 	}
+
 	const recording = store.keysEditor?.recording;
+
 	if (recording !== undefined && recording._tag !== "idle" && rawName === "<c-c>") {
 		swallow(e);
 		const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
-		if (tile !== null) window.fabrika.send(`tile:${tile.id}`, {type: "keys", data: "\u0003"});
+
+		if (tile !== null) {
+			window.fabrika.send(`tile:${tile.id}`, {type: "keys", data: "\u0003"});
+		}
+
 		return;
 	}
+
 	if (recording?._tag === "waiting") {
-		if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) return;
+		if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			return;
+		}
+
 		if (
 			(e.key === "Enter" || e.key === " ") &&
 			e.target instanceof Element &&
 			e.target.closest("button") !== null
-		)
+		) {
 			return;
+		}
+
 		swallow(e);
 		return editKeys({type: "press", press: pressed});
 	}
+
 	if (recording?._tag === "candidate" || recording?._tag === "saving") {
 		if (e.key === "Escape") {
 			swallow(e);
-			if (recording._tag === "candidate") editKeys({type: "cancel"});
+
+			if (recording._tag === "candidate") {
+				editKeys({type: "cancel"});
+			}
+
 			return;
 		}
+
 		// Keep candidates away from app shortcuts while the native controls still receive their keys.
 		if (pressed.meta || pressed.ctrl || pressed.alt) {
-			if (keyOwner(pressed, MAC, store.keys) === "system") return;
+			if (keyOwner(pressed, MAC, store.keys) === "system") {
+				return;
+			}
+
 			return swallow(e);
 		}
+
 		return;
 	}
+
 	const afterPrefix = midKey().armed
 		? matchPress(
 				pressed,
@@ -603,12 +735,23 @@ const onKey = (e: KeyboardEvent) => {
 			)
 		: null;
 	const owner = afterPrefix === null ? keyOwner(pressed, MAC, store.keys) : "app";
-	if (owner === "nobody") return swallow(e);
+
+	if (owner === "nobody") {
+		return swallow(e);
+	}
+
 	if (owner === "system") {
-		if (e.target instanceof Element && e.target.closest(".term") !== null) e.stopPropagation();
-		if (store.frame.over.kind !== "none") focusOver(e.target);
+		if (e.target instanceof Element && e.target.closest(".term") !== null) {
+			e.stopPropagation();
+		}
+
+		if (store.frame.over.kind !== "none") {
+			focusOver(e.target);
+		}
+
 		return;
 	}
+
 	const applicable = [
 		KeyCase.cases.alone.make({key: store.keys.prefix}),
 		...store.keys.rows.flatMap((row) =>
@@ -618,25 +761,52 @@ const onKey = (e: KeyboardEvent) => {
 	const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
 	const alone =
 		name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({key: name}));
+
 	if (alone === "palette.open") {
 		swallow(e);
 		toHost({type: "run", does: "palette.open", via: {keys: spell(name ?? "")}});
 		return;
 	}
+
 	if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
 		swallow(e);
-		if (store.frame.over.kind !== "none") frameStep({type: "close"});
+
+		if (store.frame.over.kind !== "none") {
+			frameStep({type: "close"});
+		}
+
 		toHost({type: "run", does: alone, via: {keys: spell(name ?? "")}});
 		return;
 	}
-	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) return swallow(e);
-	if (name === null) return;
+
+	if (e.key === "Escape" && frameStep({type: "escape", desk: midKey()})) {
+		return swallow(e);
+	}
+
+	if (name === null) {
+		return;
+	}
+
 	const forOver = keyForOver(name, e.target);
-	if (forOver === "in") return;
-	if (forOver === "moved in") return swallow(e);
+
+	if (forOver === "in") {
+		return;
+	}
+
+	if (forOver === "moved in") {
+		return swallow(e);
+	}
+
 	const press = pressed;
-	if (name === store.keys.prefix) noteKeyedFrom(e.target);
-	if (holdStep({type: "key", key: {name, press}})) return;
+
+	if (name === store.keys.prefix) {
+		noteKeyedFrom(e.target);
+	}
+
+	if (holdStep({type: "key", key: {name, press}})) {
+		return;
+	}
+
 	swallow(e);
 };
 
@@ -645,7 +815,10 @@ const onKey = (e: KeyboardEvent) => {
  * (WCAG 2.1.1: what a pointer can learn, a keyboard can too).
  */
 const explainAt = (e: Event) => {
-	if (store.frame.info.kind !== "on") return;
+	if (store.frame.info.kind !== "on") {
+		return;
+	}
+
 	frameStep({type: "explain", text: wordsAt(e.target)});
 };
 
@@ -679,7 +852,9 @@ function View({tile, run}: {readonly tile: TileId; readonly run: string}): React
 function Body({tile}: {readonly tile: TileId}): ReactNode {
 	const ref = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
-		if (ref.current !== null) terminals.get(tile)?.attach(ref.current);
+		if (ref.current !== null) {
+			terminals.get(tile)?.attach(ref.current);
+		}
 	});
 	return <div className="tile-body" ref={ref} />;
 }
@@ -724,7 +899,11 @@ function Container(props: {
 		e.preventDefault();
 		e.stopPropagation();
 		const [first, second] = [cell(a)?.getBoundingClientRect(), cell(b)?.getBoundingClientRect()];
-		if (first === undefined || second === undefined) return;
+
+		if (first === undefined || second === undefined) {
+			return;
+		}
+
 		const [from, to] = row ? [first.left, second.right] : [first.top, second.bottom];
 		const target = e.currentTarget;
 		target.setPointerCapture(e.pointerId);
@@ -746,8 +925,10 @@ function Container(props: {
 	return (
 		<div className={`container ${container.orientation}`} data-container={container.id} ref={ref}>
 			{container.children.flatMap((child) => {
-				if (isFolded(child))
+				if (isFolded(child)) {
 					return [<Strip key={child.id} node={child} toHost={toHost} agents={desk.agents} />];
+				}
+
 				const before = open[open.indexOf(child.id) - 1];
 				return [
 					...(before === undefined
@@ -780,7 +961,11 @@ function Node(props: {
 	readonly desk: Open;
 }): ReactNode {
 	const {node, ws, desk} = props;
-	if (node.tag === "tile") return <DeskTile tile={node} ws={ws} desk={desk} />;
+
+	if (node.tag === "tile") {
+		return <DeskTile tile={node} ws={ws} desk={desk} />;
+	}
+
 	return <Container container={node} ws={ws} desk={desk} />;
 }
 
@@ -887,20 +1072,33 @@ function App(): ReactNode {
 	// desk is out of reach while the link is down, so focus goes back to it once the link is up,
 	// and while something lies over it, which takes focus (pop.tsx); it goes back once that closes.
 	const focusTile = useEffectEvent(() => {
-		if (focused === null) return;
+		if (focused === null) {
+			return;
+		}
+
 		const into = document.querySelector(`[data-tile="${focused.id}"]`);
-		if (into?.contains(document.activeElement) === true && document.activeElement !== into) return;
-		if (focused.shows.kind === "tsh" && focused.shows.run === null)
+
+		if (into?.contains(document.activeElement) === true && document.activeElement !== into) {
+			return;
+		}
+
+		if (focused.shows.kind === "tsh" && focused.shows.run === null) {
 			terminals.get(focused.id)?.focus();
-		else document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
+		} else {
+			document.querySelector<HTMLElement>(`[data-view="${focused.id}"]`)?.focus();
+		}
 	});
 	useLayoutEffect(() => {
-		if (!away && over === "none") focusTile();
+		if (!away && over === "none") {
+			focusTile();
+		}
 	}, [shown, away, over]);
 	// The desk's key done, focus goes back to the bottom line's item it was on, if it fell.
 	const mid = (open?.prefix.armed ?? false) || open?.ask != null;
 	useLayoutEffect(() => {
-		if (!mid) focusBack();
+		if (!mid) {
+			focusBack();
+		}
 	}, [mid]);
 	const props: FrameProps = {
 		desk: open,
@@ -963,17 +1161,28 @@ function ZoomedTile(props: {
 }): ReactNode {
 	const {ws, id, desk} = props;
 	const tile = findTile(ws.layout, id);
-	if (tile === null) return null;
+
+	if (tile === null) {
+		return null;
+	}
+
 	return <DeskTile tile={tile} ws={ws} desk={desk} />;
 }
 
 const boot = Effect.gen(function* () {
 	ghostty = yield* loadGhostty;
 	window.addEventListener("keydown", onKey, {capture: true});
-	for (const on of EXPLAIN_ON) window.addEventListener(on, explainAt);
+
+	for (const on of EXPLAIN_ON) {
+		window.addEventListener(on, explainAt);
+	}
+
 	window.fabrika.onMessage("desk", heard);
 	const root = document.getElementById("root");
-	if (root !== null) createRoot(root).render(<App />);
+
+	if (root !== null) {
+		createRoot(root).render(<App />);
+	}
 });
 
 Effect.runFork(
@@ -981,7 +1190,11 @@ Effect.runFork(
 		Effect.catchCause((cause) =>
 			Effect.sync(() => {
 				const root = document.getElementById("root");
-				if (root === null) return;
+
+				if (root === null) {
+					return;
+				}
+
 				root.setAttribute("role", "alert");
 				root.textContent = `the desk could not start: ${String(cause)}`;
 			}),

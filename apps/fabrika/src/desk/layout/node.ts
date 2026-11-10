@@ -177,8 +177,14 @@ const isLine = (value: unknown): value is Line => isKeptLine(value) && isLetter(
  */
 const guardsOf = <L extends KeptLine>(isLineOf: (value: unknown) => value is L) => {
 	const isShows = (value: unknown): value is Shows<L> => {
-		if (!Predicate.isObject(value)) return false;
-		if (value.kind === "tsh") return value.run === null || isShown(value.run);
+		if (!Predicate.isObject(value)) {
+			return false;
+		}
+
+		if (value.kind === "tsh") {
+			return value.run === null || isShown(value.run);
+		}
+
 		return (
 			(value.kind === "line" || value.kind === "window") &&
 			isShown(value.run) &&
@@ -229,13 +235,17 @@ export function resolveSizes(
 	children: readonly LayoutNode[],
 	sizes: Readonly<Record<NodeId, number>>,
 ): Readonly<Record<NodeId, number>> {
-	if (children.length === 0) return {};
+	if (children.length === 0) {
+		return {};
+	}
 
 	const named: number[] = [];
 	let namedTotal = 0;
 	let unnamed = 0;
+
 	for (const child of children) {
 		const value = sizes[child.id];
+
 		if (value === undefined || !Number.isFinite(value) || value < 0) {
 			named.push(Number.NaN);
 			unnamed += 1;
@@ -270,8 +280,11 @@ const scaled = (
 	total: number,
 ): Record<NodeId, number> => {
 	const now = tiles.reduce((sum, tile) => sum + (sizes[tile.id] ?? 0), 0);
-	for (const tile of tiles)
+
+	for (const tile of tiles) {
 		sizes[tile.id] = now > 0 ? ((sizes[tile.id] ?? 0) * total) / now : total / tiles.length;
+	}
+
 	return sizes;
 };
 
@@ -287,14 +300,31 @@ const scaled = (
 export function shareLine(container: ContainerNode, id: TileId): ContainerNode {
 	const tile = container.children.find((child) => child.id === id);
 	const line = tile === undefined ? null : lineOf(tile);
-	if (tile?.tag !== "tile" || line === null) return container;
+
+	if (tile?.tag !== "tile" || line === null) {
+		return container;
+	}
+
 	const members = membersOf(container, line.id);
 	const open = members.filter((member) => !member.folded);
-	if (members.length < 2 || open.length === 0) return container;
+
+	if (members.length < 2 || open.length === 0) {
+		return container;
+	}
+
 	const total = members.reduce((sum, member) => sum + (container.sizes[member.id] ?? 0), 0);
 	const sizes: Record<NodeId, number> = {...container.sizes};
-	for (const member of members) if (member.folded) sizes[member.id] = 0;
-	if (tile.folded) return {...container, sizes: scaled(sizes, open, total)};
+
+	for (const member of members) {
+		if (member.folded) {
+			sizes[member.id] = 0;
+		}
+	}
+
+	if (tile.folded) {
+		return {...container, sizes: scaled(sizes, open, total)};
+	}
+
 	const share = total / open.length;
 	sizes[id] = share;
 	const rest = open.filter((member) => member.id !== id);
@@ -309,11 +339,19 @@ export function shareLine(container: ContainerNode, id: TileId): ContainerNode {
 export function freeShare(container: ContainerNode, id: TileId): ContainerNode {
 	const tile = container.children.find((child) => child.id === id);
 	const line = tile === undefined ? null : lineOf(tile);
-	if (line === null) return container;
+
+	if (line === null) {
+		return container;
+	}
+
 	const others = membersOf(container, line.id).filter((member) => member.id !== id);
 	const open = others.filter((member) => !member.folded);
 	const heirs = open.length > 0 ? open : others.slice(0, 1);
-	if (heirs.length === 0) return container;
+
+	if (heirs.length === 0) {
+		return container;
+	}
+
 	const total =
 		heirs.reduce((sum, heir) => sum + (container.sizes[heir.id] ?? 0), 0) +
 		(container.sizes[id] ?? 0);
@@ -329,7 +367,10 @@ export function openShares(container: ContainerNode): Readonly<Record<NodeId, nu
 	const open = container.children.filter((child) => !isFolded(child));
 	const total = open.reduce((sum, child) => sum + (container.sizes[child.id] ?? 0), 0);
 	const shares: Record<NodeId, number> = {};
-	for (const child of open)
+
+	for (const child of open) {
 		shares[child.id] = total > 0 ? (container.sizes[child.id] ?? 0) / total : 1 / open.length;
+	}
+
 	return shares;
 }

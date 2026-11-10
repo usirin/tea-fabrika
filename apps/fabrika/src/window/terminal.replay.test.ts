@@ -30,7 +30,9 @@ const element = (): Record<string, unknown> => {
 		parentElement: null,
 		setAttribute: () => {},
 		append: (...kids: Record<string, unknown>[]) => {
-			for (const kid of kids) kid["parentElement"] = el;
+			for (const kid of kids) {
+				kid["parentElement"] = el;
+			}
 		},
 		remove: () => {},
 		focus: () => {},
@@ -53,9 +55,11 @@ class FakeTerminal {
 	at: {parentElement: {parentElement: Slot}} | undefined;
 	readonly buffer = {active: {length: 0, cursorY: 0, getLine: () => undefined}};
 	constructor(private readonly options: {ghostty: Ghostty}) {}
+
 	loadAddon(fit: FakeFit) {
 		fit.term = this;
 	}
+
 	/** As 0.4.0's open(): the wasm terminal is made at the size the terminal has, 80 by 24. */
 	open(screen: {parentElement: {parentElement: Slot}}) {
 		this.at = screen;
@@ -65,26 +69,34 @@ class FakeTerminal {
 		made.push(this.wasmTerm);
 		this.render();
 	}
+
 	/** As 0.4.0's renderer, each frame: the screen read out of the wasm. */
 	render() {
 		this.wasmTerm?.update();
 		this.wasmTerm?.getViewport();
 	}
+
 	resize(cols: number, rows: number) {
 		this.cols = cols;
 		this.rows = rows;
 		this.wasmTerm?.resize(cols, rows);
 		this.render();
 	}
+
 	write(bytes: string) {
 		this.wasmTerm?.write(bytes);
 		this.render();
 	}
+
 	dispose() {
-		if (this.wasmTerm === undefined) return;
+		if (this.wasmTerm === undefined) {
+			return;
+		}
+
 		made.splice(made.indexOf(this.wasmTerm), 1);
 		this.wasmTerm.free();
 	}
+
 	focus() {}
 	onData() {}
 	onResize() {}
@@ -93,10 +105,15 @@ class FakeTerminal {
 /** As FitAddon: fits its terminal to the slot the tile is in. */
 class FakeFit {
 	term: FakeTerminal | undefined;
+
 	fit() {
 		const cells = this.term?.at?.parentElement.parentElement.cells;
-		if (cells !== undefined) this.term?.resize(cells.cols, cells.rows);
+
+		if (cells !== undefined) {
+			this.term?.resize(cells.cols, cells.rows);
+		}
 	}
+
 	observeResize() {}
 }
 
@@ -105,6 +122,7 @@ vi.mock("ghostty-web", async (actual) => ({
 	Terminal: FakeTerminal,
 	FitAddon: FakeFit,
 }));
+
 vi.mock("ghostty-web/ghostty-vt.wasm", () => ({default: new Uint8Array()}));
 
 const changes: (() => void)[] = [];
@@ -168,12 +186,20 @@ describe("a terminal made again", () => {
 		draw("t3", "tsh$ jobs\r\n[1] running   tracker\r\ntsh$ ");
 		const ran = terminalFor(ghostty, "t2" as never);
 		ran.attach(slot(60, 10) as never);
-		for (let line = 0; line < 30; line += 1) draw("t2", `⚙ 漢字 ✓ row ${line}\r\n`);
+
+		for (let line = 0; line < 30; line += 1) {
+			draw("t2", `⚙ 漢字 ✓ row ${line}\r\n`);
+		}
+
 		draw("t2", "              tsh$ tracker");
 		ran.dispose();
 		const before = made.map(rows);
+
 		for (const look of ["light", "dark"]) {
-			for (const change of [...changes]) change();
+			for (const change of [...changes]) {
+				change();
+			}
+
 			await settled();
 			expect(made.map(rows), look).toEqual(before);
 		}

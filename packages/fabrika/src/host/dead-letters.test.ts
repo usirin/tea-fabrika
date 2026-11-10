@@ -15,7 +15,11 @@ describe("limitEnds", () => {
 				yield* ledger.setLimits("t:1", {usd: 1}, "desk");
 				const rev = (yield* ledger.readLast("t:1", 1))[0]?.rev ?? 1;
 				const c = yield* ledger.claim("t:1", "h", rev, 30_000);
-				if (c === null) return yield* Effect.die("no claim");
+
+				if (c === null) {
+					return yield* Effect.die("no claim");
+				}
+
 				const before = yield* limitEnds("t:1");
 				yield* ledger.charge(c.fence, "a", {usd: 0.6});
 				yield* ledger.charge(c.fence, "b", {usd: 0.6});

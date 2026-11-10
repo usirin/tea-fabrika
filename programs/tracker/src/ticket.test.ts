@@ -11,6 +11,7 @@ import {factOf, summaryOf} from "./ticket.ts";
 // What a person's write puts on the ledger, and a ticket as the list sums it up.
 
 const owner = {kind: "user", id: "owner"} as const;
+
 const entry = (pos: number, fact: Fact): Entry => ({
 	pos,
 	ticket: 1,
@@ -123,13 +124,15 @@ describe("the agents' `tracker_file` tool", () => {
 			{_tag: "run", ticket: 117, run: "r-test_writer-26"},
 			{_tag: "run", ticket: 117, run: "r-test_writer-25", head: "b5b969a0"},
 			{_tag: "walk", url: "https://github.com/usirin/tea-fabrika/pull/332"},
-		])
+		]) {
 			expect(call(from)).toEqual({
 				kind: "input",
 				program: "tracker",
 				input: "file",
 				value: {title: "Mutation runner", body: "", from},
 			});
+		}
+
 		const tool = toolsOf(list()).find((t) => t.name === "tracker_file");
 		expect(tracker.inputs.file.description).toMatch(/\bfrom\b/);
 		expect(JSON.stringify(tool?.inputSchema)).toContain('"from"');
@@ -171,8 +174,11 @@ describe("an approval of a filing with a `from`", () => {
 				const filed = (fact: Fact) => fold([], [entry(1, fact)]).tickets[0];
 				const withFrom = filed({type: "filed", title: "Login fails", body: "On main.", from: FROM});
 				const without = filed({type: "filed", title: "Login fails", body: "On main."});
-				if (withFrom === undefined || without === undefined)
+
+				if (withFrom === undefined || without === undefined) {
 					return yield* Effect.die("the fold made no ticket");
+				}
+
 				expect(textOf(withFrom)).toStrictEqual({title: "Login fails", body: "On main."});
 				const answer = yield* factOf({
 					kind: "answer",
@@ -182,7 +188,11 @@ describe("an approval of a filing with a `from`", () => {
 					note: "",
 					saw: textOf(withFrom),
 				});
-				if (answer.type !== "answered") return yield* Effect.die("not an answer");
+
+				if (answer.type !== "answered") {
+					return yield* Effect.die("not an answer");
+				}
+
 				expect(answer.text).toBe(yield* hashOf({title: "Login fails", body: "On main."}));
 				expect([yield* covers(answer, withFrom), yield* covers(answer, without)]).toEqual([
 					true,

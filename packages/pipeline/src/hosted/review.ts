@@ -34,6 +34,7 @@ const ReviewAsk = Schema.Struct({
 	settings: Settings,
 	note: Schema.NullOr(Schema.String),
 });
+
 const readAsk = Schema.decodeUnknownExit(ReviewAsk);
 
 /** The stage's `Reviewer`: an ask to its child, the answer replayed as the run's stream. */
@@ -66,8 +67,11 @@ export const reviewTurn =
 	(ask: AgentAsk): Effect.Effect<Turn, never, Reviewer> =>
 		Effect.gen(function* () {
 			const read = readAsk(ask.brief);
-			if (Exit.isFailure(read))
+
+			if (Exit.isFailure(read)) {
 				return yield* Effect.die(`a review ask that does not read: ${ask.id}`);
+			}
+
 			const {brief, settings, note} = read.value;
 			const said = Array.from(
 				yield* (yield* Reviewer).review(brief, settings, note).pipe(Stream.runCollect),
@@ -80,7 +84,11 @@ export const reviewTurn =
 /** The verdict comment for a review that judged a head: one line of marker, then each row. */
 export const verdictOf = (end: Extract<Review, {phase: "over"}>, pr: string): Verdict | null => {
 	const {report, outcome} = end;
-	if (report.head === null || report.rows.length === 0 || report.replay) return null;
+
+	if (report.head === null || report.rows.length === 0 || report.replay) {
+		return null;
+	}
+
 	return {
 		pr,
 		head: report.head,
@@ -124,9 +132,13 @@ export const hostedReview: Stage<
 	resume: {type: "resume"},
 	finish: (end, job) =>
 		Effect.gen(function* () {
-			if (end.phase !== "over") return null;
+			if (end.phase !== "over") {
+				return null;
+			}
+
 			const pr = askOf(job.pr, job.rubrics).pr;
 			const verdict = verdictOf(end, pr);
+
 			if (verdict !== null) {
 				const gate = yield* Idempotency;
 				const outside = yield* Outside;
@@ -144,6 +156,7 @@ export const hostedReview: Stage<
 					})
 					.pipe(Effect.orDie);
 			}
+
 			return {
 				name: nameOf(end.outcome),
 				outcome: end.outcome,

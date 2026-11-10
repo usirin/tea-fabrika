@@ -35,6 +35,7 @@ const NAMES = [
 	"beforeModifier",
 	"beforeZwj",
 ] as const;
+
 type Name = (typeof NAMES)[number];
 
 /** The answers of every probe of one code point. */
@@ -49,6 +50,7 @@ const P0 = "؀"; // ARABIC NUMBER SIGN: Prepend, one cell wide. Anything joins i
 const textOf = (name: Name, cp: number, width: number): string => {
 	const c = String.fromCodePoint(cp);
 	const first = cp <= 0xff || width > 0 ? c : P0 + c;
+
 	switch (name) {
 		case "width":
 			return `${c}x`;
@@ -100,24 +102,55 @@ const isControl = (cp: number) => cp < 0x20 || (cp >= 0x7f && cp <= 0x9f);
 /** The class a code point's answers point to, by Ghostty's break rule (cells.ts). */
 const classOf = (cp: number, a: Answers): Class => {
 	// After © (a narrow emoji), only Extend and ZWJ join.
-	if (cp > 0xff && a.afterPict > 0) return a.between === 2 ? "zwj" : "extend";
+	if (cp > 0xff && a.afterPict > 0) {
+		return a.between === 2 ? "zwj" : "extend";
+	}
+
 	// What joins after c: code points in the first cell past c, and past P0 when c follows it.
 	const extra = cp <= 0xff || a.width > 0 ? 0 : 1;
 	const joins = (n: number) => n > extra;
-	if (joins(a.beforeOther)) return "prepend";
-	if (joins(a.beforeModifier)) return "base";
-	if (a.beforeZwj > extra + 1) return "pict";
-	if (joins(a.beforeRi)) return "ri";
-	if (joins(a.beforeL)) return "L";
-	if (joins(a.beforeV) && joins(a.beforeT)) return a.afterLV > 0 ? "V" : "LV";
-	if (joins(a.beforeT)) return a.afterL > 0 ? "LVT" : "T";
-	if (a.afterBase > 0) return "modifier";
+
+	if (joins(a.beforeOther)) {
+		return "prepend";
+	}
+
+	if (joins(a.beforeModifier)) {
+		return "base";
+	}
+
+	if (a.beforeZwj > extra + 1) {
+		return "pict";
+	}
+
+	if (joins(a.beforeRi)) {
+		return "ri";
+	}
+
+	if (joins(a.beforeL)) {
+		return "L";
+	}
+
+	if (joins(a.beforeV) && joins(a.beforeT)) {
+		return a.afterLV > 0 ? "V" : "LV";
+	}
+
+	if (joins(a.beforeT)) {
+		return a.afterL > 0 ? "LVT" : "T";
+	}
+
+	if (a.afterBase > 0) {
+		return "modifier";
+	}
+
 	return "other";
 };
 
 /** A code point's facts, from its answers. */
 const factsFrom = (cp: number, a: Answers): Facts => {
-	if (isControl(cp)) return {width: 1, class: "other", vs: false};
+	if (isControl(cp)) {
+		return {width: 1, class: "other", vs: false};
+	}
+
 	return {width: a.width, class: classOf(cp, a), vs: a.width > 0 && a.vs !== a.width};
 };
 
@@ -165,8 +198,16 @@ const TERMINALS_PER_MEMORY = 20;
 type Cells = ReturnType<GhosttyTerminal["getViewport"]>;
 
 const answerOn = (cells: Cells, y: number, x: boolean): number => {
-	if (!x) return cells[y * COLS]?.grapheme_len ?? 0;
-	for (let i = COLS - 1; i >= 0; i -= 1) if (cells[y * COLS + i]?.codepoint === 0x78) return i;
+	if (!x) {
+		return cells[y * COLS]?.grapheme_len ?? 0;
+	}
+
+	for (let i = COLS - 1; i >= 0; i -= 1) {
+		if (cells[y * COLS + i]?.codepoint === 0x78) {
+			return i;
+		}
+	}
+
 	return -1;
 };
 
@@ -183,16 +224,23 @@ const probingTerminal = (fresh: () => Ghostty) => {
 	return (texts: readonly string[]): Cells => {
 		if (writes === WRITES_PER_TERMINAL) {
 			terminals += 1;
+
 			if (terminals === TERMINALS_PER_MEMORY) {
 				ghostty = fresh();
 				terminals = 0;
 			}
+
 			t = ghostty.createTerminal(COLS, ROWS + 1);
 			writes = 0;
 		}
+
 		writes += 1;
 		t.write(`\x1b[H\x1b[2J${texts.join("\r\n")}`);
-		if (t.getCursor().y !== texts.length - 1) throw new Error("a probe took more than one row");
+
+		if (t.getCursor().y !== texts.length - 1) {
+			throw new Error("a probe took more than one row");
+		}
+
 		// The cells come from the render state, which getCursor made fresh.
 		return t.getViewport();
 	};
@@ -207,47 +255,88 @@ export const probeAll = (fresh: () => Ghostty): Probed => {
 	let xs: boolean[] = [];
 	const flush = () => {
 		const cells = write(texts);
-		for (let y = 0; y < texts.length; y += 1)
+
+		for (let y = 0; y < texts.length; y += 1) {
 			answers[slots[y] ?? 0] = answerOn(cells, y, xs[y] ?? false);
+		}
+
 		texts = [];
 		slots = [];
 		xs = [];
 	};
 	const ask = (cp: number, n: number, width: number) => {
 		const name = NAMES[n] ?? "width";
-		if (isControl(cp) || !asks(name, cp)) return;
+
+		if (isControl(cp) || !asks(name, cp)) {
+			return;
+		}
+
 		texts.push(textOf(name, cp, width));
 		slots.push(cp * NAMES.length + n);
 		xs.push(readsX(name));
-		if (texts.length === ROWS) flush();
+
+		if (texts.length === ROWS) {
+			flush();
+		}
 	};
+
 	// Widths first: where a probe puts a code point of width 0 depends on it.
-	for (let cp = 0x100; cp < 0x110000; cp += 1) ask(cp, 0, 1);
-	if (texts.length > 0) flush();
-	for (let cp = 0; cp <= 0xff; cp += 1) answers[cp * NAMES.length] = 1;
+	for (let cp = 0x100; cp < 0x110000; cp += 1) {
+		ask(cp, 0, 1);
+	}
+
+	if (texts.length > 0) {
+		flush();
+	}
+
+	for (let cp = 0; cp <= 0xff; cp += 1) {
+		answers[cp * NAMES.length] = 1;
+	}
+
 	for (let cp = 0; cp < 0x110000; cp += 1) {
 		const width = answers[cp * NAMES.length] ?? 1;
-		for (let n = 1; n < NAMES.length; n += 1) ask(cp, n, width);
+
+		for (let n = 1; n < NAMES.length; n += 1) {
+			ask(cp, n, width);
+		}
 	}
-	if (texts.length > 0) flush();
+
+	if (texts.length > 0) {
+		flush();
+	}
+
 	return {answers};
 };
 
 /** Every code point's facts, packed as the table holds them. */
 export const packedFrom = (probed: Probed): Uint8Array => {
 	const packed = new Uint8Array(0x110000);
-	for (let cp = 0; cp < 0x110000; cp += 1) packed[cp] = pack(factsFrom(cp, answersOf(probed, cp)));
+
+	for (let cp = 0; cp < 0x110000; cp += 1) {
+		packed[cp] = pack(factsFrom(cp, answersOf(probed, cp)));
+	}
+
 	return packed;
 };
 
 /** What the layout of cells.ts answers to the probes of `cp`, on rows as wide as the probing terminal's. */
 export const modelAnswersOf = (cp: number, width: number): Answers => {
 	const answer = (name: Name): number => {
-		if (isControl(cp) || !asks(name, cp)) return name === "width" ? 1 : 0;
+		if (isControl(cp) || !asks(name, cp)) {
+			return name === "width" ? 1 : 0;
+		}
+
 		const row: Cell[] = [];
 		const pen: Pen = {row, x: 0, pending: false};
-		for (const c of textOf(name, cp, width)) print(pen, c.codePointAt(0) ?? 0, COLS, () => []);
-		if (readsX(name)) return row.findLastIndex((cell) => cell.cps[0] === 0x78);
+
+		for (const c of textOf(name, cp, width)) {
+			print(pen, c.codePointAt(0) ?? 0, COLS, () => []);
+		}
+
+		if (readsX(name)) {
+			return row.findLastIndex((cell) => cell.cps[0] === 0x78);
+		}
+
 		return Math.max(0, (row[0]?.cps.length ?? 0) - 1);
 	};
 	return {

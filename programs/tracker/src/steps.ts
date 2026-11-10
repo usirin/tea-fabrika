@@ -26,6 +26,7 @@ export const STEPS = [
 	"push",
 	"merge",
 ] as const;
+
 export const StepName = Schema.Literals(STEPS);
 export type StepName = typeof StepName.Type;
 
@@ -59,7 +60,11 @@ const approvalOf = (timeline: readonly Entry[]): StepNow => {
 		e.fact.type === "asked" && isApproval(e.fact.picks) ? [e.fact] : [],
 	);
 	const last = asks.at(-1);
-	if (last === undefined) return {step: "approval", state: "none", runs: 0, usd: 0, last: null};
+
+	if (last === undefined) {
+		return {step: "approval", state: "none", runs: 0, usd: 0, last: null};
+	}
+
 	const answer = timeline.findLast(
 		(e) => e.fact.type === "answered" && e.fact.ask === last.ask,
 	)?.fact;
@@ -78,7 +83,8 @@ const stageOf = (step: StepName, timeline: readonly Entry[]): StepNow => {
 	const usd = ended.reduce((sum, e) => sum + e.usd, 0);
 	const done = new Set(ended.map((e) => e.run));
 	const open = started.findLast((s) => !done.has(s.run));
-	if (open !== undefined)
+
+	if (open !== undefined) {
 		return {
 			step,
 			state: "running",
@@ -86,8 +92,14 @@ const stageOf = (step: StepName, timeline: readonly Entry[]): StepNow => {
 			usd,
 			last: open.task === null ? "running" : `running, task ${open.task}`,
 		};
+	}
+
 	const last = ended.at(-1);
-	if (last === undefined) return {step, state: "none", runs: started.length, usd, last: null};
+
+	if (last === undefined) {
+		return {step, state: "none", runs: started.length, usd, last: null};
+	}
+
 	return {
 		step,
 		state: last.outcome.kind === "stuck" ? "stuck" : "done",

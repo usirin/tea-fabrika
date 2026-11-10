@@ -36,7 +36,11 @@ function book(facts: readonly Fact[] = []) {
 			const state = foldLedger(entries);
 			const problem = problemWith(state, {id, answer});
 			const ask = state.asks.get(id);
-			if (problem !== null || ask === undefined) return {problem};
+
+			if (problem !== null || ask === undefined) {
+				return {problem};
+			}
+
 			add({type: "answered", id, answer});
 			return {problem, next: nextOf(ask, answer)};
 		},
@@ -98,7 +102,11 @@ describe("plan approvals: the six 86b plans", () => {
 		expect(
 			desk.answer(a504!.id, {kind: "no", why: "not now: the Check could not pass it"}).next,
 		).toEqual({do: "close", why: "not now: the Check could not pass it"});
-		for (const a of [a490, a565, a579]) desk.answer(a!.id, {kind: "approve"});
+
+		for (const a of [a490, a565, a579]) {
+			desk.answer(a!.id, {kind: "approve"});
+		}
+
 		expect(desk.open()).toEqual([]);
 		expect(desk.entries.filter((e) => e.fact.type === "answered")).toHaveLength(6);
 	});
@@ -181,7 +189,11 @@ describe("a stuck task", () => {
 	const approved = () => {
 		const desk = book(planned());
 		const plans = only(desk.open(), "plan");
-		for (const a of plans) desk.answer(a.id, {kind: "approve"});
+
+		for (const a of plans) {
+			desk.answer(a.id, {kind: "approve"});
+		}
+
 		const a367 = plans[0]!;
 		const review = (open: number) => desk.add({type: "reviewed", plan: a367.plan, task: T1, open});
 		return {desk, plan: a367.plan, review};
@@ -206,7 +218,11 @@ describe("a stuck task", () => {
 
 	it("keep going 3: counted from review facts after the answer; out of rounds and no shorter, it asks again", () => {
 		const {desk, review} = approved();
-		for (const open of [4, 3, 3, 3]) review(open);
+
+		for (const open of [4, 3, 3, 3]) {
+			review(open);
+		}
+
 		const [first] = only(desk.open(), "stuck");
 		// Rounds while the ask waits are kept, and not counted.
 		review(3);
@@ -227,24 +243,44 @@ describe("a stuck task", () => {
 
 	it("keep going 3 on a list that gets shorter needs no answer, to the end", () => {
 		const {desk, review} = approved();
-		for (const open of [4, 3, 3, 3]) review(open);
+
+		for (const open of [4, 3, 3, 3]) {
+			review(open);
+		}
+
 		desk.answer(only(desk.open(), "stuck")[0]!.id, {kind: "keep_going", rounds: 3});
-		for (const open of [3, 2, 2, 1, 0]) review(open);
+
+		for (const open of [3, 2, 2, 1, 0]) {
+			review(open);
+		}
+
 		expect(desk.open()).toEqual([]);
 	});
 
 	it("remove takes the task out; its later rounds raise nothing", () => {
 		const {desk, review} = approved();
-		for (const open of [4, 3, 3, 3]) review(open);
+
+		for (const open of [4, 3, 3, 3]) {
+			review(open);
+		}
+
 		const [stuck] = only(desk.open(), "stuck");
 		expect(desk.answer(stuck!.id, {kind: "remove"}).next).toEqual({do: "remove_task", task: T1});
-		for (const open of [3, 3, 3, 3]) review(open);
+
+		for (const open of [3, 3, 3, 3]) {
+			review(open);
+		}
+
 		expect(desk.open()).toEqual([]);
 	});
 
 	it("a list that wobbles, 1, 2, 1, 2, asks the owner at round 4: no stall twice in a row, and no new lowest three rounds in a row", () => {
 		const {desk, review} = approved();
-		for (const open of [1, 2, 1]) review(open);
+
+		for (const open of [1, 2, 1]) {
+			review(open);
+		}
+
 		expect(desk.open()).toEqual([]);
 		review(2);
 		expect(only(desk.open(), "stuck")).toMatchObject([
@@ -254,7 +290,11 @@ describe("a stuck task", () => {
 
 	it("a list that reached 0 starts the count fully over: 0, then 1, 1 is one stall", () => {
 		const {desk, review} = approved();
-		for (const open of [0, 1, 1]) review(open);
+
+		for (const open of [0, 1, 1]) {
+			review(open);
+		}
+
 		expect(desk.open()).toEqual([]);
 		review(1);
 		expect(only(desk.open(), "stuck")).toMatchObject([{open: [0, 1, 1, 1]}]);
@@ -262,7 +302,11 @@ describe("a stuck task", () => {
 
 	it("reword a criterion: it is open again, the count starts over, and the next ask shows the new words", () => {
 		const {desk, review} = approved();
-		for (const open of [4, 3, 3, 3]) review(open);
+
+		for (const open of [4, 3, 3, 3]) {
+			review(open);
+		}
+
 		const [stuck] = only(desk.open(), "stuck");
 		const criterion = stuck!.criteria[2]!.id;
 		const reword = {
@@ -294,11 +338,16 @@ describe("the plain stall rule, round by round", () => {
 	const asksAt = (opens: readonly number[]): number[] => {
 		let stall: Stall | null = null;
 		const asked: number[] = [];
+
 		for (const [i, open] of opens.entries()) {
 			const step = stallStep(stall, open);
 			stall = step.stall;
-			if (step.ask) asked.push(i + 1);
+
+			if (step.ask) {
+				asked.push(i + 1);
+			}
 		}
+
 		return asked;
 	};
 

@@ -11,12 +11,15 @@ import {describe, expect, it} from "vitest";
 const script = join(import.meta.dirname, "redact.sh");
 const word = fc.stringMatching(/^[a-z][a-z0-9]{3,12}$/);
 const options = {seed: 321, numRuns: 8, endOnFailure: true};
+
 const unicode = (text: string) =>
 	[...text].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+
 const decode = (text: string) => {
 	let value = text
 		.replace(/\\u([0-9a-f]{4})/gi, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
 		.replaceAll("\\n", "\n");
+
 	for (let i = 0; i < 3; i++) {
 		try {
 			value = decodeURIComponent(value);
@@ -24,8 +27,10 @@ const decode = (text: string) => {
 			break;
 		}
 	}
+
 	return value;
 };
+
 const run = (
 	answer: string,
 	events: string,
@@ -39,6 +44,7 @@ const run = (
 	}) => void,
 ) => {
 	const dir = mkdtempSync(join(tmpdir(), "red321-"));
+
 	try {
 		const home = join(dir, "home");
 		mkdirSync(home);
@@ -69,6 +75,7 @@ const run = (
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const tokens = (value: string) => [
 	`npm_${value.repeat(40).slice(0, 36)}`,
 	`ghp_${value.repeat(40).slice(0, 36)}`,
@@ -93,11 +100,17 @@ describe("T321 K19 redaction, today's tooling", () => {
 					{},
 					(got) => {
 						expect(got.code, "redact.sh must implement the planned file redaction").toBe(0);
-						for (const output of [got.answer, got.events, got.text])
+
+						for (const output of [got.answer, got.events, got.text]) {
 							for (const secret of secrets) {
 								expect(decode(output).includes(secret)).toBe(false);
 							}
-						for (const output of [got.answer, got.events]) expect(output).toContain("[redacted]");
+						}
+
+						for (const output of [got.answer, got.events]) {
+							expect(output).toContain("[redacted]");
+						}
+
 						expect(got.answer).toContain("safe answer");
 						expect(got.answer).toContain("safe tail");
 						expect(got.text.trim()).toMatch(/^[^\d\n]*\d+[^\d\n]*$/);
@@ -144,13 +157,22 @@ describe("T321 K19 redaction, today's tooling", () => {
 							usage: {input_tokens: 10, cached_input_tokens: 0, output_tokens: 2},
 						}),
 					];
-					if (reverse) entries.reverse();
+
+					if (reverse) {
+						entries.reverse();
+					}
+
 					run(`safe\n${encoded}\n`, `${entries.join("\n")}\n`, {[name]: secret}, (got) => {
 						expect(got.code, "redact.sh must redact exact dropped values").toBe(0);
-						for (const output of [got.answer, got.events, got.text])
+
+						for (const output of [got.answer, got.events, got.text]) {
 							expect(decode(output).includes(secret)).toBe(false);
-						for (const line of got.events.trim().split("\n"))
+						}
+
+						for (const line of got.events.trim().split("\n")) {
 							expect(() => JSON.parse(line)).not.toThrow();
+						}
+
 						const again = got.again();
 						expect(again.code).toBe(0);
 						expect(again.answer).toBe(got.answer);
@@ -189,10 +211,12 @@ describe("T321 K19 redaction, today's tooling", () => {
 						{TOKEN: secret},
 						(got) => {
 							expect(got.code).toBe(0);
+
 							for (const output of [got.answer, got.events]) {
 								expect(output.includes(secret)).toBe(false);
 								expect(output.includes(JSON.stringify(secret).slice(1, -1))).toBe(false);
 							}
+
 							expect(got.answer).not.toContain(Buffer.from(value.repeat(10)).toString("base64"));
 							expect(got.answer).toContain("safe");
 						},
@@ -206,6 +230,7 @@ describe("T321 K19 redaction, today's tooling", () => {
 	// Plant: stop at the first unreadable file. Review round 1, finding 1.
 	it("K19 [secrets] scenario: an unreadable first file fails the run and later files are still scrubbed", () => {
 		const dir = mkdtempSync(join(tmpdir(), "red321-"));
+
 		try {
 			const missing = join(dir, "missing-dir");
 			mkdirSync(missing);
@@ -228,6 +253,7 @@ describe("T321 K19 redaction, today's tooling", () => {
 	// Review round 1, finding 1: a run that turns .npmrc into a folder.
 	it("K19 [secrets] scenario: a run that replaces .npmrc with a folder still scrubs and keeps the config", () => {
 		const dir = mkdtempSync(join(tmpdir(), "red321-"));
+
 		try {
 			const cwd = join(dir, "work");
 			mkdirSync(cwd);
@@ -269,12 +295,19 @@ describe("T321 K19 redaction, today's tooling", () => {
 						: `${JSON.stringify({type: "error", message: `${pem}\n${exact}`})}\n`;
 				run(answer, events, {PLANTED_SECRET: exact}, (got) => {
 					expect(got.code, "redact.sh must handle partial failed-run output").toBe(0);
+
 					for (const output of [got.answer, got.events, got.text]) {
 						expect(decode(output).includes(pem)).toBe(false);
 						expect(decode(output).includes(exact)).toBe(false);
 					}
-					if (where === "answer") expect(got.events).toBe("");
-					if (where === "events") expect(got.answer).toBe("safe\n");
+
+					if (where === "answer") {
+						expect(got.events).toBe("");
+					}
+
+					if (where === "events") {
+						expect(got.answer).toBe("safe\n");
+					}
 				});
 			}),
 			options,

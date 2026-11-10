@@ -107,6 +107,7 @@ export const runLane = (n: number, say: (line: string) => Effect.Effect<void>) =
 			yield* say(`#${n} is already running in this app. Watch it with: trace --ticket ${n}`);
 			return;
 		}
+
 		const {home} = yield* LaneHome;
 		yield* Effect.acquireRelease(
 			Effect.sync(() => live.add(n)),
@@ -125,11 +126,19 @@ export const runLane = (n: number, say: (line: string) => Effect.Effect<void>) =
 			},
 			{id: `lane-${n}`, storage: fileStorage(`${home}/storage/lanes`)},
 		);
-		if (started.kind !== "running") return yield* Effect.die(started.why);
+
+		if (started.kind !== "running") {
+			return yield* Effect.die(started.why);
+		}
+
 		const printing = yield* Stream.fromQueue(lines).pipe(Stream.runForEach(say), Effect.forkScoped);
 		const end = yield* started.run.ended;
+
 		// The lane's own end says itself, on `ended`. A run that broke past it has only this line.
-		for (const line of brokeWords(n, end)) heard(line);
+		for (const line of brokeWords(n, end)) {
+			heard(line);
+		}
+
 		yield* Queue.end(lines);
 		yield* Fiber.await(printing);
 	}).pipe(Effect.scoped);

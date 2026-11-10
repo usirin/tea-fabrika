@@ -18,14 +18,17 @@ const schemaOptions = {seed: 119120, runs: 100};
 // itself fails if the installed API or the checked result stops refusing the plant.
 // @ts-expect-error Effect 4.1.2 has no Schema.notAnInstalledApi.
 type UnsupportedSchemaApi = typeof Schema.notAnInstalledApi;
+
 const typePlants = (
 	_unsupported: UnsupportedSchemaApi,
 	_report: ReturnType<typeof checker.checkFile>,
 ) => {};
+
 // @ts-expect-error An unchecked success is missing findings, annotations and added count.
 typePlants(undefined, {exitCode: 0});
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
+
 // Independent contract schemas keep the input generator from weakening with a decoder.
 const Note = Schema.Struct({
 	id: Schema.String,
@@ -41,6 +44,7 @@ const Note = Schema.Struct({
 	test: Schema.optionalKey(Text),
 	links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
+
 const Run = Schema.Struct({
 	date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
 	role: Schema.String,
@@ -65,6 +69,7 @@ const Run = Schema.Struct({
 	outputTokens: Schema.optionalKey(Count),
 	driver_caused: Schema.optionalKey(Schema.Boolean),
 });
+
 const noteFields = [
 	"id",
 	"date",
@@ -79,6 +84,7 @@ const noteFields = [
 	"test",
 	"links",
 ];
+
 const runFields = [
 	"date",
 	"role",
@@ -115,7 +121,11 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 				const remaining = [...base];
 				const expected = head.flatMap((text, i) => {
 					const old = remaining.indexOf(text);
-					if (old < 0) return [{line: i + 1, text}];
+
+					if (old < 0) {
+						return [{line: i + 1, text}];
+					}
+
 					remaining.splice(old, 1);
 					return [];
 				});
@@ -161,6 +171,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
 				]);
 				expect(calls.some((args) => args[0] === "merge-base")).toBe(false);
 				const reads = calls.length;
+
 				for (let at = 0; at < reads; at++) {
 					let i = 0;
 					expect(() =>
@@ -179,6 +190,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
 // reads its paths. Plant caught: diffing the event's base SHA (main's tip), which counts main's
 // newer rows and edits against the PR and shows a field file the PR never touched.
 const gitEnv = {...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1"};
+
 const gitIn =
 	(dir: string) =>
 	(args: string[]): {status: number | null; stdout: string} =>
@@ -197,7 +209,9 @@ const gitIn =
 			],
 			{encoding: "utf8", env: gitEnv},
 		);
+
 const text = (rows: readonly string[]) => rows.map((row) => `${row}\n`).join("");
+
 it("a PR's field rows compare to the merge base while main moves ahead", () => {
 	const row = fc.stringMatching(/^[ -~]{0,20}$/);
 	fc.assert(
@@ -209,6 +223,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 			fc.boolean(),
 			(fork, mine, theirs, dropFirst, notesToo) => {
 				const dir = mkdtempSync(join(tmpdir(), "ci-field-"));
+
 				try {
 					const git = gitIn(dir);
 					const commit = (files: Record<string, string>, message: string) => {
@@ -216,6 +231,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 							mkdirSync(dirname(join(dir, file)), {recursive: true});
 							writeFileSync(join(dir, file), body);
 						}
+
 						expect(git(["add", "-A"]).status).toBe(0);
 						expect(git(["commit", "-q", "--allow-empty", "-m", message]).status).toBe(0);
 						return git(["rev-parse", "HEAD"]).stdout.trim();
@@ -238,10 +254,12 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
 					expect(files).toEqual(
 						mine.length > 0 ? [{file: runs, base: text(fork), head: text([...fork, ...mine])}] : [],
 					);
-					for (const input of files)
+
+					for (const input of files) {
 						expect(checker.selectAdded(input.base, input.head).map((added) => added.text)).toEqual(
 							mine,
 						);
+					}
 				} finally {
 					rmSync(dir, {recursive: true, force: true});
 				}
@@ -417,11 +435,13 @@ it("advice warns with exit zero; errors identify head lines without row content"
 				expect(
 					bad.findings.some((f) => f._tag === "error" && f.line === old + 1 && f.field === "what"),
 				).toBe(true);
+
 				for (const annotation of [...report.annotations, ...bad.annotations]) {
 					expect(annotation).not.toContain(marker);
 					expect(annotation).not.toContain(payload.length > 5 ? payload : marker);
 					expect(annotation).not.toMatch(/[\r\n]/);
 				}
+
 				const unknown = checker.checkFile(
 					"field/future.jsonl",
 					"",
@@ -429,8 +449,10 @@ it("advice warns with exit zero; errors identify head lines without row content"
 				);
 				expect(unknown.exitCode).toBe(0);
 				expect(unknown.findings.some((f) => f._tag === "warning")).toBe(true);
-				for (const text of ["null", "[]", '"text"', "1", "{", "\n"])
+
+				for (const text of ["null", "[]", '"text"', "1", "{", "\n"]) {
 					expect(checker.checkFile("field/future.jsonl", "", text).exitCode).not.toBe(0);
+				}
 			},
 		),
 		options,

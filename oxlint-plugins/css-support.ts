@@ -12,30 +12,54 @@ export const tokens = new Map(names.tokens.map(({name, owner}) => [name, owner])
 export const steps = new Set(names.steps);
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
 export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
+
 const place = (decl: Declaration) =>
 	`${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`;
 
 export const generated = (decl: Declaration) => {
-	if (file(decl) !== TOKENS) return false;
+	if (file(decl) !== TOKENS) {
+		return false;
+	}
+
 	let before = decl.prev();
+
 	while (before !== undefined) {
 		if (before.type === "comment") {
-			if (/^@end generated (colors|manti)\b/.test(before.text)) return false;
-			if (/^@generated (colors|manti)\b/.test(before.text)) return true;
+			if (/^@end generated (colors|manti)\b/.test(before.text)) {
+				return false;
+			}
+
+			if (/^@generated (colors|manti)\b/.test(before.text)) {
+				return true;
+			}
 		}
+
 		before = before.prev();
 	}
+
 	return false;
 };
 
 export const references = (decl: Declaration) => {
 	const found: string[] = [];
 	valueParser(decl.value).walk((node) => {
-		if (node.type !== "function") return;
-		if (node.value.toLowerCase() === "url") return false;
-		if (node.value.toLowerCase() !== "var") return;
+		if (node.type !== "function") {
+			return;
+		}
+
+		if (node.value.toLowerCase() === "url") {
+			return false;
+		}
+
+		if (node.value.toLowerCase() !== "var") {
+			return;
+		}
+
 		const name = node.nodes.find((child) => child.type !== "space" && child.type !== "comment");
-		if (name?.type === "word" && name.value.startsWith("--")) found.push(name.value);
+
+		if (name?.type === "word" && name.value.startsWith("--")) {
+			found.push(name.value);
+		}
 	});
 	return found;
 };
@@ -43,6 +67,7 @@ export const references = (decl: Declaration) => {
 export const media = (decl: Declaration, feature: string, value: string) => {
 	const condition = new RegExp(`\\(\\s*${feature}\\s*:\\s*${value}\\s*\\)`, "i");
 	let parent: Root["parent"] | Declaration["parent"] = decl.parent;
+
 	while (parent !== undefined) {
 		if (
 			parent.type === "atrule" &&
@@ -50,10 +75,13 @@ export const media = (decl: Declaration, feature: string, value: string) => {
 			parent.params
 				.split(",")
 				.every((query) => condition.test(query) && !/\b(not|or)\b/i.test(query))
-		)
+		) {
 			return true;
+		}
+
 		parent = parent.parent;
 	}
+
 	return false;
 };
 
@@ -77,17 +105,21 @@ export const plugin = (name: string, check: Check) => {
 					{actual: primary, possible: [true]},
 					{actual: options, possible: {known: [(value) => typeof value === "string"]}},
 				)
-			)
+			) {
 				return;
+			}
+
 			const counts: Counts = {fires: 0, known: new Set()};
 			result.fabrika ??= new Map();
 			result.fabrika.set(ruleName, counts);
 			check(root, (decl, detail, debt = place(decl)) => {
 				counts.fires++;
+
 				if (options.known.includes(debt)) {
 					counts.known.add(debt);
 					return;
 				}
+
 				stylelint.utils.report({ruleName, result, node: decl, message: messages.rejected(detail)});
 			});
 		},

@@ -8,22 +8,27 @@ import {lintWorkflow as lint} from "./workflow-lint.ts";
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
 const options = {seed: 119120, numRuns: 100};
+
 const guard = (job: string) =>
 	`\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${job} != 'false') }}`;
+
 const env = {
 	BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
 	HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
 	EVENT: `\${{ github.event_name }}`,
 };
+
 const diff = {id: "diff", env, run: "node .github/ci/changes.mjs"};
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({maxLength: 20});
+
 const valid = (label: string, extra: string) => ({
 	name: label,
 	on: {push: {branches: ["main"]}, pull_request: null},
 	jobs: {
 		changes: {
 			"runs-on": "ubuntu-latest",
+			"timeout-minutes": 5,
 			outputs: Object.fromEntries(
 				["check", "test", "next", "e2e", "field"].map((key) => [
 					key,
@@ -41,11 +46,13 @@ const valid = (label: string, extra: string) => ({
 		check: {
 			needs: "changes",
 			if: guard("check"),
+			"timeout-minutes": 10,
 			steps: [{run: "pnpm typecheck"}, {run: "pnpm lint"}, {run: "pnpm build"}],
 		},
 		test: {
 			needs: "changes",
 			if: guard("test"),
+			"timeout-minutes": 30,
 			strategy: {matrix: {shard: [1, 2, 3, 4, 5, 6]}},
 			steps: [
 				{
@@ -62,13 +69,20 @@ const valid = (label: string, extra: string) => ({
 				},
 			],
 		},
-		next: {needs: "changes", if: guard("next"), steps: [{run: "pnpm exec vitest run next/"}]},
+		next: {
+			needs: "changes",
+			if: guard("next"),
+			"timeout-minutes": 15,
+			steps: [{run: "pnpm exec vitest run next/"}],
+		},
 		e2e: {
 			needs: "changes",
 			if: guard("e2e"),
+			"timeout-minutes": 25,
 			steps: [{run: "pnpm --filter @kampus/fabrika-app-old e2e"}],
 		},
 		field: {
+			"timeout-minutes": 5,
 			steps: [
 				{uses: "actions/checkout@v7", with: {"fetch-depth": 0}},
 				diff,
@@ -83,7 +97,9 @@ const valid = (label: string, extra: string) => ({
 		},
 	},
 });
+
 type Workflow = ReturnType<typeof valid>;
+
 const plants: [string, (workflow: Workflow) => void][] = [
 	[
 		"scan skips after failure",
@@ -208,6 +224,21 @@ const plants: [string, (workflow: Workflow) => void][] = [
 			w.jobs.test.steps[0]!.run = lines.join("\n");
 		},
 	]),
+	// T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
+	...(["changes", "field", "check", "test", "next", "e2e"] as const).map(
+		(job): [string, (w: Workflow) => void] => [
+			`${job} without a time limit`,
+			(w) => {
+				Object.assign(w.jobs[job], {"timeout-minutes": undefined});
+			},
+		],
+	),
+	[
+		"a time limit past the default",
+		(w) => {
+			w.jobs.test["timeout-minutes"] = 360;
+		},
+	],
 	[
 		"duplicate forced tests",
 		(w) => {
@@ -233,6 +264,7 @@ it("accepts generated valid wiring and rejects every isolated wiring plant", () 
 		fc.property(name, name, (label, extra) => {
 			const clean = valid(label, extra);
 			expect(lint(JSON.stringify(clean))).toEqual([]);
+
 			for (const [plant, mutate] of plants) {
 				const broken = structuredClone(clean);
 				mutate(broken);

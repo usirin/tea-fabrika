@@ -1,4 +1,5 @@
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
@@ -31,10 +32,12 @@ import {
 	type Seen,
 	type SeenWorktree,
 	STUCK,
+	worktreePrs,
 } from "./gc.ts";
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+
 const seen = fc.record({
 	name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/),
 	git: fc.option(
@@ -53,6 +56,7 @@ const seen = fc.record({
 	onRemote: fc.boolean(),
 	dirty: fc.option(fc.nat({max: 12}), {nil: null}),
 }) satisfies fc.Arbitrary<Seen>;
+
 const options = {seed: 119120, numRuns: 300};
 
 describe("box gc, today's tooling", () => {
@@ -119,11 +123,18 @@ describe("box gc, today's tooling", () => {
 		fc.assert(
 			fc.property(seen, ({name, git}) => {
 				const to = backupsOf(name, git?.branch ?? null);
-				for (const b of to) expect(b).toMatch(/^fabrikalfa\/.+(?<!-wip)-wip$/);
+
+				for (const b of to) {
+					expect(b).toMatch(/^fabrikalfa\/.+(?<!-wip)-wip$/);
+				}
+
 				expect(to.at(-1)).toBe(`fabrikalfa/${name}-wip`);
 				expect(new Set(to).size).toBe(to.length);
 				const base = git?.branch?.replace(/(-wip)+$/, "");
-				if (base?.startsWith("fabrikalfa/")) expect(to[0]).toBe(`${base}-wip`);
+
+				if (base?.startsWith("fabrikalfa/")) {
+					expect(to[0]).toBe(`${base}-wip`);
+				}
 			}),
 			options,
 		);
@@ -151,6 +162,9 @@ describe("box gc, today's tooling", () => {
 });
 
 const prState = fc.constantFrom("OPEN" as const, "MERGED" as const, "CLOSED" as const);
+
+const lane = fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}$/);
+
 const worktree = fc.record({
 	branch: fc.option(fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}(-wip)?$/), {
 		nil: null,
@@ -176,6 +190,71 @@ describe("worktree gc, today's tooling", () => {
 			}),
 			options,
 		);
+	});
+
+	// Plants: drop the remote-tip or head-commit lookup, or the -wip strip on either name. The bug:
+	// a worktree on a local branch, pushed as fabrikalfa/<lane>, never matched its merged PR.
+	it("finds a worktree's pull requests by its branch, by a remote branch at its HEAD, and by head commit", () => {
+		fc.assert(
+			fc.property(
+				fc.option(lane, {nil: null}),
+				fc.option(sha, {nil: null}),
+				fc.array(lane, {maxLength: 3}),
+				fc.array(fc.tuple(lane, prState), {maxLength: 4}),
+				fc.array(fc.tuple(sha, prState), {maxLength: 4}),
+				fc.boolean(),
+				(branch, head, tips, refs, oids, wip) => {
+					const byRef = new Map<string, ("OPEN" | "MERGED" | "CLOSED")[]>();
+
+					for (const [r, st] of refs) {
+						byRef.set(r, [...(byRef.get(r) ?? []), st]);
+					}
+
+					const byHead = new Map<string, ("OPEN" | "MERGED" | "CLOSED")[]>();
+
+					for (const [o, st] of oids) {
+						byHead.set(o, [...(byHead.get(o) ?? []), st]);
+					}
+
+					const w = wip ? "-wip" : "";
+					// One tip is always a branch some pull request has, so the lookup is exercised.
+					const at = [...tips, ...refs.slice(0, 1).map(([r]) => r)];
+					const got = worktreePrs(
+						{branch: branch === null ? null : branch + w, head, tips: at.map((t) => t + w)},
+						byRef,
+						byHead,
+					);
+					const want = [
+						...(branch === null ? [] : (byRef.get(branch) ?? [])),
+						...at.flatMap((t) => byRef.get(t) ?? []),
+						...(head === null ? [] : (byHead.get(head) ?? [])),
+					];
+					expect(got).toEqual(want);
+				},
+			),
+			options,
+		);
+	});
+
+	it("scenario: a worktree whose work merged under another branch name is removed", () => {
+		// scenario: the 2026-11-09 worktree, local branch person/t378-node-kinds, pushed and merged
+		// as fabrikalfa/lead378 (PR 623), found by the remote tip and by the PR's head commit.
+		const head = "459a4f7187d6a6b809717eda51e8f52bb9c9621f";
+		const byRef = new Map([["fabrikalfa/lead378", ["MERGED" as const]]]);
+		const byHead = new Map([[head, ["MERGED" as const]]]);
+		const base = {locked: false, busy: [], idle: IDLE, dirty: 0, branch: "person/t378-node-kinds"};
+		const renamed = worktreePrs(
+			{branch: "person/t378-node-kinds", head, tips: ["fabrikalfa/lead378"]},
+			byRef,
+			new Map(),
+		);
+		const byCommit = worktreePrs(
+			{branch: "person/t378-node-kinds", head, tips: []},
+			new Map(),
+			byHead,
+		);
+		expect(decideWorktree({...base, prs: renamed})).toEqual({_tag: "remove", reason: "merged"});
+		expect(decideWorktree({...base, prs: byCommit})).toEqual({_tag: "remove", reason: "merged"});
 	});
 });
 
@@ -217,10 +296,19 @@ describe("dirtyIn reads a real box, today's tooling", () => {
 		writeFileSync(join(box, "a.ts"), "1\n");
 		git("add", "a.ts");
 		git("commit", "-q", "-m", "base");
+
 		// Three hours ago, then a stat change with no content change: plain git status rewrites the
 		// index for that, and makes index.lock in the git data folder.
-		for (const p of [join(box, "a.ts"), join(data, "index"), join(data, "logs", "HEAD"), data, box])
+		for (const p of [
+			join(box, "a.ts"),
+			join(data, "index"),
+			join(data, "logs", "HEAD"),
+			data,
+			box,
+		]) {
 			utimesSync(p, old, old);
+		}
+
 		utimesSync(join(box, "a.ts"), new Date(), new Date());
 		utimesSync(box, old, old);
 		const before = lastTouched(box, data);

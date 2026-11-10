@@ -21,11 +21,13 @@ const test: MutantAnswer = {
 	test: "redaction keeps the rest of the body",
 	file: "src/jev-redact.test.ts",
 };
+
 const cannot: MutantAnswer = {
 	mutant: "machine.ts:620:9:5d07c8",
 	answer: "cannot",
 	why: "an empty outbox loops zero times",
 };
+
 const noise: MutantAnswer = {
 	mutant: "jev.ts:105:13:b20e47",
 	answer: "noise",
@@ -58,7 +60,11 @@ describe("answering the mutants that lived", () => {
 			}),
 		]);
 		const [bad, good] = cmds;
-		if (bad === undefined || good === undefined) throw new Error("two runs");
+
+		if (bad === undefined || good === undefined) {
+			throw new Error("two runs");
+		}
+
 		const half = killRan(killing, bad, "red");
 		expect(outcomeOf([test], half)).toBeNull();
 		expect(outcomeOf([test], killRan(half, good, "green"))).toEqual({
@@ -70,7 +76,11 @@ describe("answering the mutants that lived", () => {
 
 	it("is stuck `not_killed` when the test misses the mutant or fails on the original", () => {
 		const [killing, [bad, good]] = startKills("c1", [test]);
-		if (bad === undefined || good === undefined) throw new Error("two runs");
+
+		if (bad === undefined || good === undefined) {
+			throw new Error("two runs");
+		}
+
 		const missed = killRan(killRan(killing, bad, "green"), good, "green");
 		expect(outcomeOf([test], missed)).toEqual({kind: "stuck", why: "not_killed"});
 		const wrong = killRan(killRan(killing, bad, "red"), good, "red");
@@ -91,7 +101,10 @@ describe("answering the mutants that lived", () => {
 	});
 
 	it("reads the owner's rating of a noise answer by Rate's count", () => {
-		if (noise.answer !== "noise") throw new Error("noise");
+		if (noise.answer !== "noise") {
+			throw new Error("noise");
+		}
+
 		const none = {ratings: [], shipped: []};
 		const by = (writer: string, says: "fix" | "noise") => ({
 			writer,
@@ -103,7 +116,10 @@ describe("answering the mutants that lived", () => {
 	});
 
 	it("keeps an unrated noise answer open once its change ships: silence is not the owner's approval", () => {
-		if (noise.answer !== "noise") throw new Error("noise");
+		if (noise.answer !== "noise") {
+			throw new Error("noise");
+		}
+
 		expect(ratedAs(noise, {ratings: [], shipped: [noise.mutant]})).toBe("open");
 		expect(
 			tallyOf([findingOf(noise)], {ratings: [], shipped: [noise.mutant]}, () => NOISE_SILENCE),
@@ -111,7 +127,10 @@ describe("answering the mutants that lived", () => {
 	});
 
 	it("does not let an agent's rating send a noise answer back or let it live", () => {
-		if (noise.answer !== "noise") throw new Error("noise");
+		if (noise.answer !== "noise") {
+			throw new Error("noise");
+		}
+
 		for (const says of ["fix", "noise"] as const) {
 			const ratings = [{writer: "agent:review", rating: {finding: noise.mutant, says}}];
 			expect(ratedAs(noise, {ratings, shipped: [noise.mutant]})).toBe("open");

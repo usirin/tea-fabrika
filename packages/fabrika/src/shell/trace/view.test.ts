@@ -45,9 +45,14 @@ const viewed = (content: "kept" | "kept_out" = "kept_out") => {
 };
 
 const under = (parent: Span) => trace.setSpan(ROOT_CONTEXT, parent);
+
 const named = (spans: readonly ReadableSpan[], name: string) => {
 	const found = spans.find((s) => s.name === name);
-	if (found === undefined) throw new Error(`no ${name} in ${spans.map((s) => s.name).join(", ")}`);
+
+	if (found === undefined) {
+		throw new Error(`no ${name} in ${spans.map((s) => s.name).join(", ")}`);
+	}
+
 	return found;
 };
 
@@ -103,15 +108,24 @@ const agentRun = (
 		under(agent),
 	);
 	tool.end();
-	if (failed) agent.setStatus({code: SpanStatusCode.ERROR, message: "run failed: broke"});
-	if (ends) agent.end();
+
+	if (failed) {
+		agent.setStatus({code: SpanStatusCode.ERROR, message: "run failed: broke"});
+	}
+
+	if (ends) {
+		agent.end();
+	}
 };
 
 describe("the view", () => {
 	it("lists each span under its own service, one resource per service, the rest of the resource kept", async () => {
 		const {spans, tracer, shutdown} = viewed();
-		for (const service of ["build", "review", "build"])
+
+		for (const service of ["build", "review", "build"]) {
 			tracer.startSpan(service, {attributes: {"service.name": service}}).end();
+		}
+
 		tracer.startSpan("none").end();
 		await shutdown();
 		expect(spans.map((s) => s.resource.attributes["service.name"])).toEqual([
@@ -136,8 +150,11 @@ describe("the view", () => {
 			"done:part",
 			"skip:draft",
 		];
-		for (const outcome of outcomes)
+
+		for (const outcome of outcomes) {
 			tracer.startSpan(outcome, {attributes: {"tea.outcome": outcome}}).end();
+		}
+
 		await shutdown();
 		expect(spans.map((s) => [s.name, s.status])).toEqual([
 			["stuck:read_failed", {code: SpanStatusCode.ERROR, message: "stuck:read_failed"}],
@@ -162,7 +179,11 @@ describe("the view", () => {
 		// Another run's id: its parent is not this one's made-up parent, so it stays.
 		const other = tracer.startSpan("other", {attributes: {"tea.run.id": "run-2"}}, madeUp);
 		const child = tracer.startSpan("run", {attributes: {"tea.run.id": "run-1"}}, under(root));
-		for (const span of [child, other, root]) span.end();
+
+		for (const span of [child, other, root]) {
+			span.end();
+		}
+
 		await shutdown();
 		expect(named(spans, "line").parentSpanContext).toBeUndefined();
 		expect(named(spans, "other").parentSpanContext?.spanId).toBe(traceParentIdOf("run-1"));
@@ -222,10 +243,12 @@ describe("the view", () => {
 			const alone = named(spans, "invoke_agent builder · 1 turn");
 			expect(alone.parentSpanContext?.spanId).toBe(sub.spanContext().spanId);
 			expect(alone.attributes["langfuse.observation.output"]).toBeUndefined();
-			if (sent)
-				for (const part of ["chat claude-opus", "execute_tool Bash"])
+
+			if (sent) {
+				for (const part of ["chat claude-opus", "execute_tool Bash"]) {
 					expect(named(spans, part).parentSpanContext?.spanId).toBe(alone.spanContext().spanId);
-			else {
+				}
+			} else {
 				expect(spans.map((s) => s.name)).toEqual(["reviewer", "invoke_agent builder · 1 turn"]);
 				expect(JSON.stringify(spans.map((s) => s.attributes))).not.toContain(SAID);
 			}

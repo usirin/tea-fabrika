@@ -46,19 +46,32 @@ const MOST_STATES = 20_000;
 
 /** The top of the workspace: the folder above this one that holds `pnpm-workspace.yaml`. */
 function workspaceOf(from: string): string {
-	if (existsSync(join(from, "pnpm-workspace.yaml"))) return from;
+	if (existsSync(join(from, "pnpm-workspace.yaml"))) {
+		return from;
+	}
+
 	const up = dirname(from);
-	if (up === from) throw new Error("no pnpm-workspace.yaml above this test");
+
+	if (up === from) {
+		throw new Error("no pnpm-workspace.yaml above this test");
+	}
+
 	return workspaceOf(up);
 }
 
 /** Every source file under `dir`, tests and type files left out, by its path from `root`. */
 function sources(root: string, dir: string): readonly string[] {
-	if (!existsSync(dir)) return [];
+	if (!existsSync(dir)) {
+		return [];
+	}
+
 	return readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
 		const path = join(dir, entry.name);
-		if (entry.isDirectory())
+
+		if (entry.isDirectory()) {
 			return SKIPPED.has(entry.name) || entry.name.startsWith(".") ? [] : sources(root, path);
+		}
+
 		const source = /\.tsx?$/.test(entry.name) && !/\.(test|d)\.tsx?$/.test(entry.name);
 		return source ? [relative(root, path).split(sep).join("/")] : [];
 	});
@@ -93,38 +106,70 @@ export function withoutLaws(root: string, specs: ReadonlyMap<string, number>): r
 	);
 	const out: string[] = [];
 	const made = new Set<string>();
-	for (const part of parts)
+
+	for (const part of parts) {
 		for (const file of sources(root, join(root, part))) {
 			const {count, names} = machinesIn(readFileSync(join(root, file), "utf8"));
-			if (count === 0) continue;
+
+			if (count === 0) {
+				continue;
+			}
+
 			made.add(file);
 			const laws = lawsFileOf(file);
+
 			if (!existsSync(join(root, laws))) {
 				const specced = specs.get(file) ?? 0;
-				if (specced !== count)
+
+				if (specced !== count) {
 					out.push(
 						`${file} makes ${count} machine(s) and has no ${laws} beside it${specced > 0 ? `, and ${specced} spec(s) in specs.ts` : ""}`,
 					);
+				}
+
 				continue;
 			}
-			if (!file.startsWith(`${part}/src/`))
+
+			if (!file.startsWith(`${part}/src/`)) {
 				out.push(`${laws} is outside ${part}/src, where the test run does not look`);
+			}
+
 			const text = readFileSync(join(root, laws), "utf8");
-			if (!text.includes("@demlik/tea/pbt")) out.push(`${laws} does not use tea's pbt`);
-			if (names.length !== count)
+
+			if (!text.includes("@demlik/tea/pbt")) {
+				out.push(`${laws} does not use tea's pbt`);
+			}
+
+			if (names.length !== count) {
 				out.push(`${file} makes a machine under no name, so its laws cannot name it`);
-			for (const name of names)
-				if (!new RegExp(`\\b${name}\\b`).test(text)) out.push(`${laws} does not name ${name}`);
+			}
+
+			for (const name of names) {
+				if (!new RegExp(`\\b${name}\\b`).test(text)) {
+					out.push(`${laws} does not name ${name}`);
+				}
+			}
 		}
-	for (const file of specs.keys())
-		if (!made.has(file)) out.push(`specs.ts has a spec for ${file}, which makes no machine`);
+	}
+
+	for (const file of specs.keys()) {
+		if (!made.has(file)) {
+			out.push(`specs.ts has a spec for ${file}, which makes no machine`);
+		}
+	}
+
 	return out;
 }
 
 const ROOT = workspaceOf(import.meta.dirname);
+
 const specCounts = (): ReadonlyMap<string, number> => {
 	const counts = new Map<string, number>();
-	for (const spec of SPECS) counts.set(spec.file, (counts.get(spec.file) ?? 0) + 1);
+
+	for (const spec of SPECS) {
+		counts.set(spec.file, (counts.get(spec.file) ?? 0) + 1);
+	}
+
 	return counts;
 };
 
@@ -161,17 +206,21 @@ describe("every machine has laws", () => {
 describe("the laws check, on a planted workspace", () => {
 	const made: string[] = [];
 	afterAll(() => {
-		for (const dir of made) rmSync(dir, {recursive: true, force: true});
+		for (const dir of made) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** A fresh workspace holding these files, by their path from its top. */
 	const workspace = (files: Readonly<Record<string, string>>): string => {
 		const root = mkdtempSync(join(tmpdir(), "laws-check-"));
 		made.push(root);
+
 		for (const [file, text] of Object.entries(files)) {
 			mkdirSync(dirname(join(root, file)), {recursive: true});
 			writeFileSync(join(root, file), text);
 		}
+
 		return root;
 	};
 	const MACHINE = "export const desk = defineMachine({});\n";

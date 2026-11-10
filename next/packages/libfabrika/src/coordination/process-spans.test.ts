@@ -28,6 +28,7 @@ import {Down} from "./process.ts";
 
 // Retain refs and marker suffixes through 40 characters, including the old 11..12.
 const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
+
 // Effect 4.1.1 has runs/seed but no examples option. Keep the old cases in the callback.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -39,11 +40,13 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 const nat = (max: number) =>
 	Schema.Int.check(
 		Schema.isBetween({minimum: 0, maximum: max}),
 		Schema.makeFilter((n) => !Object.is(n, -0)),
 	);
+
 const date = Arbitrary.schema(
 	Schema.Date.check(
 		Schema.isBetweenDate({minimum: new Date("1900-01-01"), maximum: new Date("2100-01-01")}),
@@ -66,15 +69,18 @@ const capture = () => {
 			spans.filter((span) => span.name === name && span.status._tag === "Ended"),
 	};
 };
+
 const records = () => {
 	const sink = storage();
 	const parts = new Map<string, ReturnType<typeof storage>>();
 	const open = (name: string) => {
 		let part = parts.get(name);
+
 		if (part === undefined) {
 			part = storage();
 			parts.set(name, part);
 		}
+
 		return part.sql;
 	};
 	return {
@@ -87,14 +93,23 @@ const records = () => {
 		),
 	};
 };
+
 const recorded = (process: string) =>
 	RecordManager.use((records) => Stream.runCollect(records.read(Chain.cases.job.make({process}))));
+
 const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) => {
 	for (const row of rows) {
 		const text = JSON.stringify({attributes: row.attributes, events: row.events, links: row.links});
-		for (const mark of marks) expect(text, row.name).not.toContain(mark);
-		for (const value of Object.values(row.attributes))
-			if (typeof value === "string") expect(value.length, row.name).toBeLessThanOrEqual(128);
+
+		for (const mark of marks) {
+			expect(text, row.name).not.toContain(mark);
+		}
+
+		for (const value of Object.values(row.attributes)) {
+			if (typeof value === "string") {
+				expect(value.length, row.name).toBeLessThanOrEqual(128);
+			}
+		}
 	}
 };
 
@@ -126,6 +141,7 @@ describe("p97, process calls", () => {
 				yield* processes.demonitor(ref, from());
 				yield* processes.down(A, {why: "intensity", crashes: 3, until: 50_000}, from());
 				expect(trace.ended("process.start")).toHaveLength(3);
+
 				for (const name of [
 					"process.info",
 					"process.isLive",
@@ -134,8 +150,10 @@ describe("p97, process calls", () => {
 					"process.receive",
 					"process.demonitor",
 					"process.down",
-				])
+				]) {
 					expect(trace.ended(name), name).toHaveLength(1);
+				}
+
 				const refusal = trace.ended("process.start")[2]!;
 				expect([...refusal.attributes].find(([key]) => key.endsWith(".why"))?.[1]).toBe(
 					"id_reused",
@@ -276,8 +294,10 @@ describe("p99, process content stays out of span tags and health", () => {
 					expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
 					leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
 					const health = JSON.stringify(world.sink.db().prepare("SELECT * FROM health").all());
-					for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"])
+
+					for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]) {
 						expect(health).not.toContain(mark);
+					}
 				}).pipe(Effect.provide(world.layer));
 			},
 		),

@@ -9,6 +9,7 @@ const cli = vi.hoisted(() => ({
 	work: undefined as Effect.Effect<unknown, unknown> | undefined,
 	layer: undefined as Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> | undefined,
 }));
+
 vi.mock("@effect/platform-node", async (original) => {
 	const actual = await original<typeof import("@effect/platform-node")>();
 	return {
@@ -25,6 +26,7 @@ vi.mock("@effect/platform-node", async (original) => {
 		},
 	};
 });
+
 const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 	expect(Exit.isFailure(exit)).toBe(true);
 	const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -34,6 +36,7 @@ const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 	expect(error).toMatchObject({_tag: "Some", value: {_tag: "GrantError", reason}});
 	expect(Option.getOrUndefined(error)).toBeInstanceOf(Error);
 };
+
 it("grant command rejects malformed outside URLs as GrantError before fetching or signing", async () => {
 	const invalid = fc.oneof(
 		fc.string().map((s) => `relative-${encodeURIComponent(s)}`),
@@ -52,6 +55,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
 				"--code=made-up",
 				"--key=unused-key-path",
 			];
+
 			try {
 				cli.work = undefined;
 				vi.resetModules();
@@ -69,6 +73,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
 });
 
 const usage = "usage: grant.ts client URL KEY --code=CODE --key=PATH";
+
 it("grant usage guard names the error for each missing argument or flag", async () => {
 	await fc.assert(
 		fc.asyncProperty(fc.string(), fc.integer({min: 0, max: 4}), async (text, missing) => {
@@ -79,13 +84,20 @@ it("grant usage guard names the error for each missing argument or flag", async 
 				`--code=${text}`,
 				"--key=unused-path",
 			];
-			if (missing === 0) args[0] = `wrong-${text}`;
-			else if (missing === 1) args.splice(1, 2);
-			else args.splice(missing, 1);
+
+			if (missing === 0) {
+				args[0] = `wrong-${text}`;
+			} else if (missing === 1) {
+				args.splice(1, 2);
+			} else {
+				args.splice(missing, 1);
+			}
+
 			// Removing the URL also removes its following positional argument so the CLI cannot shift it.
 			const argv = process.argv;
 			const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
 			process.argv = [process.execPath, "grant.ts", ...args];
+
 			try {
 				vi.resetModules();
 				await import("../grant.ts");
@@ -130,6 +142,7 @@ const generated = fc.record({
 		.jsonValue()
 		.filter((raw) => !Schema.is(Schema.Record(Schema.String, Schema.Json))(raw)),
 });
+
 const results = {
 	get: "unreachable",
 	json: "bad_target",
@@ -143,7 +156,8 @@ const results = {
 	refused: "refused",
 	applied: null,
 } as const;
-for (const mode of Object.keys(results) as Array<keyof typeof results>)
+
+for (const mode of Object.keys(results) as Array<keyof typeof results>) {
 	it(`grant ${mode} path preserves the signed fields and exact error reason`, async () => {
 		await fc.assert(
 			fc.asyncProperty(generated, async (data) => {
@@ -154,11 +168,14 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 					ChildProcessSpawner.make((command) =>
 						Effect.gen(function* () {
 							commands.push(command);
+
 							if (
 								!ChildProcess.isStandardCommand(command) ||
 								!Stream.isStream(command.options.stdin)
-							)
+							) {
 								return yield* Effect.die("expected streamed signing input");
+							}
+
 							signed.push(yield* Stream.mkString(Stream.decodeText(command.options.stdin)));
 							const stdout = Stream.make(new TextEncoder().encode(data.armored));
 							return ChildProcessSpawner.makeHandle({
@@ -182,16 +199,33 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 				const calls: Array<[unknown, RequestInit | undefined]> = [];
 				const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
 					calls.push([url, options]);
+
 					if (options?.method === "POST") {
-						if (mode === "post") throw new Error("post unavailable");
-						if (mode === "status") return new Response("refused", {status: 403});
-						if (mode === "replyJson") return new Response("{");
+						if (mode === "post") {
+							throw new Error("post unavailable");
+						}
+
+						if (mode === "status") {
+							return new Response("refused", {status: 403});
+						}
+
+						if (mode === "replyJson") {
+							return new Response("{");
+						}
+
 						return Response.json(
 							mode === "reply" ? data.badReply : {_tag: mode === "refused" ? "refused" : "applied"},
 						);
 					}
-					if (mode === "get") throw new Error("get unavailable");
-					if (mode === "json") return new Response("{");
+
+					if (mode === "get") {
+						throw new Error("get unavailable");
+					}
+
+					if (mode === "json") {
+						return new Response("{");
+					}
+
 					return Response.json(
 						mode === "target" ? data.badTarget : mode === "waiting" ? null : data.target,
 					);
@@ -208,20 +242,27 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 					"--key=unused-signing-path",
 					...(data.label === undefined ? [] : [`--label=${data.label}`]),
 				];
+
 				try {
 					vi.resetModules();
 					await import("../grant.ts");
 					const before = Date.now();
 					const exit = await Effect.runPromiseExit(cli.work!);
 					const reason = results[mode];
-					if (reason === null) expect(Exit.isSuccess(exit)).toBe(true);
-					else typed(exit, reason);
+
+					if (reason === null) {
+						expect(Exit.isSuccess(exit)).toBe(true);
+					} else {
+						typed(exit, reason);
+					}
+
 					expect(calls[0]).toEqual([
 						`http://127.0.0.1:18787/grant/client/${encodeURIComponent(data.fingerprint)}?code=${encodeURIComponent(data.code)}`,
 						undefined,
 					]);
 					const signs = !["get", "json", "target", "waiting"].includes(mode);
 					expect(commands).toHaveLength(signs ? 1 : 0);
+
 					if (signs) {
 						expect(commands[0]).toMatchObject({
 							command: "ssh-keygen",
@@ -251,9 +292,11 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 						expect(Date.parse(grant.sentAt)).toBeLessThanOrEqual(Date.now());
 						expect(text).toBe(grantText(grant));
 					}
+
 					const posts = signs && mode !== "sign";
 					expect(calls).toHaveLength(posts ? 2 : 1);
-					if (posts)
+
+					if (posts) {
 						expect(calls[1]).toEqual([
 							"http://127.0.0.1:18787/grant",
 							{
@@ -262,9 +305,13 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 								body: JSON.stringify({text: signed[0], armored: data.armored}),
 							},
 						]);
-					if (mode === "applied")
+					}
+
+					if (mode === "applied") {
 						expect(log).toHaveBeenCalledWith(`Granted ${data.fingerprint} to ${data.target.for}`);
-					else expect(log).not.toHaveBeenCalled();
+					} else {
+						expect(log).not.toHaveBeenCalled();
+					}
 				} finally {
 					process.argv = argv;
 					cli.layer = undefined;
@@ -275,6 +322,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>)
 			{seed: 119120, numRuns: 12},
 		);
 	});
+}
 
 it("grant reports bad_args when the CLI refuses unknown flags", async () => {
 	await fc.assert(
@@ -282,6 +330,7 @@ it("grant reports bad_args when the CLI refuses unknown flags", async () => {
 			const argv = process.argv;
 			const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
 			process.argv = [process.execPath, "grant.ts", `--unknown-${flag}`];
+
 			try {
 				vi.resetModules();
 				await import("../grant.ts");

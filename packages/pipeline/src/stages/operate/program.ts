@@ -123,6 +123,7 @@ const OUTPUTS = {
 	),
 	ended: output(Ended, "Once per ticket: how the loop ended, why, and every round."),
 };
+
 type Outputs = typeof OUTPUTS;
 
 const unknown = {_tag: "unknown" as const};
@@ -207,7 +208,11 @@ const reviewToTheEnd = (
 			.get(id)
 			.start({type: "start", ask: {pr, head: null, rubrics}, settings});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the review stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the review stopped in ${end.phase}`);
+		}
+
 		// Its round, for this loop's ship to read.
 		yield* keepRows(end.report, pr);
 		const reviewed: Reviewed = {pr, outcome: end.outcome, name: nameOf(end.outcome), ...end.report};
@@ -219,7 +224,11 @@ const shipToTheEnd = (ships: Stages["machines"]["ship"], id: string, pr: string)
 	Effect.gen(function* () {
 		const runtime = yield* ships.get(id).start({type: "start", pr});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the ship stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the ship stopped in ${end.phase}`);
+		}
+
 		return end.outcome;
 	}).pipe(Effect.scoped);
 
@@ -237,7 +246,10 @@ const ticketOf = (url: string): Effect.Effect<TicketId, typeof unknown> => {
 const holding = (cmd: {readonly ticket: string; readonly lane: LaneId}) =>
 	Effect.gen(function* () {
 		const ticket = yield* ticketOf(cmd.ticket);
-		if (!(yield* holds(ticket, cmd.lane))) return yield* Effect.fail(unknown);
+
+		if (!(yield* holds(ticket, cmd.lane))) {
+			return yield* Effect.fail(unknown);
+		}
 	});
 
 /** What answers the loop's Acts: each stage's runs its machine to its end, and says so on `step`. */
@@ -299,7 +311,11 @@ const loopInterpret = ({send, machines}: Stages) => {
 		loop_post: (cmd: ReturnType<typeof postVerdicts>) =>
 			Effect.gen(function* () {
 				const writes = yield* ReviewWrites;
-				for (const post of cmd.posts) yield* writes.post({pr: cmd.pr, head: cmd.head, ...post});
+
+				for (const post of cmd.posts) {
+					yield* writes.post({pr: cmd.pr, head: cmd.head, ...post});
+				}
+
 				return "posted" as const;
 			}).pipe(settled),
 		loop_ship: (cmd: ReturnType<typeof runShip>) =>
@@ -399,11 +415,21 @@ const tidy = (ticket: string, {machines}: OperateKit) =>
 	Effect.gen(function* () {
 		const kept = yield* machines.loop.get(loopId(ticket)).read;
 		const id = readTicketId(ticket);
-		if (kept !== null && kept.phase !== "idle" && id !== null) yield* release(id, kept.lane);
+
+		if (kept !== null && kept.phase !== "idle" && id !== null) {
+			yield* release(id, kept.lane);
+		}
+
 		const prefix = `${loopId(ticket)}/`;
-		for (const stage of [machines.build, machines.review, machines.ship])
-			for (const kept of yield* stage.list)
-				if (kept.id.startsWith(prefix)) yield* stage.get(kept.id).clear;
+
+		for (const stage of [machines.build, machines.review, machines.ship]) {
+			for (const kept of yield* stage.list) {
+				if (kept.id.startsWith(prefix)) {
+					yield* stage.get(kept.id).clear;
+				}
+			}
+		}
+
 		yield* machines.loop.get(loopId(ticket)).clear;
 	});
 
@@ -423,7 +449,11 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 		// A loop kept from before goes on as the lane it was; only a new one is given a lane.
 		const kept = yield* ref.read;
 		const id = readTicketId(ticket);
-		if (id === null) return yield* Effect.die(`not a ticket: ${ticket}`);
+
+		if (id === null) {
+			return yield* Effect.die(`not a ticket: ${ticket}`);
+		}
+
 		const lane = kept !== null && kept.phase !== "idle" ? kept.lane : yield* newLane(id);
 		const runtime = yield* ref.start({
 			type: "start",
@@ -433,7 +463,11 @@ const run = (ticket: string, {flags, send, machines}: OperateKit) =>
 			settings,
 		});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the loop stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the loop stopped in ${end.phase}`);
+		}
+
 		yield* send("ended", {
 			ticket,
 			outcome: end.outcome,

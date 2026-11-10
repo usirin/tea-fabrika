@@ -23,8 +23,9 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. Saved answers go in `experiments/results/`. A script is not kept on main: keep it on its own branch and name that branch in the write-up. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. A write-up quotes the numbers it uses inline. Raw results and assets (saved answers, shots, inputs, every timing of a run) go to the owner's private archive, not into git: a script writes them under `runs/` or to a path a flag names. A script is not kept on main: keep it on its own branch and name that branch in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
+| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row in `field/findings.jsonl`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
 | Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
@@ -127,7 +128,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
   they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
-  grep. Product code (`next/` and today's app) keeps its steps.
+  grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
+  `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
+  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
+  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
@@ -156,7 +161,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
   returns nothing, and reads one part through a selector, as in
   `useRuntime(run, (m) => m.views[id])`. No stand-in hook.
-- **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
+- **In `next/`, every state machine is explicit.** A stored value that changes and decides what is
+  legal next is control state. It gets one named type with its transitions in one place, never
+  flags, a position in code or an order two parties assume. A plan asks of new code: what are its
+  states? ([0037](./.decisions/0037-implicit-state-machines-made-explicit.md)).
+- **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
+  Effect does it: `Lease.of(...)` under `import * as Lease`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
@@ -203,6 +214,11 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
   behind a custom design.
+- **Try an existing tool before you hand-write one.** A plan or pull request that adds a check, a
+  script or a tool names the widely used tools it looked at, with a link each, and uses one or
+  says what it cannot do, with proof. "We could write it quickly" is not a reason. A hand-written
+  check lists its edge cases before the code, each with a test
+  ([0040](./.decisions/0040-existing-tools-before-hand-written.md)).
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
@@ -222,6 +238,12 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
+  Before you write Effect code, read `node_modules/effect/AGENTS.md` in full. It ships inside the
+  installed package (`effect` 4.1.2 today, 433 lines), so it always matches the lockfile. Where
+  it and a decision here differ, the decision wins
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Effect's
+  maintainer briefs agents the same way
+  ([tim-smart/clanka's AGENTS.md](https://github.com/tim-smart/clanka/blob/master/AGENTS.md)).
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
@@ -282,8 +304,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
-  every pull request, prose included. An Effect service name is never plural: one that holds many is
-  `<Thing>Manager`, such as `LeaseManager`.
+  every pull request, prose included. An Effect service that holds many is named in the plural, as
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
@@ -347,6 +370,27 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 above needs it; CI runs it too (experiment 108).
 Exact npm versions only, never a range: `pnpm lint` fails on one ([exact versions](./docs/direction/pin-exact-versions.md)).
 
+Run the narrowest check that still covers the change, as Effect's own repo asks of its agents
+([Effect-TS/effect-smol's AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md), "Validation").
+This table adds no rule: each row is a rule stated on this page, and `pnpm format` comes first in
+every row.
+
+| What changed | What to run here |
+|---|---|
+| Only Markdown that no program or skill reads, or `field/*.jsonl` rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
+| A skill script, or Markdown that a program or skill reads | as code, below |
+| Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
+| A dependency's version | as code; `pnpm lint` fails on a range |
+| A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
+| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
+| A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
+
+A report says which of these ran, and which could not run and why.
+
+A flaky test is fixed the day it is seen, by removing its cause; nobody reruns it until green and moves on
+([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
+
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
 about 0% of what it finds is wrong: 4 findings, all right
@@ -363,7 +407,10 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`: tabs, 100 columns. The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
+([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off

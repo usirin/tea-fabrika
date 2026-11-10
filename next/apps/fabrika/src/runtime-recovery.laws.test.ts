@@ -14,6 +14,7 @@ import type {Env} from "./runtime.ts";
 
 const table = vi.hoisted(() => ({programs: {} as Record<string, {hash: string; source: string}>}));
 vi.mock("./table.ts", () => table);
+
 vi.mock("cloudflare:workers", () => ({
 	DurableObject: class {
 		constructor(
@@ -23,15 +24,18 @@ vi.mock("cloudflare:workers", () => ({
 	},
 	WorkerEntrypoint: class {},
 }));
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const field = (value: Buffer | string) => {
 	const body = Buffer.from(value),
 		size = Buffer.alloc(4);
 	size.writeUInt32BE(body.length);
 	return Buffer.concat([size, body]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519"),
 		bytes = Buffer.from(pair.publicKey.export({format: "jwk"}).x!, "base64url"),
@@ -66,22 +70,27 @@ const identity = () => {
 		},
 	};
 };
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
 	failures: Schema.Array(Schema.String),
 });
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("prepare"), parent: Schema.optionalKey(Schema.String)}),
 	Schema.Struct({type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String)}),
 ]);
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["person_only", "not_granted"],
 });
+
 const caused = (parent: string) =>
 	write({stream: "events", write: {_tag: "caused", parent, fact: {_tag: "answered"}}});
+
 const approvals = {
 	name: "approvals",
 	machine: Machine.make({
@@ -111,10 +120,15 @@ const approvals = {
 	writes: {answered: {schema: Schema.TaggedStruct("answered", {}), personOnly: true}},
 	wake: () => null,
 } as const;
+
 const closers: Array<() => Promise<void>> = [];
+
 afterEach(async () => {
-	for (const close of closers.splice(0).reverse()) await close();
+	for (const close of closers.splice(0).reverse()) {
+		await close();
+	}
 });
+
 const storage = (db: DatabaseSync) => {
 	const sql = nodeSql(db),
 		values = new Map<string, unknown>();
@@ -136,6 +150,7 @@ const storage = (db: DatabaseSync) => {
 		deleteAlarm: async () => {},
 	};
 };
+
 const gate = () => {
 	let resolve = () => {};
 	const promise = new Promise<void>((done) => {
@@ -143,6 +158,7 @@ const gate = () => {
 	});
 	return {promise, resolve};
 };
+
 const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 	table.programs.counter = {hash: "counter-a", source: "counter"};
 	table.programs.approvals = {hash: "approvals-a", source: "approvals"};
@@ -194,6 +210,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 					JSON.parse(name),
 				);
 				let saved = processes.get(pid);
+
 				if (saved === undefined) {
 					const processDb = new DatabaseSync(":memory:");
 					// oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
@@ -204,17 +221,22 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 					saved = {object: new Process(processCtx, env), db: processDb};
 					processes.set(pid, saved);
 				}
+
 				const object = saved.object;
 				return {
 					configure: async (descriptor: Descriptor) => {
 						attempts.push(structuredClone(descriptor));
 						entered.resolve();
-						if (attempts.length === 1 && fault === "failed")
+
+						if (attempts.length === 1 && fault === "failed") {
 							throw new Error("configure failed before save");
+						}
+
 						if (attempts.length === 1 && fault === "interrupted") {
 							await interrupted.promise;
 							return;
 						}
+
 						return object.configure(descriptor);
 					},
 					descriptor: object.descriptor.bind(object),
@@ -271,10 +293,12 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 	project = new Project(ctx, env);
 	closers.push(async () => {
 		interrupted.resolve();
+
 		for (const {object, db: processDb} of processes.values()) {
 			await object.runtime.dispose();
 			processDb.close();
 		}
+
 		await project.runtime.dispose();
 		db.close();
 	});
@@ -358,7 +382,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 };
 
 describe("P12 Project configure recovery", () => {
-	for (const fault of ["failed", "interrupted", "healthy"] as const)
+	for (const fault of ["failed", "interrupted", "healthy"] as const) {
 		it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
 			const w = world(fault);
 			const first = w.project.info().then(
@@ -366,7 +390,11 @@ describe("P12 Project configure recovery", () => {
 				(error: unknown) => ({error}),
 			);
 			await w.entered;
-			if (fault === "interrupted") await w.interrupt();
+
+			if (fault === "interrupted") {
+				await w.interrupt();
+			}
+
 			const result = await first;
 			expect("value" in result).toBe(fault === "healthy");
 			const descriptor = w.attempts[0]!;
@@ -378,7 +406,11 @@ describe("P12 Project configure recovery", () => {
 				{process: descriptor.id, name: "counter:1", program: "counter"},
 			]);
 			expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
-			for (const attempt of w.attempts) expect(attempt).toEqual(descriptor);
+
+			for (const attempt of w.attempts) {
+				expect(attempt).toEqual(descriptor);
+			}
+
 			const process = w.process(descriptor.id).object;
 			expect(await process.descriptor()).toEqual(descriptor);
 			expect(await process.open("audit")).toMatchObject({rev: 0, view: {count: 0}});
@@ -399,16 +431,21 @@ describe("P12 Project configure recovery", () => {
 			await w.reopen();
 			expect(w.attempts).toEqual(attempts);
 		});
+	}
 });
 
 describe("P12 Process RPC refusal answers", () => {
-	for (const reason of ["person_only", "not_granted"] as const)
+	for (const reason of ["person_only", "not_granted"] as const) {
 		it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
 			const w = world();
 			await w.project.info();
 			const {process: pid} = await w.start(),
 				client = await w.admit();
-			if (reason === "not_granted") w.revokeBeforeCommit();
+
+			if (reason === "not_granted") {
+				w.revokeBeforeCommit();
+			}
+
 			const result = await w.project
 				.route(client, "process.send", {
 					pid,
@@ -448,4 +485,5 @@ describe("P12 Process RPC refusal answers", () => {
 			).toHaveLength(1);
 			expect(w.calls()).toEqual({signs: 1, commits: reason === "not_granted" ? 1 : 0});
 		});
+	}
 });

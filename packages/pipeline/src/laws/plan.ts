@@ -137,12 +137,27 @@ export function planLaws<S extends PlanState>(): readonly Law<S, Msg, PlanCmd>[]
 			null,
 			(brief, {prev, next}) => {
 				const now = briefOf(next) ?? brief;
-				if (next.phase !== "over" || prev.phase === "over") return now;
+
+				if (next.phase !== "over" || prev.phase === "over") {
+					return now;
+				}
+
 				const {outcome, report} = next;
-				if (outcome.kind !== "done" && outcome.kind !== "ask") return now;
-				if (report.plan === null || now === null) return broke(`${outcome.kind} with no plan`);
+
+				if (outcome.kind !== "done" && outcome.kind !== "ask") {
+					return now;
+				}
+
+				if (report.plan === null || now === null) {
+					return broke(`${outcome.kind} with no plan`);
+				}
+
 				const problems = planProblems(report.plan, now);
-				if (problems.length > 0) return broke(`${outcome.kind} with a plan the Check fails`);
+
+				if (problems.length > 0) {
+					return broke(`${outcome.kind} with a plan the Check fails`);
+				}
+
 				const asks = report.plan.questions.length > 0;
 				return asks === (outcome.kind === "ask")
 					? now
@@ -178,7 +193,11 @@ export function planLaws<S extends PlanState>(): readonly Law<S, Msg, PlanCmd>[]
 					(msg.type === "plan_finished" || msg.type === "plan_failed") &&
 					structuralHash(prev) !== structuralHash(next);
 				const now = took ? spent + msg.spend.costUsd : spent;
-				if (next.phase !== "over" || prev.phase === "over") return now;
+
+				if (next.phase !== "over" || prev.phase === "over") {
+					return now;
+				}
+
 				return next.report.spend.costUsd === now
 					? now
 					: broke(`${now} spent, and the report says ${next.report.spend.costUsd}`);
@@ -231,6 +250,7 @@ export const takesAnyRun: Update<PlanState, Msg, PlanCmd> = (s, m) => {
 		const id = runIdOf(s);
 		return id === null ? planUpdate(s, m) : planUpdate(s, {...m, id});
 	}
+
 	return planUpdate(s, m);
 };
 

@@ -197,7 +197,10 @@ export const asksProgram = defineProgram({
 						{concurrency: 1, discard: true},
 					);
 					const changed = was === null || was.join("\n") !== now.map((ask) => ask.id).join("\n");
-					if (changed) yield* send("waiting", {asks: now});
+
+					if (changed) {
+						yield* send("waiting", {asks: now});
+					}
 				});
 			yield* said(null, yield* folded);
 			yield* ship;
@@ -206,22 +209,29 @@ export const asksProgram = defineProgram({
 			// answers is never read before that ask.
 			const fact = (fact: Fact | null) =>
 				Effect.gen(function* () {
-					if (fact === null) return;
+					if (fact === null) {
+						return;
+					}
+
 					const before = yield* folded;
 					yield* keep(fact);
 					const after = yield* folded;
+
 					if (fact.type === "built") {
 						const build = [...after.builds.values()]
 							.filter((b) => b.plan === fact.plan && b.task === fact.task)
 							.at(-1);
-						if (build !== undefined)
+
+						if (build !== undefined) {
 							yield* send("built", {
 								plan: fact.plan,
 								task: fact.task,
 								changes: fact.changes,
 								build: build.build,
 							});
+						}
 					}
+
 					yield* said(before, after);
 					yield* ship;
 				});
@@ -231,8 +241,11 @@ export const asksProgram = defineProgram({
 					const problem = problemWith(before, answer);
 					const ask = before.asks.get(answer.id);
 					const next = ask === undefined ? null : nextOf(ask, answer.answer);
-					if (problem !== null || ask === undefined || next === null)
+
+					if (problem !== null || ask === undefined || next === null) {
 						return yield* send("refused", {id: answer.id, why: problem ?? "it does not fit"});
+					}
+
 					yield* keep({type: "answered", id: answer.id, answer: answer.answer});
 					yield* send("settled", {ask, answer: answer.answer, next});
 					yield* said(before, yield* folded);

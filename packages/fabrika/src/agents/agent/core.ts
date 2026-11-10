@@ -49,20 +49,36 @@ export const formOf = (schema: Record<string, unknown>) =>
 /** The last JSON object in a text that the schema reads, or none. */
 export const lastFit = <A>(read: (value: unknown) => Option.Option<A>, text: string): A | null => {
 	const whole = Option.liftThrowable(JSON.parse)(text.trim());
+
 	if (Option.isSome(whole)) {
 		const fit = read(whole.value);
-		if (Option.isSome(fit)) return fit.value;
+
+		if (Option.isSome(fit)) {
+			return fit.value;
+		}
 	}
+
 	// A message that holds an object among other words: try each `{` from the last.
 	for (let at = text.lastIndexOf("{"); at >= 0; at = text.lastIndexOf("{", at - 1)) {
 		for (let end = text.lastIndexOf("}"); end > at; end = text.lastIndexOf("}", end - 1)) {
 			const parsed = Option.liftThrowable(JSON.parse)(text.slice(at, end + 1));
-			if (Option.isNone(parsed)) continue;
+
+			if (Option.isNone(parsed)) {
+				continue;
+			}
+
 			const fit = read(parsed.value);
-			if (Option.isSome(fit)) return fit.value;
+
+			if (Option.isSome(fit)) {
+				return fit.value;
+			}
 		}
-		if (at === 0) break;
+
+		if (at === 0) {
+			break;
+		}
 	}
+
 	return null;
 };
 
@@ -95,11 +111,16 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 			const all = pid === null ? under : [pid, ...under];
 			yield* gentle.pipe(Effect.timeout(GRACE_MS), Effect.ignore);
 			let left = yield* reaper.alive(all);
+
 			for (let waited = 0; left.length > 0 && waited < GRACE_MS; waited += 100) {
 				yield* Effect.sleep("100 millis");
 				left = yield* reaper.alive(all);
 			}
-			if (left.length > 0) yield* reaper.kill(left);
+
+			if (left.length > 0) {
+				yield* reaper.kill(left);
+			}
+
 			const ended = yield* Clock.currentTimeMillis;
 			config.stopped?.({
 				provider: turn.provider,
@@ -116,23 +137,31 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 			Stream.unwrap(
 				Effect.gen(function* () {
 					const adapter = config.adapters[turn.provider];
-					if (adapter === undefined)
+
+					if (adapter === undefined) {
 						return yield* failed("no_provider", `no provider ${turn.provider} in the table`);
-					if (turn.limits.usd !== null && !adapter.holds.usd)
+					}
+
+					if (turn.limits.usd !== null && !adapter.holds.usd) {
 						return yield* failed(
 							"cannot_limit",
 							`${turn.provider} holds no dollar cap; run it with usd: null`,
 						);
+					}
+
 					// Read again here, so a prompt that got past its type (a cast, or JavaScript) reaches no adapter.
 					const system = yield* Schema.decodeUnknownEffect(SystemPrompt)(turn.system).pipe(
 						Effect.mapError((error) => failed("system", error.message)),
 					);
 					const known = yield* config.sessions.get(turn.session);
-					if (known !== null && known.provider !== turn.provider)
+
+					if (known !== null && known.provider !== turn.provider) {
 						return yield* failed(
 							"other_provider",
 							`session ${turn.session} was opened on ${known.provider}`,
 						);
+					}
+
 					const schema = jsonSchema(turn.answer);
 					const read = reader(turn.answer);
 					const running = yield* adapter.start({
@@ -185,11 +214,16 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 
 					const step = (raw: Raw | "over_time"): Effect.Effect<readonly Heard<A>[]> =>
 						Effect.gen(function* () {
-							if (raw === "over_time") return [end("over_time", {})];
+							if (raw === "over_time") {
+								return [end("over_time", {})];
+							}
+
 							switch (raw._tag) {
 								case "opened":
-									if (known === null)
+									if (known === null) {
 										yield* config.sessions.put(turn.session, turn.provider, raw.own);
+									}
+
 									return [{_tag: "started", session: turn.session}];
 								case "said":
 									state.text = raw.text;
@@ -197,18 +231,23 @@ export const makeAgents = (config: AgentsConfig): typeof Agents.Service => {
 								case "tool": {
 									state.tools.add(raw.id);
 									const limit = turn.limits.tools;
-									if (limit !== null && state.tools.size > limit)
+
+									if (limit !== null && state.tools.size > limit) {
 										return [end("max_turn_requests", {})];
+									}
+
 									return [raw];
 								}
 								case "asked":
 									return [raw];
 								case "tokens":
-									if (raw.whole) state.whole = raw.tokens;
-									else {
+									if (raw.whole) {
+										state.whole = raw.tokens;
+									} else {
 										state.sawRequest = true;
 										state.summed = add(state.summed, raw.tokens);
 									}
+
 									return [{_tag: "tokens", tokens: tokens()}];
 								case "ended":
 									return [

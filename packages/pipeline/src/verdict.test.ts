@@ -13,6 +13,7 @@ import {
 
 const HEAD = "bbe83ec08ab6a5140af3c7bef7f918b9380a753d";
 const BASE = "eced6e282f48424c88c9db21f8378339e37dd912";
+
 const marker = (namespace: string, polarity: string, clause: string, head = HEAD) =>
 	`${namespace}: ${polarity} @ ${head} content:c2e1ec85c84f — ${clause}`;
 

@@ -12,7 +12,9 @@ const ADD_SAW = {
 	kept: null,
 	old: null,
 } as const;
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SAW = {
 	code: "1234",
 	label: "Browser",
@@ -21,6 +23,7 @@ const SAW = {
 	check: "touch",
 	has: ["verify", "seal"],
 } as const;
+
 const SENT = "2026-11-08T04:00:00.000Z";
 const TOOK = {label: "Browser", where: "test", how: "panel", check: "touch"} as const;
 
@@ -33,7 +36,9 @@ const grant = {
 	saw: SAW,
 	sentAt: SENT,
 } satisfies typeof C.Grant.Type;
+
 const revoke = {id: "r1", key: "window", for: PERSON, to: "project-a", saw: TOOK, sentAt: SENT};
+
 const add = {
 	id: "a1",
 	for: PERSON,
@@ -43,6 +48,7 @@ const add = {
 	saw: ADD_SAW,
 	sentAt: SENT,
 };
+
 describe("P10 signed text", () => {
 	it("format: grantText: tag, target, every saw field and one newline are signed", () => {
 		expect(C.grantText(grant)).toBe(
@@ -72,7 +78,9 @@ describe("P10 signed text", () => {
 		expect(text).toBe(
 			`{"_tag":"enrolled","id":"a1","to":"project-a","for":"${PERSON}","key":"sk-key","window":"window","nonce":"n1"}\n`,
 		);
-		for (const name of ["id", "to", "for", "key", "window", "nonce"] as const)
+
+		for (const name of ["id", "to", "for", "key", "window", "nonce"] as const) {
 			expect(C.enrollmentText({...value, [name]: "changed"})).not.toBe(text);
+		}
 	});
 });

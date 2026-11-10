@@ -50,15 +50,18 @@ import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const NAME = "counter:1";
 const BUILD = "build-a";
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const person = Writer.cases.person.make({key: "SHA256:person", for: from().for});
 const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("save"), token: Schema.String}),
@@ -74,22 +77,27 @@ const Msg = Schema.Union([
 		to: Recipient,
 	}),
 ]);
+
 const work = Cmd.make("work", {input: Schema.Struct({}), ok: Schema.Null, err: ["failed"]});
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["failed"],
 });
+
 const Saved = Schema.TaggedStruct("saved", {token: Schema.String});
 /** The wiring's policy. P34 amendment: its `maxDeliveries` may be absent (then 3). */
 type WiringPolicy = Omit<typeof policy, "maxDeliveries"> & {readonly maxDeliveries?: number};
 /** Limits a law sets: the program's own `maxDeliveries`, and the wiring's policy. */
 type Limits = {readonly program?: number | undefined; readonly policy?: WiringPolicy};
+
 type Wiring = {
 	policy: WiringPolicy;
 	recovery: {sql: Sql; name: string; capacity: number};
 	fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
+
 const runnerLayer: (p: Descriptor, wiring: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
@@ -125,10 +133,13 @@ const world = (
 		downs: [] as Array<typeof Down.Type>,
 		timers: [] as number[],
 	};
+
 	// The platform has one activity key per object, shared by every selected process.
 	// Back it with a SQLite file so reopening drops all runner memory but keeps the key.
-	if (platformActivity)
+	if (platformActivity) {
 		state.sql.exec("CREATE TABLE p34_activity (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+	}
+
 	const activityStorage = platformActivity
 		? {
 				put: (key: string, value: unknown) =>
@@ -176,18 +187,34 @@ const world = (
 			update: {
 				add: (s, m) => {
 					controls.adds++;
-					if (controls.adds === controls.crashAdd) throw new RangeError("private fold failure");
-					if (controls.savedThrows) throw new RangeError("private saved failure");
+
+					if (controls.adds === controls.crashAdd) {
+						throw new RangeError("private fold failure");
+					}
+
+					if (controls.savedThrows) {
+						throw new RangeError("private saved failure");
+					}
+
 					return [{...s, count: s.count + m.n}, []];
 				},
 				poison: (s, m) => {
 					controls.steps.push(m.key);
-					if (controls.invalid) return [{count: Number.NaN, replies: 0}, []];
+
+					if (controls.invalid) {
+						return [{count: Number.NaN, replies: 0}, []];
+					}
+
 					if (controls.throws) {
 						const n = controls.steps.filter((key) => key === m.key).length;
-						if (n === 2) throw new RangeError("private second failure");
+
+						if (n === 2) {
+							throw new RangeError("private second failure");
+						}
+
 						throw new TypeError("private fresh failure");
 					}
+
 					return [{...s, count: s.count + 1}, []];
 				},
 				work: (s) => [s, [work({})]],
@@ -289,11 +316,13 @@ const world = (
 								id,
 								lineFor(from({by: person.key, parent: null}), fact),
 							);
+
 							// Commit the real fact, then lose only its reply.
 							if (controls.loseWriteReply) {
 								controls.loseWriteReply = false;
 								return yield* new LedgerError({why: "unreachable"});
 							}
+
 							return answer;
 						}),
 				};
@@ -306,7 +335,10 @@ const world = (
 				recovery: {sql: state.sql, name: NAME, capacity: 1024 ** 3},
 				fault: (cut) =>
 					Effect.suspend(() => {
-						if (controls.cut !== cut) return Effect.void;
+						if (controls.cut !== cut) {
+							return Effect.void;
+						}
+
 						controls.cut = "";
 						controls.hits.push(cut);
 						return Effect.fail(new LedgerError({why: "unreachable"}));
@@ -333,7 +365,11 @@ const world = (
 							return {
 								flush: Effect.suspend(() => {
 									controls.flushes.push([...controls.writes]);
-									if (!controls.flushOnce) return real.flush;
+
+									if (!controls.flushOnce) {
+										return real.flush;
+									}
+
 									controls.flushOnce = false;
 									controls.flushFailures++;
 									return Effect.fail(new LedgerError({why: "storage"}));
@@ -369,16 +405,20 @@ const world = (
 		},
 	};
 };
+
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
+
 const dead = Effect.forEach(PIDS, (p) => read(`${p}/dead`), {concurrency: 1}).pipe(
 	Effect.map((rows) => rows.flat()),
 );
+
 const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
 	e.pipe(
 		Effect.exit,
 		Effect.tap((exit) => Effect.sync(() => expect(Exit.isFailure(exit)).toBe(true))),
 	);
+
 /** A letter accepted before the saved model, as P11 marks one: sent and indexed as placed. */
 const accepted = (
 	id: string,
@@ -392,9 +432,12 @@ const accepted = (
 			turn: null,
 			cmds: [],
 		};
-		if (sent._tag === "placed")
+
+		if (sent._tag === "placed") {
 			yield* ProcessStore.use((s) => s.save(checkpoint, [{id, rev: sent.rev, pos: sent.pos}]));
+		}
 	});
+
 const recover = (w: ReturnType<typeof world>) =>
 	Effect.gen(function* () {
 		const deadline = w.alarms.at(-1);
@@ -416,10 +459,12 @@ describe("P34 runner supervision", () => {
 								const parts = new Map<string, ReturnType<typeof storage>>();
 								const records = RecordManager.sql((name) => {
 									let part = parts.get(name);
+
 									if (part === undefined) {
 										part = storage();
 										parts.set(name, part);
 									}
+
 									return part.sql;
 								}, 1024 ** 3);
 								const recording = Recording.layer.pipe(
@@ -439,27 +484,41 @@ describe("P34 runner supervision", () => {
 									s.select(process).pipe(Effect.flatMap((selected) => selected.load)),
 								);
 								yield* w.boot;
+
 								if (pending === "saved retry") {
 									// Leave a real dispatched write behind before constructing the tested runner.
 									yield* Effect.gen(function* () {
 										const r = yield* ProgramRunner;
-										if (path === "restart") yield* r.restart(request);
+
+										if (path === "restart") {
+											yield* r.restart(request);
+										}
+
 										w.controls.loseWriteReply = true;
 										yield* failed(r.msg(input));
 									}).pipe(Effect.provide(w.layer()));
 								}
+
 								expect(w.controls.loseWriteReply).toBe(false);
 								expect(w.controls.writes).toHaveLength(pending === "saved retry" ? 1 : 0);
 								// One runner owns the failed flush and every later call. No storage reopen.
 								yield* Effect.gen(function* () {
 									const r = yield* ProgramRunner;
-									if (pending === "fresh" && path === "restart") yield* r.restart(request);
+
+									if (pending === "fresh" && path === "restart") {
+										yield* r.restart(request);
+									}
+
 									const wake = Effect.gen(function* () {
-										if (path === "open") yield* r.open(id);
-										else if (path === "msg") yield* r.msg(input);
+										if (path === "open") {
+											yield* r.open(id);
+										} else if (path === "msg") {
+											yield* r.msg(input);
+										}
 										// Repeat the completed request; replacing a process must not run its old Cmds.
-										else if (path === "restart") yield* r.restart(request);
-										else {
+										else if (path === "restart") {
+											yield* r.restart(request);
+										} else {
 											w.consumeAlarm();
 											yield* r.due(time);
 										}
@@ -468,8 +527,11 @@ describe("P34 runner supervision", () => {
 									const flushes = w.controls.flushes.length;
 									w.controls.flushOnce = true;
 									const exit = yield* failed(pending === "fresh" ? r.msg(input) : wake);
-									if (Exit.isFailure(exit))
+
+									if (Exit.isFailure(exit)) {
 										expect(Cause.squash(exit.cause)).toMatchObject({why: "storage"});
+									}
+
 									expect(w.controls.flushFailures).toBe(1);
 									expect(w.controls.flushOnce).toBe(false);
 									expect(
@@ -481,7 +543,11 @@ describe("P34 runner supervision", () => {
 										job,
 										"the call dispatches its fresh or saved write before flushing",
 									).toBeTypeOf("string");
-									if (pending === "saved retry") expect(job).toBe(before[0]);
+
+									if (pending === "saved retry") {
+										expect(job).toBe(before[0]);
+									}
+
 									expect(w.controls.writes, "the call dispatches each pending write once").toEqual([
 										...before,
 										job,
@@ -567,9 +633,13 @@ describe("P34 runner supervision", () => {
 								yield* w.boot;
 								yield* Effect.gen(function* () {
 									const r = yield* ProgramRunner;
+
 									// Repeat an already completed Restart to keep this process alive.
 									// A fresh Restart must not execute its predecessor's Cmds.
-									if (path === "restart") yield* r.restart(request);
+									if (path === "restart") {
+										yield* r.restart(request);
+									}
+
 									w.controls.loseWriteReply = true;
 									yield* failed(r.msg(w.input(id, {type: "save", token: id})));
 									expect(w.controls.loseWriteReply).toBe(false);
@@ -586,11 +656,13 @@ describe("P34 runner supervision", () => {
 								yield* Effect.gen(function* () {
 									const r = yield* ProgramRunner;
 									const wake = Effect.gen(function* () {
-										if (path === "open") yield* r.open(id);
-										else if (path === "msg")
+										if (path === "open") {
+											yield* r.open(id);
+										} else if (path === "msg") {
 											yield* r.msg(w.input(`next-${id}`, {type: "add", n: delay}));
-										else if (path === "restart") yield* r.restart(request);
-										else {
+										} else if (path === "restart") {
+											yield* r.restart(request);
+										} else {
 											w.consumeAlarm();
 											yield* r.due(time);
 										}
@@ -659,10 +731,13 @@ describe("P34 runner supervision", () => {
 									const wakeAt = path === "after_down" ? time + 10_000 : time;
 									const w = world(false, false, restarting ? null : wakeAt);
 									yield* w.boot;
-									if (history)
+
+									if (history) {
 										yield* ProgramRunner.use((r) => r.msg(w.input(id, {type: "add", n}))).pipe(
 											Effect.provide(w.layer()),
 										);
+									}
+
 									const before = yield* inbox.pipe(Effect.provide(w.manager()));
 									let crashes = 1;
 									// A platform alarm has fired before due enters the runner.
@@ -670,6 +745,7 @@ describe("P34 runner supervision", () => {
 										w.consumeAlarm();
 										return r.due(at);
 									};
+
 									if (path === "wake") {
 										w.reopen();
 										yield* ProgramRunner.use((r) => r.open("wake")).pipe(Effect.provide(w.layer()));
@@ -683,10 +759,15 @@ describe("P34 runner supervision", () => {
 										const earlyCut = ["after_observation", "after_exit", "after_down"].includes(
 											path,
 										);
-										if (earlyCut) w.controls.cut = path;
+
+										if (earlyCut) {
+											w.controls.cut = path;
+										}
+
 										yield* ProgramRunner.use((r) => failed(r.msg(w.input(`crash-${id}`)))).pipe(
 											Effect.provide(w.layer()),
 										);
+
 										// P34 amendment: down is written only when the brake trips, so after_down
 										// crashes a fresh letter after each recovery until the cut is reached.
 										for (let n = 0; path === "after_down" && w.controls.hits.length === 0; n++) {
@@ -701,6 +782,7 @@ describe("P34 runner supervision", () => {
 												failed(r.msg(w.input(`crash-${n}-${id}`))),
 											).pipe(Effect.provide(w.layer()));
 										}
+
 										// The tripped brake's deadline is the down fact's own `until`.
 										const tripped = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
 											(row) => row._tag === "down",
@@ -714,12 +796,19 @@ describe("P34 runner supervision", () => {
 										// Each crash's successor takes the next ID; A was the first.
 										crashes = path === "after_down" ? w.controls.steps.length : 1;
 										w.reopen();
-										if (earlyCut)
+
+										if (earlyCut) {
 											yield* ProgramRunner.use((r) => failed(r.open("resume-down"))).pipe(
 												Effect.provide(w.layer()),
 											);
+										}
+
 										expect(w.alarm(), "only recovery is eligible while down").toBe(deadline);
-										if (earlyCut) expect(w.controls.hits).toEqual([path]);
+
+										if (earlyCut) {
+											expect(w.controls.hits).toEqual([path]);
+										}
+
 										if (path === "Restart down") {
 											w.controls.build = `build-${id}`;
 											w.controls.wakeAt = time;
@@ -737,10 +826,15 @@ describe("P34 runner supervision", () => {
 										} else {
 											yield* TestClock.setTime(deadline!);
 											const lateCut = path === "after_start" || path === "after_checkpoint";
-											if (lateCut) w.controls.cut = path;
+
+											if (lateCut) {
+												w.controls.cut = path;
+											}
+
 											yield* ProgramRunner.use((r) =>
 												lateCut ? failed(fire(r, deadline!)) : fire(r, deadline!),
 											).pipe(Effect.provide(w.layer()));
+
 											if (lateCut) {
 												expect(w.controls.hits).toEqual([path]);
 												w.reopen();
@@ -750,6 +844,7 @@ describe("P34 runner supervision", () => {
 											}
 										}
 									}
+
 									const armed = w.alarm();
 									const recovery = yield* RecoveryStore.use((s) => s.load).pipe(
 										Effect.provide(
@@ -1161,10 +1256,13 @@ describe("P34 runner supervision", () => {
 							const watching = ProcessManager.layer({...brain(), ...watcher(A)}, ids().next).pipe(
 								Layer.provideMerge(w.base()),
 							);
-							for (const ref of refs)
+
+							for (const ref of refs) {
 								yield* ProcessManager.use((p) => p.monitor(ref, B, from())).pipe(
 									Effect.provide(watching),
 								);
+							}
+
 							yield* ProcessManager.use((p) => p.exit(B, why, from())).pipe(
 								Effect.provide(w.manager()),
 							);
@@ -1177,6 +1275,7 @@ describe("P34 runner supervision", () => {
 								expected.map((m) => expect.objectContaining({m})),
 							);
 							w.reopen();
+
 							for (let wake = 0; wake < 2; wake++) {
 								yield* Effect.gen(function* () {
 									const runner = yield* ProgramRunner;
@@ -1234,9 +1333,11 @@ describe("P34 runner supervision", () => {
 				);
 				const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 				w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
+
 				for (const [index, {name}] of recoveryTables.entries()) {
 					const table = quote(String(name));
 					const columns = w.state.sql.exec(`PRAGMA table_info(${table})`);
+
 					for (const event of ["INSERT", "UPDATE", "DELETE"]) {
 						const record = event === "DELETE" ? "OLD" : "NEW";
 						const bytes = columns
@@ -1248,6 +1349,7 @@ describe("P34 runner supervision", () => {
 						);
 					}
 				}
+
 				const measure = (n: number) =>
 					Effect.gen(function* () {
 						w.state.sql.exec("DELETE FROM p34_supervision_writes");
@@ -1260,7 +1362,11 @@ describe("P34 runner supervision", () => {
 				// Sum full row images written by SQL, not the difference in database size.
 				// A growing JSON row adds a constant size but rewrites all the older inputs.
 				const afterOne = yield* measure(2);
-				for (let n = 3; n <= 50; n++) yield* good(n);
+
+				for (let n = 3; n <= 50; n++) {
+					yield* good(n);
+				}
+
 				const afterFifty = yield* measure(51);
 
 				const recovery = () => RecoveryStore.layer(w.state.sql, {name: NAME, capacity: 1024 ** 3});
@@ -1362,6 +1468,7 @@ describe("P34 runner supervision", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
+
 				for (let n = 0; n < 2; n++) {
 					yield* Effect.gen(function* () {
 						const r = yield* ProgramRunner;
@@ -1383,6 +1490,7 @@ describe("P34 runner supervision", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
+
 				for (let n = 1; n <= 3; n++) {
 					yield* Effect.gen(function* () {
 						const r = yield* ProgramRunner;
@@ -1397,8 +1505,12 @@ describe("P34 runner supervision", () => {
 						);
 					}).pipe(Effect.provide(w.layer()));
 					w.reopen();
-					if (n < 3) yield* recover(w);
+
+					if (n < 3) {
+						yield* recover(w);
+					}
 				}
+
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
 					expect(yield* dead).toMatchObject([
@@ -1441,6 +1553,7 @@ describe("P34 runner supervision", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
+
 				for (const id of ["a", "b", "a"]) {
 					yield* ProgramRunner.use((r) => failed(r.msg(w.input(id)))).pipe(
 						Effect.provide(w.layer()),
@@ -1451,6 +1564,7 @@ describe("P34 runner supervision", () => {
 						r.msg(w.input(`good-${id}-${w.controls.steps.length}`, {type: "add", n: 1})),
 					).pipe(Effect.provide(w.layer()));
 				}
+
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
 					expect(yield* r.msg(w.input("a"))).toMatchObject({_tag: "refused", why: "dead"});
@@ -1492,19 +1606,27 @@ describe("P34 runner supervision", () => {
 				const w = world();
 				yield* w.boot;
 				w.controls.invalid = true;
+
 				for (let n = 0; n < 3; n++) {
 					yield* Effect.gen(function* () {
 						const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input())));
-						if (n < 2) expect(Exit.isFailure(answer)).toBe(true);
-						else
+
+						if (n < 2) {
+							expect(Exit.isFailure(answer)).toBe(true);
+						} else {
 							expect(answer).toMatchObject({
 								_tag: "Success",
 								value: {_tag: "refused", why: "dead"},
 							});
+						}
+
 						expect(yield* inbox).toEqual([]);
 					}).pipe(Effect.provide(w.layer()));
 					w.reopen();
-					if (n < 2) yield* recover(w);
+
+					if (n < 2) {
+						yield* recover(w);
+					}
 				}
 			}),
 	);
@@ -1517,11 +1639,14 @@ describe("P34 runner supervision", () => {
 				yield* w.boot;
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
-					for (let n = 0; n < 4; n++)
+
+					for (let n = 0; n < 4; n++) {
 						expect(yield* r.msg(w.input("refusal", {type: "refuse"}))).toMatchObject({
 							_tag: "refused",
 							why: "bad_msg",
 						});
+					}
+
 					yield* r.msg(w.input("work", {type: "work"}));
 					expect(yield* dead).toEqual([]);
 					expect((yield* lives).filter((row) => row._tag === "exited")).toEqual([]);
@@ -1584,7 +1709,11 @@ describe("P34 runner supervision", () => {
 				w.reopen();
 				yield* Effect.gen(function* () {
 					const r = yield* ProgramRunner;
-					for (let n = 0; n < 3; n++) yield* Effect.exit(r.msg(w.input()));
+
+					for (let n = 0; n < 3; n++) {
+						yield* Effect.exit(r.msg(w.input()));
+					}
+
 					expect(w.controls.loads).toBe(loads);
 					expect(w.controls.steps).toEqual([]);
 					expect(yield* lives).toEqual(rows);
@@ -1599,11 +1728,14 @@ describe("P34 runner supervision", () => {
 			Effect.gen(function* () {
 				const w = world();
 				yield* w.boot;
+
 				for (const mark of [false, true]) {
-					if (mark)
+					if (mark) {
 						yield* ProcessStore.use((s) => s.activity(Activity.cases.idle.make({process: A}))).pipe(
 							Effect.provide(w.layer()),
 						);
+					}
+
 					w.reopen();
 					yield* Effect.gen(function* () {
 						yield* ProgramRunner.use((r) => r.open("wake"));
@@ -1689,6 +1821,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 						const w = world();
 						yield* w.boot;
 						let now = 0;
+
 						for (let n = 1; n <= crashes; n++) {
 							// A different letter each time: each crash is one fresh throw, never a dead letter.
 							yield* ProgramRunner.use((r) => failed(r.msg(w.input(`poison-${n}-${id}`)))).pipe(
@@ -1698,6 +1831,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 							const downs = rows.filter((row) => row._tag === "down");
 							const deadline = w.alarms.at(-1);
 							expect(deadline, `crash ${n} schedules its successor`).toBeTypeOf("number");
+
 							if (n <= policy.intensity) {
 								expect(downs, `crash ${n} is inside the restart budget`).toEqual([]);
 								const wait = Math.min(policy.backoff.minMs * 2 ** (n - 1), policy.backoff.maxMs);
@@ -1706,6 +1840,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 								expect(downs, `crash ${n} trips the brake`).toHaveLength(1);
 								expect(deadline).toBe(decodeUntil(downs[0]!.body).until);
 							}
+
 							const before = yield* restartedRows.pipe(Effect.provide(w.manager()));
 							w.reopen();
 							yield* TestClock.setTime(deadline! - 1);
@@ -1725,6 +1860,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 							).toBe(before + 1);
 							now = deadline!;
 						}
+
 						const downs = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
 							(row) => row._tag === "down",
 						);
@@ -1762,6 +1898,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 						const w = world(false, false, null, {program, policy: wide});
 						yield* w.boot;
 						const letter = w.input(id);
+
 						for (let n = 1; n < expected; n++) {
 							yield* ProgramRunner.use((r) => failed(r.msg(letter))).pipe(
 								Effect.provide(w.layer()),
@@ -1769,6 +1906,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
 							w.reopen();
 							yield* recover(w);
 						}
+
 						yield* Effect.gen(function* () {
 							const r = yield* ProgramRunner;
 							expect(yield* r.msg(letter), `throw ${expected} is the last`).toMatchObject({

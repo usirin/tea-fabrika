@@ -90,14 +90,20 @@ function rowFor(c: Criterion, p: Proof): Met | Refusal {
 	const mine = p.verdicts.filter((v) => v.criterion === c.id);
 	const here = mine.filter((v) => standsAt(v.head, p.head, p.carried ?? []));
 	const last = here.findLast((v) => v.version === c.version);
+
 	if (last === undefined) {
 		const older = here.at(-1);
-		if (older !== undefined) return {why: "old_version", id: c.id, version: older.version};
+
+		if (older !== undefined) {
+			return {why: "old_version", id: c.id, version: older.version};
+		}
+
 		const other = mine.at(-1);
 		return other === undefined
 			? {why: "no_verdict", id: c.id}
 			: {why: "other_head", id: c.id, head: other.head};
 	}
+
 	return last.grade === "pass" ? {...last, grade: "pass"} : {why: "not_met", id: c.id};
 }
 
@@ -147,6 +153,7 @@ const Shape = Schema.Struct({
 	rows: Schema.NonEmptyArray(Row),
 	carried: Schema.optionalKey(Schema.Array(Hop)),
 });
+
 const isShaped = Schema.is(Shape);
 
 /**
@@ -157,7 +164,10 @@ const isShaped = Schema.is(Shape);
  * a pass is `of`'s to judge, from every row the ledger kept.
  */
 function isReady(u: unknown): u is ReadyToMerge {
-	if (!isShaped(u) || u.rows.length !== u.criteria.length) return false;
+	if (!isShaped(u) || u.rows.length !== u.criteria.length) {
+		return false;
+	}
+
 	return u.criteria.every((c, i) => {
 		const r = u.rows[i];
 		return (
@@ -177,11 +187,21 @@ export const ReadyToMerge = {
 		const first = rowFor(c, p);
 		const rest = cs.map((k) => rowFor(k, p));
 		const refused: Refusal[] = [first, ...rest].filter(isRefusal);
-		if (p.checks.head !== p.head || p.checks.state !== "green")
+
+		if (p.checks.head !== p.head || p.checks.state !== "green") {
 			refused.push({why: "checks", state: p.checks.state, head: p.checks.head});
+		}
+
 		const [why, ...more] = refused;
-		if (why !== undefined) return {refused: [why, ...more]};
-		if (!isMet(first)) return {refused: [first]};
+
+		if (why !== undefined) {
+			return {refused: [why, ...more]};
+		}
+
+		if (!isMet(first)) {
+			return {refused: [first]};
+		}
+
 		const rows: readonly [Met, ...Met[]] = [first, ...rest.filter(isMet)];
 		// Only the hops a row stands on go in, so the proof says what each review saw and how it got here.
 		const carried = (p.carried ?? []).filter(
@@ -198,8 +218,12 @@ export const ReadyToMerge = {
 			rows,
 			...(carried.length > 0 ? {carried} : {}),
 		};
+
 		// Every row was found met above, so the check holds: this is how the brand goes on, with no cast.
-		if (!isReady(made)) throw new Error("ReadyToMerge.of made a value its own check refuses");
+		if (!isReady(made)) {
+			throw new Error("ReadyToMerge.of made a value its own check refuses");
+		}
+
 		return {ready: made};
 	},
 

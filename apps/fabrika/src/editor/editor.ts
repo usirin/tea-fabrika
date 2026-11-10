@@ -136,23 +136,28 @@ export interface EditorCtx {
 export const KEPT = 1000;
 
 const Done = Schema.Null;
+
 export const write = Cmd.make("write", {
 	input: Schema.Struct({data: Schema.String}),
 	ok: Done,
 	err: [],
 });
+
 export const line = Cmd.make("line", {
 	input: Schema.Struct({text: Schema.String}),
 	ok: Done,
 	err: [],
 });
+
 export const interrupt = Cmd.make("interrupt", {input: Schema.Struct({}), ok: Done, err: []});
 export const close = Cmd.make("close", {input: Schema.Struct({}), ok: Done, err: []});
+
 export const keep = Cmd.make("keep", {
 	input: Schema.Struct({lines: Schema.Array(Schema.String)}),
 	ok: Done,
 	err: [],
 });
+
 export const answer = Cmd.make("answer", {
 	input: Schema.Struct({n: Schema.Int, allow: Schema.Boolean}),
 	ok: Done,
@@ -206,14 +211,17 @@ export const fresh = (ctx: EditorCtx): Editor => ({
  */
 const shownLine = (s: Editor): {readonly text: string; readonly at: number} | null => {
 	const {mode} = s;
+
 	if (mode.kind === "prompt") {
 		const before = PROMPT + mode.line.left;
 		return {text: before + mode.line.right, at: spot(before, s.cols)};
 	}
+
 	if (mode.kind === "search") {
 		const text = Shell.Search.shown(newestFirst(s.history), mode.search);
 		return {text, at: spot(text, s.cols)};
 	}
+
 	return null;
 };
 
@@ -264,8 +272,15 @@ const above = (s: Editor, text: string): Acc =>
 /** The status row: drawn again in place, or taken away. Only while no prompt is up. */
 const statusTo = (s: Editor, text: string | null): Acc => {
 	const next = {...s, status: text};
-	if (shownLine(s) !== null) return start({...s, status: null});
-	if (text === null) return say(start(next), s.status === null ? "" : `\r${CLEAR_BELOW}`);
+
+	if (shownLine(s) !== null) {
+		return start({...s, status: null});
+	}
+
+	if (text === null) {
+		return say(start(next), s.status === null ? "" : `\r${CLEAR_BELOW}`);
+	}
+
 	return say(start(next), `\r${CLEAR_BELOW}${statusRow(text, s.cols)}`);
 };
 
@@ -280,7 +295,11 @@ const answering = (acc: Acc, n: number, raw: string): Acc => {
 	const yes = key.kind === "text" && (key.text === "y" || key.text === "Y");
 	const no =
 		(key.kind === "text" && (key.text === "n" || key.text === "N")) || command === "accept-line";
-	if (!yes && !no) return say(acc, BELL);
+
+	if (!yes && !no) {
+		return say(acc, BELL);
+	}
+
 	const s = {...acc.s, asking: null};
 	const said = `  ${yes ? "y: allowed once" : "n: refused"}${NEWLINE}`;
 	return say(
@@ -319,16 +338,30 @@ const isSpace = (c: string): boolean => c === " " || c === "\t";
 /** Where the word before `at` starts: skip what is not a word, then the word. */
 const wordBefore = (chars: readonly string[], at: number, inWord: (c: string) => boolean) => {
 	let i = at;
-	while (i > 0 && !inWord(chars[i - 1] ?? "")) i -= 1;
-	while (i > 0 && inWord(chars[i - 1] ?? "")) i -= 1;
+
+	while (i > 0 && !inWord(chars[i - 1] ?? "")) {
+		i -= 1;
+	}
+
+	while (i > 0 && inWord(chars[i - 1] ?? "")) {
+		i -= 1;
+	}
+
 	return i;
 };
 
 /** Where the word after `at` ends. */
 const wordAfter = (chars: readonly string[], at: number) => {
 	let i = at;
-	while (i < chars.length && !isWord(chars[i] ?? "")) i += 1;
-	while (i < chars.length && isWord(chars[i] ?? "")) i += 1;
+
+	while (i < chars.length && !isWord(chars[i] ?? "")) {
+		i += 1;
+	}
+
+	while (i < chars.length && isWord(chars[i] ?? "")) {
+		i += 1;
+	}
+
 	return i;
 };
 
@@ -341,14 +374,24 @@ const cutAt = (chars: readonly string[], at: number): Line => ({
 /** The longest start every candidate shares. */
 const sharedStart = (all: readonly string[]): string => {
 	const [first, ...rest] = all;
-	if (first === undefined) return "";
+
+	if (first === undefined) {
+		return "";
+	}
+
 	let shared = [...first];
+
 	for (const c of rest) {
 		const chars = [...c];
 		let n = 0;
-		while (n < shared.length && shared[n] === chars[n]) n += 1;
+
+		while (n < shared.length && shared[n] === chars[n]) {
+			n += 1;
+		}
+
 		shared = shared.slice(0, n);
 	}
+
 	return shared.join("");
 };
 
@@ -359,10 +402,12 @@ const remembered = (history: readonly string[], text: string): readonly string[]
 /** Enter: the line goes to tsh, unless it is blank; then a fresh prompt, as bash gives one. */
 const accept = (acc: Acc, text: string): Acc => {
 	const {s} = acc;
+
 	if (text.trim() === "") {
 		const next = withMode(s, prompt(EMPTY));
 		return say({...acc, s: next}, leave(s), drawn(next));
 	}
+
 	const history = remembered(s.history, text);
 	return say(
 		{...acc, s: {...s, mode: {kind: "busy", ahead: []}, history}},
@@ -390,11 +435,19 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 	const all = [...l, ...r];
 	const edit = (next: Line) => redraw(acc, withMode(s, prompt(next, mode.recall)));
 	const bell = () => say(acc, BELL);
+
 	// A key readline has no command for (F12, say) does nothing, as fish's does: no bell, nothing put in.
-	if (key.kind === "unknown") return acc;
-	if (key.kind === "text") return edit({left: left + key.text, right});
+	if (key.kind === "unknown") {
+		return acc;
+	}
+
+	if (key.kind === "text") {
+		return edit({left: left + key.text, right});
+	}
+
 	const cut = (text: string, next: Line, before: boolean) =>
 		kill(acc, mode.recall, text, next, before);
+
 	switch (key.command) {
 		case "beginning-of-line":
 			return edit({left: "", right: left + right});
@@ -413,8 +466,10 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 		case "delete-char":
 			return r.length === 0 ? acc : edit({left, right: r.slice(1).join("")});
 		case "end-of-file":
-			if (left + right !== "")
+			if (left + right !== "") {
 				return r.length === 0 ? acc : edit({left, right: r.slice(1).join("")});
+			}
+
 			// Ctrl-D on an empty line: the end of tsh's input, as bash ends on it.
 			return say({s: withMode(s, {kind: "ended"}), parts: acc.parts}, NEWLINE, close({}));
 		case "kill-line":
@@ -437,7 +492,10 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 			return s.killed === "" ? acc : edit({left: left + s.killed, right});
 		case "transpose-chars": {
 			// readline's: the character before the cursor goes over the one under it; at the end, the last two swap.
-			if (all.length < 2 || l.length === 0) return bell();
+			if (all.length < 2 || l.length === 0) {
+				return bell();
+			}
+
 			const at = r.length === 0 ? l.length - 1 : l.length;
 			const swapped = [...all];
 			[swapped[at - 1], swapped[at]] = [all[at] ?? "", all[at - 1] ?? ""];
@@ -450,7 +508,11 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 		case "previous-history": {
 			const back = (mode.recall?.back ?? 0) + 1;
 			const found = s.history[s.history.length - back];
-			if (found === undefined) return bell();
+
+			if (found === undefined) {
+				return bell();
+			}
+
 			return redraw(
 				acc,
 				withMode(
@@ -460,9 +522,16 @@ const atPrompt = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>, raw: string):
 			);
 		}
 		case "next-history": {
-			if (mode.recall === null) return bell();
+			if (mode.recall === null) {
+				return bell();
+			}
+
 			const back = mode.recall.back - 1;
-			if (back === 0) return redraw(acc, withMode(s, prompt(mode.recall.typed)));
+
+			if (back === 0) {
+				return redraw(acc, withMode(s, prompt(mode.recall.typed)));
+			}
+
 			const found = s.history[s.history.length - back] ?? "";
 			return redraw(acc, withMode(s, prompt({left: found, right: ""}, {...mode.recall, back})));
 		}
@@ -494,11 +563,25 @@ const completed = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>): Acc => {
 	const put = (text: string) =>
 		redraw(acc, withMode(s, prompt({left: stem + text, right}, mode.recall)));
 	const [only] = candidates;
-	if (only === undefined) return say(acc, BELL);
-	if (candidates.length === 1) return put(only.endsWith("=") ? only : `${only} `);
+
+	if (only === undefined) {
+		return say(acc, BELL);
+	}
+
+	if (candidates.length === 1) {
+		return put(only.endsWith("=") ? only : `${only} `);
+	}
+
 	const shared = sharedStart(candidates);
-	if (shared.length > word.length) return put(shared);
-	if (s.last !== "complete") return say(acc, BELL);
+
+	if (shared.length > word.length) {
+		return put(shared);
+	}
+
+	if (s.last !== "complete") {
+		return say(acc, BELL);
+	}
+
 	return say(acc, leave(s), columns(candidates.map(clean), s.cols), drawn(s));
 };
 
@@ -506,11 +589,18 @@ const completed = (acc: Acc, mode: Extract<Mode, {kind: "prompt"}>): Acc => {
 const inSearch = (acc: Acc, mode: Extract<Mode, {kind: "search"}>, raw: string): Acc => {
 	const {s} = acc;
 	const stepped = Shell.Search.step(newestFirst(s.history), mode.search, Shell.Search.keyOf(raw));
-	if (stepped.kind === "searching")
+
+	if (stepped.kind === "searching") {
 		return redraw(acc, withMode(s, {...mode, search: stepped.search}));
+	}
+
 	const found: Line = stepped.line === null ? mode.typed : {left: stepped.line, right: ""};
 	const back = redraw(acc, withMode(s, prompt(found)));
-	if (stepped.run) return accept(back, found.left + found.right);
+
+	if (stepped.run) {
+		return accept(back, found.left + found.right);
+	}
+
 	// The key that ended the search goes on, at the prompt, as bash hands it on.
 	return stepped.replay === null ? back : step(back, stepped.replay);
 };
@@ -521,23 +611,32 @@ const step = (acc: Acc, raw: string): Acc => {
 	const key = keyOf(raw);
 	const command = key.kind === "command" ? key.command : null;
 	const after = (next: Acc): Acc => ({...next, s: {...next.s, last: command}});
+
 	switch (mode.kind) {
 		case "prompt":
 			return after(atPrompt(acc, mode, raw));
 		case "search":
 			return after(inSearch(acc, mode, raw));
 		case "busy":
-			if (acc.s.asking !== null && command !== "interrupt")
+			if (acc.s.asking !== null && command !== "interrupt") {
 				return answering(acc, acc.s.asking.n, raw);
+			}
+
 			if (command === "interrupt")
-				// A terminal's Ctrl-C drops what was typed ahead (POSIX: the input queue is flushed).
+			// A terminal's Ctrl-C drops what was typed ahead (POSIX: the input queue is flushed).
+			{
 				return say(
 					unStatus({...acc, s: {...withMode(acc.s, {kind: "busy", ahead: []}), asking: null}}),
 					`^C${NEWLINE}`,
 					interrupt({}),
 				);
+			}
+
 			// Ctrl-D typed ahead would end tsh once the prompt is back: it is let go.
-			if (command === "end-of-file") return acc;
+			if (command === "end-of-file") {
+				return acc;
+			}
+
 			return {...acc, s: withMode(acc.s, {kind: "busy", ahead: [...mode.ahead, raw]})};
 		case "ended":
 			return acc;
@@ -550,16 +649,25 @@ const keys = (acc: Acc, raw: readonly string[]): Acc => raw.reduce(step, acc);
 const cmdsOf = (parts: readonly Part[]): readonly EditorCmd[] => {
 	const cmds: EditorCmd[] = [];
 	let data = "";
+
 	for (const part of parts) {
 		if (typeof part === "string") {
 			data += part;
 			continue;
 		}
-		if (data !== "") cmds.push(write({data}));
+
+		if (data !== "") {
+			cmds.push(write({data}));
+		}
+
 		data = "";
 		cmds.push(part);
 	}
-	if (data !== "") cmds.push(write({data}));
+
+	if (data !== "") {
+		cmds.push(write({data}));
+	}
+
 	return cmds;
 };
 
@@ -582,7 +690,10 @@ export const editor = defineMachine({
 		printed: (s, m) => done(above(s, shown(m.text) + NEWLINE)),
 		table: (s, m) => done(above(s, table(m.table, s.cols) + NEWLINE)),
 		ready: (s) => {
-			if (s.mode.kind !== "busy") return done(start(s));
+			if (s.mode.kind !== "busy") {
+				return done(start(s));
+			}
+
 			// The prompt, then what was typed ahead, as if typed at it.
 			const cleared = unStatus(start({...s, asking: null}));
 			const up = withMode(cleared.s, prompt(EMPTY));

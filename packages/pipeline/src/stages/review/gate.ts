@@ -63,23 +63,55 @@ const stuck = (why: Extract<ReviewOutcome, {kind: "stuck"}>["why"]) => stop({kin
 /** Go, wait, or the one reason not to. */
 export function reviewGate(pack: Pack): ReviewGate {
 	// On a replay the state is today's, not the head's: a merged pull request is what a replay is for.
-	if (!pack.replay && pack.state !== "open") return stop({kind: "skip", why: pack.state});
+	if (!pack.replay && pack.state !== "open") {
+		return stop({kind: "skip", why: pack.state});
+	}
+
 	// Red comes before everything a reviewer needs: a red head goes back whatever else is missing.
-	if (pack.checks.state === "red") return stop({kind: "send", to: "builder", why: "checks_red"});
-	if (pack.ticket === "none") return stop({kind: "send", to: "builder", why: "no_ticket"});
-	if (pack.files === null || pack.diff === null) return stuck("diff_unknown");
-	if (pack.kinds === null) return stuck("kinds_unknown");
-	if (pack.criteria === null) return stuck("ticket_unknown");
+	if (pack.checks.state === "red") {
+		return stop({kind: "send", to: "builder", why: "checks_red"});
+	}
+
+	if (pack.ticket === "none") {
+		return stop({kind: "send", to: "builder", why: "no_ticket"});
+	}
+
+	if (pack.files === null || pack.diff === null) {
+		return stuck("diff_unknown");
+	}
+
+	if (pack.kinds === null) {
+		return stuck("kinds_unknown");
+	}
+
+	if (pack.criteria === null) {
+		return stuck("ticket_unknown");
+	}
+
 	const [first, ...rest] = pack.criteria;
-	if (first === undefined) return stuck("no_criteria");
+
+	if (first === undefined) {
+		return stuck("no_criteria");
+	}
+
 	const kinds = pack.kinds.filter(isTextKind);
 	const rubrics = kinds.flatMap((kind) => {
 		const text = pack.rubrics.find((rubric) => rubric.kind === kind)?.text ?? null;
 		return text === null ? [] : [{kind, text}];
 	});
-	if (rubrics.length !== kinds.length) return stuck("rubric_unknown");
-	if (pack.checks.state === "unknown") return stuck("checks_unknown");
-	if (pack.checks.state === "pending") return {answer: "wait_for_checks", head: pack.head};
+
+	if (rubrics.length !== kinds.length) {
+		return stuck("rubric_unknown");
+	}
+
+	if (pack.checks.state === "unknown") {
+		return stuck("checks_unknown");
+	}
+
+	if (pack.checks.state === "pending") {
+		return {answer: "wait_for_checks", head: pack.head};
+	}
+
 	return {
 		answer: "go",
 		brief: {

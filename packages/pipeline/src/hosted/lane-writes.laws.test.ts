@@ -34,17 +34,22 @@ type Service = Ledger["Service"];
 type FactsMod = {
 	readonly appendFact: typeof realFacts.appendFact;
 };
+
 type GateMod = {
 	readonly gate: typeof realGate.gate;
 	readonly Faults: typeof realGate.Faults;
 	readonly useKey: typeof realGate.useKey;
 };
+
 type Mod = {readonly facts: FactsMod; readonly gate: GateMod};
 const real: Mod = {facts: realFacts, gate: realGate};
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 /**
@@ -60,7 +65,11 @@ async function plantFile(file: string, a: string, b: string): Promise<unknown> {
 		(_, path: string) => `from "${join(dirname(from), path)}"`,
 	);
 	const count = text.split(a).length - 1;
-	if (count !== 1) throw new Error(`plant edit on ${file}: "${a}" found ${count} times, want 1`);
+
+	if (count !== 1) {
+		throw new Error(`plant edit on ${file}: "${a}" found ${count} times, want 1`);
+	}
+
 	const to = join(dir, "planted.ts");
 	writeFileSync(
 		to,
@@ -68,10 +77,12 @@ async function plantFile(file: string, a: string, b: string): Promise<unknown> {
 	);
 	return import(/* @vite-ignore */ pathToFileURL(to).href);
 }
+
 const plantFacts = async (a: string, b: string): Promise<Mod> => ({
 	...real,
 	facts: (await plantFile("../asks/ledger.ts", a, b)) as typeof realFacts,
 });
+
 const plantGate = async (a: string, b: string): Promise<Mod> => ({
 	...real,
 	gate: (await plantFile("idempotency.ts", a, b)) as typeof realGate,
@@ -96,20 +107,31 @@ interface Net {
 	lands: boolean;
 	starts: (method: string, id: string | null) => boolean;
 }
+
 const isDown = (net: Net) => net.from !== null && Date.now() < net.from + net.drop;
+
 const unreachable = (method: string) =>
 	Effect.fail(new LedgerUnreachable({method, message: "the network is down"}));
 
 /** The ledger as this host reaches it: cut off while the network is down. */
 const cut = (l: Service, net: Net): Service => {
 	const at = (method: string, id: string | null) => {
-		if (net.from === null && net.starts(method, id)) net.from = Date.now();
+		if (net.from === null && net.starts(method, id)) {
+			net.from = Date.now();
+		}
 	};
 	const write = <A, E>(method: string, id: string | null, call: Effect.Effect<A, E>) =>
 		Effect.suspend((): Effect.Effect<A, E | LedgerUnreachable> => {
 			at(method, id);
-			if (!isDown(net)) return call;
-			if (!net.lands) return unreachable(method);
+
+			if (!isDown(net)) {
+				return call;
+			}
+
+			if (!net.lands) {
+				return unreachable(method);
+			}
+
 			net.lands = false;
 			return call.pipe(Effect.ignore, Effect.andThen(unreachable(method)));
 		});
@@ -143,13 +165,17 @@ const drive = async <A>(
 			end = {ok: false, value: null, at: Date.now() - start};
 		},
 	);
-	while (end === null && Date.now() - start <= budget)
+
+	while (end === null && Date.now() - start <= budget) {
 		await vi.advanceTimersByTimeAsync(Math.min(1000, Math.max(50, budget / 40)));
+	}
+
 	return end;
 };
 
 const withFakeTime = async <A>(f: () => Promise<A>): Promise<A> => {
 	vi.useFakeTimers({toFake: ["setTimeout", "clearTimeout", "Date"], now: 0});
+
 	try {
 		return await f();
 	} finally {
@@ -166,11 +192,15 @@ interface Law<W> {
 	/** What went wrong in this world, or null. */
 	readonly check: (mod: Mod, world: W) => Promise<string | null>;
 }
+
 const assertLaw = <W>(law: Law<W>, mod: Mod) =>
 	fc.assert(
 		fc.asyncProperty(law.worlds, async (w) => {
 			const why = await law.check(mod, w);
-			if (why !== null) throw new Error(why);
+
+			if (why !== null) {
+				throw new Error(why);
+			}
 		}),
 		{numRuns: 30, seed: 7},
 	);
@@ -205,6 +235,7 @@ const runFacts = (mod: Mod, writes: readonly FactWrite[]) =>
 		const c = await Effect.runPromise(l.claim(HOLD_NAME, "lane", 1, LONG));
 		const hold = {name: HOLD_NAME, fence: c.fence};
 		const ends: {readonly w: FactWrite; readonly end: Awaited<ReturnType<typeof drive>>}[] = [];
+
 		for (const [i, w] of writes.entries()) {
 			const net: Net = {from: Date.now(), drop: w.drop, lands: w.lands, starts: () => false};
 			const fact =
@@ -216,8 +247,12 @@ const runFacts = (mod: Mod, writes: readonly FactWrite[]) =>
 				.pipe(Effect.provide(Layer.succeed(Ledger, cut(l, net))));
 			const end = await drive(write, w.drop + BACK_WITHIN);
 			ends.push({w, end});
-			if (end === null || !end.ok) break;
+
+			if (end === null || !end.ok) {
+				break;
+			}
 		}
+
 		const own = await Effect.runPromise(l.readStream(realFacts.factsOf(HOLD_NAME)));
 		const inbox = await Effect.runPromise(l.readStream(`${other}/inbox`));
 		return {ends, own, inbox};
@@ -235,15 +270,24 @@ const factLandsOnce: Law<readonly FactWrite[]> = {
 	}),
 	check: async (mod, writes) => {
 		const {ends, own, inbox} = await runFacts(mod, writes);
-		for (const {w, end} of ends)
-			if (end === null || !end.ok)
+
+		for (const {w, end} of ends) {
+			if (end === null || !end.ok) {
 				return `a fact to its ${w.to} in a ${w.drop} ms drop ${shownEnd(end, w.drop + BACK_WITHIN)}: wanted it to land`;
+			}
+		}
+
 		const want = (to: FactWrite["to"]) => writes.filter((w) => w.to === to).length;
 		const facts = own.filter((r) => r.kind === "reviewed").length;
-		if (facts !== want("facts"))
+
+		if (facts !== want("facts")) {
 			return `${facts} facts in its own stream for ${want("facts")} sent`;
-		if (inbox.length !== want("inbox"))
+		}
+
+		if (inbox.length !== want("inbox")) {
 			return `${inbox.length} facts in the inbox for ${want("inbox")} sent`;
+		}
+
 		return null;
 	},
 };
@@ -274,6 +318,7 @@ interface GateWrite {
 	readonly drop: number;
 	readonly lands: boolean;
 }
+
 /**
  * The lease check's world. `takeover`: another host claims the name this long past the lease's
  * end, just before the send. `late`: the lease looks run out, or its row is gone (the alarm ran),
@@ -317,6 +362,7 @@ const runGate = (
 		const liveAtSend: boolean[] = [];
 		let backAt = Number.POSITIVE_INFINITY;
 		const lw = o.lease;
+
 		if (lw?.kind === "late" || lw?.kind === "runOut") {
 			const seen = ledger;
 			// The host's renew comes back at `backAt` and lands on the real row, at the first lease
@@ -354,12 +400,14 @@ const runGate = (
 					),
 			};
 		}
+
 		/** What happens to the lease just before the send. */
 		const beforeSend = (lw: LeaseWorld): Effect.Effect<void> => {
 			const renewIn = (back: number) =>
 				Effect.sync(() => {
 					backAt = Date.now() + back;
 				});
+
 			switch (lw.kind) {
 				case "takeover":
 					return Effect.gen(function* () {
@@ -407,6 +455,7 @@ const runGate = (
 	});
 
 const KEY = `${NAME}#comment:pr@abc`;
+
 const arbGateWrite = (drop: fc.Arbitrary<number>) =>
 	fc.record({
 		at: fc.constantFrom<GateWrite["at"]>("intent", "lease", "done"),
@@ -420,13 +469,23 @@ const gateOnce: Law<GateWrite> = {
 	worlds: arbGateWrite(fc.oneof(fc.constant(0), fc.integer({min: 1, max: 1500}))),
 	check: async (mod, w) => {
 		const {end, sent, rows} = await runGate(mod, {net: w, budget: w.drop + BACK_WITHIN});
-		if (end === null || !end.ok || end.value !== `sent ${KEY}`)
+
+		if (end === null || !end.ok || end.value !== `sent ${KEY}`) {
 			return `a write with a ${w.drop} ms drop at its ${w.at} ${shownEnd(end, w.drop + BACK_WITHIN)}: wanted it sent`;
-		if (sent.length !== 1) return `sent ${sent.length} times`;
+		}
+
+		if (sent.length !== 1) {
+			return `sent ${sent.length} times`;
+		}
+
 		for (const kind of ["intent", "done"]) {
 			const n = rows.filter((r) => r.kind === kind).length;
-			if (n !== 1) return `${n} ${kind} rows for one write`;
+
+			if (n !== 1) {
+				return `${n} ${kind} rows for one write`;
+			}
 		}
+
 		return null;
 	},
 };
@@ -509,7 +568,11 @@ const gateHoldsOnRunOut: Law<{readonly gone: boolean; readonly back: number}> = 
 			budget,
 		});
 		const world = `the lease ${gone ? "row was gone" : "had run out"} until a renew ${back} ms on`;
-		if (liveAtSend.includes(false)) return `${world}, and the gate sent the write before the renew`;
+
+		if (liveAtSend.includes(false)) {
+			return `${world}, and the gate sent the write before the renew`;
+		}
+
 		return end?.ok && sent.length === 1
 			? null
 			: `${world}, and the write ${end === null ? "was never sent" : shownEnd(end, budget)}${sent.length > 1 ? `, sent ${sent.length} times` : ""}: wanted it sent once after the renew`;
@@ -523,10 +586,12 @@ interface Checked {
 	readonly name: string;
 	readonly assert: (mod: Mod) => Promise<void>;
 }
+
 const checked = <W>(law: Law<W>): Checked => ({
 	name: law.name,
 	assert: (mod) => assertLaw(law, mod),
 });
+
 const LAWS: readonly Checked[] = [
 	checked(factLandsOnce),
 	checked(gateOnce),
@@ -540,6 +605,7 @@ const LAWS: readonly Checked[] = [
 	// Added after lane 18, for the gap experiment 151 found. The gate keeps it.
 	checked(gateHoldsOnRunOut),
 ];
+
 const BUGS: readonly (readonly [Checked, RegExp])[] = [];
 
 const PLANTS: Record<string, () => Promise<Mod>> = {
@@ -566,12 +632,15 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 		),
 	// The lease check does not look at whose lease it is.
 	otherFenceMissed: () =>
-		plantGate("if (lease !== null && lease.fence !== o.fence) return false;\n\t\t\t\t", ""),
+		plantGate(
+			"if (lease !== null && lease.fence !== o.fence) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\t",
+			"",
+		),
 	// The lease check takes a lease past its end, or a row the alarm took, for a lost one: the
 	// clock fences, as before rule B. Added with `gateWaitsForRenew`, so it is seen to fail.
 	runOutIsLost: () =>
 		plantGate(
-			"if (lease !== null && lease.fence !== o.fence) return false;",
+			"if (lease !== null && lease.fence !== o.fence) {\n\t\t\t\t\treturn false;\n\t\t\t\t}",
 			"if (lease === null || lease.fence !== o.fence || lease.expires_at <= Date.now()) return false;",
 		),
 	// The send goes out with no lease check at all.
@@ -584,7 +653,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// past its end too. Added with `gateHoldsOnRunOut`, which alone catches it.
 	sendsOnRunOut: () =>
 		plantGate(
-			"if (lease !== null && lease.expires_at - Date.now() > marginMs) return true;",
+			"if (lease !== null && lease.expires_at - Date.now() > marginMs) {\n\t\t\t\t\treturn true;\n\t\t\t\t}",
 			"return true;",
 		),
 };
@@ -608,18 +677,25 @@ describe("a lane's own writes for a short drop (lane 18, part 2)", () => {
 
 	it("each law is seen to fail on a planted mistake, and only the laws it should", async () => {
 		const caught: Record<string, readonly string[]> = {};
+
 		for (const [name, make] of Object.entries(PLANTS)) {
 			const mod = await make();
 			const out: string[] = [];
+
 			for (const law of LAWS) {
 				const failed = await law.assert(mod).then(
 					() => false,
 					() => true,
 				);
-				if (failed) out.push(law.name);
+
+				if (failed) {
+					out.push(law.name);
+				}
 			}
+
 			caught[name] = out;
 		}
+
 		expect(caught).toEqual({
 			factIdPerTry: [factLandsOnce.name],
 			sentIdPerTry: [factLandsOnce.name],

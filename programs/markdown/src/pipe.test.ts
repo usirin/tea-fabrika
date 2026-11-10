@@ -15,6 +15,7 @@ import {markdown} from "./index.ts";
 const read = experimentsOnLedger({kind: "agent", id: "test"}).pipe(
 	Layer.provide(Layer.succeed(Ledger, memoryService())),
 );
+
 const list = Shell.programList([
 	listed(experiments, read),
 	listed(experiment, read),
@@ -24,11 +25,23 @@ const list = Shell.programList([
 
 const wires = (line: string) => {
 	const parsed = Shell.parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`parse refused: ${parsed.why}`);
+	}
+
 	const [first] = parsed.statements;
-	if (first?.kind !== "run") throw new Error("not a run");
+
+	if (first?.kind !== "run") {
+		throw new Error("not a run");
+	}
+
 	const checked = Shell.check(first.pipeline, list, line);
-	if (checked.kind !== "line") throw new Error(`refused: ${JSON.stringify(checked)}`);
+
+	if (checked.kind !== "line") {
+		throw new Error(`refused: ${JSON.stringify(checked)}`);
+	}
+
 	return checked.line.stages.map((s) => s.wire);
 };
 

@@ -47,6 +47,7 @@ const table: MsgArbitraryTable<NamesMsg> = {
 	taken: arbRecordMsg("taken", {name: entry}),
 	freed: arbRecordMsg("freed", {name: fc.constantFrom(...WORDS, "nobody")}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 30});
 const OPTS = {numRuns: 100, seed: 1};
 
@@ -68,11 +69,17 @@ const play = (storage: Storage, msgs: readonly NamesMsg[]) =>
 		Effect.gen(function* () {
 			const kept = yield* openNames(storage);
 			const steps: {readonly took: boolean | null; readonly names: readonly Name[]}[] = [];
+
 			for (const m of msgs) {
 				const took = m.type === "taken" ? yield* kept.take(m.name) : null;
-				if (m.type === "freed") yield* kept.free(m.name);
+
+				if (m.type === "freed") {
+					yield* kept.free(m.name);
+				}
+
 				steps.push({took, names: kept.now().names});
 			}
+
 			return steps;
 		}).pipe(Effect.scoped),
 	);
@@ -113,6 +120,7 @@ describe("the laws of names, the kept summoned names", () => {
 				const msgs = withRuns(raw);
 				const steps = await play(memoryStorage(), msgs);
 				let model: readonly Name[] = [];
+
 				for (const [i, m] of msgs.entries()) {
 					model = modelStep(model, m);
 					expect(steps[i]?.names).toEqual(model);
@@ -145,7 +153,10 @@ describe("the laws of names, the kept summoned names", () => {
 					m.type === "taken" ? [{took: steps[i]?.took, after: steps[i]?.names}] : [],
 				);
 				const want = msgs.flatMap((m, i) => {
-					if (m.type !== "taken") return [];
+					if (m.type !== "taken") {
+						return [];
+					}
+
 					const before = befores[i] ?? [];
 					const free = !before.some((n) => n.name === m.name.name);
 					return [{took: free, after: free ? steps[i]?.names : before}];

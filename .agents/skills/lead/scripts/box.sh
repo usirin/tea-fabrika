@@ -16,7 +16,7 @@ fi
 if [ "${1:-}" = rm ]; then
 	name=${2:-}
 	[ "$#" = 2 ] || { echo "usage: box.sh rm <name>" >&2; exit 2; }
-	python3 - "$name" <<'PY'
+	python3 - "$name" "$(cd "$(dirname "$0")" && pwd -P)" <<'PY'
 from pathlib import Path
 import os
 import re
@@ -281,6 +281,12 @@ try:
         if any(tip not in reachable for tip in tips):
             keep("tip not retained in MAIN")
 
+    # Raw samples live under runs/, never in git: move them to MAIN before the folder goes.
+    moved = subprocess.run(["sh", str(Path(sys.argv[2]) / "keepruns.sh"), str(work)], capture_output=True, text=True)
+    if moved.stdout.strip():
+        print(moved.stdout.rstrip())
+    if moved.returncode:
+        keep("could not keep its runs/")
     try:
         protect_main_storage()
         shutil.rmtree(work)
@@ -376,6 +382,12 @@ def plan_owners(state):
     result = call(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--owners-json", state["plan"]])
     if result.returncode: refuse("not_owner: plan cannot be read")
     return json.loads(result.stdout)
+def owner_of(owners, p):
+    # A row ending in / owns every path under it; a plain prefix (owned.ts, owned.tsx) does not.
+    if p in owners: return owners[p]
+    if any(part in ("", ".", "..") for part in p.split("/")): return None
+    under = [k for k in owners if k.endswith("/") and p.startswith(k)]
+    return owners[max(under, key=len)] if under else None
 def fetched_head(branch):
     # Even start/end reads go through MAIN's fetch. No Git command runs in work.
     target = "refs/box-reads/" + uuid.uuid4().hex
@@ -570,7 +582,7 @@ def fetch_box():
                 if exam.returncode not in (0, 1): refuse("exam list unreadable")
                 if step == "build" and exam.returncode: refuse("build exam paths " + sha)
                 for p in paths:
-                    if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
+                    if owner_of(owners, p) != step and not (step == "mutation" and owner_of(owners, p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
                 candidates.append(sha)
             # All candidates pass before any note is made. HEAD and index belong to a private gitdir.
             common = must(git("rev-parse", "--path-format=absolute", "--git-common-dir"), "gitdir lookup failed")

@@ -52,6 +52,7 @@ const LANE = laneId("L1");
 const OTHER = laneId("L2");
 const AGENT: Settings = {model: "m", effort: "low", budget: 1};
 const SHARED: LoopSettings = {rubrics: "r", model: "m", effort: "low", budget: 1, ship: "write"};
+
 const SETTINGS: readonly LoopSettings[] = [
 	SHARED,
 	{...SHARED, ship: "read", agents: {}},
@@ -60,6 +61,7 @@ const SETTINGS: readonly LoopSettings[] = [
 		agents: {build: {model: "b", effort: "high", budget: 2}, review: {...AGENT, model: "r"}},
 	},
 ];
+
 const SPENT: Ran = {
 	spend: {costUsd: 0.5, tokens: 1200, context: 900, turns: 3, minutes: 2},
 	tools: ["Read", "Edit"],
@@ -84,6 +86,7 @@ const buildEnd = (
 		problems: outcome.kind === "stuck" ? ["the builder broke"] : [],
 	},
 });
+
 const BUILDS: readonly BuildEnd[] = [
 	buildEnd({kind: "done", part: false, pr: PR, head: "A", changed: true}, "A", SPENT),
 	buildEnd({kind: "done", part: false, pr: PR, head: "B", changed: true}, "B"),
@@ -114,6 +117,7 @@ const judged = (n: number, met: boolean): Judged => {
 		? {...base, from: "review", state: "open"}
 		: {...base, from: "ticket", id: criterionId(`c${n}`), version: 1, state: met ? "met" : "open"};
 };
+
 /** A review's end, at one head, with `open` of its 3 criteria left open. */
 const reviewed = (outcome: ReviewOutcome, head: string | null, open: number): Reviewed => ({
 	pr: PR,
@@ -134,6 +138,7 @@ const reviewed = (outcome: ReviewOutcome, head: string | null, open: number): Re
 	cost: open > 0 ? 0.25 : 0,
 	runs: 1,
 });
+
 const REVIEWS: readonly Reviewed[] = [
 	reviewed({kind: "done", part: false, head: "A"}, "A", 0),
 	reviewed({kind: "done", part: false, head: "B"}, "B", 0),
@@ -144,10 +149,12 @@ const REVIEWS: readonly Reviewed[] = [
 	reviewed({kind: "stuck", why: "unseen"}, "B", 1),
 	reviewed({kind: "skip", why: "closed"}, null, 0),
 ];
+
 const shipEnd = (outcome: ShipOutcome | null): ShipEnd => ({
 	outcome,
 	said: outcome === null ? "would enqueue" : nameOf(outcome),
 });
+
 const SHIPS: readonly ShipEnd[] = [
 	{kind: "done", part: false, commit: "main-1", cleanup: "done"} as const,
 	{kind: "send", to: "builder", why: "checks_red"} as const,
@@ -163,6 +170,7 @@ const UNKNOWN = {_tag: "unknown"} as const;
 const at = (r: number, stage: string) => intentOf("loop", T, r, stage);
 const claimed = claimTicket({ticket: T, lane: LANE, intent: intentOf("loop", T, "claim")});
 const released = releaseTicket({ticket: T, lane: LANE, intent: intentOf("loop", T, "release")});
+
 const buildOf = (r: number) =>
 	runBuild({
 		ticket: T,
@@ -173,9 +181,12 @@ const buildOf = (r: number) =>
 		settings: AGENT,
 		intent: at(r, "build"),
 	});
+
 const reviewOf = (r: number) =>
 	runReview({ticket: T, pr: PR, round: r, rubrics: "r", settings: AGENT, intent: at(r, "review")});
+
 const postOf = (r: number) => postVerdicts({pr: PR, head: "A", posts: [], intent: at(r, "post")});
+
 const shipOf = (r: number) =>
 	runShip({
 		ticket: T,
@@ -217,6 +228,7 @@ const table: MsgArbitraryTable<Msg> = {
 		.map(([r, end]) => runShip.ok(shipOf(r), end, 0)),
 	loop_ship_err: round.map((r) => runShip.err(shipOf(r), UNKNOWN, 0)),
 };
+
 /** Weighted to the answers that move a loop on, so every phase is reached. */
 const WEIGHTS = {
 	loop_claim_ok: 4,
@@ -226,6 +238,7 @@ const WEIGHTS = {
 	loop_ship_ok: 4,
 	loop_release_ok: 2,
 };
+
 /** A loop begins as its parent begins it, with `start`; the rest comes in any order. */
 const lists = fc
 	.tuple(table.start, fc.array(arbMsg(table, {weights: WEIGHTS}), {maxLength: 40, size: "max"}))
@@ -240,6 +253,7 @@ const keepsEvery = (machine: Machine, runs = 150, saved = new Set<string>()) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("loop:r1", null));
 			const store = handle.store("loop", T, Loop);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);

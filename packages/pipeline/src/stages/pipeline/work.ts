@@ -91,6 +91,7 @@ const LOADED_FILES = new Set([
 	"claude.local.md",
 	".mcp.json",
 ]);
+
 const LOADED_FOLDERS = new Set([".codex", ".agents", ".claude"]);
 
 /** Does an agent load this file by itself? Pure. */
@@ -132,8 +133,12 @@ const ON_DISK = /^(?:file:\/\/)?\/(?:.*\/)?([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/;
 export const readOrigin = (url: string): Origin | null => {
 	for (const form of ON_GITHUB) {
 		const m = form.exec(url);
-		if (m !== null) return {repo: `${m[1]}/${m[2]}`, remote: url, host: "github"};
+
+		if (m !== null) {
+			return {repo: `${m[1]}/${m[2]}`, remote: url, host: "github"};
+		}
 	}
+
 	const m = ON_DISK.exec(url);
 	return m === null ? null : {repo: `${m[1]}/${m[2]}`, remote: url, host: "local"};
 };
@@ -147,6 +152,7 @@ const GIT = [
 	"-c",
 	"core.quotepath=off",
 ];
+
 const IDENTITY = {
 	GIT_AUTHOR_NAME: "fabrika lane",
 	GIT_AUTHOR_EMAIL: "lane@fabrika.invalid",
@@ -365,9 +371,14 @@ export class LaneWork extends Context.Service<
 
 /** Who may make the copy at a path, in this process. Each lane has its own `LaneWork`, so it is here. */
 const makers = new Map<string, Semaphore.Semaphore>();
+
 const makerOf = (tree: string): Semaphore.Semaphore => {
 	const known = makers.get(tree);
-	if (known !== undefined) return known;
+
+	if (known !== undefined) {
+		return known;
+	}
+
 	const made = Semaphore.makeUnsafe(1);
 	makers.set(tree, made);
 	return made;
@@ -417,15 +428,24 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const START = "start the app from a checkout of the repository";
 		const readCheckoutOrigin = Effect.gen(function* () {
 			const ran = yield* gitIn(checkout, ["config", "--local", "--get", "remote.origin.url"]);
-			if (ran.code === 1) return yield* Effect.fail(failed(`${checkout} has no origin: ${START}`));
-			if (ran.code !== 0)
+
+			if (ran.code === 1) {
+				return yield* Effect.fail(failed(`${checkout} has no origin: ${START}`));
+			}
+
+			if (ran.code !== 0) {
 				return yield* Effect.fail(failed(`${checkout} is not a git checkout: ${START}`));
+			}
+
 			const url = ran.out.trim();
 			const read = readOrigin(url);
-			if (read === null)
+
+			if (read === null) {
 				return yield* Effect.fail(
 					failed(`origin ${url} is not on GitHub or a folder on this disk: ${START}`),
 				);
+			}
+
 			return read;
 		});
 		// Read once: one `LaneWork` serves one lane, and a checkout's origin does not change under it.
@@ -439,10 +459,12 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 
 		const fetched = Effect.gen(function* () {
 			const {remote} = yield* origin;
+
 			if (!(yield* fs.exists(clone).pipe(Effect.orElseSucceed(() => false)))) {
 				yield* quiet(fs.makeDirectory(at(), {recursive: true}));
 				yield* git(at(), ["clone", "--quiet", remote, clone]);
 			}
+
 			yield* git(clone, ["fetch", "--quiet", "origin"]);
 		});
 		const main = Effect.andThen(fetched, git(clone, ["rev-parse", "origin/main"]));
@@ -457,10 +479,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 						Effect.mapError((ran) => said("read of the settings", ran)),
 					),
 				);
-				if (refused !== null) return yield* Effect.fail(failed(refused));
+
+				if (refused !== null) {
+					return yield* Effect.fail(failed(refused));
+				}
+
 				const file = at("settings", tip, SETTINGS_FILE);
 				const text = yield* show(tip, SETTINGS_FILE);
-				if (text === null) return DEFAULT_SETTINGS;
+
+				if (text === null) {
+					return DEFAULT_SETTINGS;
+				}
+
 				yield* quiet(fs.makeDirectory(path.dirname(file), {recursive: true}));
 				yield* quiet(fs.writeFileString(file, text));
 				return yield* readSettings(file).pipe(
@@ -475,7 +505,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const settingsAt = (tip: string): Effect.Effect<Settings, Failed> =>
 			Effect.suspend(() => {
 				const known = settingsRead.get(tip);
-				if (known !== undefined) return Effect.succeed(known);
+
+				if (known !== undefined) {
+					return Effect.succeed(known);
+				}
+
 				return Effect.tap(readSettingsAt(tip), (read) =>
 					Effect.sync(() => settingsRead.set(tip, read)),
 				);
@@ -486,10 +520,12 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				const tip = yield* main;
 				const tree = at("trees", name);
+
 				if (!(yield* fs.exists(tree).pipe(Effect.orElseSucceed(() => false)))) {
 					yield* quiet(fs.makeDirectory(at("trees"), {recursive: true}));
 					yield* git(clone, ["worktree", "add", "--quiet", "-B", branch, tree, tip]);
 				}
+
 				const base = yield* git(tree, ["merge-base", "origin/main", "HEAD"]);
 				return {tree: yield* quiet(fs.realPath(tree)), branch, base};
 			});
@@ -504,14 +540,19 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					// turned back can leave, is taken away first: the file is written in the copy, never where a
 					// link points.
 					const parts = file.path.split("/");
+
 					for (let i = 1; i <= parts.length; i++) {
 						const at = path.join(folder, ...parts.slice(0, i));
 						const linked = yield* fs.lstat(at).pipe(
 							Effect.map((info) => info.type === "SymbolicLink"),
 							Effect.orElseSucceed(() => false),
 						);
-						if (linked) yield* quiet(fs.remove(at));
+
+						if (linked) {
+							yield* quiet(fs.remove(at));
+						}
 					}
+
 					yield* quiet(fs.makeDirectory(path.dirname(to), {recursive: true}));
 					yield* quiet(fs.writeFileString(to, file.text));
 				}
@@ -522,17 +563,28 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				yield* write(folder, files);
 				yield* git(folder, ["add", "-A"]);
 				const same = yield* gitIn(folder, ["diff", "--cached", "--quiet"]);
-				if (same.code !== 0) yield* git(folder, ["commit", "--quiet", "-m", message]);
+
+				if (same.code !== 0) {
+					yield* git(folder, ["commit", "--quiet", "-m", message]);
+				}
+
 				return yield* head(folder);
 			});
 
 		const commitOnly = (folder: string, paths: readonly string[], message: string) =>
 			Effect.gen(function* () {
-				if (paths.length === 0) return yield* head(folder);
+				if (paths.length === 0) {
+					return yield* head(folder);
+				}
+
 				const named = ["--", ...paths.map((file) => `:(literal)${file}`)];
 				yield* git(folder, ["add", ...named]);
 				const same = yield* gitIn(folder, ["diff", "--cached", "--quiet", "HEAD", ...named]);
-				if (same.code !== 0) yield* git(folder, ["commit", "--quiet", "-m", message, ...named]);
+
+				if (same.code !== 0) {
+					yield* git(folder, ["commit", "--quiet", "-m", message, ...named]);
+				}
+
 				return yield* head(folder);
 			});
 
@@ -540,7 +592,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 		const format = (folder: string, files: readonly string[]) =>
 			Effect.gen(function* () {
 				const run = (yield* settings).format?.run;
-				if (run === undefined) return {_tag: "none"} as const;
+
+				if (run === undefined) {
+					return {_tag: "none"} as const;
+				}
+
 				// The formatter runs outside the box, so a file reached through a link would be written
 				// where the link points. Only a file of the copy itself goes to it.
 				const root = yield* quiet(fs.realPath(folder));
@@ -551,10 +607,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					),
 				);
 				const [first, ...rest] = own;
-				if (first === undefined) return {_tag: "formatted"} as const;
+
+				if (first === undefined) {
+					return {_tag: "formatted"} as const;
+				}
+
 				const [program, ...args] = formatCommand(run, [first, ...rest]);
 				const ran = yield* on(runChild(program, args, {cwd: folder, env: runEnv()}));
-				if (ran.code === 0) return {_tag: "formatted"} as const;
+
+				if (ran.code === 0) {
+					return {_tag: "formatted"} as const;
+				}
+
 				const says = (ran.err.trim() || ran.out.trim()).slice(0, 300);
 				return {
 					_tag: "failed",
@@ -566,10 +630,16 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				const words = (yield* settings).build?.install ?? [];
 				const [program, ...args] = words;
-				if (program === undefined) return;
+
+				if (program === undefined) {
+					return;
+				}
+
 				const ran = yield* on(runChild(program, args, {cwd: tree, env: runEnv()}));
-				if (ran.code !== 0)
+
+				if (ran.code !== 0) {
 					return yield* Effect.fail(failed(`[build] install: ${ran.err.trim().slice(0, 300)}`));
+				}
 			});
 
 		/**
@@ -581,10 +651,12 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				const made_ = yield* made(name, branch);
 				const mark = at("trees", `${name}.installed`);
+
 				if (!(yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))) {
 					yield* install(made_.tree);
 					yield* quiet(fs.writeFileString(mark, ""));
 				}
+
 				return made_;
 			});
 
@@ -602,8 +674,10 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					...paths.map((file) => `:(literal)${file}`),
 				]);
 				const untar = yield* on(runChild("tar", ["-xf", packed, "-C", tree], {env: runEnv()}));
-				if (untar.code !== 0)
+
+				if (untar.code !== 0) {
 					return yield* Effect.fail(failed(`the code at ${sha} could not be copied`));
+				}
 			}).pipe(Effect.ensuring(Effect.ignore(fs.remove(packed, {force: true}))));
 		};
 
@@ -650,7 +724,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					heldIn,
 					{concurrency: 1},
 				);
-				if (others.flat().includes(folder)) return [];
+
+				if (others.flat().includes(folder)) {
+					return [];
+				}
+
 				return yield* orSaid(
 					folder,
 					Effect.andThen(quiet(fs.remove(`${folder}.done`, {force: true})), cleared(folder)),
@@ -703,16 +781,22 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			return Effect.gen(function* () {
 				// Under the permit: a lane that is leaving reads the holds under it too, so it sees this one.
 				yield* holdBy(serving, tree);
-				if (yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false)))
+
+				if (yield* fs.exists(mark).pipe(Effect.orElseSucceed(() => false))) {
 					return yield* quiet(fs.realPath(tree));
+				}
+
 				yield* cleared(tree);
 				yield* quiet(fs.makeDirectory(tree, {recursive: true}));
 				yield* unpacked(tree, sha);
 				const unlinked = yield* on(
 					runChild("find", [tree, "-type", "l", "-delete"], {env: runEnv()}),
 				);
-				if (unlinked.code !== 0)
+
+				if (unlinked.code !== 0) {
 					return yield* Effect.fail(failed(`the code at ${sha} could not be copied`));
+				}
+
 				yield* ready(tree);
 				yield* quiet(fs.writeFileString(mark, ""));
 				return yield* quiet(fs.realPath(tree));
@@ -757,7 +841,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 						{env: {...hostEnv(), ...IDENTITY}},
 					),
 				);
-				if (ran.code !== 0) return yield* Effect.fail(said("patch-id", ran));
+
+				if (ran.code !== 0) {
+					return yield* Effect.fail(said("patch-id", ran));
+				}
+
 				// An empty diff has no id: the base's own sha stands for "nothing changed".
 				return ran.out.trim().split(" ")[0] || base;
 			});
@@ -779,7 +867,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			Effect.gen(function* () {
 				const run = (yield* settingsAt(base)).format?.run;
 				const [first, ...rest] = paths;
-				if (run === undefined || first === undefined) return null;
+
+				if (run === undefined || first === undefined) {
+					return null;
+				}
+
 				const from = yield* copy(base);
 				const tree = at("carry", replayed);
 				yield* cleared(tree);
@@ -790,7 +882,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					const where = (file: string) => path.relative(from, path.join(tree, file));
 					const [program, ...args] = formatCommand(run, [where(first), ...rest.map(where)]);
 					const ran = yield* on(runChild(program, args, {cwd: from, env: runEnv()}));
-					if (ran.code !== 0) return null;
+
+					if (ran.code !== 0) {
+						return null;
+					}
+
 					yield* git(tree, ["add", "-A"]);
 					return yield* git(tree, ["write-tree"]);
 				}).pipe(
@@ -873,14 +969,23 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				Effect.gen(function* () {
 					yield* install(tree);
 					const found = yield* on(runChild("find", [tree, "-print0"], {env: runEnv()}));
-					if (found.code !== 0)
+
+					if (found.code !== 0) {
 						return yield* Effect.fail(failed(`the copy at ${sha} could not be read`));
+					}
+
 					const files = found.out.split("\0").map((file) => file.slice(tree.length + 1));
-					for (const file of files.filter(loadsItself))
+
+					for (const file of files.filter(loadsItself)) {
 						yield* quiet(fs.remove(path.join(tree, file), {recursive: true, force: true}));
+					}
+
 					const tip = yield* main;
 					const kept = (yield* plainAt(tip)).filter(loadsItself);
-					if (kept.length > 0) yield* unpacked(tree, tip, kept);
+
+					if (kept.length > 0) {
+						yield* unpacked(tree, tip, kept);
+					}
 				}),
 			);
 
@@ -943,23 +1048,28 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 							? ["rebase", "--quiet", onto]
 							: ["rebase", "--quiet", "--onto", onto, since],
 				);
+
 				// One stop per commit at most, and one for a merge: past that it is not settling.
 				for (let left = commits + 2; ran.code !== 0; left--) {
 					const files = yield* names(tree, ["diff", "--name-only", "--diff-filter=U"]);
+
 					if (left === 0 || (pushed && files.length === 0)) {
 						yield* gitIn(tree, [pushed ? "merge" : "rebase", "--abort"]);
 						return yield* Effect.fail(said(pushed ? "merge" : "rebase", ran));
 					}
+
 					if (files.length === 0) {
 						ran = yield* gitIn(tree, ["rebase", "--skip"]);
 						continue;
 					}
+
 					for (const file of files) {
 						conflicts.add(file);
 						const named = ["--", `:(literal)${file}`];
 						const taken = yield* gitIn(tree, ["checkout", side, ...named]);
 						yield* git(tree, taken.code === 0 ? ["add", ...named] : ["rm", "--quiet", ...named]);
 					}
+
 					ran = yield* gitIn(
 						tree,
 						pushed
@@ -967,6 +1077,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 							: ["-c", "core.editor=true", "rebase", "--continue"],
 					);
 				}
+
 				return {head: yield* head(tree), conflicts: [...conflicts]};
 			});
 
@@ -1003,7 +1114,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 					was === null || (yield* isAncestor(was, sha))
 						? null
 						: {head: was, ref: `refs/kept/${branch}/${was}`};
-				if (kept !== null) yield* keep(kept.head, kept.ref);
+
+				if (kept !== null) {
+					yield* keep(kept.head, kept.ref);
+				}
+
 				const lease = `--force-with-lease=refs/heads/${branch}:${was ?? ""}`;
 				yield* git(folder, ["push", "--quiet", lease, "origin", `${sha}:refs/heads/${branch}`]);
 				return kept;
@@ -1026,7 +1141,11 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				Effect.gen(function* () {
 					const {tree} = yield* made(name, name.replace(/-/, "/"));
 					const ran = yield* gitIn(tree, ["merge", "--quiet", "--ff-only", to]);
-					if (ran.code !== 0) return "behind" as const;
+
+					if (ran.code !== 0) {
+						return "behind" as const;
+					}
+
 					// `--ff-only` also passes when `to` is in the copy already: then the copy is ahead of it.
 					const at = yield* git(tree, ["rev-parse", `${to}^{commit}`]);
 					return (yield* head(tree)) === at ? ("moved" as const) : ("ahead" as const);
@@ -1035,10 +1154,18 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 				Effect.gen(function* () {
 					const {tree} = yield* made(name, name.replace(/-/, "/"));
 					const ran = yield* gitIn(tree, ["merge", "--quiet", "--no-edit", "origin/main"]);
-					if (ran.code === 0) return {_tag: "merged", head: yield* head(tree)} as const;
+
+					if (ran.code === 0) {
+						return {_tag: "merged", head: yield* head(tree)} as const;
+					}
+
 					const files = yield* names(tree, ["diff", "--name-only", "--diff-filter=U"]);
 					yield* gitIn(tree, ["merge", "--abort"]);
-					if (files.length === 0) return yield* Effect.fail(said("merge", ran));
+
+					if (files.length === 0) {
+						return yield* Effect.fail(said("merge", ran));
+					}
+
 					return {_tag: "conflicts", files} as const;
 				}),
 			given,
@@ -1104,15 +1231,23 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 			putBack: (n, from, files, message) =>
 				Effect.gen(function* () {
 					const {tree} = yield* made(String(n), `lane/${n}`);
+
 					// Each checked out of `from` is staged; each `from` has none is taken out, staged too.
 					for (const file of files) {
 						const named = ["--", `:(literal)${file}`];
 						const taken = yield* gitIn(tree, ["checkout", from, ...named]);
-						if (taken.code !== 0)
+
+						if (taken.code !== 0) {
 							yield* git(tree, ["rm", "--quiet", "-r", "--ignore-unmatch", ...named]);
+						}
 					}
+
 					const same = yield* gitIn(tree, ["diff", "--cached", "--quiet", "HEAD"]);
-					if (same.code !== 0) yield* git(tree, ["commit", "--quiet", "-m", message]);
+
+					if (same.code !== 0) {
+						yield* git(tree, ["commit", "--quiet", "-m", message]);
+					}
+
 					return yield* head(tree);
 				}),
 			mergeable: (sha) =>
@@ -1146,7 +1281,11 @@ export const pushBranch = (
 ) =>
 	Effect.gen(function* () {
 		const kept = yield* work.pushTo(folder, head, branch);
-		if (kept === null) return;
+
+		if (kept === null) {
+			return;
+		}
+
 		yield* tickets
 			.talk(number, `kept/${kept.ref}`, {
 				type: "commented",

@@ -63,14 +63,17 @@ class Copy implements Equal.Equal {
 	readonly kind: string;
 	readonly id: string;
 	readonly msg: unknown;
+
 	constructor(kind: string, id: string, msg: unknown) {
 		this.kind = kind;
 		this.id = id;
 		this.msg = msg;
 	}
+
 	[Equal.symbol](that: unknown): boolean {
 		return that instanceof Copy && that.kind === this.kind && that.id === this.id;
 	}
+
 	[Hash.symbol](): number {
 		return Hash.string(`${this.kind}/${this.id}`);
 	}
@@ -92,7 +95,11 @@ type Show = (
 const mark = (name: string, attributes: Record<string, string>) =>
 	Effect.gen(function* () {
 		const span = yield* Effect.currentParentSpan.pipe(Effect.option);
-		if (span._tag === "None" || span.value._tag !== "Span") return;
+
+		if (span._tag === "None" || span.value._tag !== "Span") {
+			return;
+		}
+
 		const clock = yield* Clock.Clock;
 		span.value.event(name, clock.currentTimeNanosUnsafe(), attributes);
 	});
@@ -167,12 +174,16 @@ export const refsOf = <
 			(name: string, id: string) => (msg?: unknown, options?: {readonly conflict?: Conflict}) =>
 				Effect.gen(function* () {
 					const copy = yield* RcMap.get(live, new Copy(name, id, msg));
-					if (msg === undefined || (copy.start !== undefined && Equal.equals(copy.start, msg)))
+
+					if (msg === undefined || (copy.start !== undefined && Equal.equals(copy.start, msg))) {
 						return copy.runtime;
+					}
+
 					if (options?.conflict === "use_existing") {
 						yield* mark(`start msg dropped: ${id}`, {[ATTR.machine]: name});
 						return copy.runtime;
 					}
+
 					return yield* new AlreadyStarted({
 						machine: name,
 						id,
@@ -184,12 +195,14 @@ export const refsOf = <
 		// Cleared only once every start of it has closed.
 		const clear = (name: string, id: string) =>
 			Effect.gen(function* () {
-				if (yield* RcMap.has(live, new Copy(name, id, undefined)))
+				if (yield* RcMap.has(live, new Copy(name, id, undefined))) {
 					return yield* Effect.die(
 						new Error(
 							`${program} cleared its ${name} run ${id} while it runs: its next save would keep it again`,
 						),
 					);
+				}
+
 				yield* handle.clear(name, id);
 			});
 
@@ -217,24 +230,40 @@ export const refsOf = <
 		// the start that tried said so.
 		const check = Effect.gen(function* () {
 			const stranded: string[] = [];
+
 			for (const [name, declared] of Object.entries(declaredKinds)) {
 				const recovered = declared.recovered;
-				if (recovered === undefined) continue;
+
+				if (recovered === undefined) {
+					continue;
+				}
+
 				const {terminal} = declared.options(kit) as {
 					readonly terminal?: (state: unknown) => boolean;
 				};
+
 				for (const run of yield* handle.list(name, declared.state)) {
-					if (run.kind === "refused") continue;
-					if (terminal?.(run.state) === true) continue;
-					if (recovered(run.state) === null) yield* handle.clear(name, run.id);
-					else
+					if (run.kind === "refused") {
+						continue;
+					}
+
+					if (terminal?.(run.state) === true) {
+						continue;
+					}
+
+					if (recovered(run.state) === null) {
+						yield* handle.clear(name, run.id);
+					} else {
 						stranded.push(
 							`${name} run ${run.id} unfinished: its parent ${declared.parent} never took it to its end`,
 						);
+					}
 				}
 			}
-			if (stranded.length > 0)
+
+			if (stranded.length > 0) {
 				return yield* Effect.die(new Error(`${program} ended with ${stranded.join("; ")}`));
+			}
 		}).pipe(Effect.orDie);
 
 		return {kit, check};

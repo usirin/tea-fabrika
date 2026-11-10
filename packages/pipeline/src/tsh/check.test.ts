@@ -14,23 +14,41 @@ const list = programsOf(defaultConfig("/tsh"));
 
 const checked = (line: string): Shell.Checked => {
 	const parsed = parse(line);
-	if (parsed.kind !== "parsed") throw new Error(`parse refused: ${parsed.why}`);
+
+	if (parsed.kind !== "parsed") {
+		throw new Error(`parse refused: ${parsed.why}`);
+	}
+
 	const [first] = parsed.statements;
-	if (first?.kind !== "run") throw new Error("not a run");
+
+	if (first?.kind !== "run") {
+		throw new Error("not a run");
+	}
+
 	return check(first.pipeline, list, line);
 };
+
 const refusal = (line: string) => {
 	const c = checked(line);
-	if (c.kind !== "refused") throw new Error(`not refused: ${line}`);
+
+	if (c.kind !== "refused") {
+		throw new Error(`not refused: ${line}`);
+	}
+
 	return c;
 };
+
 const PR = "https://github.com/example/repo/pull/7";
 const REVIEW = "review-scripted --rubrics r --model opus --effort medium --budget 1";
 
 describe("check: the user's job", () => {
 	it("passes review | ship and wires review's passed into ship's pr, every value read in its own shape", () => {
 		const c = checked(`${REVIEW} pr=${PR} | ship --mode read`);
-		if (c.kind !== "line") throw new Error(c.kind);
+
+		if (c.kind !== "line") {
+			throw new Error(c.kind);
+		}
+
 		const [review, ship] = c.line.stages;
 		expect(review.wire).toEqual({output: "passed", input: "pr"});
 		expect(ship?.fed).toBe("pr");
@@ -104,6 +122,7 @@ describe("check: names and values", () => {
 			const c = checked(line);
 			expect(c.kind === "help" && c.entry.program.name, line).toBe("ship");
 		}
+
 		expect(refusal("shp --help").why).toBe("no program named shp");
 	});
 });
@@ -111,7 +130,11 @@ describe("check: names and values", () => {
 describe("--help", () => {
 	const lines = (name: string) => {
 		const entry = list.get(name);
-		if (entry === undefined) throw new Error(name);
+
+		if (entry === undefined) {
+			throw new Error(name);
+		}
+
 		return helpOf(entry, list);
 	};
 
@@ -119,10 +142,16 @@ describe("--help", () => {
 		for (const name of ["ship", "review-scripted", "seq"]) {
 			const page = lines(name);
 			expect(page[0], name).toMatch(new RegExp(`^Usage: ${name}`));
-			for (const line of page)
-				if (!line.includes("(default:")) expect(line.length, line).toBeLessThanOrEqual(80);
+
+			for (const line of page) {
+				if (!line.includes("(default:")) {
+					expect(line.length, line).toBeLessThanOrEqual(80);
+				}
+			}
+
 			expect(page).toContain("Flags:");
 		}
+
 		const ship = lines("ship");
 		expect(ship.slice(0, 3)).toEqual([
 			"Usage: ship [--mode MODE] [pr=PR] [ask=ASK] [forget=FORGET]",
@@ -145,13 +174,21 @@ describe("--help", () => {
 		expect(lines("seq")).toContain("  seq --to TO | double");
 		// With no list, no pipes.
 		const entry = list.get("ship");
-		if (entry === undefined) throw new Error("ship");
+
+		if (entry === undefined) {
+			throw new Error("ship");
+		}
+
 		expect(helpOf(entry)).not.toContain("Example pipes:");
 	});
 
 	it("prints one part whole, one field a line", () => {
 		const entry = list.get("ship");
-		if (entry === undefined) throw new Error("ship");
+
+		if (entry === undefined) {
+			throw new Error("ship");
+		}
+
 		const whole = partsHelp(entry, [{kind: "output", name: "outcome"}]);
 		expect(whole[0]).toBe("ship >outcome  (an output of ship)");
 		expect(whole).toContain('        cleanup: "done" | "failed" | "not_run"');
@@ -189,7 +226,11 @@ describe("check: build, operate and ship take any repository's ticket or pull re
 		[`${OPERATE} ticket=https://github.com/acme/widgets/issues/670?x`],
 	])("a url that is not a ticket is refused before anything starts: %s", (line) => {
 		const r = checkedIn(line);
-		if (r.kind !== "refused") throw new Error(r.kind);
+
+		if (r.kind !== "refused") {
+			throw new Error(r.kind);
+		}
+
 		expect(r.why).toContain("not a ticket url");
 		expect(r.status).toBe(2);
 	});
@@ -201,15 +242,27 @@ describe("check: the config fills the flags a line leaves out", () => {
 	/** The flags a program starts with from `given`, its defaults filled. */
 	const startedWith = (name: string, given: Readonly<Record<string, unknown>>) => {
 		const entry = ours.get(name);
-		if (entry === undefined) throw new Error(name);
+
+		if (entry === undefined) {
+			throw new Error(name);
+		}
+
 		const read = readFlags(entry.program, given);
-		if (read.kind !== "given") throw new Error(read.why);
+
+		if (read.kind !== "given") {
+			throw new Error(read.why);
+		}
+
 		return read.flags;
 	};
 
 	it("operate ticket=<url> is a whole line, and runs with the config's values", () => {
 		const c = checked(`operate ticket=${TICKET}`);
-		if (c.kind !== "line") throw new Error(c.kind === "refused" ? c.why : c.kind);
+
+		if (c.kind !== "line") {
+			throw new Error(c.kind === "refused" ? c.why : c.kind);
+		}
+
 		expect(c.line.stages[0].flags).toEqual([]);
 		expect(startedWith("operate", {})).toEqual({
 			rubrics: "/tsh/rubrics",
@@ -236,13 +289,18 @@ describe("check: the config fills the flags a line leaves out", () => {
 			`build ticket=${TICKET}`,
 			"ship pr=https://github.com/acme/widgets/pull/7",
 			"review-scripted pr=https://github.com/acme/widgets/pull/7",
-		])
+		]) {
 			expect(checked(line).kind, line).toBe("line");
+		}
 	});
 
 	it("--help shows each default, and a flag with one is not asked for in the usage", () => {
 		const entry = ours.get("operate");
-		if (entry === undefined) throw new Error("operate");
+
+		if (entry === undefined) {
+			throw new Error("operate");
+		}
+
 		const page = helpOf(entry);
 		/** One flag's row, its wrapped lines joined. */
 		const row = (flag: string) => {

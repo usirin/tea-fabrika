@@ -37,7 +37,11 @@ const freshHome = Effect.gen(function* () {
 const lockText = (lock: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		if (!(yield* fs.exists(lock))) return null;
+
+		if (!(yield* fs.exists(lock))) {
+			return null;
+		}
+
 		return yield* fs.readFileString(lock);
 	});
 
@@ -56,7 +60,11 @@ describe("the start lock", () => {
 					inside += 1;
 					most = Math.max(most, inside);
 					yield* Effect.sleep("30 millis");
-					if (inside !== 1) overlaps.push(inside);
+
+					if (inside !== 1) {
+						overlaps.push(inside);
+					}
+
 					inside -= 1;
 				}).pipe(Effect.scoped);
 				yield* Effect.all(

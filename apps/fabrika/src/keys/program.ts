@@ -39,11 +39,13 @@ export interface KeybindingManager {
 		from: {readonly how: "pressed"; readonly window: string; readonly said: number},
 	) => Effect.Effect<Snapshot, {readonly why: string}>;
 }
+
 export const KeybindingService = Context.Service<KeybindingManager, KeybindingManager>(
 	"@kampus/fabrika-app-old/KeybindingManager",
 );
 
 const Session = Schema.Struct({open: Schema.Boolean});
+
 const session = defineMachine({
 	types: {model: {} as typeof Session.Type, msg: {} as {type: "close"}, ctx: undefined},
 	cmds: [],
@@ -115,7 +117,11 @@ export const keysRequest = (open: () => string | null) =>
 			Effect.gen(function* () {
 				yield* machines.session.get("session").start();
 				const why = open();
-				if (why !== null) return yield* Effect.fail({message: why});
+
+				if (why !== null) {
+					return yield* Effect.fail({message: why});
+				}
+
 				yield* serve({close: () => end});
 			}).pipe(Effect.scoped),
 	});

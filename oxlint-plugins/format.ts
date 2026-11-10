@@ -8,6 +8,7 @@ import {spawnSync} from "node:child_process";
 import {join} from "node:path";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const ran = spawnSync(
 	join(ROOT, "node_modules", ".bin", "oxfmt"),
 	[
@@ -18,4 +19,5 @@ const ran = spawnSync(
 	],
 	{stdio: "inherit"},
 );
+
 process.exit(ran.status ?? 2);

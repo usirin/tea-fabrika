@@ -14,15 +14,19 @@ const ROOT = resolve(import.meta.dirname, "../../../../..");
 const require = createRequire(import.meta.resolve("@alchemy.run/cloudflare"));
 const manifest = require.resolve("@alchemy.run/cloudflare-runtime/package.json");
 const exports = JSON.parse(readFileSync(manifest, "utf8")).exports;
+
 const load = (name: string) =>
 	import(pathToFileURL(resolve(dirname(manifest), exports[`./core/${name}`].import)).href);
+
 type End = {exitCode: number | null; signal: string | number | null};
+
 type Event = {worker: string} & (
 	| {type: "start"; pid: number}
 	| {type: "exit"; exit: End}
 	| {type: "restart"; exit: End; delay: number}
 	| {type: "stop"; exit: End; reason: "intensity" | "restart_failed"}
 );
+
 const spawned = () => {
 	const children: Array<{pid: number; closed: boolean; crash: () => void}> = [];
 	const sockets: Array<string> = [];
@@ -40,7 +44,10 @@ const spawned = () => {
 				return true;
 			},
 			crash: () => {
-				if (child.closed) return;
+				if (child.closed) {
+					return;
+				}
+
 				child.closed = true;
 				setImmediate(() => {
 					child.emit("close", null, "SIGKILL");
@@ -123,7 +130,9 @@ describe("P12 Alchemy lifecycle patch", () => {
 				);
 				const wait = (test: () => boolean) =>
 					Effect.gen(function* () {
-						while (!test()) yield* Effect.sleep("10 millis");
+						while (!test()) {
+							yield* Effect.sleep("10 millis");
+						}
 					}).pipe(Effect.timeout("15 seconds"));
 				const worker = {
 					name,
@@ -138,12 +147,14 @@ describe("P12 Alchemy lifecycle patch", () => {
 						},
 					],
 				};
+
 				try {
 					await Effect.runPromise(
 						Effect.scoped(
 							Effect.gen(function* () {
 								const service = yield* Runtime;
 								yield* service.start(worker);
+
 								for (let generation = 0; generation < 4; generation++) {
 									yield* wait(() => events.filter((e) => e.type === "start").length > generation);
 									const started = events.filter((e) => e.type === "start")[generation]!;
@@ -151,6 +162,7 @@ describe("P12 Alchemy lifecycle patch", () => {
 									expect(started.pid).toBe(os.children[generation]!.pid);
 									os.children[generation]!.crash();
 								}
+
 								yield* wait(() => events.some((e) => e.type === "stop"));
 								expect(events.map((e) => e.type)).toEqual([
 									"start",

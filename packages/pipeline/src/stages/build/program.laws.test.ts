@@ -33,10 +33,12 @@ const ctx = stubCtxThrowingProxy<undefined>();
 const T = "o/r#1";
 const NUMBER = 1;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
+
 const CRITERIA: readonly Criterion[] = [
 	{id: criterionId("c1"), version: 1, text: "every window opens", checked: false, evidence: null},
 	{id: criterionId("c2"), version: 2, text: "the door locks", checked: true, evidence: "a.log"},
 ];
+
 const ticket = (patch: Partial<Ticket> = {}): Ticket => ({
 	url: T,
 	number: NUMBER,
@@ -49,8 +51,10 @@ const ticket = (patch: Partial<Ticket> = {}): Ticket => ({
 	rules: [],
 	...patch,
 });
+
 /** Tickets the gate lets through. */
 const GO: readonly Ticket[] = [ticket(), ticket({prs: [{url: "P", state: "open", head: "h0"}]})];
+
 /** Tickets it stops: no plan read, no criteria, criteria it would guess at, closed, merged. */
 const STOP: readonly Ticket[] = [
 	(({plan: _, ...rest}) => rest)(ticket()),
@@ -59,11 +63,13 @@ const STOP: readonly Ticket[] = [
 	ticket({state: "closed"}),
 	ticket({prs: [{url: "P", state: "merged", head: "h0"}]}),
 ];
+
 /** Mostly one the gate lets through, so a round goes on past the read. */
 const tickets = fc.oneof(
 	{weight: 4, arbitrary: fc.constantFrom(...GO)},
 	{weight: 1, arbitrary: fc.constantFrom(...STOP)},
 );
+
 const BUILTS: readonly Built[] = [
 	{summary: "Opens the windows.", deviations: [], ran: [], left: []},
 	{
@@ -73,6 +79,7 @@ const BUILTS: readonly Built[] = [
 		left: ["criterion c2"],
 	},
 ];
+
 const RANS: readonly Ran[] = [
 	noRun,
 	{
@@ -91,6 +98,7 @@ const intent = (r: number, step: string) => intentOf("build", T, r, step);
 const reads = readTicket({ticket: T, number: NUMBER});
 const copyOf = (r: number) => copyTree({ticket: T, number: NUMBER, intent: intent(r, "copy")});
 const COPIED = {tree: "work/o-r-1", branch: "build/o-r-1", base: "h0"};
+
 const pushOf = (r: number) =>
 	pushBranch({
 		ticket: T,
@@ -98,6 +106,7 @@ const pushOf = (r: number) =>
 		message: {title: "windows", round: r, summary: "Opens the windows.", refs: NUMBER},
 		intent: intent(r, "push"),
 	});
+
 const openOf = (r: number) =>
 	openPr({
 		ticket: T,
@@ -160,6 +169,7 @@ const table: MsgArbitraryTable<Msg> = {
 	build_open_ok: round.map((r) => openPr.ok(openOf(r), "P", 0)),
 	build_open_err: round.map((r) => openPr.err(openOf(r), UNKNOWN, 0)),
 };
+
 /** Weighted to the answers that move a round on, so every phase is reached. */
 const WEIGHTS = {
 	build_ticket_ok: 6,
@@ -168,6 +178,7 @@ const WEIGHTS = {
 	build_push_ok: 6,
 	build_open_ok: 3,
 };
+
 /** A round begins as its parent begins it, with `start`; the rest comes in any order. */
 const lists = fc
 	.tuple(table.start, fc.array(arbMsg(table, {weights: WEIGHTS}), {maxLength: 30, size: "max"}))
@@ -182,6 +193,7 @@ const keepsEvery = (machine: Machine, runs = 150, saved = new Set<string>()) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("build:r1", null));
 			const store = handle.store("build", T, buildKind.state);
+
 			for (const s of foldEvents(machine, ctx, null, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -226,13 +238,16 @@ const refusedStaysRefused = (machine: Machine) =>
 			list.forEach((msg, i) => {
 				const before = states[i];
 				const after = states[i + 1];
+
 				if (
 					msg.type !== "build_push_err" ||
 					msg.error._tag !== "exam_touched" ||
 					before?.phase !== "pushing" ||
 					msg.cmd.ticket !== before.asked.ticket
-				)
+				) {
 					return;
+				}
+
 				expect(after).toMatchObject({phase: "over", outcome: {kind: "stuck", why: "exam_touched"}});
 			});
 		}),

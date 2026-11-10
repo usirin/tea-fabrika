@@ -44,6 +44,7 @@ export type BuildAsk = typeof BuildAsk.Type;
 /** A ticket, by url and number. */
 const TicketIn = Schema.Struct({ticket: Schema.String, number: Schema.Finite});
 const PushIn = Schema.Struct({ticket: Schema.String, copied: Copied, message: Commit});
+
 const OpenIn = Schema.Struct({
 	ticket: Schema.String,
 	number: Schema.Finite,
@@ -70,6 +71,7 @@ type OpenCmd = ReturnType<typeof openPr>;
 export type BuildCmd = TicketCmd | CopyCmd | PushCmd | OpenCmd;
 
 type At = {readonly ticket: string; readonly round: number; readonly run: number};
+
 /** One builder run. `run` numbers the runs of one round, so a run started again after a restart is told apart. */
 export type RunSub = Sub<
 	"build_run",
@@ -105,12 +107,14 @@ export type BuildReport = typeof BuildReport.Type;
 /** `session`: the round's conversation with the builder, named by the starter (see `BuildBrief`). */
 const Held = Schema.Struct({ask: BuildAsk, settings: Settings, session: Schema.String});
 type Held = typeof Held.Type;
+
 const Read = Schema.Struct({
 	...Held.fields,
 	ticket: Ticket,
 	/** The ticket's criteria, at least one: the gate let no other ticket through. */
 	criteria: Schema.NonEmptyArray(Criterion),
 });
+
 const Made = Schema.Struct({...Read.fields, copied: Copied});
 type Made = typeof Made.Type;
 const Done = Schema.Struct({...Made.fields, built: HeldBuilt, ran: Ran, runs: Schema.Finite});
@@ -187,6 +191,7 @@ const blank: BuildReport = {
 	runs: 0,
 	problems: [],
 };
+
 const end = (s: Held, outcome: BuildOutcome, report: Partial<BuildReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],
@@ -278,7 +283,10 @@ export const build = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readTicket({ticket: m.ask.ticket, number: m.ask.number});
 			return [
 				{ask: m.ask, settings: m.settings, session: m.session, phase: "reading", asked},
@@ -291,11 +299,16 @@ export const build = defineMachine({
 				s.phase === "copying" ||
 				s.phase === "pushing" ||
 				s.phase === "opening"
-			)
+			) {
 				return [s, [s.asked]];
-			if (s.phase !== "building") return stay(s);
+			}
+
+			if (s.phase !== "building") {
+				return stay(s);
+			}
+
 			// The run that was on is gone with the process. Start it again, once, on the copy as it stands.
-			if (s.run >= MAX_RUNS)
+			if (s.run >= MAX_RUNS) {
 				return end(
 					s,
 					{kind: "stuck", why: "over_budget"},
@@ -304,14 +317,23 @@ export const build = defineMachine({
 						problems: [`the builder was cut off ${s.run} times, and is not started again`],
 					},
 				);
+			}
+
 			return [{...s, run: s.run + 1}, []];
 		},
 
 		build_ticket_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const ticket = m.value;
 			const gate = buildGate(ticket);
-			if (gate.answer === "stop") return end(s, gate.outcome, {pr: openOf(ticket)?.url ?? null});
+
+			if (gate.answer === "stop") {
+				return end(s, gate.outcome, {pr: openOf(ticket)?.url ?? null});
+			}
+
 			const asked = copyTree({
 				ticket: s.ask.ticket,
 				number: s.ask.number,
@@ -352,14 +374,20 @@ export const build = defineMachine({
 					})
 				: stay(s),
 		build_failed: (s, m): Step => {
-			if (!isRun(s, m)) return stay(s);
+			if (!isRun(s, m)) {
+				return stay(s);
+			}
+
 			const base = {ran: m.ran, runs: s.run};
-			if (m.why === "over_budget")
+
+			if (m.why === "over_budget") {
 				return end(
 					s,
 					{kind: "stuck", why: "over_budget"},
 					{...base, problems: [`the builder reached its limit of ${s.settings.budget} dollars`]},
 				);
+			}
+
 			const problem =
 				m.why === "misfit"
 					? "what the builder handed back does not read as a form"
@@ -368,7 +396,10 @@ export const build = defineMachine({
 		},
 
 		build_push_ok: (s, m): Step => {
-			if (s.phase !== "pushing") return stay(s);
+			if (s.phase !== "pushing") {
+				return stay(s);
+			}
+
 			const done = doneOf(s);
 			const pushed = m.value;
 			const report = {
@@ -379,9 +410,10 @@ export const build = defineMachine({
 				runs: s.runs,
 			};
 			const open = openOf(s.ticket);
+
 			if (!pushed.changed) {
 				// Nothing new: the open pull request stands as it was. With none, there is nothing to open one on.
-				if (open === null)
+				if (open === null) {
 					return end(
 						s,
 						{kind: "stuck", why: "no_change"},
@@ -392,6 +424,8 @@ export const build = defineMachine({
 							],
 						},
 					);
+				}
+
 				return end(
 					s,
 					{kind: "done", part: false, pr: open.url, head: pushed.head, changed: false},
@@ -401,6 +435,7 @@ export const build = defineMachine({
 					},
 				);
 			}
+
 			const asked = openPr({
 				ticket: s.ask.ticket,
 				number: s.ask.number,

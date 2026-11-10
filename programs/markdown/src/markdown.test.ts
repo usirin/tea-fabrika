@@ -15,6 +15,7 @@ import {CodeBlock, keyed, MarkdownWindow} from "./window.tsx";
 
 const t = (value: string) => ({type: "text", value}) as const;
 const blocksOf = (text: string) => Root.fromMarkdown(text).children;
+
 /** The window's HTML for a text, as React draws it. */
 const drawn = (text: string) =>
 	renderToStaticMarkup(
@@ -225,9 +226,17 @@ describe("markdown", () => {
 					{},
 					{id: "markdown:test", storage: memoryStorage()},
 				);
-				if (started.kind !== "running") return yield* Effect.die("markdown did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("markdown did not start");
+				}
+
 				const view = viewOf(markdown);
-				if (view === undefined) return yield* Effect.die("markdown has no view");
+
+				if (view === undefined) {
+					return yield* Effect.die("markdown has no view");
+				}
+
 				const seen = yield* started.run.machines.page.changes.pipe(
 					Stream.filter((s) => s !== null),
 					Stream.map(view.of),
@@ -259,11 +268,22 @@ describe("markdown", () => {
 					{},
 					{id: "markdown:test", storage: memoryStorage()},
 				);
-				if (started.kind !== "running") return yield* Effect.die("markdown did not start");
-				for (const text of texts) yield* tell(started.run, "text", text);
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("markdown did not start");
+				}
+
+				for (const text of texts) {
+					yield* tell(started.run, "text", text);
+				}
+
 				started.close("text");
 				const early = yield* started.run.ended.pipe(Effect.timeoutOption("200 millis"));
-				if (early._tag === "Some") return {ended: early.value.kind, by: "close"};
+
+				if (early._tag === "Some") {
+					return {ended: early.value.kind, by: "close"};
+				}
+
 				yield* tell(started.run, "quit", {});
 				return {ended: (yield* started.run.ended).kind, by: "quit"};
 			}).pipe(Effect.scoped),

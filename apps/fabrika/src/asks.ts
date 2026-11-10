@@ -106,9 +106,16 @@ const decodeMarks = Schema.decodeUnknownExit(Schema.fromJsonString(Marks));
 
 /** Read back the marks a host kept, from the file's text, or `null`: there is no file. */
 export const readMarks = (text: string | null): KeptMarks => {
-	if (text === null) return {kind: "none"};
+	if (text === null) {
+		return {kind: "none"};
+	}
+
 	const exit = decodeMarks(text, {onExcessProperty: "error"});
-	if (Exit.isSuccess(exit)) return {kind: "read", marks: exit.value};
+
+	if (Exit.isSuccess(exit)) {
+		return {kind: "read", marks: exit.value};
+	}
+
 	const failure = Cause.squash(exit.cause);
 	return {kind: "refused", why: failure instanceof Error ? failure.message : String(failure)};
 };
@@ -252,7 +259,8 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 		.flatMap((ticket): Waiting[] => {
 			const head = headOf(ticket.timeline, now);
 			const of = {ticket: ticket.number, title: ticket.title};
-			if (head._tag === "asks")
+
+			if (head._tag === "asks") {
 				return head.asks.map((a) => ({
 					...of,
 					key: `${ticket.number}/${a.ask}`,
@@ -260,7 +268,12 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 					kind: "ask",
 					at: a.at,
 				}));
-			if (head._tag !== "stuck") return [];
+			}
+
+			if (head._tag !== "stuck") {
+				return [];
+			}
+
 			const ended = ticket.timeline.findLast((e) => e.fact.type === "ended");
 			const run = ended?.fact.type === "ended" ? ended.fact.run : "run";
 			return [
@@ -305,7 +318,11 @@ export const keysOf = (now: AsksNow): ReadonlySet<string> =>
 export const noticeOf = (fresh: readonly [Ask, ...Ask[]]): {title: string; body: string} => {
 	const [first, ...rest] = fresh;
 	const said = (a: Ask) => (a.kind === "stuck" ? `stuck: ${a.what}` : a.what);
-	if (rest.length === 0) return {title: `#${first.ticket} ${first.title}`, body: said(first)};
+
+	if (rest.length === 0) {
+		return {title: `#${first.ticket} ${first.title}`, body: said(first)};
+	}
+
 	return {
 		title: `${fresh.length} new asks`,
 		body: fresh.map((a) => `#${a.ticket} ${said(a)}`).join("\n"),
@@ -323,14 +340,23 @@ const loadCell = (cmd: ReturnType<typeof load>) =>
 		const ledger = yield* Ledger;
 		const entries: Entry[] = [];
 		let last = cmd.after;
+
 		for (;;) {
 			const page = yield* ledger.read(last, PAGE, ROOT);
+
 			for (const row of page) {
 				const read = readRow(row);
-				if (read.kind === "entry") entries.push(read.entry);
+
+				if (read.kind === "entry") {
+					entries.push(read.entry);
+				}
 			}
+
 			last = page.at(-1)?.pos ?? last;
-			if (page.length < PAGE) return {entries, last};
+
+			if (page.length < PAGE) {
+				return {entries, last};
+			}
 		}
 	}).pipe(Effect.mapError((e) => ({_tag: "unreachable" as const, why: e.message})));
 

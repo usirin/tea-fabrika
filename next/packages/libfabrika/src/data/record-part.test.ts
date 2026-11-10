@@ -12,6 +12,7 @@ import {nodeSql} from "./sqlite.ts";
 import type {SpanRow} from "./trace.ts";
 
 type Lookup = {_tag: "found"; content: unknown} | {_tag: "absent"; rolled: boolean};
+
 type Part = {
 	write: (
 		rows: ReadonlyArray<{span: SpanRow; content: string | null}>,
@@ -31,6 +32,7 @@ const SEED = 119120;
 const pageBoundary: [number, string, number] = [503, "private failure", 42];
 const rollAtCap: [number[], number, number] = [[1, 2], 1000, 0];
 afterAll(() => rmSync(home, {recursive: true, force: true}));
+
 const span = (n: number): SpanRow => ({
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	spanId: n.toString(16).padStart(16, "0"),
@@ -60,6 +62,7 @@ describe("P12 single record part", () => {
 							const file = join(home, `page-${total}-${at}.sqlite`);
 							rmSync(file, {force: true});
 							let db = new DatabaseSync(file);
+
 							try {
 								let part: Part = recordPart(nodeSql(db), {_tag: "spans"}, 0, 1_000_000_000);
 								const rows = Array.from({length: total}, (_, n) => ({
@@ -111,6 +114,7 @@ describe("P12 single record part", () => {
 							let size = 0;
 							const inner = nodeSql(a);
 							const sql: Sql = {...inner, size: () => size};
+
 							try {
 								const first: Part = recordPart(sql, {_tag: "spans"}, index, cap);
 								const next: Part = recordPart(

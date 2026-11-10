@@ -31,7 +31,10 @@ describe("a lane, on what the real agents answered", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllEnvs();
-		for (const dir of made.splice(0)) rmSync(dir, {recursive: true, force: true});
+
+		for (const dir of made.splice(0)) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	// P16

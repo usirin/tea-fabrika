@@ -33,27 +33,40 @@ import {Answer} from "../transport/index.ts";
 
 let Door: typeof import("@kampus/libfabrika/door").Door;
 let Id: typeof import("../id.ts");
+
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
 	Id = await vi.importActual<typeof Id>("../id.ts");
 });
+
 const checks = {seed: 119120, numRuns: 20};
 const folder = mkdtempSync(join(tmpdir(), "p17-revoke-"));
 const opened: DatabaseSync[] = [];
+
 afterAll(() => {
-	for (const db of opened) if (db.isOpen) db.close();
+	for (const db of opened) {
+		if (db.isOpen) {
+			db.close();
+		}
+	}
+
 	rmSync(folder, {recursive: true, force: true});
 });
+
 const url = "https://fabrika.test/entry/p17",
 	sentAt = "2026-11-08T04:00:00.000Z";
+
 const person = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const processes = {
 	counter: "process_01m6v5270hetdrt4r8h9vvjwjs",
 	notes: "process_01m6v5270hetdrt4r8h9vvjwjt",
 };
+
 const Input = Schema.TaggedUnion({add: {n: Schema.Int}, save: {text: Schema.String}});
 const Fact = Schema.TaggedStruct("saved", {text: Schema.String});
+
 // The pre-P17 log shape, independent of the current door's input encoder.
 const LegacyReceived = Schema.TaggedStruct("received", {
 	method: Schema.String,
@@ -64,17 +77,21 @@ const LegacyReceived = Schema.TaggedStruct("received", {
 	spanId: Schema.String,
 	input: Schema.Json,
 });
+
 const u32 = (n: number) => {
 	const bytes = Buffer.alloc(4);
 	bytes.writeUInt32BE(n);
 	return bytes;
 };
+
 const field = (value: string | Uint8Array) => {
 	const bytes = Buffer.from(value);
 	return Buffer.concat([u32(bytes.length), bytes]);
 };
+
 const web = <A>(call: () => Promise<A>) =>
 	Effect.tryPromise({try: call, catch: () => new Error("test crypto failed")});
+
 const key = Effect.fnUntraced(function* () {
 	const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
 	const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
@@ -118,7 +135,9 @@ const key = Effect.fnUntraced(function* () {
 			),
 	};
 });
+
 let homes = 0;
+
 const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown> = Input) {
 	const root = yield* key(),
 		old = yield* key(),
@@ -210,8 +229,10 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 	};
 	return {root, old, other, first, deliveries, notices, controls, layers, storage};
 });
+
 type World = Effect.Success<ReturnType<typeof world>>;
 type DoorService = typeof Door.Service;
+
 const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
 	const client = yield* door.connect(),
 		nonce = yield* door.challenge(client);
@@ -232,6 +253,7 @@ const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], t
 		trusted: {url, tab, name: k.fingerprint},
 	};
 });
+
 const hello = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
 	const hello = yield* proof(door, k, tab);
 	return {
@@ -239,6 +261,7 @@ const hello = Effect.fnUntraced(function* (door: DoorService, k: World["old"], t
 		result: yield* door.initialize(hello.client, hello.params, hello.trusted),
 	};
 });
+
 const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: string) {
 	const text = revokeText({
 		id,
@@ -250,6 +273,7 @@ const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: str
 	});
 	expect((yield* door.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 });
+
 const setup = Effect.fnUntraced(function* (w: World) {
 	const a = yield* Door.pipe(Effect.provide(w.layers().layer));
 	const b = yield* Door.pipe(Effect.provide(w.layers().layer));
@@ -276,6 +300,7 @@ const setup = Effect.fnUntraced(function* (w: World) {
 	expect(other.result._tag).toBe("online");
 	return {a, b, old: old.client, other: other.client};
 });
+
 const request = (target: "counter" | "notes", id: string, text: string) => ({
 	pid: processes[target],
 	letter: id,
@@ -283,6 +308,7 @@ const request = (target: "counter" | "notes", id: string, text: string) => ({
 	sentAt,
 	seen: 0,
 });
+
 const send = (
 	door: DoorService,
 	client: Parameters<DoorService["route"]>[0],
@@ -294,11 +320,17 @@ const send = (
 	w.controls.letter = id;
 	return door.route(client, "process.send", request(target, id, text));
 };
+
 const rows = (w: World, stream: string, saved = w.first) =>
 	Ledger.use((l) => Stream.runCollect(l.read(stream, 0))).pipe(Effect.provide(w.layers(saved).env));
+
 const last = (w: World) => {
 	const incoming = w.deliveries.at(-1);
-	if (!incoming) throw new Error("door did not deliver an input");
+
+	if (!incoming) {
+		throw new Error("door did not deliver an input");
+	}
+
 	return incoming;
 };
 
@@ -381,13 +413,16 @@ describe("P12, door laws retained after the library move", () => {
 	it("a grant target matches both the waiting fingerprint and its code", async () => {
 		await fc.assert(grantTarget(), checks);
 	});
+
 	for (const field of ["fingerprint", "code"] as const)
-		// Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
+	// Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
+	{
 		it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
 			const result = await fc.check(grantTarget(field), {...checks, endOnFailure: true});
 			expect(result.failed).toBe(true);
 			expect(result.errorInstance).toMatchObject({name: "AssertionError"});
 		});
+	}
 });
 
 describe("P17a, revoke stops writes at the final door", () => {
@@ -474,10 +509,18 @@ describe("P17a, revoke stops writes at the final door", () => {
 						const door = yield* Door.pipe(Effect.provide(w.layers(w.first, gate).layer));
 						const pending = yield* Effect.forkChild(Effect.result(hello(door, w.old, tab)));
 						yield* Deferred.await(entered);
-						if (revokeFirst) yield* remove(d.b, w, "revoke");
+
+						if (revokeFirst) {
+							yield* remove(d.b, w, "revoke");
+						}
+
 						yield* Deferred.succeed(release, undefined);
 						const result = yield* Fiber.join(pending);
-						if (!revokeFirst) yield* remove(d.b, w, "revoke");
+
+						if (!revokeFirst) {
+							yield* remove(d.b, w, "revoke");
+						}
+
 						const revoke = (yield* rows(w, "door/members")).at(-1);
 						expect(revoke?._tag).toBe("revoked");
 						const hellos = (yield* rows(w, "door/hellos")).filter(
@@ -578,6 +621,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 									const bytes = ArrayBuffer.isView(data)
 										? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
 										: new Uint8Array(data);
+
 									if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
 										paused = true;
 										return Effect.runPromise(
@@ -587,14 +631,20 @@ describe("P17a, revoke stops writes at the final door", () => {
 											),
 										);
 									}
+
 									return digest(algorithm, data);
 								});
+
 							try {
 								const pending = yield* Effect.forkChild(
 									Effect.result(send(d.a, d.old, w, target, marker, token)),
 								);
 								yield* Deferred.await(entered);
-								if (revokeFirst) yield* remove(d.b, w, "revoke");
+
+								if (revokeFirst) {
+									yield* remove(d.b, w, "revoke");
+								}
+
 								yield* Deferred.succeed(release, undefined);
 								const result = yield* Fiber.join(pending);
 								const refused = Result.isFailure(result)
@@ -627,7 +677,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 								d = yield* setup(w);
 							w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
 								const placing = yield* d.a.accept(incoming);
-								if (placing._tag !== "placed") return Sent.cases.refused.make({why: placing.why});
+
+								if (placing._tag !== "placed") {
+									return Sent.cases.refused.make({why: placing.why});
+								}
+
 								return Sent.cases.accepted.make({rev: placing.rev, pos: placing.pos});
 							});
 							const marker = `settled-retry-${token}`;
@@ -646,6 +700,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 									const bytes = ArrayBuffer.isView(data)
 										? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
 										: new Uint8Array(data);
+
 									if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
 										paused = true;
 										return Effect.runPromise(
@@ -655,18 +710,28 @@ describe("P17a, revoke stops writes at the final door", () => {
 											),
 										);
 									}
+
 									return digest(algorithm, data);
 								});
+
 							try {
 								const pending = yield* Effect.forkChild(
 									Effect.result(send(d.a, d.old, w, target, marker, text)),
 								);
 								// Request hashing follows online(); the settled reply is still pending.
 								yield* Deferred.await(entered);
-								if (revokeFirst) yield* remove(d.b, w, "revoke");
+
+								if (revokeFirst) {
+									yield* remove(d.b, w, "revoke");
+								}
+
 								yield* Deferred.succeed(release, undefined);
 								const result = yield* Fiber.join(pending);
-								if (!revokeFirst) yield* remove(d.b, w, "revoke");
+
+								if (!revokeFirst) {
+									yield* remove(d.b, w, "revoke");
+								}
+
 								const answer = Result.isFailure(result)
 									? Schema.is(NotGranted)(result.failure)
 										? {why: "not_granted"}
@@ -757,8 +822,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 										),
 									);
 									expect(placing._tag).toBe("placed");
-									if (placing._tag !== "placed")
+
+									if (placing._tag !== "placed") {
 										return yield* Effect.die(new Error("legacy inbox seed was refused"));
+									}
+
 									return Sent.cases.accepted.make({rev: placing.rev, pos: placing.pos});
 								}),
 							).pipe(Effect.provide(w.layers().env));
@@ -789,6 +857,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 							expect(client.result._tag).toBe("online");
 							const entries = saved.sql.exec("SELECT * FROM entries ORDER BY rev");
 							const bindings = saved.sql.exec("SELECT * FROM door_bindings ORDER BY id");
+
 							for (let retry = 0; retry < retries; retry++) {
 								// Plant: rebuild this old row with door and n before the duplicate check.
 								const answer = yield* Effect.result(
@@ -826,18 +895,26 @@ describe("P17a, revoke stops writes at the final door", () => {
 						Effect.gen(function* () {
 							const w = yield* world(),
 								d = yield* setup(w);
+
 							for (let n = 0; n < before; n++) {
 								expect((yield* send(d.a, d.old, w, target, `before-${n}`, text))._tag).toBe("ok");
 								expect((yield* d.a.accept(last(w)))._tag).toBe("placed");
 							}
+
 							yield* TestClock.setTime(500);
 							yield* remove(d.b, w, "revoke");
-							if (!ignoreClose) yield* d.a.disconnect(d.old);
-							for (let n = 0; n < after; n++)
+
+							if (!ignoreClose) {
+								yield* d.a.disconnect(d.old);
+							}
+
+							for (let n = 0; n < after; n++) {
 								expect(yield* send(d.a, d.old, w, target, `late-${n}`, text)).toMatchObject({
 									_tag: "refused",
 									why: "not_granted",
 								});
+							}
+
 							expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
 								Array.from({length: before}, (_, n) => `before-${n}`),
 							);
@@ -865,18 +942,33 @@ describe("P17a, revoke stops writes at the final door", () => {
 								d = yield* setup(w);
 							expect((yield* send(d.a, d.old, w, target, "delayed", text))._tag).toBe("ok");
 							const incoming = last(w);
-							if (duplicate) expect((yield* d.a.accept(incoming))._tag).toBe("placed");
-							if (revokeFirst) yield* remove(d.b, w, "revoke");
-							if (reopen) w.first.db.close();
+
+							if (duplicate) {
+								expect((yield* d.a.accept(incoming))._tag).toBe("placed");
+							}
+
+							if (revokeFirst) {
+								yield* remove(d.b, w, "revoke");
+							}
+
+							if (reopen) {
+								w.first.db.close();
+							}
+
 							const door = reopen
 								? yield* Door.pipe(Effect.provide(w.layers(w.storage()).layer))
 								: d.a;
 							const result = yield* Effect.result(door.accept(incoming));
 							expect(Result.isFailure(result)).toBe(revokeFirst);
-							if (revokeFirst && Result.isFailure(result))
+
+							if (revokeFirst && Result.isFailure(result)) {
 								expect(result.failure).toMatchObject({_tag: "NotGranted"});
-							if (!revokeFirst && Result.isSuccess(result))
+							}
+
+							if (!revokeFirst && Result.isSuccess(result)) {
 								expect(result.success._tag).toBe("placed");
+							}
+
 							const saved = reopen ? w.storage() : w.first;
 							const stored = yield* Ledger.use((l) =>
 								Stream.runCollect(l.read(`${processes[target]}/inbox`, 0)),
@@ -908,7 +1000,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 							yield* d.a
 								.signer(parent, processes[target], "saved")
 								.pipe(Effect.provideService(SignRequest, {id}));
-							if (reopen) w.first.db.close();
+
+							if (reopen) {
+								w.first.db.close();
+							}
+
 							const saved = reopen ? w.storage() : w.first;
 							const door = reopen ? yield* Door.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
 							const remover = reopen
@@ -926,6 +1022,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 									const bytes = ArrayBuffer.isView(data)
 										? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
 										: new Uint8Array(data);
+
 									if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
 										paused = true;
 										return Effect.runPromise(
@@ -935,8 +1032,10 @@ describe("P17a, revoke stops writes at the final door", () => {
 											),
 										);
 									}
+
 									return digest(algorithm, data);
 								});
+
 							try {
 								const pending = yield* Effect.forkChild(
 									Effect.result(
@@ -951,12 +1050,19 @@ describe("P17a, revoke stops writes at the final door", () => {
 									),
 								);
 								yield* Deferred.await(entered);
-								if (revokeFirst) yield* remove(remover, w, "revoke");
+
+								if (revokeFirst) {
+									yield* remove(remover, w, "revoke");
+								}
+
 								yield* Deferred.succeed(release, undefined);
 								const result = yield* Fiber.join(pending);
 								expect(Result.isFailure(result)).toBe(revokeFirst);
-								if (revokeFirst && Result.isFailure(result))
+
+								if (revokeFirst && Result.isFailure(result)) {
 									expect(result.failure).toMatchObject({_tag: "NotGranted"});
+								}
+
 								expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
 							} finally {
 								spy.mockRestore();
@@ -986,10 +1092,13 @@ describe("P17a, revoke stops writes at the final door", () => {
 								d = yield* setup(w);
 							const pending = challengeFirst ? yield* proof(d.a, w.old, "before-revoke") : null;
 							yield* remove(d.b, w, "revoke");
-							if (pending !== null)
+
+							if (pending !== null) {
 								expect(
 									yield* d.a.initialize(pending.client, pending.params, pending.trusted),
 								).toMatchObject({_tag: "refused", why: "not_granted"});
+							}
+
 							for (let n = 0; n < attempts; n++) {
 								expect((yield* hello(d.a, w.old, `reconnect-${n}`)).result).toMatchObject({
 									_tag: "refused",
@@ -998,6 +1107,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								expect((yield* send(d.b, d.other, w, target, `live-${n}`, text))._tag).toBe("ok");
 								expect((yield* d.b.accept(last(w)))._tag).toBe("placed");
 							}
+
 							const textGrant = grantText({
 								id: "regrant",
 								key: w.old.raw,
@@ -1044,6 +1154,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 								_tag: "Failure",
 								failure: {_tag: "LedgerError", why: "bad_row"},
 							});
+
 							for (const changed of [
 								{...incoming, id: "another-letter"},
 								{
@@ -1067,6 +1178,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 										(Result.isSuccess(result) && result.success._tag === "refused"),
 								).toBe(true);
 							}
+
 							expect(yield* rows(w, `${processes[target]}/inbox`)).toEqual([]);
 							expect((yield* d.a.accept(incoming))._tag).toBe("placed");
 						}).pipe(Effect.provide(TestClock.layer())),

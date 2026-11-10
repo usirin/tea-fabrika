@@ -29,6 +29,7 @@ type Msg = MsgOf<Machine>;
 type LinkStep = Step<Link, Msg, LinkCmd>;
 
 const OURS = 1;
+
 const SIDES: readonly LinkCtx[] = [
 	{side: "host", ours: OURS},
 	{side: "app", ours: OURS},
@@ -37,6 +38,7 @@ const SIDES: readonly LinkCtx[] = [
 /** A Cmd's failed answer. The link's Cmds declare no errors, so a malformed answer is the one left. */
 const failed = <T extends string, C>(type: T, cmd: C) =>
 	fc.constant({type, cmd, error: {_tag: "malformed_result", issues: []} as const, at: 0});
+
 const [greeting, delivering, refusing, dropping] = [
 	greet({version: OURS}),
 	deliver({m: null}),
@@ -63,11 +65,13 @@ const table: MsgArbitraryTable<Msg> = {
 	drop_ok: fc.constant(drop.ok(dropping, null, 0)),
 	drop_err: failed(drop.errType, dropping),
 };
+
 /** Mostly hellos and lines, so most lists come up before they end. */
 const lists = fc.array(arbMsg(table, {weights: {hello: 4, line: 4, bad: 1, ended: 1}}), {
 	maxLength: 16,
 	size: "max",
 });
+
 const OPTS = {numRuns: 300, seed: 1};
 
 interface Law {
@@ -80,7 +84,9 @@ interface Law {
 const everyStep = (name: string, holds: (step: LinkStep) => boolean): Law => ({
 	name,
 	check: (machine) => {
-		for (const ctx of SIDES) propertyInvariant(machine, ctx, lists, holds, OPTS);
+		for (const ctx of SIDES) {
+			propertyInvariant(machine, ctx, lists, holds, OPTS);
+		}
 	},
 });
 
@@ -109,7 +115,11 @@ const deliversOnlyUp = everyStep(
 	"a line is handed on only while the link is up, and as it came",
 	({prev, msg, next, cmds}) => {
 		const handed = cmds.filter((c) => c.type === "deliver");
-		if (handed.length === 0) return true;
+
+		if (handed.length === 0) {
+			return true;
+		}
+
 		return (
 			prev.at === "up" &&
 			next.at === "up" &&
@@ -133,10 +143,14 @@ const appGreets: Law = {
 	check: (machine) => {
 		const [app, appSays] = machine.init(null, {side: "app", ours: OURS});
 		const [host, hostSays] = machine.init(null, {side: "host", ours: OURS});
-		if (app.at !== "hello" || !same(appSays, [greet({version: OURS})]))
+
+		if (app.at !== "hello" || !same(appSays, [greet({version: OURS})])) {
 			throw new Error(`the app starts ${JSON.stringify([app, appSays])}`);
-		if (host.at !== "hello" || hostSays.length > 0)
+		}
+
+		if (host.at !== "hello" || hostSays.length > 0) {
 			throw new Error(`the host starts ${JSON.stringify([host, hostSays])}`);
+		}
 	},
 };
 
@@ -158,7 +172,10 @@ const comesUp = everyStep(
 const refusesOther = everyStep(
 	"a hello in another version, while it waits for one, is refused plainly and the socket closed",
 	({prev, msg, next, cmds}) => {
-		if (prev.at !== "hello" || msg.type !== "hello" || msg.version === prev.ours) return true;
+		if (prev.at !== "hello" || msg.type !== "hello" || msg.version === prev.ours) {
+			return true;
+		}
+
 		const types = cmds.map((c) => c.type);
 		return (
 			next.at === "refused" &&
@@ -180,8 +197,14 @@ const deliversLines = everyStep(
 const closesSocket = everyStep(
 	"a link it closes itself, for a bad line or a line out of turn, has its socket closed; a hang-up closes it with nothing to say",
 	({prev, msg, next, cmds}) => {
-		if (over(prev) || next.at !== "closed") return true;
-		if (msg.type === "ended") return cmds.length === 0 && next.why === msg.why;
+		if (over(prev) || next.at !== "closed") {
+			return true;
+		}
+
+		if (msg.type === "ended") {
+			return cmds.length === 0 && next.why === msg.why;
+		}
+
 		return same(cmds, [drop({why: next.why})]);
 	},
 );
@@ -214,11 +237,13 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = linkMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...linkMachine,
 	update: {...real, ...update},
 });
+
 const ctxOf = (s: Link): LinkCtx => ({side: s.side, ours: s.ours});
 
 const PLANTS = {

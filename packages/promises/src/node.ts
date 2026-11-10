@@ -73,10 +73,12 @@ export const readEntries = (root: string) =>
 		const dir = path.join(root, FOLDER);
 		const names = (yield* fs.readDirectory(dir)).filter((n) => n.endsWith(".json")).sort();
 		const out: [string, Entry][] = [];
+
 		for (const name of names) {
 			const id = name.slice(0, -".json".length);
 			out.push([id, yield* decode(id, yield* fs.readFileString(path.join(dir, name)))]);
 		}
+
 		return out;
 	});
 
@@ -87,10 +89,12 @@ export const readEntriesAt = (root: string, ref: string) =>
 			Effect.catch(() => Effect.succeed("")),
 		);
 		const out = new Map<string, Entry>();
+
 		for (const name of listed.split("\n").filter((n) => n.endsWith(".json"))) {
 			const id = name.slice(0, -".json".length);
 			out.set(id, yield* decode(id, yield* git(root, ["show", `${ref}:${FOLDER}/${name}`])));
 		}
+
 		return out;
 	});
 
@@ -100,6 +104,7 @@ export const printsNow = (root: string, pieces: readonly Piece[]) =>
 		const fs = yield* FileSystem.FileSystem;
 		const path = yield* Path.Path;
 		const out: Record<Piece, string | null> = {};
+
 		for (const piece of pieces) {
 			const {file, name} = splitPiece(piece);
 			const source = yield* fs
@@ -108,6 +113,7 @@ export const printsNow = (root: string, pieces: readonly Piece[]) =>
 			const found = source === null ? null : textOf(source, name);
 			out[piece] = found === null ? null : printOf(found);
 		}
+
 		return out;
 	});
 
@@ -120,7 +126,11 @@ export const runCheck = (root: string, command: string, plant: string | null) =>
 		const ms = Math.round(performance.now() - started);
 		const last = r.out.trim().split("\n").at(-1) ?? "";
 		const verdict = decodeVerdict(last);
-		if (Exit.isSuccess(verdict)) return {kind: "verdict", verdict: verdict.value, ms} satisfies Ran;
+
+		if (Exit.isSuccess(verdict)) {
+			return {kind: "verdict", verdict: verdict.value, ms} satisfies Ran;
+		}
+
 		const said = (r.err.trim() || r.out.trim()).split("\n").slice(-3).join(" / ");
 		return {kind: "none", why: `exit ${r.code}${said === "" ? "" : `, ${said}`}`, ms} satisfies Ran;
 	});
@@ -131,6 +141,7 @@ export const judgeAll = (root: string, base: string | null) =>
 		const entries = yield* readEntries(root);
 		const before = base === null ? null : yield* readEntriesAt(root, base);
 		const judged: Judged[] = [];
+
 		for (const [id, entry] of entries) {
 			const facts: Facts = {
 				id,
@@ -142,6 +153,7 @@ export const judgeAll = (root: string, base: string | null) =>
 			};
 			judged.push(judge(facts));
 		}
+
 		const ids = new Set(entries.map(([id]) => id));
 		const removed: Removed[] = [...(before ?? new Map<string, Entry>())]
 			.filter(([id]) => !ids.has(id))
@@ -160,22 +172,39 @@ export const confirm = (root: string, id: string) =>
 		const path = yield* Path.Path;
 		const all = yield* readEntries(root);
 		const entry = all.find(([k]) => k === id)?.[1];
-		if (entry === undefined) return yield* Effect.fail(refused(`no promise named ${id}`));
+
+		if (entry === undefined) {
+			return yield* Effect.fail(refused(`no promise named ${id}`));
+		}
+
 		const files = [...new Set(piecesOf(entry).map((p) => splitPiece(p).file))];
 		const dirty = (yield* git(root, ["status", "--porcelain", "--", ...files])).trim();
-		if (dirty !== "")
+
+		if (dirty !== "") {
 			return yield* Effect.fail(
 				refused(`commit these first, so the confirmed commit holds the code checked:\n${dirty}`),
 			);
+		}
+
 		const now = yield* printsNow(root, piecesOf(entry));
 		const check = yield* runCheck(root, entry.check, null);
 		const plant = yield* runCheck(root, entry.check, entry.plant.name);
 		const commit = (yield* git(root, ["rev-parse", "HEAD"])).trim();
 		const prints: Record<string, string> = {};
-		for (const [piece, print] of Object.entries(now)) if (print !== null) prints[piece] = print;
+
+		for (const [piece, print] of Object.entries(now)) {
+			if (print !== null) {
+				prints[piece] = print;
+			}
+		}
+
 		const next: Entry = {...entry, confirmed: {commit, prints}};
 		const j = judge({id, entry: next, before: "unknown", now, check, plant});
-		if (!j.green) return {written: false, judged: j};
+
+		if (!j.green) {
+			return {written: false, judged: j};
+		}
+
 		yield* fs.writeFileString(
 			path.join(root, FOLDER, `${id}.json`),
 			`${JSON.stringify(next, null, "\t")}\n`,

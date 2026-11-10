@@ -41,6 +41,7 @@ const made = (area: number, name: string, suggested?: Made["suggested"]): Fact =
 	name,
 	...(suggested === undefined ? {} : {suggested}),
 });
+
 const renamed = (area: number, name: string): Fact => ({_tag: "area_renamed", area, name});
 const merged = (area: number, into: number): Fact => ({_tag: "area_merged", area, into});
 
@@ -116,25 +117,37 @@ const model = (facts: readonly Fact[]) => {
 	let refused = 0;
 	const taken = (name: string, but?: number) =>
 		[...live].some(([n, other]) => n !== but && other.toLowerCase() === name.toLowerCase());
+
 	for (const fact of facts) {
 		switch (fact._tag) {
 			case "area_made":
-				if (fact.area !== live.size + into.size + 1 || taken(fact.name)) refused++;
-				else live.set(fact.area, fact.name);
+				if (fact.area !== live.size + into.size + 1 || taken(fact.name)) {
+					refused++;
+				} else {
+					live.set(fact.area, fact.name);
+				}
+
 				break;
 			case "area_renamed":
-				if (!live.has(fact.area) || taken(fact.name, fact.area)) refused++;
-				else live.set(fact.area, fact.name);
+				if (!live.has(fact.area) || taken(fact.name, fact.area)) {
+					refused++;
+				} else {
+					live.set(fact.area, fact.name);
+				}
+
 				break;
 			case "area_merged":
-				if (fact.area === fact.into || !live.has(fact.area) || !live.has(fact.into)) refused++;
-				else {
+				if (fact.area === fact.into || !live.has(fact.area) || !live.has(fact.into)) {
+					refused++;
+				} else {
 					live.delete(fact.area);
 					into.set(fact.area, fact.into);
 				}
+
 				break;
 		}
 	}
+
 	return {live, into, refused};
 };
 
@@ -229,12 +242,21 @@ describe("areasOf (a1)", () => {
 /** Follows `into` from `n` at most `into.size` steps: a live area, or null when it never gets to one. */
 const walk = (areas: Areas, n: number): number | null => {
 	let at = n;
+
 	for (let steps = 0; steps <= areas.into.size; steps++) {
-		if (areas.live.has(at)) return at;
+		if (areas.live.has(at)) {
+			return at;
+		}
+
 		const next = areas.into.get(at);
-		if (next === undefined) return null;
+
+		if (next === undefined) {
+			return null;
+		}
+
 		at = next;
 	}
+
 	return null;
 };
 
@@ -243,9 +265,16 @@ describe("liveOf (a2)", () => {
 		fc.assert(
 			fc.property(anyHistory, (facts) => {
 				const {areas} = areasOf(entriesOf(facts));
+
 				// Checked first, by a bounded walk, so a loop fails here instead of hanging `liveOf`.
-				for (const n of areas.into.keys()) expect(walk(areas, n)).not.toBeNull();
-				for (const n of areas.live.keys()) expect(liveOf(areas, n)).toBe(n);
+				for (const n of areas.into.keys()) {
+					expect(walk(areas, n)).not.toBeNull();
+				}
+
+				for (const n of areas.live.keys()) {
+					expect(liveOf(areas, n)).toBe(n);
+				}
+
 				for (const [n, next] of areas.into) {
 					const end = liveOf(areas, n);
 					expect(areas.live.has(end)).toBe(true);
@@ -260,7 +289,10 @@ describe("liveOf (a2)", () => {
 		fc.assert(
 			fc.property(anyHistory, (facts) => {
 				const {areas} = areasOf(entriesOf(facts));
-				for (const n of areas.into.keys()) expect(walk(areas, n)).not.toBeNull();
+
+				for (const n of areas.into.keys()) {
+					expect(walk(areas, n)).not.toBeNull();
+				}
 			}),
 			{numRuns: 300},
 		);
@@ -337,11 +369,19 @@ const NO_AREAS: Areas = {live: new Map(), into: new Map()};
  */
 const wordsWanted = (tickets: readonly Ticket[], areas: Areas) => {
 	const counts = new Map<string, number>();
+
 	for (const t of tickets) {
-		if (t.state !== "open" || !t.title.includes(":")) continue;
+		if (t.state !== "open" || !t.title.includes(":")) {
+			continue;
+		}
+
 		const word = t.title.split(":")[0]?.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-		if (word !== "") counts.set(word, (counts.get(word) ?? 0) + 1);
+
+		if (word !== "") {
+			counts.set(word, (counts.get(word) ?? 0) + 1);
+		}
 	}
+
 	const names = new Set([...areas.live.values()].map((n) => n.toLowerCase()));
 	return [...counts]
 		.filter(([word, n]) => n >= 3 && !names.has(word))
@@ -450,8 +490,9 @@ describe("suggestionsOf (a5)", () => {
 		);
 		fc.assert(
 			fc.property(tickets, folders, anyAreas, (t, f, areas) => {
-				for (const s of suggestionsOf(t, f, areas))
+				for (const s of suggestionsOf(t, f, areas)) {
 					expect(Schema.is(AreaName)(suggestedName(s)), JSON.stringify(s)).toBe(true);
+				}
 			}),
 			{numRuns: 300},
 		);
@@ -591,6 +632,9 @@ describe("an area row read back (readAreaRow)", () => {
 			"broken",
 			"other",
 		]);
-		for (const r of reads) expect(r).not.toHaveProperty("kind");
+
+		for (const r of reads) {
+			expect(r).not.toHaveProperty("kind");
+		}
 	});
 });

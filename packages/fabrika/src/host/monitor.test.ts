@@ -27,6 +27,7 @@ const Seen = Schema.Struct({
 	incarnation: Schema.Number,
 	reason: Schema.String,
 });
+
 const WatcherState = Schema.Struct({
 	monitors: Monitors,
 	downs: Schema.Array(Seen),
@@ -36,6 +37,7 @@ type WatcherState = typeof WatcherState.Type;
 type RetrySub = Sub<"retries", {readonly list: readonly Retry[]}>;
 
 const monitors = update({retryMs: 50});
+
 const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
 	const r = monitors(s.monitors, m);
 	const o = r.outcome;
@@ -48,6 +50,7 @@ const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
 		[...r.cmds],
 	];
 };
+
 const watcher = defineMachine<WatcherState, MonitorMsg, MonitorCmd, RetrySub, undefined>({
 	types: {
 		model: {} as WatcherState,
@@ -100,7 +103,11 @@ const watcherProgram = (targets: readonly string[]) =>
 				);
 				const machine = yield* handle.ready;
 				yield* machine.dispatch({type: "resume"});
-				for (const target of targets) yield* machine.dispatch({type: "watch", target});
+
+				for (const target of targets) {
+					yield* machine.dispatch({type: "watch", target});
+				}
+
 				yield* serve({
 					inbox: (e) => {
 						const d = e.kind === "DOWN" ? decodeDown(e.body) : null;
@@ -113,16 +120,19 @@ const watcherProgram = (targets: readonly string[]) =>
 	});
 
 const Count = Schema.Struct({n: Schema.Number, cursor: Schema.Number});
+
 const Body = Schema.Struct({
 	crash: Schema.optional(Schema.Boolean),
 	stop: Schema.optional(Schema.Boolean),
 });
+
 const counter = defineMachine({
 	types: {model: {} as typeof Count.Type, msg: {} as {type: "inc"; rev: number}, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {n: 0, cursor: 0}, []],
 	update: {inc: (s, m) => (m.rev <= s.cursor ? [s, []] : [{n: s.n + 1, cursor: m.rev}, []])},
 });
+
 const target = defineProgram({
 	name: "target",
 	description: "Counts; crashes after a crash message; returns after a stop message.",
@@ -150,11 +160,16 @@ const target = defineProgram({
 });
 
 const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
+
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
-		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
+
+		while (!(yield* done) && Date.now() - t0 < ms) {
+			yield* sleep(20);
+		}
 	});
+
 const downsOf = Effect.map(savedState("watcher:1", WatcherState), (s) => s.state?.downs ?? []);
 
 describe("monitor", () => {
@@ -213,11 +228,13 @@ describe("monitor", () => {
 		];
 		const outcomes: MonitorOutcome[] = [];
 		let s = noMonitors;
+
 		for (const m of msgs) {
 			const r = update({retryMs: 50})(s, m);
 			s = r.monitors;
 			outcomes.push(r.outcome);
 		}
+
 		expect(outcomes.filter((o) => o !== null).map((o) => [o.kind, endedOf(o)])).toEqual([
 			["down", {target: "c", from: 3, to: 3}],
 			["gap", {target: "c", from: 4, to: 5}],
@@ -233,6 +250,7 @@ describe("monitor", () => {
 		let s = up(noMonitors, {type: "watch", target: "c"}).monitors;
 		const waits: number[] = [];
 		let at = 0;
+
 		for (let i = 1; i <= 7; i++) {
 			s = up(s, {type: "monitored", ref: `c#${i}`, how: "noproc", incarnation: null, at}).monitors;
 			const w = s.watches[0];
@@ -240,6 +258,7 @@ describe("monitor", () => {
 			at = w?.due ?? 0;
 			s = up(s, {type: "retry_due", ref: `c#${i}`}).monitors;
 		}
+
 		expect(waits).toEqual([50, 100, 200, 400, 400, 400, 400]);
 		s = up(s, {type: "monitored", ref: "c#8", how: "on", incarnation: 2, at}).monitors;
 		expect(s.watches[0]?.misses).toBe(0);
@@ -262,9 +281,14 @@ describe("monitor", () => {
 		const out = await Effect.runPromise(
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
-				for (const name of ["watcher:1", "t:1", "t:2"]) yield* ledger.register(name, "test");
+
+				for (const name of ["watcher:1", "t:1", "t:2"]) {
+					yield* ledger.register(name, "test");
+				}
+
 				yield* serve({name: "watcher:1", holder: "w", program: watcherProgram(["t:1", "t:2"])});
 				const scopes = new Map<string, Scope.Closeable>();
+
 				for (const [name, holder] of [
 					["t:1", "a"],
 					["t:1", "b"],
@@ -276,6 +300,7 @@ describe("monitor", () => {
 						Scope.provide(scope),
 					);
 				}
+
 				const on = (n: number) =>
 					Effect.map(
 						savedState("watcher:1", WatcherState),
@@ -285,7 +310,11 @@ describe("monitor", () => {
 				// A takeover: t:1's holder goes away, the other host claims it. Not a death.
 				const held = yield* ledger.lease("t:1");
 				const owner = held === null ? undefined : scopes.get(held.holder);
-				if (owner !== undefined) yield* Scope.close(owner, Exit.void);
+
+				if (owner !== undefined) {
+					yield* Scope.close(owner, Exit.void);
+				}
+
 				yield* until(
 					Effect.map(ledger.lease("t:1"), (l) => l !== null && l.holder !== held?.holder),
 				);

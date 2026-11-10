@@ -42,11 +42,15 @@ type Mod = {
 	readonly createHost: typeof realHost.createHost;
 	readonly programOf: typeof realHost.programOf;
 };
+
 const real: Mod = {createHost: realHost.createHost, programOf: realHost.programOf};
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
-	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
+	for (const d of madeDirs) {
+		rmSync(d, {recursive: true, force: true});
+	}
 });
 
 /** A copy of host-machine.ts with one mistake, imported from its own folder. Each edit matches once. */
@@ -54,11 +58,17 @@ async function plant(...edits: readonly (readonly [string, string])[]): Promise<
 	const dir = mkdtempSync(join(import.meta.dirname, ".host-laws-plant-"));
 	madeDirs.push(dir);
 	let text = readFileSync(join(import.meta.dirname, "host-machine.ts"), "utf8");
+
 	for (const [a, b] of edits) {
 		const count = text.split(a).length - 1;
-		if (count !== 1) throw new Error(`plant edit: "${a}" found ${count} times, want 1`);
+
+		if (count !== 1) {
+			throw new Error(`plant edit: "${a}" found ${count} times, want 1`);
+		}
+
 		text = text.replace(a, () => b);
 	}
+
 	writeFileSync(join(dir, "host-machine.ts"), text);
 	const mod = (await import(
 		/* @vite-ignore */ pathToFileURL(join(dir, "host-machine.ts")).href
@@ -76,6 +86,7 @@ const settingsOf = (renewEveryMs: number) => {
 	const settings = {renewEveryMs, retryMs: 50, graceMs: GRACE, retryRenewMs: AWAY_EVERY};
 	return settings;
 };
+
 const machineOf = (mod: Mod, renewEveryMs: number) => mod.createHost(settingsOf(renewEveryMs));
 type Machine = ReturnType<Mod["createHost"]>;
 
@@ -84,6 +95,7 @@ type Machine = ReturnType<Mod["createHost"]>;
 const FENCES = [1, 2, 3] as const;
 const arbFence = fc.constantFrom(...FENCES);
 const arbUntil = fc.constantFrom(500, 1000, 2000);
+
 const ENDS: readonly ProgramEnd[] = [
 	{how: "ended"},
 	{how: "crashed", why: "boom", suspect: 9},
@@ -118,6 +130,7 @@ const table: MsgArbitraryTable<HostMsg> = {
 	exited: arbRecordMsg("exited", {fence: arbFence, pos: fc.constant(5)}),
 	exit_refused: arbRecordMsg("exit_refused", {fence: arbFence}),
 };
+
 /** Every walk starts by winning the name under fence 1, so most steps are an owner's. */
 const walks = arbMsgSequence(
 	arbMsg(table, {
@@ -131,6 +144,7 @@ const walks = arbMsgSequence(
 		maxLength: 20,
 	},
 );
+
 const ctx = stubCtxThrowingProxy<undefined>();
 const holds = (s: Host) => s.phase === "owning" || s.phase === "exiting";
 
@@ -153,7 +167,11 @@ const stepLaw = (
 			walks,
 			(step) => {
 				const w = why(mod, step);
-				if (w !== null) throw new Error(w);
+
+				if (w !== null) {
+					throw new Error(w);
+				}
+
 				return true;
 			},
 			{numRuns: 300, seed: 7},
@@ -173,7 +191,10 @@ const unknownKeeps = stepLaw(
 const lostStops = stepLaw(
 	"a lost renew or a newer claim stops the program at once",
 	(mod, {prev, msg, next}) => {
-		if (prev.phase !== "owning") return null;
+		if (prev.phase !== "owning") {
+			return null;
+		}
+
 		const lost =
 			(msg.type === "renew_lost" && msg.fence === prev.fence) ||
 			(msg.type === "seen_claim" && msg.fence > prev.fence);
@@ -273,6 +294,7 @@ type Pending =
 	  }
 	| {readonly at: number; readonly kind: "takeover"; readonly ver: number}
 	| {readonly at: number; readonly kind: "alarm"; readonly ver: number};
+
 /** `n` orders events due at the same time: first pushed, first run. */
 type Event = Pending & {readonly n: number};
 
@@ -285,10 +307,12 @@ function runIn(machine: Machine, world: World): Trace {
 	/** When a tail event written at `t` reaches the host: once its network is back. */
 	const reach = (t: number) => {
 		let at = t;
+
 		for (let d = drops.find((x) => x.from <= at && at < x.from + x.len); d !== undefined;) {
 			at = d.from + d.len;
 			d = drops.find((x) => x.from <= at && at < x.from + x.len);
 		}
+
 		return at;
 	};
 
@@ -305,28 +329,44 @@ function runIn(machine: Machine, world: World): Trace {
 	const swap = (i: number, j: number) => {
 		const a = queue[i];
 		const b = queue[j];
-		if (a === undefined || b === undefined) return;
+
+		if (a === undefined || b === undefined) {
+			return;
+		}
+
 		queue[i] = b;
 		queue[j] = a;
 	};
 	const push = (e: Pending) => {
 		queue.push({...e, n: n++});
-		for (let i = queue.length - 1; i > 0 && sooner(i, (i - 1) >> 1); i = (i - 1) >> 1)
+
+		for (let i = queue.length - 1; i > 0 && sooner(i, (i - 1) >> 1); i = (i - 1) >> 1) {
 			swap(i, (i - 1) >> 1);
+		}
 	};
 	const pop = (): Event | undefined => {
 		const top = queue[0];
 		const last = queue.pop();
-		if (top === undefined || last === undefined || queue.length === 0) return top;
+
+		if (top === undefined || last === undefined || queue.length === 0) {
+			return top;
+		}
+
 		queue[0] = last;
+
 		for (let i = 0; ;) {
 			const l = 2 * i + 1;
 			const r = l + 1;
 			const m = r < queue.length && sooner(r, l) ? r : l;
-			if (m >= queue.length || !sooner(m, i)) break;
+
+			if (m >= queue.length || !sooner(m, i)) {
+				break;
+			}
+
 			swap(i, m);
 			i = m;
 		}
+
 		return top;
 	};
 
@@ -338,7 +378,10 @@ function runIn(machine: Machine, world: World): Trace {
 		ledgerEnd = to;
 		ver++;
 		push({at: ledgerEnd + 1000, kind: "alarm", ver});
-		if (takeover !== null) push({at: ledgerEnd + takeover, kind: "takeover", ver});
+
+		if (takeover !== null) {
+			push({at: ledgerEnd + takeover, kind: "takeover", ver});
+		}
 	};
 
 	// The machine's Subs, as tea runs them: started when their deps turn on or change.
@@ -347,16 +390,31 @@ function runIn(machine: Machine, world: World): Trace {
 	let programOn = false;
 	const syncSubs = (s: Host, now: number) => {
 		const want = new Map<string, {readonly type: string; readonly deps: unknown}>();
+
 		for (const entry of machine.subs ?? []) {
 			const deps: unknown = (entry.deps as (s: Host) => unknown)(s);
-			if (deps !== null) want.set(subIdOf(entry.type, deps), {type: entry.type, deps});
+
+			if (deps !== null) {
+				want.set(subIdOf(entry.type, deps), {type: entry.type, deps});
+			}
 		}
-		for (const id of running.keys()) if (!want.has(id)) running.delete(id);
+
+		for (const id of running.keys()) {
+			if (!want.has(id)) {
+				running.delete(id);
+			}
+		}
+
 		programOn = [...want.values()].some((w) => w.type === "program");
+
 		for (const [id, w] of want) {
-			if (running.has(id)) continue;
+			if (running.has(id)) {
+				continue;
+			}
+
 			const start = starts++;
 			running.set(id, start);
+
 			if (w.type === "timer") {
 				const d = w.deps as {readonly ms: number; readonly msg: HostMsg};
 				push({at: now + d.ms, kind: "sub", msg: d.msg, sub: id, start});
@@ -385,8 +443,12 @@ function runIn(machine: Machine, world: World): Trace {
 			});
 		} else if (c.type === "renew") {
 			sends.push({at: now, away});
+
 			if (down(now)) {
-				if (lands && !taken) moveEnd(now + ttl);
+				if (lands && !taken) {
+					moveEnd(now + ttl);
+				}
+
 				push({at: now + lag, kind: "msg", msg: {type: "renew_unknown", fence: c.fence}});
 			} else if (taken) {
 				push({at: now, kind: "msg", msg: {type: "renew_lost", fence: c.fence}});
@@ -399,44 +461,73 @@ function runIn(machine: Machine, world: World): Trace {
 
 	let s: Host = realHost.START;
 	syncSubs(s, 0);
+
 	for (let e = pop(); e !== undefined && e.at <= horizon; e = pop()) {
 		const now = e.at;
+
 		if (e.kind === "alarm" || e.kind === "takeover") {
-			if (e.ver !== ver || taken) continue;
-			if (e.kind === "takeover") taken = true;
+			if (e.ver !== ver || taken) {
+				continue;
+			}
+
+			if (e.kind === "takeover") {
+				taken = true;
+			}
+
 			const msg: HostMsg =
 				e.kind === "takeover" ? {type: "seen_claim", fence: 2} : {type: "seen_expiry", fence: 1};
 			push({at: reach(now), kind: "msg", msg});
 			continue;
 		}
-		if (e.kind === "sub" && running.get(e.sub) !== e.start) continue;
-		if (programOn && s.phase === "owning" && now > s.until + GRACE && past === null)
+
+		if (e.kind === "sub" && running.get(e.sub) !== e.start) {
+			continue;
+		}
+
+		if (programOn && s.phase === "owning" && now > s.until + GRACE && past === null) {
 			past = {at: now, until: s.until};
+		}
+
 		const prev = s;
 		const msg = e.msg;
+
 		if (msg.type === "renewed" || msg.type === "renew_lost" || msg.type === "renew_unknown") {
-			if (programOn) answers.push({at: now, type: msg.type});
+			if (programOn) {
+				answers.push({at: now, type: msg.type});
+			}
+
 			away = msg.type === "renew_unknown";
 		}
+
 		const [next, cmds] = applyCell<Host, HostMsg, HostCmd>(machine, s, msg);
 		s = next;
 		const was = programOn;
 		syncSubs(s, now);
-		if (prev.phase !== "owning" && s.phase === "owning") claimedAt = now;
+
+		if (prev.phase !== "owning" && s.phase === "owning") {
+			claimedAt = now;
+		}
+
 		if (was && !programOn) {
 			stop = {at: now, why: msg.type, until: prev.phase === "owning" ? prev.until : -1};
 			break;
 		}
-		for (const c of cmds) doCmd(c, now);
+
+		for (const c of cmds) {
+			doCmd(c, now);
+		}
 	}
+
 	if (
 		stop === null &&
 		programOn &&
 		s.phase === "owning" &&
 		horizon > s.until + GRACE &&
 		past === null
-	)
+	) {
 		past = {at: horizon, until: s.until};
+	}
+
 	return {world, horizon, claimedAt, sends, answers, stop, past};
 }
 
@@ -447,7 +538,10 @@ const timedLaw = (name: string, why: (t: Trace) => string | null): Law => ({
 		fc.assert(
 			fc.property(arbWorld, (world) => {
 				const w = why(runIn(machineOf(mod, world.every), world));
-				if (w !== null) throw new Error(w);
+
+				if (w !== null) {
+					throw new Error(w);
+				}
 			}),
 			{numRuns: 60, seed: 7},
 		),
@@ -461,10 +555,18 @@ const timedLaw = (name: string, why: (t: Trace) => string | null): Law => ({
 const runsOnThroughGrace = timedLaw(
 	"with no word from the ledger, the program runs until its lease's end plus 10 minutes",
 	({stop}) => {
-		if (stop === null) return null;
-		if (stop.why === "renew_lost" || stop.why === "seen_claim" || stop.why === "seen_expiry")
+		if (stop === null) {
 			return null;
-		if (stop.why === "lease_due" && stop.at >= stop.until + GRACE) return null;
+		}
+
+		if (stop.why === "renew_lost" || stop.why === "seen_claim" || stop.why === "seen_expiry") {
+			return null;
+		}
+
+		if (stop.why === "lease_due" && stop.at >= stop.until + GRACE) {
+			return null;
+		}
+
 		return `the program stopped at ${stop.at} on ${stop.why}, ${stop.at - stop.until} ms past its lease's end ${stop.until}: before the 10 minute grace ran out`;
 	},
 );
@@ -483,14 +585,22 @@ const awayRenewsEachSecond = timedLaw(
 	"while away, it renews every second",
 	({answers, sends, stop, horizon}) => {
 		for (const a of answers) {
-			if (a.type !== "renew_unknown") continue;
+			if (a.type !== "renew_unknown") {
+				continue;
+			}
+
 			const by = a.at + AWAY_EVERY;
-			if (by > horizon || (stop !== null && stop.at <= by)) continue;
+
+			if (by > horizon || (stop !== null && stop.at <= by)) {
+				continue;
+			}
+
 			if (!sends.some((x) => x.at >= a.at && x.at <= by)) {
 				const next = sends.find((x) => x.at > a.at)?.at;
 				return `after no answer at ${a.at}, the next renew came at ${next ?? "never"}${next === undefined ? "" : `, ${next - a.at} ms later`}: wanted within ${AWAY_EVERY} ms`;
 			}
 		}
+
 		return null;
 	},
 );
@@ -503,11 +613,17 @@ const backKeepsPace = timedLaw(
 	"a renew that comes back ends being away: renews keep their pace",
 	({sends, claimedAt, world}) => {
 		for (const [i, x] of sends.entries()) {
-			if (x.away) continue;
+			if (x.away) {
+				continue;
+			}
+
 			const before = i === 0 ? claimedAt : (sends[i - 1]?.at ?? null);
-			if (before !== null && x.at - before < world.every)
+
+			if (before !== null && x.at - before < world.every) {
 				return `a renew at ${x.at}, ${x.at - before} ms after the one before, with every renew answered: wanted ${world.every} ms apart`;
+			}
 		}
+
 		return null;
 	},
 );
@@ -589,11 +705,13 @@ describe("the host's laws for a short drop (lane 18, part 2), on createHost", ()
 		"known bug: %s",
 		(_, law, how) => {
 			let e: unknown = null;
+
 			try {
 				law.check(real);
 			} catch (x) {
 				e = x;
 			}
+
 			expect(e).toBeInstanceOf(Error);
 			expect(messageOf(e)).toMatch(how);
 		},

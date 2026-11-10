@@ -7,11 +7,13 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
 	reason: Schema.String,
 	message: Schema.optionalKey(Schema.String),
 }) {}
+
 export const hash = Effect.fn("build.hash")((text: string) =>
 	Digest.Digest.use((digest) =>
 		digest.digestHex(Digest.sha256, new TextEncoder().encode(text)),
 	).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
+
 export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
 	const options = {input, plugins, platform: "browser" as const, external: ["cloudflare:workers"]};
 	const fail = (error: unknown) => new BuildError({reason: "bundle", message: String(error)});
@@ -38,6 +40,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 	const path = yield* Path.Path;
 	const generated = path.join(options.root, "program.generated.ts");
 	const programs: Record<string, ProgramSource> = {};
+
 	for (const [name, entry] of Object.entries(options.programs)) {
 		const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
 		const output = yield* bundle("fabrika:program", [
@@ -45,10 +48,14 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 			{
 				name: "fabrika-program",
 				resolveId(id) {
-					if (id === "fabrika:program") return generated;
+					if (id === "fabrika:program") {
+						return generated;
+					}
 				},
 				load(id) {
-					if (id === generated) return code;
+					if (id === generated) {
+						return code;
+					}
 				},
 			},
 		]);
@@ -58,5 +65,6 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 			.join("\n");
 		programs[name] = {hash: yield* hash(source), source};
 	}
+
 	return programs;
 });

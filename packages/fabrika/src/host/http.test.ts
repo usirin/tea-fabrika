@@ -26,7 +26,11 @@ const fakeLogin = (length: number) =>
 		const login = Effect.gen(function* () {
 			const n = yield* Ref.updateAndGet(count, (c) => c + 1);
 			const refused = yield* Ref.get(answer);
-			if (refused !== null) return yield* Effect.fail(refused);
+
+			if (refused !== null) {
+				return yield* Effect.fail(refused);
+			}
+
 			return sessionAt(n, yield* Clock.currentTimeMillis, length);
 		});
 		return {login, count: Ref.get(count), answer: (a: DoorRefused | null) => Ref.set(answer, a)};

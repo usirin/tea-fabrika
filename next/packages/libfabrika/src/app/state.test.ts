@@ -6,6 +6,7 @@ const Model = Schema.Struct({count: Schema.Int, step: Schema.Int});
 const old = {v: 1, model: {n: 7}, build: "old-build", after: 12};
 const N = Schema.Struct({n: Schema.Int});
 const Count = Schema.Struct({count: Schema.Int});
+
 const state = (calls: string[] = []) => ({
 	v: 3,
 	schema: Model,
@@ -34,7 +35,7 @@ describe("S3 saved state and named upgrades", () => {
 		[1, {n: 7}, ["n_to_count", "add_step"]],
 		[2, {count: 7}, ["add_step"]],
 		[3, {count: 7, step: 1}, []],
-	] as const)
+	] as const) {
 		it(`plant, skip an upgrade: version ${v} follows exactly the remaining named chain`, async () => {
 			const {Saved} = await import("./state.ts");
 			const calls: string[] = [];
@@ -45,7 +46,9 @@ describe("S3 saved state and named upgrades", () => {
 			});
 			expect(calls).toEqual(ran);
 		});
-	for (const fault of ["gap", "duplicate", "future", "throw", "decode", "zero"] as const)
+	}
+
+	for (const fault of ["gap", "duplicate", "future", "throw", "decode", "zero"] as const) {
 		it(`plant, accept ${fault}: failed upgrades leave the original saved bytes intact`, async () => {
 			const {Saved} = await import("./state.ts");
 			const raw = {...old, v: fault === "future" ? 4 : fault === "zero" ? 0 : 1};
@@ -78,6 +81,8 @@ describe("S3 saved state and named upgrades", () => {
 			);
 			expect(JSON.stringify(raw)).toBe(before);
 		});
+	}
+
 	it("plant, upgrade in place: even a mutating failed upgrade cannot destroy saved bytes", async () => {
 		const {Saved} = await import("./state.ts");
 		const raw = JSON.parse(JSON.stringify(old));
@@ -87,7 +92,11 @@ describe("S3 saved state and named upgrades", () => {
 				from: 1,
 				run: (value: unknown) => {
 					Object.assign(Schema.decodeUnknownSync(Schema.Struct({n: Schema.Int}))(value), {n: 99});
-					if (typeof value === "object" && value !== null) Object.assign(value, {n: 99});
+
+					if (typeof value === "object" && value !== null) {
+						Object.assign(value, {n: 99});
+					}
+
 					throw new Error("upgrade failed");
 				},
 			},
@@ -100,11 +109,13 @@ describe("S3 saved state and named upgrades", () => {
 		const current = {v: 3, model: {count: 7, step: 1}, build: "b-123", after: 29};
 		const text = Schema.encodeSync(Schema.fromJsonString(Saved))(current);
 		expect(Schema.decodeUnknownSync(Schema.fromJsonString(Saved))(text)).toEqual(current);
+
 		for (const bad of [
 			{...current, v: 0},
 			{...current, build: ""},
 			{...current, after: -1},
-		])
+		]) {
 			expect(() => Schema.decodeUnknownSync(Saved)(bad)).toThrow();
+		}
 	});
 });

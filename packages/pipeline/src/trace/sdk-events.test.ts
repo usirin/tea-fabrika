@@ -238,7 +238,9 @@ describe("SDK messages as agent events", () => {
 describe("the live reviewer, traced", () => {
 	const dirs: string[] = [];
 	afterAll(() => {
-		for (const dir of dirs) rmSync(dir, {recursive: true, force: true});
+		for (const dir of dirs) {
+			rmSync(dir, {recursive: true, force: true});
+		}
 	});
 
 	/** The reviewer run on `RUN`, with tracing on or off: its spans, the options it was opened with, what its `seen` was shown. */
@@ -287,8 +289,10 @@ describe("the live reviewer, traced", () => {
 		const parent = (s: ReadableSpan) => s.parentSpanContext?.spanId;
 		const [sub] = named("sub review_run");
 		const [agent] = named("invoke_agent reviewer");
-		if (sub === undefined || agent === undefined)
+
+		if (sub === undefined || agent === undefined) {
 			throw new Error(`missing: ${spans.map((s) => s.name).join(", ")}`);
+		}
 
 		expect(new Set(spans.map((s) => s.spanContext().traceId)).size).toBe(1);
 		expect(parent(agent)).toBe(id(sub));

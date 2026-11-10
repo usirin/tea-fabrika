@@ -61,6 +61,7 @@ const SHIP_OF: {readonly [S in Checks["state"]]: PrFacts["checks"]} = {
 	pending: "pending",
 	unknown: "stuck",
 };
+
 /** Worst first: the first state any side is in is the state of both. */
 const SHIP_WORST = [
 	"red",
@@ -68,6 +69,7 @@ const SHIP_WORST = [
 	"pending",
 	"green",
 ] as const satisfies readonly PrFacts["checks"][];
+
 const CHANGE_WORST = [
 	"red",
 	"unknown",
@@ -148,17 +150,23 @@ export const withLocalChecks = (
 		const cloneWith = (pr: string) =>
 			Effect.gen(function* () {
 				const at = prOf(pr);
-				if (at === null) return yield* failed;
+
+				if (at === null) {
+					return yield* failed;
+				}
+
 				const clone = cloneIn(settings.work, at);
 				const there = yield* fs
 					.exists(path.join(clone, ".git"))
 					.pipe(Effect.orElseSucceed(() => false));
+
 				if (!there) {
 					yield* fs
 						.makeDirectory(path.dirname(clone), {recursive: true})
 						.pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
 					yield* gitHost(["clone", "--no-checkout", "--quiet", urlOf(at), clone]);
 				}
+
 				yield* gitHost(["-C", clone, "fetch", "--quiet", "origin", `pull/${at.number}/head`]);
 				return clone;
 			});
@@ -203,7 +211,10 @@ export const withLocalChecks = (
 		const settle = (pr: string, head: string) =>
 			lock.withPermits(1)(
 				Effect.gen(function* () {
-					if (lastAt(yield* Ref.get(ref), head) !== null) return;
+					if (lastAt(yield* Ref.get(ref), head) !== null) {
+						return;
+					}
+
 					const ran = yield* runAt(pr, head);
 					yield* Ref.update(ref, (runs) => apply(runs, {type: "ran", ...ran}));
 				}),

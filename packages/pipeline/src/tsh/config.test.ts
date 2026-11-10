@@ -23,7 +23,11 @@ const PLACES = {home: "/h/.tsh", user: "/h"};
 /** The config `text` makes, written as tsh.toml in a fresh folder; or the reason it is refused. */
 const read = async (text: string | null): Promise<{folder: string; got: Config | string}> => {
 	const folder = mkdtempSync(join(tmpdir(), "tsh-config-"));
-	if (text !== null) writeFileSync(join(folder, CONFIG_FILE), text);
+
+	if (text !== null) {
+		writeFileSync(join(folder, CONFIG_FILE), text);
+	}
+
 	const result = await Effect.runPromise(
 		readConfig(join(folder, CONFIG_FILE), PLACES).pipe(Effect.result, Effect.provide(nodeServices)),
 	);
@@ -92,7 +96,11 @@ describe("tsh.toml", () => {
 		["repo = ", "not TOML"],
 	])("refuses %s before anything runs", async (text, says) => {
 		const {got} = await read(text);
-		if (typeof got !== "string") throw new Error("read, not refused");
+
+		if (typeof got !== "string") {
+			throw new Error("read, not refused");
+		}
+
 		expect(got).toContain(CONFIG_FILE);
 		expect(got).toContain(says);
 	});
@@ -103,7 +111,11 @@ describe("tsh.toml", () => {
 		['repo = "acme/widgets"\npacks = ["@acme/desk"]\n[pack."@acme/desk"]\nview = "comment"'],
 	])("refuses packs, saying they moved to .fabrika/fabrika.toml: %s", async (text) => {
 		const {got} = await read(text);
-		if (typeof got !== "string") throw new Error("read, not refused");
+
+		if (typeof got !== "string") {
+			throw new Error("read, not refused");
+		}
+
 		expect(got).toContain(CONFIG_FILE);
 		expect(got).toContain("add-on packs moved to .fabrika/fabrika.toml");
 		expect(got).not.toContain("at the root");
@@ -114,7 +126,11 @@ describe("tsh.toml", () => {
 		"refuses rounds, saying there is no round cap: %s",
 		async (text) => {
 			const {got} = await read(text);
-			if (typeof got !== "string") throw new Error("read, not refused");
+
+			if (typeof got !== "string") {
+				throw new Error("read, not refused");
+			}
+
 			expect(got).toContain(CONFIG_FILE);
 			expect(got).toContain("rounds: there is no round cap; the stall rule stops a loop");
 		},
@@ -125,7 +141,11 @@ describe("where fabrika.toml is read from", () => {
 	const start = "/start";
 	const of = async (text: string) => {
 		const {got} = await read(text);
-		if (typeof got === "string") throw new Error(got);
+
+		if (typeof got === "string") {
+			throw new Error(got);
+		}
+
 		return settingsWhere(got, start);
 	};
 

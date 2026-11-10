@@ -110,12 +110,22 @@ export function stallStep(
 	stall: Stall | null,
 	open: number,
 ): {readonly stall: Stall | null; readonly ask: boolean} {
-	if (open === 0) return {stall: null, ask: false};
-	if (stall === null) return {stall: startAt(open), ask: false};
+	if (open === 0) {
+		return {stall: null, ask: false};
+	}
+
+	if (stall === null) {
+		return {stall: startAt(open), ask: false};
+	}
+
 	const stalls = open >= stall.last ? stall.stalls + 1 : 0;
 	const sinceLowest = open < stall.lowest ? 0 : stall.sinceLowest + 1;
 	const ask = stalls >= STALLS_TO_ASK || sinceLowest >= NO_NEW_LOWEST_TO_ASK;
-	if (ask) return {stall: startAt(open), ask};
+
+	if (ask) {
+		return {stall: startAt(open), ask};
+	}
+
 	return {stall: {last: open, lowest: Math.min(open, stall.lowest), stalls, sinceLowest}, ask};
 }
 
@@ -123,7 +133,11 @@ export function stallStep(
 export function asksOnStall(opens: readonly number[]): boolean {
 	let stall: Stall | null = null;
 	let ask = false;
-	for (const open of opens) ({stall, ask} = stallStep(stall, open));
+
+	for (const open of opens) {
+		({stall, ask} = stallStep(stall, open));
+	}
+
 	return ask;
 }
 
@@ -188,11 +202,14 @@ export interface Folded {
 const buildKey = (plan: PlanId, task: TaskId, build: number) => `${plan}/${task}/${build}`;
 /** The ask to approve version `version` of `plan`. */
 export const planAskId = (plan: PlanId, version: number): AskId => askId(`plan:${plan}@${version}`);
+
 /** The ask a stuck task, or the whole plan's list, raises the `time`-th time it is stuck. */
 export const stuckId = (plan: PlanId, task: Owner, time: number): AskId =>
 	askId(`stuck:${plan}/${task}/${time}`);
+
 /** The ask to rule on `ticket`. */
 export const rulingId = (ticket: TicketId): AskId => askId(`ruling:${ticket}`);
+
 /** The check `by` raised on build `build` of a task. */
 export const checkId = (plan: PlanId, task: TaskId, build: number, by: string): AskId =>
 	askId(`check:${buildKey(plan, task, build)}:${by}`);
@@ -238,7 +255,12 @@ export const latestOf = (
 
 /** The plan whose tickets name `ticket`. `null`: none. Pure. */
 export function planFor(state: Folded, ticket: TicketId): PlanId | null {
-	for (const [plan, track] of state.plans) if (track.tickets.includes(ticket)) return plan;
+	for (const [plan, track] of state.plans) {
+		if (track.tickets.includes(ticket)) {
+			return plan;
+		}
+	}
+
 	return null;
 }
 
@@ -271,7 +293,9 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 	const folded: Folded = {plans, asks, answered, superseded, builds};
 
 	const raise = (ask: Ask) => {
-		if (!asks.has(ask.id)) asks.set(ask.id, ask);
+		if (!asks.has(ask.id)) {
+			asks.set(ask.id, ask);
+		}
 	};
 	const write = (track: PlanTrack, ...msgs: readonly CriteriaMsg[]) => {
 		track.book = msgs.reduce(apply, track.book);
@@ -301,10 +325,15 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				};
 				plans.set(fact.plan, track);
 				const before = track.versions.at(-1);
+
 				if (before !== undefined) {
 					const id = planAskId(fact.plan, before.version);
-					if (!answered.has(id)) superseded.add(id);
+
+					if (!answered.has(id)) {
+						superseded.add(id);
+					}
 				}
+
 				const version = (before?.version ?? 0) + 1;
 				const numbered = withIds(
 					track.book,
@@ -312,7 +341,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 					track.versions.map((v) => v.data),
 				);
 				track.book = numbered.book;
-				for (const c of criteriaIn(numbered.plan)) track.planned.add(c.id);
+
+				for (const c of criteriaIn(numbered.plan)) {
+					track.planned.add(c.id);
+				}
+
 				track.versions.push({version, data: numbered.plan, seq, tickets: fact.tickets});
 				track.tickets = [...new Set([...track.tickets, ...fact.tickets])];
 				track.closed = null;
@@ -333,24 +366,35 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				// A fold into a plan the ledger does not hold yet is kept for nothing: sort folds into
 				// open plans only, and an open plan was planned first.
 				const track = plans.get(fact.plan);
-				if (track === undefined || track.folds.includes(fact.ticket)) return;
+
+				if (track === undefined || track.folds.includes(fact.ticket)) {
+					return;
+				}
+
 				track.folds.push(fact.ticket);
 				track.tickets = [...new Set([...track.tickets, fact.ticket])];
 				return;
 			}
 			case "judged": {
 				const track = plans.get(fact.plan);
-				if (track !== undefined) track.book = withRound(track.book, fact);
+
+				if (track !== undefined) {
+					track.book = withRound(track.book, fact);
+				}
+
 				return;
 			}
 			case "reviewed": {
 				const track = plans.get(fact.plan);
+
 				if (
 					track === undefined ||
 					track.closed !== null ||
 					(fact.task !== PLAN && track.removed.has(fact.task))
-				)
+				) {
 					return;
+				}
+
 				const key = `${fact.plan}/${fact.task}`;
 				const task: TaskTrack = tasks.get(key) ?? {
 					open: [],
@@ -368,7 +412,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						a.task === fact.task &&
 						!answered.has(a.id),
 				);
-				if (waiting) return;
+
+				if (waiting) {
+					return;
+				}
+
 				const stuck = (why: "no_progress" | "ran_out") => {
 					task.time += 1;
 					task.grant = null;
@@ -393,24 +441,38 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						time: task.time,
 					});
 				};
+
 				// A list at 0 is done, and so is any "keep going".
-				if (fact.open === 0) task.grant = null;
+				if (fact.open === 0) {
+					task.grant = null;
+				}
+
 				if (task.grant !== null) {
 					// The plain rule is not in force: it starts over at each round, so when the
 					// grant ends it counts from the last one.
 					task.stall = stallStep(null, fact.open).stall;
 					task.grant.left -= 1;
-					if (task.grant.left > 0) return;
+
+					if (task.grant.left > 0) {
+						return;
+					}
+
 					if (fact.open < task.grant.open) {
 						task.grant = null;
 						return;
 					}
+
 					stuck("ran_out");
 					return;
 				}
+
 				const step = stallStep(task.stall, fact.open);
 				task.stall = step.stall;
-				if (step.ask) stuck("no_progress");
+
+				if (step.ask) {
+					stuck("no_progress");
+				}
+
 				return;
 			}
 			case "ruling_needed":
@@ -445,7 +507,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				return;
 			case "check_raised": {
 				const build = builds.get(buildKey(fact.plan, fact.task, fact.build));
-				if (build === undefined || build.shipped) return;
+
+				if (build === undefined || build.shipped) {
+					return;
+				}
+
 				build.heard.add(fact.by);
 				raise({
 					id: checkId(fact.plan, fact.task, fact.build, fact.by),
@@ -462,7 +528,11 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 			}
 			case "shipped": {
 				const build = builds.get(buildKey(fact.plan, fact.task, fact.build));
-				if (build !== undefined) build.shipped = true;
+
+				if (build !== undefined) {
+					build.shipped = true;
+				}
+
 				return;
 			}
 			// Who works a ticket is the ledger's lease on it (./claims.ts); nothing waits on the owner for it.
@@ -471,43 +541,72 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 				return;
 			case "answered": {
 				const ask = asks.get(fact.id);
-				if (ask === undefined || problemWith(folded, fact) !== null) return;
+
+				if (ask === undefined || problemWith(folded, fact) !== null) {
+					return;
+				}
+
 				answered.set(fact.id, fact.answer);
 				const answer = fact.answer;
+
 				if (ask.for === "check") {
 					const build = builds.get(buildKey(ask.plan, ask.task, ask.build));
 					const track = plans.get(ask.plan);
-					if (answer.kind !== "no" || build === undefined) return;
+
+					if (answer.kind !== "no" || build === undefined) {
+						return;
+					}
+
 					build.rejected = true;
-					if (track !== undefined)
+
+					if (track !== undefined) {
 						write(track, {type: "added", task: ask.task, text: answer.why.trim(), by: "owner"});
+					}
+
 					return;
 				}
+
 				if (ask.for === "plan") {
 					const track = plans.get(ask.plan);
-					if (track === undefined) return;
+
+					if (track === undefined) {
+						return;
+					}
+
 					if (answer.kind === "approve") {
 						track.approved = {version: ask.version, data: ask.data};
 						const kept = new Set(criteriaIn(ask.data).map((c) => c.id));
 						retire(track, (c) => kept.has(c.id) || !track.planned.has(c.id));
 					}
-					if (answer.kind === "no") track.closed = answer.why;
+
+					if (answer.kind === "no") {
+						track.closed = answer.why;
+					}
+
 					return;
 				}
+
 				if (ask.for === "stuck") {
 					const track = plans.get(ask.plan);
 					const task = tasks.get(`${ask.plan}/${ask.task}`);
-					if (track === undefined || task === undefined) return;
-					if (answer.kind === "keep_going")
+
+					if (track === undefined || task === undefined) {
+						return;
+					}
+
+					if (answer.kind === "keep_going") {
 						task.grant = {
 							left: answer.rounds,
 							open: task.stall?.last ?? Number.POSITIVE_INFINITY,
 						};
+					}
+
 					// The whole plan's list is no task: `problemWith` refuses a remove of it.
 					if (answer.kind === "remove" && ask.task !== PLAN) {
 						track.removed.add(ask.task);
 						retire(track, (c) => c.task !== ask.task);
 					}
+
 					if (answer.kind === "reword") {
 						write(track, {
 							type: "reworded",
@@ -519,12 +618,16 @@ export function foldLedger(entries: readonly Entry[]): Folded {
 						task.stall = null;
 					}
 				}
+
 				return;
 			}
 		}
 	};
 
-	for (const entry of entries) step(entry.seq, entry.fact);
+	for (const entry of entries) {
+		step(entry.seq, entry.fact);
+	}
+
 	return folded;
 }
 
@@ -543,21 +646,41 @@ export const openAsks = (state: Folded): readonly Ask[] =>
 /** Why the core does not take `answer`, or `null`: it does. Pure. */
 export function problemWith(state: Folded, answer: Answer): string | null {
 	const ask = state.asks.get(answer.id);
-	if (ask === undefined) return "no ask has this id";
-	if (state.answered.has(answer.id)) return "this ask is already answered";
-	if (state.superseded.has(answer.id)) return "a newer version of this plan is waiting instead";
+
+	if (ask === undefined) {
+		return "no ask has this id";
+	}
+
+	if (state.answered.has(answer.id)) {
+		return "this ask is already answered";
+	}
+
+	if (state.superseded.has(answer.id)) {
+		return "a newer version of this plan is waiting instead";
+	}
+
 	const body = answer.answer;
-	if (ask.for === "stuck" && ask.task === PLAN && body.kind === "remove")
+
+	if (ask.for === "stuck" && ask.task === PLAN && body.kind === "remove") {
 		return "the whole plan's list is no task to remove: keep going, or reword a criterion";
-	if (nextOf(ask, body) === null)
+	}
+
+	if (nextOf(ask, body) === null) {
 		return `a ${ask.for} ask takes ${KINDS[ask.for].join(", ")}, not ${body.kind}`;
-	if (ask.for === "plan" && body.kind === "change" && !hasLine(ask.data, body.line))
+	}
+
+	if (ask.for === "plan" && body.kind === "change" && !hasLine(ask.data, body.line)) {
 		return `the plan has no line ${body.line}`;
+	}
+
 	if (ask.for === "stuck" && body.kind === "reword") {
 		const {criterion} = body;
-		if (!ask.criteria.some((c) => c.id === criterion))
+
+		if (!ask.criteria.some((c) => c.id === criterion)) {
 			return `task ${ask.task} has no criterion ${criterion}`;
+		}
 	}
+
 	return null;
 }
 
@@ -565,31 +688,51 @@ export function problemWith(state: Folded, answer: Answer): string | null {
 export function nextOf(ask: Ask, answer: AnswerBody): Next | null {
 	switch (ask.for) {
 		case "plan":
-			if (answer.kind === "approve") return {do: "build", version: ask.version};
-			if (answer.kind === "change") return {do: "replan", line: answer.line, to: answer.to};
-			if (answer.kind === "no") return {do: "close", why: answer.why};
+			if (answer.kind === "approve") {
+				return {do: "build", version: ask.version};
+			}
+
+			if (answer.kind === "change") {
+				return {do: "replan", line: answer.line, to: answer.to};
+			}
+
+			if (answer.kind === "no") {
+				return {do: "close", why: answer.why};
+			}
+
 			return null;
 		case "stuck":
-			if (answer.kind === "remove")
+			if (answer.kind === "remove") {
 				return ask.task === PLAN ? null : {do: "remove_task", task: ask.task};
-			if (answer.kind === "keep_going")
+			}
+
+			if (answer.kind === "keep_going") {
 				return {do: "keep_going", task: ask.task, rounds: answer.rounds};
-			if (answer.kind === "reword")
+			}
+
+			if (answer.kind === "reword") {
 				return {
 					do: "reopen",
 					task: ask.task,
 					criterion: answer.criterion,
 					text: said(answer.when, answer.result),
 				};
+			}
+
 			return null;
 		case "ruling":
 			return answer.kind === "rule"
 				? {do: "ruled", record: answer.rule === "lasting", plan: answer.build}
 				: null;
 		case "check":
-			if (answer.kind === "yes") return {do: "ship", task: ask.task, build: ask.build};
-			if (answer.kind === "no")
+			if (answer.kind === "yes") {
+				return {do: "ship", task: ask.task, build: ask.build};
+			}
+
+			if (answer.kind === "no") {
 				return {do: "rebuild", task: ask.task, criterion: answer.why.trim()};
+			}
+
 			return null;
 	}
 }

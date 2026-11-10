@@ -273,6 +273,7 @@ const Slot = Schema.Struct({
 	sum: Schema.Number,
 	body: Schema.String,
 });
+
 const readSlot = Schema.decodeUnknownExit(Schema.fromJsonString(Slot));
 const SLOTS = ["a", "b"] as const;
 type At = 0 | 1;
@@ -286,9 +287,18 @@ interface Newest {
 }
 
 const newer = (a: Newest | null, b: Newest | null): Newest | null => {
-	if (a === null) return b;
-	if (b === null) return a;
-	if (a.opened !== b.opened) return a.opened > b.opened ? a : b;
+	if (a === null) {
+		return b;
+	}
+
+	if (b === null) {
+		return a;
+	}
+
+	if (a.opened !== b.opened) {
+		return a.opened > b.opened ? a : b;
+	}
+
 	return a.count >= b.count ? a : b;
 };
 
@@ -296,6 +306,7 @@ const broken = (message: string) => (cause: unknown) => new StorageBroken({messa
 
 const part = (text: string) => encodeURIComponent(text);
 const recordKey = (run: string) => `run/${part(run)}/record`;
+
 const machineKey = (run: string, machine: string, id: string) =>
 	`run/${part(run)}/machine/${part(machine)}/${part(id)}`;
 
@@ -320,12 +331,14 @@ const through = <S>(state: StateSchema<S>, machine: string, id: string) => {
 		encode: (value: S) => {
 			// A secret is never kept, by any storage: its schema would write it as its text, or as
 			// "<redacted>", which never reads back (./secrets.ts).
-			if (holdsSecret(value))
+			if (holdsSecret(value)) {
 				return Effect.die(
 					new Error(
 						`${machine} run ${id}: its state holds a secret (a Redacted), so it was not saved: keep where to find the secret, not the secret`,
 					),
 				);
+			}
+
 			const exit = encode(value);
 			return Exit.isSuccess(exit)
 				? Effect.succeed(exit.value)
@@ -370,12 +383,23 @@ function storageOn(
 			Effect.flatMap((store) => store.get(`${key}/${SLOTS[at]}`)),
 			Effect.mapError(broken(`could not read ${key}`)),
 			Effect.map((text): Newest | null => {
-				if (text === undefined) return null;
+				if (text === undefined) {
+					return null;
+				}
+
 				const exit = readSlot(text);
-				if (Exit.isFailure(exit)) return null;
+
+				if (Exit.isFailure(exit)) {
+					return null;
+				}
+
 				const slot = exit.value;
+
 				// A torn write: its checksum does not hold. The other slot keeps the value before it.
-				if (Hash.string(slot.body) !== slot.sum) return null;
+				if (Hash.string(slot.body) !== slot.sum) {
+					return null;
+				}
+
 				return {at, opened: slot.opened, count: slot.count, body: slot.body};
 			}),
 		);
@@ -403,24 +427,34 @@ function storageOn(
 			const now = yield* read(key);
 			const order: readonly At[] = now === null || now.at === 1 ? [0, 1] : [1, 0];
 			const store = yield* kv;
+
 			for (const at of order) {
 				const name = `${key}/${SLOTS[at]}`;
 				const there = yield* store.has(name).pipe(Effect.mapError(broken(`could not read ${key}`)));
-				if (there)
+
+				if (there) {
 					yield* store.remove(name).pipe(Effect.mapError(broken(`could not remove ${key}`)));
+				}
 			}
 		});
 
 	const readRecord = (run: string) =>
 		Effect.gen(function* () {
 			const now = yield* read(recordKey(run));
-			if (now === null) return null;
+
+			if (now === null) {
+				return null;
+			}
+
 			const exit = decodeRecord(now.body);
-			if (Exit.isFailure(exit))
+
+			if (Exit.isFailure(exit)) {
 				return yield* new StorageBroken({
 					message: `the record of ${run} is whole but not a run record`,
 					cause: Cause.squash(exit.cause),
 				});
+			}
+
 			return {now, record: exit.value};
 		});
 
@@ -433,16 +467,21 @@ function storageOn(
 		/** The record as it stands, when it still names this handle's open. */
 		const fence = Effect.gen(function* () {
 			const found = yield* readRecord(run);
-			if (found === null)
+
+			if (found === null) {
 				return yield* new Stale({
 					run,
 					message: `${run} was removed while a handle was still on it`,
 				});
-			if (found.record.opened !== opened || found.record.name !== name)
+			}
+
+			if (found.record.opened !== opened || found.record.name !== name) {
 				return yield* new Stale({
 					run,
 					message: `${run} was opened again since this handle opened it; this handle may not write`,
 				});
+			}
+
 			return found;
 		});
 
@@ -461,20 +500,25 @@ function storageOn(
 			Effect.gen(function* () {
 				const found = yield* fence;
 				yield* drop(machineKey(run, machine, id));
-				if (listed(found.record, machine, id))
+
+				if (listed(found.record, machine, id)) {
 					yield* rewrite(found, unlisted(found.record, machine, id));
+				}
 			});
 
 		/** Keep `kept`, a state as its schema encoded it. */
 		const save = (machine: string, id: string, kept: unknown) =>
 			Effect.gen(function* () {
 				const found = yield* fence;
+
 				// The index first: a crash after it leaves a line with no state, which the next open drops.
-				if (!listed(found.record, machine, id))
+				if (!listed(found.record, machine, id)) {
 					yield* rewrite(found, {
 						...found.record,
 						machines: [...found.record.machines, {machine, id}],
 					});
+				}
+
 				const at = machineKey(run, machine, id);
 				yield* write(at, JSON.stringify(kept), opened, yield* read(at));
 			}).pipe(one);
@@ -495,7 +539,10 @@ function storageOn(
 					save: (s) =>
 						promised(Effect.flatMap(schema.encode(s), (kept) => save(machine, id, kept))),
 					migrate: (raw) => {
-						if (raw === null || raw === undefined) return null;
+						if (raw === null || raw === undefined) {
+							return null;
+						}
+
 						const read = schema.decode(raw);
 						return read.fits ? read.state : refuse(refusedOf(machine, id, read.why).message);
 					},
@@ -505,10 +552,18 @@ function storageOn(
 				Effect.gen(function* () {
 					const found = yield* readRecord(run);
 					const out: Listed<S>[] = [];
+
 					for (const m of found?.record.machines ?? []) {
-						if (m.machine !== machine) continue;
+						if (m.machine !== machine) {
+							continue;
+						}
+
 						const raw = yield* readRaw(machine, m.id);
-						if (raw === null) continue;
+
+						if (raw === null) {
+							continue;
+						}
+
 						// One run that does not fit is shown as refused; the others are read all the same.
 						const read = through(state, machine, m.id).decode(raw);
 						out.push(
@@ -517,12 +572,17 @@ function storageOn(
 								: {kind: "refused", id: m.id, why: read.why},
 						);
 					}
+
 					return out;
 				}),
 			read: <S>(machine: string, id: string, state: StateSchema<S>) =>
 				Effect.gen(function* () {
 					const raw = yield* readRaw(machine, id);
-					if (raw === null) return null;
+
+					if (raw === null) {
+						return null;
+					}
+
 					const read = through(state, machine, id).decode(raw);
 					return read.fits ? read.state : yield* refusedOf(machine, id, read.why);
 				}),
@@ -530,7 +590,11 @@ function storageOn(
 			close: (input) =>
 				Effect.gen(function* () {
 					const found = yield* fence;
-					if (found.record.closed.includes(input)) return;
+
+					if (found.record.closed.includes(input)) {
+						return;
+					}
+
 					yield* rewrite(found, {...found.record, closed: [...found.record.closed, input]});
 				}).pipe(one),
 			unacked: first.outbox,
@@ -546,14 +610,22 @@ function storageOn(
 				Effect.gen(function* () {
 					const found = yield* fence;
 					const outbox = found.record.outbox.filter((s) => !(s.output === output && s.n === n));
-					if (outbox.length === found.record.outbox.length) return;
+
+					if (outbox.length === found.record.outbox.length) {
+						return;
+					}
+
 					yield* rewrite(found, {...found.record, outbox});
 				}).pipe(one),
 			deadLetter: (output, n, why) =>
 				Effect.gen(function* () {
 					const found = yield* fence;
 					const line = found.record.outbox.find((s) => s.output === output && s.n === n);
-					if (line === undefined) return;
+
+					if (line === undefined) {
+						return;
+					}
+
 					// One write: the line leaves the outbox and joins the dead letters together.
 					yield* rewrite(found, {
 						...found.record,
@@ -590,8 +662,13 @@ function storageOn(
 				const before = yield* readRecord(run);
 				// A machine run the index names with no state left: a crash came between the two writes. Dropped here.
 				const machines: Indexed[] = [];
-				for (const m of before?.record.machines ?? [])
-					if ((yield* read(machineKey(run, m.machine, m.id))) !== null) machines.push(m);
+
+				for (const m of before?.record.machines ?? []) {
+					if ((yield* read(machineKey(run, m.machine, m.id))) !== null) {
+						machines.push(m);
+					}
+				}
+
 				const record: Kept = {
 					run,
 					opened: (before?.record.opened ?? 0) + 1,
@@ -611,7 +688,11 @@ function storageOn(
 		remove: (run) =>
 			Effect.gen(function* () {
 				const found = yield* readRecord(run);
-				for (const m of found?.record.machines ?? []) yield* drop(machineKey(run, m.machine, m.id));
+
+				for (const m of found?.record.machines ?? []) {
+					yield* drop(machineKey(run, m.machine, m.id));
+				}
+
 				yield* drop(recordKey(run));
 			}).pipe(one),
 	};
