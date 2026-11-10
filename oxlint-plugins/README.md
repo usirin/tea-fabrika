@@ -41,9 +41,12 @@ not measure false alarms.
 
 This rule has no types. Unknown helper returns, transfers through object fields,
 nonliteral computed methods, reflection and imports through another module can escape
-it. Raw executable spawning also escapes it: the existing `e2e.ts` single-instance
-check uses `execFile`, which the approved plan did not list. The runtime hook observes
-ordinary wrapped setters and native focus events; prototype or native bypasses remain
+it. Raw executable spawning also escapes it: the rule does not inspect `execFile`
+arguments. Today's `e2e.ts` single-instance check passes the launcher's exported
+`electronHookArgs` before the app path. That second copy needs no report because it
+quits on the single-instance lock before ready, without creating a window. The first
+copy's report still checks native focus. The runtime hook observes ordinary wrapped
+setters and native focus events; prototype or native bypasses remain
 outside that claim. Hook behavior and real Electron checks belong to build and lead.
 
 ## Effect property data advice

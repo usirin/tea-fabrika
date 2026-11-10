@@ -6,6 +6,7 @@ import {describe, expect, it} from "vitest";
 import {
 	checkWindowReport,
 	createElectronRunner,
+	electronHookArgs,
 	Report,
 	type WindowReport,
 } from "./electron-launch.ts";
@@ -88,6 +89,8 @@ describe("Electron window law", () => {
 					expect(env).toEqual(before);
 					expect(new Set(f.reads).size).toBe(count);
 					for (const call of f.calls) {
+						expect(electronHookArgs).toEqual(call.args.slice(0, 2));
+						expect(call.args).toHaveLength(3);
 						expect(call.args[0]).toBe("-r");
 						expect(call.args[1]).toMatch(/\/src\/testing\/electron-hook\.cjs$/);
 						expect(call.args[2]).toMatch(/\/apps\/fabrika$/);

@@ -12,7 +12,7 @@ import {SEVEN, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
 import {Effect} from "effect";
 import type {ElectronApplication, Locator, Page} from "playwright";
 import {PROTOCOL} from "./src/link.ts";
-import {launchElectron, runE2e} from "./src/testing/electron-launch.ts";
+import {electronHookArgs, launchElectron, runE2e} from "./src/testing/electron-launch.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -1179,7 +1179,10 @@ const flow = async (app: ElectronApplication) => {
 	await countIn(page, next).filter({hasText: /^1$/}).waitFor();
 
 	// A second copy, on the same home, brings the first forward and quits.
-	const second = await promisify(execFile)(electronPath, [here], {env, timeout: 20_000}).then(
+	const second = await promisify(execFile)(electronPath, [...electronHookArgs, here], {
+		env,
+		timeout: 20_000,
+	}).then(
 		() => "quit",
 		(e: unknown) => `failed: ${String(e)}`,
 	);

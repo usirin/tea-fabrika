@@ -255,6 +255,7 @@ describe("each rule refuses what it is there to refuse", () => {
 		const planted = new Set(PLANTS.map((p) => p.code));
 		// `no-bare-disable` reports at the top of the file, so it has its own test below.
 		const elsewhere = [
+			"e2e-windows", // generated native-window and launch plants in e2e-windows.test.ts
 			"prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
 			"no-secret-env",
 			"no-redacted-value",

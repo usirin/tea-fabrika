@@ -6,6 +6,8 @@ import {join, resolve} from "node:path";
 import {Schema} from "effect";
 import {_electron} from "playwright";
 
+export const electronHookArgs = ["-r", resolve(import.meta.dirname, "electron-hook.cjs")] as const;
+
 const Bounds = Schema.Struct({
 	x: Schema.Finite,
 	y: Schema.Finite,
@@ -148,11 +150,7 @@ export const createElectronRunner = <A>(io: Dependencies<A>) => {
 		try {
 			const app = await io.launch({
 				executablePath: io.executable(),
-				args: [
-					"-r",
-					resolve(import.meta.dirname, "electron-hook.cjs"),
-					resolve(import.meta.dirname, "../.."),
-				],
+				args: [...electronHookArgs, resolve(import.meta.dirname, "../..")],
 				env: testEnv,
 				...(cwd === undefined ? {} : {cwd}),
 			});
