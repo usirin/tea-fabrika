@@ -17,8 +17,7 @@ it("L6 testHomes isolates homes at the socket boundary and preserves toolchains"
         app: optional,
         volta: optional,
         pnpm: optional,
-        // pinned: 82, 83 and 84 straddle the 103-byte socket path (length + 20), so `<=` for `<` dies.
-        length: fc.oneof(fc.integer({ min: 60, max: 110 }), fc.constantFrom(82, 83, 84)),
+        length: fc.integer({ min: 60, max: 110 }),
       }),
       ({ home, app, volta, pnpm, length }) => {
         const base = mkdtempSync("/tmp/l6-");
@@ -67,7 +66,14 @@ it("L6 testHomes isolates homes at the socket boundary and preserves toolchains"
         }
       },
     ),
-    { seed: 119120, numRuns: 100 },
+    {
+      seed: 119120,
+      numRuns: 100,
+      // pinned: always exercise the named 103-byte boundary cases; `<=` for `<` must die.
+      examples: [82, 83, 84].map((length) => [
+        { home: undefined, app: undefined, volta: undefined, pnpm: undefined, length },
+      ]),
+    },
   );
 });
 

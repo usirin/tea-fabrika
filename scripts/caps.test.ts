@@ -732,7 +732,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   });
 
   // scenario: the locked home from ticket 574. Plant: read homedir()/.fabrika.
-  it("L3 ignores a locked inherited home", () => {
+  it("scenario: L3 ignores a locked inherited home", () => {
     const dir = mkdtempSync(join(tmpdir(), "locked-"));
     const home = join(dir, "person");
     mkdirSync(join(home, ".fabrika"), { recursive: true });
