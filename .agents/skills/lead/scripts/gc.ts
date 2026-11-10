@@ -13,6 +13,9 @@
 //                         linked worktree of the main checkout outside the boxes folder whose
 //                         lane landed (decideWorktree): its branch stays in the main checkout
 //
+// Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
+// checkout's runs/<folder>/; when that fails, the folder is kept.
+//
 // Every keep is printed with its reason, so a box that never goes is seen (field note
 // 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
 //
@@ -255,6 +258,13 @@ const sizeMb = (paths: readonly string[]) => {
 	);
 };
 
+/** Move a folder's runs/ into the main checkout's runs/ before it is removed; false: keep it. */
+const keepRuns = (dir: string): boolean => {
+	const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
+	if (r.out.trim()) console.log(r.out.trim());
+	return r.code === 0;
+};
+
 const main = () => {
 	const args = process.argv.slice(2);
 	const dry = args.includes("--dry-run");
@@ -379,6 +389,11 @@ const main = () => {
 		}
 		const twin = gitDir === join(env.BOXES, `${name}-gitdata`) ? [gitDir] : [];
 		const mb = sizeMb([box, ...twin]);
+		if (!dry && !keepRuns(box)) {
+			console.log(`keep ${name}: could not keep its runs/`);
+			keptCount += 1;
+			continue;
+		}
 		if (!dry) {
 			if (gitDir?.startsWith(`${join(common, "worktrees")}/`))
 				repo("worktree", "remove", "--force", "--force", box);
@@ -439,6 +454,11 @@ const main = () => {
 			continue;
 		}
 		const mb = sizeMb([path]);
+		if (!dry && !keepRuns(path)) {
+			console.log(`keep worktree ${path}: could not keep its runs/`);
+			keptCount += 1;
+			continue;
+		}
 		// Without --force: git itself refuses a worktree with changes, a second guard.
 		if (!dry && repo("worktree", "remove", path).code !== 0) {
 			console.log(`keep worktree ${path}: git worktree remove refused`);
