@@ -418,6 +418,9 @@ nobody recorded.
 
 The leak check fails closed (owner, 2026-11-08): any hit stops the push or merge for the lead's
 hand check.
+A flagged line that only respaces a line the same file's diff removes is old text, and is not a
+hit (owner, 2026-11-09, ticket 500). Spaces put inside braces and a line wrapped another way are
+still new text.
 
 ## Go easy on the machine
 

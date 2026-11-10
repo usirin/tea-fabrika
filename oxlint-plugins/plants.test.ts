@@ -8,6 +8,7 @@ import {spawnSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import {join, relative} from "node:path";
 import {afterAll, describe, expect, it} from "vitest";
+import {BUILTIN_PLANTS, type Plant} from "./builtin-plants.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -34,14 +35,6 @@ const fires = (path: string, code: string): readonly number[] => {
 		.flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
 		.sort((a, b) => a - b);
 };
-
-interface Plant {
-	readonly code: string;
-	/** The file's name, for a rule that looks at it. */
-	readonly file?: string;
-	readonly prelude: readonly string[];
-	readonly lines: readonly (readonly [string, boolean])[];
-}
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
 
@@ -248,12 +241,49 @@ const PLANTS: readonly Plant[] = [
 	},
 ];
 
+const refuses = (p: Plant, name: string) => {
+	const file = join(plant, `${name}-${p.file ?? "planted.ts"}`);
+	writeFileSync(file, `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`);
+	const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
+	expect(fires(file, p.code)).toEqual(want);
+};
+
 describe("each rule refuses what it is there to refuse", () => {
 	it.each(PLANTS.map((p, i) => [p.code, p, i] as const))("%s", (_code, p, i) => {
-		const file = join(plant, `${i}-${p.file ?? "planted.ts"}`);
-		writeFileSync(file, `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`);
-		const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
-		expect(fires(file, p.code)).toEqual(want);
+		refuses(p, String(i));
+	});
+
+	it.each(BUILTIN_PLANTS.map((p, i) => [p.code, p, i] as const))(
+		"built in, on with 0 hits: %s",
+		(_code, p, i) => {
+			refuses(p, `builtin-${i}`);
+		},
+	);
+
+	it("built in, on with 0 hits: import(no-self-import)", () => {
+		const file = join(plant, "self.ts");
+		writeFileSync(
+			file,
+			'import {a} from "./self.ts";\nimport {b} from "./b.laws.ts";\nexport {a, b};\n',
+		);
+		expect(fires(file, "import(no-self-import)")).toEqual([1]);
+	});
+
+	// It reports each line twice, so this one counts lines, not reports.
+	it("built in, on with 0 hits: vitest(require-awaited-expect-poll)", () => {
+		const file = join(plant, "poll.test.ts");
+		const lines = [
+			'import {expect, it} from "vitest";',
+			'it("a", () => { expect.poll(() => 1).toBe(1); });',
+			'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
+		];
+		writeFileSync(file, `${lines.join("\n")}\n`);
+		expect([...new Set(fires(file, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
+	});
+
+	it("each built-in rule is planted once", () => {
+		const codes = BUILTIN_PLANTS.map((p) => p.code);
+		expect(new Set(codes).size).toBe(codes.length);
 	});
 
 	it("a test file is the only place no-expect-in-if looks", () => {

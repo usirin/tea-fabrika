@@ -23,7 +23,8 @@ workerd itself, and `next/` has no `miniflare` import. The stage's start already
 What does not yet: 16 lines that reach the workerd process by `ps`, `process.kill` or a plain
 `fetch`, listed in 0042 with the gap behind each. A gap is patched locally with its upstream
 issue, as the lifecycle hook already is
-([alchemy issue 3184](https://github.com/alchemy-run/alchemy/issues/3184)).
+([alchemy issue 3184](https://github.com/alchemy-run/alchemy/issues/3184)). The gaps 0042 lists
+are patched without an issue, by its amendment of 2026-11-09.
 
 ```ts
 // A sketch. One stack, two places. Only the command differs.

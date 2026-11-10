@@ -95,9 +95,13 @@ boots one).**
   reason to file issues, not to hand-write the piece. The local stage already does this: its
   lifecycle hook is a patch, with
   [alchemy issue 3184](https://github.com/alchemy-run/alchemy/issues/3184).
+- **The six gaps listed below are the exception: they are patched, and not reported as a batch**
+  ([Amendments](#amendments), 2026-11-09). A gap found later keeps the rule above.
 - **If a gap cannot be patched in reasonable size, the direct use stays,** marked as an edge with
   the reason and the issue link:
-  `// oxlint-disable-next-line <rule> -- edge: <why>, <issue URL>`.
+  `// oxlint-disable-next-line <rule> -- edge: <why>, <issue URL>`. For one of the six gaps
+  below, which has no issue, the words `not reported, 0042 amendment 2026-11-09` stand where the
+  URL would.
 - **Tests follow the same rule.** A test that mocks `cloudflare:workers` or names a raw platform
   type moves when the code under it moves.
 - **It becomes a lint rule:** oxlint's own `no-restricted-imports` for those module names in
@@ -112,7 +116,8 @@ boots one).**
 - No new direct platform import, raw platform type or workerd process call in `next/`, tests
   included.
 - No gap is answered by hand-writing the piece. It is a patch plus an issue, or a marked edge with
-  the issue link.
+  the issue link. The six gaps below get the patch or the marked edge without the issue
+  ([Amendments](#amendments)).
 - A claim that a piece works through Alchemy comes from a run on the installed version, not from
   the tables below.
 
@@ -180,8 +185,9 @@ imports (4).
 
 - **Most edge comments go.** Up to 130 lines stop being edges we write, once the ports land.
   `platform.ts`'s hand-written clients, 49 of them, are the largest group.
-- **The six gaps each need a patch and an issue, or a marked edge.** The port that reaches a gap
-  files its issue that day. No issue was filed with this decision, since nothing is ported yet.
+- **The six gaps each need a patch or a marked edge, and no issue as a batch.** The port that
+  reaches a gap that blocks it patches it that day and goes on
+  ([Amendments](#amendments), 2026-11-09). No issue was filed with this decision.
 - **A lint rule and a ledger come with ticket 506.** Until it lands, a reader at merge is the only
   check.
 - **Cost:** more of `next/` rests on a beta. A breaking change in Alchemy can reach every
@@ -198,3 +204,20 @@ imports (4).
 - Whether `Control` and `ProgramBox` stay named entrypoint classes or take another shape, such as
   a second Effect Worker. That is the port's plan to answer.
 - Whether the rule's check covers raw ambient types and process calls. Ticket 506 says.
+
+## Amendments
+
+- 2026-11-09: the six gaps in [Today's direct uses](#todays-direct-uses) (22 direct uses) are not
+  reported upstream as a batch. Where one blocks the port, it is patched locally with `pnpm patch`
+  and the work goes on; no issue is filed on alchemy-run/alchemy for these six as a batch. This
+  record first said the port files an issue for each gap the day it reaches it. The owner changed
+  that part the same day: a burst of issues from one user at once is noise for a young project's
+  maintainers. We file what we have proven by running, one at a time, and these six come from
+  reading the source, not from a run. The text above now says the new rule (ticket 510).
+  - Each such patch carries, at its `patchedDependencies` row in `pnpm-workspace.yaml`, a comment
+    with the gap's name and `not reported, 0042 amendment 2026-11-09`, so a later bump still knows
+    why the patch exists ([patch upstream locally](../docs/direction/patch-upstream-locally.md)).
+  - [Patch upstream locally](../docs/direction/patch-upstream-locally.md)'s general rule, every
+    patch has an upstream issue, does not change. A gap in Alchemy found after this list keeps it.
+  - Not this batch: ticket 502's trial may find a real bug by running it. Whether that one is
+    reported is decided when it comes.

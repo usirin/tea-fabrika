@@ -1,7 +1,7 @@
 ---
 id: 0034
 title: A next/ library's src/ has one folder per bounded context, with Effect's flat PascalCase modules and an internal/ inside each, never one flat src/
-status: accepted
+status: superseded by [0043](0043-rooms-on-floors.md)
 date: 2026-11-09
 tags: [layout, files, folders, bounded-context, ddd, layers, internal, libfabrika, next]
 ---
@@ -11,6 +11,9 @@ tags: [layout, files, folders, bounded-context, ddd, layers, internal, libfabrik
 **What this decides:** `libfabrika`'s files sit in one folder per bounded context (`Clients/`,
 `Ledger/`, `Runtime/`), and inside each folder the layout is the one
 [0032](0032-libraries-take-effects-file-layout.md) already gave.
+
+[0043](0043-rooms-on-floors.md) replaces this record: a folder is a subject, and the layers live
+only in the rule file. No file moved under this record.
 
 ```mermaid
 flowchart TD
