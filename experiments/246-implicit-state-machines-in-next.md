@@ -6,6 +6,11 @@ counts, with one small probe script. No model was called, $0. 85 non-test source
 their state-holding parts, the rest by search. The counts are in
 [`results/246-implicit-state-machines-in-next.json`](./results/246-implicit-state-machines-in-next.json).
 
+*Note, 2026-11-09, after this run: [0043](../.decisions/0043-one-tea-machine-per-file.md) removed
+the plain form. Where this write-up names "a tagged union plus one transition function" as a form
+(the T3 row, the Form column and each machine's Form paragraph), the form is now a tea machine. The
+findings and counts stand as run.*
+
 **The answer.** `next/` has 13 implicit state machines by the test below. One has a bug the probe
 reproduces: the "tables made yet" latch in the span sink turns on before its transaction commits,
 so one failed first write leaves the sink without tables until the process restarts. The three that

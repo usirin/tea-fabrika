@@ -1,19 +1,19 @@
 ---
 id: 0043
-title: In next/, a file exports at most one tea machine, with its Model, Msg and update in that file and no input or output code, never a machine spread over files or edited by hand from outside
+title: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 status: accepted
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
 
-# 0043: In next/, a file exports at most one tea machine, with its Model, Msg and update in that file and no input or output code, never a machine spread over files or edited by hand from outside
+# 0043: In next/, every state machine is a tea machine and a file exports at most one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
 
-**What this decides:** in `next/`, a tea machine has a file of its own that holds its Model, its Msg
-and its update and nothing that does input or output, and code outside that file changes the
-machine's state only by sending it a Msg.
+**What this decides:** in `next/`, every state machine is written as a tea machine, and each tea
+machine has a file that holds its Model, its Msg and its update and nothing that does input or
+output, so code outside that file changes the machine's state only by sending it a Msg.
 
-The machine used as the example is the supervisor, a tea machine on main today. Its states are the
-four cases of `Recovery`, and its Msgs move it:
+The example is the supervision record. Its states are the four cases of `Recovery`, and these Msgs
+move it:
 
 ```mermaid
 stateDiagram-v2
@@ -27,42 +27,54 @@ stateDiagram-v2
 ```
 
 ```ts
-// Today, on main (next/packages/libfabrika/src/). One machine, three files.
+// Before: main today (next/packages/libfabrika/src/). One machine, spread over three files.
 
-// coordination/recovery.ts:98-104: the Model, away from its machine.
+// coordination/recovery.ts:98-104: the Model, away from its update.
 export const Supervision = Schema.Struct({
 	// ...
 	recovery: Recovery,
 	pending: Schema.NullOr(Action),
 
-// app/supervisor.ts:69-71: the machine, with its Msg (:15-21) and its update (:93-178).
+// app/supervisor.ts:69-71: a tea machine, but it moves only the `recovery` half.
 export const supervisor = Machine.make({
 	model: Supervision,
 	msg: Msg,
 
-// app/runner.ts:374 and :429: two of nine hand edits of that Model, beside the service calls.
-yield* saveRecovery({...s, pending: {...action, type: "exit"}});
-yield* saveRecovery({...s, pending: null});
+// app/runner.ts:377-418: the `exit` move, built by hand between two service calls.
+case "exit": {
+	// ...
+	yield* p.exit(action.process, why, meta);
+	// ...
+	yield* saveRecovery({
+		...s,
+		build: s.restart.build,
+		recovery: Recovery.cases.starting.make({after: action.process, request}),
+		pending: {type: "start", process: action.process, from: meta},
+	});
 ```
 
-The diagram shows only the `recovery` half of the state. The other half, `pending`, is what the
-runner edits by hand, so no picture of the machine drawn from its own file is whole.
+So today the supervision record is half a tea machine. The diagram is the half the machine's own
+file shows. The other half, the `pending` journal, and one `recovery` move with it, are built by
+hand in the runner, in nine places.
 
 ## Context
 
 [0037](0037-implicit-state-machines-made-explicit.md) says every state machine in `next/` is one
-named type with its transitions in one place. It does not say where that place is, or how many
-machines one file may hold. This record says both, for tea machines. It **extends** 0037 and changes
-no rule in it, so 0037's status stays `accepted`: by
-[the adr skill's table](../.agents/skills/adr/SKILL.md#4-supersede-or-amend), `amended-in-part` is
-for a decision that changes part of an older one, and none of 0037's text stops holding. Tracker
-ticket 508.
+named type with its transitions in one place. It left two things open: which form a small machine
+takes, and where "one place" is. The owner settled both on 2026-11-09. Tracker ticket 508.
+
+**This record amends 0037 in part.** 0037 let a machine whose state need not survive a restart be
+"a tagged union plus one transition function, in memory". That option is removed. The rest of 0037
+holds as written: the two tests that say what a machine is, the three places one hides, the third
+test, the plan's question and its binding constraints. By
+[the adr skill's table](../.agents/skills/adr/SKILL.md#4-supersede-or-amend) that is
+`amended-in-part`, and 0037's status line now says so.
 
 A tea machine is one made with `Machine.make` from `@demlik/tea/effect` (tea 0.25.0, the installed
 version). `next/` has three outside its tests on main: `app/supervisor.ts:69`, `app/brain-life.ts:35`
 and `next/programs/counter/src/program.ts:15`.
 
-Why the owner decided it, on 2026-11-09:
+Why:
 
 - **The hand edits are real.**
   [Experiment 246](../experiments/246-implicit-state-machines-in-next.md#2-the-supervision-record)
@@ -70,10 +82,12 @@ Why the owner decided it, on 2026-11-09:
   `:402-415`, `:429`, `:463-471`, `:516-520`, `:565-593`, `:662-667`, `:713-719`, `:1537-1550`; the
   lines were checked again on main for this record). Its type allows 24 pairs of `recovery` and
   `pending`, 8 are real, and five `bad_row` guards exist only to catch a wrong pair.
-- **A machine alone in its file is what tea's property tests take as it is.** `propertyInvariant`
-  from `@demlik/tea/pbt` takes the machine and drawn Msg lists
-  (`app/brain-life.laws.test.ts:97-100`). It can only check the transitions the machine's own update
-  makes. A hand edit in another file is a transition no property sees.
+- **One form means one set of property tests for every machine.** `@demlik/tea/pbt` exports
+  `arbMsgSequence`, `arbGuidedSequence`, `propertyTerminates`, `propertyInvariant` and
+  `propertyTrace`, and each takes a tea machine as it is (`app/brain-life.laws.test.ts:97-100` calls
+  `propertyInvariant(brainLife, ...)`). A plain union with a function needed its own wrapper each
+  time. A property can only check the moves the machine's own update makes: a hand edit in another
+  file is a move no property sees.
 - **Elm builds a module around one type.** Elm's own guide says "all modules should be built around
   a central type", and that a page's module holds its `Model`, `update` and `view` together
   ([Structuring Web Apps](https://guide.elm-lang.org/webapps/structure.html), read at its source on
@@ -92,8 +106,18 @@ says what one such file holds. It does not say which folder.
 
 ## Decision
 
-**In `next/`, a file exports at most one tea machine, and that file is the machine: its Model, its
-Msg and its update, with no input or output code.**
+**In `next/`, every state machine is a tea machine, and a file exports at most one: that file holds
+the machine's Model, its Msg and its update, with no input or output code.**
+
+Rule 1, the form:
+
+- **Everything that passes 0037's two tests is written with `Machine.make`.** No machine is hidden,
+  and none is a plain tagged union with one transition function. Small is no exception.
+- **0037's third test stays.** State that must survive a restart, or be seen by another party, is
+  stored data that recovery reads. What gets stored is the machine's Model, and the update decides
+  every change to it. The code that saves it only saves.
+
+Rule 2, the file:
 
 - **What the file holds.** The Model's schema, the Msg's schema, the `Machine.make` call with its
   update, and the pure helpers the update uses. A Cmd definition (`Cmd.make`) stays too: it is a
@@ -103,8 +127,8 @@ Msg and its update, with no input or output code.**
   file.
 - **Nothing outside the file builds or edits the Model by hand.** Other code gets a new Model by
   sending a Msg through the machine. A spread that changes a control-state field, or a `make` of a
-  state case, outside the machine's file is the thing this forbids. A change the machine has no Msg
-  for gets a Msg.
+  state case, outside the machine's file is what this forbids. A change the machine has no Msg for
+  gets a Msg.
 - **A small private helper machine may share its parent's file.** Private means not exported and
   used only by the machine in that file. The day a second file needs it, it gets a file of its own.
 - **Why the allowance.** The owner did not want a blanket one-per-file rule in the style of the old
@@ -112,48 +136,66 @@ Msg and its update, with no input or output code.**
   reader then opens five files to follow one. The rule here counts what a file exports, not what it
   contains.
 
-**Before** is the block at the top. **After**, as a sketch (file and Msg names are not decided
-here; the Msg names are experiment 246's proposal):
+**After**, as a sketch (the file's folder and the new names are not decided here; the Msg names are
+experiment 246's proposal):
 
 ```ts
-// A sketch. One file, for example the context's internal/supervisor.ts.
-export const Supervision = Schema.Struct({/* the Model, with pending folded into the cases */});
+// A sketch. One file, for example the context's internal/supervisor.ts: the whole machine.
+export const Supervision = Schema.Struct({/* the Model, with `pending` folded into the cases */});
 const Msg = Schema.Union([/* threw, exited, due, started, healthy, exit_written, down_written */]);
-export const supervisor = Machine.make({model: Supervision, msg: Msg, cmds: [exit, down, start], /* init, update */});
+export const supervisor = Machine.make({model: Supervision, msg: Msg, cmds: [exit, down, start] /* init, update */});
 
-// The runner, in its own file: it sends a Msg and saves what comes back. No spread of the Model.
-yield* saveRecovery(moved(s, {type: "exit_written"}));
+// The runner, in its own file: it calls the service, sends a Msg and saves what comes back.
+yield* p.exit(action.process, why, meta);
+yield* saveRecovery(moved(s, {type: "exit_written", at: status.at}));
 ```
 
-What moves: the Model comes to the machine's file, and each of the runner's nine hand edits becomes
-a Msg that the update handles.
+What moves: the Model comes to the machine's file, and each of the runner's nine hand-built moves
+becomes a Msg that the update handles. `moved` is the runner's existing one-line step through the
+machine (`app/runner.ts:271-272`).
 
 **Binding constraints:**
 
-- A new tea machine in `next/` lands in a file that exports no other machine and holds no input or
-  output code.
-- A plan that adds or changes a tea machine names its file, and says which file drives it.
+- New code in `next/` that passes 0037's two tests lands as a tea machine, in a file that exports no
+  other machine and holds no input or output code.
+- A plan that adds or changes a machine names its file, and says which file drives it.
 - The existing machines are not moved by this record alone. The supervisor moves inside P34c
   (tracker ticket 404), as 0037 already says, and the rest move with the layout change.
 
 ## Consequences
 
-- **It becomes a lint rule,** tracker ticket 509. The rule counts the `Machine.make` calls a file
-  exports and fails on more than one. A machine that is not exported is a private helper, so the
+- **It becomes a lint rule,** tracker ticket 509. The rule counts the exported `Machine.make` calls
+  in a file and fails on more than one. A machine that is not exported is a private helper, so the
   allowance needs no extra code: the day a second file needs the helper it must be exported, and the
   rule fires. Until the rule exists, the plan and the review are the check.
-- **Two parts of this record may not fit a syntax rule:** "no input or output code in the file" and
-  "no hand edit of the Model outside it". Ticket 509 says which it can check and what is left to
-  review. Nobody has measured the rule's false alarms yet, and it blocks only at about 0%.
-- **The cost** is one more file for a machine that today sits inside its driver, and a Msg for each
-  change that is a hand edit today. For the supervisor, experiment 246 sizes it at about 3 files and
-  200 lines, with saved rows to migrate.
-- **Open, with no ruling: does 0037's plain form stay?** 0037 also allows a small in-memory machine
-  to be a tagged union plus one transition function. This record does not cover that form, and the
-  lint rule cannot see it: to lint it is a type and a function. Whether the plain form stays, or
-  every machine in `next/` becomes a tea machine so that tea's property helpers and this rule cover
-  all of them, is not decided. Until it is, 0037's forms hold as written.
+- **Two parts of rule 2 may not fit a syntax rule:** "no input or output code in the file" and "no
+  hand edit of the Model outside it". Ticket 509 says which it can check and what is left to review.
+  Nobody has measured the rule's false alarms yet, and it blocks only at about 0%.
+- **Experiment 246's forms change.** Eight of its 13 rows name a tagged union as the form. Each is
+  now a tea machine. Its findings and counts stand, and it carries a dated note.
+- **The cost** is one more file for a machine that today sits inside its driver, a Msg for each
+  change that is a hand edit today, and tea's schemas around machines of two states. For the
+  supervisor, experiment 246 sizes it at about 3 files and 200 lines, with saved rows to migrate.
+- **Not verified: a tea machine stepped inside a synchronous storage transaction.** Some small
+  machines live there, such as the span sink's table latch (`data/sink.ts:268-277`), where nothing
+  may be awaited and no runtime runs. What was read, in the installed tea 0.25.0:
+  - `applyCell(machine, state, msg)` from `@demlik/tea` is a plain exported function. It finds the
+    update cell and calls it, returns `[next, cmds]`, and starts no runtime, no Promise and no
+    Effect.
+  - `next/` already steps a `Machine.make` machine that way, in a plain function:
+    `app/runner.ts:271-272`.
+  - So the reading says it works. Nobody has run one inside `sql.transaction`, and nobody has
+    checked that `data/` may import tea under the layer rules. The first small machine built this
+    way settles both. This is about how such a machine is called, not whether it is a tea machine.
 - Not decided here: the folder a machine's file sits in (0034 and ticket 507), the names of the new
-  Msgs, and today's version, which this record does not touch.
-- No word is coined: `machine` in [the glossary](../.glossary/TERMS.md) already means a tea machine.
-  AGENTS.md gets one line.
+  Msgs and cases, the order the 13 machines are done in, and today's version, which this record does
+  not touch.
+
+## Records
+
+- [0037](0037-implicit-state-machines-made-explicit.md): status `amended-in-part`, and a one-line
+  pointer.
+- [`.glossary/TERMS.md`](../.glossary/TERMS.md): no word is coined. The rows `explicit machine` and
+  `machine` (Runtime) lose the plain form.
+- AGENTS.md: one line. [Experiment 246](../experiments/246-implicit-state-machines-in-next.md): one
+  dated note.

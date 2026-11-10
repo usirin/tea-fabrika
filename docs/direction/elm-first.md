@@ -115,4 +115,5 @@ const [draft, dispatch] = useMachine(Draft);
 
 *Added 2026-11-09, for `next/`: state outside a window follows the same idea.
 [0037](../../.decisions/0037-implicit-state-machines-made-explicit.md) makes every state machine
-explicit, and a tea machine with Msgs is its form when events arrive over time.*
+explicit, and [0043](../../.decisions/0043-one-tea-machine-per-file.md) makes a tea machine with
+Msgs its form, always.*
