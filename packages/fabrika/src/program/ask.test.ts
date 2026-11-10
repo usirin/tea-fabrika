@@ -418,6 +418,88 @@ describe("L8: input modes", () => {
 			),
 	);
 
+	// pinned: the control bound is CONTROL = 16 values told and not handled (program.ts). The 17th ask
+	// waits in the control waiter list, is let in by the handler that frees a room, and answers queued.
+	// Mutation survivors on enter/release (taken +-1, `>=`, the empty release) lived without this.
+	it.effect(
+		"pinned: a control ask past the bound of 16 waits for a freed room, is admitted there, and answers when its own handler exits",
+		() =>
+			Effect.gen(function* () {
+				const {gate, handled, run} = yield* begin();
+				for (let i = 0; i < 15; i += 1) yield* run.offer("signal", i);
+				// The 16th has room: admitted at once, nobody waiting.
+				const sixteenth = yield* asking(run, "signal", 15, "5 seconds");
+				yield* same("waiting with room left", run.mailbox().inputs.signal.waiting, 0);
+				// The 17th does not: it waits, in the list, behind a full line.
+				const last = yield* asking(run, "signal", 16, "5 seconds");
+				yield* same("waiting past the bound", run.mailbox().inputs.signal.waiting, 1);
+				yield* ensure(yield* pending(last), "answered while waiting for room");
+				yield* ensure(!handled.includes("signal 16"), "handled before it was let in");
+				yield* open(gate);
+				yield* settle;
+				yield* same("the 16th", yield* Fiber.join(sixteenth), "queued");
+				yield* same("the 17th", yield* Fiber.join(last), "queued");
+				yield* same("waiting after", run.mailbox().inputs.signal.waiting, 0);
+				yield* ensure(handled.includes("signal 16"), "answered, but never handled");
+				// Every room came back: a fresh ask goes straight in, nobody waits.
+				const again = yield* asking(run, "signal", 17, "5 seconds");
+				yield* same("waiting once the rooms are back", run.mailbox().inputs.signal.waiting, 0);
+				yield* same("a fresh ask", yield* Fiber.join(again), "queued");
+				yield* ensure(handled.includes("signal 17"), "the fresh ask was never handled");
+			}).pipe(Effect.scoped),
+	);
+
+	// pinned: `tell` never waits, so the 17th control value told fails MailboxFull; the 16th goes in.
+	// Unread control values are counted as they go in, with nothing serving.
+	it.effect(
+		"pinned: tell on a control input is refused MailboxFull at 16 told and not handled, and each value told counts as unread",
+		() =>
+			Effect.gen(function* () {
+				const {run} = yield* begin({serving: false});
+				for (let i = 0; i < 16; i += 1) {
+					const word = yield* run.tell("signal", i).pipe(Effect.exit);
+					yield* queued(`tell ${i}`, word);
+					yield* same("unread", run.mailbox().inputs.signal.length, i + 1);
+				}
+				const full = yield* run.tell("signal", 16).pipe(
+					Effect.flip,
+					Effect.map((e) => e._tag),
+				);
+				yield* same("the 17th told", full, "MailboxFull");
+				yield* same("unread after refusal", run.mailbox().inputs.signal.length, 16);
+			}).pipe(Effect.scoped),
+	);
+
+	// pinned: admitted at the control insertion, a control ask that runs out of time while its handler
+	// is blocked says queued (it went in); one that waits for room and runs out says TimeoutError.
+	it.effect(
+		"pinned: at the deadline a control ask says queued when admitted, TimeoutError when still waiting, and leaves no waiter",
+		() =>
+			Effect.gen(function* () {
+				const {gate, handled, run} = yield* begin();
+				const admitted = yield* asking(run, "signal", 1, "1 second");
+				for (let i = 0; i < 15; i += 1) yield* run.offer("signal", 100 + i);
+				const refused = yield* asking(run, "signal", 2, "1 second");
+				yield* same("waiting", run.mailbox().inputs.signal.waiting, 1);
+				yield* TestClock.adjust("1 second");
+				yield* settle;
+				yield* same("admitted at the cap", yield* Fiber.join(admitted), "queued");
+				yield* same(
+					"unadmitted at the cap",
+					yield* Fiber.join(refused).pipe(
+						Effect.flip,
+						Effect.map((e) => e._tag),
+					),
+					"TimeoutError",
+				);
+				yield* same("a waiter left behind", run.mailbox().inputs.signal.waiting, 0);
+				yield* open(gate);
+				yield* settle;
+				yield* ensure(handled.includes("signal 1"), "an admitted value was dropped");
+				yield* ensure(!handled.includes("signal 2"), "a timed-out value was sent later");
+			}).pipe(Effect.scoped),
+	);
+
 	it.effect("tell and offer still answer on admission, with every handler blocked", () =>
 		holds(Arbitrary.schema(InputModes), ({mode, value}) =>
 			Effect.gen(function* () {

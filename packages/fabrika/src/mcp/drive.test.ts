@@ -4,7 +4,7 @@ import {Arbitrary, Deferred, Effect, Fiber, Layer, Schema, Tracer} from "effect"
 import {TestClock} from "effect/testing";
 import {describe} from "vitest";
 import {listed} from "../program/listed.ts";
-import {defineProgram, kind} from "../program/program.ts";
+import {defineProgram, end, kind} from "../program/program.ts";
 import {input} from "../program/shape.ts";
 import {ATTR} from "../program/trace.ts";
 import {programList} from "../shell/programs.ts";
@@ -264,6 +264,73 @@ describe("one 5 s deadline for a program-input call", () => {
 						seen: Array.from({length: capacity + 1}, (_, i) => i + 1),
 					});
 				}).pipe(Effect.scoped),
+			),
+	);
+});
+
+// -------------------------------------------------------------------------------- slow start
+
+describe("a start that outlives its call's 5 s, and a run that ended", () => {
+	// A program with one input, `quit`, that ends the run when handled. Its layer counts the starts
+	// and takes `boot` ms of TestClock to build, so the start itself can be slower than the call.
+	const starts = (boot: number) =>
+		Effect.gen(function* () {
+			let count = 0;
+			const quitter = defineProgram({
+				name: "quitter",
+				description: "Quits when told.",
+				inputs: {quit: input(Schema.Int, "A number.")},
+				outputs: {},
+				main: ({serve}) => serve({quit: () => end}),
+			});
+			const slow = Layer.effectDiscard(
+				Effect.sync(() => {
+					count += 1;
+				}).pipe(Effect.andThen(Effect.sleep(boot))),
+			);
+			const {drive} = yield* driveFor({
+				list: programList([listed(quitter, slow)]),
+				tiles: () => [],
+			});
+			return {drive, count: () => count};
+		});
+
+	// pinned: the start goes on in the connection's scope after its call gave up (drive.ts `runOf`).
+	// The call that gave up says not queued; the next call joins that one start (it never starts a
+	// second run), and once it is up, answers with its own view.
+	it.effect(
+		"pinned: a start slower than 5 s refuses its call as not queued, the next call joins the same start, and a quit run starts fresh",
+		() =>
+			holds(
+				Arbitrary.schema(Schema.Int.check(Schema.isBetween({minimum: 5001, maximum: 9000}))),
+				(boot) =>
+					Effect.gen(function* () {
+						const {drive, count} = yield* starts(boot);
+						const first = yield* forked(drive.call("quitter_quit", {value: 1}));
+						yield* TestClock.adjust(5000);
+						yield* settle;
+						const refused = yield* Fiber.join(first);
+						yield* ensure(
+							refused.kind === "refused" && /not queued/.test(refused.why),
+							`a start past 5 s did not say not queued: ${JSON.stringify(refused)}`,
+						);
+						const second = yield* forked(drive.call("quitter_quit", {value: 2}));
+						yield* TestClock.adjust(boot - 5000);
+						yield* settle;
+						const done = yield* Fiber.join(second);
+						yield* same("the joined start's answer", done.kind, "done");
+						yield* same("starts so far", count(), 1);
+						// That run quit; the next call starts a fresh one, not the ended run it left behind.
+						const third = yield* forked(drive.call("quitter_quit", {value: 3}));
+						yield* TestClock.adjust(5000);
+						yield* settle;
+						yield* Fiber.join(third);
+						yield* same("starts after the quit", count(), 2);
+						yield* TestClock.adjust(boot - 5000);
+						yield* settle;
+						const fourth = yield* drive.call("quitter_quit", {value: 4});
+						yield* same("the fresh run's answer", fourth.kind, "done");
+					}).pipe(Effect.scoped),
 			),
 	);
 });
