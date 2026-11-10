@@ -18,8 +18,11 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 ## Steps
 
 1. **Read** `AGENTS.md`'s mutation rules.
-2. **Run the fast check** with [the command below](#the-command). `run.sh` and `sample.ts` hold
-   file selection, the seed, sample cap and round settings. Ask before you scale up.
+2. **Read the fast check's report.** `drive.ts` ran it before you started, in a container with its
+   own network ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)), with
+   [the command below](#the-command). Your prompt names its report, `mutbox.json`. Never run
+   Stryker yourself, and start nothing that listens on a port. `run.sh` and `sample.ts` hold file
+   selection, the seed, sample cap and round settings. Ask before you scale up.
 3. **Sort each survivor:** real (a law should catch it), equivalent (no behavior changes) or
    unconfirmed. A schema or class created during module loading needs a hand-planted check
    before any claim. In a disposable copy, show the unchanged code passing in a fresh process.
@@ -35,40 +38,62 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    `file:line` and its status, with hand-plant evidence for startup survivors; the laws added;
    the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
+   Name every test the report lists under `excluded` or `skipped`, with its reason: those did not
+   run. Give the report's `narrowing` list as the arm a against arm b comparison.
    When the sampler selects no mutation ranges, because the diff has no product lines, commit
    nothing and end with `answer: skip <why>`; review takes that row in place of a mutation run.
 
 ## The command
 
 The settings are [the decided fast check](../../../docs/direction/fast-and-daily-mutation.md#the-fast-check-decided-2026-11-01)
-on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option). Run it
-from the repo root of your worktree. `T` is the ticket, `BUILD` the build commit. Set
-`RELATED` to the explicit related-test paths, separated by commas. Ticket 520's proof uses
+on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option).
+`--ticket` is the ticket, `--build` the build commit, `--base` the commit whose tests are arm a.
+`--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
+`RELATED=<paths>`, which `drive.ts` reads. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
-The executable is `scripts/run.sh`.
+The executable inside the container is `scripts/run.sh`, from the build commit.
 
-Wait in the background while `pgrep -f "vitest run" | wc -l` is 6 or more before starting.
-
-**A Claude agent in a worktree runs this step, never a Codex box.** Stryker starts a local logging
-server that listens on a port, and the Codex sandbox refuses it (`listen EPERM`). This is socket
-work, as the lead skill's "Who runs which step" says.
+**The run happens in a container, never on the host and never in an agent's sandbox**
+([0045](../../../.decisions/0045-test-steps-run-in-containers.md)). Stryker starts a logging
+server that listens on a port. The container has its own network (`--network none`), so it may,
+and nothing on the laptop is opened. `mutbox.ts` copies the build commit in read-only, mounts
+nothing from the home folder, and takes the one Docker box lock. `drive.ts` runs it for a
+mutation step. By hand:
 
 ```sh
-export T=520 BUILD=abc1234
-export RELATED=.agents/skills/mutation/scripts/sample.test.ts
-# nice lowers the priority of setup and all workers too.
-nice -n 15 sh .agents/skills/mutation/scripts/run.sh
+node .agents/skills/lead/scripts/mutbox.ts run --checkout . --ticket 520 --build abc1234 \
+	--base origin/main --related .agents/skills/mutation/scripts/sample.test.ts \
+	--out ../boxes/t520-mutbox --lock ../boxes/state/docker.lock
 ```
 
-Set `FINAL=0` only for an intermediate round. `run.sh` defaults to the final force round.
+It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no product line) or
+`stuck`. Docker missing or stopped is `stuck`. It is never run on the host instead.
 
-- `report.json` holds every answer when Stryker finished. When the cap stopped it, read
-  `events/*-onMutantTested.json`, one file per mutant as it came: that is what it kept. Count the
-  mutants it did not reach against `sample.json`. Keep selection omissions (`left`) separate from
-  selected mutants not tested before the cap. Reused answers are not fresh test results.
+- `excluded` names each related test left out before the run, with why: a test that imports
+  Electron or a browser driver needs a display, and the container has none. `skipped` names each
+  test that skipped itself inside the container. Neither ran. A test that fails there before any
+  mutant makes the run `stuck`, naming it.
+- `b` is the branch's own tests. `a` is the same sample against the base's tests, and `narrowing`
+  the mutants `a` kills that `b` lets live.
+
+- `<out>/box/b/report.json` holds every answer when Stryker finished. When the cap stopped it,
+  `mutbox.ts` reads `events/*-onMutantTested.json`, one file per mutant as it came: that is what it
+  kept, and the arm says `from: "events"` and how many were `unreached`. Keep selection omissions
+  (`left`) separate from selected mutants not tested before the cap.
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
+
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+A survivor is this step's own answer and stays in its report, never a finding row. Outside
+means anything else you meet that is wrong.
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
 
 ## Go easy on the machine
 
