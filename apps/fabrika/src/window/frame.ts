@@ -775,7 +775,11 @@ export interface Frame {
 	readonly info: InfoMode;
 	/** Both bars hidden; a thin band stays for the window's buttons. */
 	readonly bare: boolean;
-	/** A short note at the bottom right, as after the palette ran a command: `next time: C-b z`. */
+	/**
+	 * A short note at the bottom right, as after the palette ran a command: `next time: C-b z`. The
+	 * theme's load word is a lasting note (`isLoadWord`): it stays beside keys and info until another
+	 * note takes its place, and no timer clears it.
+	 */
 	readonly note: string | null;
 }
 
@@ -785,6 +789,14 @@ export const FRAME: Frame = {
 	bare: false,
 	note: null,
 };
+
+/**
+ * Is a note the theme's load word (theme.ts, `themeWord`: `theme "dusk": 1 color moved`). It stands
+ * as long as its load report does, so `unnote` leaves it, and the bottom line draws it beside keys
+ * and info rather than in their place.
+ */
+export const isLoadWord = (note: string | null): note is string =>
+	note !== null && /^theme ".*": /.test(note);
 
 /** What the window's status region says of the mode: a screen reader reads it as it changes. */
 export const modeWord = (f: Frame): string => {
@@ -816,7 +828,11 @@ export const EXPLAIN_ON = ["pointerover", "focusin"] as const;
  * word is said there: a mode is always seen (docs/direction/modes.md, M3).
  */
 export const bottomLineShows = (f: Frame, desk: MidKey): boolean =>
-	!f.bare || desk.armed || desk.asking || f.note !== null || f.info.kind === "on";
+	!f.bare ||
+	desk.armed ||
+	desk.asking ||
+	(f.note !== null && !isLoadWord(f.note)) ||
+	f.info.kind === "on";
 
 export type FrameMsg =
 	/** A key after Ctrl-B asked the frame to show something (desk.ts, `show`), but info mode. */
@@ -939,7 +955,7 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 		case "explain":
 			return explain(f, m.text);
 		case "unnote":
-			return {...f, note: null};
+			return isLoadWord(f.note) ? f : {...f, note: null};
 		case "close":
 			return {...f, over: {kind: "none"}};
 		case "escape":

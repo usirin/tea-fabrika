@@ -33,6 +33,7 @@ import {
 	hostWord,
 	INFO,
 	infoFor,
+	isLoadWord,
 	type JobItem,
 	jobItem,
 	jobsList,
@@ -937,7 +938,8 @@ export function BottomLine(props: FrameProps): ReactNode {
 	const right = (): ReactNode => {
 		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
 		if (armed) return <span className="quiet">esc cancels</span>;
-		if (frame.note !== null) return <span className="note">{frame.note}</span>;
+		if (frame.note !== null && !isLoadWord(frame.note))
+			return <span className="note">{frame.note}</span>;
 		const keys = keyFor(props, "keys");
 		const info = keyFor(props, "info");
 		const quiet = quietOf(frame);
@@ -962,6 +964,13 @@ export function BottomLine(props: FrameProps): ReactNode {
 						<span className="broken" title={file}>
 							{file}
 						</span>
+						<Sep />
+					</>
+				)}
+				{/* The theme's load word, beside keys and info for as long as its report stands. */}
+				{isLoadWord(frame.note) && (
+					<>
+						<span className="note">{frame.note}</span>
 						<Sep />
 					</>
 				)}
