@@ -20,30 +20,31 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import fc from "fast-check";
-import {afterAll, describe, expect, it} from "vitest";
+import {describe, expect, it} from "vitest";
+import {NO_SPENT} from "./agents.ts";
 import {
-	claudeProfile,
-	claudeTail,
+	agentTail,
+	changesOf,
 	commitsSaid,
+	decide,
 	endName,
 	freshBox,
 	holdsElectron,
-	leftIn,
 	machine,
 	reportOf,
 	rowOf,
 	startedOf,
 } from "./drive.ts";
 
-// Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
+// Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = {seed: 119120, numRuns: 300};
 
 const ask = {
 	lane: "l",
 	step: "build" as const,
 	agent: "codex" as const,
-	model: "",
-	session: "",
+	model: "gpt-6-astra",
+	effort: "medium",
 	ticket: "1",
 	plan: "p",
 	branch: "fabrikalfa/l",
@@ -84,13 +85,17 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
 		left: held,
 		manifests: [],
 		plancheck: null,
+		changed: 0,
 		report,
 		problem: null,
 	};
-	const [read, cmds] = machine.update.step_read_ok({phase: "reading", ask}, {
-		type: "step_read_ok",
-		value,
-	} as never);
+	const [read, cmds] = machine.update.step_read_ok(
+		{phase: "reading", ask, answer: null, spent: NO_SPENT},
+		{
+			type: "step_read_ok",
+			value,
+		} as never,
+	);
 	if (read.phase !== "pushing") return {state: read, cmd: cmds[0] as {keep: boolean; why: string}};
 	const [state, after] = machine.update.backup_push_ok(read, {
 		type: "backup_push_ok",
@@ -137,6 +142,7 @@ describe("drive takes a skip answer, today's tooling", () => {
 				left: [],
 				manifests: [],
 				plancheck: null,
+				changed: 0,
 				report,
 				problem: null,
 			},
@@ -319,7 +325,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 
 describe("drive asks the lead for the lockfile, today's tooling", () => {
 	const read = (report: string, manifests: readonly string[]) =>
-		machine.update.step_read_ok({phase: "reading", ask}, {
+		machine.update.step_read_ok({phase: "reading", ask, answer: null, spent: NO_SPENT}, {
 			type: "step_read_ok",
 			value: {
 				head: "c".repeat(40),
@@ -330,6 +336,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
 				left: [],
 				manifests,
 				plancheck: null,
+				changed: 0,
 				report,
 				problem: null,
 			},
@@ -370,54 +377,66 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
 	});
 });
 
-describe("leftIn reads a real box, today's tooling", () => {
-	const root = mkdtempSync(join(tmpdir(), "drive-left-"));
-	afterAll(() => rmSync(root, {recursive: true, force: true}));
-	const git = (box: string, ...args: string[]) =>
-		spawnSync("git", ["-C", box, ...args], {encoding: "utf8"});
-	const fresh = (name: string) => {
-		const box = join(root, name);
-		spawnSync("git", ["init", "-q", "-b", "fabrikalfa/l", box]);
-		git(box, "config", "user.email", "t@example.com");
-		git(box, "config", "user.name", "t");
-		writeFileSync(join(box, "a.ts"), "1\n");
-		git(box, "add", "a.ts");
-		git(box, "commit", "-q", "-m", "base");
-		return box;
-	};
+describe("the box's changes are read from its status, today's tooling", () => {
+	it("each NUL-ended status entry is one file with its letters, so a deleted one is told apart", () => {
+		const out = " M a.ts\0?? b/c.ts\0 D gone.ts\0";
+		expect(changesOf(out)).toEqual([
+			{xy: " M", path: "a.ts"},
+			{xy: "??", path: "b/c.ts"},
+			{xy: " D", path: "gone.ts"},
+		]);
+		expect(changesOf("")).toEqual([]);
+	});
 
-	// Plants: drop the status read; drop untracked files; drop commits on another branch.
-	it("counts edited and untracked files, and commits the step's branch lacks", () => {
-		const clean = fresh("clean");
-		expect(leftIn(clean, "fabrikalfa/l")).toEqual([]);
+	it("a review that left a changed file is stuck:review_committed, whatever it answered", () => {
+		fc.assert(
+			fc.property(answer, fc.integer({min: 1, max: 9}), (report, changed) => {
+				const read = {
+					head: ask.base,
+					commits: 0,
+					unsigned: [],
+					exam: [],
+					leaks: [],
+					left: [],
+					manifests: [],
+					plancheck: null,
+					changed,
+					report,
+					problem: null,
+				};
+				const j = decide({...ask, step: "review"}, read);
+				expect(j.outcome).toEqual({kind: "stuck", why: "review_committed"});
+			}),
+			options,
+		);
+	});
 
-		const dirty = fresh("dirty");
-		writeFileSync(join(dirty, "a.ts"), "2\n");
-		writeFileSync(join(dirty, "new.ts"), "3\n");
-		expect(leftIn(dirty, "fabrikalfa/l")).toEqual(["2 uncommitted files"]);
-
-		const off = fresh("off");
-		git(off, "switch", "-q", "-c", "side");
-		writeFileSync(join(off, "b.ts"), "4\n");
-		git(off, "add", "b.ts");
-		git(off, "commit", "-q", "-m", "side");
-		expect(leftIn(off, "fabrikalfa/l")).toEqual(["1 commits off fabrikalfa/l"]);
-
-		// A clone's own main, ahead of the step's branch but on its remote, is not the box's work.
-		// themes build5, 2026-11-09: kept for "21 commits off" that were its local main.
-		const cloned = join(root, "cloned");
-		spawnSync("git", ["clone", "-q", "-b", "fabrikalfa/l", clean, cloned]);
-		git(clean, "switch", "-q", "-c", "main");
-		writeFileSync(join(clean, "m.ts"), "5\n");
-		git(clean, "add", "m.ts");
-		git(clean, "commit", "-q", "-m", "main moved");
-		git(clean, "switch", "-q", "fabrikalfa/l");
-		git(cloned, "fetch", "-q", "origin", "main:main");
-		expect(leftIn(cloned, "fabrikalfa/l")).toEqual([]);
-
-		// A branch the box does not have is a state drive cannot read, so the box stays.
-		expect(leftIn(clean, "fabrikalfa/missing")).toEqual(["a git state drive could not read"]);
-		expect(leftIn(join(root, "gone"), "fabrikalfa/l")).toEqual([]);
+	it("the typed answer wins over the report's answer line, and a build with no commit needs its laws", () => {
+		const read = {
+			head: ask.base,
+			commits: 0,
+			unsigned: [],
+			exam: [],
+			leaks: [],
+			left: [],
+			manifests: [],
+			plancheck: null,
+			changed: 0,
+			report: "answer: stuck no network",
+			problem: null,
+		};
+		expect(decide(ask, read, {verb: "done", to: null, why: "", laws: null}).outcome).toEqual({
+			kind: "stuck",
+			why: "no_commit",
+		});
+		expect(decide(ask, read, {verb: "done", to: null, why: "", laws: "a.test.ts"}).outcome).toEqual(
+			{kind: "done", part: false, head: ask.base},
+		);
+		expect(decide(ask, read, {verb: "send", to: "tests", why: "a law", laws: null})).toEqual({
+			outcome: {kind: "send", to: "tests", why: "step_said"},
+			why: "a law",
+		});
+		expect(decide(ask, read).outcome).toEqual({kind: "stuck", why: "step_said"});
 	});
 });
 
@@ -492,13 +511,17 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 					left: [],
 					manifests: [],
 					plancheck: null,
+					changed: 0,
 					report,
 					problem: null,
 				};
-				const [read] = machine.update.step_read_ok({phase: "reading", ask}, {
-					type: "step_read_ok",
-					value,
-				} as never);
+				const [read] = machine.update.step_read_ok(
+					{phase: "reading", ask, answer: null, spent: NO_SPENT},
+					{
+						type: "step_read_ok",
+						value,
+					} as never,
+				);
 				// A stuck answer is never pushed.
 				if (read.phase !== "pushing") {
 					expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
@@ -523,7 +546,6 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
 	const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
 		"plan" | "tests" | "build" | "mutation" | "review"
 	>;
-	const name = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
 
 	it("holds it for mutation always, and for any other step only when started with --electron", () => {
 		fc.assert(
@@ -537,32 +559,11 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
 	it("tells the agent the lock is held exactly when drive holds it", () => {
 		fc.assert(
 			fc.property(steps, fc.boolean(), (step, flagged) => {
-				const told = claudeTail({step, ticket: "1"}, flagged).includes("state/electron.lock");
+				const told = agentTail({step, ticket: "1"}, flagged).includes("state/electron.lock");
 				expect(told).toBe(holdsElectron(step, flagged));
 			}),
 			options,
 		);
-	});
-
-	it("never lets the box write the lock or anything else in BOXES/state", () => {
-		fc.assert(
-			fc.property(steps, name, (step, box) => {
-				const profile = claudeProfile("/h", "/h/boxes", box, step);
-				expect(profile).not.toContain("/h/boxes/state");
-				expect(profile).not.toContain("electron");
-			}),
-			options,
-		);
-	});
-
-	it("pinned: the profile allows writes only to the box, its git data and the caches", () => {
-		// pinned: ticket 382 widens nothing. A change here is a change to what the box can reach.
-		expect(claudeProfile("/h", "/h/boxes", "l-build1", "build")).toBe(`(version 1)
-(allow default)
-(deny file-read* file-write* (subpath "/h/.fabrika/step-keys") (literal "/h/.fabrika/leak-words") (subpath "/h/.codex"))
-(deny file-write* (subpath "/h"))
-(allow file-write* (subpath "/h/boxes/l-build1") (subpath "/h/boxes/l-build1-gitdata") (subpath "/h/.claude") (subpath "/h/.cache") (subpath "/h/.local") (subpath "/h/.npm") (subpath "/h/Library") (regex #"^/h/\\.claude\\.json"))
-`);
 	});
 
 	it("scenario: --electron on a Codex box is refused before anything starts", () => {

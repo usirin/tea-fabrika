@@ -2,6 +2,8 @@
 import "./chain.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./agents.ts?raw";
 import "./catchup.sh?raw";
 import "./box.sh?raw";
 import "./leakgrep.sh?raw";
@@ -19,9 +21,14 @@ import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
-import {Schema} from "effect";
+import {mkdtempSync, readFileSync, rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {Agent} from "@kampus/fabrika-old";
+import {Effect, Schema} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
+import {Answer, listUsdOf, NO_SPENT, runTurn, type Spent, stepRow} from "./agents.ts";
 import {
 	briefOf,
 	ChainRecord,
@@ -30,6 +37,8 @@ import {
 	type Line,
 	lineOf,
 	makeMachine,
+	movedOf,
+	moveFrom,
 	moveOf,
 	RetriesExhausted,
 	sectionsOf,
@@ -426,5 +435,189 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 			}),
 			options,
 		);
+	});
+});
+
+describe("T341 the judgment agent's typed answer is a move, today's tooling", () => {
+	it("send with a step runs that step again with the note; park, or a send with no step, parks", () => {
+		expect(movedOf({answer: "send", step: "build", note: "fix the law"})).toEqual({
+			_tag: "step",
+			step: "build",
+			note: "the lead's judgment: fix the law",
+		});
+		expect(movedOf({answer: "park", step: null, note: "a decision is needed"})).toEqual({
+			_tag: "park",
+			reason: "a decision is needed",
+		});
+		expect(movedOf({answer: "send", step: null, note: ""})).toEqual({
+			_tag: "park",
+			reason: "the judgment agent parked the lane with no why",
+		});
+	});
+
+	it("the judge Cmd's answer reads back as the move it chose, and an older text by its answer line", () => {
+		fc.assert(
+			fc.property(step, word, (s, note) => {
+				const move = {_tag: "step" as const, step: s, note};
+				expect(moveFrom(JSON.stringify(move))).toEqual(move);
+				expect(moveFrom(JSON.stringify({_tag: "park", reason: note}))).toEqual({
+					_tag: "park",
+					reason: note,
+				});
+				expect(moveFrom(`answer: send ${s} ${note}`)).toEqual(
+					judgedOf(`answer: send ${s} ${note}`),
+				);
+			}),
+			options,
+		);
+	});
+});
+
+describe("T341 a turn runs through the agents package on the fake adapter, today's tooling", () => {
+	const dir = mkdtempSync(join(tmpdir(), "chain-turn-"));
+	const turn = (script: Agent.FakeScript) =>
+		Effect.gen(function* () {
+			const fake = Agent.fakeAdapter(() => script);
+			const agents = Agent.makeAgents({
+				adapters: {claude: fake},
+				sessions: Agent.memorySessions(),
+				reaper: Agent.noReaper,
+			});
+			const events = join(dir, `${Math.random().toString(36).slice(2)}.jsonl`);
+			const report = `${events}.md`;
+			const turned = yield* runTurn(agents, {
+				provider: "claude",
+				session: "s",
+				folder: dir,
+				prompt: "do the step",
+				system: "you are the step",
+				answer: Answer,
+				model: null,
+				effort: null,
+				minutes: 1,
+				events,
+				report,
+			});
+			return {
+				turned,
+				fake,
+				events: readFileSync(events, "utf8"),
+				report: readFileSync(report, "utf8"),
+			};
+		}).pipe(Effect.runPromise);
+
+	it("the last message is the report, its JSON object is the typed answer, and every update is one event line", async () => {
+		const said = 'The laws are green.\n{"verb":"done","to":null,"why":"all green","laws":null}';
+		const {turned, fake, events, report} = await turn({
+			raws: [
+				{_tag: "tool", id: "t1", title: "pnpm test", status: "in_progress"},
+				{_tag: "tool", id: "t1", title: "pnpm test", status: "completed"},
+				{_tag: "said", text: said},
+				{_tag: "tokens", tokens: {input: 100, cached: 40, output: 10}, whole: true},
+				{_tag: "ended", stop: "end_turn", structured: undefined, usd: 0.5, requests: 2},
+			],
+		});
+		expect(report).toBe(said);
+		expect(turned._tag).toBe("ended");
+		if (turned._tag !== "ended") return;
+		expect(turned.answer).toEqual({verb: "done", to: null, why: "all green", laws: null});
+		expect(turned.spent).toEqual({
+			input: 100,
+			cached: 40,
+			output: 10,
+			counted: "turn",
+			usd: 0.5,
+			requests: 2,
+			tools: 1,
+		});
+		const lines = events
+			.trim()
+			.split("\n")
+			.map((l) => JSON.parse(l) as {_tag: string});
+		expect(lines.map((l) => l._tag)).toEqual([
+			"started",
+			"tool",
+			"tool",
+			"said",
+			"tokens",
+			"ended",
+		]);
+		// The prompt reached the adapter with the schema's form appended, and the system prompt named.
+		expect(fake.seen.started[0]?.prompt).toContain("do the step");
+		expect(fake.seen.started[0]?.system).toEqual({_tag: "append", text: "you are the step"});
+	});
+
+	it("a harness that breaks is a failed turn with its why, never a thrown error", async () => {
+		const {turned} = await turn({raws: [{_tag: "said", text: "half"}]});
+		expect(turned._tag).toBe("failed");
+		if (turned._tag === "failed") expect(turned.why).toBe("broke");
+	});
+
+	it("an agent that says nothing fitting ends with a null answer and an empty report", async () => {
+		const {turned, report} = await turn(Agent.saying("no json here"));
+		expect(report).toBe("no json here");
+		expect(turned._tag === "ended" && turned.answer).toBeNull();
+		rmSync(dir, {recursive: true, force: true});
+	});
+});
+
+describe("T341 the field row prices a turn by its provider, today's tooling", () => {
+	const spent: Spent = {
+		input: 1_000_000,
+		cached: 500_000,
+		output: 100_000,
+		counted: "last",
+		usd: 1.25,
+		requests: 3,
+		tools: 4,
+	};
+
+	it("Claude's row takes the SDK's dollars; a Codex row is priced by the table, or not at all", () => {
+		expect(listUsdOf("claude", "sonnet", spent)).toBe(1.25);
+		// 500k uncached at $10, 500k cached at $1, 100k out at $50, per million.
+		expect(listUsdOf("codex", "gpt-6-astra", spent)).toBe(5 + 0.5 + 5);
+		expect(listUsdOf("codex", "gpt-unknown", spent)).toBeNull();
+		expect(listUsdOf("codex", "gpt-6-astra", NO_SPENT)).toBeNull();
+	});
+
+	it("format: one JSON line in fieldrow.py's shape, with the tokens and a why that says how they were counted", () => {
+		const row = JSON.parse(
+			stepRow({
+				run: "t1-build",
+				ticket: "1",
+				step: "build",
+				provider: "codex",
+				model: "gpt-6-astra",
+				effort: "medium",
+				outcome: "pass",
+				why: "done.",
+				started: new Date("2026-11-09T10:00:00Z"),
+				ended: new Date("2026-11-09T10:30:00Z"),
+				spent,
+				redacted: 0,
+			}),
+		) as Record<string, unknown>;
+		expect(row).toMatchObject({
+			run: "t1-build",
+			ticket: "1",
+			step: "build",
+			role: "hand",
+			model: "gpt-6-astra",
+			effort: "medium",
+			outcome: "pass",
+			tokens: null,
+			tools: 4,
+			minutes: 30,
+			costUsd: null,
+			listUsd: 10.5,
+			billed: 1_100_000,
+			inputTokens: 1_000_000,
+			cachedTokens: 500_000,
+			outputTokens: 100_000,
+			billing: "subscription",
+			redacted: 0,
+		});
+		expect(String(row.why)).toContain("a floor");
+		expect(Object.keys(row)).toContain("date");
 	});
 });

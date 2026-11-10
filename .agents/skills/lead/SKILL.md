@@ -208,9 +208,16 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 
 A lead agent used to sit for hours on one lane, starting each step and reading its answer. That
 loop is code now (owner, 2026-11-09; tracker ticket 341). `chain.ts` is a tea machine on the
-Effect engine whose Cmds run `drive.ts` for each step, read its one JSON line, and pick the next
-move; a fresh Claude agent is started only where judgment is needed, and it is gone after one
-answer. Start it in the background and read the last line only:
+Effect engine whose Cmds run `drive.ts`'s pieces in process for each step (`prepare`, then
+`driveStep`), read the step's one line, and pick the next move; a fresh Claude agent is started
+only where judgment is needed, and it is gone after one answer. Every agent, a step's and the
+judgment's, runs through today's fabrika agents package (`Agent`, `@kampus/fabrika-old`) on its ACP
+rows, the same harness rows `summon` starts (`scripts/agents.ts`, owner, 2026-11-09): Codex writes
+its box or only reads it (plan, review), Claude runs in its own OS sandbox. The box's git data is
+outside the box, so the agent commits nothing: it leaves its changes in the tree, and drive copies
+them into a worktree of the main checkout and signs them as one step commit (0028). It answers with
+one JSON object (verb, to, why, laws), read by the agents package's schema. Start it in the
+background and read the last line only:
 
 ```sh
 node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
@@ -240,10 +247,10 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
   with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
   ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
-- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain starts `claude -p` in the main
-  checkout, read-only (`Read,Glob,Grep`, under the same sandbox profile as a Claude plan step), with
-  the lane's state file and the step's report. It answers one line: `answer: send <step> <note>`
-  runs that step again with the note in its brief; `answer: park <why>` ends the lane for the lead.
+- **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one Claude turn in the main
+  checkout on the same agents-package row, told to change nothing, with the lane's state file and
+  the step's report. It answers one JSON object: `send` with a step and a note runs that step again
+  with the note in its brief; `park` with why ends the lane for the lead.
   Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
   step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
   Claude (Electron or socket work), `--electron` the ones that run the app.
