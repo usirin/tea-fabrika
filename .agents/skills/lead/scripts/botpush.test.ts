@@ -10,7 +10,7 @@ import {describe, expect, it} from "vitest";
 
 const options = {seed: 119120, numRuns: 10};
 const word = fc.stringMatching(/^[a-z]{8,12}$/).map((s) => `private_${s}`);
-const ranges = ["tip", "saved", "diverged"] as const;
+const ranges = ["tip", "saved", "diverged", "undone"] as const;
 const input = fc.record({word, leak: fc.boolean(), range: fc.constantFrom(...ranges)});
 
 // Real Git and real caller. Only keychain, HTTP and network Git are replaced. The RSA key exists
@@ -33,7 +33,8 @@ syncBuiltinESMExports();
 `;
 
 describe("T325 K6 botpush, today's tooling", () => {
-	// Plant: omit the leakgrep call. Removed private text and the repo URL must still push.
+	// Plants: omit the leakgrep call; omit its --commits call. Removed private text and the repo URL
+	// must still push.
 	it("scans every submitted commit from the merge base at the requested source", () => {
 		fc.assert(
 			fc.property(input, ({word, leak, range}) => {
@@ -87,6 +88,13 @@ describe("T325 K6 botpush, today's tooling", () => {
 							git("commit", "-qm", "independent upstream change");
 							git("update-ref", "refs/remotes/origin/main", "HEAD");
 							git("checkout", "--detach", source);
+						}
+
+						// Decision 0048: each commit is read on its own, so a later commit changes no answer.
+						if (range === "undone") {
+							writeFileSync(join(dir, "subject.md"), "safe again\n");
+							git("add", "subject.md");
+							git("commit", "-qm", "the next commit takes the change back");
 						}
 
 						writeFileSync(join(dir, "tip.md"), "safe followup\n");
@@ -178,6 +186,8 @@ describe("T325 K6 botpush, today's tooling", () => {
 					[{word: "private_aaaaaaaa", leak: false, range: "saved"}],
 					[{word: "private_aaaaaaaa", leak: true, range: "diverged"}],
 					[{word: "private_aaaaaaaa", leak: false, range: "diverged"}],
+					[{word: "private_aaaaaaaa", leak: true, range: "undone"}],
+					[{word: "private_aaaaaaaa", leak: false, range: "undone"}],
 				],
 			},
 		);
