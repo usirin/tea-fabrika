@@ -30,6 +30,8 @@
 	"dependencies": {
 		"@demlik/code-graph": "catalog:",
 		"@demlik/tea": "catalog:",
+		"@effect/platform-node": "catalog:",
+		"@kampus/fabrika-old": "workspace:*",
 		"@kampus/pipeline": "workspace:*",
 		"@kampus/promises": "workspace:*",
 		"effect": "catalog:"
