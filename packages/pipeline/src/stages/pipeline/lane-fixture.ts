@@ -25,6 +25,7 @@ const IDENTITY = {
 const FAKE_CODEX = fileURLToPath(
 	new URL("../../../../../fixtures/pipeline-lane/codex.mjs", import.meta.url),
 );
+
 const FAKE_GH = fileURLToPath(
 	new URL("../../../../../fixtures/pipeline-lane/gh.mjs", import.meta.url),
 );
@@ -253,6 +254,7 @@ const GhPull = Schema.Struct({
 	mergeCommit: Schema.NullOr(Schema.String),
 	comments: Schema.Array(Schema.Struct({body: Schema.String})),
 });
+
 const readPulls = Schema.decodeUnknownSync(
 	Schema.fromJsonString(Schema.Struct({pulls: Schema.Array(GhPull)})),
 );

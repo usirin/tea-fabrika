@@ -14,12 +14,14 @@ import {ledgerOptions} from "./worker-options.ts";
 
 const pairOf = async () =>
 	(await crypto.subtle.generateKey({name: "Ed25519"}, true, ["sign", "verify"])) as CryptoKeyPair;
+
 const lineOf = async (p: CryptoKeyPair) =>
 	keyLineOf(new Uint8Array(await crypto.subtle.exportKey("raw", p.publicKey)));
 
 const users = new Map<string, {id: number; keys: string[]}>();
 /** Every call the Worker made to the fake GitHub: its path, and its `authorization` header. */
 const calls: {path: string; auth: string | null}[] = [];
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	calls.push({path: url.pathname, auth: req.headers.get("authorization")});
@@ -45,6 +47,7 @@ let url = "";
 let alice: CryptoKeyPair;
 let bob: CryptoKeyPair;
 let triage: CryptoKeyPair;
+
 beforeAll(async () => {
 	[alice, bob, triage] = await Promise.all([pairOf(), pairOf(), pairOf()]);
 	users.set("alice", {id: 7, keys: [await lineOf(alice)]});
@@ -64,16 +67,19 @@ beforeAll(async () => {
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });
 
 const door = () => doorOf({url, ledger: LEDGER});
 const run = <A, E>(e: Effect.Effect<A, E>) => Effect.runPromise(e);
+
 const asLedger = <A, E>(token: Redacted.Redacted<string>, e: Effect.Effect<A, E, Ledger>) =>
 	Effect.runPromiseExit(
 		e.pipe(Effect.provide(layerHttp({url, ledger: LEDGER, token})), Effect.scoped),
 	);
+
 const post = (path: string, body: unknown, token?: string) =>
 	fetch(`${url}/${LEDGER}/${path}`, {
 		method: "POST",

@@ -42,9 +42,11 @@ type Mod = {
 	readonly createHost: typeof realHost.createHost;
 	readonly programOf: typeof realHost.programOf;
 };
+
 const real: Mod = {createHost: realHost.createHost, programOf: realHost.programOf};
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
@@ -76,6 +78,7 @@ const settingsOf = (renewEveryMs: number) => {
 	const settings = {renewEveryMs, retryMs: 50, graceMs: GRACE, retryRenewMs: AWAY_EVERY};
 	return settings;
 };
+
 const machineOf = (mod: Mod, renewEveryMs: number) => mod.createHost(settingsOf(renewEveryMs));
 type Machine = ReturnType<Mod["createHost"]>;
 
@@ -84,6 +87,7 @@ type Machine = ReturnType<Mod["createHost"]>;
 const FENCES = [1, 2, 3] as const;
 const arbFence = fc.constantFrom(...FENCES);
 const arbUntil = fc.constantFrom(500, 1000, 2000);
+
 const ENDS: readonly ProgramEnd[] = [
 	{how: "ended"},
 	{how: "crashed", why: "boom", suspect: 9},
@@ -118,6 +122,7 @@ const table: MsgArbitraryTable<HostMsg> = {
 	exited: arbRecordMsg("exited", {fence: arbFence, pos: fc.constant(5)}),
 	exit_refused: arbRecordMsg("exit_refused", {fence: arbFence}),
 };
+
 /** Every walk starts by winning the name under fence 1, so most steps are an owner's. */
 const walks = arbMsgSequence(
 	arbMsg(table, {
@@ -131,6 +136,7 @@ const walks = arbMsgSequence(
 		maxLength: 20,
 	},
 );
+
 const ctx = stubCtxThrowingProxy<undefined>();
 const holds = (s: Host) => s.phase === "owning" || s.phase === "exiting";
 
@@ -273,6 +279,7 @@ type Pending =
 	  }
 	| {readonly at: number; readonly kind: "takeover"; readonly ver: number}
 	| {readonly at: number; readonly kind: "alarm"; readonly ver: number};
+
 /** `n` orders events due at the same time: first pushed, first run. */
 type Event = Pending & {readonly n: number};
 

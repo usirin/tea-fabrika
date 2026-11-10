@@ -35,6 +35,7 @@ import * as fc from "fast-check";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const runs = (numRuns: number) => ({seed: SEED, endOnFailure: true, numRuns});
 const SpanPage = Schema.Struct({spans: Schema.Array(SpanRow), next: Schema.Int});
+
 const ADD_SAW = {
 	how: "device",
 	check: "touch",
@@ -44,11 +45,13 @@ const ADD_SAW = {
 	kept: null,
 	old: null,
 } as const;
+
 const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
 const processId = (): string => Effect.runSync(ids.next(Id.Process));
 const OTHER_PROCESS = processId();
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROCESS = processId();
+
 const SAW = {
 	code: "1234",
 	label: "Browser",
@@ -57,28 +60,34 @@ const SAW = {
 	check: "touch",
 	has: ["verify", "seal"],
 } as const;
+
 const SENT = "2026-11-08T04:00:00.000Z";
 const START = processId();
 const TOOK = {label: "Browser", where: "test", how: "panel", check: "touch"} as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
+
 const u32 = (n: number) => {
 	const b = Buffer.alloc(4);
 	b.writeUInt32BE(n);
 	return b;
 };
+
 const field = (value: string | Uint8Array) => {
 	const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
 	return Buffer.concat([u32(b.length), b]);
 };
+
 const armor = (bytes: Uint8Array) =>
 	`-----BEGIN SSH SIGNATURE-----\n${Buffer.from(bytes)
 		.toString("base64")
 		.match(/.{1,70}/g)
 		?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+
 const fingerprint = (bytes: Uint8Array) =>
 	`SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+
 const signedBytes = (text: string, space: string = SPACE) =>
 	Buffer.concat([
 		Buffer.from("SSHSIG"),
@@ -87,6 +96,7 @@ const signedBytes = (text: string, space: string = SPACE) =>
 		field("sha512"),
 		field(createHash("sha512").update(text).digest()),
 	]);
+
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 	armor(
 		Buffer.concat([
@@ -99,6 +109,7 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
 			field(signature),
 		]),
 	);
+
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
 	Effect.tryPromise({try: call, catch: () => new Error("test WebCrypto failed")});
 
@@ -128,6 +139,7 @@ const integer = (raw: Uint8Array) => {
 		? Buffer.concat([Buffer.from([0]), bytes])
 		: bytes;
 };
+
 const passkey = Effect.fn("test.passkey")(function* () {
 	const pair = yield* web(() =>
 		crypto.subtle.generateKey({name: "ECDSA", namedCurve: "P-256"}, false, ["sign", "verify"]),
@@ -223,22 +235,28 @@ const passkey = Effect.fn("test.passkey")(function* () {
 // Loading inside the test hook lets each new law report the missing door on the pre-build base,
 // instead of losing every law to a collection error. This always imports the real module.
 let Door: typeof import("@kampus/libfabrika/door").Door;
+
 beforeEach(async () => {
 	({Door} =
 		await vi.importActual<typeof import("@kampus/libfabrika/door")>("@kampus/libfabrika/door"));
 });
+
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const opened: Array<DatabaseSync> = [];
+
 afterAll(() => {
 	for (const db of opened) if (db.isOpen) db.close();
 	rmSync(top, {recursive: true, force: true});
 });
+
 const open = (path: string) => {
 	const db = new DatabaseSync(path);
 	opened.push(db);
 	return db;
 };
+
 const URL = "https://fabrika.test/entry/project-socket";
+
 const Input = Schema.TaggedUnion({
 	comment: {ticket: Schema.Struct({id: Schema.String}), text: Schema.String},
 	approve: {answer: Schema.String},
@@ -249,14 +267,18 @@ const Input = Schema.TaggedUnion({
 		}),
 	},
 });
+
 const comment = (text = "hello") => Input.cases.comment.make({ticket: {id: "ticket-7"}, text});
+
 type Envelope = {
 	id: string;
 	by: {_tag: "person" | "agent"; key: string; for: string};
 	arrivedAt: number;
 	input: unknown;
 };
+
 type Delivery = {process: string; envelope: Envelope; trace: {traceId: string; spanId: string}};
+
 type DeliveryCheck = Effect.Effect<
 	void,
 	LedgerError | SinkError | Effect.Error<ReturnType<typeof writeId>>,
@@ -405,6 +427,7 @@ const world = Effect.fnUntraced(function* (
 		bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
 	};
 });
+
 type World = Effect.Success<ReturnType<typeof world>>;
 
 // Compile-only law: a client cannot choose the connection whose state these calls change.
@@ -417,15 +440,19 @@ const plainConnectionTypeLaw = (door: typeof Door.Service, wire: string) => {
 	const disconnect = door.disconnect(wire);
 	return [challenge, hello, disconnect];
 };
+
 void plainConnectionTypeLaw;
 
 const entries = (stream: string) =>
 	Ledger.use((l: typeof Ledger.Service) => Stream.runCollect(l.read(stream, 0)));
+
 const stamped = () => entries("door/inputs");
+
 const rawRows = (db: DatabaseSync, stream: string) =>
 	db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'").get()
 		? db.prepare("SELECT * FROM entries WHERE stream=? ORDER BY rev").all(stream)
 		: [];
+
 const request = (letter: string, m: unknown = comment()) => ({
 	pid: PROCESS,
 	letter,
@@ -433,6 +460,7 @@ const request = (letter: string, m: unknown = comment()) => ({
 	sentAt: SENT,
 	seen: 0,
 });
+
 const online = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
@@ -459,6 +487,7 @@ const online = Effect.fnUntraced(function* (
 	expect(result._tag).toBe("online");
 	return {nonce, hello, client};
 });
+
 const grantWindow = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
@@ -480,8 +509,10 @@ const grantWindow = Effect.fnUntraced(function* (
 	expect((yield* d.grant({text, armored}))._tag).toBe("applied");
 	return yield* online(d, w, client, k);
 });
+
 const writeId = (id: string, effect: ReturnType<typeof Door.Service.signer>) =>
 	effect.pipe(Effect.provideService(C.SignRequest, {id}));
+
 const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
 	let armed = true;
 	const sql = {
@@ -496,6 +527,7 @@ const failSessionRecord = (inner: ReturnType<typeof nodeSql>) => {
 	};
 	return {sql, failed: () => !armed};
 };
+
 const device = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,
@@ -513,6 +545,7 @@ const device = Effect.fnUntraced(function* (
 	});
 	expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 });
+
 const sheet = Effect.fnUntraced(function* (d: typeof Door.Service, w: World) {
 	const text = C.addText({
 		id: "sheet",
@@ -525,6 +558,7 @@ const sheet = Effect.fnUntraced(function* (d: typeof Door.Service, w: World) {
 	});
 	expect((yield* d.grant({text, armored: yield* w.root.sign(text)}))._tag).toBe("applied");
 });
+
 const enrolled = Effect.fnUntraced(function* (
 	d: typeof Door.Service,
 	w: World,

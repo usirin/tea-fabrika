@@ -46,6 +46,7 @@ const Run = Schema.Struct({
 	agent: Schema.NullOr(Schema.String),
 	folder: Schema.NullOr(Schema.String),
 });
+
 const PlanAskBody = Schema.Struct({run: Run, settings: Settings});
 const readAsk = Schema.decodeUnknownExit(PlanAskBody);
 

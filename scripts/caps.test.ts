@@ -19,6 +19,7 @@ import {testConfig} from "../vitest.config.ts";
 const root = resolve(import.meta.dirname, "..");
 const options = {seed: 325, numRuns: 4};
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
+
 const load = `
 if (process.env.TEST_NODE_VERSION) {
   Object.defineProperty(process, 'version', {value: 'v' + process.env.TEST_NODE_VERSION});
@@ -42,6 +43,7 @@ console.log(JSON.stringify({workers: value.test.maxWorkers, home: process.env.FA
   setupFiles: value.test.setupFiles, sequencer: value.test.sequence?.sequencer === Shards,
   forceRerunTriggers: value.test.forceRerunTriggers, include: value.test.include}));
 `;
+
 const probe = (cwd: string, args: string[], env: Record<string, string | undefined> = {}) =>
 	spawnSync(process.execPath, ["--input-type=module", "-e", load], {
 		cwd,

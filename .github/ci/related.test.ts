@@ -11,14 +11,17 @@ import {createVitest, type Vitest} from "vitest/node";
 // T375 plants caught: restoring skill force triggers selects every test; deleting box.test.ts's
 // box.sh declaration omits that test. The latter first survived mixed subsets; singletons catch it.
 const root = join(import.meta.dirname, "../..");
+
 const files = readdirSync(join(root, ".agents/skills"), {recursive: true, withFileTypes: true})
 	.filter((entry) => entry.isFile())
 	.map((entry) => relative(root, join(entry.parentPath, entry.name)));
+
 const tree = new Map(
 	files
 		.filter((path) => /\/scripts\/[^/]+$/.test(path))
 		.map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
+
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
 const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
 
@@ -39,19 +42,24 @@ const readers = new Map(
 		return [test, reached] as const;
 	}),
 );
+
 // Unreferenced scripts have no reader, as the plan's final limits section says.
 const readScripts = scripts.filter((script) =>
 	[...readers.values()].some((paths) => paths.has(script)),
 );
+
 const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("/scripts/"));
 const options = {seed: 119120, numRuns: 20};
 let vitest: Vitest;
+
 beforeAll(async () => {
 	vitest = await createVitest("test", {root, watch: false, maxWorkers: 1});
 });
+
 afterAll(async () => {
 	await vitest?.close();
 });
+
 const affected = async (paths: string[]) => {
 	vitest.config.related = paths.map((path) => join(root, path));
 	return (await vitest.getRelevantTestSpecifications())

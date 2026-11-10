@@ -39,6 +39,7 @@ const ASK = {pr: PR, head: null, rubrics: "rubrics"};
 const RAN: Ran = {spend: noSpend, tools: ["Read"], refused: [], links: 0};
 const held = {ask: ASK, settings: SETTINGS, waits: DEFAULT_WAITS, limit: DEFAULT_TRIES} as const;
 const NOTE: Note = {title: "An old doc is stale", body: "It names a flag that is gone.", at: null};
+
 const OTHER: Note = {
 	title: "A test elsewhere is skipped",
 	body: "It has been for a year.",
@@ -59,7 +60,9 @@ const reviewing = (patch: Partial<Extract<Review, {phase: "reviewing"}>> = {}): 
 	notes: [],
 	...patch,
 });
+
 const from = (run = 1) => ({pr: PR, head: HEAD, run});
+
 const passing = (): Form => ({
 	rows: BRIEF.criteria.map((c) => ({
 		id: c.id,

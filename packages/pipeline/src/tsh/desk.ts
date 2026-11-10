@@ -80,6 +80,7 @@ export interface DeskRefused {
 	readonly _tag: "desk_refused";
 	readonly message: string;
 }
+
 const refusedWith = (message: string): DeskRefused => ({_tag: "desk_refused", message});
 
 const fromPack = (e: PackRefused) => refusedWith(`the pack ${e.name} did not start: ${e.why}`);
@@ -283,6 +284,7 @@ const linesOf = (running: Running) =>
 	});
 
 const Line = output(Schema.String, "One line of the desk.");
+
 /** Send each line on `line`, one after another: a desk is read top to bottom. */
 const sendAll =
 	<E, R>(send: (output: "line", value: string) => Effect.Effect<void, E, R>) =>

@@ -46,6 +46,7 @@ const SENT = "2026-11-07T21:10:01.204Z";
 // hash of the code that wrote the line, both handed in by the wiring (log.ts, `Line`).
 const FOUNDER_BY = "SHA256:founder-mac";
 const FOUNDER_BUILD = "b-5e9c2a0";
+
 const FOUNDER = {
 	name: NAME,
 	keys: ["pA"],
@@ -54,17 +55,20 @@ const FOUNDER = {
 	by: FOUNDER_BY,
 	build: FOUNDER_BUILD,
 } as const;
+
 const FOUNDED: MemberFact = {_tag: "founded", id: P, name: NAME, keys: ["pA"], window: "wA"};
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
 const folder = mkdtempSync(join(tmpdir(), "p9-clients-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -72,11 +76,13 @@ afterAll(() => {
 
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 const onSql = (sql: Sql) => Ledger.sql(sql, {reader: READER}).pipe(Layer.provide(quiet));
+
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
 const clientsOn = (
 	ledger: Layer.Layer<Ledger>,
 	founder: Parameters<typeof ClientManager.layer>[0] = FOUNDER,
 ) => ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+
 const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.record({
 	name: fc.string(),
 	keys: fc.uniqueArray(fc.string(), {minLength: 1, maxLength: 5}),
@@ -85,7 +91,9 @@ const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.r
 	by: fc.string({minLength: 1}),
 	build: fc.string({minLength: 1}),
 });
+
 const leaf = fc.string().map((s) => `tab:${s}`);
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: NoInfer<A>[],
@@ -118,9 +126,12 @@ const from = (over: Partial<From> = {}): From => ({
 	build: "b-7c1d073",
 	...over,
 });
+
 const entries = Ledger.use((ledger) => Stream.runCollect(ledger.read(MEMBERS, 0)));
+
 const write = (fact: MemberFact, over: Partial<From> = {}) =>
 	ClientManager.use((clients) => clients.write(fact, from(over)));
+
 const members = ClientManager.use((clients) => clients.members);
 
 // ---- Facts. Signatures are not checked here, so `signed` is opaque text naming its signer ----
@@ -133,7 +144,9 @@ const SAW = {
 	check: "touch",
 	has: [],
 } as const;
+
 const TOOK = {label: "Mac A", where: "Istanbul", how: "panel", check: "touch"} as const;
+
 const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | null = null) => ({
 	how,
 	check: "touch" as const,
@@ -143,11 +156,13 @@ const addSaw = (how: "sheet" | "recovery" | "device", old: "lost" | "kept" | nul
 	kept: how === "sheet" ? ("print" as const) : null,
 	old,
 });
+
 const signed = (signer: string) => ({
 	text: `signed by ${signer}`,
 	armored: "-----SSHSIG-----",
 	signer,
 });
+
 let made = 0;
 const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
 
@@ -168,11 +183,13 @@ const granted = (
 	},
 	signed: signed(signer),
 });
+
 const revoked = (signer: string, key: string): MemberFact => ({
 	_tag: "revoked",
 	revoke: {id: nextId("revoke"), key, for: P, to: TO, saw: TOOK, sentAt: SENT},
 	signed: signed(signer),
 });
+
 const addedDevice = (
 	signer: string,
 	key: string,
@@ -191,6 +208,7 @@ const addedDevice = (
 	},
 	signed: signed(signer),
 });
+
 const addedSheet = (signer: string, key: string): MemberFact => ({
 	_tag: "added",
 	add: {
@@ -204,6 +222,7 @@ const addedSheet = (signer: string, key: string): MemberFact => ({
 	},
 	signed: signed(signer),
 });
+
 const denied = (key: string, by: string): MemberFact => ({
 	_tag: "denied",
 	id: nextId("deny"),
@@ -211,6 +230,7 @@ const denied = (key: string, by: string): MemberFact => ({
 	saw: SAW,
 	by,
 });
+
 /** The id a fact is appended under: its own, and `founded` for the founding. */
 const factId = (fact: MemberFact): string => {
 	switch (fact._tag) {
@@ -688,12 +708,15 @@ const WINDOWS = ["wA", "wB", "wC"] as const;
 const LEAVES = ["t1", "t2", "g1"] as const;
 const SHEETS = ["r1", "r2"] as const;
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, "x1"];
+
 const signer = fc.oneof(
 	{weight: 5, arbitrary: fc.constantFrom(...PERSONS)},
 	{weight: 2, arbitrary: fc.constantFrom(...SHEETS)},
 	{weight: 2, arbitrary: fc.constantFrom(...WINDOWS, ...LEAVES, "x1")},
 );
+
 const anyKey = fc.constantFrom(...ALL);
+
 const fact: fc.Arbitrary<() => MemberFact> = fc.oneof(
 	{
 		weight: 5,

@@ -19,6 +19,7 @@ const item = (n: number): Item => ({
 	where: [],
 	wants: [],
 });
+
 const round = (n: number, open: number | null): Round => ({
 	n,
 	built: "done",
@@ -32,9 +33,11 @@ const round = (n: number, open: number | null): Round => ({
 	spend: 0,
 	problems: [],
 });
+
 const failed: Pick<Reviewed, "outcome"> = {
 	outcome: {kind: "send", to: "builder", why: "review_failed"},
 };
+
 const passed: Pick<Reviewed, "outcome"> = {outcome: {kind: "done", part: false, head: HEAD}};
 
 const report: BuildReport = {

@@ -51,6 +51,7 @@ const RUNNER = {
 	claude: {model: "claude-made-up-4", harness: "claude"},
 	madeup: {model: "made-up-model", harness: "codex"},
 } as const;
+
 type Runner = keyof typeof RUNNER;
 
 /** What an `ended` holds as a price: left out, `null`, or a number, 0 among them. */

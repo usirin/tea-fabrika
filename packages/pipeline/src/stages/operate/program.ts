@@ -123,6 +123,7 @@ const OUTPUTS = {
 	),
 	ended: output(Ended, "Once per ticket: how the loop ended, why, and every round."),
 };
+
 type Outputs = typeof OUTPUTS;
 
 const unknown = {_tag: "unknown" as const};

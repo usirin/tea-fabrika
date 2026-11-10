@@ -37,6 +37,7 @@ const dir = mkdtempSync(join(tmpdir(), "door-"));
 afterAll(() => rmSync(dir, {recursive: true, force: true}));
 
 type Key = {readonly line: string; readonly sign: (text: string) => Promise<string>};
+
 const newKey = async (namespace = NAMESPACE): Promise<Key> => {
 	const pair = (await crypto.subtle.generateKey({name: "Ed25519"}, true, [
 		"sign",
@@ -97,6 +98,7 @@ const fakeKeys = () => {
 };
 
 let n = 0;
+
 const setup = (config: DoorConfig) => {
 	const {db} = openDb(join(dir, `door-${n++}.sqlite`));
 	rules.migrate(db);

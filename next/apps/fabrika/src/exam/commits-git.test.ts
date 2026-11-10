@@ -26,6 +26,7 @@ const ENV: NodeJS.ProcessEnv = {
 	GIT_COMMITTER_NAME: "step",
 	GIT_COMMITTER_EMAIL: "step@fabrika.test",
 };
+
 delete ENV.GITHUB_STEP_SUMMARY;
 delete ENV.GITHUB_ACTIONS;
 
@@ -38,20 +39,27 @@ const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV)
 const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, {mode: 0o700});
 type Who = Role | "stranger";
+
 for (const who of ["tests", "build", "lead", "stranger", "person"])
 	sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", who, "-f", join(KEYS, who)]);
+
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
+
 const pub = (who: string) =>
 	readFileSync(join(KEYS, `${who}.pub`), "utf8")
 		.split(" ")
 		.slice(0, 2)
 		.join(" ");
+
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (who: string) =>
 	sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
+
 const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
+
 const stepKeys = (build = "build") =>
 	`${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+
 const GOOD_KEYS = stepKeys();
 const personLine = (id: string, who = "person") => `person:${id} namespaces="git" ${pub(who)}`;
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
@@ -1157,6 +1165,7 @@ const squashed = (r: Repo, notes: Array<{note: object; commit: string}>, moveMai
 	);
 	return {squash, rows};
 };
+
 const log = (r: Repo, rows: object[]) => {
 	r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 	return r.commit("log");

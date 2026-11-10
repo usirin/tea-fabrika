@@ -31,6 +31,7 @@ const FORMATTER = {
 
 const SPACES =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n  expect(lower("AB")).toBe("ab");\n});\n';
+
 /** What the formatter makes of `SPACES`. */
 const TABS =
 	'import {expect, it} from "vitest";\nimport {lower} from "./lower.ts";\n\nit("lowers capitals", () => {\n\texpect(lower("AB")).toBe("ab");\n});\n';

@@ -18,11 +18,13 @@ import {
 // over the asks ledger.
 
 const TICKET = ticketId("example/repo#3");
+
 const c = (n: number, version: number, text: string): Stated => ({
 	id: criterionId(`c${n}`),
 	version,
 	text,
 });
+
 const row = (s: Stated, head: string, grade: "pass" | "fail" = "pass"): Row => ({
 	criterion: s.id,
 	version: s.version,
@@ -30,6 +32,7 @@ const row = (s: Stated, head: string, grade: "pass" | "fail" = "pass"): Row => (
 	grade,
 	proof: `the review at ${head}`,
 });
+
 /** One review round at `head`: the criteria it read, its rows, and what it found that none covers. */
 const round = (
 	head: string,
@@ -45,14 +48,17 @@ const C2_AGAIN = c(2, 2, "the door locks, from inside too");
 
 const on = <A, E>(layer: Layer.Layer<CriteriaRecord>, body: Effect.Effect<A, E, CriteriaRecord>) =>
 	Effect.runPromise(body.pipe(Effect.provide(layer)));
+
 const judge = (ticket: TicketId, judgement: Judgement) =>
 	Effect.gen(function* () {
 		return yield* (yield* CriteriaRecord).judged(ticket, judgement);
 	});
+
 const read = (ticket: TicketId) =>
 	Effect.gen(function* () {
 		return yield* (yield* CriteriaRecord).read(ticket);
 	});
+
 const said = (v: {
 	readonly id: string;
 	readonly criterion: string;

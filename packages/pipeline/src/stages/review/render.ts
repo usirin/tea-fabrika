@@ -31,6 +31,7 @@ const NOTHING = "Nothing.";
 
 const placeOf = (place: Place) =>
 	`\`${inert(place.file).replaceAll("`", "'")}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}\``;
+
 const fromOf = (from: From) => {
 	switch (from.source) {
 		case "criterion":
@@ -45,6 +46,7 @@ const fromOf = (from: From) => {
 			return `a person's decision on the plan, question ${from.id}`;
 	}
 };
+
 /**
  * An agent's text, for a comment on a pull request: on one line, since a list item that breaks its
  * line would break the list, and inert, so it pings nobody and closes nothing.

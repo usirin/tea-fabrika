@@ -45,6 +45,7 @@ import {readToPage, readToWindow} from "./src/messages.ts";
 const DIST = join(import.meta.dirname, "dist");
 const OUT = process.env.SHOTS ?? join(import.meta.dirname, "docs", "round-6");
 const ORIGIN = "http://fabrika.test";
+
 const TYPES: Readonly<Record<string, string>> = {
 	html: "text/html",
 	js: "text/javascript",
@@ -68,6 +69,7 @@ const traceWith = (names: readonly string[]): Model => {
 		chosen: keys.at(-1) ?? null,
 	};
 };
+
 const traceView = (model: Model) => ({
 	type: "view",
 	program: "trace",
@@ -100,6 +102,7 @@ const views = {
 		data: Schema.encodeSync(tracker.view.data)(tracker.view.of(state)),
 	},
 } as const;
+
 for (const view of Object.values(views)) {
 	const read = readToWindow(view);
 	if (read.kind === "refused") throw new Error(`a view does not read: ${read.why}`);
@@ -113,6 +116,7 @@ const RUNS = {
 	t4: {id: "4", program: "trace"},
 	t5: {id: "5", program: "trace"},
 } as const;
+
 type Tile = keyof typeof RUNS;
 
 /** The tiles named, each showing its run; the ones named in `folded` folded into strips. */
@@ -160,6 +164,7 @@ const deskWith = (root: ContainerNode, focused: string) => {
 
 /** The workspace's size in the 1440 by 900 window, as the page tells the host. */
 const AREA: DeskMsg = {type: "area", width: 1432, height: 868};
+
 const LINE = [
 	{id: "6", program: "tracker"},
 	{id: "1", program: "ticket"},
@@ -243,6 +248,7 @@ const bridge = (arg: {desk: unknown; views: Readonly<Record<string, unknown>>}) 
 
 await mkdir(OUT, {recursive: true});
 const browser = await chromium.launch({headless: true});
+
 try {
 	for (const shot of shots) {
 		const context = await browser.newContext({

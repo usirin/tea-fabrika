@@ -17,6 +17,7 @@ import {vi} from "vitest";
 vi.mock("../alchemy.run.ts", () => ({
 	stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
 }));
+
 vi.mock("alchemy/Deploy", () => ({
 	deploy: ({stack}: {stack: Context.Context<never>}) =>
 		Effect.gen(function* () {
@@ -48,6 +49,7 @@ const fileWithoutSync = (file: FileSystem.File): FileSystem.File => ({
 	write: (buffer) => file.write(buffer),
 	writeAll: (buffer) => file.writeAll(buffer),
 });
+
 const filesWithoutSync = Layer.effect(
 	FileSystem.FileSystem,
 	Effect.map(FileSystem.FileSystem, (fs) =>
@@ -59,11 +61,13 @@ const filesWithoutSync = Layer.effect(
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
 const homes: Array<string> = [];
+
 const home = () => {
 	const folder = mkdtempSync(join(tmpdir(), "p12-m-"));
 	homes.push(folder);
 	return folder;
 };
+
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllEnvs();

@@ -9,6 +9,7 @@ import {builderRefusal} from "./check.ts";
 // the sandbox opens to its commands. No agent runs here.
 
 const TREE = "/work/trees/1";
+
 const refused = (tool: string, input: Record<string, unknown>) =>
 	builderRefusal(TREE, [], tool, input);
 

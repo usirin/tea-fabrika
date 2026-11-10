@@ -48,6 +48,7 @@ const options = {seed: 321, numRuns: 3, endOnFailure: true};
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 type Call = {cmd: string; args: string[]; cwd: string; head?: string};
 type Operation = {path: string; text?: string; to?: string};
+
 type Setup = {
 	operations?: Operation[];
 	batches?: Operation[][];
@@ -61,6 +62,7 @@ type Setup = {
 	openPrs?: string[];
 	gh?: "down";
 };
+
 const body = (
 	files: Array<[string, string]> = [
 		["src/a.ts", "tests"],
@@ -68,9 +70,12 @@ const body = (
 	],
 ) =>
 	`# Today's tooling\n\n\`\`\`text\nstep -> fetch\n\`\`\`\n\n## Laws\n| Law | Generator | Plant |\n| --- | --- | --- |\n| holds | fc.record: files | break |\n\n## Files\n| File | Owner step |\n| --- | --- |\n${files.map(([path, owner]) => `| ${path} | ${owner} |`).join("\n")}\n\n## Size\n1 agent hour, 80 lines. Confidence: 90%.\n\n## What it records\nRun IDs and digests.\n\n## What it cannot tell us\nNo live service.\n\n## Open questions\nNone.\n`;
+
 const hash = (text: string) => createHash("sha256").update(Buffer.from(text)).digest("hex");
+
 const approve = (text: string) =>
 	`Approved by the lead agent, builds the decided note; body ${hash(text).slice(0, 12)}\nPlancheck-Version: 2\n${text}`;
+
 const write = (path: string, text: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, text);
@@ -160,6 +165,7 @@ class Box {
 	readonly branch = "fabrikalfa/one";
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(files?: Array<[string, string]>) {
 		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")])
 			mkdirSync(path, {recursive: true});
@@ -242,28 +248,35 @@ class Box {
 		write(join(this.dir, "prompt"), "A bounded fixture run.\n");
 		this.state();
 	}
+
 	close() {
 		rmSync(this.dir, {recursive: true, force: true});
 	}
+
 	setup(value: Setup) {
 		write(join(this.dir, "setup.json"), JSON.stringify(value));
 	}
+
 	call(cmd: string, args: string[], cwd = this.main, env = this.env) {
 		const r = spawnSync(cmd, args, {cwd, env, encoding: "utf8", timeout: 15_000});
 		expect(r.error, `${cmd} failed to start`).toBeUndefined();
 		return {code: r.status, signal: r.signal, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	must(cmd: string, args: string[], cwd = this.main) {
 		const r = this.call(cmd, args, cwd);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	git(cwd: string, ...args: string[]) {
 		return this.must("/usr/bin/git", args, cwd);
 	}
+
 	head(cwd = this.main, rev = "HEAD") {
 		return this.git(cwd, "rev-parse", rev).trim();
 	}
+
 	state(base = this.base) {
 		const approvedBody = readFileSync(this.plan, "utf8").split("\n").slice(2).join("\n");
 		write(
@@ -271,6 +284,7 @@ class Box {
 			`ticket: 321\nbranch: ${this.branch}\nbase: ${base}\nparent: none\nchildren: none\nplan: ${this.plan}\nplan-sha256: ${hash(approvedBody)}\n`,
 		);
 	}
+
 	run(step = "tests") {
 		return this.call("sh", [
 			program,
@@ -284,6 +298,7 @@ class Box {
 			"321",
 		]);
 	}
+
 	fetch(step = "tests", ticket = "321") {
 		return this.call(
 			"sh",
@@ -292,6 +307,7 @@ class Box {
 			{...this.env, T321_FETCH: "1"},
 		);
 	}
+
 	new(base = "origin/main", branch = "fabrikalfa/new") {
 		return this.call("sh", [
 			program,
@@ -305,6 +321,7 @@ class Box {
 			this.plan,
 		]);
 	}
+
 	calls(): Call[] {
 		return existsSync(join(this.dir, "calls.jsonl"))
 			? readFileSync(join(this.dir, "calls.jsonl"), "utf8")
@@ -314,9 +331,11 @@ class Box {
 					.map((s) => JSON.parse(s))
 			: [];
 	}
+
 	notes() {
 		return this.git(this.main, "notes", "--ref=fabrika", "list");
 	}
+
 	sign(cwd: string, step: string, ticket = "321", key = step) {
 		return this.must(
 			process.execPath,
@@ -333,12 +352,14 @@ class Box {
 			cwd,
 		);
 	}
+
 	commit(cwd: string, path: string, text: string) {
 		write(join(cwd, path), text);
 		this.git(cwd, "add", "--", path);
 		this.git(cwd, "commit", "-q", "-m", "outside change");
 		return this.head(cwd);
 	}
+
 	rows(): Array<Record<string, unknown>> {
 		const path = join(this.boxes, "state/one.rows.jsonl");
 		return existsSync(path)
@@ -350,6 +371,7 @@ class Box {
 			: [];
 	}
 }
+
 const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 	const b = new Box(files);
 	try {
@@ -358,11 +380,13 @@ const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 		b.close();
 	}
 };
+
 const refused = (r: {code: number | null; text: string}, why: RegExp) => {
 	expect(r.code, r.text).not.toBe(0);
 	expect(r.text).toMatch(why);
 	expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
+
 /** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
 const checkRefused = (r: {code: number | null; text: string}, check: string, why = /.*/) => {
 	refused(r, why);
@@ -370,6 +394,7 @@ const checkRefused = (r: {code: number | null; text: string}, check: string, why
 	expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
 	expect(r.text).not.toMatch(/^stuck /m);
 };
+
 // Exercise every independent fault, even while the product still lacks several checks.
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
@@ -387,6 +412,7 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	}
 	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
 };
+
 // A real SIGTERM to the runner and its child. The separate group contains only this fixture.
 const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 	new Promise<{code: number | null; signal: NodeJS.Signals | null; text: string}>(

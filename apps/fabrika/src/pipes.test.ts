@@ -17,11 +17,13 @@ import {PIPES} from "./pipes.ts";
 // drawn over what it sits on first, rounded to 8 bits a channel, as the page draws it.
 
 const CSS = readFileSync(join(import.meta.dirname, "window", "window.css"), "utf8");
+
 /** The design package's tokens, found by its name as the build finds them (P31). */
 const TOKENS = readFileSync(
 	fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")),
 	"utf8",
 );
+
 const RADIX: unknown = JSON.parse(
 	readFileSync(
 		join(

@@ -19,6 +19,7 @@ const Request = Schema.Struct({
 	method: Schema.String,
 	args: Schema.Array(Schema.Unknown),
 });
+
 const methods = {
 	project: new Set([
 		"clientConnect",
@@ -41,6 +42,7 @@ const methods = {
 	process: new Set(["msg", "open", "due", "abort", "activity", "recover", "savedAlarm"]),
 	record: new Set(["write", "read", "content", "deleteContent"]),
 };
+
 const dispatch = Effect.fnUntraced(function* (
 	env: Env,
 	programs: Readonly<Record<string, ProgramSource>>,

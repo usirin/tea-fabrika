@@ -14,6 +14,7 @@ const NPM: Holds = {files: new Set(["package-lock.json"]), rubrics: {}};
 
 const linesOf = (settings: Settings, holds: Holds, local: Local = NOTHING_SAID) =>
 	setupLines(setupOf(settings, holds, local, PLACES), holds, settings);
+
 const lineOf = (lines: readonly string[], key: string) =>
 	lines.filter((line) => line.startsWith(key)).join("\n");
 

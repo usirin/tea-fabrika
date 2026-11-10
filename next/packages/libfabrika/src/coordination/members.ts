@@ -193,23 +193,27 @@ class Change {
 	readonly spent: Set<string>;
 	readonly replaced: Set<string>;
 	readonly folded: Folded;
+
 	constructor(folded: Folded) {
 		this.folded = folded;
 		this.keys = new Map(folded.members.keys);
 		this.spent = new Set(folded.members.spent);
 		this.replaced = new Set(folded.replaced);
 	}
+
 	/** Adds a key, unless it is already there: a key's rank and place never change. */
 	add(key: string, rank: Rank, under: string | null): this {
 		if (!this.keys.has(key)) this.keys.set(key, {rank, live: true, under});
 		return this;
 	}
+
 	/** Stops a key forever. */
 	stop(key: string): this {
 		const known = this.keys.get(key);
 		if (known !== undefined) this.keys.set(key, {...known, live: false});
 		return this;
 	}
+
 	done(id: string, person = this.folded.members): Folded {
 		return {
 			members: {person: person.person, name: person.name, keys: this.keys, spent: this.spent},

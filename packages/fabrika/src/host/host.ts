@@ -93,6 +93,7 @@ export const envelope = <A>(body: Schema.Codec<A, A>) =>
 		kind: Schema.String,
 		body,
 	});
+
 export type Envelope<A> = {
 	readonly id: string;
 	readonly rev: number;
@@ -172,6 +173,7 @@ const answered = <A, E, W>(
 		Effect.catchTag("LedgerUnreachable", () => Effect.succeed(unreachable)),
 		Effect.catch((e) => Effect.succeed(refused(e))),
 	);
+
 const isUnreachable = (e: unknown): boolean =>
 	typeof e === "object" && e !== null && "_tag" in e && e._tag === "LedgerUnreachable";
 
@@ -209,12 +211,14 @@ export type RunUnder = <
 
 /** A fenced call's word: `fenced` means this program's lease is gone, so it may not act. */
 export type Fenced = "fenced" | "unreachable";
+
 export type Monitoring =
 	/** The monitor is on, on this incarnation of the target. */
 	| {readonly how: "on"; readonly incarnation: number}
 	/** The target was not running: a DOWN `noproc` is in this program's inbox already. */
 	| {readonly how: "noproc"}
 	| {readonly how: Fenced};
+
 export type Starting =
 	/** `started: false`: it was up already. */
 	| {readonly how: "ok"; readonly incarnation: number; readonly started: boolean}
@@ -226,12 +230,14 @@ export type Starting =
 	 */
 	| {readonly how: "limit"; readonly over: Over}
 	| {readonly how: Fenced};
+
 /** 102: a hold before a turn. `limit`: it does not fit, and the run under `over.at` has ended. */
 export type Holding =
 	| {readonly how: "ok"; readonly dup: boolean}
 	| {readonly how: "limit"; readonly over: Over}
 	| {readonly how: "denied"}
 	| {readonly how: Fenced};
+
 /** 102: a charge after a turn. `over`: it crossed this limit, and that run has ended. */
 export type Charging =
 	| {readonly how: "ok"; readonly dup: boolean; readonly over: Over | null}
@@ -411,15 +417,19 @@ export interface Serving {
 }
 
 const Expired = Schema.fromJsonString(Schema.Struct({fence: Schema.Number}));
+
 const expiredFence = (r: Row): number | null => {
 	const exit = Schema.decodeUnknownExit(Expired)(r.data);
 	return Exit.isSuccess(exit) ? exit.value.fence : null;
 };
+
 const bodyOf = (r: Row): unknown => {
 	const exit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown))(r.data);
 	return Exit.isSuccess(exit) ? exit.value : null;
 };
+
 const DeadRev = Schema.fromJsonString(Schema.Struct({rev: Schema.Number}));
+
 const deadRevOf = (r: Row): number | null => {
 	const exit = Schema.decodeUnknownExit(DeadRev)(r.data);
 	return Exit.isSuccess(exit) ? exit.value.rev : null;
@@ -435,6 +445,7 @@ const LEASE_WORDS = new Set([
 	"Stale",
 	"UnknownName",
 ]);
+
 /** Does this failure come from the lease (a refused save or write), not from the program? */
 const isLeaseLoss = (cause: Cause.Cause<unknown>): boolean => {
 	const tagged = (x: unknown, depth: number): boolean => {

@@ -34,15 +34,18 @@ type Service = Ledger["Service"];
 type FactsMod = {
 	readonly appendFact: typeof realFacts.appendFact;
 };
+
 type GateMod = {
 	readonly gate: typeof realGate.gate;
 	readonly Faults: typeof realGate.Faults;
 	readonly useKey: typeof realGate.useKey;
 };
+
 type Mod = {readonly facts: FactsMod; readonly gate: GateMod};
 const real: Mod = {facts: realFacts, gate: realGate};
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
@@ -68,10 +71,12 @@ async function plantFile(file: string, a: string, b: string): Promise<unknown> {
 	);
 	return import(/* @vite-ignore */ pathToFileURL(to).href);
 }
+
 const plantFacts = async (a: string, b: string): Promise<Mod> => ({
 	...real,
 	facts: (await plantFile("../asks/ledger.ts", a, b)) as typeof realFacts,
 });
+
 const plantGate = async (a: string, b: string): Promise<Mod> => ({
 	...real,
 	gate: (await plantFile("idempotency.ts", a, b)) as typeof realGate,
@@ -96,7 +101,9 @@ interface Net {
 	lands: boolean;
 	starts: (method: string, id: string | null) => boolean;
 }
+
 const isDown = (net: Net) => net.from !== null && Date.now() < net.from + net.drop;
+
 const unreachable = (method: string) =>
 	Effect.fail(new LedgerUnreachable({method, message: "the network is down"}));
 
@@ -166,6 +173,7 @@ interface Law<W> {
 	/** What went wrong in this world, or null. */
 	readonly check: (mod: Mod, world: W) => Promise<string | null>;
 }
+
 const assertLaw = <W>(law: Law<W>, mod: Mod) =>
 	fc.assert(
 		fc.asyncProperty(law.worlds, async (w) => {
@@ -274,6 +282,7 @@ interface GateWrite {
 	readonly drop: number;
 	readonly lands: boolean;
 }
+
 /**
  * The lease check's world. `takeover`: another host claims the name this long past the lease's
  * end, just before the send. `late`: the lease looks run out, or its row is gone (the alarm ran),
@@ -407,6 +416,7 @@ const runGate = (
 	});
 
 const KEY = `${NAME}#comment:pr@abc`;
+
 const arbGateWrite = (drop: fc.Arbitrary<number>) =>
 	fc.record({
 		at: fc.constantFrom<GateWrite["at"]>("intent", "lease", "done"),
@@ -523,10 +533,12 @@ interface Checked {
 	readonly name: string;
 	readonly assert: (mod: Mod) => Promise<void>;
 }
+
 const checked = <W>(law: Law<W>): Checked => ({
 	name: law.name,
 	assert: (mod) => assertLaw(law, mod),
 });
+
 const LAWS: readonly Checked[] = [
 	checked(factLandsOnce),
 	checked(gateOnce),
@@ -540,6 +552,7 @@ const LAWS: readonly Checked[] = [
 	// Added after lane 18, for the gap experiment 151 found. The gate keeps it.
 	checked(gateHoldsOnRunOut),
 ];
+
 const BUGS: readonly (readonly [Checked, RegExp])[] = [];
 
 const PLANTS: Record<string, () => Promise<Mod>> = {

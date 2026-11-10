@@ -12,6 +12,7 @@ import {GatewayManager} from "./gateway-manager.ts";
 import {A, B, W, storage} from "./process.test-support.ts";
 
 const NOW = 1_790_000_000_000;
+
 const setup = (now: number) => {
 	const connection = (client = "tab-a", session = A, key = "key-a") => ({
 		key,
@@ -38,7 +39,9 @@ const setup = (now: number) => {
 		});
 	return {store, live, pings, failed, asked, layer, connection};
 };
+
 const time = fc.integer({min: 0, max: 2 ** 47});
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: NoInfer<A>[],

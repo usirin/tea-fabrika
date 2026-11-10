@@ -39,10 +39,12 @@ const DISABLE = {
 	line: 11,
 	text: "// Stryker disable next-line all: no test can tell",
 };
+
 const EXAM = {...SCOPE.diff, files: [...SCOPE.diff.files, ...ASK.exam]};
 /** The ignorer as the owner approved it, and as it reads after another edit. */
 const APPROVED = ASK.exam.map((file) => ({file, hash: "0a1b2c3d4e5f"}));
 const EDITED = ASK.exam.map((file) => ({file, hash: "f5e4d3c2b1a0"}));
+
 /** A diff as it comes: clean, with a disable comment, touching the ignorer, or with no source line. */
 const scopes = fc.constantFrom(
 	SCOPE,
@@ -52,6 +54,7 @@ const scopes = fc.constantFrom(
 	{...SCOPE, diff: EXAM, exam: EDITED},
 	{diff: {files: ["README.md"], added: []}, kept: [], exam: []},
 );
+
 /** A run with none, one or two mutants that survived, each as often. */
 const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	found: 5,
@@ -61,6 +64,7 @@ const ran: fc.Arbitrary<Ran> = fc.integer({min: 0, max: 2}).map((n) => ({
 	killed: 4 - n,
 	survived: Array.from({length: n}, () => SURVIVED),
 }));
+
 /** Code's checks at a head, as the lane hands them on (self-fix PR 4). */
 interface Checked {
 	readonly head: string;
@@ -72,6 +76,7 @@ interface Checked {
 	readonly result: "green" | "red" | "not_run";
 	readonly failed: readonly string[];
 }
+
 const checkedAt = (head: string, result: Checked["result"]): Checked => ({
 	head,
 	commands: [
@@ -80,11 +85,15 @@ const checkedAt = (head: string, result: Checked["result"]): Checked => ({
 	result,
 	failed: [],
 });
+
 const GREEN_HERE = checkedAt(HEAD, "green");
+
 const checkedOf = (ask: unknown): Checked | null =>
 	(ask as {readonly checked?: Checked}).checked ?? null;
+
 const trustedOf = (report: unknown): Checked | null =>
 	(report as {readonly trusted?: Checked | null}).trusted ?? null;
+
 /** Green checks at the ask's own head: the one case the step may skip its suite run on. */
 const greenHere = (ask: {readonly head: string}) => {
 	const checked = checkedOf(ask);
@@ -120,6 +129,7 @@ const table: MsgArbitraryTable<Msg> = {
 	mutation_run_ok: ran.map((r) => runMutants.ok(RUN_CMD, r, 0)),
 	mutation_run_err: fc.constant(runMutants.err(RUN_CMD, NOT_RUN, 0)),
 };
+
 /** A start first, most of the time, then any Msgs: a run's answers, late ones, restarts and failures. */
 const lists = fc
 	.tuple(
@@ -132,6 +142,7 @@ const lists = fc
 		),
 	)
 	.map(([first, rest]) => (first === null ? rest : [first, ...rest]));
+
 const RUNS = {numRuns: 400, seed: 49};
 
 /** The law, as a step's answer: `null` holds, a sentence is how it broke. */
@@ -231,12 +242,14 @@ const examIsTheOwners: TraceLaw = (steps) => {
 
 const encode = Schema.encodeSync(Mutation);
 const decode = Schema.decodeUnknownSync(Mutation);
+
 /** Every state saves and loads back equal, so a restart reads what it left. */
 const kept: Law = ({next}) =>
 	JSON.stringify(decode(encode(next))) === JSON.stringify(next) ? null : "lost on save";
 
 const checkEach = (machine: Machine, law: Law) =>
 	propertyInvariant(machine, undefined, lists, each(law), RUNS);
+
 const checkWhole = (machine: Machine, law: TraceLaw) =>
 	propertyTrace(machine, undefined, lists, whole(law), RUNS);
 

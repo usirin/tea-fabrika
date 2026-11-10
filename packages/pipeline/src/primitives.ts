@@ -47,6 +47,7 @@ export const gather = <
 export type Intended<I> = I & {readonly intent: string};
 
 type Struct = Schema.Struct<Schema.Struct.Fields>;
+
 type ActSpec<In, O, T extends readonly string[]> = {
 	readonly input: In;
 	readonly ok: Plain<O>;

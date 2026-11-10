@@ -6,6 +6,7 @@ import * as fc from "fast-check";
 import {expect, it} from "vitest";
 
 const root = join(import.meta.dirname, "..");
+
 it("every native filesystem import form is refused only in next/ product files", () => {
 	const folder = mkdtempSync(join(root, "next/.p12-fs-"));
 	try {

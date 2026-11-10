@@ -11,6 +11,7 @@ const home = mkdtempSync(join(tmpdir(), "exact-versions-"));
 afterAll(() => rmSync(home, {recursive: true, force: true}));
 
 let trees = 0;
+
 /** Runs the check on a new git tree holding these files, each staged unless listed in `untracked`. */
 const run = (files: Readonly<Record<string, string>>, untracked: readonly string[] = []) => {
 	trees += 1;
@@ -27,6 +28,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
 };
 
 const WORKSPACE = "catalog:\n  a: 1.2.3\n";
+
 const inPackage = (field: string, version: string) =>
 	run({
 		"pnpm-workspace.yaml": WORKSPACE,

@@ -19,8 +19,10 @@ import {rolldown} from "rolldown";
 import {afterEach, describe, expect, it} from "vitest";
 
 const homes: Array<string> = [];
+
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
 	Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
+
 const discovery = (files: Array<string>) =>
 	Layer.effect(
 		FileSystem.FileSystem,
@@ -29,16 +31,20 @@ const discovery = (files: Array<string>) =>
 			glob: () => Effect.succeed(files),
 		})),
 	);
+
 afterEach(() => {
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
+
 const home = () => {
 	const h = mkdtempSync(join(tmpdir(), "p12-b-"));
 	homes.push(h);
 	return h;
 };
+
 const generated = fc.record({name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/), label: fc.string()});
 const chosen = {name: "view", label: "view-built"};
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>,
@@ -55,6 +61,7 @@ const law = (
 			{seed: 119120, numRuns: 3, examples: [[chosen]]},
 		);
 	});
+
 const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
 	readdirSync(dir, {recursive: true, withFileTypes: true})
 		.filter((f) => f.isFile())
@@ -66,7 +73,9 @@ const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
 				] as const,
 		)
 		.sort(([a], [b]) => a.localeCompare(b));
+
 const clean = "export const Tip = (p: {text: string}) => <b>{p.text}</b>;";
+
 const plants = [
 	[
 		"skipped function",

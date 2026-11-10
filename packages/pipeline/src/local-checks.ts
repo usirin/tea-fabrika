@@ -61,6 +61,7 @@ const SHIP_OF: {readonly [S in Checks["state"]]: PrFacts["checks"]} = {
 	pending: "pending",
 	unknown: "stuck",
 };
+
 /** Worst first: the first state any side is in is the state of both. */
 const SHIP_WORST = [
 	"red",
@@ -68,6 +69,7 @@ const SHIP_WORST = [
 	"pending",
 	"green",
 ] as const satisfies readonly PrFacts["checks"][];
+
 const CHANGE_WORST = [
 	"red",
 	"unknown",

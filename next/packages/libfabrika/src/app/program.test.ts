@@ -9,15 +9,18 @@ import {Input, Program, stepper} from "./program.ts";
 
 const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int});
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("throw")}),
 ]);
+
 const save = Cmd.make("save", {
 	input: Schema.Struct({n: Schema.Int}),
 	ok: Schema.Int,
 	err: ["disk"],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -32,6 +35,7 @@ const machine = Machine.make({
 		save_err: (s) => [{...s, replies: s.replies + 1}, []],
 	},
 });
+
 const authoring = () => ({
 	name: "test-counter",
 	machine,
@@ -44,10 +48,12 @@ const authoring = () => ({
 	writes: {},
 	wake: () => null,
 });
+
 const spec = () => Program.make(authoring());
 const SEED = 119120;
 const parameters = {seed: SEED, numRuns: 100};
 const model = fc.record({count: fc.integer(), replies: fc.nat()});
+
 const declarations = fc
 	.record({
 		name: fc.string({minLength: 1}),

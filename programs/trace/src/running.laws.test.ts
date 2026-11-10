@@ -43,6 +43,7 @@ const readOf = (s: Model): Read => {
 	if (s.shows.kind !== "job") throw new Error("a ticket view, from the job view's Msgs alone");
 	return s.shows.read;
 };
+
 /** A job view with this record. */
 const withRead = (s: Model, read: Read): Model => ({...s, shows: {kind: "job", read}});
 
@@ -88,6 +89,7 @@ const id = fc.oneof(
 	{arbitrary: fc.constant(TALLY_ID), weight: 5},
 	{arbitrary: fc.constant(OTHER), weight: 1},
 );
+
 const record = fc.constantFrom(...RUNNING, ...OVER);
 const row = fc.constantFrom(...nodesOf(treeOf(TALLY_TRACE)).map((n) => n.key), "");
 const moment = fc.integer({min: TALLY_AT - 1000, max: TALLY_AT + 2 * LATER});
@@ -101,7 +103,9 @@ const table: MsgArbitraryTable<JobMsg> = {
 	choose: arbRecordMsg("choose", {row: fc.option(row, {nil: null})}),
 	tick: arbRecordMsg("tick", {now: moment}),
 };
+
 const anything = fc.array(arbMsg(table), {maxLength: 30, size: "max"});
+
 /** Half start with a record read at once, since a look and its read seldom land together by luck. */
 const lists = fc.oneof(
 	anything,
@@ -113,6 +117,7 @@ const lists = fc.oneof(
 			...rest,
 		]),
 );
+
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -392,10 +397,12 @@ const breaks = (law: Law, world: World): boolean => {
 // Planted mistakes: the real machine with one cell or Sub changed, or the real view with one fact.
 
 const real = trace.update;
+
 const inMachine = (update: Partial<Machine["update"]>): World => ({
 	...REAL,
 	machine: {...trace, update: {...real, ...update}},
 });
+
 const inClock = (deps: (s: Model) => {readonly id: string} | null): World => ({
 	...REAL,
 	machine: {
@@ -403,6 +410,7 @@ const inClock = (deps: (s: Model) => {readonly id: string} | null): World => ({
 		subs: (trace.subs ?? []).map((sub) => (sub.type === "tick" ? {...sub, deps} : sub)),
 	} as Machine,
 });
+
 const inView = (change: (s: Model, view: Shown) => Shown): World => ({
 	...REAL,
 	show: (s) => change(s, shownOf(s)),

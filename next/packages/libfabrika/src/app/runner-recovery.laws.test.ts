@@ -16,6 +16,7 @@ import {ProgramRunner} from "./runner.ts";
 const PID = Effect.runSync(processId);
 const Model = Schema.Struct({count: Schema.Int});
 const Msg = Schema.Struct({type: Schema.Literal("inc")});
+
 const program = {
 	name: "counter",
 	machine: Machine.make({

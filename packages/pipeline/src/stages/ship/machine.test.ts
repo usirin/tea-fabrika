@@ -54,20 +54,24 @@ const clear: ShipFacts = {
 	main: ON_TIP,
 	...provenAt("abc1234"),
 };
+
 /** Facts with `patch`. The verdict rows follow the head unless the patch says otherwise. */
 const facts = (patch: Partial<ShipFacts> = {}): ShipFacts => ({
 	...clear,
 	...provenAt(patch.head ?? clear.head),
 	...patch,
 });
+
 /** The code review, with this verdict at the head. */
 const code = (verdict: "failed" | "missing"): ShipFacts["reviews"] => [
 	{kind: "review-code", verdict},
 ];
+
 const pending = (head = "abc1234") => facts({head, checks: "pending"});
 const red = (head = "abc1234") => facts({head, checks: "red"});
 
 type Fails = "fails";
+
 interface Script {
 	/** Each read's answer, in order. */
 	readonly facts: readonly (ShipFacts | Fails)[];
@@ -85,6 +89,7 @@ interface Script {
 }
 
 const broke = Effect.fail({_tag: "unknown" as const});
+
 /** The next answer of a script. A Cmd or a wait no script names fails the test. */
 function next<A>(answers: A[], what: string): A {
 	const answer = answers.shift();
@@ -178,32 +183,38 @@ async function drive(script: Script, machine = patient) {
 	const left = {reads, reruns, settles, enqueues, merges};
 	return {outcome: end.outcome, sent, types: sent.map((cmd) => cmd.type), waitedOn, listened, left};
 }
+
 /** Every scripted answer was used: the machine asked for nothing less than the script says. */
 const NOTHING_LEFT = {reads: [], reruns: [], settles: [], enqueues: [], merges: []};
 
 const READ = {type: "ship_facts", pr: PR};
+
 const rerunOf = (head: string) => ({
 	type: "ship_rerun_checks",
 	pr: PR,
 	head,
 	intent: `ship/${PR}/rerun/${head}`,
 });
+
 /** The writes carry the proof, and nothing else names the pull request or the head. */
 const enqueueOf = (head: string) => ({
 	type: "ship_enqueue",
 	ready: readyAt(PR, head),
 	intent: `ship/${PR}/enqueue/${head}`,
 });
+
 const mergeOf = (head: string) => ({
 	type: "ship_merge",
 	ready: readyAt(PR, head),
 	intent: `ship/${PR}/merge/${head}`,
 });
+
 const finishOf = (head: string) => ({
 	type: "ship_finish",
 	pr: PR,
 	intent: `ship/${PR}/finish/${head}`,
 });
+
 const AT = {pr: PR, head: "abc1234"};
 /** A wait on checks that were not run again. */
 const WAIT = {...AT, after: []};
@@ -757,6 +768,7 @@ const STATES = {
 } as const satisfies {readonly [P in Ship["phase"]]: Extract<Ship, {phase: P}>};
 
 const failure = {_tag: "unknown"};
+
 /** Every Msg the machine has a cell for, and the one phase that listens to it. */
 const MSGS: readonly {readonly msg: AnyMsg; readonly heardIn: Ship["phase"]}[] = [
 	{msg: {type: "start", pr: PR}, heardIn: "idle"},

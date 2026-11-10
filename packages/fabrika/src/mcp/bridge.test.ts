@@ -202,7 +202,9 @@ const INITIALIZE = {
 		clientInfo: {name: "claude-code", version: "2.1.0"},
 	},
 };
+
 const INITIALIZED = {jsonrpc: "2.0", method: "notifications/initialized"};
+
 const call = (id: number) => ({
 	jsonrpc: "2.0",
 	id,

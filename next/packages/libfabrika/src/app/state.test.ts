@@ -6,6 +6,7 @@ const Model = Schema.Struct({count: Schema.Int, step: Schema.Int});
 const old = {v: 1, model: {n: 7}, build: "old-build", after: 12};
 const N = Schema.Struct({n: Schema.Int});
 const Count = Schema.Struct({count: Schema.Int});
+
 const state = (calls: string[] = []) => ({
 	v: 3,
 	schema: Model,

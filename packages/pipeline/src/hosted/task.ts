@@ -194,6 +194,7 @@ const handlers = (o: {
 const planBranch = (plan: PlanId) => `plan/${plan.slice(plan.indexOf("#") + 1)}`;
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(TaskJob));
+
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(
 		Effect.orElseSucceed(() => []),

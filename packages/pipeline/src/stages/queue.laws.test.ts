@@ -22,6 +22,7 @@ type Msg = MsgOf<Machine>;
 const ctx = stubCtxThrowingProxy<undefined>();
 /** A few items, so one is told twice, done while it waits, and dropped while it is worked. */
 const item = fc.constantFrom("o/r#1", "o/r#2", "o/r#3", "o/r#4");
+
 /** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {
 	told: arbRecordMsg("told", {item}),
@@ -29,6 +30,7 @@ const table: MsgArbitraryTable<Msg> = {
 	cleared: arbRecordMsg("cleared", {item}),
 	dropped: arbRecordMsg("dropped", {item}),
 };
+
 const lists = fc.array(arbMsg(table, {weights: {told: 3}}), {maxLength: 30, size: "max"});
 /** A queue a run kept before it was killed: one item worked and owed its tidy-up, two waiting. */
 const KEPT: Waiting = {items: ["o/r#2", "o/r#3"], clearing: ["o/r#1"]};

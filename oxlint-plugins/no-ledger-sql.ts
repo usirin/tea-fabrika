@@ -7,6 +7,7 @@ const OWNERS = new Set([
 	"next/packages/libfabrika/src/data/referee.ts",
 	"next/packages/libfabrika/src/data/ledger.ts",
 ]);
+
 // Strip SQL comments before recognizing quoted or plain table names in table positions.
 const touchesLedger = (query: string) =>
 	/\b(?:from|join|into|update|table(?:\s+if\s+(?:not\s+)?exists)?)\s+(?:main\s*\.\s*)?["`[]?(?:entries|rings)\b/i.test(

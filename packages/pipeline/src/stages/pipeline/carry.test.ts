@@ -24,6 +24,7 @@ import {LaneHome, LaneWork, laneWork} from "./work.ts";
 const A = "a".repeat(40);
 const B = "b".repeat(40);
 const GIVEN: Given = {head: A, onto: "main", base: "1".repeat(40), diff: "d".repeat(40)};
+
 const now = (over: Partial<Now>): Now => ({
 	head: B,
 	tree: "7".repeat(40),
@@ -104,6 +105,7 @@ const README = [
 ].join("\n");
 
 const dirs: string[] = [];
+
 afterEach(() => {
 	for (const dir of dirs.splice(0)) rmSync(dir, {recursive: true, force: true});
 });

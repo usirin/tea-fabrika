@@ -53,6 +53,7 @@ export type KeyLine = typeof KeyLine.Type;
 type Hash = {readonly name: "sha512" | "sha256"; readonly web: "SHA-512" | "SHA-256"};
 const SHA512: Hash = {name: "sha512", web: "SHA-512"};
 const SHA256: Hash = {name: "sha256", web: "SHA-256"};
+
 /** A Map, so a name such as `constructor` is no hash. */
 const HASHES: ReadonlyMap<string, Hash> = new Map([
 	[SHA512.name, SHA512],
@@ -121,6 +122,7 @@ export const Checked = Schema.TaggedUnion({
 	},
 	refused: {why: Schema.Literal("bad_signature")},
 });
+
 const bad = Checked.cases.refused.make({why: "bad_signature"});
 
 export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {

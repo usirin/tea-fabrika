@@ -11,6 +11,7 @@ import {describe, expect, it} from "vitest";
 const CSS = readFileSync(join(import.meta.dirname, "window.css"), "utf8");
 /** The reset kept to Manti's parts, the app's own. */
 const RESET = readFileSync(join(import.meta.dirname, "manti-reset.css"), "utf8");
+
 /**
  * The design package's tokens (P31): the scale, and Manti's tokens set from it, so Manti's parts
  * draw their text from it. Found by its name, as the build finds it.

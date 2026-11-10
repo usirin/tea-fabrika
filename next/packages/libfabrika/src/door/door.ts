@@ -73,23 +73,30 @@ const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({span: (options) => new Tracer.NativeSpan(options)});
+
 const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
 	return yield* effect.pipe(Effect.withTracer(quiet));
 });
+
 const json = Schema.decodeUnknownResult(Schema.Json);
+
 const rawObject = (a: unknown): Record<string, unknown> | null =>
 	typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
+
 const reserved = (a: unknown) => {
 	const value = rawObject(a);
 	return (
 		value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key))
 	);
 };
+
 const no = (why: string) => Answer.cases.refused.make({why});
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({result});
+
 // A dead letter stops the sender's outbox. Other program refusals keep their full reply.
 const deliveryAnswer = (result: Schema.Json) =>
 	Schema.is(Answer.cases.refused)(result) && result.why === "dead" ? no("dead") : ok(result);
+
 const EnvelopeState = Schema.TaggedUnion({
 	allocated: {},
 	recorded: {},
@@ -97,7 +104,9 @@ const EnvelopeState = Schema.TaggedUnion({
 	retryable: {},
 	settled: {result: Schema.Json},
 });
+
 const Link = Schema.Struct({traceId: Schema.String, spanId: Schema.String});
+
 const Binding = Schema.Struct({
 	id: Schema.String,
 	door: Schema.optionalKey(ProcessId),
@@ -119,6 +128,7 @@ const Binding = Schema.Struct({
 type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
+
 // Saved pre-P17 inputs keep their original shape when checking a retry.
 const LegacyInputFact = Schema.TaggedUnion({
 	received: {
@@ -140,6 +150,7 @@ const LegacyInputFact = Schema.TaggedUnion({
 		why: Schema.String,
 	},
 });
+
 const InputFact = Schema.TaggedUnion({
 	received: {
 		...LegacyInputFact.cases.received.fields,
@@ -152,15 +163,18 @@ const InputFact = Schema.TaggedUnion({
 		n: Schema.Int,
 	},
 });
+
 const GrantReply = Schema.TaggedUnion({
 	applied: {rev: Schema.Number},
 	ignored: {rev: Schema.Number, why: Schema.String},
 	refused: {why: Schema.String},
 });
+
 const WatchReply = Schema.TaggedUnion({
 	watching: {rows: Schema.Array(Row)},
 	refused: {why: Schema.String, rows: Schema.Array(Row)},
 });
+
 const Enrollment = Schema.Struct({
 	id: Schema.String,
 	for: Schema.String,
@@ -168,8 +182,10 @@ const Enrollment = Schema.Struct({
 	key: Schema.String,
 	window: Schema.String,
 });
+
 const Enrolled = Schema.Struct({binding: Enrollment, nonce: Schema.String, used: Schema.Boolean});
 const Receipt = Schema.Struct({text: Schema.String, armored: Schema.String, reply: GrantReply});
+
 const ChangePending = Schema.Struct({
 	text: Schema.String,
 	armored: Schema.String,
@@ -183,11 +199,13 @@ const ChangePending = Schema.Struct({
 		build: Line.fields.build,
 	}),
 });
+
 const AppendMeta = Schema.Struct({
 	sentAt: Schema.String,
 	digest: Schema.String,
 	stream: Schema.String,
 });
+
 const Send = Schema.Struct({
 	pid: ProcessId,
 	letter: Schema.String,
@@ -196,17 +214,22 @@ const Send = Schema.Struct({
 	seen: Schema.Int,
 	traceId: Schema.optional(Schema.String),
 });
+
 const InboxFact = Schema.TaggedStruct("send", {m: Schema.Json});
+
 const Read = Schema.Struct({
 	stream: Schema.String,
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
+
 const SpanRead = Schema.Struct({
 	chain: Chain,
 	after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
+
 const SpanContent = Schema.Struct({chain: Chain, spanId: Schema.String});
 const DeleteContent = Schema.Struct({...SpanContent.fields, why: Schema.String});
+
 const methods: ReadonlySet<string> = new Set([
 	"process.send",
 	"view.open",
@@ -1394,7 +1417,9 @@ const HelloFact = Schema.TaggedStruct("initialized", {
 	location: Schema.String,
 	build: Schema.String,
 });
+
 const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
+
 const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 	if (Result.isFailure(bytes)) return yield* new NotGranted({});
@@ -1405,6 +1430,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 	const digest = yield* work;
 	return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
 });
+
 const hash = Effect.fnUntraced(function* (text: string) {
 	const bytes = new TextEncoder().encode(text);
 	const fail = () => new LedgerError({why: "crypto"});

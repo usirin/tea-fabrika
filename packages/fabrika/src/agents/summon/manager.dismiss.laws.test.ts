@@ -20,6 +20,7 @@ const PERSON = "user:owner";
 const PRIVATE = "T237-dismiss-this-private-prompt";
 const KEEP = "T237-keep-the-other-conversation";
 const made: string[] = [];
+
 afterEach(() => {
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
 });

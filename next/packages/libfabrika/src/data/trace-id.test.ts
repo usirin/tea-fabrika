@@ -17,7 +17,9 @@ import {nodeSql} from "./sqlite.ts";
 const traceIds = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/))).pipe(
 	Arbitrary.filter((traceId) => traceId !== "0".repeat(32)),
 );
+
 const SENT = "2026-11-07T21:10:01.204Z";
+
 const from = {
 	by: "SHA256:writer-a",
 	for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -27,6 +29,7 @@ const from = {
 } as const;
 
 const opened: Array<DatabaseSync> = [];
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 });

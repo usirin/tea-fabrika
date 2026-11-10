@@ -13,12 +13,14 @@ const scan = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.la
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
 const text = () => readFileSync(stack, "utf8");
+
 const generated = fc.record({
 	alias: fc
 		.stringMatching(/^[A-Z][a-zA-Z0-9]{0,10}$/)
 		.filter((alias) => !["Cloudflare", "Alchemy", "Context", "Effect", "Layer"].includes(alias)),
 	name: fc.string(),
 });
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"]) => void,

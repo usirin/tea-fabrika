@@ -127,6 +127,7 @@ export const MAX_WAITS = 5;
 /** `waits`: the limits this run started with, kept in the state so a restart goes by the same numbers. */
 const Held = Schema.Struct({pr: Schema.String, waits: Waits});
 type Held = typeof Held.Type;
+
 /**
  * What a run remembers from one read to the next. `moves`: how many times the
  * head has moved under an enqueue. `rerunFor`: the head whose red checks were
@@ -233,10 +234,12 @@ export type ShipMsg =
 type Step = readonly [Ship, readonly ShipCmd[]];
 
 const stay = (s: Ship): Step => [s, []];
+
 const over = (s: Held, outcome: ShipOutcome): Step => [
 	{phase: "over", pr: s.pr, waits: s.waits, outcome},
 	[],
 ];
+
 const sofar = (s: Sofar): Sofar => ({
 	pr: s.pr,
 	waits: s.waits,
@@ -244,8 +247,10 @@ const sofar = (s: Sofar): Sofar => ({
 	rerunFor: s.rerunFor,
 	waited: s.waited,
 });
+
 const isHere = (s: Held & {readonly head: string}, m: AtHead): boolean =>
 	m.pr === s.pr && m.head === s.head;
+
 /** The head a run that went on from the gate is landing: the one its proof names. */
 const landingHead = (s: Going): string => s.ready.head;
 
@@ -266,6 +271,7 @@ function read(s: Sofar): Step {
 	const asked = readShipFacts({pr: s.pr});
 	return [{...sofar(s), phase: "reading", asked}, [asked]];
 }
+
 /**
  * The head moved under a write, or the facts changed under it (`stale`). Read
  * fresh, again, and go through the gate again: a branch that keeps moving
@@ -275,6 +281,7 @@ const moved = (s: Sofar): Step =>
 	s.moves >= MAX_MOVES
 		? over(s, {kind: "stuck", why: "head_moving"})
 		: read({...s, moves: s.moves + 1});
+
 /** Merged as `commit` on the base branch, by the queue or straight in: tidy up. */
 function landedAs(s: Held & Going, commit: string): Step {
 	const asked = finish({pr: s.pr, intent: intentOf("ship", s.pr, "finish", landingHead(s))});
@@ -283,6 +290,7 @@ function landedAs(s: Held & Going, commit: string): Step {
 		[asked],
 	];
 }
+
 /** Wait on the checks of `head`, with a clock of its own, unless it has waited `MAX_WAITS` times. */
 const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step =>
 	s.waited >= MAX_WAITS
@@ -293,10 +301,12 @@ const wait = (s: Sofar, head: string, after: readonly Rerun[] = []): Step =>
 export const checksSub = listen("ship_checks", (s: Ship) =>
 	s.phase === "waiting" ? {pr: s.pr, head: s.head, after: s.after} : null,
 );
+
 /** The Listen on the merge queue: open only while the pull request is in it. */
 export const queueSub = listen("ship_queue", (s: Ship) =>
 	s.phase === "queued" ? {pr: s.pr, head: landingHead(s)} : null,
 );
+
 /** The clock beside each Listen. Its Msg names the wait it was set for, so each wait sets a new clock. */
 export const checksClock = listen("timer", (s: Ship) =>
 	s.phase === "waiting"
@@ -306,6 +316,7 @@ export const checksClock = listen("timer", (s: Ship) =>
 			}
 		: null,
 );
+
 export const queueClock = listen("timer", (s: Ship) =>
 	s.phase === "queued"
 		? {

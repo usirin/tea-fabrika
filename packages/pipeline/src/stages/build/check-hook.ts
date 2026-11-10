@@ -25,6 +25,7 @@ const refuse: (why: string) => never = (why) => {
 	process.stderr.write(`${why}\n`);
 	process.exit(2);
 };
+
 process.on("uncaughtException", () => refuse("The call could not be checked, so it is refused."));
 
 const [tree, log] = process.argv.slice(2);
@@ -33,15 +34,20 @@ const chunks: Buffer[] = [];
 for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
 // A call that is not JSON, or a log that cannot be written, throws: refused above.
 const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
 const call: {tool_name?: unknown; tool_input?: unknown} =
 	typeof parsed === "object" && parsed !== null ? parsed : {};
+
 const tool = typeof call.tool_name === "string" ? call.tool_name : "unknown";
+
 const input =
 	typeof call.tool_input === "object" && call.tool_input !== null
 		? (call.tool_input as Record<string, unknown>)
 		: {};
+
 const why = builderCheck(tree, temps())(tool, input);
 appendFileSync(log, `${JSON.stringify({tool, why} satisfies Checked)}\n`);
+
 if (why !== null)
 	process.stdout.write(
 		JSON.stringify({

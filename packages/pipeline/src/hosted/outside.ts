@@ -31,6 +31,7 @@ export interface Repo {
 	readonly owner: string;
 	readonly name: string;
 }
+
 export const repoText = (r: Repo) => `${r.owner}/${r.name}`;
 
 /** What an enqueue answers, as `CodeHostWrites` says it. */
@@ -105,6 +106,7 @@ export const marked = (text: string, key: string) => `${text}\n\n${markerOf(key)
 
 /** Every git call: no prompt, no hook of the repo's, no pager. */
 export const GIT_FIRST = ["-c", "core.hooksPath=/dev/null", "-c", "core.pager=cat"];
+
 const ok = (exited: Exited): Effect.Effect<string, Failed> =>
 	exited.code === 0 ? Effect.succeed(exited.out) : failed;
 
@@ -129,6 +131,7 @@ export const gitOn = (env: Readonly<Record<string, string>>) =>
 			okLow: (args: readonly string[]) => gitLow(args).pipe(Effect.flatMap(ok)),
 		};
 	});
+
 export type Git = Effect.Success<ReturnType<typeof gitOn>>;
 
 /** The branch's commit at `remote`, by `git ls-remote`. */
@@ -164,6 +167,7 @@ export const pushWith =
 const PullRequest = Schema.Struct({html_url: Schema.String, number: Schema.Finite});
 const PullRequests = Schema.Array(PullRequest);
 const Comments = Schema.Array(Schema.Struct({body: Schema.String}));
+
 const LandingAnswer = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -176,6 +180,7 @@ const LandingAnswer = Schema.Struct({
 		}),
 	}),
 });
+
 const LANDING = `
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {

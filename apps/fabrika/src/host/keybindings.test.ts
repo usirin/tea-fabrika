@@ -18,12 +18,15 @@ import {decodeKeys, defaults, type Does, type Keys} from "../desk/keymap.ts";
 import {Edit, KeybindingManager, type Snapshot} from "./keybindings.ts";
 
 const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+
 const go = <A, E>(test: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Scope.Scope>) =>
 	Effect.runPromise(test.pipe(Effect.scoped, Effect.provide(platform)));
+
 const FROM = {how: "pressed" as const, window: "window-1", said: 100};
 const bind = (does: Does, keys: readonly string[]) => Edit.cases.bind.make({does, keys});
 const row = (keys: Keys, does: string) => keys.rows.find((r) => r.does === does);
 const pause = Effect.sleep("150 millis");
+
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 1000; i += 1) {

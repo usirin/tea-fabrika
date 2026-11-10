@@ -16,15 +16,19 @@ import {stageRecording} from "./stage-recording.ts";
 class ControlPlugin extends Plugin.Service<ControlPlugin>()(
 	"cloudflare-runtime/plugin/FabrikaControl",
 ) {}
+
 class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
 	reason: Schema.String,
 }) {}
+
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 const Response = Schema.Struct({
 	value: Schema.optionalKey(Schema.Unknown),
 	error: Schema.optionalKey(Schema.Struct({reason: Schema.String})),
 });
+
 const sample = (pid: number) =>
 	Effect.scoped(
 		Effect.gen(function* () {
@@ -37,6 +41,7 @@ const sample = (pid: number) =>
 			return Number(text.trim()) * 1024;
 		}),
 	).pipe(Effect.mapError(() => new ControlError({reason: "sample"})));
+
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
 	const raw = yield* work;
 	if (raw === null) return null;

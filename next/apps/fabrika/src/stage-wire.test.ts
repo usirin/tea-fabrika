@@ -19,12 +19,14 @@ const APP = resolve(import.meta.dirname, "..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const field = (a: string | Buffer) => {
 	const bytes = typeof a === "string" ? Buffer.from(a) : a;
 	const size = Buffer.alloc(4);
 	size.writeUInt32BE(bytes.length);
 	return Buffer.concat([size, bytes]);
 };
+
 const identity = () => {
 	const pair = generateKeyPairSync("ed25519");
 	const raw = pair.publicKey.export({format: "jwk"}).x!;
@@ -66,7 +68,9 @@ const identity = () => {
 		},
 	};
 };
+
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+
 const unusedPort = () =>
 	new Promise<number>((done, fail) => {
 		const listener = createServer();
@@ -77,6 +81,7 @@ const unusedPort = () =>
 			listener.close(() => done(at.port));
 		});
 	});
+
 // Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
 // wrong-host check sends its request with node:http, which sends the header as given.
 const statusWithHost = (url: string, host: string) =>
@@ -88,9 +93,11 @@ const statusWithHost = (url: string, host: string) =>
 		sent.once("error", fail);
 		sent.end();
 	});
+
 const children: Array<ChildProcess> = [];
 const homes: Array<string> = [];
 const sockets: Array<WebSocket> = [];
+
 afterEach(async () => {
 	for (const ws of sockets.splice(0)) ws.close();
 	for (const child of children.splice(0)) {
@@ -100,6 +107,7 @@ afterEach(async () => {
 	}
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
+
 const stage = async (saved?: {key: ReturnType<typeof identity>; home: string; port: number}) => {
 	readFileSync(join(APP, "dev.ts"), "utf8");
 	const key = saved?.key ?? identity();
@@ -183,6 +191,7 @@ type Frame = {
 	result?: any;
 	error?: {data?: {why: string}; message?: string};
 };
+
 class Client {
 	readonly frames: Array<Frame | string> = [];
 	private serial = 0;
@@ -193,6 +202,7 @@ class Client {
 	private readonly base: string;
 	private readonly key: ReturnType<typeof identity>;
 	private readonly tab: string;
+
 	constructor(base: string, key: ReturnType<typeof identity>, tab: string) {
 		this.base = base;
 		this.key = key;
@@ -211,6 +221,7 @@ class Client {
 			this.frames.push(data === "pong" ? "pong" : JSON.parse(String(data)));
 		});
 	}
+
 	async next(test: (f: Frame | string) => boolean): Promise<any> {
 		for (;;) {
 			const at = this.frames.findIndex(test);
@@ -220,10 +231,12 @@ class Client {
 			await pause();
 		}
 	}
+
 	async challenge() {
 		return (await this.next((f) => typeof f !== "string" && f.method === "challenge")).params
 			.nonce as string;
 	}
+
 	hello(nonce?: string, overrides: object = {}) {
 		const challenge =
 			nonce === undefined ? Effect.promise(() => this.challenge()) : Effect.succeed(nonce);
@@ -247,6 +260,7 @@ class Client {
 			),
 		);
 	}
+
 	async call(method: string, params: unknown): Promise<Frame> {
 		const id = ++this.serial;
 		while (this.ws.readyState === WebSocket.CONNECTING) {
@@ -256,20 +270,24 @@ class Client {
 		this.ws.send(JSON.stringify({jsonrpc: "2.0", id, method, params}));
 		return this.next((f) => typeof f !== "string" && f.id === id);
 	}
+
 	ping() {
 		this.ws.send("ping");
 		return this.next((f) => f === "pong");
 	}
+
 	close() {
 		this.ws.close();
 	}
 }
+
 const connected = async (s: Awaited<ReturnType<typeof stage>>, tab = "tab-a") => {
 	const client = new Client(s.url, s.key, tab);
 	const hello = await Effect.runPromise(client.hello());
 	expect(hello.error).toBeUndefined();
 	return client;
 };
+
 const read = async (
 	client: Client,
 	stream: string,
@@ -279,6 +297,7 @@ const read = async (
 	expect(response.error).toBeUndefined();
 	return Schema.decodeUnknownSync(Schema.Array(Entry))(response.result.entries);
 };
+
 const counter = async (c: Client) => {
 	const rows = await read(c, "processes/counter:1");
 	const started = rows.findLast(
@@ -287,8 +306,10 @@ const counter = async (c: Client) => {
 	expect(started, "stage must start the real counter:1").toBeDefined();
 	return (started!.body as {process: string}).process;
 };
+
 const send = (c: Client, pid: string, letter: string, m: unknown = {type: "inc"}, seen = 0) =>
 	c.call("process.send", {pid, letter, m, sentAt: SENT, seen, traceId: TRACE});
+
 const placing = (r: Frame) => {
 	expect(r.error).toBeUndefined();
 	expect(r.result).toMatchObject({
@@ -298,6 +319,7 @@ const placing = (r: Frame) => {
 	});
 	return r.result as {rev: number; pos: number};
 };
+
 const view = async (c: Client, pid: string) => {
 	const response = await c.call("view.open", {pid});
 	expect(response.error).toBeUndefined();

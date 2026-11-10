@@ -418,17 +418,20 @@ describe("calls", () => {
 // ---------------------------------------------------------------- on the in-memory ledger
 
 const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
+
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
 		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
 	});
+
 const decodeExit = Schema.decodeUnknownExit(ExitMessage);
 const Body = Schema.Struct({crashAfter: Schema.optional(Schema.Boolean)});
 const decodeBody = Schema.decodeUnknownExit(Body);
 
 const Count = Schema.Struct({count: Schema.Number, cursor: Schema.Number});
 type Inc = {readonly type: "inc"; readonly rev: number; readonly poison: boolean};
+
 /** A counter whose pure reducer throws on a `poison` message: the planted bug. */
 const counter = defineMachine({
 	types: {model: {} as typeof Count.Type, msg: {} as Inc, ctx: undefined},
@@ -561,6 +564,7 @@ const upAt = (name: string) =>
 		const p = yield* (yield* Ledger).processInfo(name);
 		return p === null || p.down !== 0 ? 0 : p.incarnation;
 	});
+
 const replyTo = (id: string) =>
 	Effect.gen(function* () {
 		const ledger = yield* Ledger;
@@ -571,6 +575,7 @@ const replyTo = (id: string) =>
 		}
 		return null;
 	});
+
 /** One call; `tries` names the send, so a resend is a new message with the same call id. */
 const ask = (to: string, id: string, req: unknown, tries = 1) =>
 	Effect.gen(function* () {

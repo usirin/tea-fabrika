@@ -7,6 +7,7 @@ import type {BrainOptions, Env} from "./runtime.ts";
 
 type Fetch = (request: Request, env: Env, config: BrainOptions) => Effect.Effect<Response, unknown>;
 const moduleURL = new URL("./fetch.ts", import.meta.url).href;
+
 const load = async (): Promise<Fetch> => {
 	const module: {fetch?: Fetch} = await import(/* @vite-ignore */ moduleURL).catch(
 		(error: unknown) => {
@@ -22,6 +23,7 @@ const load = async (): Promise<Fetch> => {
 	if (module.fetch === undefined) throw new Error("Missing public fetch function");
 	return module.fetch;
 };
+
 const generated = fc.record({
 	port: fc.integer({min: 1024, max: 65535}),
 	name: fc.uuid(),
@@ -29,6 +31,7 @@ const generated = fc.record({
 	code: fc.string({maxLength: 40}),
 	body: fc.jsonValue(),
 });
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"], fetch: Fetch) => Promise<void>,
@@ -40,6 +43,7 @@ const law = (
 			{seed: 119120, numRuns: 20},
 		);
 	});
+
 const world = (port: number, name: string) => {
 	const calls: Array<{to: string; method: string; args: unknown[]}> = [];
 	const response = new Response("gateway", {status: 202});

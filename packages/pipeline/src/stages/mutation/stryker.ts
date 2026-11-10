@@ -126,6 +126,7 @@ const Report = Schema.Struct({
 		}),
 	),
 });
+
 type Reported = (typeof Report.Type)["files"][string]["mutants"][number];
 
 /** What Stryker says, and exits 1 on, when the repo's tests never reach the code it mutates. */
@@ -217,6 +218,7 @@ export const tidyPaths = (text: string, folder: string, home: string): string =>
 };
 
 const quiet = () => {};
+
 /** The instrumenter's logger: warnings and errors only. */
 const logger = {
 	trace: quiet,

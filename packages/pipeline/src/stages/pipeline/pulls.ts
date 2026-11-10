@@ -35,6 +35,7 @@ import {LaneWork} from "./work.ts";
 
 type Failed = {readonly _tag: "unknown"};
 const failed: Failed = {_tag: "unknown"};
+
 const need = <A>(value: A | null): Effect.Effect<A, Failed> =>
 	value === null ? Effect.fail(failed) : Effect.succeed(value);
 
@@ -241,6 +242,7 @@ interface Said {
 	readonly base?: string | null;
 	readonly diff?: string;
 }
+
 type Timeline = {
 	readonly timeline: readonly {readonly by: {readonly kind: string}; readonly fact: Said}[];
 };

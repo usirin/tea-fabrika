@@ -18,6 +18,7 @@ import {ledgerOptions} from "./worker-options.ts";
 const t0 = performance.now();
 // Read as a `Redacted` and kept one: an empty or missing secret is none.
 const secret = Effect.runSync(Config.option(Config.Redacted("DOOR_SECRET")));
+
 const mf = new Miniflare(
 	ledgerOptions({
 		persist: process.env.PERSIST ?? false,
@@ -40,8 +41,10 @@ const mf = new Miniflare(
 		direct: Number(process.env.PORT ?? "0"),
 	}),
 );
+
 await mf.ready;
 const direct = await mf.unsafeGetDirectURL();
+
 process.stdout.write(
 	`${JSON.stringify({ready: direct.origin, ms: performance.now() - t0, pid: process.pid})}\n`,
 );
@@ -52,11 +55,13 @@ const stop = () => {
 		() => process.exit(1),
 	);
 };
+
 process.on("SIGTERM", stop);
 
 // The process that started it is gone (killed with no chance to close its scope): stop too, so
 // no ledger is left serving with no owner. Its parent changes when it is orphaned.
 const owner = process.ppid;
+
 setInterval(() => {
 	if (process.ppid !== owner) stop();
 }, 250).unref();

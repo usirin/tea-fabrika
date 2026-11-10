@@ -33,22 +33,27 @@ export interface Text {
 	readonly type: "text";
 	readonly value: string;
 }
+
 export interface InlineCode {
 	readonly type: "inlineCode";
 	readonly value: string;
 }
+
 export interface Break {
 	readonly type: "break";
 }
+
 export interface Marked {
 	readonly type: "strong" | "emphasis" | "delete";
 	readonly children: readonly Inline[];
 }
+
 export interface Link {
 	readonly type: "link";
 	readonly url: string;
 	readonly children: readonly Inline[];
 }
+
 export type Inline = Text | InlineCode | Break | Marked | Link;
 
 const inlines = Schema.Array(Schema.suspend((): Schema.Codec<Inline> => Inline));
@@ -66,16 +71,19 @@ export interface Heading {
 	readonly depth: number;
 	readonly children: readonly Inline[];
 }
+
 export interface Paragraph {
 	readonly type: "paragraph";
 	readonly children: readonly Inline[];
 }
+
 export interface ListItem {
 	readonly type: "listItem";
 	/** A task list's box: ticked, not ticked, or no box. */
 	readonly checked: boolean | null;
 	readonly children: readonly Block[];
 }
+
 export interface List {
 	readonly type: "list";
 	readonly ordered: boolean;
@@ -85,25 +93,31 @@ export interface List {
 	readonly spread: boolean;
 	readonly children: readonly ListItem[];
 }
+
 export interface Code {
 	readonly type: "code";
 	readonly lang: string | null;
 	readonly value: string;
 }
+
 export interface Blockquote {
 	readonly type: "blockquote";
 	readonly children: readonly Block[];
 }
+
 export type Align = "left" | "right" | "center" | null;
+
 export interface Table {
 	readonly type: "table";
 	readonly align: readonly Align[];
 	/** The rows, the head first; each row's cells, each cell's text. */
 	readonly children: readonly (readonly (readonly Inline[])[])[];
 }
+
 export interface ThematicBreak {
 	readonly type: "thematicBreak";
 }
+
 export type Block = Heading | Paragraph | List | Code | Blockquote | Table | ThematicBreak;
 
 const blocks = Schema.Array(Schema.suspend((): Schema.Codec<Block> => Block));

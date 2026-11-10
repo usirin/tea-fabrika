@@ -33,6 +33,7 @@ import {pathsOf, reach} from "./socket.ts";
 // alice's key, made here at test time. No call leaves the laptop.
 
 const users = new Map<string, {id: number; keys: string[]}>();
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});

@@ -31,9 +31,11 @@ writeFileSync(join(repo, "a.txt"), "a\n");
 writeFileSync(join(repo, "b.txt"), "b\n");
 
 const env: Record<string, string> = {};
+
 for (const [name, value] of Object.entries(process.env))
 	if (value !== undefined && !/API_KEY$/.test(name) && name !== "FABRIKA_FOREGROUND")
 		env[name] = value;
+
 Object.assign(env, {FABRIKA_HOME: home, FABRIKA_REPO: repo});
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
@@ -41,7 +43,9 @@ const check = (what: string, ok: boolean, seen?: unknown) => {
 		throw new Error(`${what}: no${seen === undefined ? "" : `, saw ${JSON.stringify(seen)}`}`);
 	console.log(`ok  ${what}`);
 };
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => boolean) => {
 	const from = Date.now();
 	let seen = await look();
@@ -55,18 +59,24 @@ const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => b
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
+
 const screen = async (page: Page, id: string) => {
 	const text = tile(page, id).locator(".screen-text");
 	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
 };
+
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+
 /** Terminal wraps can split a word or trim the space at the end of a row. */
 const contains = (text: string, words: string) =>
 	text.replaceAll(/\s/g, "").includes(words.replaceAll(/\s/g, ""));
+
 const tiles = (page: Page) =>
 	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
+
 const focused = async (page: Page) =>
 	(await page.locator('[data-tile][aria-current="true"]').getAttribute("data-tile")) ?? "";
+
 /** aria-current names the selected tile; keys go to document.activeElement. */
 const focusIs = (page: Page, id: string) =>
 	until(
@@ -77,8 +87,10 @@ const focusIs = (page: Page, id: string) =>
 			),
 		(f) => f === id,
 	);
+
 const shows = (page: Page, id: string, what: string, ok: (text: string) => boolean) =>
 	until(`${id}: ${what}`, () => screen(page, id), ok);
+
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
 
@@ -115,10 +127,12 @@ const run = async (page: Page, id: string, line: string) => {
 	await focusIs(page, id);
 	await page.keyboard.press("Enter");
 };
+
 const prefixed = async (page: Page, key: string) => {
 	await page.keyboard.press("Control+b");
 	await page.keyboard.press(key);
 };
+
 const otherPromptsEmpty = async (page: Page, id: string, state: string) => {
 	for (const other of await tiles(page)) {
 		if (other === null || other === id) continue;
@@ -126,6 +140,7 @@ const otherPromptsEmpty = async (page: Page, id: string, state: string) => {
 		check(`${state}: ${other}'s prompt is empty`, row === "tsh$", row);
 	}
 };
+
 const shot = async (page: Page, id: string, name: string) => {
 	await page.mouse.move(1, 1);
 	await page.waitForTimeout(250);
@@ -133,6 +148,7 @@ const shot = async (page: Page, id: string, name: string) => {
 	await page.screenshot({path: join(shots, `${name}.png`)});
 	console.log(`shot ${name}`);
 };
+
 const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "light") => {
 	await app.evaluate(({nativeTheme}, to) => {
 		nativeTheme.themeSource = to;
@@ -144,6 +160,7 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 		(light) => light === (look === "light"),
 	);
 };
+
 /** T259: let rebuilt terminals' focus timers finish before checking focus and typing. */
 const settleTerminals = (page: Page) =>
 	page.evaluate(async () => {
@@ -151,6 +168,7 @@ const settleTerminals = (page: Page) =>
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 	});
+
 /** A new tile: focus moves to it, and its tsh is up. */
 const split = async (page: Page, key: "|" | "-") => {
 	const before = await tiles(page);
@@ -322,6 +340,7 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 const app = await _electron.launch({executablePath: electronPath, args: [here], env});
 const observer = new Client({name: "summon-shots", version: "0.0.0"});
 let failed = false;
+
 try {
 	const page = await app.firstWindow();
 	const bounds = await app.evaluate(({BrowserWindow}) => {
@@ -410,4 +429,5 @@ try {
 		} catch {}
 	console.log(`shots: ${shots}\nhome: ${home}\nrepo: ${repo}`);
 }
+
 if (failed) process.exit(1);

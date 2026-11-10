@@ -25,31 +25,37 @@ const Id = Schema.Struct({id: Schema.String});
 
 // tea's `Cmd.make`, and each move, handed Effect schemas.
 const readTicket = Cmd.make("ticket_read", {input: Id, ok: Ticket, err: ["unknown", "gone"]});
+
 const sizeOf = gather("ticket_size", {
 	input: Id,
 	ok: Schema.Literals(["small", "medium", "large"]),
 	err: ["unknown"],
 });
+
 const addLabel = act("ticket_label", {
 	input: Schema.Struct({id: Schema.String, label: Schema.String}),
 	ok: Schema.Null,
 	err: ["unknown"],
 });
+
 const runTests = checkRun("ticket_test", {
 	input: Id,
 	verdict: Schema.Struct({passed: Schema.Boolean, failed: Schema.Array(Schema.String)}),
 });
+
 const urgency = createJudge({
 	name: "urgent",
 	instructions: "`title` is a ticket's title. Does it need doing now?",
 	choices: {now: "It blocks people today", later: "It can wait"},
 });
+
 // The code not yet moved: tea's core `Cmd.define` over zod, and a move with a zod slot beside an Effect one.
 const readComments = CoreCmd.define("ticket_comments", {
 	input: z.object({id: z.string()}),
 	ok: z.array(z.string()),
 	err: ["unknown"],
 });
+
 const readOwner = gather("ticket_owner", {
 	input: z.object({id: z.string()}),
 	ok: Schema.Struct({owner: Schema.String}),
@@ -69,6 +75,7 @@ interface Desk {
 	/** Each Cmd that failed, with the tag it failed with. */
 	readonly errors: readonly string[];
 }
+
 const empty: Desk = {
 	ticket: null,
 	size: null,
@@ -79,6 +86,7 @@ const empty: Desk = {
 	owner: null,
 	errors: [],
 };
+
 type DeskMsg = {readonly type: "start"; readonly id: string};
 
 const cmds = [
@@ -90,8 +98,10 @@ const cmds = [
 	readComments,
 	readOwner,
 ] as const;
+
 type DeskCmd = ReturnType<(typeof cmds)[number]>;
 type Step = readonly [Desk, readonly DeskCmd[]];
+
 const failed = (
 	s: Desk,
 	m: {readonly type: string; readonly error: {readonly _tag: string}},
@@ -140,6 +150,7 @@ const ticket: Ticket = {
 	pr: null,
 	labels: ["text"],
 };
+
 /** What the world answers. A test swaps one answer for a wrong one. */
 const world = {
 	ticket: ticket as unknown,
@@ -147,6 +158,7 @@ const world = {
 	verdict: {passed: false, failed: ["slugify keeps accents"]} as unknown,
 	comments: ["me too"] as unknown,
 };
+
 type World = typeof world;
 
 /** The handlers, as a host would write them. Each hands back what the world says, unchecked: the check is the Cmd's. */
@@ -185,6 +197,7 @@ const jev = () =>
 				},
 			}),
 	});
+
 /** A still clock, so two drives stamp their Msgs the same. */
 const driveDesk = (id: string, w: World = world) =>
 	Effect.runPromise(
@@ -192,6 +205,7 @@ const driveDesk = (id: string, w: World = world) =>
 			Effect.provide(jev()),
 		),
 	);
+
 const typesOf = (trace: Awaited<ReturnType<typeof driveDesk>>["trace"]) =>
 	trace.flatMap((entry) => (entry.kind === "cmd" ? [entry.cmd.type] : []));
 

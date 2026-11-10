@@ -7,6 +7,7 @@ import {Edit} from "./program.ts";
 
 const Target = Schema.TaggedUnion({command: {does: Does}, prefix: {}, ignore: {}});
 type Target = typeof Target.Type;
+
 const Recording = Schema.TaggedUnion({
 	idle: {},
 	waiting: {target: Target, prefix: Schema.Boolean, add: Schema.Boolean},
@@ -34,7 +35,9 @@ const edit = Cmd.make("edit", {
 	ok: Schema.Null,
 	err: [],
 });
+
 export type EditorCmd = ReturnType<typeof edit>;
+
 export type EditorMsg =
 	| {readonly type: "query"; readonly query: string}
 	| {readonly type: "select"; readonly does: Editor["selected"]}
@@ -46,6 +49,7 @@ export type EditorMsg =
 	| {readonly type: "undo"};
 
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
+
 export const matching = (keys: Keys, query: string) => {
 	const words = query.toLowerCase().split(/\s+/).filter(Boolean);
 	return keys.rows.filter((row) => {
@@ -58,6 +62,7 @@ export const matching = (keys: Keys, query: string) => {
 
 type Step = readonly [Editor, readonly EditorCmd[]];
 const idle = () => Recording.cases.idle.make({});
+
 const target = (selected: Editor["selected"]): Target | null =>
 	selected === null
 		? null
@@ -66,6 +71,7 @@ const target = (selected: Editor["selected"]): Target | null =>
 			: selected === "ignore"
 				? Target.cases.ignore.make({})
 				: Target.cases.command.make({does: selected});
+
 const saving = (s: Editor, request: typeof Edit.Type): Step => {
 	const id = `keys-${s.next}`;
 	return [
@@ -78,6 +84,7 @@ const saving = (s: Editor, request: typeof Edit.Type): Step => {
 		[edit({request: id, edit: request})],
 	];
 };
+
 const recording = (s: Editor, add: boolean): Step => {
 	const selected = target(s.selected);
 	return selected === null
@@ -91,6 +98,7 @@ const recording = (s: Editor, add: boolean): Step => {
 				[],
 			];
 };
+
 const update = (s: Editor, m: EditorMsg): Step => {
 	switch (m.type) {
 		case "query":
@@ -223,6 +231,7 @@ const update = (s: Editor, m: EditorMsg): Step => {
 			return s.undo === null ? [s, []] : saving(s, Edit.cases.undo.make({version: s.undo}));
 	}
 };
+
 const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 	{
 		keys: loaded !== null && "query" in loaded ? loaded.keys : (loaded ?? defaults),
@@ -236,6 +245,7 @@ const init = (loaded: Keys | Editor | null, _ctx: undefined): Step => [
 	},
 	[],
 ];
+
 const machine = defineMachine({
 	types: {model: {} as Editor, msg: {} as EditorMsg, cmd: {} as EditorCmd, ctx: undefined},
 	init,
@@ -256,4 +266,5 @@ const machine = defineMachine({
 		undo: update,
 	},
 });
+
 export const editorMachine = {...machine, init};
