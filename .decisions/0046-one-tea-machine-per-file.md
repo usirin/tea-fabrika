@@ -186,9 +186,34 @@ machine (`app/runner.ts:271-272`).
   - So the reading says it works. Nobody has run one inside `sql.transaction`, and nobody has
     checked that `data/` may import tea under the layer rules. The first small machine built this
     way settles both. This is about how such a machine is called, not whether it is a tea machine.
+- **A new state is not forced through every handler by the compiler** (2026-11-10, the amendment
+  below). A handler that picks the next state with a plain conditional still compiles when the
+  Model gains a case. The machine's property tests carry that check.
 - Not decided here: the folder a machine's file sits in ([0043](0043-rooms-on-floors.md) does), the names of the new
   Msgs and cases, the order the 13 machines are done in, and today's version, which this record does
   not touch.
+
+## Amendments
+
+- 2026-11-10: **an `update` handler picks the next state with a plain conditional on the state's
+  `_tag`,** the form `next/packages/libfabrika/src/app/brain-life.ts` has today. It does not use
+  Effect's `Match` module or the Model's own `Schema.TaggedUnion` `.match` for that. Tracker
+  ticket 524.
+
+  ```ts
+  // app/brain-life.ts:59, the form that stays.
+  stop: (s) => [terminal(s) ? s : BrainState.cases.stopping.make({}), []],
+  ```
+
+  - **What was tried.** Every handler written as
+    `Match.type<Model>().pipe(Match.tag(...), Match.exhaustive)`, against tea 0.25.0 and effect
+    4.1.2. It type-checks, and it does catch a state missing from a handler.
+  - **Why it was not taken.** Each handler must list every state that stays as it is, so the code
+    reads noisier, and the compile error for a missing state is about ten lines of type noise.
+  - **The cost, accepted.** The compiler does not force a new state through every handler. The
+    machine's property tests carry that (Consequences).
+  - **What it does not cover.** Only the transition code inside `update`. `Match` and `.match`
+    anywhere else are untouched.
 
 ## Records
 
