@@ -11,7 +11,7 @@ TSH_WORK=~/.tsh/work TSH_OWN=<your login> TSH_TRACE=1 bin/tsh -c \
 open http://localhost:16686
 ```
 
-![One operate line in Jaeger: two rounds of build and review, the verdicts posted, and ship](./69-build-loop-jaeger.png)
+![One operate line in Jaeger: two rounds of build and review, the verdicts posted, and ship](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/69-build-loop-jaeger.png?raw=true)
 
 ## What we asked
 
@@ -339,7 +339,7 @@ TSH_WORK=<folder> TSH_OWN=<your login> TSH_TRACE=1 bin/tsh -c \
   'ship-sandbox --mode write pr=https://github.com/kamp-us/tea-fabrika-sandbox/pull/4'
 ```
 
-![One ship-sandbox line in Jaeger: read, enqueue, the wait on the queue, the tidy-up](./69b-queue-merge-jaeger.png)
+![One ship-sandbox line in Jaeger: read, enqueue, the wait on the queue, the tidy-up](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/69b-queue-merge-jaeger.png?raw=true)
 
 The one path 69 could not show. The sandbox is now
 `kamp-us/tea-fabrika-sandbox`, public, with a ruleset on `main`: the check
