@@ -11,7 +11,7 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
    *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. `refused`: the ledger refused
    *  a line the caller needed written.
    *  `crypto`: WebCrypto threw or rejected. */
-  why: Schema.Literals(["unreachable", "bad_row", "storage", "refused", "crypto"]),
+  reason: Schema.Literals(["unreachable", "bad_row", "storage", "refused", "crypto"]),
   /** What the thrown error said. It rides in the span's failure, never in a tag. */
   message: Schema.optional(Schema.String),
 }) {}
@@ -81,14 +81,14 @@ export class Ledger extends Context.Service<
         "rpc.method": name,
         ...short({ [STREAM]: stream, [tag("reader")]: who.reader }),
       });
-      const fail = () => new LedgerError({ why: "unreachable" });
+      const fail = () => new LedgerError({ reason: "unreachable" });
       // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
       const io = Effect.tryPromise({ try: () => Reflect.apply(stub[name], stub, args), catch: fail });
       return yield* io.pipe(
         Effect.flatMap((raw) =>
-          Schema.decodeUnknownEffect(answer)(raw).pipe(Effect.mapError(() => new LedgerError({ why: "bad_row" }))),
+          Schema.decodeUnknownEffect(answer)(raw).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" }))),
         ),
-        Effect.tapError((error) => Effect.annotateCurrentSpan(tag("why"), error.why)),
+        Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
       );
     });
     const page = Schema.Array(Entry);

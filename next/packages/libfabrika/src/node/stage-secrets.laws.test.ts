@@ -267,7 +267,7 @@ const flow = async (sample: Flow) => {
           }
 
           if (mode === "refused") {
-            return { _tag: "refused", why: "not_granted" };
+            return { _tag: "refused", reason: "not_granted" };
           }
 
           return { _tag: "ok", result: { accepted: true } };

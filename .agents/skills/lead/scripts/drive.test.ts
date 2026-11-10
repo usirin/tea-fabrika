@@ -105,14 +105,14 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
   } as never);
 
   if (read.phase !== "pushing") {
-    return { state: read, cmd: cmds[0] as { keep: boolean; why: string } };
+    return { state: read, cmd: cmds[0] as { keep: boolean; reason: string } };
   }
 
   const [state, after] = machine.update.backup_push_ok(read, {
     type: "backup_push_ok",
     value: { ok: true, detail: "" },
   } as never);
-  return { state, cmd: after[0] as { keep: boolean; why: string } };
+  return { state, cmd: after[0] as { keep: boolean; reason: string } };
 };
 
 describe("drive keeps a box that holds work, today's tooling", () => {
@@ -134,11 +134,11 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 
         // The outcome line's reason says what was kept.
         for (const what of held) {
-          expect(cmd.why).toContain(what);
+          expect(cmd.reason).toContain(what);
         }
 
         if (held.length === 0) {
-          expect(cmd.why).not.toContain("box kept");
+          expect(cmd.reason).not.toContain("box kept");
         }
       }),
       options,
@@ -181,7 +181,7 @@ describe("drive takes a skip answer, today's tooling", () => {
         }
 
         expect(s.outcome).toEqual({ kind: "skip", why: "step_said" });
-        expect(s.why).toBe(text);
+        expect(s.reason).toBe(text);
         expect(s.kept).toBe(false);
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("skip:step_said");
@@ -277,12 +277,17 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
       fc.property(check, detail, (c, d) => {
         const [state, cmds] = boxNewOk({ _tag: "refused", check: c, detail: d });
         expect(state.phase).toBe("recording");
-        const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean; why: string };
+        const cmd = cmds[0] as {
+          outcome: string;
+          exit: number;
+          keep: boolean;
+          reason: string;
+        };
         expect(cmd.outcome).toBe(`refused:${c}`);
         expect(cmd.outcome.startsWith("stuck")).toBe(false);
         expect(cmd.exit).toBe(3);
         expect(cmd.keep).toBe(false);
-        expect(cmd.why).toBe(d);
+        expect(cmd.reason).toBe(d);
         expect(rowOf(cmd.outcome)).not.toBe("pass");
       }),
       options,
@@ -316,13 +321,13 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
 describe("T429 drive names the commits check's rule and commit, today's tooling", () => {
   const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link");
   const answer = fc.record({
-    why: rule,
+    reason: rule,
     sha: fc.stringMatching(/^[0-9a-f]{40}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
   const lane = new Set(["tests", "build"]);
-  const held = (a: { why: string; step?: string }) =>
-    !(a.why === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
+  const held = (a: { reason: string; step?: string }) =>
+    !(a.reason === "stale_link" && !(a.step !== undefined && lane.has(a.step)));
 
   // Plants: print only the last lines of JSON; drop the commit; name a waived stale link.
   it("each held answer is named as rule, commit and step, and a waived stale link is not", () => {
@@ -332,7 +337,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, lane);
         const named = answers
           .filter(held)
-          .map((a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+          .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
 
         if (named.length === 0) {
           expect(said).toMatch(/^commits check exit 1: /);
@@ -381,10 +386,10 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         expect(s.outcome).toEqual({ kind: "ask", who: "lead", for: "lockfile" });
 
         for (const p of paths) {
-          expect(s.why).toContain(p);
+          expect(s.reason).toContain(p);
         }
 
-        expect(s.why).toContain("fabrikalfa/l-wip");
+        expect(s.reason).toContain("fabrikalfa/l-wip");
       }),
       options,
     );

@@ -12,7 +12,7 @@ const receiptFor = (value: unknown, letter: unknown) => {
   const saved = decodeReceipt(value);
 
   if (saved.letter !== letter) {
-    throw new LedgerError({ why: "bad_row" });
+    throw new LedgerError({ reason: "bad_row" });
   }
 
   return saved;
@@ -50,7 +50,7 @@ export class RecoveryStore extends Context.Service<
         catch: (error) =>
           error instanceof LedgerError
             ? error
-            : new LedgerError({ why: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
+            : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
       });
     const snapshot = () => {
       const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name);
@@ -62,7 +62,7 @@ export class RecoveryStore extends Context.Service<
       const saved = decode(row.value);
 
       if (saved.name !== who.name) {
-        throw new LedgerError({ why: "bad_row" });
+        throw new LedgerError({ reason: "bad_row" });
       }
 
       return saved;
@@ -100,7 +100,7 @@ export class RecoveryStore extends Context.Service<
         const saved = Schema.decodeUnknownSync(Supervision)(value);
 
         if (saved.name !== who.name) {
-          throw new LedgerError({ why: "bad_row" });
+          throw new LedgerError({ reason: "bad_row" });
         }
 
         const text = encode({ ...saved, receipts: [] });
@@ -137,7 +137,7 @@ export class RecoveryStore extends Context.Service<
           }
 
           if (sql.size() + growth > who.capacity) {
-            throw new LedgerError({ why: "storage" });
+            throw new LedgerError({ reason: "storage" });
           }
 
           for (const receipt of changed) {

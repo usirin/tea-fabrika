@@ -30,11 +30,11 @@ import {
   inSignalSpace,
   LedgerError,
   Mailbox,
-  MemberFact,
+  MemberEvent,
   NotGranted,
   ParentText,
   type Placed,
-  ProcessFact,
+  ProcessEvent,
   ProcessStore,
   ProcessManager,
   type ProcessError,
@@ -54,7 +54,7 @@ import { Failure, Policy, Recovery, type Supervision } from "../coordination/rec
 import {
   Alarm,
   CheckedWriter,
-  type Fact,
+  type Event,
   Incoming,
   type Loaded,
   ProgramLoader,
@@ -102,10 +102,10 @@ const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
 /** The turn a crash may cut: an input stepped and about to be appended. */
 const Turn = Schema.TaggedUnion({ prepared: { id: Schema.NonEmptyString } });
 
-/** The runtime's own facts and lifecycle facts a program may never write, even if declared. */
+/** The runtime's own events and lifecycle events a program may never write, even if declared. */
 const RESERVED = new Set([
-  ...Object.keys(ProcessFact.cases),
-  ...Object.keys(MemberFact.cases),
+  ...Object.keys(ProcessEvent.cases),
+  ...Object.keys(MemberEvent.cases),
   ...Object.keys(RuntimeRecord.cases),
 ]);
 
@@ -147,8 +147,8 @@ type Live = {
   readonly cmds: ReadonlyArray<Dispatched>;
 };
 
-/** A failed Cmd's settled Msg error: its case is its why. */
-const failure = (why: string) => Schema.TaggedStruct(why, {}).make({});
+/** A failed Cmd's settled Msg error: its case is its reason. */
+const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
 
 type RunnerOptions = {
   /** The trusted wiring's policy. Without `maxDeliveries`, a letter is tried 3 times. */
@@ -234,7 +234,7 @@ export class ProgramRunner extends Context.Service<
         const fault = (cut: string) => options?.fault?.(cut) ?? Effect.void;
         const coordinator = Effect.gen(function* () {
           if (Option.isNone(manager)) {
-            return yield* new LedgerError({ why: "unreachable" });
+            return yield* new LedgerError({ reason: "unreachable" });
           }
 
           return manager.value;
@@ -247,7 +247,7 @@ export class ProgramRunner extends Context.Service<
           supervision = next;
         });
         const currentRecovery = Effect.suspend(() =>
-          supervision === null ? Effect.fail(new LedgerError({ why: "bad_row" })) : Effect.succeed(supervision),
+          supervision === null ? Effect.fail(new LedgerError({ reason: "bad_row" })) : Effect.succeed(supervision),
         );
         const moved = (s: Supervision, msg: SupervisorMsg): Supervision => applyCell(supervisor, s, msg)[0];
         /** Which delivery limit wins: the program's own, else the wiring's (3 when it sets none). */
@@ -323,7 +323,7 @@ export class ProgramRunner extends Context.Service<
                 const receipt = s.receipts.find((r) => r.process === action.process && r.result !== null);
 
                 if (receipt === undefined) {
-                  return yield* new LedgerError({ why: "bad_row" });
+                  return yield* new LedgerError({ reason: "bad_row" });
                 }
 
                 yield* p
@@ -354,10 +354,10 @@ export class ProgramRunner extends Context.Service<
               }
               case "exit": {
                 if (s.recovery._tag !== "ending") {
-                  return yield* new LedgerError({ why: "bad_row" });
+                  return yield* new LedgerError({ reason: "bad_row" });
                 }
 
-                const why =
+                const reason =
                   s.restart !== undefined
                     ? "restart"
                     : s.recovery.failure._tag === "saved"
@@ -365,7 +365,7 @@ export class ProgramRunner extends Context.Service<
                       : s.recovery.failure._tag === "fresh"
                         ? "step"
                         : "interrupted";
-                yield* p.exit(action.process, why, meta);
+                yield* p.exit(action.process, reason, meta);
                 yield* fault("after_exit");
                 const status = yield* p.status(process.name);
 
@@ -374,7 +374,7 @@ export class ProgramRunner extends Context.Service<
                     id: s.restart.id,
                     name: s.name,
                     after: action.process,
-                    why: "restart",
+                    reason: "restart",
                     code: { program: process.program, hash: s.restart.build },
                   });
                   yield* saveRecovery({
@@ -397,7 +397,7 @@ export class ProgramRunner extends Context.Service<
               }
               case "down": {
                 if (s.recovery._tag !== "down") {
-                  return yield* new LedgerError({ why: "bad_row" });
+                  return yield* new LedgerError({ reason: "bad_row" });
                 }
 
                 yield* p.down(action.process, s.recovery, meta);
@@ -407,7 +407,7 @@ export class ProgramRunner extends Context.Service<
               }
               case "start": {
                 if (s.recovery._tag !== "starting") {
-                  return yield* new LedgerError({ why: "bad_row" });
+                  return yield* new LedgerError({ reason: "bad_row" });
                 }
 
                 const status = yield* p.status(s.name);
@@ -449,7 +449,7 @@ export class ProgramRunner extends Context.Service<
               }
               case "checkpoint": {
                 if (action.after === undefined) {
-                  return yield* new LedgerError({ why: "bad_row" });
+                  return yield* new LedgerError({ reason: "bad_row" });
                 }
 
                 const previous = yield* rootStore.select(action.after);
@@ -541,7 +541,7 @@ export class ProgramRunner extends Context.Service<
             const old = s.receipts.find((r) => r.letter === failure.letter);
 
             if (old === undefined || next.pending === null) {
-              return yield* new LedgerError({ why: "bad_row" });
+              return yield* new LedgerError({ reason: "bad_row" });
             }
 
             const errors = [...old.errors, failure.error];
@@ -552,7 +552,9 @@ export class ProgramRunner extends Context.Service<
               tries: errors.length,
               process: failure.process,
               result: terminal
-                ? Schema.TaggedStruct("refused", { why: Schema.Literal("dead") }).make({ why: "dead" })
+                ? Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).make({
+                    reason: "dead",
+                  })
                 : null,
             };
             next = {
@@ -603,7 +605,7 @@ export class ProgramRunner extends Context.Service<
                   maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
                 });
               },
-              catch: () => new LedgerError({ why: "bad_row" }),
+              catch: () => new LedgerError({ reason: "bad_row" }),
             });
             supervision = yield* recovery.load;
 
@@ -695,13 +697,13 @@ export class ProgramRunner extends Context.Service<
         });
 
         const step = Effect.fnUntraced(function* (
-          why: ProgramDown["why"],
+          reason: ProgramDown["reason"],
           letter: string,
           f: () => Effect.Effect<Step, ProgramDown>,
         ) {
           if (supervision !== null) {
             const status = yield* (yield* coordinator).status(process.name);
-            const phase = why === "step" ? "fresh" : "saved";
+            const phase = reason === "step" ? "fresh" : "saved";
             const attempt = {
               process: process.id,
               letter,
@@ -720,7 +722,7 @@ export class ProgramRunner extends Context.Service<
             const attempt = supervision.attempt;
 
             if (attempt === null) {
-              return yield* new LedgerError({ why: "bad_row" });
+              return yield* new LedgerError({ reason: "bad_row" });
             }
 
             if (Cause.hasInterrupts(result.cause)) {
@@ -747,14 +749,14 @@ export class ProgramRunner extends Context.Service<
                     ? "null"
                     : typeof original;
             yield* observed(
-              (why === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
+              (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({
                 ...attempt,
                 error,
               }),
               attempt.at,
               original,
             );
-            return yield* wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ why, cause: original });
+            return yield* wrapped instanceof ProgramDown ? wrapped : new ProgramDown({ reason, cause: original });
           }
 
           if (supervision !== null) {
@@ -770,8 +772,8 @@ export class ProgramRunner extends Context.Service<
           );
         });
 
-        const stepped = Effect.fnUntraced(function* (step: Step, why: ProgramDown["why"]) {
-          return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ why }));
+        const stepped = Effect.fnUntraced(function* (step: Step, reason: ProgramDown["reason"]) {
+          return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ reason }));
         });
 
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
@@ -806,7 +808,7 @@ export class ProgramRunner extends Context.Service<
           const decoded = decodeDispatched(saved.cmds);
 
           if (Result.isFailure(decoded)) {
-            return yield* new ProgramDown({ why: "saved_state" });
+            return yield* new ProgramDown({ reason: "saved_state" });
           }
 
           const cmds = decoded.success;
@@ -996,14 +998,14 @@ export class ProgramRunner extends Context.Service<
           const port = inputPort(state, m);
 
           if (port === undefined || !port.write || port.personOnly || hasParent(m)) {
-            return Step.cases.refused.make({ why: "bad_msg" });
+            return Step.cases.refused.make({ reason: "bad_msg" });
           }
 
-          const refused = Step.cases.refused.make({ why: "bad_msg" });
+          const refused = Step.cases.refused.make({ reason: "bad_msg" });
           return yield* state.loaded.execution.admit(m).pipe(
             Effect.flatMap((admitted) => (admitted ? state.loaded.execution.step(model, m) : Effect.succeed(refused))),
             Effect.catchIf(
-              (error) => error.why === "step" && error.source === undefined,
+              (error) => error.reason === "step" && error.source === undefined,
               () => Effect.succeed(refused),
             ),
           );
@@ -1014,7 +1016,7 @@ export class ProgramRunner extends Context.Service<
           yield* ensure();
 
           if (supervision !== null && supervision.recovery._tag !== "live") {
-            return yield* new ProgramDown({ why: "saved_letter" });
+            return yield* new ProgramDown({ reason: "saved_letter" });
           }
 
           let state: Live;
@@ -1049,12 +1051,12 @@ export class ProgramRunner extends Context.Service<
             at: time,
           }));
         });
-        const err = Effect.fnUntraced(function* (job: Dispatched, why: string, error: unknown = failure(why)) {
+        const err = Effect.fnUntraced(function* (job: Dispatched, reason: string, error: unknown = failure(reason)) {
           return yield* Effect.map(at, (time) => ({
             type: `${cmdType(job)}_err`,
             cmd: job.cmd,
             error,
-            why,
+            reason,
             at: time,
           }));
         });
@@ -1069,7 +1071,7 @@ export class ProgramRunner extends Context.Service<
           return yield* work;
         });
 
-        /** A checked write: the fact must be declared, not reserved, and match its schema. */
+        /** A checked write: the event must be declared, not reserved, and match its schema. */
         const write = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const input = decodeWriteCmd(job.cmd);
 
@@ -1078,12 +1080,12 @@ export class ProgramRunner extends Context.Service<
           }
 
           const { stream, write: asked } = input.success;
-          const fact = asked.fact;
-          const kind = typeof fact._tag === "string" ? fact._tag : null;
+          const event = asked.event;
+          const kind = typeof event._tag === "string" ? event._tag : null;
           const writes = state.loaded.declaration.writes;
           const policy = kind !== null && Object.hasOwn(writes, kind) ? writes[kind] : undefined;
 
-          if (kind === null || RESERVED.has(kind) || policy === undefined || !isFact(fact)) {
+          if (kind === null || RESERVED.has(kind) || policy === undefined || !isEvent(event)) {
             return yield* err(job, "bad_cmd");
           }
 
@@ -1096,7 +1098,7 @@ export class ProgramRunner extends Context.Service<
             return yield* err(job, "forbidden");
           }
 
-          if (!(yield* state.loaded.execution.check(kind, fact))) {
+          if (!(yield* state.loaded.execution.check(kind, event))) {
             return yield* err(job, "bad_cmd");
           }
 
@@ -1114,10 +1116,10 @@ export class ProgramRunner extends Context.Service<
           const attempt: Effect.Effect<Appended, LedgerError | SigningRefused | NotGranted> = Effect.gen(function* () {
             if (asked._tag === "own") {
               if (policy.personOnly) {
-                return yield* new SigningRefused({ why: "person_only" });
+                return yield* new SigningRefused({ reason: "person_only" });
               }
 
-              return yield* commit([])(checked.own(job.id, stream, fact));
+              return yield* commit([])(checked.own(job.id, stream, event));
             }
 
             if (checked.sign === undefined && Option.isNone(sessions)) {
@@ -1130,7 +1132,7 @@ export class ProgramRunner extends Context.Service<
                   .signer(asked.parent, process.id, kind)
                   .pipe(Effect.provideService(SignRequest, { id: job.id }));
             return yield* commit([{ span: Tracer.externalSpan(session.span), attributes: {} }])(
-              checked.commit(job.id, session, stream, fact),
+              checked.commit(job.id, session, stream, event),
             );
           });
           // A refusal is the Cmd's answer; a storage failure is not, so the Cmd stays dispatched.
@@ -1140,7 +1142,7 @@ export class ProgramRunner extends Context.Service<
               (e): e is SigningRefused | NotGranted => e instanceof SigningRefused || e instanceof NotGranted,
               (e) =>
                 Effect.succeed<Result.Result<Appended, string>>(
-                  Result.fail(e instanceof SigningRefused ? e.why : "not_granted"),
+                  Result.fail(e instanceof SigningRefused ? e.reason : "not_granted"),
                 ),
             ),
           );
@@ -1150,7 +1152,7 @@ export class ProgramRunner extends Context.Service<
           }
 
           if (answer.success._tag === "refused") {
-            return yield* err(job, answer.success.why);
+            return yield* err(job, answer.success.reason);
           }
 
           return yield* ok(job, answer.success);
@@ -1180,16 +1182,16 @@ export class ProgramRunner extends Context.Service<
 
           const outcome: Outcome<unknown, unknown> = exit.value;
           // The box checks the declared tag and encodes the answer (main's P11 encoding); an Err
-          // also carries its tag as `why`, as the runner's own errors do.
+          // also carries its tag as `reason`, as the runner's own errors do.
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
               const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
               return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
-                ? { ...m, why: tag }
+                ? { ...m, reason: tag }
                 : m;
             }),
             Effect.catchIf(
-              (error) => error.why === "step" && error.source === undefined,
+              (error) => error.reason === "step" && error.source === undefined,
               () => err(job, "bad_cmd"),
             ),
           );
@@ -1247,7 +1249,7 @@ export class ProgramRunner extends Context.Service<
                 .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
               if (sent._tag === "refused") {
-                return yield* new LedgerError({ why: "refused", message: sent.why });
+                return yield* new LedgerError({ reason: "refused", message: sent.reason });
               }
 
               return (yield* catchUp(current, { mine: answer })).fresh;
@@ -1312,7 +1314,7 @@ export class ProgramRunner extends Context.Service<
                 const state = yield* ready();
 
                 if (client.length === 0 || client.length > 256) {
-                  return yield* new RunnerError({ why: "bad_client" });
+                  return yield* new RunnerError({ reason: "bad_client" });
                 }
 
                 clients.delete(client);
@@ -1338,7 +1340,7 @@ export class ProgramRunner extends Context.Service<
             msg(
               Effect.gen(function* () {
                 const input = yield* decodeDelivery(raw).pipe(
-                  Effect.mapError(() => new RunnerError({ why: "bad_input" })),
+                  Effect.mapError(() => new RunnerError({ reason: "bad_input" })),
                 );
                 yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
                 const receipt = supervision?.receipts.find((r) => r.letter === input.id);
@@ -1347,16 +1349,16 @@ export class ProgramRunner extends Context.Service<
                   const digest =
                     receipt.digest ??
                     (yield* decodeDelivery(receipt.input).pipe(
-                      Effect.mapError(() => new LedgerError({ why: "bad_row" })),
+                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
                       Effect.flatMap(inputDigest),
                     ));
 
                   if ((yield* inputDigest(input)) !== digest) {
-                    return { answer: Sent.cases.refused.make({ why: "id_reused" }), jobs: [] };
+                    return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
                   }
 
                   if (receipt.result !== null) {
-                    return { answer: Sent.cases.refused.make({ why: "dead" }), jobs: [] };
+                    return { answer: Sent.cases.refused.make({ reason: "dead" }), jobs: [] };
                   }
                 }
 
@@ -1383,7 +1385,7 @@ export class ProgramRunner extends Context.Service<
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
                 if (sent._tag === "refused") {
-                  return yield* new LedgerError({ why: "refused", message: sent.why });
+                  return yield* new LedgerError({ reason: "refused", message: sent.reason });
                 }
 
                 const { fresh } = yield* catchUp(state, { mine: id });
@@ -1395,7 +1397,7 @@ export class ProgramRunner extends Context.Service<
             restart(
               Effect.gen(function* () {
                 if (recovery === null) {
-                  return yield* new LedgerError({ why: "unreachable" });
+                  return yield* new LedgerError({ reason: "unreachable" });
                 }
 
                 const s = yield* currentRecovery;
@@ -1403,7 +1405,7 @@ export class ProgramRunner extends Context.Service<
 
                 if (prior !== undefined) {
                   if (prior.build !== request.build) {
-                    return yield* new RunnerError({ why: "bad_input" });
+                    return yield* new RunnerError({ reason: "bad_input" });
                   }
 
                   if (s.recovery._tag === "live") {
@@ -1420,7 +1422,7 @@ export class ProgramRunner extends Context.Service<
                   id: request.id,
                   name: s.name,
                   after,
-                  why: "restart",
+                  reason: "restart",
                   code: { program: process.program, hash: request.build },
                 });
                 const meta = yield* from(null, yield* traceId);
@@ -1465,7 +1467,7 @@ export class ProgramRunner extends Context.Service<
               brainOnly({ stream: `${process.name}/inbox`, id: input.id, tag: "send" }) ||
               hasParent(input.envelope.input)
             ) {
-              return { answer: Sent.cases.refused.make({ why: "bad_msg" }), jobs: [] };
+              return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
             }
 
             const prior = (yield* store.placed(input.id)) ?? (yield* store.placedByAny(input.id));
@@ -1477,14 +1479,14 @@ export class ProgramRunner extends Context.Service<
             const port = inputPort(state, input.envelope.input);
 
             if (port === undefined || !port.write || (port.personOnly && input.envelope.by._tag !== "person")) {
-              return { answer: Sent.cases.refused.make({ why: "bad_msg" }), jobs: [] };
+              return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
             }
 
             const m = stamp(input.envelope.input, input.envelope.id);
 
             // The port's schema runs inside the box; Schemas do not cross its RPC (P12).
             if (!(yield* state.loaded.execution.admit(m))) {
-              return { answer: Sent.cases.refused.make({ why: "bad_msg" }), jobs: [] };
+              return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
             }
 
             if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id)) {
@@ -1495,7 +1497,7 @@ export class ProgramRunner extends Context.Service<
                   {
                     letter: input.id,
                     input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
-                      Effect.mapError(() => new LedgerError({ why: "bad_row" })),
+                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
                     ),
                     digest: yield* inputDigest(input),
                     errors: [],
@@ -1522,7 +1524,7 @@ export class ProgramRunner extends Context.Service<
                 supervision !== null &&
                 deadDone(supervision)
               ) {
-                return { answer: Sent.cases.refused.make({ why: "dead" }), jobs: [] };
+                return { answer: Sent.cases.refused.make({ reason: "dead" }), jobs: [] };
               }
 
               return yield* Effect.fail(preparation.failure);
@@ -1531,20 +1533,20 @@ export class ProgramRunner extends Context.Service<
             const prepared = preparation.success;
 
             if (prepared._tag === "refused") {
-              const { _tag: _case, ...why } = prepared;
-              return { answer: Sent.cases.refused.make(why), jobs: [] };
+              const { _tag: _case, ...reason } = prepared;
+              return { answer: Sent.cases.refused.make(reason), jobs: [] };
             }
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.
             const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
-              Effect.mapError(() => new RunnerError({ why: "bad_input" })),
+              Effect.mapError(() => new RunnerError({ reason: "bad_input" })),
             );
             yield* store.save(checkpoint(state, Turn.cases.prepared.make({ id: input.id })));
             const appended = yield* checked.append(incoming);
 
             if (appended._tag === "refused") {
               yield* store.save(checkpoint(state, null));
-              return { answer: Sent.cases.refused.make({ why: appended.why }), jobs: [] };
+              return { answer: Sent.cases.refused.make({ reason: appended.reason }), jobs: [] };
             }
 
             // The inbox now holds the accepted input. Failed deliveries keep their original body.
@@ -1575,7 +1577,7 @@ export class ProgramRunner extends Context.Service<
 
 /** A delivery that does not have P10's shape. */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
-  why: Schema.Literals(["bad_input", "bad_client"]),
+  reason: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted;
@@ -1596,7 +1598,7 @@ const inputPort = (state: Live, m: unknown) =>
     },
   });
 
-const isFact = (u: Readonly<Record<string, Schema.Json>>): u is Fact => typeof u._tag === "string";
+const isEvent = (u: Readonly<Record<string, Schema.Json>>): u is Event => typeof u._tag === "string";
 
 /** An Err outcome's tag, when its error is tagged. */
 const errTag = (error: unknown): string | undefined =>

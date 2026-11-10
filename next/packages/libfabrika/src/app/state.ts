@@ -16,7 +16,7 @@ const Row = Schema.Struct({
 const decodeRow = Schema.decodeUnknownResult(Row);
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
-const down = (): ProgramDown => new ProgramDown({ why: "saved_state" });
+const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });
 
 export class Saved extends Schema.Opaque<Saved>()(Row) {
   /**

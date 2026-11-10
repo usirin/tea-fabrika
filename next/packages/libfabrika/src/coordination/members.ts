@@ -1,10 +1,10 @@
-// Who belongs: signed facts in, a grant tree out (p28). Pure, so the door's rule and the view are
+// Who belongs: signed events in, a grant tree out (p28). Pure, so the door's rule and the view are
 // one function and never drift. Tier 1, P9, building account recovery's calls 6 to 9 and a key per
 // client. Every device the person owns is a master: devices are equal roots, and only tabs and
 // agents hang under the device that let them in. The sheet belongs to the person and works once.
 //
-// It never checks a signature: the door does, then hands the fact here. `Members` is a projection,
-// never stored, so a later rule re-judges old facts.
+// It never checks a signature: the door does, then hands the event here. `Members` is a projection,
+// never stored, so a later rule re-judges old events.
 import { Result, Schema } from "effect";
 
 /** What the person saw when they let a tab or an agent in. Recorded, never trusted. */
@@ -110,7 +110,7 @@ export const Add = Schema.Struct({
   sentAt: Schema.String,
 });
 
-export const MemberFact = Schema.TaggedUnion({
+export const MemberEvent = Schema.TaggedUnion({
   founded: {
     id: Schema.String,
     name: Schema.String,
@@ -122,7 +122,7 @@ export const MemberFact = Schema.TaggedUnion({
   revoked: { revoke: Revoke, signed: Signed },
   added: { add: Add, signed: Signed },
 });
-export type MemberFact = typeof MemberFact.Type;
+export type MemberEvent = typeof MemberEvent.Type;
 
 /** Rank `email`, the brain's own key, waits for P36. */
 type Rank = "person" | "window" | "agent" | "recovery";
@@ -138,16 +138,16 @@ export type Members = {
   readonly spent: ReadonlySet<string>;
 };
 
-/** Why a fact changes nothing. */
-export const Why = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
-export type Why = typeof Why.Type;
+/** Why an event changes nothing. */
+export const Reason = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
+export type Reason = typeof Reason.Type;
 
 /** Who belongs so far, plus what the rule needs that `Members` does not show. */
 export type Folded = {
   readonly members: Members;
   /** Sheets a newer sheet ended. */
   readonly replaced: ReadonlySet<string>;
-  /** The id of every fact folded, so the same fact twice changes nothing. */
+  /** The id of every event folded, so the same event twice changes nothing. */
   readonly ids: ReadonlySet<string>;
 };
 
@@ -157,9 +157,9 @@ export const EMPTY: Folded = {
   ids: new Set(),
 };
 
-/** The id a fact is kept under: its own, and the fixed `founded` for the founding. */
-export const factId = (fact: MemberFact): string =>
-  MemberFact.match(fact, {
+/** The id an event is kept under: its own, and the fixed `founded` for the founding. */
+export const eventId = (event: MemberEvent): string =>
+  MemberEvent.match(event, {
     founded: () => "founded",
     granted: ({ grant }) => grant.id,
     denied: ({ id }) => id,
@@ -167,9 +167,9 @@ export const factId = (fact: MemberFact): string =>
     added: ({ add }) => add.id,
   });
 
-/** The key that signed a fact, if it is signed. */
-export const signedBy = (fact: MemberFact): string | null =>
-  MemberFact.match(fact, {
+/** The key that signed an event, if it is signed. */
+export const signedBy = (event: MemberEvent): string | null =>
+  MemberEvent.match(event, {
     founded: () => null,
     denied: () => null,
     granted: ({ signed }) => signed.signer,
@@ -177,9 +177,9 @@ export const signedBy = (fact: MemberFact): string | null =>
     added: ({ signed }) => signed.signer,
   });
 
-/** The key a fact is about. */
-export const subject = (fact: MemberFact): string | null =>
-  MemberFact.match(fact, {
+/** The key an event is about. */
+export const subject = (event: MemberEvent): string | null =>
+  MemberEvent.match(event, {
     founded: () => null,
     denied: ({ key }) => key,
     granted: ({ grant }) => grant.key,
@@ -230,10 +230,10 @@ class Change {
   }
 }
 
-const refuse = (why: Why): Result.Result<Folded, Why> => Result.fail(why);
+const refuse = (reason: Reason): Result.Result<Folded, Reason> => Result.fail(reason);
 
-/** How a signer stands: refused with a why, or its rank. */
-const standing = (folded: Folded, signer: string, person: string): Result.Result<Rank, Why> => {
+/** How a signer stands: refused with a reason, or its rank. */
+const standing = (folded: Folded, signer: string, person: string): Result.Result<Rank, Reason> => {
   const { members, replaced } = folded;
   const known = members.keys.get(signer);
 
@@ -257,7 +257,7 @@ const standing = (folded: Folded, signer: string, person: string): Result.Result
 };
 
 /** Whether a key may join as `rank`: new, or already there, live and of that rank. */
-const joins = (folded: Folded, key: string, rank: Rank): Result.Result<void, Why> => {
+const joins = (folded: Folded, key: string, rank: Rank): Result.Result<void, Reason> => {
   const known = folded.members.keys.get(key);
 
   if (known === undefined) {
@@ -272,19 +272,19 @@ const joins = (folded: Folded, key: string, rank: Rank): Result.Result<void, Why
 };
 
 /**
- * The one rule: what a fact does to who belongs, or why it does nothing. The fold skips what it
+ * The one rule: what an event does to who belongs, or why it does nothing. The fold skips what it
  * refuses, and `ClientManager.write` answers with it, so the door and the view never drift.
  */
-export const allows = (folded: Folded, fact: MemberFact): Result.Result<Folded, Why> => {
-  const id = factId(fact);
+export const allows = (folded: Folded, event: MemberEvent): Result.Result<Folded, Reason> => {
+  const id = eventId(event);
 
-  // The same fact again changes nothing, wherever it comes.
+  // The same event again changes nothing, wherever it comes.
   if (folded.ids.has(id)) {
     return Result.succeed(folded);
   }
 
   const founded = folded.members.person !== "";
-  return MemberFact.match(fact, {
+  return MemberEvent.match(event, {
     founded: ({ id: person, name, keys, window }) => {
       if (founded) {
         return refuse("not_allowed");
@@ -382,9 +382,9 @@ export const allows = (folded: Folded, fact: MemberFact): Result.Result<Folded, 
   });
 };
 
-/** Every fact in order, each one taken or refused by `allows`. */
-export const foldMembers = (facts: ReadonlyArray<MemberFact>): Members =>
-  facts.reduce((folded, fact) => Result.getOrElse(allows(folded, fact), () => folded), EMPTY).members;
+/** Every event in order, each one taken or refused by `allows`. */
+export const foldMembers = (events: ReadonlyArray<MemberEvent>): Members =>
+  events.reduce((folded, event) => Result.getOrElse(allows(folded, event), () => folded), EMPTY).members;
 
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
 const chainLive = (members: Members, key: string): boolean => {
@@ -411,15 +411,15 @@ export const admitted = (
   key: string,
 ):
   | { readonly key: string; readonly person: string; readonly as: "window" | "agent" }
-  | { readonly why: "not_granted" } => {
+  | { readonly reason: "not_granted" } => {
   const known = members.keys.get(key);
 
   if (known === undefined || !known.live || !chainLive(members, key)) {
-    return { why: "not_granted" };
+    return { reason: "not_granted" };
   }
 
   if (known.rank !== "window" && known.rank !== "agent") {
-    return { why: "not_granted" };
+    return { reason: "not_granted" };
   }
 
   return { key, person: members.person, as: known.rank };

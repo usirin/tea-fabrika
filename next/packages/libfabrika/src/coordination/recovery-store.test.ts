@@ -3,7 +3,7 @@
 // No test implements recovery or supplies a fake store. SQL corruption is planted after save.
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, type Layer } from "effect";
+import { type Context, Effect, Exit, type Layer, Schema } from "effect";
 import type { LedgerError } from "../data/ledger.ts";
 import { type Sql } from "../data/referee.ts";
 import { A, B, from, storage } from "./process.test-support.ts";
@@ -53,7 +53,7 @@ const terminal = {
   input,
   errors: ["TypeError", "RangeError", "TypeError"],
   tries: 3,
-  result: { _tag: "refused", why: "dead" },
+  result: { _tag: "refused", reason: "dead" },
   process: B,
 };
 
@@ -128,75 +128,97 @@ describe("P34 recovery storage", () => {
     );
   });
 
-  it("storage plant, evict receipts at capacity: failed new save preserves all old bytes", async () => {
-    const { RecoveryStore: S } = await subject();
-    const disk = storage();
-    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 64 * 1024 });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const s = yield* S;
-        yield* s.save(snapshot);
-        const full = {
-          ...snapshot,
-          receipts: [
-            ...snapshot.receipts,
-            { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(128 * 1024) } },
-          ],
-        };
-        expect(yield* Effect.flip(s.save(full))).toMatchObject({ why: "storage" });
-        expect(yield* s.load).toEqual(snapshot);
-      }).pipe(Effect.provide(layer())),
-    );
-    disk.reopen();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const s = yield* S;
-        expect(yield* s.receipt("poison")).toEqual(terminal);
-        expect(yield* s.input("poison")).toEqual(input);
-      }).pipe(Effect.provide(layer())),
-    );
-  });
-
-  it("wake probe plant, reset corrupt state: malformed durable snapshot fails closed with bad_row", async () => {
-    const { RecoveryStore: S } = await subject();
-    const disk = storage();
-    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        yield* (yield* S).save(snapshot);
-      }).pipe(Effect.provide(layer())),
-    );
-    // Find the actual saved JSON column, without prescribing the store's table names.
-    let planted = 0;
-    const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
-
-    for (const { name } of disk.sql.exec(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-    )) {
-      const table = quote(String(name));
-
-      for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
-        for (const [column, value] of Object.entries(row)) {
-          if (typeof value === "string" && value.includes('"recovery"')) {
-            disk.sql.exec(
-              `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
-              '{"v":999,"recovery":"broken"}',
-              row.rowid!,
+  it.effect.prop(
+    "storage plant, evict receipts at capacity: failed new save preserves all old bytes",
+    { generated: Schema.Int.check(Schema.isBetween({ minimum: 128 * 1024, maximum: 256 * 1024 })) },
+    ({ generated }) =>
+      Effect.forEach(
+        [128 * 1024, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const { RecoveryStore: S } = await subject();
+            const disk = storage();
+            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 64 * 1024 });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const s = yield* S;
+                yield* s.save(snapshot);
+                const full = {
+                  ...snapshot,
+                  receipts: [
+                    ...snapshot.receipts,
+                    { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
+                  ],
+                };
+                expect(yield* Effect.flip(s.save(full))).toMatchObject({ reason: "storage" });
+                expect(yield* s.load).toEqual(snapshot);
+              }).pipe(Effect.provide(layer())),
             );
-            planted++;
-          }
-        }
-      }
-    }
+            disk.reopen();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                const s = yield* S;
+                expect(yield* s.receipt("poison")).toEqual(terminal);
+                expect(yield* s.input("poison")).toEqual(input);
+              }).pipe(Effect.provide(layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
-    expect(planted, "the cut must corrupt real saved supervision bytes").toBeGreaterThan(0);
-    disk.reopen();
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        expect(yield* Effect.flip((yield* S).load)).toMatchObject({ why: "bad_row" });
-      }).pipe(Effect.provide(layer())),
-    );
-  });
+  it.effect.prop(
+    "wake probe plant, reset corrupt state: malformed durable snapshot fails closed with bad_row",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["broken", generated],
+        (corrupt) =>
+          Effect.promise(async () => {
+            const { RecoveryStore: S } = await subject();
+            const disk = storage();
+            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                yield* (yield* S).save(snapshot);
+              }).pipe(Effect.provide(layer())),
+            );
+            // Find the actual saved JSON column, without prescribing the store's table names.
+            let planted = 0;
+            const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
+
+            for (const { name } of disk.sql.exec(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )) {
+              const table = quote(String(name));
+
+              for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
+                for (const [column, value] of Object.entries(row)) {
+                  if (typeof value === "string" && value.includes('"recovery"')) {
+                    disk.sql.exec(
+                      `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
+                      JSON.stringify({ v: 999, recovery: corrupt }),
+                      row.rowid!,
+                    );
+                    planted++;
+                  }
+                }
+              }
+            }
+
+            expect(planted, "the cut must corrupt real saved supervision bytes").toBeGreaterThan(0);
+            disk.reopen();
+            await Effect.runPromise(
+              Effect.gen(function* () {
+                expect(yield* Effect.flip((yield* S).load)).toMatchObject({ reason: "bad_row" });
+              }).pipe(Effect.provide(layer())),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   it("storage plant, acknowledge before durable save: SQLITE_FULL is a failure and earlier state survives", async () => {
     const { RecoveryStore: S } = await subject();

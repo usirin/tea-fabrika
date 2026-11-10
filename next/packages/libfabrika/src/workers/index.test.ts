@@ -15,7 +15,7 @@ it("an unknown program is refused before the Worker Loader is called", async () 
           const loader = workerLoader({ get: unexpected, load: unexpected }, {});
           expect(yield* Effect.flip(loader.load(name, process))).toMatchObject({
             _tag: "ProgramDown",
-            why: "no_program",
+            reason: "no_program",
           });
         }),
       ),

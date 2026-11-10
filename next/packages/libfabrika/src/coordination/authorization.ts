@@ -3,11 +3,11 @@ import { LedgerTransaction } from "../data/ledger-transaction.ts";
 import { LedgerError } from "../data/ledger.ts";
 import { Appended, type Line, valueFor } from "../data/log.ts";
 import { short } from "../data/trace.ts";
-import { admitted, foldMembers, MemberFact } from "./members.ts";
+import { admitted, foldMembers, MemberEvent } from "./members.ts";
 import { NotGranted } from "./session-manager.ts";
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberFact.cases));
-const decodeFact = Schema.decodeUnknownResult(MemberFact);
+const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
 /** Current membership and the client write share one synchronous ledger transaction. */
 export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
@@ -17,23 +17,23 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
     );
     const transaction = yield* LedgerTransaction;
     const result = yield* transaction.transact((turn): Result.Result<Appended, LedgerError | NotGranted> => {
-      const facts: MemberFact[] = [];
+      const events: MemberEvent[] = [];
 
       for (const row of turn.read("door/members", 0)) {
         if (!known.has(row._tag)) {
           continue;
         }
 
-        const fact = decodeFact(valueFor(row));
+        const event = decodeEvent(valueFor(row));
 
-        if (Result.isFailure(fact)) {
-          return Result.fail(new LedgerError({ why: "bad_row" }));
+        if (Result.isFailure(event)) {
+          return Result.fail(new LedgerError({ reason: "bad_row" }));
         }
 
-        facts.push(fact.success);
+        events.push(event.success);
       }
 
-      if ("why" in admitted(foldMembers(facts), key)) {
+      if ("reason" in admitted(foldMembers(events), key)) {
         return Result.fail(new NotGranted({}));
       }
 
@@ -44,6 +44,6 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
     return appended;
   },
   Effect.tapError((error) =>
-    Effect.annotateCurrentSpan("fab.authorization.outcome", error._tag === "NotGranted" ? "not_granted" : error.why),
+    Effect.annotateCurrentSpan("fab.authorization.outcome", error._tag === "NotGranted" ? "not_granted" : error.reason),
   ),
 );

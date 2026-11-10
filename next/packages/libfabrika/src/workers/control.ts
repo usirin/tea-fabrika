@@ -60,13 +60,13 @@ const dispatch = Effect.fnUntraced(function* (
     if (method === "put") {
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
-      )(args).pipe(Effect.mapError(() => new LedgerError({ why: "bad_row" })));
+      )(args).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
       return yield* checkedPut(env.HEALTH, key, Uint8Array.from(bytes), checksum);
     }
 
     if (method === "head") {
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
-        Effect.mapError(() => new LedgerError({ why: "bad_row" })),
+        Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
       );
       return yield* bucketHead(env.HEALTH, key);
     }
@@ -128,8 +128,8 @@ export const control = Effect.fn("runtime.control")(function* (
             reason:
               typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
                 ? answer.failure.reason
-                : typeof answer.failure === "object" && answer.failure !== null && "why" in answer.failure
-                  ? answer.failure.why
+                : typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
+                  ? answer.failure.reason
                   : "unreachable",
           },
         },

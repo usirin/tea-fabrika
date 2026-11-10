@@ -21,7 +21,7 @@ export const doorStore = (sql: Sql) => {
           ensure();
           return step();
         }),
-      catch: () => new LedgerError({ why: "storage" }),
+      catch: () => new LedgerError({ reason: "storage" }),
     });
   });
   const get = <A>(name: string, schema: Schema.Codec<A>) => {
@@ -34,7 +34,7 @@ export const doorStore = (sql: Sql) => {
     const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema))(row.value);
 
     if (Result.isFailure(decoded)) {
-      throw new LedgerError({ why: "bad_row" });
+      throw new LedgerError({ reason: "bad_row" });
     }
 
     return decoded.success;

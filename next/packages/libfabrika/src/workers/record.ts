@@ -14,11 +14,11 @@ const part = Effect.fnUntraced(function* (
 ) {
   const [, name] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-  )(ctx.id.name).pipe(Effect.mapError(() => new SinkError({ why: "bad_row", held: 0 })));
+  )(ctx.id.name).pipe(Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 })));
   const expected = chain._tag === "spans" ? `spans/${at}` : `job/${chain.process}/${at}`;
 
   if (name !== expected) {
-    return yield* new SinkError({ why: "bad_row", held: 0 });
+    return yield* new SinkError({ reason: "bad_row", held: 0 });
   }
 
   return recordPart(workerSql(ctx.storage), chain, at, bytes ?? 1_000_000_000);

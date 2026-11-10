@@ -214,7 +214,7 @@ const backupPush = act("backup_push", {
 const Entry = Schema.Struct({
   ask: Ask,
   outcome: Schema.String,
-  why: Schema.String,
+  reason: Schema.String,
   head: Schema.String,
   exit: Schema.Number,
   keep: Schema.Boolean,
@@ -239,7 +239,7 @@ type Model =
       readonly phase: "pushing";
       readonly ask: Ask;
       readonly outcome: Outcome;
-      readonly why: string;
+      readonly reason: string;
       readonly head: string;
       readonly left: readonly string[];
     }
@@ -247,7 +247,7 @@ type Model =
       readonly phase: "recording" | "over";
       readonly ask: Ask;
       readonly outcome: End;
-      readonly why: string;
+      readonly reason: string;
       readonly head: string;
       readonly kept: boolean;
     };
@@ -270,19 +270,19 @@ const answerOf = (step: StepName, report: string) => {
 
     if (m) {
       const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
-      const why = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-      return { verb, to: m[2]?.toLowerCase() ?? "", why };
+      const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
+      return { verb, to: m[2]?.toLowerCase() ?? "", reason };
     }
   }
 
   const first = (lines[0] ?? "").replace(/^[`*#\s]+/, "");
 
   if (step === "review" && /^merge-ready/i.test(first)) {
-    return { verb: "done", to: "", why: "merge-ready" };
+    return { verb: "done", to: "", reason: "merge-ready" };
   }
 
   if (step === "review" && /^changes/i.test(first)) {
-    return { verb: "send", to: "build", why: first };
+    return { verb: "send", to: "build", reason: first };
   }
 
   return null;
@@ -302,12 +302,12 @@ const greenOf = (report: string) => {
   return (m[1] ?? "").replace(/[`*\s]+$/, "") || "laws named";
 };
 
-type Judged = { readonly outcome: Outcome; readonly why: string };
-type Ended = { readonly outcome: End; readonly why: string };
+type Judged = { readonly outcome: Outcome; readonly reason: string };
+type Ended = { readonly outcome: End; readonly reason: string };
 
 const stuck = (why: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
   outcome: { kind: "stuck", why },
-  why: text,
+  reason: text,
 });
 
 /** The Check, pure: what the reads found wins over what the step said. */
@@ -335,7 +335,7 @@ const decide = (ask: Ask, read: Read): Judged => {
   if (ask.step === "build" && read.exam.length > 0) {
     return {
       outcome: { kind: "send", to: "tests", why: "exam_paths" },
-      why: `the build touched exam paths: ${read.exam.join(" ")}`,
+      reason: `the build touched exam paths: ${read.exam.join(" ")}`,
     };
   }
 
@@ -343,7 +343,7 @@ const decide = (ask: Ask, read: Read): Judged => {
   if (read.manifests.length > 0) {
     return {
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
-      why:
+      reason:
         `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
         `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
         "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
@@ -355,7 +355,7 @@ const decide = (ask: Ask, read: Read): Judged => {
   if (ask.step === "plan" && read.plancheck !== null) {
     return {
       outcome: { kind: "send", to: "plan", why: "plancheck" },
-      why: `plancheck --draft: ${read.plancheck}`,
+      reason: `plancheck --draft: ${read.plancheck}`,
     };
   }
 
@@ -376,7 +376,7 @@ const decide = (ask: Ask, read: Read): Judged => {
 
         return {
           outcome: { kind: "done", part: false, head: read.head },
-          why: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
+          reason: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
         };
       }
 
@@ -384,17 +384,17 @@ const decide = (ask: Ask, read: Read): Judged => {
         return stuck("no_commit", "answered done with no commit");
       }
 
-      return { outcome: { kind: "done", part: false, head: read.head }, why: said.why };
+      return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
     case "send": {
       const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
-      return { outcome: { kind: "send", to, why: "step_said" }, why: said.why };
+      return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
     case "ask":
-      return { outcome: { kind: "ask", who: "lead", for: "question" }, why: said.why };
+      return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
     case "skip":
-      return { outcome: { kind: "skip", why: "step_said" }, why: said.why };
+      return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
     default:
-      return stuck("step_said", said.why);
+      return stuck("step_said", said.reason);
   }
 };
 
@@ -432,17 +432,17 @@ const stay = (s: Model): Step => [s, []];
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
 const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
-  const why = left.length > 0 ? `${j.why} (box kept: ${left.join(", ")})` : j.why;
+  const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
     ask,
     outcome: endName(j.outcome),
-    why,
+    reason,
     head,
     exit: exitOf(j.outcome),
     keep: kept,
     intent: intentOf("record", ask.box),
   });
-  return [{ phase: "recording", ask, outcome: j.outcome, why, head, kept }, [entry]];
+  return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept }, [entry]];
 };
 
 const draft = listen("draft", (s: Model) => (s.phase === "drafting" ? s.ask : null));
@@ -473,7 +473,11 @@ export const machine = defineMachine({
       const started = m.value;
 
       if (started._tag === "refused") {
-        return recordIt(s.ask, { outcome: { kind: "refused", check: started.check }, why: started.detail }, s.ask.base);
+        return recordIt(
+          s.ask,
+          { outcome: { kind: "refused", check: started.check }, reason: started.detail },
+          s.ask.base,
+        );
       }
 
       if (started._tag === "failed") {
@@ -509,7 +513,7 @@ export const machine = defineMachine({
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head, intent: intentOf("push", s.ask.box) });
-        const pushing = { outcome: j.outcome, why: j.why, head, left: m.value.left };
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
@@ -526,7 +530,7 @@ export const machine = defineMachine({
         return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.left);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, why: s.why }, s.head, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.left);
     },
     backup_push_err: (s): Step =>
       s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.left) : stay(s),
@@ -540,7 +544,7 @@ export const machine = defineMachine({
       }
 
       const outcome: Outcome = { kind: "stuck", why: "record_failed" };
-      return [{ ...s, phase: "over", outcome, why: `${s.why} (${m.value.detail})`, kept: true }, []];
+      return [{ ...s, phase: "over", outcome, reason: `${s.reason} (${m.value.detail})`, kept: true }, []];
     },
     record_err: (s): Step =>
       s.phase === "recording"
@@ -549,7 +553,7 @@ export const machine = defineMachine({
               ...s,
               phase: "over",
               outcome: { kind: "stuck", why: "record_failed" },
-              why: `${s.why} (not recorded)`,
+              reason: `${s.reason} (not recorded)`,
               kept: true,
             },
             [],
@@ -1012,7 +1016,7 @@ const handlers = (env: Env) => {
         // The field row, held beside the boxes until a field PR lands it.
         if (existsSync(ask.events)) {
           const row = rowOf(e.outcome);
-          const why = `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.why}`;
+          const why = `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.reason}`;
           const r =
             ask.agent === "claude"
               ? sh("python3", [
@@ -1067,7 +1071,7 @@ const handlers = (env: Env) => {
           from: ask.base,
           head: e.head,
           outcome,
-          why: ok ? e.why : `${e.why} (${notes.join("; ")})`,
+          why: ok ? e.reason : `${e.reason} (${notes.join("; ")})`,
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
           kept: keep,
@@ -1086,7 +1090,7 @@ const handlers = (env: Env) => {
         renameSync(`${state}.tmp`, state);
         appendFileSync(
           join(env.BOXES, "state", `${ask.lane}.md`),
-          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}, head ${e.head.slice(0, 8)}. ${e.why}\n`,
+          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
@@ -1678,7 +1682,7 @@ const main = () => {
       box,
       from: base,
       head: end.head,
-      reason: end.why,
+      reason: end.reason,
       report: writtenReport(ask),
       kept: end.kept,
       exit: exitOf(end.outcome),

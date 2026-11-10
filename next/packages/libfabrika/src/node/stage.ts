@@ -156,7 +156,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
         flushRecords.pipe(
           // The durable queue retries a down receiver. A full local disk still fails loudly.
           Effect.catchIf(
-            (error) => error.why !== "storage",
+            (error) => error.reason !== "storage",
             () => Effect.void,
           ),
           Effect.flatMap(() => exit),
@@ -346,7 +346,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
         yield* flush.pipe(Effect.ignore);
         yield* flushRecords.pipe(
           Effect.catchIf(
-            (error) => error.why !== "storage",
+            (error) => error.reason !== "storage",
             () => Effect.void,
           ),
           Effect.orDie,
