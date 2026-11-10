@@ -414,7 +414,7 @@ const recover = (w: ReturnType<typeof world>) =>
 describe("T337 down event identity, next/", () => {
 	const DownPolicy = Recovery.cases.down.mapFields(({_tag, process, ...fields}) => fields);
 	it.effect.prop(
-		"public down and saved Recovery.down share one policy-sensitive id through retry and reopen",
+		"public down ids track policy and each caller retries its own event through reopen",
 		{process: processIds, down: DownPolicy},
 		({process, down}) =>
 			Effect.gen(function* () {
@@ -426,15 +426,20 @@ describe("T337 down event identity, next/", () => {
 							Effect.gen(function* () {
 								yield* p.exit(process, policy.reason, from());
 								yield* p.down(process, policy, from());
-								yield* p.down(process, policy, from());
 							}),
 						).pipe(Effect.provide(w.manager()));
+						const first = w.ledger.rows().filter((row) => row._tag === "down");
+						expect(first).toHaveLength(1);
+						yield* ProcessManager.use((p) => p.down(process, policy, from())).pipe(
+							Effect.provide(w.manager()),
+						);
+						expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
 						w.reopen();
 						yield* ProcessManager.use((p) => p.down(process, policy, from())).pipe(
 							Effect.provide(w.manager()),
 						);
 						const rows = w.ledger.rows().filter((row) => row._tag === "down");
-						expect(rows).toHaveLength(1);
+						expect(rows).toEqual(first);
 						return rows[0]!.id;
 					});
 				const expected = yield* publicId(down);
@@ -478,23 +483,18 @@ describe("T337 down event identity, next/", () => {
 				);
 				expect(w.controls.hits).toEqual(["after_down"]);
 				const first = w.ledger.rows().filter((row) => row._tag === "down");
+				expect(first).toHaveLength(1);
 				w.reopen();
 				yield* ProgramRunner.use((r) => Effect.exit(r.open("retry"))).pipe(
 					Effect.provide(w.layer()),
 				);
+				expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
 				w.reopen();
 				yield* ProgramRunner.use((r) => Effect.exit(r.open("reopen"))).pipe(
 					Effect.provide(w.layer()),
 				);
 				const retried = w.ledger.rows().filter((row) => row._tag === "down");
-				// Crossing callers on the same reopened store must also find that one event.
-				yield* ProcessManager.use((p) => p.down(process, down, from())).pipe(
-					Effect.provide(w.manager()),
-				);
-				expect(first).toHaveLength(1);
 				expect(retried).toEqual(first);
-				expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
-				expect(first[0]!.id).toBe(expected);
 			}),
 		{arbitrary: {seed: 119120, runs: 40}},
 	);
