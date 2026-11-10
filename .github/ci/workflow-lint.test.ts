@@ -164,6 +164,12 @@ const plants: [string, (workflow: Workflow) => void][] = [
 		],
 	),
 	[
+		"next test command inside a longer step",
+		(w) => {
+			w.jobs.next.steps[0]!.run = `echo before\n${w.jobs.next.steps[0]!.run}`;
+		},
+	],
+	[
 		"next no shard flag",
 		(w) => {
 			w.jobs.next.steps[0]!.run = "pnpm exec vitest run next/";
@@ -380,6 +386,14 @@ it("accepts generated valid wiring and rejects every isolated wiring plant", () 
 		}),
 		options,
 	);
+});
+
+it("names the next command whose step or condition is wrong", () => {
+	const broken = structuredClone(valid("label", "extra"));
+	broken.jobs.next.steps[1]!.if = "matrix.shard == 1";
+	expect(lint(JSON.stringify(broken))).toEqual([
+		"check.yaml: next runs pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium once on shard 1 with its original condition",
+	]);
 });
 
 it("format: the checked-in workflow passes the same wiring lint", () => {
