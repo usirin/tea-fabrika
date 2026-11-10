@@ -742,3 +742,30 @@ Five isolated input/decoder plants were caught: removing choice support, opening
 `pnpm format` passed. The single full `pnpm lint` passed its earlier checks and then failed at the token generator's unsupported choice. The final format run found zero blocking lint findings. The single final `pnpm typecheck` reached three product errors in `src/build/tokens.ts`: line 215 indexes a choice as per-look data, and line 359 reads its missing `dark` and `light` fields for comments. No test-side type errors were reported before the workspace check stopped. Other checks in that recursive command were terminated after this failure, so this is not a clean workspace typecheck.
 
 Build must handle the new union case at both locations, generate picks and generated outputs, and keep the 210 failed picks visible. No Electron, host-watch, paid call, full local suite, push, or product edit was performed in this tests step.
+
+## Tests17: the load-word amendment
+
+Today's app, ticket 343, starting at `d88f46ac`. Four laws were added. No older law changed.
+
+| Law and label | Check | Result at the start | Planted bug and observed failure |
+|---|---|---|---|
+| T20, `scenario:` | `apps/fabrika/src/window/theme.test.ts`: a fresh page boots from a made-up cached theme, then hears forced colors on and off before any host theme arrives. | Green | Drop only the cached message to the look machine, while startup still paints CSS. After forced colors ends, both canvas and CSS must restore the cached theme. The canvas assertion instead received fabrika's `#111113` background. |
+| T18/T20, `property:` | `apps/fabrika/src/window/theme.test.ts`: 150 generated cells, seed 119120, through the real Ghostty renderer and app correction. Selection, inverse, faint, foregrounds, backgrounds and both system colors vary. An independent WCAG calculation picks the system color with the greater contrast on the final cell background. | Green | Return the theme foreground from correction under forced colors. The property failed on its first input, then shrank to a black cell drawing black instead of the system's `#000001`. |
+| T21, `scenario:` | `apps/fabrika/src/window/frame.test.ts`: the real page hears a theme report, then real desk states after a new workspace and a split. The frame is drawn after five seconds of fake-clock time for each layout. Keys and info must remain beside the load word. | Red | The existing four-second note timer is the plant. The load word is present before time advances, then missing after both layout changes while the same report stands. Both failures reached the word assertion. |
+| T12, `pinned:` | `apps/fabrika/src/window/theme.test.ts`: the named build13 wording bug under `off`. One proposed move and one proposed builtin replacement must say `would move` and `would use fabrika's`, with no `moved`. | Green | Ignore the off policy when choosing the verbs. The assertion received `1 color moved, 1 uses fabrika's`. |
+
+The three temporary plants wrapped product exports from the test code, one isolated run per plant.
+They were removed before the final narrow run. No product file was edited. The page scenarios
+replace browser and terminal edges; they do not launch Electron or a host and need no real home.
+
+The two narrow suites ran together once with `pnpm exec vitest run --maxWorkers=1`:
+
+- `apps/fabrika/src/window/theme.test.ts`: 8 passed.
+- `apps/fabrika/src/window/frame.test.ts`: 69 passed, 1 failed, the new T21 law.
+- Total: 77 passed, 1 failed. No skipped laws or sandbox failures.
+
+`pnpm format`, the single `pnpm lint`, and the single final `pnpm typecheck` passed.
+
+Build must keep the load word in the frame's bottom line beside keys and info while its report
+stands, including after the note timer and later workspace or split changes. T20, T18/T20 and
+T12 need no product change at this start.

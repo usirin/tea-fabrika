@@ -1,8 +1,9 @@
 import {applyCell} from "@demlik/tea";
-import {Result} from "effect";
-import {createElement, isValidElement, type ReactNode} from "react";
+import {fabrika} from "@kampus/fabrika-design";
+import {Effect, Result} from "effect";
+import {createElement, isValidElement, type ReactElement, type ReactNode} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import type {Ask, AsksNow} from "../asks.ts";
 import {
 	activeOf,
@@ -66,6 +67,148 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 	for (const m of msgs) s = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, s, m)[0];
 	if (s.at !== "open") throw new Error("the desk is over");
 	return s;
+};
+
+// Today's app, T343 amendment. scenario: the real page hears a host theme, its real desk changes
+// workspace and splits, and its note timer runs. Only the browser/terminal edges are replaced.
+// Plant: clear the load word on a timer, as build13 does with an ordinary four-second note.
+it("scenario: T21 the load word stays beside keys and info after a new workspace or split", async () => {
+	vi.resetModules();
+	vi.useFakeTimers();
+	let app: (() => ReactNode) | undefined;
+	let hear: (message: unknown) => void = () => {
+		throw new Error("the page did not attach");
+	};
+	const storage = new Map<string, string>();
+	vi.stubGlobal("localStorage", {
+		getItem: (key: string) => storage.get(key) ?? null,
+		setItem: (key: string, value: string) => void storage.set(key, value),
+		removeItem: (key: string) => void storage.delete(key),
+	});
+	vi.stubGlobal(
+		"ResizeObserver",
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		},
+	);
+	vi.stubGlobal("navigator", {userAgent: "test"});
+	vi.stubGlobal("document", {
+		documentElement: {style: {setProperty: vi.fn(), removeProperty: vi.fn()}, dataset: {}},
+		getElementById: () => ({}),
+	});
+	vi.stubGlobal("window", {
+		addEventListener: vi.fn(),
+		matchMedia: () => ({matches: false, addEventListener: vi.fn()}),
+		fabrika: {
+			send: vi.fn(),
+			onMessage: (_: string, receive: typeof hear) => {
+				hear = receive;
+			},
+		},
+	});
+	vi.doMock("./terminal.ts", () => ({loadGhostty: Effect.succeed(null)}));
+	vi.doMock("./windows.tsx", () => ({WINDOWS: new Map()}));
+	// Read App's real child props without mounting a native window. Frame drawing uses real React.
+	vi.doMock("react", async (original) => ({
+		...(await original<typeof import("react")>()),
+		useLayoutEffect: () => {},
+		useEffectEvent: (fn: unknown) => fn,
+		useSyncExternalStore: (_: unknown, snapshot: () => unknown) => snapshot(),
+	}));
+	vi.doMock("react-dom/client", () => ({
+		createRoot: () => ({
+			render: (element: ReactElement) => {
+				app = element.type as () => ReactNode;
+			},
+		}),
+	}));
+	try {
+		await import("./desk.tsx");
+		const {BottomArea: PageBottomArea} = await import("./frame.tsx");
+		expect(app).toBeTypeOf("function");
+		const bottom = (): FrameProps => {
+			const find = (node: unknown): FrameProps | undefined => {
+				if (Array.isArray(node)) {
+					for (const child of node) {
+						const found = find(child);
+						if (found !== undefined) return found;
+					}
+				}
+				if (!isValidElement(node)) return undefined;
+				if (node.type === PageBottomArea) return node.props as FrameProps;
+				return find((node.props as {children?: unknown}).children);
+			};
+			const props = find(app?.());
+			if (props === undefined) throw new Error("the page did not draw its bottom area");
+			return props;
+		};
+		const line = () =>
+			renderToStaticMarkup(createElement(BottomLine, bottom()))
+				.replace(/<[^>]+>/g, " ")
+				.replace(/&quot;/g, '"')
+				.replace(/&#x27;/g, "'")
+				.replace(/\s+/g, " ")
+				.trim();
+		let desk = fold([]);
+		const sendDesk = () => hear({type: "desk", desk, takes: {all: false, keys: []}});
+		sendDesk();
+		hear({
+			type: "theme",
+			version: "1",
+			value: {
+				format: 1,
+				name: "fabrika",
+				look: fabrika.look,
+				colors: fabrika.colors,
+				terminal: fabrika.terminal,
+			},
+			report: {
+				name: "dusk",
+				changes: [
+					{
+						_tag: "moved",
+						token: "text-faint",
+						on: "surface",
+						was: "#222222",
+						now: "#777777",
+						from: {wcag: 2.9, apca: -20},
+						to: {wcag: 4.5, apca: -60},
+					},
+				],
+				failures: [],
+				diagnostics: [],
+			},
+		});
+		const word = 'theme "dusk": 1 color moved';
+		expect(line()).toContain(word);
+		for (const does of ['tezgah."workspace --to new"', "tezgah.split"] as const) {
+			desk = foldFrom(desk, {type: "run", does});
+			sendDesk();
+			// Longer than the app's four-second note timer, without waiting on wall-clock time.
+			await vi.advanceTimersByTimeAsync(5000);
+			const words = line();
+			expect.soft(words, `load report still stands after ${does}`).toContain(word);
+			expect.soft(words).toMatch(/\bkeys\b/);
+			expect.soft(words).toMatch(/\binfo\b/);
+		}
+	} finally {
+		vi.doUnmock("./terminal.ts");
+		vi.doUnmock("./windows.tsx");
+		vi.doUnmock("react");
+		vi.doUnmock("react-dom/client");
+		vi.clearAllTimers();
+		vi.useRealTimers();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+	}
+});
+
+const foldFrom = (desk: Open, msg: DeskMsg): Open => {
+	const next = applyCell<Desk, DeskMsg, DeskCmd>(deskMachine, desk, msg)[0];
+	if (next.at !== "open") throw new Error("the desk closed");
+	return next;
 };
 
 it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {

@@ -1,10 +1,20 @@
 import {isDeepStrictEqual} from "node:util";
+import {fabrika} from "@kampus/fabrika-design";
+import {Effect} from "effect";
 import fc from "fast-check";
 // Today's app, T343 PR 1. Real ghostty renderer, with canvas calls recorded.
 // Plant: check the default background; swap before inverse; apply faint after correction.
 import {CanvasRenderer, CellFlags} from "ghostty-web";
 import {afterEach, describe, expect, it, vi} from "vitest";
-import {channels, composite, hex, rgbHex, RUNS, solid} from "../../../../fixtures/themes/laws.ts";
+import {
+	channels,
+	composite,
+	hex,
+	rgbHex,
+	RUNS,
+	solid,
+	wcag,
+} from "../../../../fixtures/themes/laws.ts";
 
 type Cell = {
 	codepoint: number;
@@ -314,6 +324,33 @@ describe("T21/T24 the startup cache is for paint only", () => {
 });
 
 describe("T12/T25 the one load diagnostic in the bottom line", () => {
+	// pinned: build13's off warning claimed that proposed changes had already happened.
+	// Plant: ignore the off policy when choosing the verbs.
+	it("pinned: T12 off says would move and would use fabrika's, never moved", async () => {
+		const theme = await import("./theme.ts");
+		const word = theme.themeWord(
+			{
+				name: "dusk",
+				changes: [
+					{
+						_tag: "moved",
+						token: "text-faint",
+						on: "surface",
+						was: "#222222",
+						now: "#777777",
+						from: {wcag: 2.9, apca: -20},
+						to: {wcag: 4.5, apca: -60},
+					},
+					{_tag: "builtin", token: "done", was: "#111111", now: "#89ff9fcd", why: "past_cap"},
+				],
+				failures: [],
+				diagnostics: [],
+			},
+			{fix: "off", contrast: 4.5},
+		);
+		expect(word).toBe('theme "dusk": 1 color would move, 1 would use fabrika\'s');
+		expect(word).not.toMatch(/\bmoved\b/);
+	});
 	// vector: themes.md point 4's sketch of the load line.
 	it('vector: theme "dusk": 2 colors moved, 1 uses fabrika\'s', async () => {
 		const {themeWord} = await built<WindowTheme>("./theme.ts");
@@ -392,4 +429,142 @@ describe("T12/T25 the one load diagnostic in the bottom line", () => {
 			RUNS,
 		);
 	});
+});
+
+describe("T18/T20 forced-color cells", () => {
+	// property: Ghostty's cell/selection inputs have no Effect schema. Record the real renderer's
+	// canvas calls after inverse, selection and faint, with the real app correction attached.
+	// Plant: keep the theme's foreground when forced colors is on.
+	it("property: T18/T20 every forced-color cell draws the system color that reads best", async () => {
+		fakeRoot();
+		const theme = await import("./theme.ts");
+		theme.applyAppearance({_tag: "forced", on: true});
+		try {
+			fc.assert(
+				fc.property(
+					fc.record({
+						foreground: solid,
+						background: solid,
+						base: solid,
+						selection: hex,
+						selectedInk: solid,
+						selected: fc.boolean(),
+						inverse: fc.boolean(),
+						faint: fc.boolean(),
+						text: solid,
+						back: solid,
+					}),
+					(v) => {
+						const drawn: {color: string; alpha: number}[] = [];
+						const renderer = Object.create(CanvasRenderer.prototype) as Renderer;
+						renderer.theme = {
+							background: v.base,
+							selectionBackground: v.selection,
+							selectionForeground: v.selectedInk,
+						};
+						renderer.metrics = {width: 8, height: 16, baseline: 12};
+						renderer.fontSize = 13;
+						renderer.fontFamily = "monospace";
+						renderer.isInSelection = () => v.selected;
+						renderer.ctx = {
+							fillStyle: "",
+							globalAlpha: 1,
+							font: "",
+							fillText: () => {
+								drawn.push({color: renderer.ctx.fillStyle, alpha: renderer.ctx.globalAlpha});
+							},
+						};
+						renderer.correctForeground = (fg, bg) => theme.correctCell(fg, bg, v);
+						const [r, g, b] = channels(v.foreground),
+							[R, G, B] = channels(v.background);
+						const cell: Cell = {
+							codepoint: 65,
+							width: 1,
+							flags: (v.inverse ? CellFlags.INVERSE : 0) | (v.faint ? CellFlags.FAINT : 0),
+							fg_r: r!,
+							fg_g: g!,
+							fg_b: b!,
+							bg_r: R!,
+							bg_g: G!,
+							bg_b: B!,
+							grapheme_len: 0,
+							hyperlink_id: 0,
+						};
+						const original = {...cell};
+						const rawBg = v.inverse ? v.foreground : v.background;
+						const bg = v.selected
+							? composite(v.selection, v.base)
+							: rawBg === "#000000"
+								? v.base
+								: rawBg;
+						const expected = wcag(v.text, bg) >= wcag(v.back, bg) ? v.text : v.back;
+						renderer.renderCellText(cell, 0, 0);
+						expect(drawn).toEqual([{color: expected, alpha: 1}]);
+						expect(cell).toEqual(original);
+					},
+				),
+				RUNS,
+			);
+		} finally {
+			theme.applyAppearance({_tag: "forced", on: false});
+		}
+	});
+});
+
+// scenario: a fresh page boots from its cache, then receives real media-change events, before
+// any host theme arrives. A renderer-only cache check missed build13's lost machine state.
+// Plant: let the cache paint CSS, but drop the cached message to the look machine.
+it("scenario: T20 cached start survives forced colors on then off", async () => {
+	vi.resetModules();
+	const {props, local, root} = fakeRoot();
+	const cached = {
+		format: 1,
+		name: "cached-nord",
+		look: "dark",
+		colors: {...fabrika.colors, surface: "#2e3440"},
+		terminal: {...fabrika.terminal, background: "#2e3440"},
+	};
+	local.setItem("fabrika.theme", JSON.stringify(cached));
+	let change: (event: {matches: boolean}) => void = () => {
+		throw new Error("no media listener");
+	};
+	vi.stubGlobal(
+		"ResizeObserver",
+		class {
+			observe() {}
+			unobserve() {}
+			disconnect() {}
+		},
+	);
+	vi.stubGlobal("navigator", {userAgent: "test"});
+	vi.stubGlobal("document", {documentElement: root, getElementById: () => null});
+	const ready = vi.fn();
+	vi.stubGlobal("window", {
+		addEventListener: vi.fn(),
+		matchMedia: () => ({
+			matches: false,
+			addEventListener: (_: string, hear: typeof change) => {
+				change = hear;
+			},
+		}),
+		fabrika: {send: ready, onMessage: vi.fn()},
+	});
+	vi.doMock("./terminal.ts", () => ({loadGhostty: Effect.succeed(null)}));
+	vi.doMock("./windows.tsx", () => ({WINDOWS: new Map()}));
+	try {
+		const theme = await import("./theme.ts");
+		await import("./desk.tsx");
+		expect(ready).toHaveBeenCalledWith("desk", {type: "ready"});
+		expect(props.get("--surface")).toBe(cached.colors.surface);
+		change({matches: true});
+		expect(props.has("--surface")).toBe(false);
+		expect(theme.readColors().terminal.foreground).toBe("CanvasText");
+		change({matches: false});
+		expect(theme.readColors()).toEqual({colors: cached.colors, terminal: cached.terminal});
+		expect(props.get("--surface")).toBe(cached.colors.surface);
+	} finally {
+		vi.doUnmock("./terminal.ts");
+		vi.doUnmock("./windows.tsx");
+		vi.resetModules();
+	}
 });
