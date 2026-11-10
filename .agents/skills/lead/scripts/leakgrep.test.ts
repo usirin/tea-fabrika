@@ -387,4 +387,20 @@ describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () =
 			expect(ran.stderr).toContain("leak machine_path");
 			expect(ran.stdout + ran.stderr).not.toContain(leak);
 		});
+	// A home folder matches in its real case, so a lowercase API path passes and a home path fails,
+	// whatever the name. Ticket 439's sweep was held (ticket 464) on GitHub's REST path /users/<name>/keys.
+	// Plants: match homes in any case (the API path fails), or drop /home (the Linux home passes).
+	it("a lowercase /users/<name>/ API path passes, and /Users/<name>/ and /home/<name>/ fail", () => {
+		fc.assert(
+			fc.property(fc.stringMatching(/^[a-z][a-z0-9]{2,11}$/), (name) => {
+				expect(run(`"/${"users"}/${name}/keys"`).status).toBe(0);
+				for (const home of ["Users", "home"]) {
+					const ran = run(`"/${home}/${name}/keys"`);
+					expect(ran.status).toBe(1);
+					expect(ran.stderr).toContain("leak machine_path");
+				}
+			}),
+			{seed: 119120, numRuns: 4},
+		);
+	});
 });
