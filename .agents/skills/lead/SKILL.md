@@ -152,8 +152,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
-- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
-  step at a time holds `BOXES/state/electron.lock`; the next waits.
+- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. Start any
+  other Claude step whose laws or shots run the app with `--electron`. The box cannot write
+  `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
+  it for the whole step; the next Electron step waits. The sandbox is unchanged.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
   by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
   is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
@@ -186,7 +188,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
   drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
   worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
-  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
+  when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
@@ -246,6 +249,8 @@ visible, and never weaken the rules to hide this message.
    Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
    The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
+   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
+   Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and both zero-hit checks together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
