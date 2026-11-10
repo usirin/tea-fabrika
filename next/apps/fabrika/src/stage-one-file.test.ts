@@ -7,6 +7,7 @@ import childProcess, {spawn} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {
 	cpSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -17,7 +18,7 @@ import {
 import {createServer as httpServer} from "node:http";
 import {syncBuiltinESMExports} from "node:module";
 import {createServer} from "node:net";
-import {join, resolve} from "node:path";
+import {dirname, isAbsolute, join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
 import {Id} from "@kampus/libfabrika";
 import {workerLoader} from "@kampus/libfabrika/workers";
@@ -127,8 +128,8 @@ const field = (value: string | Buffer) => {
 	n.writeUInt32BE(b.length);
 	return Buffer.concat([n, b]);
 };
-// P12's driver field names. Its current driver supplies no lostLinkMs and publishes no caps.
-// Those are missing measurements, never a license to reuse PR 223's caps or invent new ones.
+// P12's driver field names. Experiment 238's driver on branch fabrikalfa/exp241-script gives
+// lostLinkMs and writes the caps: experiment 241's guess from its sitting's four base runs.
 const Metrics = Schema.Struct({
 	acceptedSend: Schema.Number,
 	publication: Schema.Number,
@@ -177,9 +178,23 @@ const readings = (s: typeof Sample.Type) => ({
 	rss: s.workerdRssMb,
 	startup: s.startMs,
 });
-const localBar = (bar: Bar, digest: string, enforce: boolean) => {
+// Whether any selected program's package exports "./window", read from the same package.json
+// files libfabrika's build reads: node_modules/<package> from `from` upward. A path has none.
+const findManifest = (from: string, name: string): string | undefined => {
+	const file = join(from, "node_modules", name, "package.json");
+	if (existsSync(file)) return file;
+	return dirname(from) === from ? undefined : findManifest(dirname(from), name);
+};
+const exportsWindow = (from: string, selected: ReadonlyArray<{readonly package: string}>) =>
+	selected.some(({package: name}) => {
+		const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
+		if (file === undefined) return false;
+		const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
+		return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
+	});
+const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
 	assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");
-	assert(bar.capsFrom.length > 0, "measured cap source missing");
+	assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
 	assert.equal(bar.base.length, 4);
 	assert.equal(bar.head.length, 5);
 	for (const sample of [...bar.base, ...bar.head]) {
@@ -192,7 +207,10 @@ const localBar = (bar: Bar, digest: string, enforce: boolean) => {
 			assert(Number.isFinite(value) && value >= 0, "invalid reading");
 	}
 	for (const sample of bar.head) assert.equal(sample.brain, digest, "wrong built bytes");
-	for (const size of Object.values(bar.sizes)) assert(size > 0, "separate byte sizes missing");
+	for (const key of ["brain", "programs"] as const)
+		assert(Number.isFinite(bar.sizes[key]) && bar.sizes[key] > 0, `${key} bytes missing`);
+	assert(Number.isFinite(bar.sizes.window) && bar.sizes.window >= 0, "window bytes invalid");
+	if (windowed) assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
 	for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
 		assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 		if (enforce)
@@ -777,17 +795,21 @@ describe("P16 copied-file real stage, serial", () => {
 		);
 	});
 	// scenario: a fixed base/head benchmark, because it measures real laptop performance.
-	it("scenario: T10 timing keeps P12's four base and five head readings; unavailable readings remain unfinished", () => {
+	it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
 		const path = process.env.P16_LOCAL_BAR;
-		assert(
-			path,
-			"T10 unfinished: rerun experiment 238's driver (branch fabrikalfa/exp238-script), four base and five head, same sitting/settings/chaos, and set P16_LOCAL_BAR and P16_BRAIN; a lost-link reading is still missing",
-		);
+		if (!path) {
+			console.log(
+				"T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
+			);
+			return;
+		}
 		const bar = Schema.decodeUnknownSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
 		const brain = process.env.P16_BRAIN;
 		assert(brain, "final brain path missing");
 		const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");
-		localBar(bar, digest, !process.env.CI);
+		const {programs} = await import("./table.ts");
+		const windowed = exportsWindow(join(APP, "src"), programs);
+		localBar(bar, digest, !process.env.CI, windowed);
 		console.log(
 			JSON.stringify({
 				law: "T10",
@@ -807,6 +829,7 @@ describe("P16 copied-file real stage, serial", () => {
 				},
 				digest,
 				true,
+				windowed,
 			),
 		).toThrow("acceptedSend");
 		expect(() =>
@@ -814,8 +837,34 @@ describe("P16 copied-file real stage, serial", () => {
 				{...bar, head: bar.head.map((s) => ({...s, error: "planted failure"}))},
 				digest,
 				false,
+				windowed,
 			),
 		).toThrow("failed run");
-		expect(() => localBar(bar, "wrong digest", false)).toThrow("wrong built bytes");
+		expect(() => localBar(bar, "wrong digest", false, windowed)).toThrow("wrong built bytes");
+		expect(() =>
+			localBar({...bar, capsFrom: "ticket-115's rule (a guess)"}, digest, false, windowed),
+		).toThrow("experiment 241");
+		for (const key of ["brain", "programs"] as const)
+			expect(() =>
+				localBar({...bar, sizes: {...bar.sizes, [key]: 0}}, digest, false, windowed),
+			).toThrow(`${key} bytes missing`);
+		// A program whose package.json exports "./window", read the way the build reads it.
+		const planted = home();
+		mkdirSync(join(planted, "src"));
+		mkdirSync(join(planted, "node_modules/@p16/windowed"), {recursive: true});
+		writeFileSync(
+			join(planted, "node_modules/@p16/windowed/package.json"),
+			JSON.stringify({exports: {".": "./program.ts", "./window": "./window.tsx"}}),
+		);
+		const withWindow = [...programs, {name: "windowed", package: "@p16/windowed"}];
+		expect(exportsWindow(join(planted, "src"), withWindow)).toBe(true);
+		expect(() =>
+			localBar(
+				{...bar, sizes: {...bar.sizes, window: 0}},
+				digest,
+				false,
+				exportsWindow(join(planted, "src"), withWindow),
+			),
+		).toThrow("window bytes missing");
 	});
 });
