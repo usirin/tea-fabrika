@@ -2,7 +2,7 @@ import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import { applyCell } from "@demlik/tea";
-import { Context, DateTime, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope, Stream } from "effect";
+import { Context, DateTime, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope, Semaphore, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -341,7 +341,9 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
     });
     // The watcher reads a file only when it changes, so a change the brain could not take (it was
     // restarting) is held and sent again, with its id, by the loop below until it lands. A newer
-    // change replaces it: each holds the whole table.
+    // change replaces it: each holds the whole table. One send at a time, of whatever is held when
+    // it starts: two in flight could land out of order, and an older table saved last would win.
+    const sending = yield* Semaphore.make(1);
     resendKeys = Effect.suspend(() => {
       const entry = heldKeys;
       return entry === null
@@ -357,7 +359,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
             Effect.ignore,
             Effect.provideContext(recording),
           );
-    });
+    }).pipe(sending.withPermit);
     const settings = (change: object) =>
       Effect.gen(function* () {
         const id = Base64Url.encode(yield* random.randomBytes(12));
