@@ -100,6 +100,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
   (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+- **In `next/`, use the platform through Alchemy, never directly,** in the cloud and on the laptop
+  alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
+  platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
+  gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
+  marked edge with the issue link. Today's direct uses move with their ports, and the lint rule is
+  ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge

@@ -20,6 +20,14 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)): a Durable Object class
   is written with Alchemy's Effect model, so once its port (ticket 502) lands, an object method
   is no longer an edge we write. Until then the edge lines in `brain.ts` stay.*
+  *Also from 2026-11-09
+  ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): every platform piece,
+  in the cloud and in the local stage, is used through Alchemy's Effect form, so a platform call
+  is not an edge we write either. 130 edge comments sit on platform calls today (64
+  `fabrika/no-promises`, 66 `fabrika/no-effect-run-outside-edge`); each goes with its port. An
+  edge stays only where Alchemy has a gap that cannot be patched in reasonable size, and then its
+  comment carries the upstream issue link. What is not the platform's stays an edge as before:
+  WebCrypto, a browser event handler, Rolldown.*
 - **"Simplest shape" never covers it.** A brief for `next/` says so. An agent's
   shortcut against this is a bug in the change, not a tradeoff to list at the end.
 - **It is checked, not only written down.** Lint rules refuse Promises in `next/`
