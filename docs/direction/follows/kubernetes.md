@@ -17,7 +17,7 @@ Seeded 2026-11-09 from the notes above, checked against main at `5b1171ed`.
 |---|---|---|---|
 | Restart backoff | Doubling from 10 s, capped at 5 minutes ([restart policy][restart]) | Doubling from 100 ms, capped at 800 ms (`app/supervisor.ts:11`, `:103-107`) | differs, because a restart here is a wake in the same object, so the shape is Kubernetes' and the scale is not ([experiment 100](../../../experiments/100-supervision-tree.md)) |
 | Backoff reset | Reset after 10 minutes running without a problem ([restart]) | Reset after 5 s live (`app/supervisor.ts:147-149`) | differs, because the scale follows the 800 ms cap |
-| A crash loop never gives up | `restartPolicy: Always` keeps trying at the capped wait ([restart]) | Past the brake, `down` until the window has room, then a new start, forever (`app/supervisor.ts:116-136`) | differs, because our wait between brakes stays near 5 s; a wait that grows like Kubernetes' is the lean, the owner's call (ticket 404) |
+| A crash loop never gives up | `restartPolicy: Always` keeps trying at the capped wait ([restart]) | Past the brake, `down` until the window has room, then a new start, forever (`app/supervisor.ts:116-136`) | differs, because our wait between brakes stays near 5 s; 0016 picks OTP's give-up instead |
 | Which exits restart | `Always`, `OnFailure` or `Never`, picked per pod ([restart]) | Only a throw restarts, like `OnFailure`, with no choice (`app/supervisor.ts:84-131`) | differs, because restart types wait for Tier 4 ([OTP table](./otp.md)) |
 | A stale write | `resourceVersion` lets the API server reject a client that is out of date ([versions]) | Each line keeps `seen`; a `seen` past the head is `refused {why: "seen_ahead"}` (`data/ledger-store.ts:128-132`); a stale `seen` still lands | differs, because append stays plain and `seen` is not a lock ([saved state](../saved-state.md), D1) |
 | State is observed, not set | `status` holds "the most recent observations of actual state" ([conventions]) | A process's `live`, `ended` or `down` is folded from its facts (`coordination/process.ts:39-43`), never written by hand | same |
@@ -30,8 +30,9 @@ Seeded 2026-11-09 from the notes above, checked against main at `5b1171ed`.
 Count: 11 rows, 1 same, 10 differ. Of the 10, 4 are not built yet (limits, labels, node affinity,
 leases).
 
-Open: [PR 642](https://github.com/usirin/tea-fabrika/pull/642) proposes dropping the backoff for
-OTP's restart at once. If it lands, the first four rows change in the pull request that builds it.
+Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
+drops the backoff for OTP's restart at once, and past its limit a name waits for a person. P34c's
+pull request updates the first four rows; they may then leave this table.
 
 [restart]: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy
 [versions]: https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions
