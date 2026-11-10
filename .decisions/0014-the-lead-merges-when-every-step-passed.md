@@ -1,7 +1,7 @@
 ---
 id: 0014
 title: The lead merges any pull request, product code included, once every step passed, never waiting on the owner except for real loosening or a new design call
-status: accepted
+status: amended-in-part by [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)
 date: 2026-11-09
 tags: [merge, lead, owner, exam, loosening, pipeline]
 ---
@@ -67,6 +67,10 @@ lead's hand check (owner, 2026-11-09).**
 
 - No step's check is dropped to reach a merge. A check that cannot run is `stuck`, never a pass.
 - The leak check still fails closed.
+
+"CI green on the head" holds for a head behind main once `pnpm lint` passed on its merge with
+current main ([0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)); the rest of this
+file still holds.
 
 ## Consequences
 

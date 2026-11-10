@@ -1,7 +1,7 @@
 ---
 id: 0041
 title: In next/, a Durable Object class is written with Alchemy's Effect Durable Object model in its modular form, never as a plain cloudflare:workers class
-status: accepted
+status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md)
 date: 2026-11-09
 tags: [durable-objects, alchemy, effect, object-class, brain, rpc, next]
 ---
@@ -245,7 +245,9 @@ the stack's `bundle: false`: see the second line under [Amendments](#amendments)
     `bundle: false` build with a hand-exported bridge class is a staging step of the port, not
     where it ends.
   - **PR 8: the object services read storage through Alchemy's `state.storage`,** with its Effect
-    `transaction`, not through `state.raw`.
+    `transaction`, not through `state.raw`. What runs inside it is a plain step,
+    `Effect.sync(step)`, never an Effect body ([0050](0050-a-ledger-step-is-a-plain-function.md));
+    the rest of this bullet holds.
   - **Why.** Alchemy has an Effect form for each of these. What the port's earlier plan called
     gaps were our staging choices: they kept each pull request small, and they were never a limit
     of the library.
