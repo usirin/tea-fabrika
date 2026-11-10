@@ -192,8 +192,15 @@ const DONE = {_tag: "done"};
 const runs = {seed: 119120, numRuns: 5};
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
-// oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
-const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
+
+const stuck = (reason: string, sha: string, more: object = {}) => ({
+	// oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
+	_tag: "stuck",
+	reason,
+	sha,
+	...more,
+});
+
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
 const ask = (...paths: string[]) => ({_tag: "ask", who: "owner", for: "exam_read", paths});
 
