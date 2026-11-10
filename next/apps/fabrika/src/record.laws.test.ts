@@ -7,7 +7,7 @@ import { Chain, Content, partName, SinkError, SpanRow } from "@kampus/libfabrika
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, Option, Result, Schema, Scope } from "effect";
 
 import { recordWire } from "./record-wire.test-support.ts";
 
@@ -84,31 +84,38 @@ for (const kind of ["node", "wire"] as const) {
         return;
       }
 
-      const stages = new Map<number, Effect.Success<ReturnType<typeof recordWire>>>();
+      const scope = Effect.runSync(Scope.make());
+      scopes.push(scope);
+      const stage = await Effect.runPromise(recordWire(1_000_000_000).pipe(Scope.provide(scope)));
 
-      for (const cap of [1, 1_000_000_000]) {
-        const scope = Effect.runSync(Scope.make());
-        scopes.push(scope);
-        stages.set(cap, await Effect.runPromise(recordWire(cap).pipe(Scope.provide(scope))));
-      }
+      driver = (name) => {
+        const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
+          name,
+        );
+        const [project, part] = Option.getOrElse(decoded, () => ["invalid-name", name]);
+        const stub = stage.record(project, part);
+        const { write, read, content, deleteContent } = stub;
 
-      driver = (name, cap) => {
-        const [project, part] = Schema.decodeUnknownSync(
-          Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-        )(name);
-        const stub = stages.get(cap)!.record(project, part);
+        if (write === undefined || read === undefined || content === undefined || deleteContent === undefined) {
+          throw new Error("record binding is missing a method");
+        }
+
+        const Failure = Schema.Struct({ reason: Schema.String });
         const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
-          Effect.tryPromise({ try: invoke, catch: (cause: unknown) => cause }).pipe(
+          Effect.tryPromise({ try: invoke, catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause) }).pipe(
+            // Mapping every reach failure to unreachable still fails the bad_row law.
             Effect.catch((error) =>
-              Schema.decodeUnknownEffect(SinkError)(error).pipe(Effect.orDie, Effect.flatMap(Effect.fail)),
+              error.reason === "unreachable" || error.reason === "bad_row" || error.reason === "storage"
+                ? Effect.fail(new SinkError({ reason: error.reason, held: 0 }))
+                : Effect.die(error),
             ),
             Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
           );
         return {
-          write: (chain, at, rows) => call(Written, () => stub.write(chain, at, rows)),
-          read: (chain, at, after) => call(Page, () => stub.read(chain, at, after)),
-          content: (chain, at, id) => call(Lookup, () => stub.content(chain, at, id)),
-          deleteContent: (chain, at, id, by) => call(Lookup, () => stub.deleteContent(chain, at, id, by)),
+          write: (chain, at, rows) => call(Written, () => write(chain, at, rows)),
+          read: (chain, at, after) => call(Page, () => read(chain, at, after)),
+          content: (chain, at, id) => call(Lookup, () => content(chain, at, id)),
+          deleteContent: (chain, at, id, by) => call(Lookup, () => deleteContent(chain, at, id, by)),
         } satisfies Part;
       };
     });
@@ -160,22 +167,6 @@ for (const kind of ["node", "wire"] as const) {
     );
 
     it.effect.prop(
-      "a cap below the initialized database rolls before a fresh row",
-      { input: Input },
-      ({ input }) =>
-        Effect.gen(function* () {
-          const chain = Chain.cases.spans.make({});
-          const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
-          const part = driver(name, 1);
-          const expected = yield* node(name, 1).write(chain, input.at, input.rows);
-          expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);
-          expect(expected).toEqual({ _tag: "rolled", next: partName(chain, input.at + 1), had: [] });
-          expect(yield* part.read(chain, input.at, 0)).toEqual({ spans: [], after: 0, rolled: true });
-        }),
-      options,
-    );
-
-    it.effect.prop(
       "a name that cannot decode fails as SinkError bad_row over either driver",
       { text: Schema.String },
       ({ text }) =>
@@ -183,12 +174,14 @@ for (const kind of ["node", "wire"] as const) {
           const part = driver(`not-json:${text}`, 1_000_000_000);
           const chain = Chain.cases.spans.make({});
 
-          for (const call of [
+          const calls: ReadonlyArray<Effect.Effect<unknown, SinkError>> = [
             part.write(chain, 0, []),
             part.read(chain, 0, 0),
             part.content(chain, 0, "missing"),
             part.deleteContent(chain, 0, "missing", { by: "fixture", at: 0, reason: text }),
-          ]) {
+          ];
+
+          for (const call of calls) {
             const result = yield* Effect.result(call);
             expect(Result.match(result, { onSuccess: () => null, onFailure: (e) => e })).toMatchObject({
               _tag: "SinkError",
@@ -201,3 +194,20 @@ for (const kind of ["node", "wire"] as const) {
     );
   });
 }
+
+// A whole stage at cap 1 cannot start, since its own spans roll forever.
+it.effect.prop(
+  "a cap below the initialized database rolls before a fresh row",
+  { input: Input },
+  ({ input }) =>
+    Effect.gen(function* () {
+      const chain = Chain.cases.spans.make({});
+      const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
+      const part = node(name, 1);
+      const expected = yield* node(name, 1).write(chain, input.at, input.rows);
+      expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);
+      expect(expected).toEqual({ _tag: "rolled", next: partName(chain, input.at + 1), had: [] });
+      expect(yield* part.read(chain, input.at, 0)).toEqual({ spans: [], after: 0, rolled: true });
+    }),
+  options,
+);
