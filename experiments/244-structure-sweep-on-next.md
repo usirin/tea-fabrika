@@ -6,7 +6,8 @@ verdict below was checked by hand against the code. Raw output stayed under `run
 the numbers are in [`results/244-structure-sweep-on-next.json`](./results/244-structure-sweep-on-next.json).
 
 **The answer.** The tool found three real duplicated or misplaced decisions in `next/`, and each is
-now a ticket. Jev's own verdicts were right about two times in three on duplicate pairs, and its
+now a tracker ticket: 472 (the pre-hello rule), 473 (the execution reason map) and 474 (the brain's
+stopping guard). Jev's own verdicts were right about two times in three on duplicate pairs, and its
 most confident wrong answers were its highest scores, as the earlier Jev research warned. Feature
 placement was right for 83 of 91 files. The whole run cost about 1.2 cents. Treat it as a cheap
 way to point a person at code, never as a verdict.
@@ -45,11 +46,11 @@ braked:  (s, m) => [terminal(s) || s._tag === "stopping" ? s : BrainState.cases.
 
 - **The brain's "ignore news once stopping" guard, three times** (above). Jev called two of the
   three symmetric pairs `same_decision` and the third `look_alike`. The rule does repeat. But the
-  right fix is one named predicate, not one function, so the action was wrong.
+  right fix is one named predicate, not one function, so the action was wrong. Ticket 474.
 - **Which `ProgramDown` reason each execution call fails with,** written twice in
   `app/execution.ts`: `nodeExecution` and `workerExecution` both map init to `load`, fold to
   `saved_letter`, upgrade to `saved_state`, and step, reply, check and admit to `step`. Jev said
-  `shared_helper` (0.76). Right: one table would stop the two drifting apart.
+  `shared_helper` (0.76). Right: one table would stop the two drifting apart. Ticket 473.
 - **Lazy table setup in four stores** (`data/records.ts`, `data/sink.ts`,
   `coordination/process-store.ts`, `data/ledger-store.ts`): `if (!ready) for (const query of
   TABLES) sql.exec(query)` inside the first transaction. Jev said `shared_helper` on one pair.
@@ -117,7 +118,7 @@ if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "d
 `answerFrame` is the plain function that [an object class stays
 thin](../docs/direction/object-classes-stay-thin.md) names, but only its own test calls it. The
 running path is `connection`, and the moves to `waiting` and `online` sit in the gateway's
-platform wiring (`workers/gateway.ts:65-118`). Both build the JSON-RPC error frame by hand too.
+platform wiring (`workers/gateway.ts:65-118`). Both build the JSON-RPC error frame by hand too. Ticket 472.
 
 Roles were not scored file by file. A spot check agreed on the clear cases (`brain-life.ts`,
 `process.ts`, `members.ts`, `recovery.ts` as rules; the stores as persistence). `data/referee.ts`
