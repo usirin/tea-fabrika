@@ -326,6 +326,32 @@ describe("Shards", () => {
     );
     expect(Math.max(...seconds)).toBeLessThanOrEqual(Math.max(Math.min(...seconds) + heaviestLane, biggest));
   });
+
+  it("scenario: a list holding a lane file and another file is split as `assign` does, from zeros", async () => {
+    // Only a list of lane files only starts from `restLoads`: the rest step shares those machines.
+    // Plant: start from `restLoads` when any file is a lane file.
+    const lanes = readdirSync(join(ROOT, LANES))
+      .filter((name) => /^lane\..*\.test\.ts$/.test(name))
+      .map((name) => `${LANES}/${name}`);
+    const others = Object.keys(measured).filter((path) => !path.startsWith("next/") && !inLaneStep(path));
+    const paths = [...lanes, ...others];
+    const files = paths.map((path) => ({ path, seconds: measured[path] ?? 1 }));
+    const placed = assign(files, 6);
+
+    for (const index of [1, 2, 3, 4, 5, 6]) {
+      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
+
+      try {
+        const Sequencer = vitest.config.sequence.sequencer;
+        const mine = await new Sequencer(vitest).shard(paths.map((path) => ({ moduleId: join(ROOT, path) })) as never);
+        expect(mine.map((spec) => relative(ROOT, spec.moduleId))).toEqual(
+          paths.filter((_, i) => placed[i] === index - 1),
+        );
+      } finally {
+        await vitest.close();
+      }
+    }
+  });
 });
 
 it("L9: wall equals the largest file or the shared worker load", () => {
