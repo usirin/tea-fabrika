@@ -7,7 +7,7 @@ import type * as Data from "@kampus/libfabrika/data";
 import { type Context, Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import type { ProcessIdGenerator } from "./coordination/process-id.ts";
-import type { ProcessId as TraceProcessId } from "./data/trace.ts";
+import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
 
 const checkTypes = (raw: string) => {
   const ProcessId = Id.make("process");

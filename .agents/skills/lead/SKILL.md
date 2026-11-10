@@ -123,7 +123,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit; before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
-| `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, mutation, review through `drive.ts`, then the PR and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
+| `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, mutation, review through `drive.ts`, then the PR, `loosening.sh` and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
 | `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the mutation step's Stryker sample in a container: `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
@@ -275,7 +275,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to mutation, mutation (done or skip) to review,
   and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
-  steps-and-dollars table in its body, and runs `catchup.sh`. A `send` goes to the step it names,
+  steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
+  `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
+  runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
+  an error, or a comment that did not post, ends it `stuck`. The chain passes no mapping table, so
+  a renamed law is a hit too. A `send` goes to the step it names,
   with the sender's word in that step's brief. A send to plan parks: only the lead approves a plan.
   A lockfile ask parks with drive's own instructions. Any other refusal parks.
 - **Retries and limits** (decided with the clanka walk, 2026-11-09): a step drive refused for a full
@@ -314,6 +318,15 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
 bot and branch-only as the person are two intended writes. A refusal stops the step.
 
+When the session's permission check refuses a step agent its lead sign (`pnpm commits sign --step
+lead` through the repo's scripts), its normal push (`botpush.mjs`, or a plain non-force push of its
+own branch), or its merge of a passing test-only fix or a rows-only PR, the lead session runs that
+same command itself, without asking the owner again
+([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md)). Only the script reads the key.
+Report every other refused action to the owner with the exact command and worktree; never route
+around it. A rows-only PR merges with `catchup.sh` on green CI with a clean leak grep; a test-only
+fix still runs every step first.
+
 `Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
 status and the rule suite's overall result and named ref. In
 [rule suite 4984058968](https://api.github.com/repos/usirin/tea-fabrika/rulesets/rule-suites/4984058968),
@@ -336,6 +349,9 @@ visible, and never weaken the rules to hide this message.
    using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
    including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
+   A plan that patches or changes a package (tea, demlik, Manti, Effect, Alchemy) names what it
+   read of that package's decisions, patterns and source; else send it back
+   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
 4. **Start the lane** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
@@ -350,6 +366,8 @@ visible, and never weaken the rules to hide this message.
    one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
    driver included, once it has finished), and one `field/notes.jsonl` note for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
+   A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
+   the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
    Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
@@ -475,6 +493,10 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
   leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
   searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
+- **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
+  and that package's decisions, as [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
+  asks of upstream. Then say what the code does, what breaks, each option with its cost, and your
+  lean with how sure you are. An abstract question comes back to be asked again.
 - **Read what a diff touches.** Before a review and before a merge, run
   `sh .agents/skills/lead/scripts/governance.sh` on the branch. It lists the decision files the
   diff's words touch. The review step and the lead read each one and say whether the diff walks it

@@ -9,7 +9,7 @@
 // lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
 // `deleteContent`.
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
-import type { Sql } from "./referee.ts";
+import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./trace.ts";
 
 /** A part's answer to a write. `had`: the batch's span ids this part already holds. */

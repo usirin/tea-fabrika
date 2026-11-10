@@ -40,10 +40,11 @@ export {
   Start,
   State,
 } from "./process.ts";
-export { Appended, ParentText, Rev } from "../data/log.ts";
+export { Appended } from "../data/log.ts";
+export { ParentText, Rev } from "../Rev.ts";
 export { InputId } from "../id.ts";
 export { LedgerError } from "../data/ledger.ts";
-export { type Sql } from "../data/referee.ts";
+export { type Sql } from "../Sql.ts";
 export { Archive, sha256 } from "../data/archive.ts";
 export { RecordManager } from "../data/records.ts";
 export { SinkError, SpanSink } from "../data/sink.ts";
