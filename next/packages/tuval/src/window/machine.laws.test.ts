@@ -34,11 +34,12 @@
 //   settled letter one `reply` row; a whole view installed a `view {result: "whole"}` row, an ask
 //   a `view {result: "asked"}` row, and a run of patches one `view {result: "patch", patches}` row
 //   when it ends.
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { ClientRecord } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Effect, Layer, Queue, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -151,6 +152,8 @@ type Tuning = {
   readonly removal?: boolean;
   /** Draw view notes that mostly continue the shown revision, so runs of patches form and end. */
   readonly runs?: boolean;
+  /** Draw the brain's ping interval on `admitted`, below, at and past the link's beat (the hang law). */
+  readonly pings?: boolean;
 };
 
 /** The ms a list's handlers measured: drawn on the tuned lists, and a constant 0 on the default
@@ -198,7 +201,12 @@ const cells = (pids: ReadonlyArray<string>, tuning: Tuning = {}) => {
     ? { ask_again: fc.record({ type: fc.constant("ask_again"), dial: fc.integer({ min: 1, max: 4 }) }) }
     : {};
   const outside = {
-    admitted: fc.record({ type: fc.constant("admitted"), dial, ping: fc.constant(0), ms }),
+    admitted: fc.record({
+      type: fc.constant("admitted"),
+      dial,
+      ping: tuning.pings ? fc.constantFrom(0, 1_000, 4_999, 5_000, 30_000, 60_000) : fc.constant(0),
+      ms,
+    }),
     closed: fc.record({
       type: fc.constant("closed"),
       dial,
@@ -248,14 +256,18 @@ const cells = (pids: ReadonlyArray<string>, tuning: Tuning = {}) => {
           ? { type: "now_ok", cmd, value: { letter: `letter_${v.letter}`, sentAt } }
           : { type: "now_err", cmd, error: { _tag: "clock" } },
     },
+    // Review 1, D: an answer the client cannot read (`send_err {_tag: "unknown"}`) is drawn too,
+    // so a window that settles a letter on it breaks p1.
     send: {
-      draw: fc.tuple(fc.constantFrom("accepted", "refused", "unreachable"), ms),
+      draw: fc.tuple(fc.constantFrom("accepted", "refused", "unreachable", "unknown"), ms),
       make: (cmd: Cmd, [kind, took]: readonly [string, number]): Msg =>
         kind === "accepted"
           ? { type: "send_ok", cmd, value: { _tag: "accepted", rev: 1, pos: 1, ms: took } }
           : kind === "refused"
             ? { type: "send_ok", cmd, value: { _tag: "refused", reason: "bad_msg", ms: took } }
-            : { type: "send_err", cmd, error: { _tag: "unreachable" } },
+            : kind === "unknown"
+              ? { type: "send_err", cmd, error: { _tag: "unknown" } }
+              : { type: "send_err", cmd, error: { _tag: "unreachable" } },
     },
     persist: {
       draw: fc.constantFrom("true", "false", "error"),
@@ -284,6 +296,10 @@ const lists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: M
     maxLength: 70,
     ...(loaded === undefined ? {} : { loaded: loaded as never }),
   });
+
+/** Lists for the hang law: the brain's ping interval drawn on each admission. */
+const pingLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
+  arbGuidedSequence(m as never, { layout } as never, cells(pids, { pings: true }) as never, { maxLength: 70 });
 
 /** Lists for the connect law: every outcome, a removed key and Ask again included. */
 const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
@@ -1260,6 +1276,257 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
   }
 });
 
+// Review 1, A (p17 and p5): a brain call in flight never holds the window. The brain hangs: no
+// answer comes to any Cmd the window asked (`send`, `open`, the link's `knock` and `ping`), and the
+// only Msgs that still arrive are the window's own timer Sub's (tea's built-in `timer`, deps read
+// from the machine as its runtime reads them). From any state the generated runs reach, an online
+// link leaves `online` within the detection bound, BEAT + BEAT = 10 s (`transport/link.ts`), and a
+// grant wait keeps knocking without ever being admitted. No pending letter is lost while it hangs.
+// The browser half, where a handler that waits on the brain would hold tea's serial loop, is
+// `e2e/window-recovery.test.ts`'s "a brain call in flight" cases.
+const DETECTION = 10_000;
+
+const HANG =
+  "hang: with every call in flight unanswered, the window's own timers take an online link off online within 10 s and keep a grant wait knocking";
+
+type Timer = { readonly ms: number; readonly msg: Msg } | null;
+
+/** The window machine's own timer Subs, as its runtime reads them, and one step of its real update. */
+const parts = (m: Machine) => {
+  // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+  const real = m as unknown as {
+    readonly subs?: ReadonlyArray<{ readonly type: string; readonly deps: (s: Model) => Timer }>;
+    readonly update: Record<string, (s: Model, msg: Msg, ctx: object) => readonly [Model, ReadonlyArray<Cmd>]>;
+  };
+  const timers = (real.subs ?? []).filter((sub) => sub.type === "timer");
+  return {
+    timers: (s: Model): ReadonlyArray<Timer> => timers.map((sub) => sub.deps(s)),
+    step: (s: Model, msg: Msg, ctx: object) => real.update[msg.type]?.(s, msg, ctx) ?? ([s, []] as const),
+  };
+};
+
+/** tea's timer Sub as its runtime runs it: one per deps value, which fires once after its ms, and
+ *  starts again only when the deps change. Answers the next timer Msg and how long it waited. */
+const clock = () => {
+  const running = new Map<number, { key: string; left: number; fired: boolean }>();
+  return (timers: ReadonlyArray<Timer>): { readonly msg: Msg; readonly after: number } | null => {
+    for (const [n, t] of timers.entries()) {
+      const key = JSON.stringify(t);
+      const now = running.get(n);
+
+      if (now === undefined || now.key !== key) {
+        running.set(n, { key, left: t?.ms ?? Number.POSITIVE_INFINITY, fired: t === null });
+      }
+    }
+
+    let next: number | null = null;
+
+    for (const [n, r] of running) {
+      if (!r.fired && (next === null || r.left < (running.get(next)?.left ?? Number.POSITIVE_INFINITY))) {
+        next = n;
+      }
+    }
+
+    if (next === null) {
+      return null;
+    }
+
+    const after = running.get(next)!.left;
+
+    for (const r of running.values()) {
+      r.left -= r.fired ? 0 : after;
+    }
+
+    running.get(next)!.fired = true;
+    return { msg: timers[next]!.msg, after };
+  };
+};
+
+const letters = (s: Model): string =>
+  JSON.stringify(s.client.pending.map((p) => [p.n, p.letter ?? null]).sort((a, b) => Number(a[0]) - Number(b[0])));
+
+/** What a hang from `start` did: null when the law holds, else why it does not. */
+const hang = (
+  m: Machine,
+  layout: Tree,
+  start: Model,
+  inFlight: ReadonlySet<string>,
+  seen: Record<string, number>,
+): string | null => {
+  const { timers, step } = parts(m);
+  const was = start.link._tag;
+
+  if (was !== "online" && was !== "waiting_grant") {
+    return null;
+  }
+
+  let s = start;
+  let waited = 0;
+  const flight = new Set(inFlight);
+  const tick = clock();
+
+  for (let n = 0; n < 12; n++) {
+    const next = tick(timers(s));
+
+    if (next === null) {
+      return `the window sits still in ${s.link._tag} while ${[...flight].join(", ") || "nothing"} is in flight`;
+    }
+
+    waited += next.after;
+    const [after, cmds] = step(s, next.msg, { layout });
+
+    for (const c of cmds) {
+      flight.add(c.type);
+    }
+
+    if (letters(after) !== letters(s)) {
+      return `${next.msg.type} during a hang changed the pending letters: ${letters(s)} to ${letters(after)}`;
+    }
+
+    s = after;
+
+    if (was === "online" && !online(s)) {
+      seen[`left online with ${[...inFlight].sort().join("+") || "nothing"} in flight`] = 1;
+      return waited <= DETECTION
+        ? null
+        : `the link left online only after ${waited} ms of hang, past the ${DETECTION} ms bound`;
+    }
+
+    if (was === "waiting_grant" && s.link._tag !== "waiting_grant") {
+      return `a grant wait moved to ${s.link._tag} on its own timer while the brain hung`;
+    }
+  }
+
+  if (was === "online") {
+    return `the link is still online after ${waited} ms of hang with ${[...flight].join(", ")} in flight`;
+  }
+
+  if (flight.has("knock")) {
+    seen["a grant wait kept knocking with a knock in flight"] = 1;
+  }
+
+  return null;
+};
+
+describe("window machine: a brain call in flight holds no timer (review 1, A)", () => {
+  for (const [label, layout, tiles] of LAYOUTS) {
+    it(`${HANG} (${label})`, async () => {
+      const m = await machine();
+      const seen: Record<string, number> = {};
+      propertyTrace(
+        m as never,
+        { layout } as never,
+        pingLists(m, layout, tiles) as never,
+        ((steps: ReadonlyArray<Step>) => {
+          // The calls asked and not yet answered, by their Cmd: each `<type>_ok` or `<type>_err` Msg
+          // answers the Cmd it carries.
+          const asked = new Map<string, string>();
+
+          for (const { msg, next, cmds } of steps) {
+            const answered = (msg["cmd"] as object | undefined) && JSON.stringify(msg["cmd"]);
+
+            if (answered !== undefined) {
+              asked.delete(answered);
+            }
+
+            for (const c of cmds) {
+              if (c.type === "send" || c.type === "open" || c.type === "knock") {
+                asked.set(JSON.stringify(c), c.type);
+              }
+            }
+
+            // A call from an older dial is not this link's: only the online link's calls count.
+            const why = hang(m, layout, next, new Set(asked.values()), seen);
+
+            if (why !== null) {
+              return why;
+            }
+          }
+
+          return null;
+        }) as never,
+        opts as never,
+      );
+
+      // Good thing: the hangs met a send, an open, and both together in flight, and a grant wait
+      // that knocked while its knock was unanswered.
+      const met = Object.keys(seen);
+      expect(
+        met.some((k) => /with \S*send\S* in flight/.test(k)),
+        `a send in flight: ${met.join("; ")}`,
+      ).toBe(true);
+      expect(
+        met.some((k) => /with \S*open\S* in flight/.test(k)),
+        `an open in flight: ${met.join("; ")}`,
+      ).toBe(true);
+    });
+  }
+
+  it("good thing: a grant wait knocks again and again with its knock unanswered, and is never admitted", async () => {
+    const m = await machine();
+    const [, layout] = LAYOUTS[0] as (typeof LAYOUTS)[number];
+    const waiting = after(m, layout, [GRANT[0] as Msg]).state;
+    expect(waiting.link._tag).toBe("waiting_grant");
+    const seen: Record<string, number> = {};
+    expect(hang(m, layout, waiting, new Set(), seen)).toBeNull();
+    expect(seen).toHaveProperty(["a grant wait kept knocking with a knock in flight"]);
+  });
+
+  // Plants: a window that holds its beat while a call is in flight, and one whose grant wait goes
+  // quiet once it knocked, are each caught by the hang law.
+  const plant = async (change: (m: Machine) => Machine, layoutAt = 2): Promise<void> => {
+    const real = await machine();
+    const [, layout, tiles] = LAYOUTS[layoutAt] as (typeof LAYOUTS)[number];
+    const planted = change(real);
+    expect(() =>
+      propertyTrace(
+        planted as never,
+        { layout } as never,
+        pingLists(real, layout, tiles) as never,
+        ((steps: ReadonlyArray<Step>) => {
+          for (const { next } of steps) {
+            const why = hang(planted, layout, next, new Set(["send"]), {});
+
+            if (why !== null) {
+              return why;
+            }
+          }
+
+          return null;
+        }) as never,
+        opts as never,
+      ),
+    ).toThrow();
+  };
+  const withSubs = (m: Machine, deps: (real: (s: Model) => Timer) => (s: Model) => Timer): Machine => {
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+    const subs = (m as unknown as { subs: ReadonlyArray<{ type: string; deps: (s: Model) => Timer }> }).subs;
+    // The link's timer is the window's first; the plant changes it and keeps every other Sub.
+    const [link, ...rest] = subs;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and swaps one Sub; the cast names it a Machine again
+    return { ...m, subs: [{ type: "timer", deps: deps(link!.deps) }, ...rest] } as unknown as Machine;
+  };
+  it("a beat held while a letter is pending is caught (hang)", () =>
+    plant((m) => withSubs(m, (real) => (s) => (online(s) && s.client.pending.length > 0 ? null : real(s)))));
+  it("a stall that waits twice the beat is caught (hang)", () =>
+    plant((m) =>
+      withSubs(m, (real) => (s) => {
+        const t = real(s);
+        return t !== null && online(s) ? { ...t, ms: t.ms * 3 } : t;
+      }),
+    ));
+  it("a grant wait that goes quiet once it knocked is caught (hang)", async () => {
+    const m = await machine();
+    const [, layout] = LAYOUTS[0] as (typeof LAYOUTS)[number];
+    const waiting = after(m, layout, [GRANT[0] as Msg]).state;
+    const quiet = withSubs(
+      m,
+      (real) => (s) => (s.link._tag === "waiting_grant" && Number(s.link["knocks"] ?? 0) > 0 ? null : real(s)),
+    );
+    expect(hang(quiet, layout, waiting, new Set(), {})).not.toBeNull();
+  });
+});
+
 describe("window machine: the view records, with each set of checks, on every fixed layout", () => {
   for (const name of Object.keys(viewLaws)) {
     for (const [named, checks] of CHECKS) {
@@ -1411,6 +1678,21 @@ describe("window machine plants: each break is caught by the law that names it",
   it("clearing the queue on any answer is caught (p1)", () =>
     expectCaught("p1: a letter is never lost, written counts presses, ids never repeat", ([m, c], _s, msg) =>
       msg.type === "send_err" ? [{ ...m, client: { ...m.client, pending: [] } }, c] : [m, c],
+    ));
+  it("settling a letter on an answer the client cannot read is caught (p1)", () =>
+    expectCaught("p1: a letter is never lost, written counts presses, ids never repeat", ([m, c], _s, msg) =>
+      msg.type === "send_err" && (msg["error"] as { _tag: string })._tag === "unknown"
+        ? [
+            {
+              ...m,
+              client: {
+                ...m.client,
+                pending: m.client.pending.filter((p) => p.letter !== (msg["cmd"] as { letter: string }).letter),
+              },
+            },
+            c,
+          ]
+        : [m, c],
     ));
   it("a new letter on a resend is caught (p1)", () =>
     expectCaught("p1: a letter is never lost, written counts presses, ids never repeat", ([m, c], _s, msg) =>
@@ -1764,5 +2046,296 @@ describe("window machine: format of the Msgs", () => {
     expect(ok({ _tag: "accepted", rev: 1, pos: 1 })).toBe(false);
     expect(ok({ _tag: "refused", reason: "bad_msg" })).toBe(false);
     expect(ok({ _tag: "accepted", ms: 3 })).toBe(false);
+  });
+});
+
+// Review 1, B (the settings read/wait/pages/restart half), on the window as it boots: Tuval's public
+// `startWindow` with the platform's contracts (`ClientKey`, `ClientSocket`, `ClientRows`) given by
+// Node doubles, and a made-up brain on the far side of the socket that speaks P12's wire. Each dial
+// reads the person's `person/<person>/settings` stream through every page of `ledger.read` (a page of
+// 100 is not the end), then waits past its cursor with `ledger.wait`, and reads again. The window's
+// key table is the last `keys` entry whose body decodes; it shows a `keys_failed` problem only when
+// that is the last entry read; `seen` is the last revision read. A new dial, after a restart, reads
+// the stream again and reaches everything saved while it was down.
+describe("window boot: the person's key settings, through every page, a wait and a restart (review 1, B)", () => {
+  const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+  const STREAM = `person/${PERSON}/settings`;
+  type Entry = { readonly rev: number; readonly id: string; readonly _tag: string; readonly body: unknown };
+  type Live = { readonly getState: () => Model & { readonly keys: unknown; readonly keyError: unknown } };
+
+  /** A made-up brain: every dial is one socket; `entries` is the settings stream as saved. */
+  const brain = () => {
+    const entries: Array<Entry> = [];
+    const sockets: Array<{ readonly close: (code: number) => void }> = [];
+    const waits: Array<() => void> = [];
+    const reads: Array<{ readonly socket: number; readonly after: number; readonly got: number }> = [];
+    const closed = new Set<number>();
+    const dial = (_url: string) =>
+      Effect.gen(function* () {
+        const queue = yield* Queue.unbounded<{ event: string; data?: unknown; code?: number }>();
+        const socket = sockets.length;
+        const say = (frame: object) => Queue.offerUnsafe(queue, { event: "message", data: JSON.stringify(frame) });
+        const answer = (id: unknown, result: unknown) => say({ jsonrpc: "2.0", id, result });
+        Queue.offerUnsafe(queue, { event: "open" });
+        say({ jsonrpc: "2.0", method: "challenge", params: { nonce: "nonce-p14" } });
+        sockets.push({
+          close: (code) => {
+            closed.add(socket);
+            Queue.offerUnsafe(queue, { event: "close", code });
+          },
+        });
+        return {
+          events: Stream.fromQueue(queue),
+          close: () => undefined,
+          send: (text: string) => {
+            if (text === "ping") {
+              Queue.offerUnsafe(queue, { event: "message", data: "pong" });
+              return true;
+            }
+
+            const call = JSON.parse(text) as { id: unknown; method: string; params: Record<string, unknown> };
+
+            if (call.method === "initialize") {
+              answer(call.id, { who: { person: PERSON }, version: 1, ping: 5_000 });
+            } else if (call.method === "ledger.read") {
+              const after = Number(call.params["after"]);
+              const page = call.params["stream"] === STREAM ? entries.filter((e) => e.rev > after).slice(0, 100) : [];
+              reads.push({ socket, after, got: page.length });
+              answer(call.id, { entries: page });
+            } else if (call.method === "ledger.wait") {
+              const after = Number(call.params["after"]);
+              const wake = () => answer(call.id, null);
+
+              if (entries.some((e) => e.rev > after)) {
+                wake();
+              } else {
+                waits.push(wake);
+              }
+            } else if (call.method === "client.record") {
+              const rows = (call.params["rows"] as ReadonlyArray<{ id: string }>) ?? [];
+              answer(call.id, { acknowledged: rows.map((r) => r.id) });
+            } else if (call.method === "view.open") {
+              answer(call.id, { rev: 0, view: { count: 0 } });
+            }
+
+            return true;
+          },
+        };
+      });
+    const save = (more: ReadonlyArray<Omit<Entry, "rev">>) => {
+      for (const e of more) {
+        entries.push({ ...e, rev: entries.length + 1 });
+      }
+
+      for (const wake of waits.splice(0)) {
+        wake();
+      }
+    };
+    return { entries, sockets, reads, closed, dial, save };
+  };
+
+  const identity = () => {
+    const pair = generateKeyPairSync("ed25519");
+    const raw = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url");
+    const field = (b: Buffer) => Buffer.concat([Buffer.from([0, 0, 0, b.length]), b]);
+    const blob = Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]);
+    return {
+      fingerprint: `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`,
+      raw: raw.toString("base64url"),
+      line: `ssh-ed25519 ${blob.toString("base64")}`,
+    };
+  };
+
+  /** Boots the real window on the doubles and hands the live run to `use`. */
+  const boot = <A>(b: ReturnType<typeof brain>, use: (live: Live) => Effect.Effect<A, unknown>) =>
+    Effect.gen(function* () {
+      // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
+      const tuval = (yield* Effect.promise(() => import("../index.ts"))) as unknown as {
+        startWindow?: (o: object) => Effect.Effect<{ readonly ready: Effect.Effect<Live, unknown> }, unknown>;
+      };
+      expect(tuval.startWindow, "@kampus/tuval exports startWindow").toBeTypeOf("function");
+      const { ClientKey, ClientRows, ClientSocket, KeyLine } = yield* Effect.promise(
+        () => import("@kampus/libfabrika/transport"),
+      );
+      const { Id } = yield* Effect.promise(() => import("@kampus/libfabrika"));
+      const me = identity();
+      const line = Schema.decodeUnknownSync(KeyLine)(me.line);
+      const kept = new Map<string, unknown>();
+      const services = Layer.mergeAll(
+        Layer.succeed(ClientKey, {
+          current: () =>
+            Effect.succeed({ ...me, line, found: "reused" as const, sign: () => Effect.succeed(new Uint8Array(64)) }),
+          claimPersist: Effect.succeed(false),
+          persist: Effect.succeed(true),
+        }),
+        Layer.succeed(ClientSocket, { dial: b.dial as never }),
+        Layer.succeed(ClientRows, {
+          put: (row: { id: string }) => Effect.sync(() => void kept.set(row.id, row)),
+          all: Effect.sync(() => [...kept.values()]),
+          remove: (ids: ReadonlyArray<string>) =>
+            Effect.sync(() => {
+              for (const id of ids) {
+                kept.delete(id);
+              }
+            }),
+        }),
+        Id.Generator.layer,
+      );
+      return yield* Effect.gen(function* () {
+        const booting = yield* tuval.startWindow!({
+          layout: { _tag: "tile", id: "t0", pid: "process_a" },
+          ctx: {},
+          checks: {},
+          label: "Browser",
+          build: "build-test",
+          origin: "http://127.0.0.1:18787",
+        });
+        return yield* use(yield* booting.ready);
+      }).pipe(Effect.provide(services), Effect.scoped);
+    });
+
+  /** Waits, on the real clock, until `ok` holds of the window's state, or says what it last was. */
+  const until = (live: Live, what: string, ok: (s: ReturnType<Live["getState"]>) => boolean) =>
+    Effect.gen(function* () {
+      for (let n = 0; n < 200; n++) {
+        if (ok(live.getState())) {
+          return;
+        }
+
+        yield* Effect.sleep("20 millis");
+      }
+
+      const s = live.getState();
+      expect.fail(
+        `${what}: the window has link ${s.link._tag}, seen ${s.client.seen}, keys ${JSON.stringify(s.keys)}, keyError ${JSON.stringify(s.keyError)}`,
+      );
+    });
+
+  const chord = fc.constantFrom("a", "b", "+", "ctrl+k", "shift+enter");
+  const entry = fc.oneof(
+    {
+      weight: 5,
+      arbitrary: chord.map((c) => ({
+        _tag: "keys",
+        body: { rows: { "counter.inc": [c] }, source: "file", reader: "stage:p14" },
+      })),
+    },
+    {
+      weight: 2,
+      arbitrary: fc
+        .record({ line: fc.nat(40), reason: fc.constantFrom("syntax", "unknown_command", "clash") })
+        .map((p) => ({
+          _tag: "keys_failed",
+          body: { ...p, source: "file", reader: "stage:p14" },
+        })),
+    },
+    // A `keys` entry whose body does not decode gives no table; another case is not a settings entry.
+    { weight: 1, arbitrary: fc.constant({ _tag: "keys", body: { rows: "not rows" } }) },
+    { weight: 1, arbitrary: fc.constant({ _tag: "note", body: {} }) },
+  );
+  /** Stream lengths around a page: none, one, 99 to 101, 199 to 201, and any up to 230. */
+  const count = fc.oneof(fc.constantFrom(0, 1, 99, 100, 101, 199, 200, 201), fc.nat(230));
+  const stream = count.chain((n) => fc.array(entry, { minLength: n, maxLength: n }));
+  const ids = (list: ReadonlyArray<object>, from: number) => list.map((e, n) => ({ ...e, id: `keys-${from + n}` }));
+
+  /** The model: what the window holds after it read `saved`. */
+  const expected = async (saved: ReadonlyArray<Entry>) => {
+    const { Keys } = await import("@kampus/libfabrika");
+    const good = saved
+      .filter((e) => e._tag === "keys" && typeof (e.body as { rows?: unknown }).rows === "object")
+      .at(-1);
+    const last = saved.at(-1);
+    return {
+      keys: Keys.buildTable({}, (good?.body as { rows?: Rows } | undefined)?.rows ?? {}),
+      keyError:
+        last?._tag === "keys_failed"
+          ? { line: (last.body as { line: number }).line, reason: (last.body as { reason: string }).reason }
+          : null,
+      seen: last?.rev ?? 0,
+    };
+  };
+  type Rows = Readonly<Record<string, ReadonlyArray<string>>>;
+
+  const holds = (want: Awaited<ReturnType<typeof expected>>) => (s: ReturnType<Live["getState"]>) =>
+    s.client.seen === want.seen &&
+    JSON.stringify(s.keys) === JSON.stringify(want.keys) &&
+    JSON.stringify(s.keyError ?? null) === JSON.stringify(want.keyError);
+
+  it(
+    "every page, then each wait, then a new dial after a restart: the table is the last good entry, the problem only the last entry's, seen the last revision",
+    { timeout: 120_000 },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(stream, stream, stream, async (first, later, down) => {
+          const b = brain();
+          b.save(ids(first, 0) as never);
+          await Effect.runPromise(
+            boot(b, (live) =>
+              Effect.gen(function* () {
+                /** Waits for a read of the settings stream on the socket of dial `n` (0-based). */
+                const read = (n: number) =>
+                  Effect.gen(function* () {
+                    for (let t = 0; t < 200 && !b.reads.some((r) => r.socket === n); t++) {
+                      yield* Effect.sleep("20 millis");
+                    }
+
+                    expect(
+                      b.reads.some((r) => r.socket === n),
+                      `dial ${n + 1} read the settings stream`,
+                    ).toBe(true);
+                  });
+                yield* read(0);
+                yield* until(live, "after the first read", holds(yield* Effect.promise(() => expected(b.entries))));
+                b.save(ids(later, first.length) as never);
+                yield* until(live, "after a wait", holds(yield* Effect.promise(() => expected(b.entries))));
+                // The brain restarts: the socket closes, and edits are saved before the next dial.
+                b.sockets.at(-1)?.close(1006);
+                b.save(ids(down, first.length + later.length) as never);
+                yield* read(1);
+                yield* until(live, "after a restart", holds(yield* Effect.promise(() => expected(b.entries))));
+              }),
+            ),
+          );
+
+          // A page of 100 is not the end: on a socket still open, every full page was followed by
+          // another read past it.
+          expect(b.reads.length, "the settings stream was read").toBeGreaterThan(0);
+
+          for (const [n, r] of b.reads.entries()) {
+            const next = b.reads.slice(n + 1).find((x) => x.socket === r.socket);
+
+            if (r.got === 100 && !b.closed.has(r.socket)) {
+              expect(next?.after, "a full page is read past").toBeGreaterThan(r.after);
+            }
+          }
+        }),
+        { seed: SEED, numRuns: 12, endOnFailure: true, examples: [[[], [], []]] },
+      );
+    },
+  );
+
+  // Plants on the model: a client that stops at the first page, takes the last entry's table even
+  // when it does not decode, or shows a problem an earlier entry had, is told apart from the right
+  // answer on these streams.
+  it("plants: stopping at the first page, using a bad last entry, or keeping an old problem are each caught", async () => {
+    const at = (list: ReadonlyArray<object>) => ids(list, 0).map((e, n) => ({ ...e, rev: n + 1 })) as Array<Entry>;
+    const good = (c: string) => ({ _tag: "keys", body: { rows: { "counter.inc": [c] }, source: "file", reader: "r" } });
+    const bad = { _tag: "keys", body: { rows: "not rows" } };
+    const failed = { _tag: "keys_failed", body: { line: 3, reason: "syntax", source: "file", reader: "r" } };
+    const long = at([...Array.from({ length: 100 }, () => good("a")), good("b")]);
+    const right = await expected(long);
+    const firstPage = await expected(long.slice(0, 100));
+    expect(
+      holds(right)({ ...firstPage, client: { seen: firstPage.seen } } as never),
+      "stopping at the first page",
+    ).toBe(false);
+    const tail = at([good("a"), bad]);
+    const wrongTable = { ...(await expected(tail)), keys: { rows: "not rows" } };
+    expect(holds(await expected(tail))({ ...wrongTable, client: { seen: 2 } } as never), "a bad last entry").toBe(
+      false,
+    );
+    const healed = at([failed, good("b")]);
+    const kept = { ...(await expected(healed)), keyError: { line: 3, reason: "syntax" } };
+    expect(holds(await expected(healed))({ ...kept, client: { seen: 2 } } as never), "an old problem").toBe(false);
   });
 });

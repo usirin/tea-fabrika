@@ -270,6 +270,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   return {
     p,
     run,
+    client,
     span,
     key,
     env,
@@ -703,4 +704,171 @@ describe("P12 Gateway recording", () => {
       }
     });
   }
+});
+
+// P14 (ticket 286), review 1, B: the Project's trusted `settings` call (`keySettings`) as the stage
+// hands it a key-file read. A valid change is appended to `person/<person>/settings` once: an id
+// already in the stream is no change, and so is a change equal to the last entry (the same rows, or
+// the same problem, from the same source and reader). Bad input is refused and keeps nothing. The
+// stream is read back through the door's own `ledger.read`, as a window reads it.
+describe("P14 key settings append", () => {
+  const rows = fc.constantFrom({ "counter.inc": ["+"] }, { "counter.inc": ["a"] }, { "counter.inc": [] }, {});
+  const reader = fc.constantFrom("stage:p14", "stage:other");
+  const good = fc.oneof(
+    fc.record({ kind: fc.constant("rows"), rows, reader }),
+    fc.record({
+      kind: fc.constant("error"),
+      error: fc.record({ line: fc.nat(9), reason: fc.constantFrom("syntax", "clash") }),
+      reader,
+    }),
+  );
+  const bad = fc.constantFrom<unknown>(
+    null,
+    "rows",
+    { id: "", source: "file", reader: "r", sentAt: SENT, rows: {} },
+    { id: "x", source: "socket", reader: "r", sentAt: SENT, rows: {} },
+    { id: "x", source: "file", reader: "", sentAt: SENT, rows: {} },
+    { id: "x", source: "file", reader: "r", sentAt: SENT, rows: { "counter.inc": "+" } },
+    { id: "x", source: "file", reader: "r", sentAt: SENT },
+    { id: "x", source: "file", reader: "r", sentAt: SENT, error: { line: "one", reason: "syntax" } },
+  );
+  /** A change with an id drawn from a few, so a repeat id is common. */
+  const change = fc.oneof(
+    { weight: 6, arbitrary: fc.tuple(fc.nat(5), good).map(([n, g]) => ({ bad: false as const, id: `keys-${n}`, g })) },
+    { weight: 1, arbitrary: bad.map((raw) => ({ bad: true as const, raw })) },
+  );
+  type Change = typeof change extends fc.Arbitrary<infer A> ? A : never;
+  type Fact = { readonly _tag: string; readonly [key: string]: unknown };
+
+  const fact = (g: Extract<Change, { bad: false }>["g"]): Fact =>
+    g.kind === "rows"
+      ? { _tag: "keys", rows: g.rows, source: "file", reader: g.reader }
+      : { _tag: "keys_failed", ...g.error, source: "file", reader: g.reader };
+  const input = (c: Extract<Change, { bad: false }>) =>
+    c.g.kind === "rows"
+      ? { id: c.id, source: "file", reader: c.g.reader, sentAt: SENT, rows: c.g.rows }
+      : { id: c.id, source: "file", reader: c.g.reader, sentAt: SENT, error: c.g.error };
+
+  /** The model: the ids and facts the stream should hold after `list`. */
+  const model = (list: ReadonlyArray<Change>) => {
+    const kept: Array<{ id: string; fact: Fact }> = [];
+
+    for (const c of list) {
+      if (c.bad || kept.some((k) => k.id === c.id)) {
+        continue;
+      }
+
+      const f = fact(c.g);
+
+      if (JSON.stringify(kept.at(-1)?.fact) !== JSON.stringify(f)) {
+        kept.push({ id: c.id, fact: f });
+      }
+    }
+
+    return kept;
+  };
+
+  /** What the stream holds, read as a window reads it: each entry's id and its body's fields. */
+  const held = async (w: Awaited<ReturnType<typeof world>>) => {
+    const answer = (await w.run(
+      w.p.route(w.client, "ledger.read", { stream: `person/${PERSON}/settings`, after: 0 }),
+    )) as { readonly result?: { readonly entries?: ReadonlyArray<Record<string, unknown>> } };
+    return (answer.result?.entries ?? []).map((e) => {
+      const body = (e["body"] ?? {}) as Record<string, unknown>;
+      const { _tag } = e as { _tag: string };
+      return {
+        id: String(e["id"]),
+        fact: Object.fromEntries(Object.entries({ _tag, ...body }).filter(([k]) => k !== "sentAt")) as Fact,
+      };
+    });
+  };
+
+  /** The law on one list, as a check a plant can run on made-up observations. */
+  const judge = (
+    list: ReadonlyArray<Change>,
+    seen: ReadonlyArray<{ id: string; fact: Fact }>,
+    refused: ReadonlyArray<boolean>,
+  ): string | null => {
+    const want = model(list);
+
+    if (JSON.stringify(seen.map((e) => e.id)) !== JSON.stringify(want.map((e) => e.id))) {
+      return `the stream holds ${JSON.stringify(seen.map((e) => e.id))}, the model ${JSON.stringify(want.map((e) => e.id))}`;
+    }
+
+    for (const [n, e] of seen.entries()) {
+      const f = want[n]!.fact;
+
+      for (const [k, v] of Object.entries(f)) {
+        if (JSON.stringify(e.fact[k]) !== JSON.stringify(v)) {
+          return `entry ${e.id} holds ${k} ${JSON.stringify(e.fact[k])}, the change said ${JSON.stringify(v)}`;
+        }
+      }
+    }
+
+    for (const [n, c] of list.entries()) {
+      if (c.bad !== refused[n]) {
+        return `change ${n} ${c.bad ? "was bad and accepted" : "was good and refused"}`;
+      }
+    }
+
+    return null;
+  };
+
+  it("a valid change is appended once; a repeated id or the same change as the last is no change; bad input is refused and keeps nothing", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(change, { minLength: 1, maxLength: 12 }), async (list) => {
+        const w = await world();
+        const refused: Array<boolean> = [];
+
+        try {
+          for (const c of list) {
+            const exit = await w.run(Effect.exit(w.p.settings(c.bad ? c.raw : input(c))));
+            refused.push(Exit.isFailure(exit));
+          }
+
+          expect(judge(list, await held(w), refused)).toBeNull();
+        } finally {
+          for (const close of closers.splice(0).reverse()) {
+            await close();
+          }
+        }
+      }),
+      { seed: 119120, numRuns: 30, endOnFailure: true },
+    );
+  });
+
+  it("plants: appending a repeated id, appending the same change as the last, or keeping bad input are each caught", () => {
+    fc.assert(
+      fc.property(fc.array(change, { minLength: 1, maxLength: 12 }), (list) => {
+        const right = model(list);
+        const refused = list.map((c) => c.bad);
+        expect(judge(list, right, refused)).toBeNull();
+        const good = list.filter((c): c is Extract<Change, { bad: false }> => !c.bad);
+        const everyGood = good.map((c) => ({ id: c.id, fact: fact(c.g) }));
+        const byId = good
+          .filter((c, n) => good.findIndex((x) => x.id === c.id) === n)
+          .map((c) => ({ id: c.id, fact: fact(c.g) }));
+
+        if (JSON.stringify(everyGood) !== JSON.stringify(right)) {
+          expect(judge(list, everyGood, refused), "appending every valid change").not.toBeNull();
+        }
+
+        if (JSON.stringify(byId) !== JSON.stringify(right)) {
+          expect(judge(list, byId, refused), "no same-as-last check").not.toBeNull();
+        }
+
+        if (list.some((c) => c.bad)) {
+          expect(
+            judge(
+              list,
+              right,
+              list.map(() => false),
+            ),
+            "accepting bad input",
+          ).not.toBeNull();
+        }
+      }),
+      { seed: 119120, numRuns: 200 },
+    );
+  });
 });

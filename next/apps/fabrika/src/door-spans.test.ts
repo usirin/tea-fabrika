@@ -205,7 +205,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample, sink: (sql: Sql) => Sql 
       ),
     ),
   );
-  return { layer, window, stranger, root, controls };
+  return { layer, window, stranger, root, controls, databases };
 });
 
 const capture = (delegate: Tracer.Tracer) => {
@@ -847,6 +847,97 @@ describe("P14: client.record keeps a window's rows durably, once, under its admi
         ).not.toBeNull();
       }),
       { seed: 119120, numRuns: 100 },
+    );
+  });
+});
+
+// P14 (ticket 286), review 1, C, [secrets]: what a window hands `client.record` beyond the checked
+// row fields never reaches an output. Generated made-up secrets (a control bearer, a private key
+// body, a pass) are planted where the door's allowlist does not look: extra fields on a row, on its
+// record and on the call, and a row whose case is a secret. After the call
+// and its retry (a row id is the window's own checked field, so no secret is planted there), no form of any secret (as is, base64, base64url, hex, URI-encoded) is in the
+// answer, the ledger, the span and health rows, the client samples or any other table the door's
+// stores hold. The plant puts one secret into each output and the same check must name it.
+describe("P14 [secrets]: client.record keeps no secret it was handed", () => {
+  const bytes = (n: number) => fc.uint8Array({ minLength: n, maxLength: n });
+  const secrets = fc.record({
+    bearer: bytes(32).map((b) => Buffer.from(b).toString("base64url")),
+    key: bytes(64).map((b) => Buffer.from(b).toString("base64")),
+    pass: fc.stringMatching(/^[A-Za-z0-9]{16,24}$/).map((w) => `pass-${w}`),
+  });
+  const forms = (secret: string): ReadonlyArray<string> => [
+    secret,
+    Buffer.from(secret).toString("base64"),
+    Buffer.from(secret).toString("base64url"),
+    Buffer.from(secret).toString("hex"),
+    encodeURIComponent(secret),
+  ];
+  /** The outputs that name any form of any secret. */
+  const leaks = (said: ReadonlyArray<string>, outputs: Readonly<Record<string, string>>): ReadonlyArray<string> =>
+    Object.entries(outputs)
+      .filter(([, text]) => said.some((secret) => forms(secret).some((f) => text.includes(f))))
+      .map(([name]) => name);
+
+  /** Every row of every table in every store the fixture opened, by store and table. */
+  const tables = (databases: ReadonlyArray<DatabaseSync>): Record<string, string> =>
+    Object.fromEntries(
+      databases.flatMap((db, n) =>
+        (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>).map(
+          ({ name }) => [`store ${n} ${name}`, JSON.stringify(db.prepare(`SELECT * FROM "${name}"`).all())],
+        ),
+      ),
+    );
+
+  it("no planted secret reaches the answer, the ledger, the span, health or sample rows, or any stored table", async () => {
+    await fc.assert(
+      fc.asyncProperty(recordCase, secrets, async ({ a, ids, bodies }, said) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* fixture(a);
+              yield* Effect.gen(function* () {
+                const d = yield* Door;
+                const client = yield* online(d, w, a);
+                const records = yield* Arbitrary.sampleEffect(Arbitrary.schema(ClientRecord), {
+                  count: ids.length,
+                  seed: bodies,
+                });
+                const rows = ids.map((id, i) => ({
+                  id,
+                  tab: "tab_p14",
+                  build: "test-build",
+                  sentAt: SENT,
+                  record: { ...(records[i] as object), token: said.bearer },
+                  secret: said.key,
+                }));
+                const junk = [
+                  { id: "junk_0003", tab: "tab_p14", build: "test-build", sentAt: SENT, record: { _tag: said.pass } },
+                ];
+                const params = { rows: [...rows, ...junk], authorization: `Bearer ${said.bearer}`, key: said.key };
+                const first = yield* d.route(client, "client.record", params);
+                const second = yield* d.route(client, "client.record", params);
+                yield* (yield* SpanSink).flush;
+                const spans = yield* Stream.runCollect((yield* RecordManager).read(Chain.cases.spans.make({})));
+                const outputs = {
+                  answers: JSON.stringify([first, second]),
+                  spans: JSON.stringify([...spans]),
+                  ...tables(w.databases),
+                };
+                // Good thing: the rows themselves were kept, so the outputs are not empty.
+                expect(acknowledged(first).length, "the valid rows were acknowledged").toBe(ids.length);
+                expect(leaks([said.bearer, said.key, said.pass], outputs)).toEqual([]);
+
+                // The plant: one secret put into each output is named by the same check.
+                for (const name of Object.keys(outputs)) {
+                  const planted = { ...outputs, [name]: `${outputs[name as keyof typeof outputs]}${said.key}` };
+                  expect(leaks([said.key], planted), `a leak planted in ${name}`).toEqual([name]);
+                }
+              }).pipe(Effect.provide(w.layer));
+            }),
+          ),
+        ),
+      ),
+      RECORDS,
     );
   });
 });

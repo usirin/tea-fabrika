@@ -1,11 +1,13 @@
 // P14, next/ (Tier 1, ticket 286): what the Worker adds for the first window. Written before the
-// changes (the plan's "The wire against P12 as built", "Scope and ownership"). Each module loads by
-// `import()` inside its test, so a missing name is a red test.
+// changes (the plan's "The wire against P12 as built", "Scope and ownership", and A10). Each module
+// loads by `import()` inside its test, so a missing name is a red test.
 //
 // The shape these laws hold the code to, from the plan's words (the build may add more):
-// - `fetch(request, env, config, assets)`: `assets` is `{page, script}`, text the app supplies. `GET /`
-//   answers `page` as `text/html` and `GET /window.js` answers `script` as JavaScript, each after the
-//   Host and Origin checks, which come first for every path. No other route changes.
+// - A10: the window rides in P16's tables. `fetch(request, env, config, assets)` takes P16's table of
+//   window files by route, each `{hash, type, body}`. The page is the asset at `/index.html`, typed
+//   `text/html; charset=utf-8`: `GET` or `HEAD /` answers it with its type and its ETag when the
+//   table holds it, and the plain `fabrika` as today when it does not. `/window.js` is served as any
+//   other asset. The Host and Origin checks come first for every path. No other route changes.
 // - `control` has `settings` among its fixed project methods: with the bearer it reaches the Project's
 //   `settings` call once, with the caller's arguments; without it, never. Public `fetch` has no route
 //   to it.
@@ -14,6 +16,7 @@
 // - `bootstraps(option)` (exported by `runtime.ts`): the bootstraps a Project starts. A single
 //   `{name, id, program}` stays valid and is one; an array keeps its order; a repeated name or id is
 //   refused.
+import { createHash } from "node:crypto";
 import { Cause, Effect, Exit, Redacted } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -22,9 +25,21 @@ import type { BrainOptions, Env } from "./runtime.ts";
 const SEED = 119120;
 const opts = { seed: SEED, numRuns: 40 };
 
-type Assets = { readonly page: string; readonly script: string };
+/** P16's window table: each route's `{hash, type, body}` (`app/built.ts`'s Asset). */
+type Asset = { readonly hash: string; readonly type: string; readonly body: string };
+type Assets = Readonly<Record<string, Asset>>;
 
-type Fetch = (request: Request, env: Env, config: BrainOptions, assets: Assets) => Effect.Effect<Response, unknown>;
+type Fetch = (request: Request, env: Env, config: BrainOptions, assets?: Assets) => Effect.Effect<Response, unknown>;
+
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+const HTML = "text/html; charset=utf-8";
+const JS = "text/javascript; charset=utf-8";
+
+/** A built table: the page at `/index.html` when `page` is given, the tab's script at `/window.js`. */
+const table = (page: string | null, script: string): Assets => ({
+  ...(page === null ? {} : { "/index.html": { hash: sha(page), type: HTML, body: page } }),
+  "/window.js": { hash: sha(script), type: JS, body: script },
+});
 
 type Control = (
   request: Request,
@@ -106,36 +121,79 @@ const must = <A, E>(exit: Exit.Exit<A, E>): A => {
 };
 
 describe("P14: the Worker serves the built page and script, behind the same checks", () => {
-  it("GET / and GET /window.js answer the supplied text; Host and Origin are checked first for both", async () => {
+  it("GET or HEAD / answers the built page as text/html with its ETag, /window.js the script; Host and Origin are checked first for both", async () => {
     const fetch = await fetchApi();
     await fc.assert(
-      fc.asyncProperty(fc.integer({ min: 1024, max: 65_535 }), word, word, async (port, page, script) => {
+      fc.asyncProperty(
+        fc.integer({ min: 1024, max: 65_535 }),
+        fc.string({ unit: "grapheme", maxLength: 40 }),
+        word,
+        async (port, page, script) => {
+          const { env, calls } = world();
+          const origin = `http://127.0.0.1:${port}`;
+          const assets = table(page, script);
+          const at = (path: string, headers: Record<string, string> = {}, method = "GET") =>
+            run(
+              fetch(
+                new Request(`${origin}${path}`, { method, headers: { host: `127.0.0.1:${port}`, ...headers } }),
+                env,
+                config(port),
+                assets,
+              ),
+            );
+
+          for (const method of ["GET", "HEAD"]) {
+            const home = must(await at("/", {}, method));
+            expect(home.status, `${method} /`).toBe(200);
+            expect(home.headers.get("content-type"), `${method} /`).toBe(HTML);
+            expect(home.headers.get("etag"), `${method} / carries the page's ETag`).toBe(`"${sha(page)}"`);
+            expect(await home.text(), `${method} /`).toBe(method === "HEAD" ? "" : page);
+          }
+
+          const code = must(await at("/window.js"));
+          expect(code.status).toBe(200);
+          expect(code.headers.get("content-type")).toBe(JS);
+          expect(code.headers.get("etag")).toBe(`"${sha(script)}"`);
+          expect(await code.text()).toBe(script);
+
+          for (const path of ["/", "/window.js"]) {
+            expect(must(await at(path, { host: "evil.example" })).status).toBe(421);
+            expect(must(await at(path, { origin: "http://evil.example" })).status).toBe(403);
+          }
+
+          expect(calls, "serving the page reaches no object").toEqual([]);
+        },
+      ),
+      opts,
+    );
+  });
+  it("with no page built, / is the plain answer as today, and the table's other files are still served", async () => {
+    const fetch = await fetchApi();
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1024, max: 65_535 }), word, fc.boolean(), async (port, script, empty) => {
         const { env, calls } = world();
-        const origin = `http://127.0.0.1:${port}`;
-        const at = (path: string, headers: Record<string, string> = {}) =>
-          run(
-            fetch(
-              new Request(`${origin}${path}`, { headers: { host: `127.0.0.1:${port}`, ...headers } }),
-              env,
-              config(port),
-              { page, script },
+        const assets = empty ? undefined : table(null, script);
+
+        for (const method of ["GET", "HEAD"]) {
+          const home = must(
+            await run(
+              fetch(
+                new Request(`http://127.0.0.1:${port}/`, { method, headers: { host: `127.0.0.1:${port}` } }),
+                env,
+                config(port),
+                assets,
+              ),
             ),
           );
-        const home = must(await at("/"));
-        expect(home.status).toBe(200);
-        expect(home.headers.get("content-type")).toMatch(/^text\/html/);
-        expect(await home.text()).toBe(page);
-        const code = must(await at("/window.js"));
-        expect(code.status).toBe(200);
-        expect(code.headers.get("content-type")).toMatch(/javascript/);
-        expect(await code.text()).toBe(script);
+          expect(home.status).toBe(200);
+          expect(home.headers.get("content-type")).toContain("text/plain");
 
-        for (const path of ["/", "/window.js"]) {
-          expect(must(await at(path, { host: "evil.example" })).status).toBe(421);
-          expect(must(await at(path, { origin: "http://evil.example" })).status).toBe(403);
+          if (method === "GET") {
+            expect(await home.text()).toBe("fabrika");
+          }
         }
 
-        expect(calls, "serving the page reaches no object").toEqual([]);
+        expect(calls).toEqual([]);
       }),
       opts,
     );
@@ -155,8 +213,14 @@ describe("P14: the Worker serves the built page and script, behind the same chec
             headers: { host: `127.0.0.1:${port}` },
             ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
           });
-          const out = must(await run(fetch(request, env, config(port), { page: "PAGE", script: "SCRIPT" })));
-          expect(await out.text()).toBe("fabrika");
+          const out = must(await run(fetch(request, env, config(port), table("PAGE", "SCRIPT"))));
+          // P16: an unknown window path read by GET is 404; any other method keeps the plain answer.
+          expect(out.status).toBe(method === "GET" ? 404 : 200);
+
+          if (method !== "GET") {
+            expect(await out.text()).toBe("fabrika");
+          }
+
           expect(calls.filter((c) => c.method === "settings")).toEqual([]);
         },
       ),

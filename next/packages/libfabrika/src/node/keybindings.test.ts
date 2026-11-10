@@ -183,3 +183,68 @@ describe("key file reader: validated publication, visible failures, scoped clean
     await expect(check((list) => lawOne(broken, list))).rejects.toThrow();
   });
 });
+
+// Review 1, C, [secrets]: a settings error keeps the line and the reason, never the file's text. A
+// person's key file holds a made-up secret (a pass or a token pasted by mistake) in a comment, as an
+// unknown command, as a key name, or on a line that does not parse. Neither the status nor any
+// published table holds any form of it (as is, base64, hex, URI-encoded). The plant puts the secret
+// into each output, and the same check must name it.
+describe("[secrets] key file reader: an error keeps its line and reason, never the file's text", () => {
+  const forms = (secret: string): ReadonlyArray<string> => [
+    secret,
+    Buffer.from(secret).toString("base64"),
+    Buffer.from(secret).toString("hex"),
+    encodeURIComponent(secret),
+  ];
+  const leaks = (secret: string, outputs: Readonly<Record<string, string>>): ReadonlyArray<string> =>
+    Object.entries(outputs)
+      .filter(([, text]) => forms(secret).some((f) => text.includes(f)))
+      .map(([name]) => name);
+  const files = (secret: string): ReadonlyArray<string> => [
+    `# ${secret}\n[keys]\n"counter.inc" = ["a"]\n`,
+    `[keys]\n"${secret}" = ["a"]\n`,
+    `[keys]\n"counter.inc" = ["${secret}"]\n`,
+    `[keys]\n${secret} = = [\n`,
+    `${secret}\n`,
+  ];
+
+  it("no status and no published table holds the secret, whatever the file", async () => {
+    const watch = await load();
+    await fc.assert(
+      fc.asyncProperty(fc.stringMatching(/^[A-Za-z0-9]{16,24}$/), fc.nat(4), async (word, which) => {
+        const secret = `pass-${word}`;
+        const content = files(secret)[which]!;
+        const published: Array<unknown> = [];
+        const statuses: Array<Status> = [];
+        await Effect.runPromise(
+          Effect.scoped(
+            watch({
+              file: "keybindings.toml",
+              commands: COMMANDS,
+              defaults: {},
+              publish: (v) => Effect.sync(() => void published.push(v)),
+              status: (s) => Effect.sync(() => void statuses.push(s)),
+            }).pipe(
+              Effect.provide(
+                FileSystem.layerNoop({
+                  readFileString: () => Effect.succeed(content),
+                  watch: () => Stream.empty,
+                }),
+              ),
+            ),
+          ),
+        );
+        const outputs = { published: JSON.stringify(published), statuses: JSON.stringify(statuses) };
+        // Good thing: the reader read the file and said something about it.
+        expect(statuses.length + published.length).toBeGreaterThan(0);
+        expect(leaks(secret, outputs)).toEqual([]);
+
+        for (const name of Object.keys(outputs)) {
+          const planted = { ...outputs, [name]: `${outputs[name as keyof typeof outputs]}${secret}` };
+          expect(leaks(secret, planted), `a leak planted in ${name}`).toEqual([name]);
+        }
+      }),
+      { seed: SEED, numRuns: 100 },
+    );
+  });
+});

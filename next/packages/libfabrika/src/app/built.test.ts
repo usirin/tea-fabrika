@@ -145,3 +145,30 @@ describe("P16 checked built tables", () => {
     );
   });
 });
+
+// P14 (A10): the tab's page rides in the same table, as the asset at `/index.html` typed
+// `text/html; charset=utf-8`, beside P16's scripts and stylesheets. Every P16 law above stays: a
+// bare `text/html` and any other type are still refused.
+describe("P14 the page in the built tables", () => {
+  const page = "text/html; charset=utf-8";
+  it("a page asset round-trips with its checked hash beside generated scripts and stylesheets", async () => {
+    const api = await load();
+    await fc.assert(
+      fc.asyncProperty(rows, routes, fc.string({ maxLength: 80, unit: "grapheme" }), async (rows, assets, html) => {
+        const raw: Built = {
+          programs: Object.fromEntries(rows.map(({ name, source }) => [name, { hash: sha(source), source }])),
+          assets: {
+            ...Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
+            "/index.html": { hash: sha(html), type: page, body: html },
+          },
+        };
+        expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
+        const asset = raw.assets["/index.html"]!;
+        expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
+        // Plant: the page's hash on another body is still refused.
+        await failed(api, { ...raw, assets: { ...raw.assets, "/index.html": { ...asset, body: `${html}x` } } });
+      }),
+      runs,
+    );
+  });
+});

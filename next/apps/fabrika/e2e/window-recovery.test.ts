@@ -7,6 +7,8 @@
 //     --testTimeout=120000 --hookTimeout=120000 window-recovery.test.ts
 // Each kill is its own case, run five times; "the whole sequence" runs them all in one stage life,
 // five times. `held restart` here is a second kill while the first restart is still being held back.
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -16,6 +18,8 @@ import {
   ledgerRows,
   openProfile,
   pause,
+  readWaiting,
+  runGrant,
   press,
   startStage,
   summary,
@@ -296,6 +300,247 @@ describe("the whole recovery sequence, five times", () => {
       for (const kill of KILLS) {
         await survive(kill);
       }
+    });
+  }
+});
+
+// Review 1, A (p17 and p5): a brain call in flight must not hold the window's loop. The brain hangs
+// while a call is out, the hang is held past the 10 s detection bound (BEAT + BEAT,
+// `transport/link.ts`), and the frame must leave `online` within it. scenario: only the built tab on
+// the real stage shows whether a Cmd handler that waits on the brain holds tea's serial loop; the
+// pure half is the window and link laws' hang law. The press case hangs the real workerd with
+// SIGSTOP. The open and knock cases need the hang to start at one exact call, so Playwright's
+// WebSocket route stands between the tab and the stage and stops passing the brain's frames from
+// that call on (or drops that one call's answer): the page, its client and its socket are the real
+// ones, and no client driver is installed in the page.
+const DETECTION = 10_000;
+const SLACK = 5_000;
+
+/** Waits for the frame to leave `online`, and answers how long that took since `from`. */
+const leftOnline = async (tab: Tab, from: number): Promise<number> => {
+  await until(
+    "the frame to leave online while the brain hangs",
+    async () => (/^online/i.test((await connection(tab.page)).trim()) ? undefined : true),
+    DETECTION + SLACK,
+  );
+  return performance.now() - from;
+};
+
+type Route = {
+  /** From the next frame the tab sends that names `method`, the brain says nothing more on that socket. */
+  hangAt: (method: string) => void;
+  /** Drop the answer to the next call the tab sends that names `method`; every other frame passes. */
+  dropAnswer: (method: string) => void;
+  /** How many frames the tab sent that name `method`. */
+  sent: (method: string) => number;
+  /** Ends every routed socket from the brain's side, as a dropped connection does. */
+  cut: () => void;
+};
+
+/** Puts a WebSocket route between the context's tabs and the stage. */
+const routed = async (context: import("playwright").BrowserContext): Promise<Route> => {
+  let hang: string | null = null;
+  let drop: string | null = null;
+  const counts = new Map<string, number>();
+  const open = new Set<{ close: () => void }>();
+  await context.routeWebSocket(/\/client\//, (ws) => {
+    const server = ws.connectToServer();
+    const end = { close: () => void ws.close({ code: 1000, reason: "cut" }) };
+    open.add(end);
+    let hung = false;
+    const dropped = new Set<unknown>();
+    ws.onMessage((message) => {
+      const text = String(message);
+      const call = text.startsWith("{") ? (JSON.parse(text) as { id?: unknown; method?: string }) : {};
+
+      if (call.method !== undefined) {
+        counts.set(call.method, (counts.get(call.method) ?? 0) + 1);
+      }
+
+      if (hang !== null && call.method === hang) {
+        hang = null;
+        hung = true;
+      }
+
+      if (drop !== null && call.method === drop) {
+        drop = null;
+        dropped.add(call.id);
+      }
+
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const text = String(message);
+      const id = text.startsWith("{") ? (JSON.parse(text) as { id?: unknown }).id : undefined;
+
+      if (!hung && !(id !== undefined && dropped.has(id))) {
+        ws.send(message);
+      }
+    });
+    ws.onClose((code, reason) => {
+      open.delete(end);
+      void server.close({ code, reason });
+    });
+    server.onClose((code, reason) => void ws.close({ code, reason }));
+  });
+  return {
+    hangAt: (method) => {
+      hang = method;
+    },
+    dropAnswer: (method) => {
+      drop = method;
+    },
+    sent: (method) => counts.get(method) ?? 0,
+    cut: () => {
+      for (const end of [...open]) {
+        end.close();
+      }
+    },
+  };
+};
+
+describe("a brain call in flight does not hold the window, five times each (review 1, A)", () => {
+  beforeEach(freshLife, 180_000);
+
+  for (let n = 1; n <= 5; n++) {
+    it(`scenario: a press in flight while workerd hangs past 10 s takes the frame off online, and lands once after (run ${n} of 5)`, async () => {
+      const a = await window();
+      const b = await window();
+      const base = await first(a.tab);
+      const pid = workerd(stage);
+      // edge: stops workerd by signal to hang the brain, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
+      stage.kill(pid, "SIGSTOP");
+
+      try {
+        const t0 = performance.now();
+        await press(a.tab.page, "Add one", 0); // process.send goes out; no answer comes
+        accepted++;
+        const took = await leftOnline(a.tab, t0);
+        (samples["hang detection, a send in flight"] ??= []).push(took);
+        expect(took, "the hang is seen within BEAT + BEAT").toBeLessThanOrEqual(DETECTION + SLACK);
+        await pause(Math.max(0, DETECTION + SLACK - took)); // the hang is held past the bound
+      } finally {
+        // edge: continues the stopped workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
+        stage.kill(pid, "SIGCONT");
+      }
+
+      await settled(a.tab, base + 1, 100_000);
+      await settled(b.tab, base + 1, 100_000);
+      await until(
+        "the ledger to hold every accepted letter",
+        () => (letters().length === accepted ? true : undefined),
+        30_000,
+      );
+      expectOnePerLetter(accepted);
+    });
+
+    it(`scenario: a view.open in flight while the brain hangs past 10 s takes the frame off online, and the next dial shows the count (run ${n} of 5)`, async () => {
+      const p = await openProfile();
+      closers.push(p.close);
+      const route = await routed(p.context);
+      const tab = await p.tab(stage.url);
+      await grant(stage, tab);
+      const base = await first(tab);
+      const opens = route.sent("view.open");
+      route.hangAt("view.open");
+      // A new dial opens its views again (p4): end this one, and the next one hangs at its open.
+      route.cut();
+      await until("the next dial's view.open", () => (route.sent("view.open") > opens ? true : undefined), 60_000);
+      const t0 = performance.now();
+      const took = await leftOnline(tab, t0);
+      (samples["hang detection, an open in flight"] ??= []).push(took);
+      expect(took, "the hang is seen within BEAT + BEAT").toBeLessThanOrEqual(DETECTION + SLACK);
+      await pause(Math.max(0, DETECTION + SLACK - took));
+      // The brain is back on the next dial: the count shows and a press lands once.
+      await until(
+        "the frame to be online again",
+        async () => (/^online/i.test(await connection(tab.page)) ? true : undefined),
+        60_000,
+      );
+      expect(await first(tab)).toBe(base);
+      await press(tab.page, "Add one", 0);
+      accepted++;
+      await settled(tab, base + 1);
+      await until(
+        "the ledger to hold every accepted letter",
+        () => (letters().length === accepted ? true : undefined),
+        30_000,
+      );
+      expectOnePerLetter(accepted);
+    });
+
+    it(`scenario: a renewed door.knock whose answer never comes does not hold the grant wait: the grant still takes the tab online (run ${n} of 5)`, async () => {
+      const p = await openProfile();
+      closers.push(p.close);
+      const route = await routed(p.context);
+      const tab = await p.tab(stage.url);
+      const w = await readWaiting(stage, tab);
+      const knocks = route.sent("door.knock");
+      // The link knocks again every 30 s while it waits; the brain never answers that one.
+      route.dropAnswer("door.knock");
+      await until(
+        "the grant wait to knock again",
+        () => (route.sent("door.knock") > knocks ? true : undefined),
+        45_000,
+      );
+      await pause(DETECTION + SLACK); // the knock is held past the bound
+      await runGrant(stage, w.fingerprint, w.code, stage.key);
+      await tab.page
+        .getByRole("region", { name: /^counter/i })
+        .first()
+        .waitFor({ timeout: 30_000 });
+      expect((await connection(tab.page)).trim()).toMatch(/^online/i);
+    });
+  }
+});
+
+// Review 1, B (the plan's plant "lose the last update"): a valid key edit saved while the brain
+// restarts reaches the window. The stage's reader publishes it through the trusted control call;
+// that call fails while workerd is down, and the edit must still arrive once the brain is back.
+// scenario: only the real stage, its file watcher and a killed workerd show it.
+describe("a key edit saved while the brain restarts reaches the window, five times", () => {
+  beforeEach(freshLife, 180_000);
+
+  for (const [n, key] of ["j", "k", "l", "m", "n"].entries()) {
+    it(`scenario: counter.inc rebound to ${key} while workerd restarts takes effect after it (run ${n + 1} of 5)`, async () => {
+      const a = await window();
+      const base = await first(a.tab);
+      // edge: kills workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
+      stage.kill(workerd(stage), "SIGKILL");
+      writeFileSync(join(stage.home, "keybindings.toml"), `[keys]\n"counter.inc" = [${JSON.stringify(key)}]\n`);
+      await until(
+        "the frame to be online again",
+        async () => (/^online/i.test(await connection(a.tab.page)) ? true : undefined),
+        100_000,
+      );
+      // Give the tile focus without pressing anything, then press the new key, once per try.
+      const tile = a.tab.page.getByRole("region", { name: /^counter/i }).first();
+      let took = false;
+
+      for (let tries = 0; tries < 15 && !took; tries++) {
+        await tile.getByRole("button", { name: "Take one away" }).focus();
+        await a.tab.page.keyboard.press(key);
+
+        try {
+          took = await until(
+            `the ${key} key to add one`,
+            async () => ((await first(a.tab)) > base ? true : undefined),
+            2_000,
+          );
+        } catch {
+          took = false;
+        }
+      }
+
+      expect(took, `the edit saved during the restart rebinds counter.inc to ${key}`).toBe(true);
+      await pause(3_000); // a press that lands late still counts
+      accepted += (await first(a.tab)) - base;
+      await until(
+        "the ledger to hold every accepted letter",
+        () => (letters().length === accepted ? true : undefined),
+        30_000,
+      );
+      expectOnePerLetter(accepted);
     });
   }
 });

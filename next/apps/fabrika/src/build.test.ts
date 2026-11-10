@@ -11,8 +11,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
@@ -64,9 +66,14 @@ const generated = fc.record({
 
 const chosen = { name: "view", label: "view-built", mark: "p14-rebuild-mark-chosen" };
 
-/** A module specifier naming a `node:` module: a static import or re-export, a dynamic import or a
- *  require. An object key such as React DOM's minified `{node:n}` is not one. */
-const NODE_SPECIFIER = /\b(?:from|import|require)\s*\(?\s*["'`]node:/;
+/** A module specifier naming a `node:` module: a static import or re-export, a dynamic import, a
+ *  require or Node's `getBuiltinModule`, as Effect's async-hooks probe names one. An object key such
+ *  as React DOM's minified `{node:n}` is not one. */
+const NODE_SPECIFIER = /(?:\b(?:from|import|require|getBuiltinModule)\s*\(?\s*|\?\.\s*\(\s*)["'`]node:/;
+
+/** Any import of another module: a static import or re-export, or a dynamic import of a path. */
+const IMPORTS =
+  /(?:^|[;}\n])\s*(?:import\s*(?:[\w$*{][^;]*?\bfrom\s*)?["'`]|export\s*(?:\*|\{[^}]*\})\s*(?:as\s+[\w$]+\s*)?from\s*["'`])|\bimport\s*\(\s*["'`]/;
 
 const law = (name: string, check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>) =>
   it(name, async () => {
@@ -330,63 +337,74 @@ describe("P12 Rolldown build", () => {
   });
 });
 
-// P14 (ticket 286), the plan's "Build, screens and styles". Written before the browser half of
-// `build.ts`. The shape these laws hold it to:
-// - `build({out, browser})`: `browser` is the entry module to bundle for the tab, default
-//   `src/entry/browser.tsx`. It goes through the same Compiler plugin and the same ledger check.
-// - The result gains `page` (the HTML), `script` (the browser bundle as text) and `style`, the CSS
-//   collected in order, each `{source: "manti" | "tokens" | "tuval", css}`.
-// - `out` gains `window.js` (the script) and `page.html` (the page). The page holds every style text
-//   in that order and loads `/window.js`; the script imports nothing from outside itself.
-// - A failure of any kind (a Compiler finding, a bundle error) publishes nothing: every byte of the
-//   last good `out`, `brain.mjs` and the browser files included, stays as it was.
+// P14 (ticket 286), the plan's "Build, screens and styles", on P16's tables (A10). The app only
+// selects: its build hands libfabrika the tab's entry (`src/entry/browser.tsx`) and the three
+// stylesheets in the page's order, Manti's, then `@kampus/fabrika-design/tokens.css`, then
+// `@kampus/tuval/style.css`. The shape these laws hold it to:
+// - The result's `assets` holds `/window.js`, the tab's script (one ES module that names no `node:`
+//   module and imports nothing), and `/index.html`, the page (`text/html; charset=utf-8`), which holds
+//   the three stylesheets' rules in that order and loads `/window.js`.
+// - Only `brain.mjs` is published (P16), and it embeds both.
+// The fixture laws of P14's browser bundle (a Compiler finding in the tab's views, a tab entry that
+// cannot bundle, a good rebuild) moved with the bundle into libfabrika's build-one-file.test.ts.
 describe("P14 browser build", () => {
-  const fixture = (name: string, view: string) => {
-    const folder = home();
-    mkdirSync(join(folder, "node_modules"));
-    symlinkSync(
-      resolve(import.meta.dirname, "../../../../node_modules/.pnpm/react@19.3.1/node_modules/react"),
-      join(folder, "node_modules/react"),
-    );
-    const entry = join(folder, "entry.tsx");
-    writeFileSync(join(folder, `${name}.tsx`), view);
-    writeFileSync(entry, `import {Tip} from "./${name}.tsx"; export const mounted = Tip;`);
-    return { folder, entry, file: join(folder, `${name}.tsx`), out: join(folder, "dist") };
+  const STYLES = ["@manti-ui/styles/index.css", "@kampus/fabrika-design/tokens.css", "@kampus/tuval/style.css"];
+  // The CSS parser libfabrika's build uses, read from the library's own dependencies: a law
+  // compares rules, not text, since the build may print a stylesheet again.
+  type Css = {
+    readonly transform: (o: {
+      filename: string;
+      code: Uint8Array;
+      visitor: { StyleSheet: (sheet: { rules: Array<unknown> }) => void };
+    }) => unknown;
   };
-  const sources = ["manti", "tokens", "tuval"];
+  const css = createRequire(resolve(import.meta.dirname, "../../../packages/libfabrika/package.json"))(
+    "lightningcss",
+  ) as Css;
+  const parsedRules = (text: string): unknown => {
+    let rules: Array<unknown> = [];
+    css.transform({
+      filename: "law.css",
+      code: Buffer.from(text),
+      visitor: {
+        StyleSheet: (sheet) => {
+          rules = sheet.rules;
+        },
+      },
+    });
+    return JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
+  };
+  const pageRules = (page: string): unknown =>
+    parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
 
-  it("publishes the page, the script and the brain together, with the styles in order", async () => {
+  it("the brain carries the page and the script in its tables, with Manti's styles, then the tokens, then Tuval's", async () => {
     const { build } = await import("./build.ts");
     const out = join(home(), "dist");
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const built = (await runNode(build({ out }))) as unknown as {
-      page: string;
-      script: string;
-      style: ReadonlyArray<{ source: string; css: string }>;
-    };
-    expect(built.style.map((s) => s.source)).toEqual(sources);
+    const built = await runNode(build({ out }));
+    const script = built.assets["/window.js"];
+    const page = built.assets["/index.html"];
+    expect(script?.type, "the tab's script is in the table").toBe("text/javascript; charset=utf-8");
+    expect(page?.type, "the page is in the table").toBe("text/html; charset=utf-8");
+    const given = STYLES.map((module) => readFileSync(fileURLToPath(import.meta.resolve(module)), "utf8"));
 
-    for (const s of built.style) {
-      expect(s.css.length, `${s.source} css is not empty`).toBeGreaterThan(0);
+    for (const [n, text] of given.entries()) {
+      expect(text.length, `${STYLES[n]} is not empty`).toBeGreaterThan(0);
     }
 
-    const at = built.style.map((s) => built.page.indexOf(s.css));
-    expect(
-      at.every((n) => n >= 0),
-      "the page holds every style text",
-    ).toBe(true);
-    expect(at).toEqual([...at].sort((a, b) => a - b));
-    expect(built.page).toContain("/window.js");
-    expect(readFileSync(join(out, "window.js"), "utf8")).toBe(built.script);
-    expect(readFileSync(join(out, "page.html"), "utf8")).toBe(built.page);
-    expect(readdirSync(out)).toContain("brain.mjs");
-    // A self-contained browser script: no bare or platform import left, no Node, Worker or MCP name.
-    expect(built.script).not.toMatch(/(?:^|\n)\s*import\s[^;]*from\s*["'](?!\.|\/|https?:)/);
-
-    expect(built.script, "no node: module is imported or required").not.toMatch(NODE_SPECIFIER);
+    expect(pageRules(page!.body), "Manti's rules, then the tokens', then Tuval's").toEqual(
+      parsedRules(given.join("\n")),
+    );
+    // Plant: the tokens before Manti's are caught by that check.
+    expect(pageRules(page!.body)).not.toEqual(parsedRules([given[1], given[0], given[2]].join("\n")));
+    expect(page!.body).toMatch(/<script\b(?=[^>]*\btype="module")(?=[^>]*\bsrc="\/window\.js")[^>]*>/);
+    expect(readdirSync(out), "only the brain is published").toEqual(["brain.mjs"]);
+    const brain = readFileSync(built.brain, "utf8");
+    expect(brain.length).toBeGreaterThan(script!.body.length);
+    expect(script!.body, "no node: module is imported, required or probed").not.toMatch(NODE_SPECIFIER);
+    expect(script!.body, "one module that imports nothing").not.toMatch(IMPORTS);
 
     for (const word of ["cloudflare:", "@modelcontextprotocol", 'require("react']) {
-      expect(built.script).not.toContain(word);
+      expect(script!.body).not.toContain(word);
     }
   });
 
@@ -405,58 +423,19 @@ describe("P14 browser build", () => {
             `export {x} from${gap}${q}node:${module}${q};`,
             `const m = import(${gap}${q}node:${module}${q});`,
             `const m = require(${gap}${q}node:${module}${q});`,
+            `globalThis.process?.getBuiltinModule?.(${q}node:${module}${q})`,
           ];
 
           for (const form of forms) {
             expect(`a();${form}b();`, form).toMatch(NODE_SPECIFIER);
           }
 
+          expect(`a();import{x}from${q}./${module}.js${q};b();`).toMatch(IMPORTS);
           expect(`var o={node:${module},offset:1};f({node:n});`).not.toMatch(NODE_SPECIFIER);
+          expect(`throw Error("cannot import ${module} from here");`).not.toMatch(IMPORTS);
         },
       ),
       { seed: 119120, numRuns: 200 },
     );
-  });
-
-  for (const [plant, source] of plants) {
-    law(`a Compiler finding in the browser entry's views publishes nothing: ${plant}`, async ({ name }) => {
-      const { build } = await import("./build.ts");
-      const { folder, entry, file, out } = fixture(name, clean);
-      const options = { out, files: [], ledger: [], browser: entry };
-      await runNode(build(options));
-      const before = snapshot(out);
-      expect(before.map(([n]) => n)).toEqual(expect.arrayContaining(["window.js", "page.html", "brain.mjs"]));
-      writeFileSync(file, source);
-      const failed = await runNode(Effect.exit(build(options)));
-      expect(Exit.isFailure(failed), "the browser entry's TSX is checked even with files: []").toBe(true);
-      expect(snapshot(out)).toEqual(before);
-      expect(readdirSync(folder).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
-    });
-  }
-
-  law("a browser bundle that cannot build publishes nothing and leaves no temporary folder", async ({ name }) => {
-    const { build } = await import("./build.ts");
-    const { folder, entry, out } = fixture(name, clean);
-    const options = { out, files: [], ledger: [], browser: entry };
-    await runNode(build(options));
-    const before = snapshot(out);
-    writeFileSync(entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
-    const failed = await runNode(Effect.exit(build(options)));
-    expect(Exit.isFailure(failed)).toBe(true);
-    expect(snapshot(out)).toEqual(before);
-    expect(readdirSync(folder).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
-  });
-  law("a good rebuild replaces every file at once and the build hash follows the script", async ({ name, mark }) => {
-    const { build } = await import("./build.ts");
-    const { entry, file, out } = fixture(name, clean);
-    const options = { out, files: [], ledger: [], browser: entry };
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const first = (await runNode(build(options))) as unknown as { script: string };
-    writeFileSync(file, `export const Tip = () => <b>{${JSON.stringify(mark)}}</b>;`);
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const second = (await runNode(build(options))) as unknown as { script: string };
-    expect(readFileSync(join(out, "window.js"), "utf8")).toBe(second.script);
-    expect(second.script).toContain(mark);
-    expect(first.script).not.toContain(mark);
   });
 });

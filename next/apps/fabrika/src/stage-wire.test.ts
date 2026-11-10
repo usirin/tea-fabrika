@@ -581,7 +581,7 @@ describe("P12 real dev.ts wire", () => {
       expect(response.error?.data?.reason).toBe("unknown_method");
     }
   });
-  it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails; GET / serves the window page", async () => {
+  it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails; GET and HEAD / serve the built window page with its ETag, and /window.js the tab's script", async () => {
     const s = await stage();
     const ready = `${JSON.stringify({ ready: s.url }).slice(0, -1)},"build":`;
 
@@ -592,10 +592,24 @@ describe("P12 real dev.ts wire", () => {
 
     // Only POST /grant and GET /grant/client/KEY reach the grant routes. GET / is the window page
     // (P14), after the Host and Origin checks the unauthenticated scenario holds on this same URL.
+    // A10: the page is the brain's `/index.html` asset, served from P16's table with its ETag, and
+    // HEAD answers the same headers with no body.
     const page = await fetch(s.url);
     expect(page.status).toBe(200);
-    expect(page.headers.get("content-type")).toMatch(/^text\/html/);
-    expect(await page.text(), "the page loads the brain's own script").toContain("/window.js");
+    expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    const tag = page.headers.get("etag");
+    expect(tag, "the page carries its ETag").toMatch(/^"[a-f0-9]{64}"$/);
+    expect(await page.text(), "the page loads the brain's own script").toMatch(/src="\/window\.js"/);
+    const head = await fetch(s.url, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(head.headers.get("etag")).toBe(tag);
+    expect(await head.text()).toBe("");
+    const script = await fetch(`${s.url}/window.js`);
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(script.headers.get("etag")).toMatch(/^"[a-f0-9]{64}"$/);
+    expect(script.headers.get("etag")).not.toBe(tag);
     const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
     expect(await posted.text()).toBe("fabrika");
     const home = mkdtempSync(join(tmpdir(), "p12-w-"));

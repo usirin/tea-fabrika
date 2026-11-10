@@ -91,6 +91,10 @@ const prefixed = fc.oneof(
 );
 
 const opts = { seed: SEED, numRuns: RUNS };
+
+const TEA_TIMER =
+  "as tea runs its timer, a link with no answer never sits still: online leaves within 10 s, a grant wait keeps knocking";
+
 const currentDial = (s: Link): number | null => (typeof s["dial"] === "number" ? s["dial"] : null);
 const same = (x: unknown, y: unknown): boolean => JSON.stringify(x) === JSON.stringify(y);
 
@@ -286,6 +290,69 @@ const laws: Readonly<Record<string, (d: Driver) => void>> = {
       }),
       opts,
     ),
+  // Review 1, A (p17 and p5): with no answer from a hung brain, the link's own timer, run as tea
+  // runs a timer Sub, moves every live state. tea starts a timer for each new deps value
+  // (`timerDeps`, the deps a `linkTimer` gives) and fires it once; deps that do not change after it
+  // fired start no second one. So from every reached state, the timer alone takes an online link
+  // off `online` within BEAT + BEAT = 10 s, redials from `dialing` and `retrying`, and keeps a grant
+  // wait knocking without admitting it.
+  [TEA_TIMER]: (d) =>
+    fc.assert(
+      fc.property(prefixed, (list) =>
+        walk(d, list, (_p, _m, start) => {
+          let s = start;
+          let waited = 0;
+          let knocks = 0;
+          let fired: string | null = null;
+
+          for (let n = 0; n < 6; n++) {
+            const t = d.timer(s);
+
+            if (t === null) {
+              if (["dialing", "online", "retrying", "waiting_grant"].includes(s._tag)) {
+                fail(`${s._tag} has no timer`);
+              }
+
+              return;
+            }
+
+            const key = JSON.stringify(t);
+
+            if (key === fired) {
+              fail(`${s._tag} sits still: its timer ${key} already fired and its deps did not change`);
+            }
+
+            fired = key;
+            waited += t.after;
+            const [next, cmds] = d.step(s, t.msg);
+            knocks += cmds.filter((c) => (c as { type?: string }).type === "knock").length;
+
+            if (start._tag === "online" && next._tag !== "online") {
+              if (waited > 10_000) {
+                fail(`an online link with no answer left online after ${waited} ms, past 10 s`);
+              }
+
+              return;
+            }
+
+            if (start._tag === "waiting_grant" && next._tag !== "waiting_grant") {
+              fail(`a grant wait became ${next._tag} on its own timer`);
+            }
+
+            s = next;
+          }
+
+          if (start._tag === "online") {
+            fail(`an online link with no answer is still online after ${waited} ms`);
+          }
+
+          if (start._tag === "waiting_grant" && knocks < 6) {
+            fail(`a grant wait knocked ${knocks} times in six of its timers`);
+          }
+        }),
+      ),
+      opts,
+    ),
 };
 
 describe("p5: the link never sits still", () => {
@@ -346,8 +413,41 @@ describe("p5: the link never sits still", () => {
 // Plants (p5): ignore retry; honor an old close; admit on a timer; remove the 30-second cap. Each is
 // the real reducer with one break, and the law that names it must throw.
 describe("p5 plants: each break is caught by the law that names it", () => {
+  /** Why `run` failed, its causes included (fast-check keeps the property's own error as the cause). */
+  const failure = (run: () => void): string => {
+    try {
+      run();
+    } catch (error) {
+      const said: Array<string> = [];
+
+      for (let e: unknown = error; e instanceof Error; e = e.cause) {
+        said.push(e.message);
+      }
+
+      return said.join("\n");
+    }
+
+    return "it did not fail";
+  };
   const plant = (d: Driver, over: Partial<Driver>): Driver => ({ ...d, ...over });
   const live = (s: Link): boolean => ["dialing", "online", "retrying", "waiting_grant"].includes(s._tag);
+  it("a beat timer whose deps stay the same after it fires is caught (tea's timer)", async () => {
+    const d = real(await api());
+    const broken = plant(d, {
+      timer: (s) => (s._tag === "online" ? { after: 5_000, msg: { type: "beat", dial: s["dial"] } } : d.timer(s)),
+    });
+    expect(failure(() => laws[TEA_TIMER]?.(broken))).toMatch(/online sits still/);
+  });
+  it("a stall past twice the beat is caught (tea's timer)", async () => {
+    const d = real(await api());
+    const broken = plant(d, {
+      timer: (s) => {
+        const t = d.timer(s);
+        return t !== null && s._tag === "online" ? { ...t, after: t.after + 5_001 } : t;
+      },
+    });
+    expect(failure(() => laws[TEA_TIMER]?.(broken))).toMatch(/past 10 s/);
+  });
   it("ignoring retry is caught", async () => {
     const d = real(await api());
     const broken = plant(d, { step: (s, m) => (m.type === "retry" ? [s, []] : d.step(s, m)) });

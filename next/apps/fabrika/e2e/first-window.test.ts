@@ -7,15 +7,19 @@
 //     --testTimeout=120000 --hookTimeout=120000 first-window.test.ts
 // Every test here is a scenario: real WebCrypto, IndexedDB, grant signing, reload and a 4003 close
 // cannot be had without the built tab and OS processes.
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { ClientRow } from "@kampus/libfabrika";
 import { Schema } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  APP,
   cleanup,
   connection,
   counts,
   grant,
+  ledgerRows,
   openProfile,
   otherKey,
   press,
@@ -24,6 +28,8 @@ import {
   runGrant,
   shot,
   startStage,
+  summary,
+  timed,
   until,
   type Stage,
 } from "./p14.test-support.ts";
@@ -470,6 +476,139 @@ describe("[secrets] private key data and control credentials stay out of every o
         }),
         `a leak planted in ${name}`,
       ).toContain(name);
+    }
+  });
+});
+
+// Review 1, C, [secrets]: the outputs the scenario above skips. scenario: only the real tab and
+// stage hold the IndexedDB client queue (`fabrika-rows` and every other store), the settings error a
+// tab shows, the ledger, span and health rows the stage keeps on disk, the saved test reports and
+// what a screenshot shows; the pure halves are door-spans.test.ts's and node/keybindings.test.ts's
+// [secrets] properties. The secrets are the person's throwaway private key body, the stage's control
+// bearer (read from the stage's own files under its test home, or the workerd command line), and a
+// made-up pass the person pasted into the key file by mistake. The plant puts one secret into each
+// output and the same check must name it.
+describe("[secrets] the client queue, settings errors, ledger, spans, health, reports and visible text hold no secret", () => {
+  const forms = (s: string): ReadonlyArray<string> => [
+    s,
+    Buffer.from(s).toString("base64"),
+    Buffer.from(s).toString("base64url"),
+    encodeURIComponent(s),
+    Buffer.from(s).toString("hex"),
+  ];
+  const leaks = (secrets: ReadonlyArray<string>, outputs: Readonly<Record<string, string>>): ReadonlyArray<string> =>
+    Object.entries(outputs)
+      .filter(([, text]) => secrets.some((s) => forms(s).some((f) => f.length >= 12 && text.includes(f))))
+      .map(([name]) => name);
+  /** Every file under `dir`, recursively; one that is gone by the time it is read is skipped. */
+  const files = (dir: string): ReadonlyArray<string> =>
+    existsSync(dir)
+      ? readdirSync(dir, { recursive: true, withFileTypes: true })
+          .filter((f) => f.isFile())
+          .map((f) => join(f.parentPath, f.name))
+      : [];
+  const text = (file: string): string => {
+    try {
+      return readFileSync(file, "utf8");
+    } catch {
+      return "";
+    }
+  };
+  /** Every row of every table of every SQLite file under the stage home, read only. */
+  const stored = (home: string): string =>
+    files(home)
+      .filter((f) => statSync(f, { throwIfNoEntry: false })?.isFile() && text(f).startsWith("SQLite format 3"))
+      .map((f) => {
+        try {
+          const db = new DatabaseSync(f, { readOnly: true });
+
+          try {
+            const names = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{
+              name: string;
+            }>;
+            return names.map(({ name }) => JSON.stringify(db.prepare(`SELECT * FROM "${name}"`).all())).join("\n");
+          } finally {
+            db.close();
+          }
+        } catch {
+          return "";
+        }
+      })
+      .join("\n");
+  /** The stage's control bearer, from the files Alchemy keeps under the test home. */
+  const bearer = (home: string): string => {
+    for (const f of files(home)) {
+      const found = text(f).match(/\\?"token\\?"\s*:\s*\\?"([A-Za-z0-9_-]{43})\\?"/);
+
+      if (found?.[1] !== undefined) {
+        return found[1];
+      }
+    }
+
+    throw new Error("the control bearer is not in the stage home's files; read it where Alchemy keeps workerd's props");
+  };
+  const idb = (page: import("playwright").Page): Promise<string> =>
+    page.evaluate(async () => {
+      const out: Array<string> = [];
+
+      for (const info of await indexedDB.databases()) {
+        const db = await new Promise<IDBDatabase>((done, fail) => {
+          const open = indexedDB.open(info.name ?? "");
+          open.onsuccess = () => done(open.result);
+          open.onerror = () => fail(open.error);
+        });
+
+        for (const store of Array.from(db.objectStoreNames)) {
+          const rows = await new Promise<Array<unknown>>((done, fail) => {
+            const all = db.transaction(store).objectStore(store).getAll();
+            all.onsuccess = () => done(all.result);
+            all.onerror = () => fail(all.error);
+          });
+          out.push(`${info.name}/${store}: ${JSON.stringify(rows)}`);
+        }
+
+        db.close();
+      }
+
+      return out.join("\n");
+    });
+
+  it("scenario: no secret is in the queue, the shown settings error, the stage's tables, the reports or the visible text", async () => {
+    const p = await profile();
+    const tab = await p.tab(stage.url);
+    const waitingText = await tab.page.innerText("body");
+    await grant(stage, tab);
+    await timed("secrets press", () => press(tab.page, "Add one", 0));
+    const pass = `pass-${Date.now().toString(36)}Zq9`;
+    // A bad key file with the made-up pass on a bad line: the tab shows the problem.
+    writeFileSync(join(stage.home, "keybindings.toml"), `# ${pass}\n[keys]\n"${pass}" = ["a"]\n`);
+    await until("the settings error to be saved", () =>
+      ledgerRows(stage.home).some((r) => r.tag === "keys_failed") ? true : undefined,
+    );
+    await tab.page.waitForTimeout(2_000); // the tab reads it on its settings wait
+    const body = readFileSync(stage.key, "utf8")
+      .split("\n")
+      .filter((l) => l.length > 20 && !l.startsWith("-----"));
+    const secrets = [...body, bearer(stage.home), pass];
+    process.stdout.write(`${summary()}\n`);
+    const reports = files(resolve(APP, "../../../runs/p14")).map(text).join("\n");
+    const outputs = {
+      queue: await idb(tab.page),
+      "settings error and visible text": `${waitingText}\n${await tab.page.innerText("body")}`,
+      "ledger, spans, health and samples": stored(stage.home),
+      reports,
+    };
+    expect(outputs.queue.length, "the queue was read").toBeGreaterThan(0);
+    expect(outputs["ledger, spans, health and samples"].length, "the stage's tables were read").toBeGreaterThan(0);
+    expect(leaks(secrets, outputs)).toEqual([]);
+
+    for (const name of Object.keys(outputs)) {
+      for (const secret of [body[0] ?? "", secrets.at(-2)!, pass]) {
+        expect(
+          leaks(secrets, { ...outputs, [name]: `${outputs[name as keyof typeof outputs]}\n${secret}` }),
+          `a leak planted in ${name}`,
+        ).toContain(name);
+      }
     }
   });
 });

@@ -2,6 +2,11 @@
 // root and explicit program selections. Implementation owns those signature adjustments.
 // Builder contract: `libfabrika/src/build.ts` exports `build(options)`, an Effect that needs
 // FileSystem and Path and fails with BuildError's `reason`.
+// P14 (A10): `build` also takes `tab: {entry, styles}`, the tab's entry module and its stylesheets in
+// the order the page applies them, and builds them into the same tables: the entry as one
+// Compiler-checked ES module at `/window.js` that names no `node:` module, and the page at
+// `/index.html` (`text/html; charset=utf-8`) that holds every stylesheet's rules in the given order
+// and loads `/window.js`. Without `tab` neither route exists. A failure publishes nothing.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -21,6 +26,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import * as fc from "fast-check";
+import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +64,7 @@ type Build = {
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
+    readonly tab?: { readonly entry: string; readonly styles: readonly string[] };
   }) => Effect.Effect<Built, unknown>;
 };
 
@@ -395,6 +402,224 @@ describe("P16 p33 one-file build", () => {
           expect(() => embedded(source, [source])).toThrow("compiled text changed");
         }),
         { ...runs, numRuns: 8 },
+      );
+    },
+  );
+});
+
+// P14 (A10): the tab's page and script in P16's tables.
+/** A module specifier naming a `node:` module: an import, a re-export, a dynamic import, a require
+ *  or Node's `getBuiltinModule`, as Effect's async-hooks probe names one. React DOM's minified
+ *  object key `{node:n}` is not one. */
+const NODE_NAME = /(?:\b(?:from|import|require|getBuiltinModule)\s*\(?\s*|\?\.\s*\(\s*)["'`]node:/;
+
+/** Any import of another module: a static import or re-export, or a dynamic import of a path. */
+const IMPORTS =
+  /(?:^|[;}\n])\s*(?:import\s*(?:[\w$*{][^;]*?\bfrom\s*)?["'`]|export\s*(?:\*|\{[^}]*\})\s*(?:as\s+[\w$]+\s*)?from\s*["'`])|\bimport\s*\(\s*["'`]/;
+
+const HTML = "text/html; charset=utf-8";
+const JS = "text/javascript; charset=utf-8";
+
+const parsedRules = (css: string): unknown => {
+  let rules: Rule[] = [];
+  transform({
+    filename: "law.css",
+    code: Buffer.from(css),
+    visitor: {
+      StyleSheet: (sheet) => {
+        rules = sheet.rules;
+      },
+    },
+  });
+  return JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
+};
+
+/** The rules of every `<style>` in the page, in document order, as one list. */
+const pageRules = (page: string): unknown =>
+  parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
+
+const tabCase = fc.record({
+  marks: fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9]{2,10}$/), { minLength: 2, maxLength: 3 }),
+  label: fc.stringMatching(/^[a-z0-9 ]{1,16}$/),
+});
+
+/** A tab entry with one view (TSX, so it goes through the Compiler) and Effect, and its stylesheets. */
+const tabFixture = (marks: readonly string[], label: string) => {
+  const f = fixture("tab");
+  const dir = join(f.home, "tab");
+  mkdirSync(dir);
+  const view = join(dir, "view.tsx");
+  writeFileSync(view, `export const Tip = () => <b>${label}</b>;`);
+  const entry = join(dir, "entry.tsx");
+  writeFileSync(
+    entry,
+    `import {Effect} from "effect"; import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(label)})];`,
+  );
+  const styles = marks.map((mark, n) => {
+    const file = join(dir, `s${n}.css`);
+    writeFileSync(file, `.${mark} { --p14-order: ${n}; }\n.${mark} b { color: red; }\n`);
+    return file;
+  });
+  return { ...f, view, entry, styles, options: { ...f.options, tab: { entry, styles } } };
+};
+
+const snapshot = (dir: string) =>
+  readdirSync(dir)
+    .sort()
+    .map((name) => [name, readFileSync(join(dir, name)).toString("base64")]);
+
+describe("P14 the tab's page and script ride in the one build (A10)", () => {
+  it(
+    "the tab's entry is one script at /window.js naming no node: module, and /index.html holds the styles in order and loads it",
+    { timeout: buildTimeout() * 2 },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(tabCase, async ({ marks, label }) => {
+          const f = tabFixture(marks, label);
+          const built = await build(f.options);
+          const script = built.assets["/window.js"];
+          const page = built.assets["/index.html"];
+          expect(script?.type, "the tab's script is in the table").toBe(JS);
+          expect(page?.type, "the page is in the table").toBe(HTML);
+          expect(script!.hash).toBe(sha(script!.body));
+          expect(page!.hash).toBe(sha(page!.body));
+          expect(script!.body).toContain(label);
+          expect(script!.body, "the tab's script names no node: module").not.toMatch(NODE_NAME);
+          expect(script!.body, "the tab's script is one module and imports nothing").not.toMatch(IMPORTS);
+          expect(page!.body).toMatch(/<script\b(?=[^>]*\btype="module")(?=[^>]*\bsrc="\/window\.js")[^>]*>/);
+          const given = marks.map((_, n) => readFileSync(f.styles[n]!, "utf8"));
+          expect(pageRules(page!.body), "the page holds every style's rules, in the given order").toEqual(
+            parsedRules(given.join("\n")),
+          );
+          // Plant: the same styles in another order are caught by that check.
+          expect(pageRules(page!.body)).not.toEqual(parsedRules([...given].reverse().join("\n")));
+          expect(readdirSync(f.options.out), "only the brain is published").toEqual(["brain.mjs"]);
+          embedded(readFileSync(built.brain, "utf8"), [script!.body, page!.body]);
+          // Without a tab, neither route exists.
+          const bare = await build({ ...fixture("bare").options });
+          expect(Object.keys(bare.assets)).not.toContain("/index.html");
+          expect(Object.keys(bare.assets)).not.toContain("/window.js");
+        }),
+        runs,
+      );
+    },
+  );
+
+  // Plant for the two checks above: each way a script names a node: module or another module is
+  // caught, and a minified object key `node:` or a word `import` inside a name is not.
+  it("the node: and import checks catch every form and pass an object key", () => {
+    fc.assert(
+      fc.property(
+        fc.stringMatching(/^[a-z_]{1,12}$/),
+        fc.constantFrom("'", '"', "`"),
+        fc.constantFrom(" ", "", "\n  "),
+        (module, q, gap) => {
+          for (const form of [
+            `import x from${gap}${q}node:${module}${q};`,
+            `import${gap}${q}node:${module}${q};`,
+            `export {x} from${gap}${q}node:${module}${q};`,
+            `const m = import(${gap}${q}node:${module}${q});`,
+            `const m = require(${gap}${q}node:${module}${q});`,
+            `globalThis.process?.getBuiltinModule?.(${q}node:${module}${q})`,
+          ]) {
+            expect(`a();${form}b();`, form).toMatch(NODE_NAME);
+          }
+
+          for (const form of [
+            `import x from${gap}${q}./${module}.js${q};`,
+            `import{a}from${q}./${module}.js${q};`,
+            `import${gap}${q}./${module}.js${q};`,
+            `export * from ${q}./${module}.js${q};`,
+            `export{a}from${q}./${module}.js${q};`,
+            `const m = import(${gap}${q}./${module}.js${q});`,
+          ]) {
+            expect(`a();${form}b();`, form).toMatch(IMPORTS);
+          }
+
+          expect(`var o={node:${module},offset:1};f({node:n});`).not.toMatch(NODE_NAME);
+          expect(`var ${module}import=1;export{${module}import as default};`).not.toMatch(IMPORTS);
+          expect(`throw Error("cannot import ${module} from here");`).not.toMatch(IMPORTS);
+        },
+      ),
+      { seed: 119120, numRuns: 200 },
+    );
+  });
+
+  for (const [plant, source] of [
+    [
+      "skipped function",
+      'import {useRef} from "react"; export const Tip = () => {const r = useRef(1); return <b>{r.current}</b>;}',
+    ],
+    ["purity error", "export const Tip = () => <b>{Date.now()}</b>;"],
+    ["unlisted directive", 'export const Tip = () => {"use no memo"; return <b>ok</b>;}'],
+  ] as const) {
+    it(
+      `a Compiler finding in the tab's views publishes nothing: ${plant}`,
+      { timeout: buildTimeout() * 2 },
+      async () => {
+        await fc.assert(
+          fc.asyncProperty(tabCase, async ({ marks, label }) => {
+            const f = tabFixture(marks, label);
+            await build(f.options);
+            const before = snapshot(f.options.out);
+            writeFileSync(f.view, source);
+            const failed = await Effect.runPromise(
+              Effect.result((await api()).build(f.options)).pipe(Effect.provide(NodeServices.layer)),
+            );
+            expect(failed, "the tab's TSX is checked even with files: []").toMatchObject({
+              _tag: "Failure",
+              failure: { _tag: "BuildError", reason: "compiler" },
+            });
+            expect(snapshot(f.options.out)).toEqual(before);
+            expect(readdirSync(f.home).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
+          }),
+          runs,
+        );
+      },
+    );
+  }
+
+  it(
+    "a tab entry that cannot bundle publishes nothing and leaves no temporary folder",
+    { timeout: buildTimeout() * 2 },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(tabCase, async ({ marks, label }) => {
+          const f = tabFixture(marks, label);
+          await build(f.options);
+          const before = snapshot(f.options.out);
+          writeFileSync(f.entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
+          const failed = await Effect.runPromise(
+            Effect.result((await api()).build(f.options)).pipe(Effect.provide(NodeServices.layer)),
+          );
+          expect(failed).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
+          expect(snapshot(f.options.out)).toEqual(before);
+          expect(readdirSync(f.home).filter((n) => n.startsWith(".fabrika-build-"))).toEqual([]);
+        }),
+        runs,
+      );
+    },
+  );
+
+  it(
+    "a good rebuild replaces the script, and the page, the brain and its hash follow it",
+    { timeout: buildTimeout() * 2 },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(tabCase, fc.stringMatching(/^[a-z0-9]{8,16}$/), async ({ marks, label }, mark) => {
+          const f = tabFixture(marks, label);
+          const first = await build(f.options);
+          const word = `p14-rebuild-mark-${mark}`;
+          writeFileSync(f.view, `export const Tip = () => <b>{${JSON.stringify(word)}}</b>;`);
+          const second = await build(f.options);
+          expect(first.assets["/window.js"], "the tab's script is in the table").toBeDefined();
+          expect(first.assets["/window.js"]?.body).not.toContain(word);
+          expect(second.assets["/window.js"]?.body).toContain(word);
+          expect(second.build).not.toBe(first.build);
+          expect(second.build).toBe(sha(readFileSync(second.brain)));
+          embedded(readFileSync(second.brain, "utf8"), [second.assets["/window.js"]!.body]);
+        }),
+        runs,
       );
     },
   );
