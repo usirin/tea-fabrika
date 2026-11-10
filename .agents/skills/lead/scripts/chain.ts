@@ -10,14 +10,14 @@
 // process (`prepare`, then `driveStep`: one box, one agent turn, the reads, the push, the row),
 // and the machine reads the step's one line to pick the next move. Every agent, a step's and the
 // judgment's, runs through today's fabrika agents package on its ACP rows (./agents.ts): the
-// unmodified harness, in its own containment, with only its model login. A fresh, short Claude
-// agent is started only where judgment is needed: a step that asked a question or got stuck. It
+// unmodified harness, in its own containment, with only its model login. A fresh, short
+// read-only Codex agent is started only where judgment is needed: a step that asked a question or got stuck. It
 // reads the lane's state file and the report, answers once, and is gone. The five verbs stay:
 // done, send, ask, skip, stuck.
 //
 //   stepping   Act     drive's prepare and driveStep, the brief cut from the lane brief's section
 //                      plus the lane's facts (heads, round, what the last step said)
-//   judging    Draft   one Claude turn in the main checkout, one typed answer: send a step
+//   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
@@ -527,18 +527,34 @@ type Setup = {
 	readonly model: string;
 };
 
-const JUDGE_TAIL = (lane: string, step: StepName, line: Line, state: string) => `
+/** The last `n` lines of a file, or a line saying it is not there. */
+const lastLines = (path: string | null, n: number): string =>
+	path !== null && existsSync(path)
+		? readFileSync(path, "utf8").trim().split("\n").slice(-n).join("\n")
+		: "(none)";
+
+const JUDGE_TAIL = (lane: string, step: StepName, line: Line, state: string, report: string) => `
 You are the lead's judgment for lane ${lane}, started by chain.ts because the ${step} step
 answered ${line.outcome}: ${line.reason}
-You read; you change no file and start nothing. Read the lane's state file ${state}, the step's
-report${line.report ? ` ${line.report}` : ""}, and what you need in this repo. Before you park a
-question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then answer with one
-JSON object (its schema follows): answer "send" with the step to run again (tests, build, mutation
+You read; you change no file and start nothing. Your row only reads this repo and nothing beside
+it, so the lane's state file and the step's report follow below. Read what you need in this repo.
+Before you park a question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then
+answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build, mutation
 or review) and a note of one or two sentences for that step, or answer "park" with step null and
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
 person is involved, or the same step already failed the same way.
+
+---
+The lane's state file, its last lines:
+
+${state}
+
+---
+The ${step} step's report:
+
+${report}
 `;
 
 const handlers = (s: Setup) => {
@@ -696,17 +712,24 @@ const handlers = (s: Setup) => {
 					`round ${cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`,
 				);
 				const started = new Date();
-				// One Claude turn in the main checkout, on the same rows a step runs on. The prompt says
-				// to change nothing; the row holds no other right.
+				// One turn in the main checkout on the row that only reads (Codex's read-only profile):
+				// the judgment cannot change the checkout, by the harness and not by a promise. That row
+				// reads nothing beside the checkout, so the state file and the report ride in the prompt.
 				const turned = yield* runTurn(s.agents, {
-					provider: "claude",
+					provider: "codex-read",
 					session: box,
 					folder: env.MAIN,
-					prompt: JUDGE_TAIL(s.lane, cmd.step, cmd.line, md),
+					prompt: JUDGE_TAIL(
+						s.lane,
+						cmd.step,
+						cmd.line,
+						lastLines(md, 40),
+						lastLines(cmd.line.report, 200),
+					),
 					system: `You are the lead's judgment for lane ${s.lane}, run by chain.ts. You read and change no file.`,
 					answer: Judgment,
-					model: s.model,
-					effort: null,
+					model: env.CODEX_MODEL,
+					effort: env.CODEX_EFFORT,
 					minutes: 20,
 					events: at(".jsonl"),
 					report: at(".md"),
@@ -724,9 +747,9 @@ const handlers = (s: Setup) => {
 						run: `t${s.ticket}-judge${cmd.round}`,
 						ticket: s.ticket,
 						step: cmd.step,
-						provider: "claude",
-						model: s.model,
-						effort: null,
+						provider: "codex-read",
+						model: env.CODEX_MODEL,
+						effort: env.CODEX_EFFORT,
 						outcome: move._tag === "step" ? "pass" : "parked",
 						why: `chain.ts judgment for ${s.lane} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
 						started,

@@ -14,7 +14,7 @@
 // commit through stepcommit, with main's own signer. Mutation runs on Claude only (it binds ports
 // and starts Electron), one Electron step at a time. The box cannot write state/electron.lock, so
 // drive holds it for the whole step, outside the box: for mutation, and for a Claude step started
-// with --electron (a step whose laws or shots run the app). chain.ts runs these same pieces in
+// with --electron (a step whose laws or shots run the app). The chain runs these same pieces in
 // process (`prepare`, `driveStep`); the command below is for one step by hand.
 //
 // The step is a tea machine on the Effect engine:
@@ -1081,6 +1081,16 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
 };
 
 /**
+ * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
+ * sandbox, Codex's fence), so a step cannot read a plan kept beside the boxes: it rides in the
+ * prompt. A plan step writes the plan, and a missing file is box.sh new's refusal to make.
+ */
+export const planTail = (step: StepName, path: string, text: string | null) =>
+	step === "plan" || text === null
+		? ""
+		: `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+
+/**
  * The Draft: one turn of the agent in the box (a plan reads the main checkout), as a Sub that
  * answers once. The prompt file is the brief with drive's tail; the system prompt names the step.
  */
@@ -1197,7 +1207,7 @@ const takeElectron = (env: Env) =>
 		}
 	});
 
-/** What one step is asked for, as the command line or chain.ts gives it. */
+/** What one step is asked for, as the command line or the chain gives it. */
 export interface StepArgs {
 	readonly lane: string;
 	readonly step: StepName;
@@ -1387,12 +1397,16 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 			: "";
 	writeFileSync(
 		ask.prompt,
-		readFileSync(p.brief, "utf8") + agentTail(ask, electron) + TAIL + verdict,
+		readFileSync(p.brief, "utf8") +
+			planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
+			agentTail(ask, electron) +
+			TAIL +
+			verdict,
 	);
 	return {_tag: "prepared", ask, electron};
 };
 
-/** drive's one line: how the step ended, as chain.ts and a reader of the log take it. */
+/** drive's one line: how the step ended, as the chain and a reader of the log take it. */
 export interface DriveLine {
 	readonly outcome: string;
 	readonly lane: string;
