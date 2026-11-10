@@ -171,8 +171,8 @@ type Tuning = {
   readonly runs?: boolean;
   /** Draw the brain's ping interval on `admitted`, below, at and past the link's beat (the hang law). */
   readonly pings?: boolean;
-  /** Also draw a failed key settings read, `settings_failed {dial, reason}`, on any dial, and the
-   *  settings Msgs `keys` and `keys_failed` (A15). */
+  /** Also draw a failed key settings read, `settings_failed {dial, reason}`, on any dial, the
+   *  settings Msgs `keys` and `keys_failed` (A15), and the resend timer's tick on any dial (A16). */
   readonly settings?: boolean;
 };
 
@@ -207,8 +207,10 @@ const runNote = fc.oneof(
 );
 
 /** A15: the settings read's own Msgs. A failed read names its dial and the call's own reason; a
- *  good table or a problem has no dial, as the runner sends them today. */
+ *  good table or a problem has no dial, as the runner sends them today. A16: the resend timer's
+ *  tick, on any dial, is what asks a failed read again, so these lists draw it too. */
 const settingsCells = {
+  resend: fc.record({ type: fc.constant("resend"), dial }),
   settings_failed: fc.record({
     type: fc.constant("settings_failed"),
     dial,
@@ -558,8 +560,8 @@ const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded
 const viewLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
   guided(m, layout, cells(pids, { runs: true }), { maxLength: 120, ...(loaded === undefined ? {} : { loaded }) });
 
-/** Lists for the settings law (A15): a failed key settings read on any dial, and good tables and
- *  problems, among every other Msg. */
+/** Lists for the settings law (A15, A16): a failed key settings read on any dial, good tables and
+ *  problems, and resend ticks, among every other Msg. */
 const settingsLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
   guided(m, layout, cells(pids, { settings: true }), { maxLength: 70 });
 
@@ -1731,8 +1733,8 @@ const viewLaws: Readonly<Record<string, ViewLaw>> = {
   },
 };
 
-/** The laws that also run on the settings lists (A15): a dial a failed read ends loses no letter,
- *  and the next dial sends and opens as any other. */
+/** The laws that also run on the settings lists (A15, A16): a failed read and the resend ticks that
+ *  ask it again lose no letter, and every dial sends and opens as any other. */
 const SETTINGS_RUNS: ReadonlySet<string> = new Set([
   "p1: a letter is never lost, written counts presses, ids never repeat",
   "p2: what waited goes out: online sends every ready letter once in order, offline sends nothing",
@@ -1761,7 +1763,7 @@ const fold = async (
     propertyTrace(used as never, { layout } as never, linkLists(m, layout, tiles) as never, law, opts);
   }
 
-  // A15: p1, p2 and p4 also run on lists where a failed settings read ends a dial.
+  // A15, A16: p1, p2 and p4 also run on lists where a settings read fails and is asked again.
   if (SETTINGS_RUNS.has(name)) {
     propertyTrace(used as never, { layout } as never, settingsLists(m, layout, tiles) as never, law, opts);
   }
@@ -3136,16 +3138,22 @@ describe("window machine plants: each break of a view record is caught by its la
     }));
 });
 
-// A15: a failed key settings read is a Msg. The runner (main.tsx) reports a failed `ledger.read` or
-// `ledger.wait` on `person/<id>/settings` as `settings_failed {dial, reason}` and stops reading on
-// that dial; the Model decides what follows. Its `settings` is the read's state per dial,
-// `{_tag: "reading", dial}` or `{_tag: "failed", dial, reason}`. On the online dial a failure ends
-// the dial as a lost socket does (a `closed` on that dial, code 1006, folded by the same machine from
-// the same Model), keeps its reason in `settings` until something clears it, and the next dial that
-// goes online reads again. A later `keys` or `keys_failed` while a newer dial's socket is open
-// clears it. A `settings_failed` for any other dial, or while the link is not online, changes nothing.
+// A15, as A16 changes it: a failed key settings read is a Msg, and it restarts the read, not the
+// dial. The runner (main.tsx) reports a failed `ledger.read` or `ledger.wait` on
+// `person/<id>/settings` as `settings_failed {dial, reason}` and stops reading on that dial; the
+// Model decides what follows. Its `settings` is the read's state per dial, `{_tag: "reading", dial}`
+// or `{_tag: "failed", dial, reason}`. On the online dial a failure sets `failed` with its reason
+// and leaves the rest of the window as it was: the link stays online on that dial and no Cmd ends
+// it, so the socket's own close still reaches the link with its code. The door refuses a removed
+// key's calls and then closes 4003 (`door/door.ts:989`), so a 4003 on that dial after the failure
+// leaves the link `removed`. The resend timer runs while that read is `failed`; its `resend` for
+// that dial asks the Cmd `read_settings {dial}` once and sets `reading`. No other step asks it,
+// save the step that goes online, at most once and for its own dial: a resend for another dial,
+// or once the dial closed, asks nothing. A dial that goes online reads again, and a later `keys` or
+// `keys_failed` while a newer dial's socket is open clears a failure. A `settings_failed` for any
+// other dial, or while the link is not online, changes nothing.
 const SETTINGS =
-  "A15 settings: a failed settings read on the online dial ends it by a lost socket's path and keeps its reason; the next dial online reads again; a later keys or keys_failed on a new dial clears it; any other changes nothing";
+  "A16 settings: a failed settings read on the online dial keeps its reason and leaves the link as it was, so a 4003 after it still removes; that dial's next resend asks read_settings once and reads; nothing else asks it; the next dial online reads again; a later keys or keys_failed on a new dial clears it; any other changes nothing";
 
 type Settings = { readonly _tag?: unknown; readonly dial?: unknown; readonly reason?: unknown } | undefined;
 
@@ -3155,19 +3163,83 @@ const readState = (s: Model): Settings => (s as Model & { readonly settings?: Se
 /** The settings read state as text, for the law's message. */
 const told = (s: Settings): string => JSON.stringify(s) ?? "undefined";
 
-/** The window with its settings read state left out, for the lost socket's path. */
+/** The window with its settings read state left out. */
 const besides = (s: Model): string => JSON.stringify({ ...s, settings: null });
 
-/** A step's Cmds, the connect rows left out: a failed read is no link outcome the connect law names. */
-const besidesConnect = (cmds: ReadonlyArray<Cmd>): string =>
-  JSON.stringify(cmds.filter((c) => !(c.type === "record" && (c["record"] as { _tag?: unknown })?._tag === "connect")));
+/** The `read_settings` Cmds a step asked (A16). */
+const readsAsked = (cmds: ReadonlyArray<Cmd>): ReadonlyArray<Cmd> => cmds.filter((c) => c.type === "read_settings");
+
+/** A step's Cmds that may come with a failed read: none but a record that is no link outcome. */
+const besidesRecords = (cmds: ReadonlyArray<Cmd>): ReadonlyArray<Cmd> =>
+  cmds.filter((c) => !(c.type === "record" && (c["record"] as { _tag?: unknown })?._tag !== "connect"));
+
+/** One more Msg folded by the machine under test, from `s`, as its runner would fold it next. */
+const foldNext = (used: Machine, s: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] =>
+  applyCell(used as never, s as never, msg as never) as never;
+
+/** Whether a resend on `msg`'s dial is the one that asks the failed read of `s` again. */
+const retries = (s: Model, msg: Msg): boolean => {
+  const was = readState(s);
+  return (
+    msg.type === "resend" &&
+    online(s) &&
+    s.link["dial"] === msg["dial"] &&
+    was?._tag === "failed" &&
+    was.dial === msg["dial"]
+  );
+};
+
+/** A resend asked the read once on its dial and set it reading, or why not. */
+const askedOnce = (msg: Msg, next: Model, cmds: ReadonlyArray<Cmd>): string | null => {
+  const asked = readsAsked(cmds);
+  const is = readState(next);
+
+  if (asked.length !== 1 || asked[0]?.["dial"] !== msg["dial"]) {
+    return `a resend on dial ${String(msg["dial"])}, whose read failed, asked ${JSON.stringify(asked)}, not one read_settings for it`;
+  }
+
+  if (is?._tag !== "reading" || is.dial !== msg["dial"]) {
+    return `a resend on dial ${String(msg["dial"])}, whose read failed, left settings ${told(is)}, not reading on it`;
+  }
+
+  return null;
+};
 
 const settingsLaw =
-  (real: Machine) =>
+  (used: Machine) =>
   (steps: ReadonlyArray<Folded>): string | null => {
+    const { timers } = parts(used);
+
     for (const { prev, msg, next, cmds } of steps) {
       const was = readState(prev);
       const is = readState(next);
+      const fresh = online(next) && !online(prev);
+
+      // The resend timer runs while the online dial's read is failed (A16).
+      if (online(next) && is?._tag === "failed" && is.dial === next.link["dial"]) {
+        const ticks = timers(next);
+
+        if (!ticks.some((t) => t?.msg.type === "resend" && t.msg["dial"] === is.dial)) {
+          return `the read of the online dial ${String(is.dial)} failed and no resend timer runs for it: ${JSON.stringify(ticks)}`;
+        }
+      }
+
+      if (retries(prev, msg)) {
+        const why = askedOnce(msg, next, cmds);
+
+        if (why !== null) {
+          return why;
+        }
+
+        continue;
+      }
+
+      // No tight loop: nothing else asks the read, save the step that goes online, once, for its dial.
+      const asked = readsAsked(cmds);
+
+      if (fresh ? asked.length > 1 || asked.some((c) => c["dial"] !== next.link["dial"]) : asked.length > 0) {
+        return `${JSON.stringify(msg)}, while ${prev.link._tag} on ${String(prev.link["dial"])} with settings ${told(was)}, asked ${JSON.stringify(asked)}`;
+      }
 
       if (msg.type === "settings_failed") {
         if (!online(prev) || prev.link["dial"] !== msg["dial"]) {
@@ -3178,33 +3250,69 @@ const settingsLaw =
           continue;
         }
 
-        if (online(next)) {
-          return `a settings_failed on the online dial ${String(msg["dial"])} left the link online, with no reader`;
+        if (JSON.stringify(next.link) !== JSON.stringify(prev.link)) {
+          return `a settings_failed on the online dial ${String(msg["dial"])} moved the link from ${JSON.stringify(prev.link)} to ${JSON.stringify(next.link)}`;
         }
 
-        const lost: Msg = { type: "closed", dial: msg["dial"], code: 1006, fingerprint: "SHA256:x", ms: 0 };
-        const [lostNext, lostCmds]: readonly [Model, ReadonlyArray<Cmd>] = applyCell(
-          real as never,
-          prev as never,
-          lost as never,
-        ) as never;
-
-        if (besides(next) !== besides(lostNext)) {
-          return `a settings_failed on dial ${String(msg["dial"])} left ${besides(next)}, a lost socket leaves ${besides(lostNext)}`;
+        if (besides(next) !== besides(prev)) {
+          return `a settings_failed on dial ${String(msg["dial"])} changed the window besides its settings read: ${besides(prev)} to ${besides(next)}`;
         }
 
-        if (besidesConnect(cmds) !== besidesConnect(lostCmds)) {
-          return `a settings_failed on dial ${String(msg["dial"])} asked ${besidesConnect(cmds)}, a lost socket asks ${besidesConnect(lostCmds)}`;
+        if (besidesRecords(cmds).length > 0) {
+          return `a settings_failed on dial ${String(msg["dial"])} asked ${JSON.stringify(besidesRecords(cmds))}`;
         }
 
         if (is?._tag !== "failed" || is.dial !== msg["dial"] || is.reason !== msg["reason"]) {
           return `a settings_failed ${JSON.stringify(msg)} left settings ${told(is)}, not failed with its dial and reason`;
         }
 
+        // The removal order: the door refuses a removed key's read, then closes 4003 on that dial.
+        const [removed] = foldNext(used, next, {
+          type: "closed",
+          dial: msg["dial"],
+          code: 4003,
+          fingerprint: "SHA256:x",
+          ms: 0,
+        });
+
+        if (removed.link._tag !== "removed") {
+          return `a 4003 close on dial ${String(msg["dial"])} after its settings read failed left the link ${JSON.stringify(removed.link)}, not removed`;
+        }
+
+        // The next resend on that dial asks the read once.
+        const tick: Msg = { type: "resend", dial: msg["dial"] };
+        const [again, againCmds] = foldNext(used, next, tick);
+        const why = askedOnce(tick, again, againCmds);
+
+        if (why !== null) {
+          return `the next tick after ${JSON.stringify(msg)}: ${why}`;
+        }
+
+        // The next dial that goes online reads again: the socket is lost, the link retries and the
+        // brain admits its next dial.
+        const [lost] = foldNext(used, next, {
+          type: "closed",
+          dial: msg["dial"],
+          code: 1006,
+          fingerprint: "SHA256:x",
+          ms: 0,
+        });
+        const [redial] = foldNext(used, lost, {
+          type: "retry",
+          dial: lost.link["dial"],
+          tries: lost.link["tries"] ?? 1,
+        });
+        const [back] = foldNext(used, redial, { type: "admitted", dial: redial.link["dial"], ping: 0, ms: 0 });
+        const read = readState(back);
+
+        if (!online(back) || read?._tag !== "reading" || read.dial !== back.link["dial"]) {
+          return `after ${JSON.stringify(msg)}, the socket lost and the next dial admitted left ${JSON.stringify(back.link)} with settings ${told(read)}, not reading on it`;
+        }
+
         continue;
       }
 
-      if (online(next) && !online(prev)) {
+      if (fresh) {
         if (is?._tag !== "reading" || is.dial !== next.link["dial"]) {
           return `going online on dial ${String(next.link["dial"])} left settings ${told(is)}, not reading on that dial`;
         }
@@ -3227,14 +3335,14 @@ const settingsLaw =
       }
 
       if (JSON.stringify(is) !== JSON.stringify(was)) {
-        return `${msg.type} moved the failed read ${told(was)} to ${told(is)} before a new dial went online`;
+        return `${msg.type} moved the failed read ${told(was)} to ${told(is)} before a new dial went online or its resend`;
       }
     }
 
     return null;
   };
 
-describe("window machine: a failed key settings read is a Msg (A15)", () => {
+describe("window machine: a failed key settings read is a Msg that restarts the read, not the dial (A15, A16)", () => {
   for (const [label, layout, tiles] of LAYOUTS) {
     it(`${SETTINGS} (${label})`, async () => {
       const m = await machine();
@@ -3248,9 +3356,17 @@ describe("window machine: a failed key settings read is a Msg (A15)", () => {
     });
   }
 
-  it("good thing: the settings runs fail a read on the online dial and on a stale one, go online again after a failure, and clear one by keys on a new dial", async () => {
+  it("good thing: the settings runs fail a read on the online dial and on a stale one, tick it again on its dial, on another and after its close, and clear one by keys on a new dial", async () => {
     const m = await machine();
-    const seen = { current: 0, staleOnline: 0, staleOffline: 0, readAgain: 0, cleared: 0 };
+    const seen = {
+      current: 0,
+      staleOnline: 0,
+      staleOffline: 0,
+      retried: 0,
+      tickElsewhere: 0,
+      tickAfterClose: 0,
+      cleared: 0,
+    };
 
     for (const [, layout, tiles] of LAYOUTS) {
       propertyTrace(
@@ -3258,23 +3374,22 @@ describe("window machine: a failed key settings read is a Msg (A15)", () => {
         { layout } as never,
         settingsLists(m, layout, tiles) as never,
         ((folded: ReadonlyArray<Folded>) => {
-          let failed = false;
+          for (const { prev, msg } of folded) {
+            const was = readState(prev);
 
-          for (const { prev, msg, next } of folded) {
             if (msg.type === "settings_failed") {
               const current = online(prev) && prev.link["dial"] === msg["dial"];
               seen.current += current ? 1 : 0;
               seen.staleOnline += online(prev) && !current ? 1 : 0;
               seen.staleOffline += online(prev) ? 0 : 1;
-              failed ||= current;
             }
 
-            if (failed && online(next) && !online(prev)) {
-              seen.readAgain++;
-              failed = false;
+            if (msg.type === "resend" && was?._tag === "failed") {
+              const mine = was.dial === msg["dial"];
+              seen.retried += retries(prev, msg) ? 1 : 0;
+              seen.tickElsewhere += !mine ? 1 : 0;
+              seen.tickAfterClose += mine && openDial(prev) !== was.dial ? 1 : 0;
             }
-
-            const was = readState(prev);
 
             if (
               (msg.type === "keys" || msg.type === "keys_failed") &&
@@ -3297,18 +3412,22 @@ describe("window machine: a failed key settings read is a Msg (A15)", () => {
     }
   });
 
-  // Plants: the window ignores the Msg (the dial stays online with no reader, nothing shows), and
-  // the window acts on a stale dial's Msg as if it were the online one's. Each wraps the real update
-  // for `settings_failed` only; the law must hold on the real machine first, so a plant is caught
-  // for its break, not for a missing handler.
+  // Plants. A15's two: the window ignores the Msg (nothing shows the failure, and nothing asks the
+  // read again), and it acts on a stale dial's Msg as if it were the online one's. A16's four: it
+  // ends the dial on a failed read, as A15 built it (the removed-key loss: the 4003 that follows
+  // is stale and the link is not removed); it never asks the read again; it asks it on every Msg
+  // rather than once per tick; it asks it on a tick after the dial closed. Each wraps the real
+  // update; the law must hold on the real machine first, so a plant is caught for its break, not
+  // for a missing handler.
   type Update = (state: Model, msg: Msg, ctx: object) => readonly [Model, ReadonlyArray<Cmd>];
-  const planted = (real: Machine, change: (own: Update | undefined) => Update): Machine => {
+  type Updates = Readonly<Record<string, Update>>;
+  const planted = (real: Machine, change: (update: Updates) => Updates): Machine => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const update = (real as unknown as { update: Record<string, Update> }).update;
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and swaps one handler; the cast names it a Machine again
-    return { ...real, update: { ...update, settings_failed: change(update["settings_failed"]) } } as unknown as Machine;
+    const update = (real as unknown as { update: Updates }).update;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the plant keeps the real machine and swaps handlers; the cast names it a Machine again
+    return { ...real, update: { ...update, ...change(update) } } as unknown as Machine;
   };
-  const expectCaught = async (change: (own: Update | undefined) => Update): Promise<void> => {
+  const expectCaught = async (change: (update: Updates) => Updates): Promise<void> => {
     const real = await machine();
     const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
     const run = (used: Machine) => () =>
@@ -3316,22 +3435,74 @@ describe("window machine: a failed key settings read is a Msg (A15)", () => {
         used as never,
         { layout } as never,
         settingsLists(real, layout, tiles) as never,
-        settingsLaw(real) as never,
+        settingsLaw(used) as never,
         opts,
       );
     expect(run(real), "the law holds on the real window").not.toThrow();
     expect(run(planted(real, change))).toThrow();
   };
+  const none: Update = (x) => [x, []];
 
-  it("ignoring a failed settings read, so the dial stays online with no reader and nothing shows, is caught (A15)", () =>
-    expectCaught(() => (s) => [s, []]));
+  it("ignoring a failed settings read, so nothing shows it and nothing asks it again, is caught (A15)", () =>
+    expectCaught(() => ({ settings_failed: (s) => [s, []] })));
   it("acting on a stale dial's failed settings read is caught (A15)", () =>
-    expectCaught((own) => (s, msg, ctx) => {
-      const step = own ?? ((x: Model): readonly [Model, ReadonlyArray<Cmd>] => [x, []]);
-      return online(s) && s.link["dial"] !== msg["dial"]
-        ? step(s, { ...msg, dial: s.link["dial"] }, ctx)
-        : step(s, msg, ctx);
-    }));
+    expectCaught((update) => ({
+      settings_failed: (s, msg, ctx) => {
+        const own = update["settings_failed"] ?? none;
+        return online(s) && s.link["dial"] !== msg["dial"]
+          ? own(s, { ...msg, dial: s.link["dial"] }, ctx)
+          : own(s, msg, ctx);
+      },
+    })));
+  it("ending the dial on a failed read, as A15 built it, so the 4003 after it is stale and the link is not removed, is caught (A16)", () =>
+    expectCaught((update) => ({
+      settings_failed: (s, msg, ctx) => {
+        if (!online(s) || s.link["dial"] !== msg["dial"]) {
+          return [s, []];
+        }
+
+        const lost: Msg = { type: "closed", dial: msg["dial"], code: 1006, fingerprint: "", ms: 0 };
+        const [next, cmds] = (update["closed"] ?? none)(s, lost, ctx);
+        return [
+          Object.assign({}, next, { settings: { _tag: "failed", dial: msg["dial"], reason: msg["reason"] } }),
+          cmds,
+        ];
+      },
+    })));
+  it("never asking a failed settings read again is caught (A16)", () =>
+    expectCaught((update) => ({
+      resend: (s, msg, ctx) => {
+        const [next, cmds] = (update["resend"] ?? none)(s, msg, ctx);
+        return [Object.assign({}, next, { settings: readState(s) }), cmds.filter((c) => c.type !== "read_settings")];
+      },
+    })));
+  it("asking the settings read on every Msg rather than once per tick is caught (A16)", () =>
+    expectCaught((update) =>
+      Object.fromEntries(
+        Object.entries(update).map(([type, own]) => [
+          type,
+          ((s, msg, ctx) => {
+            const [next, cmds] = own(s, msg, ctx);
+            return online(next) && readsAsked(cmds).length === 0
+              ? [next, [...cmds, { type: "read_settings", dial: next.link["dial"] }]]
+              : [next, cmds];
+          }) satisfies Update,
+        ]),
+      ),
+    ));
+  it("asking the settings read on a tick after its dial closed is caught (A16)", () =>
+    expectCaught((update) => ({
+      resend: (s, msg, ctx) => {
+        const [next, cmds] = (update["resend"] ?? none)(s, msg, ctx);
+        const was = readState(s);
+        return !online(s) && was?._tag === "failed" && was.dial === msg["dial"]
+          ? [
+              Object.assign({}, next, { settings: { _tag: "reading", dial: msg["dial"] } }),
+              [...cmds, { type: "read_settings", dial: msg["dial"] }],
+            ]
+          : [next, cmds];
+      },
+    })));
 });
 
 describe("window machine: saved state", () => {
@@ -3342,7 +3513,7 @@ describe("window machine: saved state", () => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
     const model = (m as unknown as { model: Schema.Codec<unknown, unknown> }).model;
 
-    // A15: also on runs where a failed settings read ends a dial, so the read's state saves too.
+    // A15, A16: also on runs where a settings read fails and is asked again, so its state saves too.
     for (const made of [lists, settingsLists]) {
       fc.assert(
         fc.property(made(m, layout, tiles), (list) => {
@@ -3415,6 +3586,35 @@ describe("window machine: format of the Msgs", () => {
     expect(await accepts({ type: "settings_failed", dial: 3 })).toBe(false);
     expect(await accepts({ type: "settings_failed", dial: "3", reason: "unreachable" })).toBe(false);
     expect(await accepts({ type: "settings_failed", dial: 3, reason: 7 })).toBe(false);
+  });
+
+  it("format: the settings read's restart is the Cmd `read_settings` with the dial it reads on (A16)", async () => {
+    // reason: the runner (main.tsx) starts the settings read again on that dial's socket only on this
+    // Cmd; decoded through the input schema of the machine's own `read_settings` Cmd.
+    type Issues = { readonly issues?: unknown };
+    type Def = {
+      readonly cmdType: string;
+      readonly schema: {
+        readonly input: {
+          readonly "~standard": {
+            readonly validate: (v: unknown) => Issues | Promise<Issues>;
+          };
+        };
+      };
+    };
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the machine's `cmds` are the Cmds it may ask; the cast names their tea shape
+    const defs = ((await machine()) as unknown as { cmds: ReadonlyArray<Def> }).cmds;
+    const def = defs.find((d) => d.cmdType === "read_settings");
+    expect(def, "the window declares the Cmd read_settings").toBeDefined();
+    const takes = async (input: unknown): Promise<boolean> => {
+      const out = await def?.schema.input["~standard"].validate(input);
+      return out !== undefined && out.issues === undefined;
+    };
+    expect(await takes({ dial: 3 })).toBe(true);
+    expect(await takes({ dial: 1 })).toBe(true);
+    expect(await takes({})).toBe(false);
+    expect(await takes({ dial: "3" })).toBe(false);
+    expect(await takes({ dial: 1.5 })).toBe(false);
   });
 
   it("format: the socket Sub's answer to an open, open_ok, carries the write's id and dial and a {rev, view}", async () => {
