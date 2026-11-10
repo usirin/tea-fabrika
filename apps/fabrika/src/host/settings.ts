@@ -1,5 +1,19 @@
 import { join } from "node:path";
-import { Data, Duration, Effect, Equal, Exit, FileSystem, Path, type PlatformError, Ref, Result, Stream } from "effect";
+import {
+  Data,
+  Duration,
+  Effect,
+  Equal,
+  Exit,
+  FileSystem,
+  Path,
+  type PlatformError,
+  Ref,
+  Result,
+  Schedule,
+  Sink,
+  Stream,
+} from "effect";
 import type { Launch } from "../launch.ts";
 
 // The one reader of the person's settings folder: keybindings.toml now (desk/keymap.ts), and
@@ -14,7 +28,8 @@ import type { Launch } from "../launch.ts";
 //
 // The folder is watched, not the file: an editor saves by writing a new file and renaming it
 // over the old one, and a watch on the old file would end there. A one second poll also reads
-// the file, so a save is heard even without an OS event. Both wait out the same 50 ms settle.
+// the file, so a save is heard even without an OS event. The first hint starts a fixed 50 ms
+// settle; later hints do not delay the read, and any watch hint makes its source "watch".
 // Each file is read apart, so a bad fabrika.toml never touches the keys, and the other way round.
 // An answer is said once: a
 // save that leaves the text as it was says nothing. A page never reads a file; the host sends
@@ -63,7 +78,7 @@ const Setting = Data.taggedEnum<SettingOf>();
 export const settingsFolder = (launch: Launch, userHome: string): string =>
   launch.kind === "owner" ? join(userHome, ".fabrika") : launch.home;
 
-/** How long a burst of events from one save is waited out, in ms: an editor's write and rename are one save. */
+/** How long to collect hints from the first one, in ms: an editor's write and rename are one save. */
 const SETTLE_MS = 50;
 
 /** How often the file itself is looked at, so a save is heard when the OS sends no event. */
@@ -71,6 +86,17 @@ const POLL = Duration.seconds(1);
 
 /** How a save was heard: the OS watch told us, or the poll found it. */
 type Heard = "watch" | "poll";
+
+/** Collect one fixed window of hints, keeping whether the watch heard the save. */
+const settle = (duration: Duration.Input) =>
+  Stream.aggregateWithin(
+    Sink.fold<Heard, Heard>(
+      () => "poll",
+      () => true,
+      (by, hint) => Effect.succeed(by === "watch" || hint === "watch" ? "watch" : "poll"),
+    ),
+    Schedule.spaced(duration),
+  );
 
 /**
  * Every answer for the file `name` in `folder`: one at once, then one each time a save
@@ -141,7 +167,7 @@ export const settingsFile = <A>(
         Stream.as("poll" as const),
       );
       const saves = Stream.merge(heard, polled).pipe(
-        Stream.debounce(`${SETTLE_MS} millis`),
+        settle(`${SETTLE_MS} millis`),
         Stream.mapEffect((by) => Effect.map(text, (said) => ({ by, said }))),
       );
       const first = Stream.fromEffect(Effect.map(text, (said) => ({ by: "start" as const, said })));
