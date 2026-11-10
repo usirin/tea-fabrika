@@ -64,7 +64,11 @@ const Input = Schema.Struct({
   ).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
   after: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 25 })),
   by: Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String }),
-});
+}).check(
+  // A lone surrogate is repaired differently by workerd's SQLite (three U+FFFD) and node:sqlite (one).
+  // A finding records it; this law compares well-formed text.
+  Schema.makeFilter((input) => !/\\ud[89a-f][0-9a-f]{2}/i.test(JSON.stringify(input))),
+);
 
 const options = { arbitrary: { seed: 119120, runs: 30 } };
 let sequence = 0;
@@ -154,7 +158,6 @@ for (const kind of ["node", "wire"] as const) {
           const result = yield* exercise(actual);
           expect(result).toEqual(yield* exercise(oracle));
           expect(result.write).toEqual({ _tag: "written" });
-          // SQLite normalizes lone UTF-16 surrogates; compare full rows with its answer above.
           expect(result.read).toMatchObject({
             spans: rows.slice(input.after).map((r) => ({ spanId: r.span.spanId })),
             after: Math.max(input.after, rows.length),
