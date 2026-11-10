@@ -5,15 +5,79 @@ import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with {type: "json"};
 
 type Root = Parameters<ReturnType<stylelint.Rule>>[0];
+type CssNode = Root | Root["nodes"][number];
 type Declaration = Extract<Root["nodes"][number], {type: "decl"}>;
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 export const WINDOW = "apps/fabrika/src/window/window.css";
 export const tokens = new Map(names.tokens.map(({name, owner}) => [name, owner]));
 export const steps = new Set(names.steps);
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
-export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
-const place = (decl: Declaration) =>
-	`${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`;
+export const file = (decl: CssNode) => relative(process.cwd(), decl.source?.input.file ?? "");
+const place = (decl: CssNode) =>
+	decl.type === "decl"
+		? `${file(decl)} ${decl.parent?.type === "rule" ? decl.parent.selector.replace(/\s+/g, " ").trim() : ""} { ${decl.prop} }`
+		: `${file(decl)} { ${decl.type} }`;
+
+const layerRanks = ["desk", "sheet", "float", "popover", "palette", "tooltip"] as const;
+// CSS Syntax's escaped code points: up to six hex digits and one optional space.
+export const cssName = (name: string) =>
+	name.replace(/\\(?:([\da-f]{1,6})(?:\r\n|[ \t\r\n\f])?|([^\r\n\f]))/gi, (_, hex, char) => {
+		if (hex === undefined) return char;
+		const point = Number.parseInt(hex, 16);
+		return String.fromCodePoint(
+			point === 0 || point > 0x10ffff || (point >= 0xd800 && point <= 0xdfff) ? 0xfffd : point,
+		);
+	});
+export const layerToken = (name: string) => layerRanks.some((rank) => name === `--layer-${rank}`);
+export const layerValue = (value: string): boolean => {
+	const nodes = valueParser(value).nodes.filter(
+		(node) => node.type !== "space" && node.type !== "comment",
+	);
+	const one = nodes[0];
+	if (nodes.length !== 1 || one?.type !== "function" || one.value !== "var") return false;
+	const args = one.nodes.filter((node) => node.type !== "space" && node.type !== "comment");
+	return args.length === 1 && args[0]?.type === "word" && layerToken(args[0].value);
+};
+
+/** A copied block name or incomplete rank table grants no token permission. */
+export const frameLayerBlock = (root: Root) => {
+	const blocks: Extract<Root["nodes"][number], {type: "atrule"}>[] = [];
+	root.walkAtRules("layer", (node) => {
+		if (node.params.trim() === "fabrika-frame-layers") blocks.push(node);
+	});
+	const block = blocks[0];
+	if (file(root) !== WINDOW || blocks.length !== 1 || block?.parent !== root) return null;
+	const definitions: Declaration[] = [];
+	root.walkDecls((decl) => {
+		if (cssName(decl.prop).startsWith("--layer-")) definitions.push(decl);
+	});
+	if (definitions.length !== layerRanks.length) return null;
+	for (const [rank, name] of layerRanks.entries()) {
+		const found = definitions.filter((decl) => cssName(decl.prop) === `--layer-${name}`);
+		const decl = found[0];
+		if (
+			found.length !== 1 ||
+			decl?.value !== String(rank) ||
+			decl.important ||
+			decl.parent?.type !== "rule" ||
+			decl.parent.selector !== ":root" ||
+			decl.parent.parent !== block
+		)
+			return null;
+	}
+	return block;
+};
+
+export const inFrameLayerBlock = (decl: Declaration): boolean => {
+	const block = frameLayerBlock(decl.root());
+	if (block === null) return false;
+	let parent: Root["parent"] | Declaration["parent"] = decl.parent;
+	while (parent !== undefined) {
+		if (parent === block) return true;
+		parent = parent.parent;
+	}
+	return false;
+};
 
 export const generated = (decl: Declaration) => {
 	if (file(decl) !== TOKENS) return false;
@@ -57,7 +121,7 @@ export const media = (decl: Declaration, feature: string, value: string) => {
 	return false;
 };
 
-type Fire = (decl: Declaration, detail: string, debt?: string) => void;
+type Fire = (decl: CssNode, detail: string, debt?: string) => void;
 type Check = (root: Root, fire: Fire) => void;
 type Options = {known: readonly string[]};
 

@@ -34,6 +34,7 @@ const RULES = [
 	{law: 24, name: "part-token-owner", lines: [1, 2]},
 	{law: 25, name: "motion-under-guard", lines: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]},
 	{law: 26, name: "font-size-from-scale", lines: [1, 2, 3, 4, 5, 6, 7]},
+	{law: 31, name: "frame-layers", lines: [1, 2, 3, 4, 5, 6]},
 ] as const;
 const temps: string[] = [];
 afterAll(() => {
@@ -80,6 +81,17 @@ const lint = async (file: string, codeFilename?: string) => {
 	).toEqual([]);
 	return result.warnings;
 };
+// Unrelated token/color fixtures at the real frame path still need its required rank table.
+// Append it so each fixture keeps its original diagnostic lines.
+const lintInFrame = (file: string) =>
+	lint(
+		write(
+			temp(),
+			"window.css",
+			`${readFileSync(file, "utf8")}\n${readFileSync(fixture("good", "frame-layers"), "utf8")}`,
+		),
+		WINDOW,
+	);
 
 describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 	it.each(RULES)("law $law: $name", async ({name, lines}) => {
@@ -95,7 +107,11 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 		expect([...new Set(fires.map((warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
 		expect(fires.every((warning) => warning.severity === "error")).toBe(true);
 		const good = fixture("good", name);
-		expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
+		expect(
+			name === "part-token-owner"
+				? await lintInFrame(good)
+				: await lint(good, name === "frame-layers" ? WINDOW : undefined),
+		).toEqual([]);
 	});
 
 	it("law 21 reads only var() past comments and spaces and names the unknown token", async () => {
@@ -190,7 +206,7 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 				"pipe.css",
 				`[data-pipe=${name}] { --tile-wash: #fff; --tile-wash-on: #fff; --tile-edge-hover: #fff; --tile-edge-on: #fff; --tile-edge-loud: #fff; }\n`,
 			);
-			expect(await lint(file, WINDOW)).toEqual([]);
+			expect(await lintInFrame(file)).toEqual([]);
 			const warnings = await lint(file, "programs/css-plant/window.css");
 			expect(warnings.map(({rule}) => rule)).toContain("fabrika/no-raw-color");
 			const nested = write(
@@ -198,11 +214,138 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 				"nested-pipe.css",
 				`.outer [data-pipe=${name}] { --tile-wash: #fff; }\n`,
 			);
-			expect(await lint(nested, WINDOW)).toEqual([
+			expect(await lintInFrame(nested)).toEqual([
 				expect.objectContaining({rule: "fabrika/no-raw-color"}),
 			]);
 		},
 	);
+});
+
+describe("T204 PR 1 frame layer policy through the real root config", () => {
+	const check = async (css: string, path = WINDOW) => {
+		const file = write(temp(), "layers.css", css);
+		return lint(file, path);
+	};
+	const allowed = () => readFileSync(fixture("good", "frame-layers"), "utf8");
+	// pinned: review 3 found escaped definitions could override every rank inside a valid block.
+	it.each(["desk", "sheet", "float", "popover", "palette", "tooltip"])(
+		"pinned: review 3 refuses an escaped %s rank override inside the approved block",
+		async (rank) => {
+			const plant = allowed().replace(
+				"@layer fabrika-frame-layers {",
+				String.raw`@layer fabrika-frame-layers { :root { --l\61yer-${rank}: 99; }`,
+			);
+			expect((await check(plant)).map((warning) => warning.rule)).toContain("fabrika/frame-layers");
+		},
+	);
+	// format: escape spelling cannot change a rank's fixed value or uniqueness.
+	it.each(["desk", "sheet", "float", "popover", "palette", "tooltip"])(
+		"format: an escaped %s definition keeps its one approved rank",
+		async (rank) => {
+			expect(
+				await check(allowed().replace(`--layer-${rank}:`, String.raw`--l\61yer-${rank}:`)),
+			).toEqual([]);
+		},
+	);
+	// pinned: review 2 found CSS escapes and @property could change the frame's ranks.
+	it.each([
+		String.raw`.a { z\2d index: 99; }`,
+		String.raw`.a { z\00002dindex: 99; }`,
+		String.raw`.a { \7a-index: 99; }`,
+		String.raw`.a { --layer-\70 alette: 99; }`,
+		String.raw`.a { --manti-dialog-z\2d index: 99; }`,
+		'@property --layer-palette { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-dialog-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-popover-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		'@property --manti-tooltip-z-index { syntax: "<integer>"; inherits: false; initial-value: 99; }',
+		String.raw`@property --layer-\70 alette { syntax: "<integer>"; inherits: false; initial-value: 99; }`,
+	])("pinned: review 2 layer spelling bypass is refused: %s", async (plant) => {
+		for (const path of [WINDOW, "programs/ticket/window.css"]) {
+			const warnings = await check(`${allowed()}\n${plant}`, path);
+			expect(warnings.filter((warning) => warning.rule === "fabrika/frame-layers")).toContainEqual(
+				expect.objectContaining({line: allowed().split("\n").length + 1}),
+			);
+		}
+	});
+	// format: equivalent spellings of a valid frame declaration and unrelated registrations
+	// keep their meaning; decoding a name grants no new permission outside the frame.
+	it("format: CSS escapes keep valid named frame values and unrelated @property registrations", async () => {
+		expect(await check(allowed().replace("z-index:", String.raw`z\2d index:`))).toEqual([]);
+		expect(
+			await check(
+				'@property --tile-size { syntax: "<integer>"; inherits: false; initial-value: 1; }',
+				"programs/ticket/window.css",
+			),
+		).toEqual([]);
+	});
+	// format: L1 requires this exact table even if no declaration currently uses a layer token.
+	it("format: window.css must contain a complete frame rank table even without layer choices", async () => {
+		for (const css of [
+			"",
+			".workspace { position: relative; }",
+			"@layer fabrika-frame-layers;",
+			"@layer fabrika-frame-layers {}",
+		]) {
+			const warnings = await check(css);
+			expect(
+				warnings.filter((w) => w.rule === "fabrika/frame-layers"),
+				css,
+			).not.toEqual([]);
+			expect(await check(css, "programs/ticket/window.css")).toEqual(
+				css.includes("@layer") ? [expect.objectContaining({rule: "fabrika/frame-layers"})] : [],
+			);
+		}
+	});
+	it("format: L1 grants layer tokens only to the checked frame block at its exact path", async () => {
+		expect(await check(allowed())).toEqual([]);
+		for (const path of [
+			"programs/ticket/window.css",
+			"apps/other/window.css",
+			"packages/frame/window.css",
+		]) {
+			const warnings = await check(allowed(), path);
+			expect(
+				warnings.some((w) => w.rule === "fabrika/frame-layers"),
+				path,
+			).toBe(true);
+		}
+	});
+	it("format: changed, duplicate, missing or nested rank tables grant no permission", async () => {
+		for (const css of [
+			allowed().replace("--layer-sheet: 1", "--layer-sheet: 99"),
+			allowed().replace("--layer-sheet: 1;", ""),
+			allowed().replace("--layer-sheet: 1;", "--layer-sheet: 1; --layer-sheet: 1;"),
+			`${allowed()}\n${allowed()}`,
+			`@media (min-width: 1px) { ${allowed()} }`,
+		]) {
+			const warnings = await check(css);
+			expect(warnings.some((w) => w.rule === "fabrika/frame-layers")).toBe(true);
+		}
+	});
+	it("format: raw ranks, fallbacks, calculations and unknown names are forbidden inside the frame too", async () => {
+		for (const value of [
+			"99",
+			"var(--layer-palette, 99)",
+			"calc(var(--layer-palette) + 1)",
+			"var(--layer-nope)",
+			"var(--layer-palette) !important",
+		]) {
+			const warnings = await check(
+				allowed().replace("z-index: var(--layer-desk)", `z-index: ${value}`),
+			);
+			expect(
+				warnings.some((w) => w.rule === "fabrika/frame-layers"),
+				value,
+			).toBe(true);
+		}
+	});
+	it("format: a local declaration cannot turn a reserved token into a global exemption", async () => {
+		const warnings = await check(
+			`${allowed()}\n.outside { --layer-palette: 4; order: var(--layer-palette); }`,
+		);
+		expect(warnings.map((w) => w.rule)).toContain("fabrika/token-exists");
+		expect(warnings.map((w) => w.rule)).toContain("fabrika/frame-layers");
+	});
 });
 
 const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.Config) => {

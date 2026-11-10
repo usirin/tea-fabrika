@@ -37,6 +37,7 @@ const fires = (path: string, code: string): readonly number[] => {
 
 interface Plant {
 	readonly code: string;
+	readonly label?: string;
 	/** The file's name, for a rule that looks at it. */
 	readonly file?: string;
 	readonly prelude: readonly string[];
@@ -46,6 +47,157 @@ interface Plant {
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
 
 const PLANTS: readonly Plant[] = [
+	{
+		code: "fabrika(no-layer-style)",
+		label: "pinned: review 4 String.raw value expressions cannot hide fixed layer names",
+		file: "layer-raw-values.ts",
+		prelude: ["declare const el: HTMLElement;", "declare const rank: number;"],
+		// Review 4: ten names x three spellings x two values x two writes = 120 refusals.
+		// Ordinary templates are controls. Safe raw writes must keep passing too.
+		lines: [
+			...[
+				"z-index",
+				...["desk", "sheet", "float", "popover", "palette", "tooltip"].map(
+					(layer) => `--layer-${layer}`,
+				),
+				...["dialog", "popover", "tooltip"].map((part) => `--manti-${part}-z-index`),
+			].flatMap((name) => [
+				...[name, name.replace("-", String.raw`\2d `), `${name}/**/`].flatMap((spelling) =>
+					["99", "rank"].flatMap((value) => {
+						const css = `String.raw\`${spelling}:\${${value}}\``;
+						return [
+							[`el.style.cssText = ${css};`, true] as const,
+							[`el.setAttribute("style", ${css});`, true] as const,
+						];
+					}),
+				),
+				[`el.style.cssText = \`${name}:\${rank}\`;`, true] as const,
+				[`el.setAttribute("style", \`${name}:\${rank}\`);`, true] as const,
+			]),
+			...["opacity", "--tile-wash", "--manti-dialog-radius"].flatMap((name) =>
+				[
+					name,
+					name.replace(/^[a-z-]/, (first) => `\\${first.charCodeAt(0).toString(16)} `),
+					`${name}/**/`,
+				].flatMap((spelling) =>
+					["99", "rank"].flatMap((value) => {
+						const css = `String.raw\`${spelling}:\${${value}}\``;
+						return [
+							[`el.style.cssText = ${css};`, false] as const,
+							[`el.setAttribute("style", ${css});`, false] as const,
+						];
+					}),
+				),
+			),
+		],
+	},
+	{
+		code: "fabrika(no-layer-style)",
+		label: "pinned: review 3 CSS escapes and comments in both inline declaration routes",
+		file: "layer-css-spellings.ts",
+		prelude: ["declare const el: HTMLElement;"],
+		// Review 3's full matrix: ten names, two spellings, two write routes = forty plants.
+		lines: [
+			"z-index",
+			...["desk", "sheet", "float", "popover", "palette", "tooltip"].map(
+				(rank) => `--layer-${rank}`,
+			),
+			...["dialog", "popover", "tooltip"].map((part) => `--manti-${part}-z-index`),
+		].flatMap((name) =>
+			[name.replace("-", String.raw`\2d `), `${name}/**/`].flatMap((spelling) => {
+				const value = JSON.stringify(`${spelling}:99`);
+				return [
+					[`el.style.cssText = ${value};`, true] as const,
+					[`el.setAttribute("style", ${value});`, true] as const,
+				];
+			}),
+		),
+	},
+	{
+		code: "fabrika(no-layer-style)",
+		label: "pinned: review 3 static String.raw bypasses in all seven write routes",
+		file: "layer-raw.tsx",
+		prelude: ["declare const el: HTMLElement;"],
+		lines: [
+			["const style = {[String.raw`zIndex`]: 99};", true],
+			['el.style[String.raw`zIndex`] = "99";', true],
+			['el.style.setProperty(String.raw`z-index`, "99");', true],
+			['el.style[String.raw`setProperty`]("--layer-palette", "99");', true],
+			["el.style.cssText = String.raw`z-index:99`;", true],
+			['el.setAttribute("style", String.raw`z-index:99`);', true],
+			['el[String.raw`setAttribute`]("style", "--manti-dialog-z-index:99");', true],
+			// format: raw templates retain backslashes, and unrelated names and reads stay valid.
+			["const safe = {[String.raw`opacity`]: 1};", false],
+			['el.style[String.raw`opacity`] = "1";', false],
+			['el.style.setProperty(String.raw`--tile-wash`, "transparent");', false],
+			['el.style[String.raw`setProperty`]("opacity", "1");', false],
+			["el.style.cssText = String.raw`opacity/**/:1`;", false],
+			['el.setAttribute("style", String.raw`opacity:1`);', false],
+			['el[String.raw`setAttribute`]("style", "opacity:1");', false],
+			["const read = el.style[String.raw`zIndex`];", false],
+			["const rawName = {[String.raw`z\\u0049ndex`]: 1};", false],
+		],
+	},
+	{
+		code: "fabrika(no-layer-style)",
+		label: "pinned: review 2 static layer spelling bypasses",
+		file: "layer-plant.tsx",
+		prelude: ["declare const el: HTMLElement;"],
+		lines: [
+			["const view = <div style={{zIndex: 99}} />;", true],
+			['const style = {"zIndex": 99};', true],
+			['el.style.zIndex = "99";', true],
+			['el.style["zIndex"] = "99";', true],
+			['el.style.setProperty("z-index", "99");', true],
+			['el.style.setProperty("--layer-palette", "99");', true],
+			['const bypass = {"--manti-dialog-z-index": 99};', true],
+			['el.style.cssText = "z-index:99";', true],
+			['el.setAttribute("style", "z-index:99");', true],
+			["Object.assign(el.style, {zIndex: 99});", true],
+			["const safe = <div style={{opacity: 1}} />;", false],
+			['const name = "zIndex";', false],
+			["const read = el.style.zIndex;", false],
+			['el.style.setProperty("--tile-wash", "transparent");', false],
+			// pinned: review 2 found equivalent static spellings escaping the real layer rule.
+			["const templateStyle = {[`zIndex`]: 99};", true],
+			['const joinedStyle = {["z" + "Index"]: 99};', true],
+			['el.style[`zIndex`] = "99";', true],
+			['el.style["z" + "Index"] = "99";', true],
+			['el.style.setProperty(`z-index`, "99");', true],
+			['el.style.setProperty(`--layer-palette`, "99");', true],
+			['el.style.setProperty(`--manti-dialog-z-index`, "99");', true],
+			['el.style.setProperty(`--manti-popover-z-index`, "99");', true],
+			['el.style.setProperty(`--manti-tooltip-z-index`, "99");', true],
+			["el.style.cssText = `z-index:99`;", true],
+			['el.setAttribute("style", `z-index:99`);', true],
+			['el.style[`setProperty`]("z-index", "99");', true],
+			['el[`setAttribute`]("style", "z-index:99");', true],
+			['el.style.setProperty("Z-INDEX", "99");', true],
+			['el.setAttribute("STYLE", "Z-INDEX:99");', true],
+			["el.style[`cssText`] = `--layer-palette:99`;", true],
+			[`el.style.setProperty(\`z-\${"index"}\`, "99");`, true],
+			['el["set" + "Attribute"]("style", "z-" + "index:99");', true],
+			['el.style.setProperty(`--tile-wash`, "transparent");', false],
+			["el.setAttribute(`STYLE`, `opacity:1`);", false],
+			["const templateRead = el.style[`zIndex`];", false],
+			['const namedProperty = (zIndex: string) => el.style.setProperty(zIndex, "99");', true],
+			['const namedAttribute = (style: string) => el.setAttribute(style, "z-index:99");', true],
+			['const namedCssText = (cssText: string) => { el.style[cssText] = "z-index:99"; };', true],
+			[`const dynamicCss = (rank: number) => { el.style.cssText = \`z-index:\${rank}\`; };`, true],
+			[
+				`const dynamicAttribute = (rank: number) => el.setAttribute(\`STYLE\`, \`z-index:\${rank}\`);`,
+				true,
+			],
+			[
+				`const dynamicLayer = (rank: number) => { el.style.cssText = \`--layer-palette:\${rank}\`; };`,
+				true,
+			],
+			[
+				`const dynamicManti = (rank: number) => el.setAttribute("style", \`--manti-tooltip-z-index:\${rank}\`);`,
+				true,
+			],
+		],
+	},
 	{
 		code: "fabrika(no-bare-tell)",
 		prelude: [
@@ -236,7 +388,7 @@ const PLANTS: readonly Plant[] = [
 ];
 
 describe("each rule refuses what it is there to refuse", () => {
-	it.each(PLANTS.map((p, i) => [p.code, p, i] as const))("%s", (_code, p, i) => {
+	it.each(PLANTS.map((p, i) => [p.label ?? p.code, p, i] as const))("%s", (_label, p, i) => {
 		const file = join(plant, `${i}-${p.file ?? "planted.ts"}`);
 		writeFileSync(file, `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`);
 		const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));

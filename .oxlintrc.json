@@ -260,6 +260,11 @@
 	},
 	"overrides": [
 		{
+			// Today's layer policy, plus the rule's plants. Design experiments keep their own CSS.
+			"files": ["apps/**", "packages/**", "programs/**", "oxlint-plugins/**"],
+			"rules": { "fabrika/no-layer-style": "error" }
+		},
+		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.
 			"files": ["**/*.test.ts"],

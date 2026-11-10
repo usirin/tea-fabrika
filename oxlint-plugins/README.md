@@ -1,5 +1,23 @@
 These lint rules are the `fabrika` plugin for oxlint, written in TypeScript. `index.ts` lists them, `match.ts` holds what they share, and `.oxlintrc.json` at the top of the repo turns each one on, with the reason for every path it leaves out. Why oxlint: [`docs/direction/oxlint-and-oxfmt.md`](../docs/direction/oxlint-and-oxfmt.md).
 
+T204 PR 1 adds `fabrika/frame-layers` to stylelint and `fabrika/no-layer-style` to oxlint.
+Today's app owns layer choices in one top-level `@layer fabrika-frame-layers` block,
+only in `apps/fabrika/src/window/window.css`. Its ranks are desk 0, sheet 1, float 2,
+popover 3, palette 4 and tooltip 5. Definitions, z-index uses and Manti overrides stay there.
+Uses accept one named token, with no fallback, calculation or `!important`.
+`token-exists` recognizes those names only in a complete, checked frame block.
+Inline object properties, DOM member writes, `setProperty`, literal `cssText` and
+literal style attributes cannot choose layers either. Reads and unrelated styles pass.
+Computed dynamic names and runtime CSS assembled by helpers need review; these rules see syntax.
+
+The real-plugin count is repeatable with `node experiments/240-layer-fire-counts.ts --audit`.
+Add `--assert-clean` after the product build. Raw reports go under ignored `runs/`, or `--out`.
+On the pinned base: four fires, all real, no false alarms, 0 of 4. They are the missing
+required rank table, `.pop` choosing 10, `.scrim` choosing 9 and `.tip` choosing 20 in
+today's window CSS. The completed tree has zero fires, matching experiment 240.
+Good fixtures have zero fires; the bad fixture has six. This is a small policy count,
+not a broad estimate of false alarms. The lead owns the experiment's public summary.
+
 ```sh
 pnpm lint                                   # runs lint.ts, then format.ts --check, then the code-graph checks
 node oxlint-plugins/lint.ts packages/x      # the same oxlint step on one folder

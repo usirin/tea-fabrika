@@ -1,0 +1,24 @@
+/* format: L1's complete table, including the reserved sheet and float ranks. */
+@layer fabrika-frame-layers {
+	:root {
+		--layer-desk: 0;
+		--layer-sheet: 1;
+		--layer-float: 2;
+		--layer-popover: 3;
+		--layer-palette: 4;
+		--layer-tooltip: 5;
+	}
+	.workspace { z-index: var(--layer-desk); }
+	.pop { z-index: var(--layer-popover); }
+	.scrim, .pop.palette { z-index: var(--layer-palette); }
+	.tip { z-index: var(--layer-tooltip); }
+	[data-scope="dialog"][data-part="backdrop"],
+	[data-scope="dialog"][data-part="positioner"] { --manti-dialog-z-index: var(--layer-palette); }
+	[data-scope="popover"][data-part="positioner"] { --manti-popover-z-index: var(--layer-popover); }
+	[data-scope="tooltip"][data-part="positioner"] { --manti-tooltip-z-index: var(--layer-tooltip); }
+	.nested { & .child { z-index: var(/* allowed token comment */ --layer-popover); } }
+	/* format: an escaped CSS name keeps the same approved frame value. */
+	.escaped { z\2d index/**/: var(--layer-tooltip); }
+}
+/* z-index: 99; */
+.label { content: "z-index: 99; --layer-sheet: 99"; }

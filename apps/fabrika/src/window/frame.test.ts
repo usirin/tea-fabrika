@@ -557,9 +557,9 @@ describe("keys while something lies over the desk", () => {
 		expect(keyGoesTo({kind: "jobs"}, "J", PREFIX, {armed: true, asking: false})).toBe("desk");
 	});
 
-	it("keeps every key in the palette, a modal dialog, even Ctrl-B", () => {
-		expect(keyGoesTo(palette, PREFIX, PREFIX, quiet)).toBe("over");
-		expect(keyGoesTo(palette, "a", PREFIX, {armed: true, asking: true})).toBe("over");
+	it("pinned: L3's palette prefix bug, the desk must still receive its escape route", () => {
+		expect(keyGoesTo(palette, PREFIX, PREFIX, quiet)).toBe("desk");
+		expect(keyGoesTo(palette, "a", PREFIX, {armed: true, asking: true})).toBe("desk");
 	});
 });
 
@@ -1097,7 +1097,8 @@ describe("info mode", () => {
 		expect(stepped).toEqual([{type: "info", focus: INFO.info}]);
 	});
 
-	it("K17: the keys button names its dialog and opens it on a click", () => {
+	// Review 2 found this real button lost its known click source before recording.
+	it("pinned: K17 keys button names its dialog and records its click source", () => {
 		const html = line(FRAME);
 		const button = /<button[^>]*data-item="keys"[^>]*>/.exec(html)?.[0];
 		expect(button).toContain('aria-haspopup="dialog"');
@@ -1106,7 +1107,7 @@ describe("info mode", () => {
 		const key = itemsOf(FRAME, (m) => stepped.push(m))[1];
 		if (typeof key?.onClick !== "function") throw new Error("keys has no click handler");
 		key.onClick();
-		expect(stepped).toEqual([{type: "show", what: "keys"}]);
+		expect(stepped).toEqual([{type: "show", what: "keys", via: {_tag: "click"}}]);
 	});
 
 	// M2: the mode is one value. Never on, on with what it explains, or off after it was on: an

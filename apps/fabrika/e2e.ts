@@ -3003,6 +3003,215 @@ const focusShots = async () => {
 	}
 };
 
+/**
+ * scenario: T204 PR 1 needs Chromium focus, hit testing and the real host's held-key answers.
+ * Run on a Claude agent with --layers. Made up content: SEVEN's ask and the unfinished `say` line.
+ * Ticket 203 owns the workspace-inert checks. This stage checks the finished layer flow above it.
+ */
+const layersStage = async () => {
+	for (const layout of LAYOUTS) {
+		const own = await mkdtemp(join(tmpdir(), "fl-"));
+		await seedAsks(own);
+		// Exercise the configured focus-cycle binding rather than hard-coding F6 as a way out.
+		await writeFile(join(own, "keybindings.toml"), 'tezgah."focus --to next" = "ctrl+g"\n');
+		const app = await launch(own);
+		try {
+			await app.evaluate(({BrowserWindow, screen}) => {
+				for (const window of BrowserWindow.getAllWindows()) {
+					window.setOpacity(0);
+					window.setIgnoreMouseEvents(true);
+					const area = screen.getPrimaryDisplay().workArea;
+					window.setPosition(area.x, area.y);
+					window.setContentSize(1440, 900);
+				}
+			});
+			const page = await app.firstWindow();
+			await prompted(page, "t1");
+			const ids = await arrange(page, layout, "t1");
+			await app.evaluate(() => {
+				const {EventEmitter} = process.getBuiltinModule("node:events");
+				const emit = EventEmitter.prototype.emit;
+				const reports: unknown[] = [];
+				EventEmitter.prototype.emit = function (event: string | symbol, ...args: unknown[]) {
+					const data =
+						typeof args[0] === "object" && args[0] !== null ? Reflect.get(args[0], "data") : null;
+					if (
+						event === "message" &&
+						typeof data === "object" &&
+						data !== null &&
+						Reflect.get(data, "type") === "layer"
+					)
+						reports.push(data);
+					return Reflect.apply(emit, this, [event, ...args]);
+				};
+				Object.assign(globalThis, {layerTestReports: reports});
+			});
+			if (layout === "small") {
+				const cdp = await page.context().newCDPSession(page);
+				await cdp.send("Emulation.setDeviceMetricsOverride", {
+					width: 1024,
+					height: 700,
+					deviceScaleFactor: 0,
+					mobile: false,
+				});
+			}
+			await focusOn(page, "t1");
+			await typeLine(page, "t1", "say --text unfinished-layer-fixture");
+			const before = await screen(page, "t1");
+			const status = async (word: string) => {
+				await until(
+					`layer status ${word}`,
+					() => page.locator(".bottomline").innerText(),
+					(words) => words.includes(word) && /esc closes it/i.test(words),
+				);
+				const bounds = await page.locator(".bottomline").evaluate((line) => {
+					const children = [...line.querySelectorAll(".left, .right")];
+					return children.every((child) => {
+						const rect = child.getBoundingClientRect();
+						return (
+							rect.left >= 0 &&
+							rect.right <= innerWidth &&
+							rect.top >= 0 &&
+							rect.bottom <= innerHeight &&
+							child.scrollWidth <= child.clientWidth
+						);
+					});
+				});
+				check(`${layout}: the owner word and exit fit`, bounds);
+			};
+			const capture = async (state: string) => {
+				const name = layout === "2x2" ? "grid" : layout === "small" ? "small-1024x700" : layout;
+				for (const look of LOOKS) {
+					await lookIs(app, page, look);
+					const out = join(shots, "apps/fabrika/docs/layers");
+					await mkdir(out, {recursive: true});
+					const file = join(out, `${state}-${name}-${look}.png`);
+					await page.screenshot({path: file});
+					saved.push(file);
+				}
+			};
+			await prefixed(page, "a");
+			await page.locator("#pop-asks").waitFor();
+			await status("ASKS");
+			check(`${layout}: asks owns actual focus`, (await overHolds(page)) === "pop-asks");
+			await capture("asks-open");
+			await page.keyboard.press("Meta+k");
+			const palette = page.getByRole("dialog", {name: "Commands"});
+			await palette.waitFor();
+			await status("PALETTE");
+			check(`${layout}: palette replaces asks`, (await page.locator("#pop-asks").count()) === 0);
+			const input = palette.getByRole("combobox");
+			const hit = await input.evaluate((el) => {
+				const box = el.getBoundingClientRect();
+				return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === el;
+			});
+			check(`${layout}: the scrim does not intercept palette hits`, hit);
+			await page.keyboard.type("zo");
+			check(`${layout}: typed letters go to the palette`, (await input.inputValue()) === "zo");
+			await capture("palette-open");
+			await page.keyboard.press("Control+b");
+			await until(
+				"prefix beneath the palette",
+				() => page.locator(".bottomline").innerText(),
+				(words) => words.includes("PREFIX"),
+			);
+			await capture("prefix-under-palette");
+			// One Escape closes only the palette. The next clears the pending prefix.
+			await page.keyboard.press("Escape");
+			await gone(page, "pop-palette");
+			check(
+				`${layout}: a replaced asks menu is not resurrected`,
+				(await page.locator("#pop-asks").count()) === 0,
+			);
+			await page.keyboard.press("Escape");
+			check(`${layout}: focus returns to the opener`, (await focusedIn(page)) === "t1");
+			check(
+				`${layout}: terminal text survives overlay input`,
+				(await screen(page, "t1")) === before,
+			);
+			// All three presses happen in one renderer turn, before a host answer can arrive.
+			await page.keyboard.press("Meta+k");
+			await palette.waitFor();
+			await page.evaluate(() => {
+				const target = document.activeElement ?? document.body;
+				for (const press of [
+					{key: "b", code: "KeyB", ctrlKey: true},
+					{key: "a", code: "KeyA"},
+					{key: "j", code: "KeyJ"},
+				]) {
+					target.dispatchEvent(
+						new KeyboardEvent("keydown", {...press, bubbles: true, cancelable: true}),
+					);
+				}
+			});
+			await page.locator("#pop-asks").waitFor();
+			await status("ASKS");
+			check(
+				`${layout}: replay cannot leak a held menu letter into tsh`,
+				(await screen(page, "t1")) === before,
+			);
+			await page.keyboard.press("Escape");
+			await gone(page, "pop-asks");
+			await prefixed(page, "B");
+			await prefixed(page, "a");
+			await page.locator("#pop-asks").waitFor();
+			await status("ASKS");
+			await capture("asks-bars-hidden");
+			await page.keyboard.press("Escape");
+			await gone(page, "pop-asks");
+			await prefixed(page, "B");
+			// scenario: wait for the bars command to finish. Cmd-K uses a direct host run;
+			// without this wait it can overtake the held B, whose later reply closes the palette.
+			await page.locator(".desk:not(.bare) .topbar").waitFor();
+			await page.keyboard.press("Meta+k");
+			await palette.waitFor();
+			await page.keyboard.press("Control+g");
+			await gone(page, "pop-palette");
+			await focusIs(page, ids[1] ?? "t1");
+			check(
+				`${layout}: configured focus exit enters the workspace after dismissal`,
+				(await focusedIn(page)) === (ids[1] ?? "t1"),
+			);
+			await page.mouse.move(1, 1);
+			await page.locator('[data-item="info"]').hover();
+			await page.locator(".tip").waitFor();
+			await page.mouse.move(1, 1);
+			await page.locator(".tip").waitFor({state: "hidden"});
+			const reports: {id: string; change: {_tag: string; layer: {_tag: string}}}[] =
+				await app.evaluate(() => Reflect.get(globalThis, "layerTestReports"));
+			check(
+				`${layout}: actual outgoing reports include tooltip open and close`,
+				["open", "close"].every((event) =>
+					reports.some(
+						(report) => report.change._tag === event && report.change.layer._tag === "tooltip",
+					),
+				),
+			);
+			const recorded = await until(
+				"the host durably records delivered layer reports",
+				() =>
+					Effect.runPromise(
+						Effect.gen(function* () {
+							const ledger = yield* Ledger;
+							return yield* ledger.read(0, 10000);
+						}).pipe(Effect.provide(layerSqliteSync({path: join(own, "ledger.sqlite")}))),
+					),
+				(rows) => reports.every((report) => rows.some((row) => row.id === report.id)),
+			);
+			const lifecycle = recorded.filter((row) => reports.some((report) => report.id === row.id));
+			check(
+				`${layout}: lifecycle rows contain no typed content`,
+				!JSON.stringify({reports, lifecycle}).includes("unfinished-layer-fixture"),
+			);
+		} finally {
+			await app.close().catch(() => {});
+			const pid = await hostPid(own);
+			if (pid !== null) await stop(pid);
+			await rm(own, {recursive: true, force: true});
+		}
+	}
+};
+
 /** Where the approved trees are kept: `<state>-<layout>.aria.yml`. */
 const ARIA = join(here, "aria");
 
@@ -3317,7 +3526,8 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) await keysLook();
+if (process.argv.includes("--layers")) await layersStage();
+else if (process.argv.includes("--keys")) await keysLook();
 else if (process.argv.includes("--drag")) await borderDrag();
 else if (process.argv.includes("--tiles")) await tilesLook();
 else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();

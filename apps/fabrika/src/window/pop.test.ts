@@ -1,6 +1,8 @@
-import {createElement} from "react";
+import * as fc from "fast-check";
+import {createElement, type DependencyList, type EffectCallback} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
+import type {LayerChange} from "./layers.ts";
 import {
 	capOf,
 	capsOf,
@@ -16,7 +18,145 @@ import {
 	textOf,
 	tipWait,
 } from "./pop.ts";
-import {Menu, type MenuProps, Palette, type PaletteProps, Panel} from "./pop.tsx";
+import {Menu, type MenuProps, Palette, type PaletteProps, Panel, useTip} from "./pop.tsx";
+
+// A hook boundary for useTip's real event handlers and effects. Other component tests keep
+// React's own hooks. Browser rectangles and timers are controlled; tooltip logic is real.
+const hook = vi.hoisted(() => ({
+	active: false,
+	at: 0,
+	values: [] as unknown[],
+	effects: new Map<number, {deps: DependencyList | undefined; stop?: () => void}>(),
+	pending: [] as (() => void)[],
+	reports: [] as LayerChange[],
+}));
+vi.mock("react", async (original) => {
+	const real = await original<typeof import("react")>();
+	const effect = (callback: EffectCallback, deps?: DependencyList) => {
+		const at = hook.at++;
+		const previous = hook.effects.get(at);
+		if (
+			previous !== undefined &&
+			deps !== undefined &&
+			previous.deps !== undefined &&
+			deps.length === previous.deps.length &&
+			deps.every((value, index) => Object.is(value, previous.deps?.[index]))
+		)
+			return;
+		hook.pending.push(() => {
+			previous?.stop?.();
+			const stop = callback();
+			hook.effects.set(at, {deps, ...(typeof stop === "function" ? {stop} : {})});
+		});
+	};
+	return {
+		...real,
+		useContext: (...args: Parameters<typeof real.useContext>) =>
+			hook.active ? (change: LayerChange) => hook.reports.push(change) : real.useContext(...args),
+		useEffectEvent: (callback: () => void) =>
+			hook.active ? callback : real.useEffectEvent(callback),
+		useState: (initial: unknown) => {
+			if (!hook.active) return real.useState(initial);
+			const at = hook.at++;
+			if (!(at in hook.values))
+				hook.values[at] = typeof initial === "function" ? initial() : initial;
+			return [
+				hook.values[at],
+				(value: unknown) => {
+					hook.values[at] = typeof value === "function" ? value(hook.values[at]) : value;
+				},
+			];
+		},
+		useRef: (initial: unknown) => {
+			if (!hook.active) return real.useRef(initial);
+			const at = hook.at++;
+			if (!(at in hook.values)) hook.values[at] = {current: initial};
+			return hook.values[at];
+		},
+		useEffect: (...args: Parameters<typeof real.useEffect>) =>
+			hook.active ? effect(...args) : real.useEffect(...args),
+		useLayoutEffect: (...args: Parameters<typeof real.useLayoutEffect>) =>
+			hook.active ? effect(...args) : real.useLayoutEffect(...args),
+	};
+});
+vi.mock("react-dom", async (original) => {
+	const real = await original<typeof import("react-dom")>();
+	return {
+		...real,
+		createPortal: (...args: Parameters<typeof real.createPortal>) =>
+			hook.active ? args[0] : real.createPortal(...args),
+	};
+});
+
+describe("today's tooltip opening sources", () => {
+	// Plant: useTip currently hard-codes via: null after both real entry handlers.
+	it.each(["pointer", "focus"] as const)("%s entry records its known tooltip source", (entry) => {
+		fc.assert(
+			fc.property(fc.string(), fc.boolean(), fc.nat({max: 10000}), (name, typed, at) => {
+				const sources: unknown[] = [];
+				for (const mode of [entry, entry === "pointer" ? "focus" : "pointer"] as const) {
+					vi.useFakeTimers();
+					vi.setSystemTime(at);
+					hook.active = true;
+					hook.values = [];
+					hook.effects.clear();
+					hook.reports = [];
+					vi.stubGlobal("window", {
+						innerHeight: 700,
+						innerWidth: 1024,
+						addEventListener: () => {},
+						removeEventListener: () => {},
+					});
+					vi.stubGlobal("document", {body: {}});
+					const Tip = () => {
+						hook.at = 0;
+						hook.pending = [];
+						const tip = useTip({name, typed, caps: [], word: null}, false);
+						for (const run of hook.pending) run();
+						return tip;
+					};
+					try {
+						const target: Pick<Element, "matches" | "getBoundingClientRect"> = {
+							matches: ((_selector: string) => true) as Element["matches"],
+							getBoundingClientRect: () => ({
+								x: 10,
+								y: 10,
+								top: 10,
+								bottom: 30,
+								left: 10,
+								right: 30,
+								width: 20,
+								height: 20,
+								toJSON: () => ({}),
+							}),
+						};
+						// Node supplies the two Element methods the real handlers use.
+						const event = {currentTarget: target as Element};
+						const tip = Tip();
+						if (mode === "pointer") tip.on.onPointerEnter(event);
+						else tip.on.onFocus(event);
+						vi.runOnlyPendingTimers();
+						expect(Tip().node).not.toBeNull();
+						const opened = hook.reports.filter((change) => change._tag === "open");
+						expect(opened).toHaveLength(1);
+						expect(opened[0]?.via, mode).toEqual(
+							expect.objectContaining({_tag: expect.any(String)}),
+						);
+						sources.push(opened[0]?.via);
+					} finally {
+						for (const effect of hook.effects.values()) effect.stop?.();
+						hook.active = false;
+						vi.useRealTimers();
+						vi.unstubAllGlobals();
+					}
+				}
+				// Pointer entry and keyboard focus are different known causes of an opening.
+				expect(sources[0]).not.toEqual(sources[1]);
+			}),
+			{seed: 119120, numRuns: 100},
+		);
+	});
+});
 
 // The popover rule (docs/direction/popovers.md): keys as the Mac draws them, what each key does
 // in a menu, the palette's bold letters, the tooltip's wait, and the roles each one draws.
