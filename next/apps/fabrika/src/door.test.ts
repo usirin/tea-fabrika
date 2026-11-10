@@ -2975,7 +2975,7 @@ describe("P10 span reader and recording", () => {
 		{generated: SinkError.fields.reason},
 		({generated}) =>
 			Effect.forEach(
-				["storage", generated],
+				["storage", generated] as const,
 				(value) =>
 					Effect.gen(function* () {
 						const w = yield* world();
@@ -3068,7 +3068,7 @@ describe("P10 span reader and recording", () => {
 		{generated: SinkError.fields.reason},
 		({generated}) =>
 			Effect.forEach(
-				["unreachable", generated],
+				["unreachable", generated] as const,
 				(value) =>
 					Effect.gen(function* () {
 						const w = yield* world();
