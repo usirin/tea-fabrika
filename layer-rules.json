@@ -6,7 +6,12 @@
     },
     {
       "name": "next-node",
-      "paths": ["next/packages/libfabrika/src/node"]
+      "paths": [
+        "next/packages/libfabrika/src/node",
+        "next/packages/libfabrika/src/build.ts",
+        "next/packages/libfabrika/src/compiler.ts",
+        "next/packages/libfabrika/src/build-modules.d.ts"
+      ]
     },
     {
       "name": "next-workers",

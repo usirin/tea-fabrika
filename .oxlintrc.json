@@ -395,6 +395,29 @@
   },
   "overrides": [
     {
+      "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@effect/platform-node",
+                  "@effect/platform-node/*",
+                  "node:fs",
+                  "node:fs/*",
+                  "@radix-ui/colors",
+                  "@radix-ui/colors/*"
+                ],
+                "message": "L8: settings laws use an in-memory FileSystem, never a real file system. Radix tokens remain restricted."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // Test files only: an `expect` that sits only inside an `if` may never run.
       // `!` is allowed here: a test that hits a missing value fails on its own.
       "files": ["**/*.test.ts"],
@@ -549,6 +572,98 @@
         "fabrika/no-hand-tag": "off",
         "fabrika/one-store-hook": "off"
       }
+    },
+    {
+      // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
+      // another room's names, `src/` holds only what is listed here, every export in an `internal/`
+      // file is `@internal`, and the `values` files hold no service and no error. `folders` and
+      // `files` also name what main holds today (`data`, `coordination`, `app`, `id`, `testing`), so
+      // the rule fires on nothing before a file moves. Each old name leaves in the pull request that
+      // empties it. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
+      //
+      // Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
+      // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
+      // so the Radix entry of the base rule is repeated here.
+      "files": ["next/packages/libfabrika/src/**"],
+      "rules": {
+        "fabrika/rooms": [
+          "error",
+          {
+            "src": "next/packages/libfabrika/src",
+            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"],
+            "folders": ["node", "workers", "data", "coordination", "app"],
+            "files": [
+              "index",
+              "Id",
+              "Testing",
+              "ProcessId",
+              "Sql",
+              "Rev",
+              "id",
+              "testing",
+              "build",
+              "compiler",
+              "build-modules",
+              "build-assets",
+              "build-one-file"
+            ],
+            "values": ["ProcessId", "Sql", "Rev"]
+          }
+        ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // A room's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
+      // oxlint's own rule (0040). Only the six rooms with no file on main are named, so it fires on
+      // nothing today: `transport` joins in the pull request that renames its files, and `door` in its own.
+      "files": [
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/runtime/**"
+      ],
+      "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
+    },
+    {
+      // A room's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
+      "files": [
+        "next/packages/libfabrika/src/telemetry/internal/**",
+        "next/packages/libfabrika/src/ledger/internal/**",
+        "next/packages/libfabrika/src/processes/internal/**",
+        "next/packages/libfabrika/src/presence/internal/**",
+        "next/packages/libfabrika/src/access/internal/**",
+        "next/packages/libfabrika/src/runtime/internal/**"
+      ],
+      "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     }
   ]
 }
