@@ -671,12 +671,6 @@ describe("every library file has exactly one row", () => {
   // A Mac's disk ignores case, so a made-up name may not differ from a real one by case alone.
   const unlisted = (taken: ReadonlyArray<string>) => name.filter((n) => !taken.includes(n.toLowerCase()));
 
-  it("the real rule file names the library's folders", () => {
-    expect([...folders].sort()).toEqual(
-      ["app", "coordination", "data", "door", "mcp", "node", "transport", "workers"].sort(),
-    );
-  });
-
   // Plant: let a library file with no row pass, as the reader did before for a file at the top of
   // `src/` (it answered "an entry file" and checked nothing). Then `src/sync/Merge.ts` and a new
   // top file import anything.

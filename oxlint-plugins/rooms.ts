@@ -24,7 +24,10 @@
 //    - the entry file and the platform folders are not rooms, so they may put the rooms together;
 //    - a top file's name (`../Rev.ts`) is no room's, so it passes;
 //    - a package specifier (`@kampus/libfabrika/...`) is not read: only relative paths are;
-//    - a name given a new binding first (`const b = a; export {b}`) is not followed.
+//    - a name given a new binding first (`const b = a; export {b}`) is not followed;
+//    - an import three folders deep into another room's `internal/` (`../../../x/internal/`) is
+//      reached by no pattern of the `.oxlintrc.json` group, whose longest is `./../../*/internal/**`,
+//      and has no plant: the pull request that first adds a folder inside an `internal/` adds both.
 // 2. `src/` holds only the listed rooms, folders and top files. A name in another case is another
 //    name: `Ledger/` is not `ledger/`. It reports at the start of the file.
 // 3. Every export in a room's `internal/` file is `@internal`: the last `/** */` comment before the
