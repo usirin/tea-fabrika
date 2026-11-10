@@ -111,6 +111,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
+- **In `next/`, a resource is acquired in a scope.** A child process, a test window, a database,
+  a file handle, a socket, a temp folder, a timer or a subscription is opened with
+  `Effect.acquireRelease` and offered as a `Layer` or a scoped Effect, so the scope gives it back.
+  No `try/finally` and no `afterEach` that releases it, and no "remember to close" in prose. A
+  raw handle from the platform is wrapped once, at the edge. A process killed with SIGKILL runs no
+  finalizer, so a resource that must not outlive it needs a guard outside the process too
+  ([0061](./.decisions/0061-resources-are-acquired-in-a-scope.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
