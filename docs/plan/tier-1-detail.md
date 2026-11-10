@@ -1823,6 +1823,29 @@ The prepared step in 6 is a check: what is installed is the fold of the landed l
 
 **What it cannot tell us.** Nothing ran on workerd, so the cost of a turn, of stepping twice, and of `sync()` is not measured (P12). Experiment 231 ran on Miniflare only. The sender test proves the table its caller gives it, not what a program's author meant. Saving a Cmd before it runs does not make an outside effect happen once: a crash can leave a Cmd with no answer, and the runner does not guess.
 
+### P34 on the Worker, as built
+
+Built 2026-11-10, tracker ticket 402, [PR 760](https://github.com/usirin/tea-fabrika/pull/760). This is `next/`. [PR 535](https://github.com/usirin/tea-fabrika/pull/535) built P34's supervision in the runner and proved it on Node. The Worker never passed the runner its recovery options, so on the local stage a throw had no saved count and no supervised restart ([experiment 239](../../experiments/239-supervision-vs-otp.md) found the same gap). This pull request wires it.
+
+```ts
+// The whole idea, as built, in next/packages/libfabrika/src/workers/runtime.ts.
+ProgramRunner.withLoader(saved, loader, {
+  policy: defaultPolicy, // 3 deliveries, 5 restarts in 5,000 ms, backoff 100 to 800 ms
+  recovery: { sql, name: saved.name, capacity: 1024 ** 3 }, // the Process object's own SQLite
+});
+// Its Layer now needs ProcessManager. On the Worker that is the Project's, over RPC:
+remoteProcessManager(manager); // coordination/process-manager.ts, from a plain ProcessCalls value
+```
+
+- **Recovery is required.** `RunnerOptions` is exported and no longer optional in `ProgramRunner.layer` and `withLoader`, and both Layers require `ProcessManager`. The path that set recovery to null is gone; `policy` and `fault` stay optional. The type law is `app/runner-options.test.ts`.
+- **One name, one storage owner.** A Process object is keyed by `[project, name]`, never by a process ID, so a successor reads the receipts, counts and checkpoints its name already has. The Project's `processObject(pid)` finds the name from history and refuses an unknown ID. Delivery, view opening and the private stage calls all route through it. The checked writer signs with the name's current process ID.
+- **The Project owns the one process table.** Eleven trusted Project calls carry `ProcessManager` to the Process object: `processObject`, `processStart`, `processExit`, `processStatus`, `processResolve`, `processDead`, `processIsLive`, `processMonitor`, `processDemonitor`, `processDown` and `processReceive`. A `ProcessError` crosses the RPC as reply data (`ProcessReplies` in `workers/bindings.ts`); a transport failure stays a `LedgerError`. `processReceive` collects its letters and the Stream is rebuilt on the other side. The public JSON-RPC method set did not change.
+- **Trusted restart.** `stage.process(pid).restart({id, build})` goes through the private control allowlist, `ProcessClient.restart`, `Process.restart`, `ProcessService.restart` and `ProgramRunner.restart`, then the Project's exit and start. A repeated request ID makes one replacement.
+- **These twelve handoffs are methods on the plain classes** in `next/apps/fabrika/src/brain.ts`, each one line into its service. They move to Effect objects with ticket 502's port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)).
+- **Records.** No new event or recovery state. The Worker now writes the existing `dead`, `exited`, `started`, `restarted` and `down` events, and the existing `runner.throw`, `runner.dead`, `runner.restart` and `runner.recover` spans, with the real process ID on each.
+- **Tested.** `next/apps/fabrika/src/worker-supervision.test.ts` runs three scenarios on the real local stage (workerd, the real brain, alarms): a poison letter reaches `dead` at its limit of 2 and its sender is refused with `reason: "dead"`, then the successor accepts healthy mail and its counts survive a reopen; a trusted restart starts the new init once per request ID; a saved stepping marker becomes one interrupted recovery after an abort. `runtime-recovery.laws.test.ts` generates `RecoveryFlow` cases (limits 1 to 32, resends, reopen points, lost Project calls) against the real services on SQLite.
+- **Not covered.** Cloud alarms, cloud eviction and a deploy are P24's. The 1 GiB receipt cap is a wiring choice, not a measure, and nothing cleans receipts yet. Mutation cannot reach code that runs only inside workerd. The retry policy after the brake is P34c's (ticket 404).
+
 ### The span sink, as P37 built it
 
 Built 2026-11-07, from [P37's row](./tier-1.md#the-pull-requests-one-at-a-time), beside the ledger in `next/packages/libfabrika/src/data/`. The exported names, with their bodies left out; the code is the source.
