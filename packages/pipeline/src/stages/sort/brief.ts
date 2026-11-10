@@ -36,6 +36,8 @@ const fenced = (text: string): string => {
 	return `${fence}markdown\n${text.replace(/\n+$/, "")}\n${fence}`;
 };
 
+// The dash is part of the brief's text. Kept as written, so a reformat never reads this old line as new text.
+// oxfmt-ignore
 const earlierLines = (brief: Brief): readonly string[] =>
 	brief.context.earlier.length === 0
 		? ["None."]
