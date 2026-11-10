@@ -64,6 +64,9 @@ P25, P27a and P36 have tests on their branches and wait for builds; P28's tests 
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
 turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the owner's read.
+Its first open question is answered
+([0018](../../.decisions/0018-one-application-per-program.md)): each program is its own OTP
+application, so one program past its restart limit stops alone.
 
 Today's hand-run tooling, ticket 318: [review, cleanup and saved waits](../direction/hand-run-review-and-cleanup.md)
 is decided 2026-11-08. Review sweeps every law and decided note and answers once. Drivers save
