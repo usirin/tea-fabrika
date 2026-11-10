@@ -106,10 +106,10 @@ describe("lane rules, today's tooling", () => {
   // themes tests4, 2026-11-09: PR 565's lead link on ticket 343 made the lane's tests step stale_link lead.
   it("holds every stuck answer except a stale link of a step the lane has not signed", () => {
     const answer = fc.oneof(
-      fc.record({ _tag: fc.constant("stuck"), why: fc.constant("stale_link"), step }),
+      fc.record({ _tag: fc.constant("stuck"), reason: fc.constant("stale_link"), step }),
       fc.record({
         _tag: fc.constant("stuck"),
-        why: fc.constantFrom("unsigned_commit", "broken_chain"),
+        reason: fc.constantFrom("unsigned_commit", "broken_chain"),
       }),
       fc.record({
         _tag: fc.constant("ask"),
@@ -123,7 +123,7 @@ describe("lane rules, today's tooling", () => {
         const out = [...answers.map((a) => JSON.stringify(a)), "commits: noise"].join("\n");
         const held = laneStuck(out, lane).map((l) => JSON.parse(l));
         const want = answers.filter(
-          (a) => a._tag === "stuck" && !(a.why === "stale_link" && "step" in a && !lane.has(a.step)),
+          (a) => a._tag === "stuck" && !(a.reason === "stale_link" && "step" in a && !lane.has(a.step)),
         );
         expect(held).toEqual(want);
         const stuck = answers.some((a) => a._tag === "stuck");

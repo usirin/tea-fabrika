@@ -237,7 +237,7 @@ describe("T285, ledger tracing keep-laws", () => {
                         : { ...cut("fab.ledger.by", a.by), "fab.ledger.tag": "saved" }),
                       "fab.ledger.answer": call.op === "resend" ? "resent" : answer._tag,
                       ...(answer._tag === "refused"
-                        ? { "fab.ledger.why": answer.why }
+                        ? { "fab.ledger.reason": answer.reason }
                         : { "fab.ledger.rev": head, "fab.ledger.pos": head }),
                       ...(accepted
                         ? {
@@ -299,7 +299,7 @@ describe("T285, ledger tracing keep-laws", () => {
                 return Effect.die(new Error("generated ring defect"));
               }
 
-              return mode === "fail" ? Effect.fail(new LedgerError({ why: "unreachable" })) : Effect.void;
+              return mode === "fail" ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void;
             },
           });
 
@@ -377,7 +377,7 @@ describe("T285, ledger tracing keep-laws", () => {
                   ended(spans[0]!, false);
                   child(spans[0]!, parent);
                   expect(tags(spans[0]!)).toMatchObject({
-                    "fab.ledger.why": "storage",
+                    "fab.ledger.reason": "storage",
                     "error.type": "Error",
                   });
                 }
@@ -438,9 +438,9 @@ describe("T285, coordination tracing keep-laws", () => {
                   child(read, spans[0]!);
                   expect(tags(read)).toEqual(
                     fails
-                      ? { "fab.members.why": "storage" }
+                      ? { "fab.members.reason": "storage" }
                       : {
-                          "fab.members.facts": 1,
+                          "fab.members.events": 1,
                           "fab.members.keys": keys.length,
                           "fab.members.live": keys.length,
                           "fab.members.ignored": 0,
@@ -668,7 +668,7 @@ describe("T285, sink keep-law", () => {
                     now += sample.ms;
 
                     if (sample.failure === "fail") {
-                      return yield* Effect.fail(new LedgerError({ why: "storage" }));
+                      return yield* Effect.fail(new LedgerError({ reason: "storage" }));
                     }
 
                     if (sample.failure === "die") {
@@ -793,8 +793,8 @@ const machine = Machine.make({
         write({
           stream: m.stream,
           write: m.own
-            ? { _tag: "own", fact: { _tag: "saved", value: m.value } }
-            : { _tag: "caused", parent: m.parent ?? "", fact: { _tag: "saved", value: m.value } },
+            ? { _tag: "own", event: { _tag: "saved", value: m.value } }
+            : { _tag: "caused", parent: m.parent ?? "", event: { _tag: "saved", value: m.value } },
         }),
       ],
     ],
@@ -844,7 +844,7 @@ const runnerWorld = (
     Ledger.sql(data.sql, { reader: "runner-test" }).pipe(Layer.provide(quiet)),
     SessionManager.layer(sessions.sql, () => Effect.succeed(owner), {
       input: () => false,
-      fact: () => false,
+      event: () => false,
     }),
     SpanSink.layer(sink.sql, { object: PROCESS }),
     RecordManager.memory(BIG),
@@ -859,7 +859,7 @@ const runnerWorld = (
       return {
         append: Effect.fnUntraced(function* (input: Incoming) {
           if (fault.at === "append_storage") {
-            return yield* new LedgerError({ why: "storage" });
+            return yield* new LedgerError({ reason: "storage" });
           }
 
           return yield* mailbox.send(a.name, input.id, input.envelope.input, {
@@ -873,16 +873,16 @@ const runnerWorld = (
           });
         }),
         commit: Effect.fnUntraced(function* (
-          ...[id, session, stream, fact]: Parameters<typeof CheckedWriter.Service.commit>
+          ...[id, session, stream, event]: Parameters<typeof CheckedWriter.Service.commit>
         ) {
-          const receipt = yield* sessions.receipt(id, session.parent, PROCESS, fact._tag);
+          const receipt = yield* sessions.receipt(id, session.parent, PROCESS, event._tag);
 
           if (fault.at === "write_storage") {
-            return yield* new LedgerError({ why: "storage" });
+            return yield* new LedgerError({ reason: "storage" });
           }
 
           if (fault.at === "write_refused") {
-            return Appended.cases.refused.make({ why: "seen_ahead" });
+            return Appended.cases.refused.make({ reason: "seen_ahead" });
           }
 
           return yield* ledger.append(
@@ -898,17 +898,17 @@ const runnerWorld = (
                 sentAt: "2026-11-08T00:00:00.000Z",
                 build: a.build,
               },
-              fact,
+              event,
             ),
           );
         }),
-        own: Effect.fnUntraced(function* (...[id, stream, fact]: Parameters<typeof CheckedWriter.Service.own>) {
+        own: Effect.fnUntraced(function* (...[id, stream, event]: Parameters<typeof CheckedWriter.Service.own>) {
           if (fault.at === "write_storage") {
-            return yield* new LedgerError({ why: "storage" });
+            return yield* new LedgerError({ reason: "storage" });
           }
 
           if (fault.at === "write_refused") {
-            return Appended.cases.refused.make({ why: "seen_ahead" });
+            return Appended.cases.refused.make({ reason: "seen_ahead" });
           }
 
           return yield* ledger.append(
@@ -922,7 +922,7 @@ const runnerWorld = (
                 seen: 0,
                 build: a.build,
               }).pipe(Effect.orDie),
-              fact,
+              event,
             ),
           );
         }),
@@ -1027,7 +1027,7 @@ describe("T285, runner tracing keep-laws", () => {
               const error = yield* Effect.flip(runner.msg(w.input(1, { type: "work", value: a.value })));
               expect(error).toMatchObject({
                 _tag: "LedgerError",
-                why: "refused",
+                reason: "refused",
                 message: "id_reused",
               });
               expect((yield* store.load)?.cmds).toHaveLength(1);

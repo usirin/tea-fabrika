@@ -104,7 +104,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               for (const c of calls) {
                 const value = line(parent.traceId, c.body);
                 append = c.refused
-                  ? Appended.cases.refused.make({ why: "id_reused" })
+                  ? Appended.cases.refused.make({ reason: "id_reused" })
                   : Appended.cases.placed.make({ rev: 1, pos: 1 });
                 wait = c.ready ? Waited.cases.ready.make({ rev: 1 }) : Waited.cases.parked.make({});
                 rows = Array.from({ length: c.pages * PAGE + c.tail }, (_, i) =>
@@ -201,11 +201,11 @@ describe("ledger.call, next/ tracing keep-laws", () => {
                 Effect.withTracer(tracer),
               ),
             );
-            const why = c.unreachable ? "unreachable" : "bad_row";
+            const reason = c.unreachable ? "unreachable" : "bad_row";
             expect(Exit.isFailure(result)).toBe(true);
 
             if (Exit.isFailure(result)) {
-              expect(Cause.squash(result.cause)).toEqual(new LedgerError({ why }));
+              expect(Cause.squash(result.cause)).toEqual(new LedgerError({ reason }));
             }
 
             const span = spans.at(-1)!;
@@ -216,7 +216,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               "rpc.method": c.method,
               ...cut("messaging.destination.name", stream),
               ...cut("fab.ledger.reader", reader),
-              "fab.ledger.why": why,
+              "fab.ledger.reason": reason,
             });
             expect(span.status._tag).toBe("Ended");
 

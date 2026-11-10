@@ -78,10 +78,10 @@ const encoder = new TextEncoder();
 const bytes = (texts: ReadonlyArray<string | null>): number =>
   texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
 
-type Why = (typeof Appended.cases.refused.Type)["why"];
+type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
 /** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
-const check = (stream: string, id: string, input: unknown): Result.Result<Line, Why> => {
+const check = (stream: string, id: string, input: unknown): Result.Result<Line, Reason> => {
   if (Result.isFailure(decodeId({ stream, id }))) {
     return Result.fail("bad_line");
   }
@@ -130,9 +130,10 @@ const decide = (
       Option.some(
         same(line, entry)
           ? Placing.cases.resent.make({ rev: entry.rev, pos: entry.pos })
-          : Placing.cases.refused.make({ why: "id_reused" }),
+          : Placing.cases.refused.make({ reason: "id_reused" }),
       ),
-    onNone: () => (line.seen > head ? Option.some(Placing.cases.refused.make({ why: "seen_ahead" })) : Option.none()),
+    onNone: () =>
+      line.seen > head ? Option.some(Placing.cases.refused.make({ reason: "seen_ahead" })) : Option.none(),
   });
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
@@ -182,14 +183,14 @@ export const ledgerStore = (
           return Effect.fail(error);
         }
 
-        const why = Schema.isSchemaError(error) ? "bad_row" : "storage";
+        const reason = Schema.isSchemaError(error) ? "bad_row" : "storage";
         const failure = new LedgerError({
-          why,
+          reason,
           ...(error instanceof Error ? { message: error.message } : {}),
         });
         // The class and code are tags; the message rides only in the span's failure, its content.
         return Effect.annotateCurrentSpan({
-          [tag("why")]: why,
+          [tag("reason")]: reason,
           [ERROR]: errorClass(error),
           ...Option.match(errorCode(error), {
             onNone: () => ({}),
@@ -275,10 +276,10 @@ export const ledgerStore = (
     );
   });
 
-  const refused = Effect.fnUntraced(function* (why: Why) {
+  const refused = Effect.fnUntraced(function* (reason: Reason) {
     return yield* Effect.as(
-      Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("why")]: why }),
-      Appended.cases.refused.make({ why }),
+      Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: reason }),
+      Appended.cases.refused.make({ reason }),
     );
   });
 
@@ -297,7 +298,7 @@ export const ledgerStore = (
     yield* Effect.annotateCurrentSpan(short({ [tag("tag")]: line._tag, [tag("by")]: line.by }));
     const placing = yield* atomic((now) => place(stream, id, line, now));
     return yield* Placing.match(placing, {
-      refused: ({ why }) => refused(why),
+      refused: ({ reason }) => refused(reason),
       resent: ({ rev, pos }) =>
         Effect.as(
           Effect.annotateCurrentSpan({
@@ -388,7 +389,7 @@ export const ledgerStore = (
     let open = true;
     const ensureOpen = () => {
       if (!open) {
-        throw new LedgerError({ why: "storage", message: "ledger turn has ended" });
+        throw new LedgerError({ reason: "storage", message: "ledger turn has ended" });
       }
     };
     const turn: LedgerTurn = {
@@ -403,13 +404,13 @@ export const ledgerStore = (
         const checked = check(stream, id, input);
 
         if (Result.isFailure(checked)) {
-          throw new LedgerError({ why: "refused" });
+          throw new LedgerError({ reason: "refused" });
         }
 
         const placing = place(stream, id, checked.success, now);
 
         if (placing._tag === "refused") {
-          throw new LedgerError({ why: "refused" });
+          throw new LedgerError({ reason: "refused" });
         }
 
         if (placing._tag === "placed") {
