@@ -61,7 +61,7 @@ const fixtures = (statement: string, form: number) =>
 	][form]!;
 
 it("reports exactly undeclared direct and transitive script reads", () => {
-	for (const addFixtures of [false, true])
+	for (const addFixtures of [false, true]) {
 		fc.assert(
 			fc.property(model, ({skills, tests, form, importForm, fixtureForm, syntaxForm}) => {
 				const files = skills.flatMap((scripts, s) =>
@@ -113,20 +113,33 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 						].join("\n"),
 					);
 					const reached = new Set(roots);
-					for (const n of reached) for (const edge of edges[n]!) reached.add(edge);
+
+					for (const n of reached) {
+						for (const edge of edges[n]!) {
+							reached.add(edge);
+						}
+					}
+
 					reachable.set(path, reached);
-					for (const n of reached)
-						if (!declared.has(n)) expected.push({test: path, path: files[n]!.path});
+
+					for (const n of reached) {
+						if (!declared.has(n)) {
+							expected.push({test: path, path: files[n]!.path});
+						}
+					}
 				});
 				const got = scriptReads(addFixtures ? withFixtures : tree);
 				const sort = (rows: {test: string; path: string}[]) =>
 					rows.map(({test, path}) => `${test}:${path}`).sort();
 				expect(sort(got)).toEqual(sort(expected));
+
 				for (const row of got) {
 					const via = files.findIndex((f) => f.path === row.via);
 					const target = files.findIndex((f) => f.path === row.path);
-					if (via < 0) expect(row.via).toBe(row.test);
-					else {
+
+					if (via < 0) {
+						expect(row.via).toBe(row.test);
+					} else {
 						expect(reachable.get(row.test)!.has(via)).toBe(true);
 						expect(edges[via]).toContain(target);
 					}
@@ -134,4 +147,5 @@ it("reports exactly undeclared direct and transitive script reads", () => {
 			}),
 			{seed: 119120, numRuns: 100},
 		);
+	}
 });

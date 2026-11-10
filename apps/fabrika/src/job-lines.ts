@@ -84,8 +84,12 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 		);
 		const stops = () => {
 			const jobs = table.getState().jobs;
+
 			for (const job of jobs) {
-				if (job.stop === null || stopped.has(job.n)) continue;
+				if (job.stop === null || stopped.has(job.n)) {
+					continue;
+				}
+
 				stopped.add(job.n);
 				const since = idle();
 				log("job_stopped", {
@@ -98,7 +102,12 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 					...(since === null ? {} : {idle_ms: since}),
 				});
 			}
-			for (const n of stopped) if (!jobs.some((job) => job.n === n)) stopped.delete(n);
+
+			for (const n of stopped) {
+				if (!jobs.some((job) => job.n === n)) {
+					stopped.delete(n);
+				}
+			}
 		};
 		const unsubscribe = table.subscribe(stops);
 		yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
@@ -113,12 +122,21 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 		/** Forget the oldest jobs past `JOBS_KEPT`, but none the table still holds. */
 		const forget = () => {
 			for (const n of ended.keys()) {
-				if (ended.size <= JOBS_KEPT) break;
+				if (ended.size <= JOBS_KEPT) {
+					break;
+				}
+
 				ended.delete(n);
 			}
+
 			for (const n of kept.keys()) {
-				if (kept.size <= JOBS_KEPT) break;
-				if (!inTable(n)) kept.delete(n);
+				if (kept.size <= JOBS_KEPT) {
+					break;
+				}
+
+				if (!inTable(n)) {
+					kept.delete(n);
+				}
 			}
 		};
 
@@ -126,7 +144,11 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 			news: (tile) => ({
 				began: (job) => {
 					const by = table.getState().jobs.find((row) => row.n === job.n)?.by ?? null;
-					if (by !== null) writers.set(job.n, by);
+
+					if (by !== null) {
+						writers.set(job.n, by);
+					}
+
 					log("job_began", {n: job.n, text: job.text, tile, ...byOf(by)});
 				},
 				ended: (job) => {
@@ -138,12 +160,21 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 					const heard = waiting.get(job.n);
 					const now = lines.job(job.n);
 					waiting.delete(job.n);
-					if (now !== null) for (const tell of heard ?? []) tell(now);
+
+					if (now !== null) {
+						for (const tell of heard ?? []) {
+							tell(now);
+						}
+					}
 				},
 			}),
 			printed: (n, text) => {
 				const one = kept.get(n);
-				if (one !== undefined) return one.push(text);
+
+				if (one !== undefined) {
+					return one.push(text);
+				}
+
 				const fresh = new KeptLines();
 				fresh.push(text);
 				kept.set(n, fresh);
@@ -152,7 +183,8 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 			job: (n) => {
 				const shown = [...(kept.get(n)?.lines ?? [])];
 				const row = table.getState().jobs.find((job) => job.n === n);
-				if (row !== undefined)
+
+				if (row !== undefined) {
 					return {
 						n,
 						text: row.text,
@@ -163,8 +195,14 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 								: State.cases.detached.make({}),
 						lines: shown,
 					};
+				}
+
 				const end = ended.get(n);
-				if (end === undefined) return null;
+
+				if (end === undefined) {
+					return null;
+				}
+
 				return {
 					n,
 					text: end.job.text,
@@ -176,14 +214,21 @@ export const jobLines = (table: JobTable, idle: () => number | null = () => null
 			ended: (n) =>
 				Effect.callback<JobAnswer>((resume) => {
 					const now = lines.job(n);
-					if (now?.state._tag === "ended") return resume(Effect.succeed(now));
+
+					if (now?.state._tag === "ended") {
+						return resume(Effect.succeed(now));
+					}
+
 					const one = (job: JobAnswer) => resume(Effect.succeed(job));
 					const all = waiting.get(n) ?? new Set();
 					all.add(one);
 					waiting.set(n, all);
 					return Effect.sync(() => {
 						all.delete(one);
-						if (all.size === 0 && waiting.get(n) === all) waiting.delete(n);
+
+						if (all.size === 0 && waiting.get(n) === all) {
+							waiting.delete(n);
+						}
 					});
 				}),
 		};

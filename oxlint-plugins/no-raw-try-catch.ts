@@ -44,7 +44,10 @@ export const noRawTryCatch: CreateRule = {
 				);
 			},
 			TryStatement(node) {
-				if (!imports || node.handler === null || node.finalizer !== null) return;
+				if (!imports || node.handler === null || node.finalizer !== null) {
+					return;
+				}
+
 				context.report({
 					node,
 					message:

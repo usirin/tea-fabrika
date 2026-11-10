@@ -39,13 +39,28 @@ const decodeAgent = Schema.decodeUnknownOption(Agent);
 /** The writer a row's `writer` text names, or `null` when it names neither a user nor an agent. */
 export function writerOf(text: string): Writer | null {
 	const [head, rest, ...more] = text.split(" ");
-	if (head === undefined || more.length > 0) return null;
+
+	if (head === undefined || more.length > 0) {
+		return null;
+	}
+
 	const at = head.indexOf(":");
-	if (at === -1) return null;
+
+	if (at === -1) {
+		return null;
+	}
+
 	const kind = head.slice(0, at);
 	const id = head.slice(at + 1);
-	if (rest === undefined) return Option.getOrNull(decode({kind, id}));
-	if (kind !== "agent" || !rest.startsWith("for:")) return null;
+
+	if (rest === undefined) {
+		return Option.getOrNull(decode({kind, id}));
+	}
+
+	if (kind !== "agent" || !rest.startsWith("for:")) {
+		return null;
+	}
+
 	// Only `Agent`: an empty person must not fall through to the agent from before the door.
 	return Option.getOrNull(decodeAgent({kind, id, for: rest.slice("for:".length)}));
 }

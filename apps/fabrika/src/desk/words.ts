@@ -36,7 +36,10 @@ interface Refused {
 const tell = (does: Does) =>
 	Effect.gen(function* () {
 		const why = (yield* DeskWords).said(does);
-		if (why !== null) return yield* Effect.fail<Refused>({_tag: "refused", message: why});
+
+		if (why !== null) {
+			return yield* Effect.fail<Refused>({_tag: "refused", message: why});
+		}
 	});
 
 /** A word with no flags: it says one command. */

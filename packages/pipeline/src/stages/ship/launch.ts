@@ -52,7 +52,11 @@ export function planOf(argv: readonly string[]): Plan | null {
 	const [pr, ...more] = named;
 	const own = accounts("--own");
 	const reviewers = accounts("--reviewers");
-	if (pr === undefined || own.length === 0) return null;
+
+	if (pr === undefined || own.length === 0) {
+		return null;
+	}
+
 	return {
 		prs: [pr, ...more],
 		mode: flags.includes("--write") ? "write" : "read",
@@ -69,8 +73,12 @@ export function planOf(argv: readonly string[]): Plan | null {
 export function checked(plan: Plan, program: ShipProgram = shipProgram): BadShape | undefined {
 	for (const pr of plan.prs) {
 		const why = program.inputs.pr.shape.problem(pr);
-		if (why !== undefined) return {kind: "bad_shape", name: "pr", why};
+
+		if (why !== undefined) {
+			return {kind: "bad_shape", name: "pr", why};
+		}
 	}
+
 	return undefined;
 }
 
@@ -127,7 +135,11 @@ export const launch = (
 ) =>
 	Effect.gen(function* () {
 		const bad = checked(plan, program);
-		if (bad !== undefined) return bad;
+
+		if (bad !== undefined) {
+			return bad;
+		}
+
 		return yield* shipEach(plan, parts, listeners, program);
 	});
 
@@ -143,17 +155,29 @@ const shipEach = (
 			id: `ship:${randomUUID()}`,
 			storage: memoryStorage(),
 		});
-		if (started.kind === "bad_shape") return started;
+
+		if (started.kind === "bad_shape") {
+			return started;
+		}
+
 		const {run, close} = started;
+
 		// Offered: a list longer than the input holds waits for ship to read, like a file piped into a command.
 		for (const pr of plan.prs) {
 			const word = yield* offer(run, "pr", pr);
-			if (word !== "queued")
+
+			if (word !== "queued") {
 				return yield* Effect.die(new Error(`ship did not take ${pr}: ${word}`));
+			}
 		}
+
 		close("pr");
 		const end = yield* run.ended;
-		if (end.kind === "failed") return yield* Effect.failCause(end.cause);
+
+		if (end.kind === "failed") {
+			return yield* Effect.failCause(end.cause);
+		}
+
 		return {kind: "ran"} as const;
 	}).pipe(Effect.scoped, Effect.provide(servicesOf(plan, parts)));
 

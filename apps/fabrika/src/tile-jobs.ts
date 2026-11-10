@@ -99,21 +99,36 @@ export const watchJobs = (
 			.map((job) => ({n: job.n, text: job.text, since: job.since, foreground: job.foreground}));
 		const jobs: TileJobs = {running, ended};
 		const word = JSON.stringify(jobs);
-		if (word === said) return;
+
+		if (word === said) {
+			return;
+		}
+
 		said = word;
 		tell(jobs);
 	};
 	/** A job that left the table, once each of its runs said how it ended: it is the tile's last to end. */
 	const settle = () => {
 		for (const job of seen.values()) {
-			if (!job.left) continue;
+			if (!job.left) {
+				continue;
+			}
+
 			const how = job.runs.flatMap((run) => {
 				const end = ends.get(run);
 				return end === undefined ? [] : [end];
 			});
-			if (how.length < job.runs.length) continue;
+
+			if (how.length < job.runs.length) {
+				continue;
+			}
+
 			seen.delete(job.n);
-			for (const run of job.runs) ends.delete(run);
+
+			for (const run of job.runs) {
+				ends.delete(run);
+			}
+
 			ended = {
 				n: job.n,
 				text: job.text,
@@ -128,9 +143,14 @@ export const watchJobs = (
 	return {
 		table: (now, mine) => {
 			const own = (now?.jobs ?? []).filter((job) => job.stages.some((st) => mine.has(st.run)));
+
 			for (const job of own) {
-				if (job.state !== "running") continue;
+				if (job.state !== "running") {
+					continue;
+				}
+
 				const known = seen.get(job.n);
+
 				if (known === undefined || known.left) {
 					const begun: Seen = {
 						n: job.n,
@@ -141,29 +161,47 @@ export const watchJobs = (
 						left: false,
 					};
 					seen.set(job.n, begun);
-					for (const st of job.stages) ends.delete(st.run);
+
+					for (const st of job.stages) {
+						ends.delete(st.run);
+					}
+
 					news?.began({
 						n: begun.n,
 						text: begun.text,
 						since: begun.since,
 						foreground: begun.foreground,
 					});
-				} else known.foreground = !job.background;
+				} else {
+					known.foreground = !job.background;
+				}
 			}
+
 			// A job of this tile no longer running in the table has ended, or was detached as tsh
 			// stopped: only one that left the table ended.
 			for (const job of seen.values()) {
-				if (job.left) continue;
+				if (job.left) {
+					continue;
+				}
+
 				const row = now?.jobs.find((j) => j.n === job.n);
-				if (row === undefined) job.left = true;
-				else if (row.state !== "running") seen.delete(job.n);
+
+				if (row === undefined) {
+					job.left = true;
+				} else if (row.state !== "running") {
+					seen.delete(job.n);
+				}
 			}
+
 			settle();
 			say();
 		},
 		ran: (run, end) => {
 			// A run of no job seen here: one whose job was detached, or never ran.
-			if (![...seen.values()].some((job) => job.runs.includes(run))) return;
+			if (![...seen.values()].some((job) => job.runs.includes(run))) {
+				return;
+			}
+
 			ends.set(run, end.kind);
 			settle();
 			say();

@@ -36,9 +36,14 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
@@ -68,7 +73,11 @@ const trackerInTile = Effect.gen(function* () {
 	/** What the person's tracker window shows now. */
 	const shown = (): Record<string, unknown> | undefined => {
 		const last = got.findLast((m) => m.type === "to" && m.port === port);
-		if (last?.type !== "to") return undefined;
+
+		if (last?.type !== "to") {
+			return undefined;
+		}
+
 		return Reflect.get(Object(last.m), "data") as Record<string, unknown>;
 	};
 	/** A click in the person's window: one input's value, as the window sends it. */
@@ -78,7 +87,10 @@ const trackerInTile = Effect.gen(function* () {
 	const agentsNow = () => {
 		const last = got
 			.flatMap((m) => {
-				if (m.type !== "to" || m.port !== "desk") return [];
+				if (m.type !== "to" || m.port !== "desk") {
+					return [];
+				}
+
 				const read = readToPage(m.m);
 				return read.kind === "read" && read.msg.type === "host" ? [read.msg.now] : [];
 			})
@@ -158,12 +170,15 @@ describe("an agent's tools", () => {
 			tracker_file: undefined,
 			tracker_close: undefined,
 		});
+
 		// An input only a person tells has no tool, so a call to it is refused as any unknown tool is.
-		for (const name of ["tracker_answer", "tracker_rate_duplicate", "ticket_answer"])
+		for (const name of ["tracker_answer", "tracker_rate_duplicate", "ticket_answer"]) {
 			expect(callOf(agentsList(), name, {value: {}})).toEqual({
 				kind: "refused",
 				why: `there is no tool ${name}`,
 			});
+		}
+
 		// A call tells the input of the same name its value, as it is.
 		expect(callOf(agentsList(), "tracker_query", {value: {ticket: 43}})).toEqual({
 			kind: "input",

@@ -159,31 +159,57 @@ function sectionUnder(
 	let folded = 0;
 	let own: number | null = null;
 	const section: string[] = [];
+
 	for (const line of lines) {
 		const mark = FENCE.exec(line)?.[1];
-		if (mark !== undefined) fence = fence === null ? mark : fence === mark ? null : fence;
+
+		if (mark !== undefined) {
+			fence = fence === null ? mark : fence === mark ? null : fence;
+		}
+
 		const plain = fence === null && mark === undefined;
+
 		if (plain && DETAILS_OPEN.test(line)) {
-			if (own !== null) return section;
+			if (own !== null) {
+				return section;
+			}
+
 			folded += 1;
 			continue;
 		}
+
 		if (plain && DETAILS_CLOSE.test(line)) {
 			folded = Math.max(0, folded - 1);
 			continue;
 		}
-		if (folded > 0) continue;
+
+		if (folded > 0) {
+			continue;
+		}
+
 		const heading = plain ? HEADING.exec(line) : null;
+
 		if (heading !== null) {
 			const level = (heading[1] as string).length;
-			if (own !== null && ends(level, own)) return section;
+
+			if (own !== null && ends(level, own)) {
+				return section;
+			}
+
 			if (own === null) {
-				if (named((heading[2] as string).trim())) own = level;
+				if (named((heading[2] as string).trim())) {
+					own = level;
+				}
+
 				continue;
 			}
 		}
-		if (own !== null) section.push(line);
+
+		if (own !== null) {
+			section.push(line);
+		}
 	}
+
 	return own === null ? null : section;
 }
 
@@ -208,14 +234,20 @@ export function criteriaIn(body: string): readonly Criterion[] | null {
 	const items: {checked: boolean; parts: string[]}[] = [];
 	let open: {checked: boolean; parts: string[]} | null = null;
 	let fenced = false;
+
 	for (const line of section) {
 		if (FENCE.test(line)) {
 			fenced = !fenced;
 			open = null;
 			continue;
 		}
-		if (fenced) continue;
+
+		if (fenced) {
+			continue;
+		}
+
 		const box = BOX.exec(line);
+
 		if (box !== null) {
 			open = {checked: box[1] !== " ", parts: [(box[2] as string).trim()]};
 			items.push(open);
@@ -225,6 +257,7 @@ export function criteriaIn(body: string): readonly Criterion[] | null {
 			open.parts.push(line.trim());
 		}
 	}
+
 	const boxes = items
 		.map((item) => ({
 			checked: item.checked,
@@ -233,7 +266,11 @@ export function criteriaIn(body: string): readonly Criterion[] | null {
 		.filter((item) => item.said !== "")
 		.map((item) => ({...item, mark: readMark(item.said)}));
 	const marked = boxes.filter((box) => box.mark !== null).length;
-	if (marked !== 0 && marked !== boxes.length) return null;
+
+	if (marked !== 0 && marked !== boxes.length) {
+		return null;
+	}
+
 	const criteria = boxes.map((box, at): Criterion => {
 		const said = box.mark?.words ?? box.said;
 		const source = EVIDENCE.exec(said)?.[1] ?? "";
@@ -262,7 +299,11 @@ export function deviationsIn(body: string): Deviations {
 		.join("\n")
 		.trim();
 	const text = `\n${section}`.replace(SIGNED, "").trim();
-	if (text === "") return {state: "absent"};
+
+	if (text === "") {
+		return {state: "absent"};
+	}
+
 	return /^[*_]*none\.?[*_]*$/i.test(text) ? {state: "none"} : {state: "listed", text};
 }
 

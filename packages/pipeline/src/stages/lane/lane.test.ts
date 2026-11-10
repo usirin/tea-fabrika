@@ -431,7 +431,11 @@ describe("the lane machine", () => {
 		const running = (value: LaneView, child: string) => {
 			const [s1, [c1]] = step(s, {type: readLane.okType, cmd, value});
 			const [r1] = step(s1, {type: startChild.okType, cmd: c1, value: {started: true}});
-			if (!child.endsWith(":catchup")) return r1;
+
+			if (!child.endsWith(":catchup")) {
+				return r1;
+			}
+
 			const [s2, [c2]] = step(r1, {type: "child_over", child, end: {outcome: {kind: "done"}}});
 			return step(s2, {type: startChild.okType, cmd: c2, value: {started: true}})[0];
 		};

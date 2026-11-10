@@ -13,7 +13,10 @@ type Rgba = readonly [number, number, number, number];
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/;
 
 const rgbaOf = (value: string): Rgba => {
-	if (!HEX.test(value)) throw new Error(`not a #rrggbb or #rrggbbaa color: ${value}`);
+	if (!HEX.test(value)) {
+		throw new Error(`not a #rrggbb or #rrggbbaa color: ${value}`);
+	}
+
 	const at = (i: number) => Number.parseInt(value.slice(i, i + 2), 16) / 255;
 	return [at(1), at(3), at(5), value.length === 9 ? at(7) : 1];
 };
@@ -27,7 +30,11 @@ const channel = (c: number) =>
 export const over = (top: string, bottom: string): string => {
 	const [r, g, b, a] = rgbaOf(top);
 	const [R, G, B, A] = rgbaOf(bottom);
-	if (A !== 1) throw new Error(`a backdrop is solid: ${bottom}`);
+
+	if (A !== 1) {
+		throw new Error(`a backdrop is solid: ${bottom}`);
+	}
+
 	const mix = (x: number, y: number) => Math.round((x * a + y * (1 - a)) * 255) / 255;
 	return `#${[mix(r, R), mix(g, G), mix(b, B)].map(channel).join("")}`;
 };

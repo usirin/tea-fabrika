@@ -14,7 +14,11 @@ const [first] = plans86b().filter((p) => p.plan !== null);
 const ticket = ticketId(first!.ticket);
 const plan = planOf(ticket);
 const data = revisionOfDraft(first!.plan!);
-if (data === null) throw new Error("the first 86b plan has no revision");
+
+if (data === null) {
+	throw new Error("the first 86b plan has no revision");
+}
+
 const planned: Fact = {type: "planned", plan, tickets: [ticket], data, problems: []};
 const answered = (answer: AnswerBody): Fact => ({type: "answered", id: planAskId(plan, 1), answer});
 

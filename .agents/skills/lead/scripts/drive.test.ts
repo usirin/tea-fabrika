@@ -96,7 +96,11 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
 			value,
 		} as never,
 	);
-	if (read.phase !== "pushing") return {state: read, cmd: cmds[0] as {keep: boolean; why: string}};
+
+	if (read.phase !== "pushing") {
+		return {state: read, cmd: cmds[0] as {keep: boolean; why: string}};
+	}
+
 	const [state, after] = machine.update.backup_push_ok(read, {
 		type: "backup_push_ok",
 		value: {ok: true, detail: ""},
@@ -112,13 +116,23 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 			fc.property(answer, fc.nat({max: 2}), left, (report, commits, held) => {
 				const {state, cmd} = recorded(report, commits, held);
 				expect(state.phase).toBe("recording");
-				if (state.phase !== "recording") return;
+
+				if (state.phase !== "recording") {
+					return;
+				}
+
 				const stuck = state.outcome.kind === "stuck";
 				expect(cmd.keep).toBe(stuck || held.length > 0);
 				expect(state.kept).toBe(cmd.keep);
+
 				// The outcome line's reason says what was kept.
-				for (const what of held) expect(cmd.why).toContain(what);
-				if (held.length === 0) expect(cmd.why).not.toContain("box kept");
+				for (const what of held) {
+					expect(cmd.why).toContain(what);
+				}
+
+				if (held.length === 0) {
+					expect(cmd.why).not.toContain("box kept");
+				}
 			}),
 			options,
 		);
@@ -155,7 +169,11 @@ describe("drive takes a skip answer, today's tooling", () => {
 			fc.property(steps, why, fc.constantFrom("", "`", "**"), (step, text, wrap) => {
 				const [s, cmds] = read(step, `report body\n\n${wrap}answer: skip ${text}${wrap}`);
 				expect(s.phase).toBe("recording");
-				if (s.phase !== "recording") return;
+
+				if (s.phase !== "recording") {
+					return;
+				}
+
 				expect(s.outcome).toEqual({kind: "skip", why: "step_said"});
 				expect(s.why).toBe(text);
 				expect(s.kept).toBe(false);
@@ -179,18 +197,21 @@ describe("drive takes a skip answer, today's tooling", () => {
 			"stuck:no_answer",
 			"stuck:record_failed",
 		];
+
 		for (const name of names) {
 			const want = {done: "pass", send: "fail", ask: "parked", skip: "skip"}[
 				name.split(":")[0] as "done"
 			];
 			expect(rowOf(name)).toBe(want ?? "stopped");
 		}
+
 		expect(names.filter((n) => rowOf(n) === "skip")).toEqual(["skip:step_said"]);
 	});
 
 	// Plant: give skip the stuck code. Each verb keeps an exit code of its own.
 	it("each answer verb gets its own exit code", () => {
 		const exits = new Map<string, number>();
+
 		for (const line of [
 			"answer: done",
 			"answer: send tests x",
@@ -203,6 +224,7 @@ describe("drive takes a skip answer, today's tooling", () => {
 			const [, cmds] = read("review", line);
 			exits.set(line, (cmds[0] as {exit: number}).exit);
 		}
+
 		expect(new Set(exits.values()).size).toBe(exits.size);
 		expect(exits.get("answer: skip x")).toBe(40);
 		expect(exits.get("answer: stuck x")).toBe(30);
@@ -232,9 +254,15 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
 			fc.property(check, detail, noise, fc.constantFrom(0, 1, 2, 3, 127), (c, d, before, code) => {
 				const err = [...before, `refused ${c}: ${d}`, ""].join("\n");
 				const got = startedOf(code, err);
-				if (code === 0) expect(got).toEqual({_tag: "made"});
-				else if (code === 3) expect(got).toEqual({_tag: "refused", check: c, detail: d});
-				else expect(got._tag).toBe("failed");
+
+				if (code === 0) {
+					expect(got).toEqual({_tag: "made"});
+				} else if (code === 3) {
+					expect(got).toEqual({_tag: "refused", check: c, detail: d});
+				} else {
+					expect(got._tag).toBe("failed");
+				}
+
 				// A stuck line, or an unknown check, is never a refusal.
 				expect(startedOf(3, `stuck ${c}: ${d}\n`)._tag).toBe("failed");
 				expect(startedOf(3, `refused not_a_check_${c}: ${d}\n`)._tag).toBe("failed");
@@ -311,10 +339,12 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 				const named = answers
 					.filter(held)
 					.map((a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+
 				if (named.length === 0) {
 					expect(said).toMatch(/^commits check exit 1: /);
 					return;
 				}
+
 				const more = named.length > 5 ? `; and ${named.length - 5} more` : "";
 				expect(said).toBe(`commits check: ${named.slice(0, 5).join("; ")}${more}`);
 			}),
@@ -354,9 +384,17 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
 			fc.property(answer, fc.uniqueArray(manifest, {minLength: 1}), (report, paths) => {
 				const s = read(report, paths);
 				expect(s.phase).toBe("pushing");
-				if (s.phase !== "pushing") return;
+
+				if (s.phase !== "pushing") {
+					return;
+				}
+
 				expect(s.outcome).toEqual({kind: "ask", who: "lead", for: "lockfile"});
-				for (const p of paths) expect(s.why).toContain(p);
+
+				for (const p of paths) {
+					expect(s.why).toContain(p);
+				}
+
 				expect(s.why).toContain("fabrikalfa/l-wip");
 			}),
 			options,
@@ -468,9 +506,14 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
 					const i = Number(box.slice(`p12-${step}`.length));
 					expect(box).toBe(`p12-${step}${i}`);
 					expect(i).toBeGreaterThanOrEqual(n);
-					for (const suffix of suffixes) expect(taken.has(`${box}${suffix}`)).toBe(false);
-					for (let j = n; j < i; j += 1)
+
+					for (const suffix of suffixes) {
+						expect(taken.has(`${box}${suffix}`)).toBe(false);
+					}
+
+					for (let j = n; j < i; j += 1) {
 						expect(suffixes.some((suffix) => taken.has(`p12-${step}${j}${suffix}`))).toBe(true);
+					}
 				},
 			),
 			options,
@@ -487,8 +530,14 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
 				const got = reportOf("r.md", at, written);
 				const second = Math.floor(at / 1000) * 1000;
 				expect(got).toBe(written !== null && written >= second ? "r.md" : null);
-				if (written !== null && written >= at) expect(got).toBe("r.md");
-				if (written !== null && written < second) expect(got).toBeNull();
+
+				if (written !== null && written >= at) {
+					expect(got).toBe("r.md");
+				}
+
+				if (written !== null && written < second) {
+					expect(got).toBeNull();
+				}
 			}),
 			options,
 		);
@@ -522,11 +571,13 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 						value,
 					} as never,
 				);
+
 				// A stuck answer is never pushed.
 				if (read.phase !== "pushing") {
 					expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
 					return;
 				}
+
 				const [state, cmds] = machine.update.backup_push_ok(read, {
 					type: "backup_push_ok",
 					value: {ok: landed, detail: landed ? "pushed" : "botpush: push refused"},
@@ -534,8 +585,12 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 				const cmd = cmds[0] as {outcome: string; head: string};
 				expect(state.phase).toBe("recording");
 				expect(cmd.head).toBe(value.head);
-				if (landed) expect(cmd.outcome).toBe(nameOf(read.outcome));
-				else expect(cmd.outcome).toBe("stuck:push_failed");
+
+				if (landed) {
+					expect(cmd.outcome).toBe(nameOf(read.outcome));
+				} else {
+					expect(cmd.outcome).toBe("stuck:push_failed");
+				}
 			}),
 			options,
 		);

@@ -91,7 +91,10 @@ export const push = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const {ticket, number, head} = m.ask;
 			const asked = pushHead({ticket, number, head, intent: at(m.ask, "push")});
 			return [{phase: "pushing", ask: m.ask, asked}, [asked]];
@@ -101,14 +104,20 @@ export const push = defineMachine({
 				? [s, [s.asked]]
 				: stay(s),
 		push_head_ok: (s): Step => {
-			if (s.phase !== "pushing") return stay(s);
+			if (s.phase !== "pushing") {
+				return stay(s);
+			}
+
 			const {ticket, number, head, title, body} = s.ask;
 			const asked = openPull({ticket, number, head, title, body, intent: at(s.ask, "open")});
 			return [{phase: "opening", ask: s.ask, asked}, [asked]];
 		},
 		push_head_err: (s): Step => (s.phase === "pushing" ? stuck(s.ask, "push_failed") : stay(s)),
 		push_open_ok: (s, m): Step => {
-			if (s.phase !== "opening") return stay(s);
+			if (s.phase !== "opening") {
+				return stay(s);
+			}
+
 			const asked = postReviews({
 				pr: m.value,
 				head: s.ask.head,

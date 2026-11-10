@@ -25,7 +25,11 @@ const review = {kind: "agent", id: "review", for: "owner"} as const;
 const filedAs = (number: number, fact: Fact): Ticket => {
 	const entry: Entry = {pos: 1, ticket: number, by: review, at: NOW - 60_000, fact};
 	const [ticket] = fold([], [entry]).tickets;
-	if (ticket === undefined) throw new Error("the fold made no ticket");
+
+	if (ticket === undefined) {
+		throw new Error("the fold made no ticket");
+	}
+
 	return ticket;
 };
 
@@ -83,6 +87,7 @@ describe("a ticket's page says where it came from", () => {
 		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "PR 352 · mutation", url});
 		const rows = fromRows(markupOf(ticket));
 		expect(rows).toHaveLength(2);
+
 		for (const row of rows) {
 			expect(row).toMatch(/^<a [^>]*>[^<]*<\/a>$/);
 			expect(row).toContain(`href="${url}"`);
@@ -97,6 +102,7 @@ describe("a ticket's page says where it came from", () => {
 		const url = `${REPO}/pull/357#discussion_r1001`;
 		const ticket = filedAs(186, filed({_tag: "pr", url, step: "review"}));
 		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "PR 357 · review", url});
+
 		for (const row of fromRows(markupOf(ticket))) {
 			expect(row).toContain(`href="${url}"`);
 			expect(textOf(row)).toBe("PR 357 · review");
@@ -110,6 +116,7 @@ describe("a ticket's page says where it came from", () => {
 		expect(pageOf(ticket, NOW).from?.url).toBe(url);
 		const rows = fromRows(markupOf(ticket));
 		expect(rows).toHaveLength(2);
+
 		for (const row of rows) {
 			expect(row).toMatch(/^<a [^>]*>[^<]*<\/a>$/);
 			expect(row).toContain(`href="${url}"`);
@@ -121,7 +128,10 @@ describe("a ticket's page says where it came from", () => {
 		const url = `${REPO}/pull/332`;
 		const ticket = filedAs(191, filed({_tag: "walk", url}));
 		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "walk of PR 332", url});
-		for (const row of fromRows(markupOf(ticket))) expect(textOf(row)).toBe("walk of PR 332");
+
+		for (const row of fromRows(markupOf(ticket))) {
+			expect(textOf(row)).toBe("walk of PR 332");
+		}
 	});
 
 	// p5. A walk of a note or an experiment has no pull request in its address: it reads by the
@@ -135,6 +145,7 @@ describe("a ticket's page says where it came from", () => {
 		});
 		const rows = fromRows(markupOf(ticket));
 		expect(rows).toHaveLength(2);
+
 		for (const row of rows) {
 			expect(row).toContain(`href="${url}"`);
 			expect(textOf(row)).toBe("walk of example.com/notes/flaky-lane-writes");
@@ -146,7 +157,10 @@ describe("a ticket's page says where it came from", () => {
 		const url = `${REPO}/pull/352`;
 		const ticket = filedAs(188, filed({_tag: "pr", url}));
 		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "PR 352", url});
-		for (const row of fromRows(markupOf(ticket))) expect(textOf(row)).toBe("PR 352");
+
+		for (const row of fromRows(markupOf(ticket))) {
+			expect(textOf(row)).toBe("PR 352");
+		}
 	});
 
 	// p6
@@ -155,6 +169,7 @@ describe("a ticket's page says where it came from", () => {
 		expect(pageOf(ticket, NOW).from).toStrictEqual({text: "#117 · r-test_writer-26", url: null});
 		const rows = fromRows(markupOf(ticket));
 		expect(rows).toHaveLength(2);
+
 		for (const row of rows) {
 			// No link: the run is on this ledger, not at an address.
 			expect(row).not.toContain("<a ");
@@ -171,8 +186,10 @@ describe("a ticket's page says where it came from", () => {
 			text: "#117 · r-test_writer-25 · b5b969a0",
 			url: null,
 		});
-		for (const row of fromRows(markupOf(ticket)))
+
+		for (const row of fromRows(markupOf(ticket))) {
 			expect(textOf(row)).toContain("#117 · r-test_writer-25 · b5b969a0");
+		}
 	});
 
 	// p1. Every ticket filed before the key has no `from`: its window draws, with no From row.
@@ -194,7 +211,10 @@ describe("a ticket's page says where it came from", () => {
 		expect(read.page?.from).toStrictEqual({text: "PR 352 · mutation", url});
 		const rows = fromRows(drawn(read));
 		expect(rows).toHaveLength(2);
-		for (const row of rows) expect(textOf(row)).toBe("PR 352 · mutation");
+
+		for (const row of rows) {
+			expect(textOf(row)).toBe("PR 352 · mutation");
+		}
 
 		const readWith = (from: unknown) => () =>
 			Schema.decodeUnknownSync(Shown)({...sent, page: {...sent.page, from}});

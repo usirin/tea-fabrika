@@ -100,14 +100,20 @@ const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 	let turns = 0;
 	let model: string | null = null;
 	let [inputTokens, outputTokens, cachedTokens] = [0, 0, 0];
+
 	// Turns are counted from 1 as they started; tea numbers them from 0.
 	for (const part of parts.toSorted((a, b) => ms(a.startTime) - ms(b.startTime))) {
 		const took = Math.round(ms(part.endTime) - ms(part.startTime));
 		const wrong = part.status.code === SpanStatusCode.ERROR ? {failed: true} : {};
+
 		if (part.attributes[OP] === "chat") {
 			turns += 1;
 			const model_ = part.attributes["gen_ai.request.model"];
-			if (typeof model_ === "string") model = model_;
+
+			if (typeof model_ === "string") {
+				model = model_;
+			}
+
 			const input = num(part.attributes["gen_ai.usage.input_tokens"]);
 			const output = num(part.attributes["gen_ai.usage.output_tokens"]);
 			inputTokens += input;
@@ -124,6 +130,7 @@ const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 			events.push({name: tool, time: part.startTime, attributes: {duration_ms: took, ...wrong}});
 		}
 	}
+
 	events.sort((a, b) => ms(a.time) - ms(b.time));
 	const kept = parts.filter((part) => part.attributes[ATTR.content] === "kept");
 	return {span: agent, turns, tools, model, inputTokens, outputTokens, cachedTokens, events, kept};
@@ -132,8 +139,13 @@ const fold = (agent: ReadableSpan, parts: readonly ReadableSpan[]): Folded => {
 /** What an agent's span says once folded, without anything kept out or meant for an LLM viewer. */
 const agentAttributes = (agents: readonly Folded[]): Attributes => {
 	const tools = new Map<string, number>();
-	for (const agent of agents)
-		for (const [name, n] of agent.tools) tools.set(name, (tools.get(name) ?? 0) + n);
+
+	for (const agent of agents) {
+		for (const [name, n] of agent.tools) {
+			tools.set(name, (tools.get(name) ?? 0) + n);
+		}
+	}
+
 	const sum = (pick: (a: Folded) => number) => agents.reduce((total, a) => total + pick(a), 0);
 	const [first] = agents;
 	return {
@@ -207,7 +219,11 @@ export const view = (
 
 	const resourceOf = (base: Resource, service: string): Resource => {
 		const found = resources.get(service);
-		if (found !== undefined) return found;
+
+		if (found !== undefined) {
+			return found;
+		}
+
 		const made = base.merge(resourceFromAttributes({[SERVICE_NAME]: service}));
 		resources.set(service, made);
 		return made;
@@ -261,10 +277,15 @@ export const view = (
 	 * Only to a store that keeps content: anywhere else, the folded span says all that goes.
 	 */
 	const keptUnder = (under: ReadableSpan, agents: readonly Folded[]) => {
-		if (content === "kept_out") return;
-		for (const agent of agents)
-			for (const part of agent.kept)
+		if (content === "kept_out") {
+			return;
+		}
+
+		for (const agent of agents) {
+			for (const part of agent.kept) {
 				next.onEnd(changed(part, {resource: under.resource}, under.spanContext()));
+			}
+		}
 	};
 
 	/** A turn or tool call of a run that never ended, as it was made: its content only if kept. */
@@ -281,16 +302,19 @@ export const view = (
 			const id = span.spanContext().spanId;
 			const parent = span.parentSpanContext?.spanId;
 			const op = span.attributes[OP];
+
 			if ((op === "chat" || op === "execute_tool") && parent !== undefined) {
 				parts.set(parent, [...(parts.get(parent) ?? []), span]);
 				return;
 			}
+
 			if (op === "invoke_agent" && parent !== undefined) {
 				const folded = fold(span, parts.get(id) ?? []);
 				parts.delete(id);
 				agents.set(parent, [...(agents.get(parent) ?? []), folded]);
 				return;
 			}
+
 			const under = agents.get(id) ?? [];
 			agents.delete(id);
 			const out = shown(span, under);
@@ -301,13 +325,20 @@ export const view = (
 		shutdown: () => {
 			// What never found the span it would fold into: each agent run on its own, and
 			// the turns of a run that never ended as they were made.
-			for (const held of agents.values())
+			for (const held of agents.values()) {
 				for (const agent of held) {
 					const out = alone(agent);
 					next.onEnd(out);
 					keptUnder(out, [agent]);
 				}
-			for (const held of parts.values()) for (const part of held) next.onEnd(unfolded(part));
+			}
+
+			for (const held of parts.values()) {
+				for (const part of held) {
+					next.onEnd(unfolded(part));
+				}
+			}
+
 			agents.clear();
 			parts.clear();
 			return next.shutdown();

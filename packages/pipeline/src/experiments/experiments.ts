@@ -201,12 +201,17 @@ export const experimentsOnLedger = (writer: Writer): Layer.Layer<Experiments, ne
 				Effect.gen(function* () {
 					const found: Entry[] = [];
 					let last = 0;
+
 					for (;;) {
 						const page = yield* ledger.read(last, PAGE, ROOT);
 						found.push(...entries(page));
 						last = page.at(-1)?.pos ?? last;
-						if (page.length < PAGE) break;
+
+						if (page.length < PAGE) {
+							break;
+						}
 					}
+
 					return fold(found).experiments.map((k) => Experiment.fromPage(k.page));
 				}).pipe(Effect.mapError((e) => failed("unreachable", e.message)));
 
@@ -242,31 +247,43 @@ export const experimentsOnLedger = (writer: Writer): Layer.Layer<Experiments, ne
 								Effect.andThen(one(n)),
 								Effect.map(found),
 							));
-						if (record === undefined)
+
+						if (record === undefined) {
 							return yield* Effect.fail(
 								failed("bad_fact", `the start ${plan.key} on ${n} did not fold into a run`),
 							);
-						if (record.key !== plan.key)
+						}
+
+						if (record.key !== plan.key) {
 							return yield* Effect.fail(
 								failed(
 									"id_taken",
 									`run key ${plan.key} makes ${run}, which run key ${record.key} has`,
 								),
 							);
-						if (!RunRecord.startedWith(record, yield* keptPlan(plan)))
+						}
+
+						if (!RunRecord.startedWith(record, yield* keptPlan(plan))) {
 							return yield* Effect.fail(
 								failed("key_reused", `run key ${plan.key} started ${run} with another plan`),
 							);
+						}
+
 						return run;
 					}),
 				log: (run, what) =>
 					Effect.gen(function* () {
 						const {kept, record} = yield* known(run);
+
 						if (record.status !== "running") {
 							// Sent again after the run ended, as a second import does: what it holds is no change.
-							if (what.every((log) => holds(kept, record, log))) return;
+							if (what.every((log) => holds(kept, record, log))) {
+								return;
+							}
+
 							return yield* Effect.fail(hasEnded(record));
 						}
+
 						for (const log of what) {
 							const id =
 								log.kind === "metric"
@@ -280,9 +297,12 @@ export const experimentsOnLedger = (writer: Writer): Layer.Layer<Experiments, ne
 				end: (run, how) =>
 					Effect.gen(function* () {
 						const {record} = yield* known(run);
-						if (record.status === "running")
+
+						if (record.status === "running") {
 							yield* send(experimentFor(run), `ended/${run}`, {type: "ended", run, ...how});
-						else if (!RunRecord.endedWith(record, how)) return yield* Effect.fail(hasEnded(record));
+						} else if (!RunRecord.endedWith(record, how)) {
+							return yield* Effect.fail(hasEnded(record));
+						}
 					}),
 				runs: (n) => one(n).pipe(Effect.map((k) => k.page.runs)),
 				cases: (run) =>

@@ -125,10 +125,17 @@ export const rowName = (row: Row): AgentName => (typeof row === "string" ? row :
  */
 const HERE = (() => {
 	const here = fileURLToPath(new URL(".", import.meta.url));
-	if (existsSync(join(here, "fake-agent.ts"))) return here;
-	for (let up = here; dirname(up) !== up; up = dirname(up))
-		if (existsSync(join(up, "pnpm-workspace.yaml")))
+
+	if (existsSync(join(here, "fake-agent.ts"))) {
+		return here;
+	}
+
+	for (let up = here; dirname(up) !== up; up = dirname(up)) {
+		if (existsSync(join(up, "pnpm-workspace.yaml"))) {
 			return join(up, "packages", "fabrika", "src", "agents", "acp");
+		}
+	}
+
 	return here;
 })();
 
@@ -230,7 +237,11 @@ const lines = <Rule>(paths: readonly string[], rule: Rule): Record<string, Rule>
 /** Where a path really is, as far as it is there: a login may not be there yet, under a link that is. */
 const realSoFar = (path: string, real: Disk["real"]): string => {
 	const there = real(path);
-	if (there !== null) return there;
+
+	if (there !== null) {
+		return there;
+	}
+
 	return dirname(path) === path ? path : join(realSoFar(dirname(path), real), basename(path));
 };
 
@@ -287,8 +298,15 @@ const closingAllBut = (
 	/** `start` has no case, and `here` are the kept names that start with it, in any case. */
 	const walk = (start: string, here: readonly string[]): readonly string[] => {
 		const longer = here.filter((name) => name.length > start.length);
-		if (longer.length === 0) return keys(`${dir}/${start}?*`);
-		if (start.length >= depth) return listed(start);
+
+		if (longer.length === 0) {
+			return keys(`${dir}/${start}?*`);
+		}
+
+		if (start.length >= depth) {
+			return listed(start);
+		}
+
 		const next = [...new Set(longer.map((name) => fold(name.charAt(start.length))))].sort();
 		const isKept = here.some((name) => fold(name) === start);
 		const set = [
@@ -395,7 +413,11 @@ export const homeFence = (
 	const nameable = (path: string) => !ODD.test(path);
 	const beside = (dir: string): readonly string[] => {
 		const entries = disk.list(dir);
-		if (entries === null) return closing(dir);
+
+		if (entries === null) {
+			return closing(dir);
+		}
+
 		const ways = entries.filter(({name, link}) => {
 			const path = `${dir}/${name}`;
 			return !link && (opened.includes(path) || holdsOpened(path));
@@ -491,8 +513,11 @@ const profileBytes = (keys: readonly string[]): number =>
 export const fenceTooBig = (table: Readonly<Record<string, unknown>>): string | null => {
 	const keys = Object.keys(table);
 	const count = keys.length;
-	if (count > FENCE_LIMIT)
+
+	if (count > FENCE_LIMIT) {
 		return `Codex's box would need ${count} lines to close what is beside the opened folders, and it takes at most ${FENCE_LIMIT}. Nothing was started. Use a folder with fewer names beside it.`;
+	}
+
 	return patternBytes(keys) > PATTERN_BYTES || profileBytes(keys) > PROFILE_BYTES
 		? `Codex's box would need ${count} lines to close what is beside the opened folders, and those are too long or too deep for it. Nothing was started. Use a folder nearer the top of home, with fewer long names beside it.`
 		: null;
@@ -576,14 +601,23 @@ export const codexLogin = (parent: Env) =>
  */
 export const planLogin = (text: string): "plan" | "not_json" | "not_plan" | "has_key" => {
 	let parsed: unknown;
+
 	try {
 		parsed = JSON.parse(text);
 	} catch {
 		return "not_json";
 	}
-	if (typeof parsed !== "object" || parsed === null) return "not_json";
+
+	if (typeof parsed !== "object" || parsed === null) {
+		return "not_json";
+	}
+
 	const {auth_mode: mode, OPENAI_API_KEY: key} = parsed as Record<string, unknown>;
-	if (mode !== "chatgpt") return "not_plan";
+
+	if (mode !== "chatgpt") {
+		return "not_plan";
+	}
+
 	return key === undefined || key === null || key === "" ? "plan" : "has_key";
 };
 
@@ -604,18 +638,32 @@ export const codexHome = (home: string, login: string) =>
 		const fs = yield* FileSystem.FileSystem;
 		const link = `${home}/auth.json`;
 		const there = yield* fs.exists(login).pipe(Effect.orElseSucceed(() => false));
-		if (!there)
+
+		if (!there) {
 			return yield* Effect.fail("codex is not signed in on this machine: run `codex login`");
+		}
+
 		const plan = planLogin(yield* fs.readFileString(login).pipe(Effect.orElseSucceed(() => "")));
-		if (plan !== "plan") return yield* Effect.fail(PLAN_REFUSED[plan]);
+
+		if (plan !== "plan") {
+			return yield* Effect.fail(PLAN_REFUSED[plan]);
+		}
+
 		yield* fs.makeDirectory(home, {recursive: true, mode: 0o700}).pipe(Effect.mapError(String));
 		const linked = yield* fs.readLink(link).pipe(Effect.option);
+
 		if (linked._tag === "Some") {
-			if (linked.value === login) return;
+			if (linked.value === login) {
+				return;
+			}
+
 			return yield* Effect.fail(`${link} links somewhere else`);
 		}
-		if (yield* fs.exists(link).pipe(Effect.orElseSucceed(() => false)))
+
+		if (yield* fs.exists(link).pipe(Effect.orElseSucceed(() => false))) {
 			return yield* Effect.fail(`${link} is a file, not a link to the login`);
+		}
+
 		yield* fs.symlink(login, link).pipe(Effect.mapError(String));
 	});
 
@@ -706,7 +754,10 @@ export const codexSystem = (
 	readonly config: Readonly<Record<string, string>>;
 	readonly file: {readonly path: string; readonly text: string} | null;
 } => {
-	if (system._tag === "append") return {config: {developer_instructions: system.text}, file: null};
+	if (system._tag === "append") {
+		return {config: {developer_instructions: system.text}, file: null};
+	}
+
 	const path = `${home}/system-${createHash("sha256").update(system.text).digest("hex").slice(0, 16)}.md`;
 	return {config: {model_instructions_file: path}, file: {path, text: system.text}};
 };
@@ -718,7 +769,10 @@ export const codexSystem = (
  */
 export const writeSystem = (file: ReturnType<typeof codexSystem>["file"]) =>
 	Effect.gen(function* () {
-		if (file === null) return;
+		if (file === null) {
+			return;
+		}
+
 		const fs = yield* FileSystem.FileSystem;
 		const dir = file.path.slice(0, file.path.lastIndexOf("/"));
 		const fresh = yield* fs.makeTempFile({directory: dir, prefix: ".system-"});
@@ -818,7 +872,7 @@ export function harnessOf(
 	budget: number | null,
 	parent: Env = process.env,
 ): Harness {
-	if (typeof row !== "string")
+	if (typeof row !== "string") {
 		return {
 			name: row.name,
 			access: row.access,
@@ -831,6 +885,8 @@ export function harnessOf(
 				codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
 			),
 		};
+	}
+
 	switch (row) {
 		case "claude":
 			return {

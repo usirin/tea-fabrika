@@ -351,7 +351,11 @@ export function postsOf(reviewed: Reviewed): readonly Post[] {
 	const reason = `${met} of ${reviewed.criteria.length} criteria met`;
 	return reviewed.verdicts.flatMap((v) => {
 		const text = reviewed.comments.find((c) => c.kind === v.kind)?.text;
-		if (text === undefined || v.verdict === "unseen") return [];
+
+		if (text === undefined || v.verdict === "unseen") {
+			return [];
+		}
+
 		return [{kind: v.kind, verdict: v.verdict, reason, text}];
 	});
 }
@@ -409,8 +413,12 @@ export const loop = defineMachine({
 			};
 			const at = {...held(s), rounds: [...s.rounds, round], round: s.round};
 			const next = afterBuild(s.round, m.value);
+
 			// Only a build that is done goes on to a review, and a done build names its pull request.
-			if (next.go === "review" && outcome.kind === "done") return review(at, outcome.pr);
+			if (next.go === "review" && outcome.kind === "done") {
+				return review(at, outcome.pr);
+			}
+
 			return next.go === "end"
 				? over(at, next.outcome, m.value.name)
 				: over(at, {kind: "stuck", why: "build"}, m.value.name);
@@ -433,7 +441,11 @@ export const loop = defineMachine({
 			const at = {...held(s), rounds, round: s.round};
 			const next = afterReview(rounds, reviewed, items);
 			const posts = postsOf(reviewed);
-			if (posts.length === 0 || reviewed.head === null) return go(at, s.pr, next, reviewed.name);
+
+			if (posts.length === 0 || reviewed.head === null) {
+				return go(at, s.pr, next, reviewed.name);
+			}
+
 			const asked = postVerdicts({
 				pr: s.pr,
 				head: reviewed.head,

@@ -21,10 +21,12 @@ const run = Effect.gen(function* () {
 	const folder = path.join(import.meta.dirname, "e2e");
 	const names = (yield* fs.exists(folder)) ? yield* fs.readDirectory(folder) : [];
 	const files = names.filter((name) => name.endsWith(".test.ts")).sort();
+
 	if (files.length === 0) {
 		yield* Console.log("e2e: no e2e/*.test.ts yet, nothing to run");
 		return;
 	}
+
 	yield* Console.log(`e2e: ${files.length} file(s): ${files.join(", ")}`);
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 	const exitCode = yield* spawner.exitCode(
@@ -44,7 +46,10 @@ const run = Effect.gen(function* () {
 			{cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit"},
 		),
 	);
-	if (exitCode !== 0) return yield* new E2eFailed({exitCode});
+
+	if (exitCode !== 0) {
+		return yield* new E2eFailed({exitCode});
+	}
 });
 
 NodeRuntime.runMain(run.pipe(Effect.provide(NodeServices.layer)));

@@ -36,7 +36,11 @@ const refused = (file: string, field: string, map: unknown): readonly string[] =
 
 const inPackage = (file: string, text: string): readonly string[] => {
 	const manifest: unknown = JSON.parse(text);
-	if (!isMap(manifest)) throw new Error("not an object");
+
+	if (!isMap(manifest)) {
+		throw new Error("not an object");
+	}
+
 	const {pnpm} = manifest;
 	return [
 		...[...FIELDS, ...OVERRIDES].flatMap((field) => refused(file, field, manifest[field])),
@@ -46,7 +50,11 @@ const inPackage = (file: string, text: string): readonly string[] => {
 
 const inWorkspace = (file: string, text: string): readonly string[] => {
 	const workspace: unknown = parse(text);
-	if (!isMap(workspace)) return [];
+
+	if (!isMap(workspace)) {
+		return [];
+	}
+
 	const {catalog, catalogs, overrides} = workspace;
 	return [
 		...refused(file, "catalog", catalog),
@@ -84,7 +92,11 @@ if (tracked.status !== 0 || files.length === 0) {
 
 const check = (file: string): readonly string[] => {
 	const read = READERS[basename(file)];
-	if (read === undefined) throw new Error("no reader");
+
+	if (read === undefined) {
+		throw new Error("no reader");
+	}
+
 	return read(file, readFileSync(join(root, file), "utf8"));
 };
 
@@ -99,8 +111,14 @@ const attempt = (file: string): {readonly lines: readonly string[]; readonly bro
 
 const results = files.map(attempt);
 const lines = results.flatMap((result) => result.lines);
-for (const line of lines) console.error(line);
-if (results.some((result) => result.broken)) process.exit(2);
+
+for (const line of lines) {
+	console.error(line);
+}
+
+if (results.some((result) => result.broken)) {
+	process.exit(2);
+}
 
 if (lines.length > 0) {
 	console.error(

@@ -46,14 +46,18 @@ export function runsLaws<S extends Runs>(): readonly Law<S, Msg, Cmd>[] {
 			{},
 			(seen, {msg, next}) => {
 				const now = msg.at === null ? seen : {...seen, [msg.at]: standing(msg.results)};
+
 				for (const head of HEADS) {
 					const read = checksAt(next, head, NAMES).state;
 					const want = now[head] ?? "pending";
-					if (read !== want)
+
+					if (read !== want) {
 						return broke(
 							`${head} reads ${read}, and ${now[head] === undefined ? `no run stood at ${head}` : `the last run at ${head} was ${want}`}`,
 						);
+					}
 				}
+
 				return now;
 			},
 		),

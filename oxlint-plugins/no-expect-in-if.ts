@@ -53,23 +53,39 @@ export const noExpectInIf: CreateRule = {
 					isExpect ||
 					name === "expect.assertions" ||
 					(name === "expect.hasAssertions" && node.arguments.length === 0);
-				if (!counts) return;
+
+				if (!counts) {
+					return;
+				}
+
 				const plainly = grouped(context.sourceCode, node.callee) === 0;
 				const bodies: Node[] = [];
 				let inIf = false;
+
 				for (const up of ancestors(node)) {
-					if (up.type === "IfStatement") inIf = true;
-					if (up.type === "BlockStatement" && isFunction(up.parent)) bodies.push(up);
+					if (up.type === "IfStatement") {
+						inIf = true;
+					}
+
+					if (up.type === "BlockStatement" && isFunction(up.parent)) {
+						bodies.push(up);
+					}
 				}
+
 				if (!inIf && plainly) {
-					for (const body of bodies) provenBodies.add(body);
+					for (const body of bodies) {
+						provenBodies.add(body);
+					}
 				} else if (inIf && isExpect) {
 					guarded.push({node, body: bodies[0] ?? null});
 				}
 			},
 			"Program:exit"() {
 				for (const {node, body} of guarded) {
-					if (body === null || provenBodies.has(body)) continue;
+					if (body === null || provenBodies.has(body)) {
+						continue;
+					}
+
 					context.report({
 						node,
 						message:

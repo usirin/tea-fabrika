@@ -179,10 +179,14 @@ const draft = (s: Read, facts: Facts | null, restarts = 0, spend = nothing): Ste
 
 /** A planner Msg, folded into the refine combo, and what it ends in. */
 function drafted(s: PlanState, m: Extract<PlanMsg, {type: "plan_finished" | "plan_failed"}>): Step {
-	if (s.phase !== "drafting" || refine.runOf(s.refining)?.id !== m.id) return stay(s);
+	if (s.phase !== "drafting" || refine.runOf(s.refining)?.id !== m.id) {
+		return stay(s);
+	}
+
 	const spend = add(s.spend, m.spend);
 	const next = refine.update(s.refining, m);
 	const base = {tries: next.tries, facts: s.facts, spend};
+
 	switch (next.phase) {
 		case "drafting":
 			return [{...s, refining: next, spend}, []];
@@ -209,7 +213,10 @@ function drafted(s: PlanState, m: Extract<PlanMsg, {type: "plan_finished" | "pla
 
 /** The planner's run: on only while a draft is asked for. Its folder is the commit the code is read at. */
 export const runSub = listen("plan_run", (s: PlanState) => {
-	if (s.phase !== "drafting") return null;
+	if (s.phase !== "drafting") {
+		return null;
+	}
+
 	const run = refine.runOf(s.refining);
 	return run === null ? null : {run: {...run, folder: s.ticket.at}, settings: s.settings};
 });
@@ -225,16 +232,25 @@ export const plan = defineMachine({
 	init: (loaded) => [loaded ?? {phase: "idle"}, []],
 	update: {
 		start: (s, m): Step => {
-			if (s.phase !== "idle") return stay(s);
+			if (s.phase !== "idle") {
+				return stay(s);
+			}
+
 			const asked = readTicket({ticket: m.ask.ticket});
 			return [{ask: m.ask, settings: m.settings, key: m.key, phase: "reading", asked}, [asked]];
 		},
 		resume: (s): Step => {
-			if (s.phase === "reading" || s.phase === "gathering") return [s, [s.asked]];
-			if (s.phase !== "drafting") return stay(s);
+			if (s.phase === "reading" || s.phase === "gathering") {
+				return [s, [s.asked]];
+			}
+
+			if (s.phase !== "drafting") {
+				return stay(s);
+			}
+
 			// The run that was on is gone with the process, and its conversation's name is taken.
 			// Start over once, under a new name.
-			if (s.restarts >= MAX_RESTARTS)
+			if (s.restarts >= MAX_RESTARTS) {
 				return end(
 					s,
 					{kind: "stuck", why: "cut_off"},
@@ -244,6 +260,8 @@ export const plan = defineMachine({
 						problems: [`the planner was cut off ${s.restarts + 1} times`],
 					},
 				);
+			}
+
 			const brief = s.refining.phase === "drafting" ? s.refining.brief : null;
 			return draft(
 				s,
@@ -254,9 +272,16 @@ export const plan = defineMachine({
 		},
 
 		plan_ticket_ok: (s, m): Step => {
-			if (s.phase !== "reading") return stay(s);
+			if (s.phase !== "reading") {
+				return stay(s);
+			}
+
 			const ticket = m.value;
-			if (ticket.state === "closed") return end(s, {kind: "skip", why: "closed"});
+
+			if (ticket.state === "closed") {
+				return end(s, {kind: "skip", why: "closed"});
+			}
+
 			const asked = readFacts({ticket});
 			return [{...held(s), ticket, phase: "gathering", asked}, [asked]];
 		},

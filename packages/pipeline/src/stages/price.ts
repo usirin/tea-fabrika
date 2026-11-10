@@ -24,7 +24,11 @@ export interface Tokens {
 /** A run at list price. `null`: this model's price is not known. */
 export const listUsdOf = (model: string, t: Tokens): number | null => {
 	const rate = LIST[model];
-	if (rate === undefined) return null;
+
+	if (rate === undefined) {
+		return null;
+	}
+
 	return (
 		(rate.in * Math.max(0, t.input - t.cached) + rate.cached * t.cached + rate.out * t.output) /
 		1_000_000

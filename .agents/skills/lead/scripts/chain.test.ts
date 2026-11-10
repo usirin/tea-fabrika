@@ -83,12 +83,17 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 			mutation: "review",
 			review: "open",
 		};
-		for (const s of STEPS)
+
+		for (const s of STEPS) {
 			for (const o of ["done", "skip:step_said"]) {
 				const m = moveOf(s, line(o, "h"), 0, 3);
 				expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
-				if (m._tag === "step") expect(m.note).toBe("");
+
+				if (m._tag === "step") {
+					expect(m.note).toBe("");
+				}
 			}
+		}
 	});
 
 	it("a send goes to the step it names with the sender's word; a send to plan parks", () => {
@@ -96,7 +101,11 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 			fc.property(step, step, word, (from, to, why) => {
 				const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
 				expect(m).toMatchObject({_tag: "step", step: to});
-				if (m._tag === "step") expect(m.note).toContain(why);
+
+				if (m._tag === "step") {
+					expect(m.note).toContain(why);
+				}
+
 				expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
 			}),
 			options,
@@ -120,7 +129,10 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 				const [verb, check] = o.split(":");
 				const slot = verb === "refused" && (check === "agent_cap" || check === "low_disk");
 				expect(slotRefusal(o)).toBe(slot ? check : null);
-				if (verb === "refused") expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");
+
+				if (verb === "refused") {
+					expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");
+				}
 			}),
 			options,
 		);
@@ -181,7 +193,11 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
 			fc.property(step, word, word, (s, note, chatter) => {
 				const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
 				expect(sent).toMatchObject({_tag: "step", step: s});
-				if (sent._tag === "step") expect(sent.note).toContain(note);
+
+				if (sent._tag === "step") {
+					expect(sent.note).toContain(note);
+				}
+
 				expect(judgedOf(`answer: send ${s} old\n${chatter}\nanswer: park ${note}`)).toEqual({
 					_tag: "park",
 					reason: note,
@@ -230,18 +246,27 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
 				});
 				expect(text).toContain("Shared: ticket 7");
 				expect(text).toContain(cut.sections[s] ?? "nothing");
-				for (const other of STEPS)
-					if (other !== s) expect(text).not.toContain(cut.sections[other] ?? "nothing");
+
+				for (const other of STEPS) {
+					if (other !== s) {
+						expect(text).not.toContain(cut.sections[other] ?? "nothing");
+					}
+				}
+
 				expect(text).not.toContain("What changed.");
 				expect(text).toContain(`round ${round}`);
 				expect(text).toContain(`Last round: ${note}`);
 				expect(text).toContain(head.slice(0, 8));
+
 				// A review gets the two full SHAs its template needs; a mutation its build range.
 				if (s === "review") {
 					expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
 					expect(text).toContain(`Parent base: origin/main at ${root}`);
 				}
-				if (s === "mutation") expect(text).toContain("T=7, BUILD=");
+
+				if (s === "mutation") {
+					expect(text).toContain("T=7, BUILD=");
+				}
 			}),
 			options,
 		);
@@ -280,12 +305,14 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 		let [m, cmds] = start();
 		expect(cmds[0]).toMatchObject({type: "step_run", step: "tests", round: 1});
 		const heads: string[] = [];
+
 		for (const [i, s] of STEPS.entries()) {
 			expect(m).toMatchObject({phase: "stepping", step: s});
 			const head = String(i + 1).repeat(40);
 			heads.push(head);
 			[m, cmds] = ran(m, line("done", head));
 		}
+
 		expect(m.phase).toBe("opening");
 		expect(cmds[0]).toMatchObject({type: "pr_open", head: heads[3]});
 		[m, cmds] = machine.update.pr_open_ok(m, {
@@ -298,6 +325,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 			value: {ok: true, detail: "merged"},
 		} as never);
 		expect(m.phase).toBe("over");
+
 		if (m.phase === "over") {
 			expect(m.end.kind).toBe("done");
 			expect(exitOf(m.end)).toBe(0);
@@ -318,7 +346,10 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 				[m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
 				expect(m).toMatchObject({phase: "stepping", step: to});
 				expect(cmds[0]).toMatchObject({type: "step_run", step: to, round: 3});
-				if (cmds[0]?.type === "step_run") expect(cmds[0].note).toContain(why);
+
+				if (cmds[0]?.type === "step_run") {
+					expect(cmds[0].note).toContain(why);
+				}
 			}),
 			options,
 		);
@@ -342,7 +373,10 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 					value: {text: `answer: park ${why}`},
 				} as never);
 				expect(parked).toMatchObject({phase: "over", end: {kind: "ask", reason: why}});
-				if (parked.phase === "over") expect(exitOf(parked.end)).toBe(20);
+
+				if (parked.phase === "over") {
+					expect(exitOf(parked.end)).toBe(20);
+				}
 			}),
 			options,
 		);
@@ -362,6 +396,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 					},
 				} as never);
 				expect(over).toMatchObject({phase: "over", end: {kind: "stuck"}});
+
 				if (over.phase === "over") {
 					expect(over.end.reason).toContain("slotSchedule(5 minutes)");
 					expect(over.end.reason).toContain(why);
@@ -426,12 +461,14 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 						},
 					],
 				};
-				for (const r of [before, after])
+
+				for (const r of [before, after]) {
 					expect(
 						Schema.decodeUnknownSync(ChainRecord)(
 							JSON.parse(JSON.stringify(Schema.encodeSync(ChainRecord)(r))),
 						),
 					).toEqual(r);
+				}
 			}),
 			options,
 		);
@@ -519,7 +556,11 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
 		});
 		expect(report).toBe(said);
 		expect(turned._tag).toBe("ended");
-		if (turned._tag !== "ended") return;
+
+		if (turned._tag !== "ended") {
+			return;
+		}
+
 		expect(turned.answer).toEqual({verb: "done", to: null, why: "all green", laws: null});
 		expect(turned.spent).toEqual({
 			input: 100,
@@ -550,7 +591,10 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
 	it("a harness that breaks is a failed turn with its why, never a thrown error", async () => {
 		const {turned} = await turn({raws: [{_tag: "said", text: "half"}]});
 		expect(turned._tag).toBe("failed");
-		if (turned._tag === "failed") expect(turned.why).toBe("broke");
+
+		if (turned._tag === "failed") {
+			expect(turned.why).toBe("broke");
+		}
 	});
 
 	it("an agent that says nothing fitting ends with a null answer and an empty report", async () => {

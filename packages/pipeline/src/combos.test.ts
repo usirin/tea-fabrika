@@ -305,7 +305,11 @@ describe("ask: a question, the replies, a typed answer", () => {
 		const yes = (q = question) => {
 			const asked = ask.posted(ask.start("k", q, "run/ask")[0], "thread-1", 100);
 			const [answered] = ask.replied(asked, reply("owner", "/yes", 200));
-			if (answered.phase !== "answered") throw new Error("not answered");
+
+			if (answered.phase !== "answered") {
+				throw new Error("not answered");
+			}
+
 			return answered;
 		};
 
@@ -343,8 +347,10 @@ describe("spawn: a child per item", () => {
 
 	it("gives each child the lowest free slot for life, and refuses one more than the slots", () => {
 		let children: Children<Child> = {};
-		for (const key of ["a", "b"])
+
+		for (const key of ["a", "b"]) {
 			children = spawn(children, key, {n: 0, wants: key}, 2) ?? children;
+		}
 
 		expect([children.a?.slot, children.b?.slot]).toEqual([0, 1]);
 		expect(spawn(children, "c", {n: 0, wants: "c"}, 2)).toBeNull();
@@ -364,8 +370,10 @@ describe("spawn: a child per item", () => {
 		const none: Children<Child> = {};
 		expect(stepChild(none, "constructor", (s) => [s, ["cmd"]])).toEqual([none, []]);
 		let children = none;
-		for (const key of ["constructor", "__proto__"])
+
+		for (const key of ["constructor", "__proto__"]) {
 			children = spawn(children, key, {n: 0, wants: key}, 2) ?? children;
+		}
 
 		expect(Object.entries(children)).toEqual([
 			["constructor", {slot: 0, state: {n: 0, wants: "constructor"}}],

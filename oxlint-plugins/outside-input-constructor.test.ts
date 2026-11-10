@@ -97,7 +97,11 @@ describe("P17a, outside input has typed failures", () => {
 			...files,
 			[other]: "declare const raw: unknown, Row: any; Row.make(raw);",
 		});
-		for (const path of Object.keys(files)) expect(linted(code, path)).toEqual([1]);
+
+		for (const path of Object.keys(files)) {
+			expect(linted(code, path)).toEqual([1]);
+		}
+
 		expect(linted(code, other)).toEqual([]);
 	});
 });

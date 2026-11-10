@@ -22,7 +22,10 @@ it("refuses the retired Id module for generated contents and permits other modul
 					Object.fromEntries([retired, ...allowed].map((path) => [path, body])),
 				);
 				expect(linted("fabrika(one-id-module)", retired)).toEqual([1]);
-				for (const path of allowed) expect(linted("fabrika(one-id-module)", path)).toEqual([]);
+
+				for (const path of allowed) {
+					expect(linted("fabrika(one-id-module)", path)).toEqual([]);
+				}
 			}
 		}),
 		{seed: 119120, numRuns: 10},

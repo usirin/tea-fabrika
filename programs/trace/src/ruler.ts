@@ -58,7 +58,10 @@ const coarsest = (length: number): number =>
 
 /** The ticks of an axis `length` ms long, each at its coarsest rank, in time order. */
 export const ticksOf = (length: number): readonly Tick[] => {
-	if (!(length > 0)) return [{t: 0, rank: 0}];
+	if (!(length > 0)) {
+		return [{t: 0, rank: 0}];
+	}
+
 	const one = coarsest(length);
 	const last = Math.floor(length / one) * one;
 	const two = finest(length, one, 8);

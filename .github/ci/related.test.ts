@@ -31,14 +31,18 @@ const readers = new Map(
 	tests.map((test) => {
 		const reached = new Set<string>();
 		const queue = [test];
+
 		for (const path of queue) {
 			const names = new Set((tree.get(path) ?? "").match(/[\w-]+\.(?:sh|py|mjs|ts|json)\b/g));
-			for (const script of scripts)
+
+			for (const script of scripts) {
 				if (names.has(basename(script)) && !reached.has(script)) {
 					reached.add(script);
 					queue.push(script);
 				}
+			}
 		}
+
 		return [test, reached] as const;
 	}),
 );

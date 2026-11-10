@@ -74,14 +74,25 @@ const USE = `Load them with ownRules (@kampus/fabrika-old/agents/sandbox), or no
  */
 export const settingsRefusal = (options: SettingsFrom): string | null => {
 	const sources = options.settingSources;
-	if (sources === undefined)
+
+	if (sources === undefined) {
 		return `settingSources is not set, and the Agent SDK then loads every settings file: the user's, the project's and the local one. ${USE}`;
-	if (sources.length === 0) return null;
+	}
+
+	if (sources.length === 0) {
+		return null;
+	}
+
 	const others = sources.filter((source) => source !== "project");
-	if (others.length > 0)
+
+	if (others.length > 0) {
 		return `settingSources names ${others.join(" and ")}, so the user's own or the local settings would load. ${USE}`;
-	if (options.projectConfigRoot !== NO_PROJECT_CONFIG)
+	}
+
+	if (options.projectConfigRoot !== NO_PROJECT_CONFIG) {
 		return `settingSources names project, and projectConfigRoot is ${options.projectConfigRoot === undefined ? "not set" : `${options.projectConfigRoot}, not ${NO_PROJECT_CONFIG}`}, so the project's hooks, env and apiKeyHelper would load with its rules (experiment 155). ${USE}`;
+	}
+
 	return null;
 };
 
@@ -121,17 +132,29 @@ const FIX = `On a machine: sudo ${MAKE_EMPTY_FOLDER}. In a box image, as root be
  */
 export const emptyFolderRefusal = (folder: string = NO_PROJECT_CONFIG): string | null => {
 	const stat = statOf(folder);
-	if (stat === undefined)
+
+	if (stat === undefined) {
 		return `${folder} is not on this machine, and Claude Code does not start without it: a run reads the project's settings from that empty folder (experiment 155). Debian and Ubuntu do not ship it. ${FIX}`;
-	if (!stat.isDirectory())
+	}
+
+	if (!stat.isDirectory()) {
 		return `${folder} is not a folder, and Claude Code does not start without one: a run reads the project's settings from it. Remove it, then make the folder. ${FIX}`;
+	}
+
 	const held = entriesOf(folder);
-	if (held === null)
+
+	if (held === null) {
 		return `${folder} cannot be listed by this process, and Claude Code does not start then. Make it readable: sudo chmod 0555 ${folder}.`;
-	if (held.length > 0)
+	}
+
+	if (held.length > 0) {
 		return `${folder} is not empty (it holds ${held.join(", ")}), and Claude Code reads a project's settings from it. Remove what it holds.`;
-	if (writable(folder))
+	}
+
+	if (writable(folder)) {
 		return `${folder} can be written by this process, so an agent it starts could put settings there for the next run. Make it root's and read-only: sudo chown root ${folder} && sudo chmod 0555 ${folder}. Root writes anywhere: run the agent as another user, or mount the folder read-only.`;
+	}
+
 	return null;
 };
 

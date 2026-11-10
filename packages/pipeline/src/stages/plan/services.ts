@@ -100,7 +100,11 @@ export const githubPlanHost = (gh: Gh) =>
 		ticket: (url) =>
 			Effect.gen(function* () {
 				const at = ticketOf(url);
-				if (at === null) return yield* Effect.fail({_tag: "unknown" as const});
+
+				if (at === null) {
+					return yield* Effect.fail({_tag: "unknown" as const});
+				}
+
 				const {issue} = (yield* ask(gh, Answer, TICKET, {
 					owner: at.owner,
 					name: at.name,

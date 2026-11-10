@@ -61,8 +61,11 @@ function scripted(answer: (args: readonly string[], nth: number) => Answer) {
 function inOrder(...answers: Answer[]) {
 	return scripted((_args, nth) => {
 		const out = answers[nth - 1];
-		if (out === undefined)
+
+		if (out === undefined) {
 			throw new Error(`call ${nth} came, and the script has ${answers.length}`);
+		}
+
 		return out;
 	});
 }
@@ -390,7 +393,8 @@ describe("merge, pinned to the main the head was tested on", () => {
 	}) =>
 		scripted((args) => {
 			const path = args.find((arg) => arg.startsWith("repos/")) ?? "";
-			if (args.some((arg) => arg.includes("rules(first")))
+
+			if (args.some((arg) => arg.includes("rules(first"))) {
 				return JSON.stringify({
 					data: {
 						repository: {
@@ -398,17 +402,36 @@ describe("merge, pinned to the main the head was tested on", () => {
 						},
 					},
 				});
-			if (args.includes("graphql")) return o.read ?? allows({});
-			if (path === `${REPO}/branches/main`)
+			}
+
+			if (args.includes("graphql")) {
+				return o.read ?? allows({});
+			}
+
+			if (path === `${REPO}/branches/main`) {
 				return JSON.stringify({protected: o.protected ?? false});
-			if (path === `${REPO}/git/commits/${HEAD}`)
+			}
+
+			if (path === `${REPO}/git/commits/${HEAD}`) {
 				return JSON.stringify({sha: HEAD, tree: {sha: "tree0"}});
-			if (path === `${REPO}/git/commits`) return JSON.stringify({sha: MADE});
-			if (path === `${REPO}/git/refs/heads/main`) return o.moved === false ? "breaks" : "{}";
-			if (path === `${REPO}/git/ref/heads/main`)
+			}
+
+			if (path === `${REPO}/git/commits`) {
+				return JSON.stringify({sha: MADE});
+			}
+
+			if (path === `${REPO}/git/refs/heads/main`) {
+				return o.moved === false ? "breaks" : "{}";
+			}
+
+			if (path === `${REPO}/git/ref/heads/main`) {
 				return JSON.stringify({object: {sha: o.tip ?? LANDED}});
-			if (path.startsWith(`${REPO}/compare/`))
+			}
+
+			if (path.startsWith(`${REPO}/compare/`)) {
 				return JSON.stringify({status: o.compare ?? "diverged"});
+			}
+
 			throw new Error(`no answer for ${args.join(" ")}`);
 		});
 
@@ -469,6 +492,7 @@ describe("merge, pinned to the main the head was tested on", () => {
 		const ruled = branchWith({protected: true});
 		const ruleset = branchWith({rules: [{type: "pull_request"}]});
 		const squashOnly = branchWith({read: allows({mergeCommitAllowed: false})});
+
 		for (const {gh, calls} of [ruled, ruleset, squashOnly]) {
 			// GitHub's merge is answered here; every other call goes to the branch's script.
 			const answered = await Effect.runPromise(
@@ -623,7 +647,10 @@ async function waited(answers: Answer[], limits: {outPolls?: number; outMs?: num
 function waitedBlind(answers: Answer[], limits: {outPolls: number; outMs: number}) {
 	let plain = 0;
 	const {gh, calls} = scripted((args) => {
-		if (asksRecord(args)) return "breaks";
+		if (asksRecord(args)) {
+			return "breaks";
+		}
+
 		plain += 1;
 		return answers[Math.min(plain, answers.length) - 1] as Answer;
 	});
@@ -690,6 +717,7 @@ describe("one read of the queue, weighed with the reads before it", () => {
 				),
 			).toEqual({reading: "ejected"});
 		}
+
 		// The first read was behind and did not show our enqueue yet.
 		expect(
 			after(
@@ -1075,21 +1103,41 @@ function github(change: (args: readonly string[], nth: number) => Answer | null 
 	let queueReads = 0;
 	return scripted((args, nth) => {
 		const other = change(args, nth);
-		if (other !== null) return other;
+
+		if (other !== null) {
+			return other;
+		}
+
 		const query = queryOf(args);
-		if (query.includes("enqueuePullRequest")) return ENQUEUED;
-		if (query.includes("isMergeQueueEnabled")) return stands();
-		if (query.includes("baseRefName"))
+
+		if (query.includes("enqueuePullRequest")) {
+			return ENQUEUED;
+		}
+
+		if (query.includes("isMergeQueueEnabled")) {
+			return stands();
+		}
+
+		if (query.includes("baseRefName")) {
 			return JSON.stringify({
 				data: {repository: {pullRequest: {headRefOid: HEAD, baseRefName: "main"}}},
 			});
-		if (query.includes("codeowners:")) return recorded("open-clean");
+		}
+
+		if (query.includes("codeowners:")) {
+			return recorded("open-clean");
+		}
+
 		// Where main is: the head left it at its tip.
-		if (args[1]?.includes("/compare/")) return JSON.stringify({tested: MERGE, tip: MERGE});
+		if (args[1]?.includes("/compare/")) {
+			return JSON.stringify({tested: MERGE, tip: MERGE});
+		}
+
 		if (query.includes("mergeCommit")) {
 			queueReads += 1;
 			return queueReads < 3 ? queueNow({}, [OURS]) : MERGED;
 		}
+
 		throw new Error(`a call the script does not know: ${args.join(" ").slice(0, 120)}`);
 	});
 }
@@ -1136,7 +1184,11 @@ describe("the machine alone on a pull request", () => {
 		const {gh, calls} = github();
 		const issue = "https://github.com/example/repo/issues/7";
 		const p = planOf([PR, issue, "--own", "a"]);
-		if (p === null) throw new Error("the plan was refused");
+
+		if (p === null) {
+			throw new Error("the plan was refused");
+		}
+
 		const started = await Effect.runPromise(launch(p, partsOn(gh, made), {}));
 
 		expect(started).toMatchObject({kind: "bad_shape", name: "pr"});
@@ -1215,17 +1267,26 @@ describe("the machine alone on a pull request", () => {
 		const {gh, calls} = github((args) => {
 			const query = queryOf(args);
 			const path = args[args.length - 1] ?? "";
+
 			// Red on the first read of the facts, green after the re-run.
 			if (query.includes("codeowners:")) {
 				factReads += 1;
 				return factReads === 1 ? redFacts : null;
 			}
-			if (path.includes("/actions/runs?head_sha="))
+
+			if (path.includes("/actions/runs?head_sha=")) {
 				return runs([run(10, "success"), run(11, "failure")]);
-			if (path.endsWith("/rerun-failed-jobs")) return "{}";
+			}
+
+			if (path.endsWith("/rerun-failed-jobs")) {
+				return "{}";
+			}
+
 			// The wait: the old red try twice, the second try running, then finished.
-			if (query.includes("statusCheckRollup") && !query.includes("codeowners:"))
+			if (query.includes("statusCheckRollup") && !query.includes("codeowners:")) {
 				return checksNow(runReads < 3 ? "FAILURE" : "SUCCESS");
+			}
+
 			if (path.endsWith("/actions/runs/11")) {
 				runReads += 1;
 				return [
@@ -1235,6 +1296,7 @@ describe("the machine alone on a pull request", () => {
 					runNow(2, "completed"),
 				][Math.min(runReads, 4) - 1] as string;
 			}
+
 			return null;
 		});
 		const ran = await alone(

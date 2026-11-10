@@ -110,14 +110,25 @@ export const shipWriteInterpret = () => ({
 	ship_enqueue: (cmd: ReturnType<typeof enqueue>) =>
 		Effect.gen(function* () {
 			const door = yield* atTheDoorNow(cmd.ready, atTheDoor);
-			if ("stale" in door) return "stale" as const;
+
+			if ("stale" in door) {
+				return "stale" as const;
+			}
+
 			return yield* (yield* CodeHostWrites).enqueue(door.write);
 		}),
 	ship_merge: (cmd: ReturnType<typeof merge>) =>
 		Effect.gen(function* () {
 			const door = yield* atTheDoorNow(cmd.ready, atTheMergeDoor);
-			if ("stale" in door) return {reading: "stale" as const};
-			if ("behind" in door) return {reading: "behind" as const};
+
+			if ("stale" in door) {
+				return {reading: "stale" as const};
+			}
+
+			if ("behind" in door) {
+				return {reading: "behind" as const};
+			}
+
 			return yield* (yield* CodeHostWrites).merge(door.write);
 		}),
 	ship_finish: (_cmd: ReturnType<typeof finish>) => Effect.succeed(null),

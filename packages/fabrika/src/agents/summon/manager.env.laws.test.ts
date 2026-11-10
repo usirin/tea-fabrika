@@ -52,7 +52,10 @@ const made: string[] = [];
 
 afterEach(() => {
 	seen.opened.length = 0;
-	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
+
+	for (const folder of made.splice(0)) {
+		rmSync(folder, {recursive: true, force: true});
+	}
 });
 
 describe("T237-1: summon keeps the harness's hidden-file defaults", () => {
@@ -73,6 +76,7 @@ describe("T237-1: summon keeps the harness's hidden-file defaults", () => {
 			expect(seen.opened).toHaveLength(1);
 			const opened = seen.opened[0]!;
 			expect(opened.folder).toBe(folder);
+
 			if (agent === "claude") {
 				const {options} = (opened.meta as {claudeCode: {options: Options}}).claudeCode;
 				expect(options.sandbox?.filesystem?.allowRead).toContain(folder);

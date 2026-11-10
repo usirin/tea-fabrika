@@ -54,7 +54,11 @@ const read = await Effect.runPromise(
 		const {settings, source, holds} = yield* loadSettings(where);
 		const file = yield* ledgerFile(home, where);
 		const repo = path.join(home, "rubrics", source.from === "repo" ? source.commit : "folder");
-		if (settings.review?.rubrics !== undefined) yield* writeRubrics(repo, holds.rubrics);
+
+		if (settings.review?.rubrics !== undefined) {
+			yield* writeRubrics(repo, holds.rubrics);
+		}
+
 		const setup = setupOf(settings, holds, config.said, {shipped: yield* shippedRubrics(), repo});
 		const lines = setupLines(setup, holds, settings);
 		const persist = path.join(home, "ledgers", "local");
@@ -73,7 +77,11 @@ if (read._tag === "Failure") {
 } else {
 	const {config, start, settings, source, persist, ledger: name, file, setup, lines} = read.success;
 	process.stderr.write(`${sourceLine(source)}\n`);
-	for (const line of lines) process.stderr.write(`  ${line}\n`);
+
+	for (const line of lines) {
+		process.stderr.write(`  ${line}\n`);
+	}
+
 	const open = Effect.runSync(Scope.make());
 	const picked =
 		setup.ledger.value === "sqlite" ? sqliteLedger(file) : localLedger({persist, ledger: name});

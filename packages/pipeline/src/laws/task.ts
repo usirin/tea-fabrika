@@ -128,22 +128,35 @@ export function taskLaws<S extends Task>(): readonly Law<S, Msg, TaskCmd>[] {
 			null,
 			(read, {prev, msg, cmds}) => {
 				const now = prev.phase === "reading" && msg.type === "task_read_ok" ? msg.value : read;
+
 				for (const push of pushesIn(cmds)) {
-					if (now === null) return broke("a push before the task was read");
-					if (taskGate(now).answer !== "go") return broke("a push the gate stopped");
-					if (push.base !== now.base || push.branch !== now.branch)
+					if (now === null) {
+						return broke("a push before the task was read");
+					}
+
+					if (taskGate(now).answer !== "go") {
+						return broke("a push the gate stopped");
+					}
+
+					if (push.base !== now.base || push.branch !== now.branch) {
 						return broke(
 							`pushed ${push.branch} from ${push.base}, read ${now.branch} at ${now.base}`,
 						);
+					}
 				}
+
 				return now;
 			},
 		),
 		law<S, Msg, TaskCmd>("the commit closes no ticket", ({cmds}) => {
 			for (const push of pushesIn(cmds)) {
 				const named = closes(push.message);
-				if (named.length > 0) return `the commit message closes ${named.join(", ")}`;
+
+				if (named.length > 0) {
+					return `the commit message closes ${named.join(", ")}`;
+				}
 			}
+
 			return null;
 		}),
 		law<S, Msg, TaskCmd>("a builder Msg counts only for the run asked for", ({prev, msg, next}) =>
@@ -194,7 +207,11 @@ export function showTaskMsg(m: Msg): string {
 /** The builder's summary goes into the commit as it came: a "Fixes #2" in it closes #2. */
 export const rawSummary: Update<Task, Msg, TaskCmd> = (s, m) => {
 	const [next, cmds] = taskUpdate(s, m);
-	if (next.phase !== "pushing" || s.phase !== "building") return [next, cmds];
+
+	if (next.phase !== "pushing" || s.phase !== "building") {
+		return [next, cmds];
+	}
+
 	const message = `${next.asked.message}\n\n${next.built.summary}`;
 	const asked = {...next.asked, message};
 	return [{...next, asked}, cmds.map((c) => (c.type === "task_push" ? asked : c))];

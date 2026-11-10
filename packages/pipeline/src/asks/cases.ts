@@ -36,7 +36,11 @@ export const numberOf = (url: string): string => url.split(/[/#]/).at(-1) ?? url
 export function changed(approved: Plan): Revision {
 	const plan = revisionOf(approved);
 	const [task, ...rest] = plan.tasks;
-	if (task === undefined) return plan;
+
+	if (task === undefined) {
+		return plan;
+	}
+
 	const [first, ...others] = task.criteria;
 	const tightened =
 		first === undefined

@@ -102,8 +102,15 @@ const services = (config: BuildConfig) =>
 					"origin/main",
 					"HEAD",
 				]);
-				if (holds.code === 0) return;
-				if (holds.code !== 1) return yield* failed;
+
+				if (holds.code === 0) {
+					return;
+				}
+
+				if (holds.code !== 1) {
+					return yield* failed;
+				}
+
 				const merged = yield* git([
 					"-C",
 					tree,
@@ -115,7 +122,11 @@ const services = (config: BuildConfig) =>
 					"Take main in",
 					"origin/main",
 				]);
-				if (merged.code === 0) return;
+
+				if (merged.code === 0) {
+					return;
+				}
+
 				yield* git(["-C", tree, "merge", "--abort"]);
 				return yield* failed;
 			});
@@ -132,13 +143,16 @@ const services = (config: BuildConfig) =>
 				const clone = cloneIn(config.work, at);
 				const branch = branchOf(number);
 				const tree = path.join(path.dirname(clone), "trees", String(number));
+
 				if (!(yield* exists(path.join(clone, ".git")))) {
 					yield* fs
 						.makeDirectory(path.dirname(clone), {recursive: true})
 						.pipe(Effect.mapError(() => ({_tag: "unknown" as const})));
 					yield* gitLow(["clone", "--no-checkout", urlOf(at), clone]).pipe(Effect.flatMap(ok));
 				}
+
 				yield* gitLow(["-C", clone, "fetch", "--prune", "origin"]).pipe(Effect.flatMap(ok));
+
 				if (!(yield* exists(tree))) {
 					// A copy removed by hand is still on git's list until it is pruned.
 					yield* git(["-C", clone, "worktree", "prune"]).pipe(Effect.flatMap(ok));
@@ -155,6 +169,7 @@ const services = (config: BuildConfig) =>
 						Effect.flatMap(ok),
 					);
 				}
+
 				// The real path: the agent's Check judges paths as they are written.
 				const real = yield* fs
 					.realPath(tree)
@@ -164,8 +179,11 @@ const services = (config: BuildConfig) =>
 				)).trim();
 				yield* takeMainIn(real);
 				const [program, ...args] = install;
-				if (program !== undefined && !(yield* exists(path.join(tree, "node_modules"))))
+
+				if (program !== undefined && !(yield* exists(path.join(tree, "node_modules")))) {
 					yield* on(runLow(program, args, {cwd: tree, env: runEnv()})).pipe(Effect.flatMap(ok));
+				}
+
 				return {tree: real, branch, base};
 			});
 
@@ -180,11 +198,15 @@ const services = (config: BuildConfig) =>
 				yield* git([...at, "add", "-A"]).pipe(Effect.flatMap(ok));
 				// 1: something is staged. 0: nothing is, so this round's commit, if any, is already made.
 				const staged = yield* git([...at, "diff", "--cached", "--quiet"]);
-				if (staged.code === 1)
+
+				if (staged.code === 1) {
 					yield* git([...at, "commit", "--no-verify", "-q", "-m", message]).pipe(
 						Effect.flatMap(ok),
 					);
-				else if (staged.code !== 0) return yield* failed;
+				} else if (staged.code !== 0) {
+					return yield* failed;
+				}
+
 				const head = (yield* git([...at, "rev-parse", "HEAD"]).pipe(Effect.flatMap(ok))).trim();
 				// Never forced: a branch that moved on GitHub is a failure to read, not one to overwrite.
 				yield* gitLow([
@@ -212,6 +234,7 @@ const services = (config: BuildConfig) =>
 					`${pulls}?head=${repo.owner}:${branch}&state=open&per_page=10`,
 				]);
 				const [standing] = found;
+
 				if (standing !== undefined) {
 					yield* gh([
 						"api",
@@ -225,6 +248,7 @@ const services = (config: BuildConfig) =>
 					]);
 					return standing.html_url;
 				}
+
 				const made = yield* answerOf(gh, PullRequest, [
 					"api",
 					"--method",

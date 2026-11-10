@@ -125,8 +125,11 @@ const gitHubReads = (
 	counted: Counted | undefined,
 ): Layer.Layer<CodeHost> => {
 	const accounts = {own: config.own, reviewers: config.reviewers};
-	if (setup === null)
+
+	if (setup === null) {
 		return gitHubCodeHost(counted === undefined ? accounts : {...accounts, checks: counted});
+	}
+
 	const github = setup.github.value;
 	const base = gitHubCodeHost({
 		...accounts,
@@ -134,7 +137,11 @@ const gitHubReads = (
 		declared: {approval: setup.approval.value},
 	});
 	const [first, ...rest] = setup.run.value;
-	if (first === undefined) return base;
+
+	if (first === undefined) {
+		return base;
+	}
+
 	const settings = {
 		work: config.work,
 		install: setup.install.value,

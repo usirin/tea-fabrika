@@ -104,7 +104,11 @@ const viewNow = (run: AnyRun): unknown => {
 const shown = (run: AnyRun) => {
 	const declared = viewOf(run.program);
 	const machine = declared === undefined ? undefined : run.machines[declared.machine];
-	if (machine === undefined) return Effect.void;
+
+	if (machine === undefined) {
+		return Effect.void;
+	}
+
 	return machine.changes.pipe(
 		Stream.filter((s) => s !== null),
 		Stream.runHead,
@@ -155,14 +159,26 @@ export const driveFor = (options: {
 		const runOf = (program: string) =>
 			Effect.gen(function* () {
 				const running = mine.get(program);
-				if (running !== undefined) return Option.some(running);
+
+				if (running !== undefined) {
+					return Option.some(running);
+				}
+
 				const entry = list.get(program);
-				if (entry === undefined) return Option.none();
+
+				if (entry === undefined) {
+					return Option.none();
+				}
+
 				const id = `${program}:agent:${crypto.randomUUID().slice(0, 8)}`;
 				const started = yield* entry
 					.start({}, {}, {id, storage: memoryStorage()})
 					.pipe(Scope.provide(scope));
-				if (started.kind !== "running") return Option.none();
+
+				if (started.kind !== "running") {
+					return Option.none();
+				}
+
 				mine.set(program, started);
 				// It ended: its program quit, or its input was closed. The next call starts a fresh one.
 				yield* started.run.ended.pipe(
@@ -193,11 +209,14 @@ export const driveFor = (options: {
 				case "job":
 					return Effect.sync((): Answer => {
 						const found = job?.(c.ask.n) ?? null;
-						if (found === null)
+
+						if (found === null) {
 							return {
 								kind: "refused",
 								why: `there is no job ${c.ask.n}: the host's table does not hold it, and no end of it is kept`,
 							};
+						}
+
 						return {
 							kind: "done",
 							data: {...found, lines: lastLines(found.lines, c.ask.last ?? LAST_MAX)},
@@ -205,8 +224,10 @@ export const driveFor = (options: {
 					});
 				case "stop":
 					// Listed only when the host hands its stop, and only a listed tool is read.
-					if (stop === undefined)
+					if (stop === undefined) {
 						return Effect.succeed({kind: "refused", why: "there is no tool stop"});
+					}
+
 					return stop(c.ask).pipe(
 						Effect.map((answer): Answer => ({
 							kind: "done",
@@ -221,8 +242,10 @@ export const driveFor = (options: {
 					);
 				case "restart":
 					// Listed only when the host hands its restart, and only a listed tool is read.
-					if (restart === undefined)
+					if (restart === undefined) {
 						return Effect.succeed({kind: "refused", why: `there is no tool ${RESTART}`});
+					}
+
 					return restart(c.ask).pipe(
 						Effect.map((data): Answer => ({kind: "done", data})),
 						Effect.catchTag("RestartRefused", ({why}) =>
@@ -231,8 +254,10 @@ export const driveFor = (options: {
 					);
 				case "line":
 					// Listed only when the host hands its line, and only a listed tool is read.
-					if (line === undefined)
+					if (line === undefined) {
 						return Effect.succeed({kind: "refused", why: "there is no tool line"});
+					}
+
 					return line(c.ask).pipe(
 						Effect.map((answer): Answer => ({kind: "done", data: answer})),
 						Effect.catchTag("LineRefused", ({why}) =>
@@ -242,18 +267,24 @@ export const driveFor = (options: {
 				case "input":
 					return Effect.gen(function* () {
 						const running = yield* runOf(c.program);
-						if (Option.isNone(running))
+
+						if (Option.isNone(running)) {
 							return {
 								kind: "refused",
 								why: `${c.program} did not start with no flags: start it in a tile instead`,
 							} as const;
+						}
+
 						const {run} = running.value;
 						const word = yield* run.offer(c.input, c.value);
-						if (word !== "queued")
+
+						if (word !== "queued") {
 							return {
 								kind: "refused",
 								why: `${c.program}'s ${c.input} took nothing: ${word}`,
 							} as const;
+						}
+
 						return {
 							kind: "done",
 							data: {program: c.program, run: run.id, word, view: viewNow(run)},

@@ -15,10 +15,15 @@ import type {Reaper} from "./turn.ts";
 const parents = (): ReadonlyMap<number, number> => {
 	const out = String(execFileSync("ps", ["-axo", "pid=,ppid="], {timeout: 5_000}));
 	const map = new Map<number, number>();
+
 	for (const line of out.split("\n")) {
 		const [pid, ppid] = line.trim().split(/\s+/).map(Number);
-		if (pid !== undefined && ppid !== undefined && Number.isFinite(pid)) map.set(pid, ppid);
+
+		if (pid !== undefined && ppid !== undefined && Number.isFinite(pid)) {
+			map.set(pid, ppid);
+		}
 	}
+
 	return map;
 };
 
@@ -26,14 +31,18 @@ const parents = (): ReadonlyMap<number, number> => {
 export const under = (root: number, map: ReadonlyMap<number, number>): number[] => {
 	const found: number[] = [];
 	const queue = [root];
+
 	while (queue.length > 0) {
 		const at = queue.shift() as number;
-		for (const [pid, ppid] of map)
+
+		for (const [pid, ppid] of map) {
 			if (ppid === at && pid !== root && !found.includes(pid)) {
 				found.push(pid);
 				queue.push(pid);
 			}
+		}
 	}
+
 	return found;
 };
 
@@ -61,6 +70,8 @@ export const psReaper: Reaper = {
 	alive: (pids) => Effect.sync(() => pids.filter(isAlive)),
 	kill: (pids) =>
 		Effect.sync(() => {
-			for (const pid of pids) killOne(pid);
+			for (const pid of pids) {
+				killOne(pid);
+			}
 		}),
 };

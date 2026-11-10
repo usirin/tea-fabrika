@@ -94,8 +94,11 @@ describe("P11 real counter laws", () => {
 		);
 		const boot = p.init(null);
 		expect(boot).toMatchObject({_tag: "stepped", view: {count: 0}, cmds: []});
-		for (const type of ["inc", "dec", "reset"] as const)
+
+		for (const type of ["inc", "dec", "reset"] as const) {
 			expect(counter.refuse({count: 0}, {type})).toBeNull();
+		}
+
 		expect(p.step({count: 0}, {type: "inc", value: "wrong"})).toMatchObject({
 			_tag: "stepped",
 			view: {count: 1},

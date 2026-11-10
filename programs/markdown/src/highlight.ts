@@ -53,7 +53,10 @@ export const wantsColors = (lang: string | null): lang is string =>
 export const colorsOf =
 	(highlights: Highlights, theme: Pierre.Theme): Colors =>
 	(code, lang) => {
-		if (!wantsColors(lang) || !highlights.isSupportedLanguage(lang)) return null;
+		if (!wantsColors(lang) || !highlights.isSupportedLanguage(lang)) {
+			return null;
+		}
+
 		const {tokens, fg} = highlights.codeToTokens(code, {
 			lang,
 			theme,
@@ -100,7 +103,11 @@ export const loadColors = (): Promise<Colors | null> => {
 	]).then(
 		([highlights, theme]) => {
 			colors = colorsOf(highlights, theme.default);
-			for (const listener of listeners) listener();
+
+			for (const listener of listeners) {
+				listener();
+			}
+
 			return colors;
 		},
 		(cause: unknown) => {

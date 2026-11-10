@@ -167,8 +167,15 @@ export const runTurn = <A>(
 			Stream.runForEach((heard) =>
 				Effect.gen(function* () {
 					yield* append({at: new Date().toISOString(), ...heard});
-					if (heard._tag === "said") state.said = heard.text;
-					if (heard._tag === "ended") state.ended = heard;
+
+					if (heard._tag === "said") {
+						state.said = heard.text;
+					}
+
+					if (heard._tag === "ended") {
+						state.ended = heard;
+					}
+
 					state.spent = spending(state.spent, heard);
 				}),
 			),
@@ -182,13 +189,19 @@ export const runTurn = <A>(
 			message,
 			spent: state.spent,
 		});
+
 		if (Result.isFailure(ran)) {
 			const e = ran.failure;
 			yield* append({at: new Date().toISOString(), _tag: "failed", why: e.why, message: e.message});
 			return failed(e.why, e.message);
 		}
+
 		const ended = state.ended;
-		if (ended === null) return failed("broke", "the stream ended with no end");
+
+		if (ended === null) {
+			return failed("broke", "the stream ended with no end");
+		}
+
 		const turned: Turned<A> = {
 			_tag: "ended",
 			stop: ended.stop,
@@ -230,9 +243,16 @@ export interface RowAsk {
 
 /** The turn's list-price dollars: Claude's SDK says its own; a Codex row is priced by the table. */
 export const listUsdOf = (provider: Provider, model: string, spent: Spent): number | null => {
-	if (provider === "claude") return spent.usd;
+	if (provider === "claude") {
+		return spent.usd;
+	}
+
 	const rate = CODEX_LIST[model];
-	if (rate === undefined || spent.counted === "none") return null;
+
+	if (rate === undefined || spent.counted === "none") {
+		return null;
+	}
+
 	const [input, cached, output] = rate;
 	return (
 		Math.round(

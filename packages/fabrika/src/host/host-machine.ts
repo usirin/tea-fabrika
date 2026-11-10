@@ -228,18 +228,28 @@ export const hostUpdate = (settings: HostSettings) => {
 	return (s: Host, m: HostMsg): Step => {
 		switch (s.phase) {
 			case "watching":
-				if ((m.type === "claim_due" && m.tries === s.tries) || m.type === "seen_expiry")
+				if ((m.type === "claim_due" && m.tries === s.tries) || m.type === "seen_expiry") {
 					return [
 						{phase: "claiming", tries: s.tries, lastExit: 0, lastRestart: 0},
 						[{type: "claim"}],
 					];
-				if (m.type === "seen_exit") return [{phase: "down", pos: m.pos}, []];
+				}
+
+				if (m.type === "seen_exit") {
+					return [{phase: "down", pos: m.pos}, []];
+				}
+
 				return [s, []];
 			case "claiming":
-				if (m.type === "seen_exit") return [{...s, lastExit: Math.max(s.lastExit, m.pos)}, []];
-				if (m.type === "seen_restart")
+				if (m.type === "seen_exit") {
+					return [{...s, lastExit: Math.max(s.lastExit, m.pos)}, []];
+				}
+
+				if (m.type === "seen_restart") {
 					return [{...s, lastRestart: Math.max(s.lastRestart, m.pos)}, []];
-				if (m.type === "claimed")
+				}
+
+				if (m.type === "claimed") {
 					return s.lastExit > m.fence
 						? [{phase: "down", pos: s.lastExit}, []]
 						: [
@@ -254,50 +264,103 @@ export const hostUpdate = (settings: HostSettings) => {
 								},
 								[],
 							];
+				}
+
 				// Down, unless a restart landed while the claim was in flight: then claim again.
-				if (m.type === "is_down")
+				if (m.type === "is_down") {
 					return s.lastRestart > m.pos
 						? [watching(settings.retryMs, 0), []]
 						: [{phase: "down", pos: m.pos}, []];
-				if (m.type === "held") return [watching(m.waitMs, s.tries + 1), []];
-				if (m.type === "claim_failed") return [watching(settings.retryMs, s.tries + 1), []];
+				}
+
+				if (m.type === "held") {
+					return [watching(m.waitMs, s.tries + 1), []];
+				}
+
+				if (m.type === "claim_failed") {
+					return [watching(settings.retryMs, s.tries + 1), []];
+				}
+
 				return [s, []];
 			case "owning": {
-				if (m.type === "seen_exit" && m.pos > s.fence) return [{phase: "down", pos: m.pos}, []];
+				if (m.type === "seen_exit" && m.pos > s.fence) {
+					return [{phase: "down", pos: m.pos}, []];
+				}
+
 				if (m.type === "program_ended" && m.fence === s.fence) {
 					const exit = exitOf(m);
-					if (exit === null) return [watching(settings.retryMs, 0), []];
+
+					if (exit === null) {
+						return [watching(settings.retryMs, 0), []];
+					}
+
 					const {fence, incarnation, until, ticks} = s;
 					return [
 						{phase: "exiting", fence, incarnation, until, ticks, away: s.away === true, exit},
 						[{type: "exit", fence, ...exit}],
 					];
 				}
-				if (losesLease(s.fence, s.until, m, grace)) return [watching(settings.retryMs, 0), []];
-				if (m.type === "program_started" && m.fence === s.fence) return [{...s, started: true}, []];
-				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks)
+
+				if (losesLease(s.fence, s.until, m, grace)) {
+					return [watching(settings.retryMs, 0), []];
+				}
+
+				if (m.type === "program_started" && m.fence === s.fence) {
+					return [{...s, started: true}, []];
+				}
+
+				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks) {
 					return [{...s, ticks: s.ticks + 1}, [{type: "renew", fence: s.fence}]];
-				if (m.type === "renew_unknown" && m.fence === s.fence) return [away(s), []];
+				}
+
+				if (m.type === "renew_unknown" && m.fence === s.fence) {
+					return [away(s), []];
+				}
+
 				// A late answer to an older renew may carry an earlier `until`: the lease only grows.
-				if (m.type === "renewed" && m.fence === s.fence) return [back(s, m.until), []];
+				if (m.type === "renewed" && m.fence === s.fence) {
+					return [back(s, m.until), []];
+				}
+
 				return [s, []];
 			}
 			case "exiting":
-				if (m.type === "exited" && m.fence === s.fence) return [{phase: "down", pos: m.pos}, []];
-				if (m.type === "seen_exit" && m.pos > s.fence) return [{phase: "down", pos: m.pos}, []];
-				if (m.type === "exit_refused" && m.fence === s.fence)
+				if (m.type === "exited" && m.fence === s.fence) {
+					return [{phase: "down", pos: m.pos}, []];
+				}
+
+				if (m.type === "seen_exit" && m.pos > s.fence) {
+					return [{phase: "down", pos: m.pos}, []];
+				}
+
+				if (m.type === "exit_refused" && m.fence === s.fence) {
 					return [watching(settings.retryMs, 0), []];
+				}
+
 				// A landed exit deletes the lease, so a renew racing it hears `lost`: the exit's own
 				// answer decides, not the renew's.
-				if (m.type !== "renew_lost" && losesLease(s.fence, s.until, m, grace))
+				if (m.type !== "renew_lost" && losesLease(s.fence, s.until, m, grace)) {
 					return [watching(settings.retryMs, 0), []];
-				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks)
+				}
+
+				if (m.type === "renew_due" && m.fence === s.fence && m.tick === s.ticks) {
 					return [{...s, ticks: s.ticks + 1}, [{type: "renew", fence: s.fence}]];
-				if (m.type === "renew_unknown" && m.fence === s.fence) return [away(s), []];
-				if (m.type === "renewed" && m.fence === s.fence) return [back(s, m.until), []];
+				}
+
+				if (m.type === "renew_unknown" && m.fence === s.fence) {
+					return [away(s), []];
+				}
+
+				if (m.type === "renewed" && m.fence === s.fence) {
+					return [back(s, m.until), []];
+				}
+
 				return [s, []];
 			case "down":
-				if (m.type === "seen_restart" && m.pos > s.pos) return [watching(0, 0), []];
+				if (m.type === "seen_restart" && m.pos > s.pos) {
+					return [watching(0, 0), []];
+				}
+
 				return [s, []];
 		}
 	};

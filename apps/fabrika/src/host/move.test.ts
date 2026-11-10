@@ -53,6 +53,7 @@ const laptopFile = (home: string, extra?: (db: Db) => void) => {
 	const {db, close} = openDb(file);
 	register(db, 10, "host/h1", "h1");
 	let t = 20;
+
 	for (const k of [1, 2, 3]) {
 		const inbox = `tracker/ticket/${k}/inbox`;
 		register(db, t++, `tracker/ticket/${k}`, "user:owner");
@@ -76,6 +77,7 @@ const laptopFile = (home: string, extra?: (db: Db) => void) => {
 			id: `x${k}`,
 		});
 	}
+
 	extra?.(db);
 	close();
 	return file;
@@ -107,8 +109,10 @@ const target = (db: Db, o: {drop?: number} = {}) => {
 			progress: Effect.sync(() => moveProgress(db)),
 			send: (events) =>
 				Effect.suspend((): Effect.Effect<Progress, MoveStopped | LinkDropped> => {
-					if (o.drop !== undefined && landed >= o.drop)
+					if (o.drop !== undefined && landed >= o.drop) {
 						return Effect.fail(new LinkDropped({why: "the wifi went"}));
+					}
+
 					landed++;
 					return answer(importChunk(db, FOUNDER, alice, {events}));
 				}),

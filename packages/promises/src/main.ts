@@ -21,7 +21,11 @@ const say = (s: string) => Effect.sync(() => process.stdout.write(`${s}\n`));
 const list = Effect.gen(function* () {
 	const {judged} = yield* judgeAll(root, null);
 	yield* say(listText(judged));
-	for (const j of judged) yield* say(`\n${detailText(j)}`);
+
+	for (const j of judged) {
+		yield* say(`\n${detailText(j)}`);
+	}
+
 	return judged.every((j) => j.green) ? 0 : 1;
 });
 
@@ -31,10 +35,12 @@ const gate = (base: string | null) =>
 		const out = gateText(judged, removed, base);
 		yield* say(out);
 		const summary = process.env.GITHUB_STEP_SUMMARY;
+
 		if (summary !== undefined && summary !== "") {
 			const fs = yield* FileSystem.FileSystem;
 			yield* fs.writeFileString(summary, `## Promises\n\n\`\`\`\n${out}\n\`\`\`\n`, {flag: "a"});
 		}
+
 		return judged.every((j) => j.green) ? 0 : 1;
 	});
 
@@ -58,12 +64,20 @@ type Verb = Effect.Effect<
 
 function main(argv: readonly string[]): Verb {
 	const [verb, ...rest] = argv;
-	if (verb === undefined) return list;
+
+	if (verb === undefined) {
+		return list;
+	}
+
 	if (verb === "gate") {
 		const at = rest.indexOf("--base");
 		return gate(at < 0 ? null : (rest[at + 1] ?? null));
 	}
-	if (verb === "confirm" && rest[0] !== undefined) return confirmOne(rest[0]);
+
+	if (verb === "confirm" && rest[0] !== undefined) {
+		return confirmOne(rest[0]);
+	}
+
 	return say("usage: pnpm promises [gate [--base <ref>] | confirm <id>]").pipe(Effect.as(2));
 }
 

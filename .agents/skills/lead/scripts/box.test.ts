@@ -169,8 +169,10 @@ class Box {
 	readonly base: string;
 
 	constructor(files?: Array<[string, string]>) {
-		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")])
+		for (const path of [this.main, this.boxes, this.home, this.bin, join(this.boxes, "state")]) {
 			mkdirSync(path, {recursive: true});
+		}
+
 		this.env = {
 			HOME: this.home,
 			PATH: `${this.bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
@@ -198,8 +200,11 @@ class Box {
 		write(join(this.home, ".npmrc"), "");
 		write(join(this.dir, "global.npmrc"), "");
 		this.setup({});
-		for (const cmd of ["pnpm", "codex", "git", "gh"])
+
+		for (const cmd of ["pnpm", "codex", "git", "gh"]) {
 			writeFileSync(join(this.bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
+		}
+
 		writeFileSync(join(this.bin, "nice"), '#!/bin/sh\nshift 2\nexec "$@"\n', {mode: 0o755});
 		this.git(
 			this.main,
@@ -210,6 +215,7 @@ class Box {
 			`--separate-git-dir=${join(this.dir, "main-gitdata")}`,
 		);
 		const lines: string[] = [];
+
 		for (const role of ["tests", "build", "lead", "person", "stranger"]) {
 			const key = join(this.home, ".fabrika/step-keys", role);
 			mkdirSync(dirname(key), {recursive: true});
@@ -219,11 +225,14 @@ class Box {
 				.split(" ")
 				.slice(0, 2)
 				.join(" ");
-			if (role !== "stranger")
+
+			if (role !== "stranger") {
 				lines.push(
 					`${role === "person" ? "person:fixture" : role} namespaces="${role === "person" ? "git" : "fabrika-step"}" ${pub}`,
 				);
+			}
 		}
+
 		write(join(this.main, "allowed_signers"), `${lines.join("\n")}\n`);
 		const exam = JSON.parse(readFileSync(join(root, "exam-paths.json"), "utf8"));
 		// The installed checker skips ordinary tooling files. This disposable exam row makes its
@@ -376,6 +385,7 @@ class Box {
 
 const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
 	const b = new Box(files);
+
 	try {
 		f(b);
 	} finally {
@@ -400,6 +410,7 @@ const checkRefused = (r: {code: number | null; text: string}, check: string, why
 // Exercise every independent fault, even while the product still lacks several checks.
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
+
 	for (const value of values) {
 		try {
 			check(value);
@@ -412,7 +423,10 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 			);
 		}
 	}
-	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+
+	if (errors.length) {
+		throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
+	}
 };
 
 // A real SIGTERM to the runner and its child. The separate group contains only this fixture.
@@ -440,7 +454,10 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 			const poll = setInterval(() => {
 				if (!sent && existsSync(join(b.dir, "ready"))) {
 					sent = true;
-					if (child.pid) process.kill(-child.pid, "SIGTERM");
+
+					if (child.pid) {
+						process.kill(-child.pid, "SIGTERM");
+					}
 				}
 			}, 10);
 			const timeout = setTimeout(() => {
@@ -449,6 +466,7 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 						process.kill(-child.pid, "SIGKILL");
 					} catch {}
 				}
+
 				reject(new Error("fixture runner never reached the signal point"));
 			}, 10_000);
 			child.stdout.on("data", (s) => {
@@ -515,12 +533,14 @@ describe("T321 K1 fetch, today's tooling", () => {
 							const fetched = b.fetch(step);
 							expect(fetched.code, fetched.text).toBe(0);
 							expect(b.head(b.main, b.branch)).toBe(b.head(b.work));
+
 							for (const [i, sha] of commits.entries()) {
 								const note = JSON.parse(b.git(b.main, "notes", "--ref=fabrika", "show", sha));
 								expect(note).toMatchObject({step: "tests", ticket: "321", version: i + 1});
 								expect(note.from).toBe(b.head(b.main, `${sha}^1^{tree}`));
 								expect(note.to).toBe(b.head(b.main, `${sha}^{tree}`));
 							}
+
 							const verified = b.call(process.execPath, [
 								signer,
 								"check",
@@ -548,7 +568,8 @@ describe("T321 K1 fetch, today's tooling", () => {
 							expect(signs.every((c) => realpathSync(c.cwd) === realpathSync(b.main))).toBe(true);
 							const checks = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "check");
 							expect(checks).toHaveLength(2);
-							for (const c of checks)
+
+							for (const c of checks) {
 								expect(c.args).toEqual([
 									"commits",
 									"check",
@@ -557,6 +578,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									"--head",
 									b.head(b.work),
 								]);
+							}
 						},
 						[["src/a.ts", "tests"]],
 					),
@@ -645,6 +667,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 		await fc.assert(
 			fc.asyncProperty(fc.boolean(), async (reverse) => {
 				const b = new Box();
+
 				try {
 					const two = join(b.boxes, "two"),
 						data = join(b.boxes, "two-gitdata");
@@ -711,8 +734,13 @@ describe("T321 K1 fetch, today's tooling", () => {
 								["one", "321"],
 								["two", "322"],
 							];
-					for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!))))
+
+					for (const got of await Promise.all(
+						order.map(([name, ticket]) => fetch(name!, ticket!)),
+					)) {
 						expect(got.code, got.text).toBe(0);
+					}
+
 					for (const name of ["one", "two"]) {
 						const check = b.call(process.execPath, [
 							signer,
@@ -724,6 +752,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 						]);
 						expect(check.code, check.text).toBe(0);
 					}
+
 					expect(b.notes().trim().split("\n")).toHaveLength(2);
 				} finally {
 					b.close();
@@ -739,15 +768,20 @@ describe("T321 K1 fetch, today's tooling", () => {
 			fc.property(word, (text) => {
 				each(["ticket", "step", "outside", "base"], (fault) =>
 					fixture((b) => {
-						if (fault === "outside") b.commit(b.work, "src/a.ts", "outside\n");
+						if (fault === "outside") {
+							b.commit(b.work, "src/a.ts", "outside\n");
+						}
+
 						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
 						expect(b.run().code).toBe(0);
+
 						if (fault === "base") {
 							const other = b
 								.git(b.main, "commit-tree", b.head(b.main, "HEAD^{tree}"), "-m", "unrelated")
 								.trim();
 							b.state(other);
 						}
+
 						refused(
 							b.fetch(fault === "step" ? "build" : "tests", fault === "ticket" ? "322" : "321"),
 							/run|ticket|step|base|ancestor|unsigned/,
@@ -779,6 +813,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
 							}
+
 							const notes = b.notes();
 							const operations: Operation[] = [{path: "src/a.ts", text: `${text}\n`}];
 							operations.push(
@@ -825,10 +860,12 @@ describe("T321 K1 fetch, today's tooling", () => {
 						b.setup({operations: [{path: "src/a.ts", text: `${text}\n`}]});
 						expect(b.run().code).toBe(0);
 						const sha = b.head(b.work);
-						if (kind === "malformed")
+
+						if (kind === "malformed") {
 							b.git(b.work, "notes", "--ref=fabrika", "add", "-m", "not JSON", sha);
-						else {
+						} else {
 							b.sign(b.work, "tests");
+
 							if (kind === "invalid") {
 								const note = JSON.parse(b.git(b.work, "notes", "--ref=fabrika", "show", sha));
 								b.git(
@@ -842,6 +879,7 @@ describe("T321 K1 fetch, today's tooling", () => {
 									sha,
 								);
 							}
+
 							if (kind === "stale") {
 								b.git(b.main, "fetch", "-q", b.work, "refs/notes/fabrika:refs/notes/fabrika");
 								b.git(b.main, "checkout", "-q", "-b", "other");
@@ -853,11 +891,14 @@ describe("T321 K1 fetch, today's tooling", () => {
 								b.git(b.work, "notes", "--ref=fabrika", "merge", "newer");
 							}
 						}
+
 						const original = b.git(b.work, "notes", "--ref=fabrika", "show", sha);
+
 						if (kind === "conflict") {
 							b.git(b.main, "fetch", "-q", b.work, `${b.branch}:refs/heads/incoming`);
 							b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "different note", sha);
 						}
+
 						const mainNote =
 							kind === "conflict" ? b.git(b.main, "notes", "--ref=fabrika", "show", sha) : original;
 						refused(
@@ -902,11 +943,15 @@ describe("T321 K1 fetch, today's tooling", () => {
 							expect(b.run().code).toBe(0);
 							const got = b.fetch();
 							expect(got.code, got.text).toBe(pass ? 0 : 1);
+
 							if (status === 1) {
 								expect(got.text).toContain("unsigned_commit");
 								expect(got.text).toContain("stale_link");
 							}
-							if (pass) expect(got.text).toContain("exam_read");
+
+							if (pass) {
+								expect(got.text).toContain("exam_read");
+							}
 						}),
 				);
 			}),
@@ -940,7 +985,11 @@ describe("T321 K2 box start, today's tooling", () => {
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
 						const other = !["main", "this", "inside"].includes(place);
-						if (other) b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+
+						if (other) {
+							b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+						}
+
 						// Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
 						const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
 						const sha = b.commit(b.main, path, `${text}\n`);
@@ -949,30 +998,40 @@ describe("T321 K2 box start, today's tooling", () => {
 							place === "field-rows" ? "lead" : "tests",
 							place === "different-ticket" ? "322" : "321",
 						);
-						if (place === "main" || place === "merged")
+
+						if (place === "main" || place === "merged") {
 							b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+						}
+
 						// An older branch of this lane that the base already holds is history (#590).
-						if (place === "inside") b.git(b.main, "branch", "fabrikalfa/old", sha);
+						if (place === "inside") {
+							b.git(b.main, "branch", "fabrikalfa/old", sha);
+						}
+
 						b.setup({
 							openPrs: ["open-pr", "field-rows"].includes(place)
 								? ["fabrikalfa/other"]
 								: ["fabrikalfa/unrelated"],
 							...(place === "gh-down" ? {gh: "down" as const} : {}),
 						});
+
 						if (place === "running-box") {
 							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
 							mkdirSync(join(b.boxes, "two"));
 						}
+
 						if (place === "history") {
 							// A box state left behind with no box on disk is not a running lane.
 							write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
 						}
+
 						b.git(b.main, "checkout", "-q", "main");
 						const got =
 							place === "inside"
 								? b.new(sha, b.branch)
 								: b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
+
 						// A live branch is the check saying no; open PRs gh cannot read is a check that
 						// could not run, which stays stuck (ticket 428).
 						if (place === "gh-down") {
@@ -981,9 +1040,11 @@ describe("T321 K2 box start, today's tooling", () => {
 								/^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m,
 							);
 							expect(got.code, got.text).toBe(1);
-						} else if (blocks.has(place))
+						} else if (blocks.has(place)) {
 							checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
-						else expect(got.code, got.text).toBe(0);
+						} else {
+							expect(got.code, got.text).toBe(0);
+						}
 					}),
 				);
 			}),
@@ -1035,15 +1096,21 @@ describe("T321 K2 box start, today's tooling", () => {
 							b.plan,
 							...extra,
 						]);
+
 						if (root === "elsewhere") {
 							checkRefused(got, "root_not_ancestor", /root is not an ancestor/);
 							return;
 						}
+
 						expect(got.code, got.text).toBe(0);
 						const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
 						expect(state).toContain(`base: ${head}`);
-						if (root === "held") expect(state).toContain(`root: ${b.base}`);
-						else expect(state).not.toContain("root:");
+
+						if (root === "held") {
+							expect(state).toContain(`root: ${b.base}`);
+						} else {
+							expect(state).not.toContain("root:");
+						}
 					}),
 				);
 			}),
@@ -1062,9 +1129,12 @@ describe("T321 K2 box start, today's tooling", () => {
 					fixture((b) => {
 						b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
 						const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
-						if (kind === "build" || kind === "tests" || kind === "lead")
+
+						if (kind === "build" || kind === "tests" || kind === "lead") {
 							b.sign(b.main, kind, "300");
-						if (kind === "forged")
+						}
+
+						if (kind === "forged") {
 							b.git(
 								b.main,
 								"notes",
@@ -1074,14 +1144,21 @@ describe("T321 K2 box start, today's tooling", () => {
 								'{"step":"build","ticket":"300","sig":"fake"}',
 								parent,
 							);
+						}
+
 						b.git(b.main, "checkout", "-q", "main");
+
 						// main moves on; box.sh new's own fetch of origin then sees the newer tip.
-						if (kind === "older-main") b.commit(b.main, "src/old.ts", `${text} newer\n`);
+						if (kind === "older-main") {
+							b.commit(b.main, "src/old.ts", `${text} newer\n`);
+						}
+
 						const onMain = kind === "main" || kind === "older-main";
 						const got = b.new(
 							kind === "main" ? "origin/main" : kind === "older-main" ? b.base : parent,
 						);
 						expect(got.code).not.toBeNull();
+
 						if (onMain || kind === "build" || kind === "lead") {
 							expect(got.code, got.text).toBe(0);
 							expect(
@@ -1092,9 +1169,15 @@ describe("T321 K2 box start, today's tooling", () => {
 							expect(state).toContain(`base: ${onMain ? b.base : parent}`);
 							expect(state).toContain(`plan-sha256: ${hash(body())}`);
 							expect(state).toContain("ticket: 321");
-							if (onMain) expect(state).toContain("parent: none");
-							else expect(state).toContain(`fabrikalfa/parent@${parent}`);
-						} else checkRefused(got, "base_not_signed");
+
+							if (onMain) {
+								expect(state).toContain("parent: none");
+							} else {
+								expect(state).toContain(`fabrikalfa/parent@${parent}`);
+							}
+						} else {
+							checkRefused(got, "base_not_signed");
+						}
 					}),
 				);
 			}),
@@ -1110,16 +1193,34 @@ describe("T321 K2 box start, today's tooling", () => {
 					fixture((b) => {
 						const original = `${body()}\n## Amendment 1\n${text}${ending}`;
 						let plan = approve(original);
-						if (fault === "unsigned") plan = `\nPlancheck-Version: 2\n${original}`;
-						if (fault === "body") plan = plan.replace(text, `${text}changed`);
-						if (fault === "amendment") plan += "\n## Amendment 2\nChanged.\n";
-						if (fault === "renewed") plan = approve(`${original}\n## Amendment 2\nChanged.\n`);
+
+						if (fault === "unsigned") {
+							plan = `\nPlancheck-Version: 2\n${original}`;
+						}
+
+						if (fault === "body") {
+							plan = plan.replace(text, `${text}changed`);
+						}
+
+						if (fault === "amendment") {
+							plan += "\n## Amendment 2\nChanged.\n";
+						}
+
+						if (fault === "renewed") {
+							plan = approve(`${original}\n## Amendment 2\nChanged.\n`);
+						}
+
 						write(b.plan, plan);
 						const got = b.new("origin/main", fault === "branch" ? "other/new" : "fabrikalfa/new");
 						expect(got.code).not.toBeNull();
-						if (fault === "renewed") expect(got.code, got.text).toBe(0);
-						else if (fault === "branch") refused(got, /branch|prefix/);
-						else checkRefused(got, "plan_unapproved", /plan|approval|hash|body/);
+
+						if (fault === "renewed") {
+							expect(got.code, got.text).toBe(0);
+						} else if (fault === "branch") {
+							refused(got, /branch|prefix/);
+						} else {
+							checkRefused(got, "plan_unapproved", /plan|approval|hash|body/);
+						}
 					}),
 				);
 			}),
@@ -1193,8 +1294,10 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				});
 				expect(b.run().code).toBe(0);
 				const got = b.fetch();
-				if (step === "tests") refused(got, /commits check failed/);
-				else {
+
+				if (step === "tests") {
+					refused(got, /commits check failed/);
+				} else {
 					expect(got.code, got.text).toBe(0);
 					expect(got.text).toContain("stale_link_outside_lane");
 				}
@@ -1212,10 +1315,12 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				b.git(b.work, "fetch", "-q", b.main, moved);
 				b.git(b.work, "reset", "-q", "--hard", moved);
 				let start = moved;
+
 				if (kind === "root-off-main") {
 					start = b.commit(b.work, "src/old.ts", "off main\n");
 					b.git(b.main, "fetch", "-q", b.work, start);
 				}
+
 				b.state(start);
 				const root = kind === "main-moved" ? b.base : start;
 				appendFileSync(join(b.boxes, "state/one.box"), `root: ${root}\n`);
@@ -1364,9 +1469,13 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						fixture((b) => {
 							if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
 								const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
-								if (kind === "bad-note")
+
+								if (kind === "bad-note") {
 									b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
-								else b.sign(b.work, "tests");
+								} else {
+									b.sign(b.work, "tests");
+								}
+
 								b.git(
 									b.main,
 									"fetch",
@@ -1375,13 +1484,18 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 									`${b.branch}:${b.branch}`,
 									"refs/notes/fabrika:refs/notes/fabrika",
 								);
-								if (kind === "before-base") b.state(sha);
+
+								if (kind === "before-base") {
+									b.state(sha);
+								}
+
 								if (kind === "since-root") {
 									b.state(sha);
 									appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
 								}
 							}
-							if (kind === "mutation" || kind === "skip")
+
+							if (kind === "mutation" || kind === "skip") {
 								write(
 									join(b.boxes, "state/one.rows.jsonl"),
 									`${JSON.stringify({
@@ -1393,6 +1507,8 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 										why: "recorded fixture result",
 									})}\n`,
 								);
+							}
+
 							if (kind.startsWith("lane-row")) {
 								// Where drive writes a step's row: BOXES/<lane>-rows.jsonl, not the box's own.
 								appendFileSync(join(b.boxes, "state/one.box"), "lane: onelane\n");
@@ -1409,6 +1525,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 									})}\n`,
 								);
 							}
+
 							const review = [
 								"review-absent",
 								"mutation",
@@ -1427,8 +1544,10 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 							].includes(kind);
 							const got = b.run(review ? "review" : "build");
 							expect(got.code).not.toBeNull();
-							if (pass) expect(got.code, got.text).toBe(0);
-							else {
+
+							if (pass) {
+								expect(got.code, got.text).toBe(0);
+							} else {
 								refused(got, /step_out_of_order|tests|mutation/);
 								expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
 							}
@@ -1444,10 +1563,16 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 		fc.assert(
 			fc.property(fc.integer({min: 0, max: 9}), (count) =>
 				fixture((b) => {
-					for (let i = 0; i < count; i++)
+					for (let i = 0; i < count; i++) {
 						write(join(b.boxes, `state/live-${i}.pid`), `${process.pid}\n`);
-					for (let i = 0; i < 3; i++) write(join(b.boxes, `state/dead-${i}.pid`), "2147483647\n");
+					}
+
+					for (let i = 0; i < 3; i++) {
+						write(join(b.boxes, `state/dead-${i}.pid`), "2147483647\n");
+					}
+
 					const got = b.run();
+
 					if (count >= 8) {
 						refused(got, /slot|running|limit/);
 						expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
@@ -1455,9 +1580,13 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 						expect(got.code, got.text).toBe(0);
 						expect(b.rows()).toHaveLength(1);
 					}
+
 					expect(readdirSync(join(b.boxes, "state")).filter((n) => n === "one.pid")).toEqual([]);
-					for (let i = 0; i < count; i++)
+
+					for (let i = 0; i < count; i++) {
 						rmSync(join(b.boxes, `state/live-${i}.pid`), {force: true});
+					}
+
 					expect(b.run().code).toBe(0);
 					const rows = b.rows();
 					expect(rows).toHaveLength(count >= 8 ? 1 : 2);
@@ -1537,6 +1666,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 				),
 				(turns) => {
 					const dir = mkdtempSync(join(tmpdir(), "row321-"));
+
 					try {
 						const events = join(dir, "events.jsonl");
 						const lines = turns.map((turn) =>
@@ -1596,6 +1726,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 		await fc.assert(
 			fc.asyncProperty(fc.boolean(), async (usage) => {
 				const b = new Box();
+
 				try {
 					b.setup({hold: true, usage});
 					const got = await signalRun(b);
@@ -1662,6 +1793,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								`sk-${value.repeat(48).slice(0, 48)}`,
 								`private-${value}-pass`,
 							];
+
 							for (const name of [
 								"MY_TOKEN",
 								"SERVICE_SECRET",
@@ -1669,14 +1801,18 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								"DB_PASSWORD",
 								"HTTP_AUTH",
 								"NPM_CONFIG_AUTH",
-							])
+							]) {
 								b.env[lower ? name.toLowerCase() : name] = secrets[3];
+							}
+
 							for (const [file, token] of [
 								[join(b.home, ".npmrc"), secrets[0]],
 								[join(b.dir, "global.npmrc"), secrets[1]],
 								[join(runner === "box" ? b.work : b.main, ".npmrc"), secrets[2]],
-							])
+							]) {
 								write(file!, `//registry.example.test/:_authToken=${token}\n`);
+							}
+
 							b.env.NPM_CONFIG_GLOBALCONFIG = join(b.dir, "global.npmrc");
 							b.setup({secrets, exit, signal});
 							const got =
@@ -1699,11 +1835,13 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 								runner === "plan"
 									? readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8")
 									: got.text;
+
 							for (const output of [readFileSync(answer, "utf8"), events]) {
 								for (const secret of secrets) {
 									expect(output.includes(secret)).toBe(false);
 									expect(output.includes(encodeURIComponent(secret))).toBe(false);
 								}
+
 								expect(output).toContain("[redacted]");
 							}
 						});
@@ -1729,6 +1867,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 			await fc.assert(
 				fc.asyncProperty(word, async (value) => {
 					const b = new Box();
+
 					try {
 						const secret = `npm_${value.repeat(40).slice(0, 36)}`;
 						b.env.PLANTED_TOKEN = secret;
@@ -1738,6 +1877,7 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 						const answer = runner === "box" ? join(b.dir, "answer") : join(b.boxes, "one-plan.md");
 						const events =
 							runner === "box" ? got.text : readFileSync(join(b.boxes, "one-plan.jsonl"), "utf8");
+
 						for (const output of [readFileSync(answer, "utf8"), events]) {
 							expect(output.includes(secret)).toBe(false);
 							expect(output).toContain("[redacted]");

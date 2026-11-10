@@ -87,12 +87,14 @@ const double = (names: readonly string[] = ["scout"], run?: string) => {
 				Effect.gen(function* () {
 					const news = yield* Queue.unbounded<TurnNews, Cause.Done>();
 					calls.turns.push({name, prompt, room, news});
+
 					if (state.auto) {
 						const n = calls.turns.length;
 						Queue.offerUnsafe(news, {_tag: "told", turn: n});
 						Queue.offerUnsafe(news, {_tag: "said", text: `reply ${n}`});
 						Queue.offerUnsafe(news, RESULT);
 					}
+
 					return Stream.fromQueue(news).pipe(Stream.takeUntil((n) => n._tag === "result"));
 				}),
 			),
@@ -101,9 +103,12 @@ const double = (names: readonly string[] = ["scout"], run?: string) => {
 			Effect.sync(() => {
 				calls.cancels.push(name);
 				calls.mines.push(mine);
-				for (const t of calls.turns)
-					if (t.name === name)
+
+				for (const t of calls.turns) {
+					if (t.name === name) {
 						Queue.offerUnsafe(t.news, {_tag: "result", stop: "cancelled", ms: 1, cost: null});
+					}
+				}
 			}),
 		// `by`: who answered, which the plan's ask_answered line records. Taken as a rest so the
 		// double fits the manager's signature before and after it gains the person.
@@ -121,9 +126,13 @@ type Double = ReturnType<typeof double>;
 const until = (what: string, check: () => boolean) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 500; i += 1) {
-			if (check()) return;
+			if (check()) {
+				return;
+			}
+
 			yield* Effect.sleep(Duration.millis(10));
 		}
+
 		return yield* Effect.die(`waited five seconds for ${what}`);
 	});
 
@@ -155,7 +164,11 @@ const tshOn = (d: Double, by: string = PERSON) =>
 			Effect.provideService(Programs, by === AGENT ? forAgent(list) : list),
 			Effect.provideService(SummonManager, d.service),
 		);
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		/** Type a line; its `ready` comes later, from `done`. */
 		const type = (text: string) =>
@@ -314,7 +327,11 @@ describe("summon, dismiss and agents, in tsh", () => {
 				return {nobody, upper, typo, jobs: t.table.getState().jobs.length};
 			}).pipe(Effect.scoped),
 		);
-		for (const refused of [seen.nobody, seen.upper, seen.typo]) expect(refused.status).not.toBe(0);
+
+		for (const refused of [seen.nobody, seen.upper, seen.typo]) {
+			expect(refused.status).not.toBe(0);
+		}
+
 		expect(seen.nobody.err.join("\n")).toContain("nobody");
 		expect(seen.nobody.err.join("\n")).toContain("no agent named nobody");
 		// Upper case is refused with the lower-case name as its did-you-mean, never folded (S3).
@@ -338,7 +355,11 @@ describe("S-2: a said line is one job in the foreground", () => {
 				const during = t.table.getState().jobs;
 				const held = t.ready.values.length;
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				Queue.offerUnsafe(asked.news, {_tag: "said", text: "ok"});
 				Queue.offerUnsafe(asked.news, RESULT);
@@ -386,8 +407,11 @@ describe("S-5, tsh's side: Ctrl-C cancels the turn, not the agent", () => {
 						storage: memoryStorage(),
 					},
 				);
-				if (first.kind !== "running" || queued.kind !== "running")
+
+				if (first.kind !== "running" || queued.kind !== "running") {
 					return yield* Effect.die("turn did not start");
+				}
+
 				yield* tell(first.run, "prompt", "first tile's turn");
 				first.close("prompt");
 				yield* until("the first turn", () => d.calls.turns.length === 1);
@@ -416,7 +440,11 @@ describe("S-5, tsh's side: Ctrl-C cancels the turn, not the agent", () => {
 				const n = yield* t.type("@scout slowly read everything");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				Queue.offerUnsafe(asked.news, {_tag: "status", text: "reading · 1 tool · 1s"});
 				yield* until("the turn job", () => t.table.getState().jobs.length === 1);
@@ -449,7 +477,11 @@ describe("S-7, tsh's side: the reply prints once, whole, under the name", () => 
 				const n = yield* t.type("@scout why does post print #7 twice?");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 3});
 				Queue.offerUnsafe(asked.news, {
 					_tag: "status",
@@ -535,19 +567,32 @@ describe("the ask: allow? [y/N] holds the prompt", () => {
 							storage: memoryStorage(),
 						},
 					).pipe(Effect.provideService(SummonManager, d.service));
-					if (started.kind !== "running") return yield* Effect.die("turn did not start");
+
+					if (started.kind !== "running") {
+						return yield* Effect.die("turn did not start");
+					}
+
 					yield* tell(started.run, "prompt", "write it");
 					yield* until("the turn", () => d.calls.turns.length === 1);
 					const turn = d.calls.turns[0];
-					if (turn === undefined) return yield* Effect.die("no turn");
+
+					if (turn === undefined) {
+						return yield* Effect.die("no turn");
+					}
+
 					Queue.offerUnsafe(turn.news, {_tag: "told", turn: 1});
+
 					if (asked) {
 						Queue.offerUnsafe(turn.news, {_tag: "ask", ask: "edit-1", title: "Write written.txt"});
 						yield* seen.upTo(1);
 					}
-					if (by === "person")
+
+					if (by === "person") {
 						yield* tell(started.run, "allow", {ask: "edit-1", allow, by: PERSON});
-					else Queue.offerUnsafe(turn.news, {_tag: "answered", ask: "edit-1", allow});
+					} else {
+						Queue.offerUnsafe(turn.news, {_tag: "answered", ask: "edit-1", allow});
+					}
+
 					yield* seen.upTo(asked ? 2 : 1);
 					Queue.offerUnsafe(turn.news, RESULT);
 					yield* started.run.ended;
@@ -576,7 +621,11 @@ describe("the ask: allow? [y/N] holds the prompt", () => {
 				const n = yield* t.type("@scout write it");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				Queue.offerUnsafe(asked.news, {_tag: "ask", ask: "t1.w", title: "Write written.txt"});
 				const shown = () => JSON.stringify([texts(t.printed.values), t.asked.values]);
@@ -621,10 +670,12 @@ describe("S-8: only a person summons, dismisses or talks", () => {
 				return {summon, dismiss, at, jobs: t.table.getState().jobs.length};
 			}).pipe(Effect.scoped),
 		);
+
 		for (const refused of [seen.summon, seen.dismiss, seen.at]) {
 			expect(refused.status).not.toBe(0);
 			expect(refused.err.length).toBeGreaterThan(0);
 		}
+
 		expect(seen.dismiss.err.join("\n")).toContain("only a person dismisses an agent");
 		expect(d.calls.summons).toEqual([]);
 		expect(d.calls.dismisses).toEqual([]);
@@ -657,7 +708,11 @@ describe("S-7, tsh's side: a reply of several lines hangs under its name", () =>
 				const n = yield* t.type("@scout read a.txt and b.txt");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				Queue.offerUnsafe(asked.news, {
 					_tag: "said",
@@ -684,7 +739,11 @@ describe("Ctrl-C on a turn prints one line", () => {
 				const n = yield* t.type("@scout slowly read everything");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				yield* until("the turn job", () => t.table.getState().jobs.length === 1);
 				const from = t.printed.values.length;
@@ -707,12 +766,20 @@ describe("ask_answered records who answered", () => {
 				const n = yield* t.type("@scout write it");
 				yield* until("the turn", () => d.calls.turns.length === 1);
 				const [asked] = d.calls.turns;
-				if (asked === undefined) return yield* Effect.die("no turn");
+
+				if (asked === undefined) {
+					return yield* Effect.die("no turn");
+				}
+
 				Queue.offerUnsafe(asked.news, {_tag: "told", turn: 1});
 				Queue.offerUnsafe(asked.news, {_tag: "ask", ask: "t1.w", title: "Write written.txt"});
 				yield* until("the ask shown", () => t.asked.values.length > 0);
 				const job = t.table.getState().jobs[0];
-				if (job === undefined) return yield* Effect.die("no job");
+
+				if (job === undefined) {
+					return yield* Effect.die("no job");
+				}
+
 				expect(yield* tell(t.run, "answer", {n: job.n, allow: true})).toBe("queued");
 				yield* until("the answer", () => d.calls.answers.length === 1);
 				Queue.offerUnsafe(asked.news, RESULT);
@@ -741,7 +808,11 @@ describe("T237-4, the turn's side: a told turn is kept with its run", () => {
 				{told: told.hear, result: result.hear},
 				{id: "turn:kept", storage: memoryStorage()},
 			);
-			if (started.kind !== "running") return yield* Effect.die("turn did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("turn did not start");
+			}
+
 			const kept = () => started.run.machines.turn.state();
 			yield* tell(started.run, "prompt", "slowly read a.txt");
 			yield* until("the turn", () => d.calls.turns.length === 1);
@@ -797,7 +868,11 @@ describe("the ask's prompt line clears when nothing waits", () => {
 			yield* until("the turn", () => d.calls.turns.length === 1);
 			const turn = d.calls.turns[0]!;
 			Queue.offerUnsafe(turn.news, {_tag: "told", turn: 1});
-			for (const a of asks) Queue.offerUnsafe(turn.news, {_tag: "ask", ...a});
+
+			for (const a of asks) {
+				Queue.offerUnsafe(turn.news, {_tag: "ask", ...a});
+			}
+
 			Queue.offerUnsafe(turn.news, {_tag: "status", text: "waiting on an edit"});
 			yield* until("the asks consumed", () => t.status.values.length > 0);
 			return {t, n, turn};

@@ -28,10 +28,15 @@ export const serveChildren = <R>(
 			const rows = yield* ledger
 				.readStream(childrenOf(parent), rev)
 				.pipe(Effect.orElseSucceed(() => []));
+
 			for (const row of rows) {
 				rev = Math.max(rev, row.rev);
 				const child = row.id;
-				if (child === undefined || child === null || served.has(child)) continue;
+
+				if (child === undefined || child === null || served.has(child)) {
+					continue;
+				}
+
 				served.add(child);
 				yield* serve(child);
 			}

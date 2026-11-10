@@ -119,7 +119,11 @@ const shared = (founder: string): DoorConfig => ({
 /** A person's login on `door` by `name`: its challenge, signed with `key`. */
 const loginWith = async (door: Door, name: string, key: Key) => {
 	const c = door.challenge(ADDRESS);
-	if (!c.ok) throw new Error(c.why);
+
+	if (!c.ok) {
+		throw new Error(c.why);
+	}
+
 	return door.login({name, challenge: c.value.text, signature: await key.sign(c.value.text)});
 };
 
@@ -365,7 +369,11 @@ describe("a local door", () => {
 
 	it("gives its person agent tokens, which are agents for that person and never the person", async () => {
 		const a = await t.door.addAgent({kind: "user", id: "owner"}, "triage");
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		expect(Redacted.value(a.value.token).startsWith("fabrika_a_")).toBe(true);
 		expect(String(a.value.token)).toBe("<redacted>");
 		expect(await t.door.who(a.value.token)).toEqual({
@@ -379,7 +387,11 @@ describe("a local door", () => {
 
 	it("keeps a token's hash, never the token", async () => {
 		const a = await t.door.addAgent({kind: "user", id: "owner"}, "triage");
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		const rows = t.db.all("SELECT * FROM door_sessions");
 		expect(JSON.stringify(rows)).not.toContain(Redacted.value(a.value.token));
 		expect(rows[0]?.hash).toBe(await hashOf(a.value.token));
@@ -404,7 +416,11 @@ describe("a shared door", () => {
 
 	it("lets its founder in first, by the id in its config, as a person", async () => {
 		const s = await loginWith(t.door, "alice", alice);
-		if (!s.ok) throw new Error(s.why);
+
+		if (!s.ok) {
+			throw new Error(s.why);
+		}
+
 		expect(s.value.who).toEqual({kind: "user", id: "github:7"});
 		expect(await t.door.who(s.value.token)).toEqual({ok: true, value: s.value.who});
 		expect([...t.door.members().members]).toEqual([["github:7", "alice"]]);
@@ -449,7 +465,11 @@ describe("a shared door", () => {
 
 	it("gives one refusal for a name it does not know and a key that does not match", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		await t.door.invite(a.value.who, "bob");
 		const carol = await newKey();
 		t.people.set("carol", {id: "github:9", keys: [carol.line]});
@@ -461,7 +481,10 @@ describe("a shared door", () => {
 		];
 		t.door.remove(a.value.who, "github:8");
 		refusals.push(await loginWith(t.door, "bob", bob)); // an invite taken back
-		for (const r of refusals) expect(r).toEqual({ok: false, status: 401, why: NOT_PROVEN});
+
+		for (const r of refusals) {
+			expect(r).toEqual({ok: false, status: 401, why: NOT_PROVEN});
+		}
 	});
 
 	it("lets a member in after a rename at the keys service, by the name it knows them by", async () => {
@@ -490,14 +513,22 @@ describe("a shared door", () => {
 		expect(await loginWith(t.door, "alice", alice)).toMatchObject({ok: false, status: 502});
 		t.state.other = null;
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		t.people.set("bob", {id: "github:8@elsewhere", keys: [bob.line]});
 		expect(await t.door.invite(a.value.who, "bob")).toMatchObject({ok: false, status: 502});
 	});
 
 	it("lets nobody in, and invites nobody, while the keys service cannot be asked", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		t.state.down = true;
 		expect(await loginWith(t.door, "alice", alice)).toMatchObject({ok: false, status: 502});
 		expect(await t.door.invite(a.value.who, "bob")).toMatchObject({ok: false, status: 502});
@@ -507,7 +538,11 @@ describe("a shared door", () => {
 
 	it("answers one text for every failure of the keys service, and logs what went wrong", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		t.state.down = true;
 		const down = {ok: false, status: 502, why: UNAVAILABLE};
 		expect(await loginWith(t.door, "alice", alice)).toEqual(down);
@@ -529,7 +564,11 @@ describe("a shared door", () => {
 		let newBob: Key;
 		beforeEach(async () => {
 			const a = await loginWith(t.door, "alice", alice);
-			if (!a.ok) throw new Error(a.why);
+
+			if (!a.ok) {
+				throw new Error(a.why);
+			}
+
 			await t.door.invite(a.value.who, "bob");
 			await loginWith(t.door, "bob", bob);
 			newBob = await newKey();
@@ -605,7 +644,11 @@ describe("a shared door", () => {
 
 	it("takes each challenge once", async () => {
 		const c = t.door.challenge(ADDRESS);
-		if (!c.ok) throw new Error(c.why);
+
+		if (!c.ok) {
+			throw new Error(c.why);
+		}
+
 		const signature = await alice.sign(c.value.text);
 		expect(await t.door.login({name: "alice", challenge: c.value.text, signature})).toMatchObject({
 			ok: true,
@@ -623,7 +666,11 @@ describe("a shared door", () => {
 		).toMatchObject({ok: false, status: 401});
 
 		const c = t.door.challenge(ADDRESS);
-		if (!c.ok) throw new Error(c.why);
+
+		if (!c.ok) {
+			throw new Error(c.why);
+		}
+
 		t.clock.t += CHALLENGE_MS;
 		const signature = await alice.sign(c.value.text);
 		expect(await t.door.login({name: "alice", challenge: c.value.text, signature})).toMatchObject({
@@ -635,7 +682,11 @@ describe("a shared door", () => {
 
 	it("refuses a challenge whose text was changed after it was given", async () => {
 		const c = t.door.challenge(ADDRESS);
-		if (!c.ok) throw new Error(c.why);
+
+		if (!c.ok) {
+			throw new Error(c.why);
+		}
+
 		const other = c.value.text.replace(ADDRESS, "https://elsewhere.test/demo");
 		expect(
 			await t.door.login({name: "alice", challenge: other, signature: await alice.sign(other)}),
@@ -644,7 +695,11 @@ describe("a shared door", () => {
 
 	it("lets in a person a member invited, by the keys service's id, not by the name", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		t.state.asked.length = 0;
 		expect(await t.door.invite(a.value.who, "bob")).toEqual({
 			ok: true,
@@ -676,10 +731,18 @@ describe("a shared door", () => {
 
 	it("ends a removed member's sessions, and keeps its last member", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		await t.door.invite(a.value.who, "bob");
 		const b = await loginWith(t.door, "bob", bob);
-		if (!b.ok) throw new Error(b.why);
+
+		if (!b.ok) {
+			throw new Error(b.why);
+		}
+
 		expect(t.door.remove(a.value.who, "github:8")).toEqual({ok: true, value: {id: "github:8"}});
 		expect(await t.door.who(b.value.token)).toMatchObject({ok: false, status: 401});
 		expect(await loginWith(t.door, "bob", bob)).toMatchObject({ok: false, status: 401});
@@ -690,7 +753,11 @@ describe("a shared door", () => {
 
 	it("ends a person's session after its length: a key no longer listed opens no new one", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		t.people.set("alice", {id: "github:7", keys: []});
 		t.clock.t += SESSION_MS;
 		expect(await t.door.who(a.value.token)).toMatchObject({ok: false, status: 401});
@@ -708,7 +775,11 @@ describe("a shared door", () => {
 
 	it("writes its members' facts with the person who did each as the writer", async () => {
 		const a = await loginWith(t.door, "alice", alice);
-		if (!a.ok) throw new Error(a.why);
+
+		if (!a.ok) {
+			throw new Error(a.why);
+		}
+
 		await t.door.invite(a.value.who, "bob");
 		expect(readStream(t.db, MEMBERS).map((r) => r.writer)).toEqual([
 			"user:github:7",
@@ -728,7 +799,11 @@ describe("a shared door", () => {
 			});
 		const agentLogin = async (o: {grant: string; by: Key; signer?: Key}) => {
 			const c = t.door.challenge(ADDRESS);
-			if (!c.ok) throw new Error(c.why);
+
+			if (!c.ok) {
+				throw new Error(c.why);
+			}
+
 			return t.door.agentLogin(ADDRESS, {
 				grant: o.grant,
 				granted: await o.by.sign(o.grant),
@@ -739,12 +814,19 @@ describe("a shared door", () => {
 		beforeEach(async () => {
 			triage = await newKey();
 			const a = await loginWith(t.door, "alice", alice);
-			if (!a.ok) throw new Error(a.why);
+
+			if (!a.ok) {
+				throw new Error(a.why);
+			}
 		});
 
 		it("comes in on its person's grant as an agent for that person, never as a person", async () => {
 			const s = await agentLogin({grant: grantFor({}), by: alice});
-			if (!s.ok) throw new Error(s.why);
+
+			if (!s.ok) {
+				throw new Error(s.why);
+			}
+
 			expect(s.value.who).toEqual({kind: "agent", id: "triage", for: "github:7"});
 			expect(await t.door.who(s.value.token)).toEqual({ok: true, value: s.value.who});
 			expect(t.db.all("SELECT kind, agent FROM door_sessions WHERE kind = 'agent'")).toEqual([
@@ -757,7 +839,11 @@ describe("a shared door", () => {
 			t.clock.t += 1000;
 			const long = grantFor({expires: t.clock.t + 7 * 24 * 3_600_000});
 			const s = await agentLogin({grant: long, by: alice});
-			if (!s.ok) throw new Error(s.why);
+
+			if (!s.ok) {
+				throw new Error(s.why);
+			}
+
 			expect(s.value.expires).toBe(personUntil);
 			t.clock.t = personUntil;
 			expect(await t.door.who(s.value.token)).toMatchObject({ok: false, status: 401});
@@ -817,14 +903,26 @@ describe("a shared door", () => {
 		it("loses its session when its person is removed, and ends with its grant", async () => {
 			await t.door.invite({kind: "user", id: "github:7"}, "bob");
 			const bobIn = await loginWith(t.door, "bob", bob);
-			if (!bobIn.ok) throw new Error(bobIn.why);
+
+			if (!bobIn.ok) {
+				throw new Error(bobIn.why);
+			}
+
 			const s = await agentLogin({grant: grantFor({name: "bob"}), by: bob});
-			if (!s.ok) throw new Error(s.why);
+
+			if (!s.ok) {
+				throw new Error(s.why);
+			}
+
 			t.door.remove({kind: "user", id: "github:7"}, "github:8");
 			expect(await t.door.who(s.value.token)).toMatchObject({ok: false});
 
 			const short = await agentLogin({grant: grantFor({expires: t.clock.t + 1000}), by: alice});
-			if (!short.ok) throw new Error(short.why);
+
+			if (!short.ok) {
+				throw new Error(short.why);
+			}
+
 			t.clock.t += 1000;
 			expect(await t.door.who(short.value.token)).toMatchObject({ok: false, status: 401});
 		});

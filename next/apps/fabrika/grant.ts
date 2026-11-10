@@ -29,16 +29,19 @@ const grant = Command.make(
 	},
 	Effect.fn("grant.client")(function* (values) {
 		const {kind, url, fingerprint} = values;
+
 		if (
 			kind !== "client" ||
 			url === undefined ||
 			fingerprint === undefined ||
 			values.code === undefined ||
 			values.key === undefined
-		)
+		) {
 			return yield* new GrantError({
 				reason: "usage: grant.ts client URL KEY --code=CODE --key=PATH",
 			});
+		}
+
 		const {code, key} = values;
 		const origin = yield* Effect.try({
 			try: () => new URL(url).origin,
@@ -58,7 +61,11 @@ const grant = Command.make(
 		const target = yield* Schema.decodeUnknownEffect(Target)(raw).pipe(
 			Effect.mapError(() => new GrantError({reason: "bad_target"})),
 		);
-		if (target === null) return yield* new GrantError({reason: "not_waiting"});
+
+		if (target === null) {
+			return yield* new GrantError({reason: "not_waiting"});
+		}
+
 		const text = grantText({
 			id: yield* SecureRandom.SecureRandom.use((random) => random.uuidV4()),
 			key: target.key,
@@ -86,7 +93,11 @@ const grant = Command.make(
 					[Stream.mkString(Stream.decodeText(signer.stdout)), signer.exitCode],
 					{concurrency: 2},
 				);
-				if (Number(code) !== 0) return yield* new GrantError({reason: "sign_failed"});
+
+				if (Number(code) !== 0) {
+					return yield* new GrantError({reason: "sign_failed"});
+				}
+
 				return out;
 			}),
 		);
@@ -99,14 +110,22 @@ const grant = Command.make(
 		// oxlint-disable-next-line fabrika/no-promises -- edge: the signed grant is posted over HTTP
 		const post = Effect.tryPromise({try: () => fetch(grantUrl, request), catch: unreachable});
 		const result = yield* post;
-		if (!result.ok) return yield* new GrantError({reason: "refused"});
+
+		if (!result.ok) {
+			return yield* new GrantError({reason: "refused"});
+		}
+
 		const badReply = () => new GrantError({reason: "bad_reply"});
 		// oxlint-disable-next-line fabrika/no-promises -- edge: HTTP response bodies return a Promise
 		const applied = yield* Effect.tryPromise({try: () => result.json(), catch: badReply});
 		const reply = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Json))(
 			applied,
 		).pipe(Effect.mapError(() => new GrantError({reason: "bad_reply"})));
-		if (reply._tag !== "applied") return yield* new GrantError({reason: "refused"});
+
+		if (reply._tag !== "applied") {
+			return yield* new GrantError({reason: "refused"});
+		}
+
 		yield* Console.log(`Granted ${fingerprint} to ${target.for}`);
 	}),
 );

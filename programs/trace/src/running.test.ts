@@ -180,7 +180,11 @@ describe("the tick", () => {
 					{},
 					{id: "trace:test", storage: memoryStorage()},
 				).pipe(Effect.provide(growing));
-				if (started.kind !== "running") return yield* Effect.die("it did not start");
+
+				if (started.kind !== "running") {
+					return yield* Effect.die("it did not start");
+				}
+
 				const until = (ok: (s: Model) => boolean) =>
 					started.run.machines.trace.changes.pipe(
 						Stream.filter((s): s is Model => s !== null),

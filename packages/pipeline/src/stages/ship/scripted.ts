@@ -58,7 +58,11 @@ export function readyAt(pr: string, head: string): ReadyToMerge {
 		...provenAt(head),
 		checks: {head, state: "green"},
 	});
-	if (!("ready" in r)) throw new Error(`the scripted verdicts do not prove ${pr} at ${head}`);
+
+	if (!("ready" in r)) {
+		throw new Error(`the scripted verdicts do not prove ${pr} at ${head}`);
+	}
+
 	return r.ready;
 }
 

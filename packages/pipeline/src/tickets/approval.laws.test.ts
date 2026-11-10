@@ -88,7 +88,11 @@ const ticketOf = (title: string, body: string) => {
 		[],
 		[{pos: 1, ticket: 1, by: owner, at: 0, fact: {type: "filed", title, body}}],
 	).tickets;
-	if (ticket === undefined) throw new Error("the ticket did not fold");
+
+	if (ticket === undefined) {
+		throw new Error("the ticket did not fold");
+	}
+
 	return ticket;
 };
 

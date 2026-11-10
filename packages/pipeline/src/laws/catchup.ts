@@ -119,23 +119,45 @@ export function catchupLaws<S extends Catchup>(): readonly Law<S, Msg, CatchupCm
 						: prev.phase === "trying" && msg.type === "catchup_try_ok"
 							? {...seen, conflicts: msg.value.conflicts}
 							: seen;
+
 				for (const push of pushesIn(cmds)) {
 					const v = now.view;
-					if (v === null || v.branch === null) return broke("a push with no branch read");
-					if (push.base !== v.branch) return broke(`pushed from ${push.base}, read ${v.branch}`);
+
+					if (v === null || v.branch === null) {
+						return broke("a push with no branch read");
+					}
+
+					if (push.base !== v.branch) {
+						return broke(`pushed from ${push.base}, read ${v.branch}`);
+					}
+
 					const drop = "ask" in prev && prev.ask.drop !== null;
+
 					if (drop) {
-						if (push.main !== null || push.resolved.length > 0)
+						if (push.main !== null || push.resolved.length > 0) {
 							return broke("a drop merged something in");
-						if (structuralHash(push.reverts) !== structuralHash(v.drops))
+						}
+
+						if (structuralHash(push.reverts) !== structuralHash(v.drops)) {
 							return broke(`reverted ${push.reverts.join(", ")}, read ${v.drops.join(", ")}`);
+						}
 					} else {
-						if (push.reverts.length > 0) return broke("a catch-up reverted a commit");
-						if (push.main !== v.main) return broke(`merged ${push.main}, read main at ${v.main}`);
+						if (push.reverts.length > 0) {
+							return broke("a catch-up reverted a commit");
+						}
+
+						if (push.main !== v.main) {
+							return broke(`merged ${push.main}, read main at ${v.main}`);
+						}
+
 						const left = now.conflicts.filter((p) => !push.resolved.some((f) => f.path === p));
-						if (left.length > 0) return broke(`pushed with ${left.join(", ")} unresolved`);
+
+						if (left.length > 0) {
+							return broke(`pushed with ${left.join(", ")} unresolved`);
+						}
 					}
 				}
+
 				return now;
 			},
 		),

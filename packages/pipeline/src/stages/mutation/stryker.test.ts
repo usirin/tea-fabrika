@@ -61,9 +61,15 @@ const inCopy = <A, E>(
 				const fs = yield* FileSystem.FileSystem;
 				const path = yield* Path.Path;
 				const dir = yield* fs.makeTempDirectoryScoped({prefix: "mutation-fixture-"});
-				for (const name of yield* fs.readDirectory(FIXTURE))
+
+				for (const name of yield* fs.readDirectory(FIXTURE)) {
 					yield* fs.copyFile(path.join(FIXTURE, name), path.join(dir, name));
-				for (const {name, text} of planted) yield* fs.writeFileString(path.join(dir, name), text);
+				}
+
+				for (const {name, text} of planted) {
+					yield* fs.writeFileString(path.join(dir, name), text);
+				}
+
 				yield* fs.symlink(MODULES, path.join(dir, "node_modules"));
 				const layer = strykerRunner({
 					folder: () => dir,

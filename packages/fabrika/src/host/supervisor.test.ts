@@ -22,9 +22,15 @@ const counter = defineMachine({
 	init: (loaded) => [loaded ?? {count: 0, cursor: 0}, []],
 	update: {
 		inc: (s, m) => {
-			if (m.rev <= s.cursor) return [s, []];
+			if (m.rev <= s.cursor) {
+				return [s, []];
+			}
+
 			// The planted bug: a pure reducer that throws on one message, every time it sees it.
-			if (m.poison) throw new Error("poison");
+			if (m.poison) {
+				throw new Error("poison");
+			}
+
 			return [{count: s.count + 1, cursor: m.rev}, []];
 		},
 	},
@@ -67,7 +73,10 @@ const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
-		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
+
+		while (!(yield* done) && Date.now() - t0 < ms) {
+			yield* sleep(20);
+		}
 	});
 
 const countOf = (name: string) => Effect.map(savedState(name, Count), (s) => s.state?.count ?? 0);
@@ -78,22 +87,30 @@ const tree = (spec: SupervisorSpec, events: HostEvent[]) =>
 		const ledger = yield* Ledger;
 		yield* ledger.register("sup:1", "test");
 		const sup = supervisor("sup:1", spec);
-		if (!sup.ok) return yield* Effect.die(sup.why);
+
+		if (!sup.ok) {
+			return yield* Effect.die(sup.why);
+		}
+
 		yield* serve({
 			name: "sup:1",
 			holder: "h-sup",
 			program: sup.program,
 			listen: (e) => events.push(e),
 		});
-		for (const c of spec.children)
+
+		for (const c of spec.children) {
 			yield* serve({
 				name: c.name,
 				holder: `h-${c.name}`,
 				program: child,
 				listen: (e) => events.push(e),
 			});
-		for (const c of spec.children)
+		}
+
+		for (const c of spec.children) {
 			yield* until(Effect.map(ledger.lease(c.name), (l) => l !== null));
+		}
 	});
 
 const SPEC: SupervisorSpec = {
@@ -113,9 +130,17 @@ describe("supervisor", () => {
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				yield* tree(SPEC, events);
-				for (let i = 0; i < 5; i++) yield* cast("c:1", `m${i}`, {}, "sender");
+
+				for (let i = 0; i < 5; i++) {
+					yield* cast("c:1", `m${i}`, {}, "sender");
+				}
+
 				yield* cast("c:1", "boom", {crashAfter: true}, "sender");
-				for (let i = 5; i < 10; i++) yield* cast("c:1", `m${i}`, {}, "sender");
+
+				for (let i = 5; i < 10; i++) {
+					yield* cast("c:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf("c:1"), (n) => n === 11));
 				const sup = yield* savedState("sup:1", SupervisorState);
 				return {
@@ -139,9 +164,17 @@ describe("supervisor", () => {
 			Effect.gen(function* () {
 				const ledger = yield* Ledger;
 				yield* tree(SPEC, events);
-				for (let i = 0; i < 3; i++) yield* cast("c:1", `m${i}`, {}, "sender");
+
+				for (let i = 0; i < 3; i++) {
+					yield* cast("c:1", `m${i}`, {}, "sender");
+				}
+
 				yield* cast("c:1", "poison", {poison: true}, "sender");
-				for (let i = 3; i < 6; i++) yield* cast("c:1", `m${i}`, {}, "sender");
+
+				for (let i = 3; i < 6; i++) {
+					yield* cast("c:1", `m${i}`, {}, "sender");
+				}
+
 				yield* until(Effect.map(countOf("c:1"), (n) => n === 6));
 				return {
 					n: yield* countOf("c:1"),

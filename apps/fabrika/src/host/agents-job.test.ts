@@ -54,19 +54,26 @@ const until = <T>(what: string, check: () => T | undefined) =>
 	Effect.gen(function* () {
 		for (let i = 0; i < 2000; i += 1) {
 			const got = check();
-			if (got !== undefined) return got;
+
+			if (got !== undefined) {
+				return got;
+			}
+
 			yield* Effect.sleep("5 millis");
 		}
+
 		return yield* Effect.die(`waited for ${what}`);
 	});
 
 /** One log line's `key=value` fields, as `Logger.formatSimple` writes them, quotes taken off. */
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 
@@ -78,8 +85,12 @@ const fileOf = (lines: readonly string[]) => lines.join("\n").split("\n");
  * words, kept as words.
  */
 const messageOf = (line: string): string | undefined => {
-	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g))
-		if (m[1] === "message") return m[2];
+	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
+		if (m[1] === "message") {
+			return m[2];
+		}
+	}
+
 	return undefined;
 };
 
@@ -165,15 +176,25 @@ const agentOn = (home: string, agent: string, named = {name: "test", version: "0
 		) =>
 			Effect.gen(function* () {
 				const listed = (yield* tools).tools.some((t) => t.name === "job");
-				if (!listed) return yield* Effect.die("the agent has no job tool");
+
+				if (!listed) {
+					return yield* Effect.die("the agent has no job tool");
+				}
+
 				for (let i = 0; i < 400; i += 1) {
 					const answer = yield* call("job", args);
+
 					if (!answer.error) {
 						const data = JSON.parse(answer.text) as Record<string, unknown>;
-						if (ok(data)) return data;
+
+						if (ok(data)) {
+							return data;
+						}
 					}
+
 					yield* Effect.sleep("25 millis");
 				}
+
 				return yield* Effect.die(`job ${JSON.stringify(args)} never came to what was waited for`);
 			});
 		/** The ids of the tool calls the client sent, in order. */
@@ -529,7 +550,11 @@ describe("the host's wide log", () => {
 					readonly error: boolean;
 					readonly text: string;
 				}> = [];
-				for (const [tool, args] of calls) answers.push({tool, ...(yield* agent.call(tool, args))});
+
+				for (const [tool, args] of calls) {
+					answers.push({tool, ...(yield* agent.call(tool, args))});
+				}
+
 				yield* until("a line for each call", () =>
 					said(lines, "tool_called").length >= calls.length ? true : undefined,
 				);
@@ -546,6 +571,7 @@ describe("the host's wide log", () => {
 			const line = called.find((f) => f.call === seen.ids[i]);
 			expect(line).toMatchObject({level: "INFO", agent: "claude", tool: answer.tool});
 			expect(line?.took_ms).toMatch(/^\d+$/);
+
 			if (answer.error) {
 				// Refused: the why as the agent was told it, and no `ok`.
 				expect(line?.refused).toBe(answer.text);
@@ -568,13 +594,17 @@ describe("the host's wide log", () => {
 				// The thread is held 200 ms at a time for about three seconds, as the trace window's
 				// `childrenOf` held it: the lag sampler, about once a second, sees p99 far past its line.
 				const until3s = Date.now() + 3000;
+
 				while (Date.now() < until3s && said(lines, "lag").length === 0) {
 					const end = Date.now() + 200;
+
 					while (Date.now() < end) {
 						// busy: nothing else runs on this thread
 					}
+
 					yield* Effect.sleep("1 millis");
 				}
+
 				yield* until("a lag line", () => (said(lines, "lag").length > 0 ? true : undefined));
 			}),
 		);
@@ -627,6 +657,7 @@ describe("no secret in a tool's answer or a log line", () => {
 		expect(said(lines, "job_began").length).toBeGreaterThan(0);
 		expect(said(lines, "agent_came").length).toBeGreaterThan(0);
 		expect(said(lines, "tool_called").length).toBeGreaterThan(0);
+
 		for (const text of [...heard, ...lines]) {
 			expect(text).not.toContain(secret);
 			expect(text).not.toContain(NAME);

@@ -79,7 +79,11 @@ export const SETTLE = Duration.seconds(5);
 const gotThenSettled = (t: JobTrace): Stream.Stream<TraceMsg | null> => {
 	const got: Stream.Stream<TraceMsg | null> = Stream.make({type: "got", trace: t});
 	const ended = t.job?.ended ?? null;
-	if (ended === null) return got;
+
+	if (ended === null) {
+		return got;
+	}
+
 	const wait = Effect.flatMap(Clock.currentTimeMillis, (now) =>
 		Effect.sleep(Duration.millis(Math.max(0, ended.at + Duration.toMillis(SETTLE) - now))),
 	);
@@ -149,24 +153,34 @@ const factsRunner = (sub: FactsSub) =>
 		Effect.gen(function* () {
 			const given = yield* Effect.serviceOption(Tickets);
 			const {number} = sub.deps;
+
 			if (Option.isNone(given)) {
 				const msg: TraceMsg = {type: "unread", number, why: "no ledger is given here"};
 				return Stream.make(msg);
 			}
+
 			const tickets = given.value;
 			return Stream.paginate<Poll, TraceMsg>({seen: null, same: 0, first: true}, (poll) =>
 				Effect.gen(function* () {
-					if (!poll.first) yield* Effect.sleep(poll.same >= CALM ? SLOW : FAST);
+					if (!poll.first) {
+						yield* Effect.sleep(poll.same >= CALM ? SLOW : FAST);
+					}
+
 					const read = yield* Effect.result(tickets.read(number));
+
 					if (read._tag === "Failure") {
 						const msg: TraceMsg = {type: "unread", number, why: read.failure.says};
 						return [[msg], {...poll, same: poll.same + 1, first: false}] as const;
 					}
+
 					const {timeline} = read.success;
 					const newest = timeline.at(-1);
 					const seen = `${timeline.length}:${newest?.pos ?? 0}:${newest?.at ?? 0}`;
-					if (seen === poll.seen)
+
+					if (seen === poll.seen) {
 						return [[], {...poll, same: poll.same + 1, first: false}] as const;
+					}
+
 					const msg: TraceMsg = {type: "facts", number, timeline};
 					return [[msg], {seen, same: 0, first: false}] as const;
 				}).pipe(Effect.map(([msgs, next]) => [msgs, Option.some(next)] as const)),
@@ -232,13 +246,19 @@ export const trace = defineProgram({
 			const step = (msg: TraceMsg) => runtime.dispatch(msg).pipe(Effect.orDie);
 			const look = (id: string) => step({type: "look", id});
 			const show = (number: number) => step({type: "ticket", number});
+
 			// The ticket flag, else the id flag's job, else its own line's: `null` when it runs in no
 			// job (a test).
-			if (flags.ticket !== undefined) yield* show(flags.ticket);
-			else {
+			if (flags.ticket !== undefined) {
+				yield* show(flags.ticket);
+			} else {
 				const first = flags.id ?? (yield* jobTraceId);
-				if (first !== null) yield* look(first);
+
+				if (first !== null) {
+					yield* look(first);
+				}
 			}
+
 			yield* watch("trace", "trace", runtime);
 			// Each id and ticket told, in order with the window's inputs: a pipe's end does not end
 			// the window. A quit, or the window's inputs closed, does. Anything on `any` is taken and

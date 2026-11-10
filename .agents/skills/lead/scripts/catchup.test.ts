@@ -53,8 +53,12 @@ const storageFiles = (root: string) => {
 			: info.isFile()
 				? `file:${readFileSync(path).toString("base64")}`
 				: "directory";
-		if (info.isDirectory())
-			for (const child of readdirSync(path)) visit(join(path, child), `${name}/${child}`);
+
+		if (info.isDirectory()) {
+			for (const child of readdirSync(path)) {
+				visit(join(path, child), `${name}/${child}`);
+			}
+		}
 	};
 	visit(root, ".");
 	return files;
@@ -235,6 +239,7 @@ die("unhandled tool: " + cmd);
 
 const run = (setup: Setup, args: string[] = []) => {
 	const dir = mkdtempSync(join(tmpdir(), "cu-"));
+
 	try {
 		const bin = join(dir, "bin");
 		mkdirSync(bin);
@@ -266,6 +271,7 @@ const run = (setup: Setup, args: string[] = []) => {
 		let protectedWork = "",
 			protectedData = "",
 			saved = "";
+
 		if (setup.cleanup) {
 			git(dir, "init", "-q", "--initial-branch=main");
 			git(dir, "config", "user.name", "Fixture");
@@ -290,6 +296,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			git(dir, "worktree", "add", "-q", join(dir, "boxes/driver"), setup.branch);
 			git(dir, "branch", `${setup.branch}-sibling`, checkedTip);
 			git(dir, "worktree", "add", "-q", join(dir, "boxes/sibling"), `${setup.branch}-sibling`);
+
 			for (const [name, branch] of [
 				["exact box", setup.branch],
 				["sibling box", `${setup.branch}-sibling`],
@@ -306,26 +313,47 @@ const run = (setup: Setup, args: string[] = []) => {
 				expect(git(work, "remote")).toBe("origin");
 				git(work, "config", "user.name", "Fixture");
 				git(work, "config", "user.email", "fixture@example.test");
+
 				if (name === "exact box") {
-					if (setup.cleanup === "dirty") writeFileSync(join(work, "tracked"), "dirty");
+					if (setup.cleanup === "dirty") {
+						writeFileSync(join(work, "tracked"), "dirty");
+					}
+
 					if (setup.cleanup === "unsaved") {
 						writeFileSync(join(work, "tracked"), "unsaved");
 						git(work, "commit", "-qam", "unsaved");
 					}
-					if (setup.cleanup === "malformed") writeFileSync(join(data, "HEAD"), "malformed");
+
+					if (setup.cleanup === "malformed") {
+						writeFileSync(join(data, "HEAD"), "malformed");
+					}
 				}
 			}
-			if (setup.cleanup === "dirty") writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
-			if (setup.cleanup === "locked") git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+
+			if (setup.cleanup === "dirty") {
+				writeFileSync(join(dir, "boxes/driver/tracked"), "dirty");
+			}
+
+			if (setup.cleanup === "locked") {
+				git(dir, "worktree", "lock", join(dir, "boxes/driver"));
+			}
+
 			if (setup.trouble === "unregistered") {
 				git(dir, "worktree", "remove", "--force", join(dir, "boxes/catchup-900"));
 				mkdirSync(join(dir, "boxes/catchup-900/node_modules"), {recursive: true});
 			}
-			if (setup.trouble === "twins")
+
+			if (setup.trouble === "twins") {
 				git(dir, "worktree", "add", "-q", "-f", join(dir, "boxes/driver twin"), setup.branch);
-			if (setup.trouble === "missing") rmSync(join(dir, "boxes/driver"), {recursive: true});
+			}
+
+			if (setup.trouble === "missing") {
+				rmSync(join(dir, "boxes/driver"), {recursive: true});
+			}
+
 			mkdirSync(join(dir, "boxes/state"));
 			writeFileSync(join(dir, "boxes/state/driver.md"), "saved wait");
+
 			if (setup.protected) {
 				protectedWork = join(dir, "boxes", setup.protected === "state" ? "state" : "protected");
 				protectedData = `${protectedWork}-gitdata`;
@@ -334,6 +362,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				git(protectedWork, "remote", "add", "origin", dir);
 				git(protectedWork, "fetch", "-q", "origin", `${setup.branch}:refs/heads/${setup.branch}`);
 				git(protectedWork, "checkout", "-q", setup.branch);
+
 				if (setup.protected !== "state") {
 					main =
 						setup.protected === "main-work"
@@ -346,27 +375,33 @@ const run = (setup: Setup, args: string[] = []) => {
 									);
 					mkdirSync(main, {recursive: true});
 				}
+
 				saved = join(setup.protected === "state" ? protectedWork : main, "saved.md");
 				writeFileSync(saved, setup.branch);
 			}
+
 			expect(git(dir, "remote")).toBe("");
+
 			if (setup.deepStorage || setup.sharedAdmin || setup.unwalkable) {
 				const original = join(dir, ".git");
 				const worktree =
 					setup.deepStorage?.worktree ?? setup.sharedAdmin ?? setup.unwalkable!.worktree;
 				admin = git(join(dir, "boxes", worktree), "rev-parse", "--absolute-git-dir");
 				history = git(dir, "rev-list", "--objects", "--all");
+
 				if (setup.sharedAdmin) {
 					// A worktree removal deletes its admin directory outside the work folder.
 					// MAIN is another reader of that exact directory, with the same common store.
 					const common = join(dir, "main-common");
 					renameSync(original, common);
+
 					for (const name of ["catchup-900", "driver", "sibling"]) {
 						writeFileSync(
 							join(dir, "boxes", name, ".git"),
 							`gitdir: ${join(common, "worktrees", name)}\n`,
 						);
 					}
+
 					admin = join(common, "worktrees", worktree);
 					writeFileSync(original, `gitdir: ${admin}\n`);
 					storage = admin;
@@ -378,10 +413,18 @@ const run = (setup: Setup, args: string[] = []) => {
 				} else {
 					const path = setup.deepStorage!;
 					git(dir, "pack-refs", "--all");
-					if (path.kind === "objects/pack") git(dir, "repack", "-ad");
-					if (path.kind === "refs") git(dir, "update-ref", "refs/keep/storage", "HEAD");
+
+					if (path.kind === "objects/pack") {
+						git(dir, "repack", "-ad");
+					}
+
+					if (path.kind === "refs") {
+						git(dir, "update-ref", "refs/keep/storage", "HEAD");
+					}
+
 					history = git(dir, "rev-list", "--objects", "--all");
 					let root = original;
+
 					if (path.root === "common") {
 						root = join(dir, "main-common");
 						cpSync(original, root, {recursive: true});
@@ -392,6 +435,7 @@ const run = (setup: Setup, args: string[] = []) => {
 							`${path.relative ? relative(original, root) : root}\n`,
 						);
 					}
+
 					if (path.root === "alternate") {
 						root = join(dir, "main-alternate");
 						renameSync(join(original, "objects"), root);
@@ -401,6 +445,7 @@ const run = (setup: Setup, args: string[] = []) => {
 							`${path.relative ? relative(join(original, "objects"), root) : root}\n`,
 						);
 					}
+
 					const source = join(
 						root,
 						path.kind === "loose"
@@ -411,12 +456,17 @@ const run = (setup: Setup, args: string[] = []) => {
 									? path.kind.replace(/^objects\//, "")
 									: path.kind,
 					);
+
 					if (!existsSync(source)) {
 						mkdirSync(join(source, ".."), {recursive: true});
-						if (["generated-file", "packed-refs", "index"].includes(path.kind))
+
+						if (["generated-file", "packed-refs", "index"].includes(path.kind)) {
 							writeFileSync(source, setup.branch);
-						else mkdirSync(source);
+						} else {
+							mkdirSync(source);
+						}
 					}
+
 					storage = join(
 						path.location === "admin" ? admin : join(dir, "boxes", path.worktree, "node_modules"),
 						...path.parts,
@@ -430,14 +480,23 @@ const run = (setup: Setup, args: string[] = []) => {
 					const real = (at: string) => join(realpathSync(join(at, "..")), basename(at));
 					const name = (from: string, to: string) =>
 						path.relative ? relative(realpathSync(from), real(to)) : to;
-					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
+
+					if (path.through) {
+						symlinkSync(name(join(storage, ".."), stored), storage);
+					}
+
 					symlinkSync(name(join(source, ".."), storage), source);
 				}
-				if (stored) savedStorage = storageFiles(stored);
+
+				if (stored) {
+					savedStorage = storageFiles(stored);
+				}
+
 				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
 				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
 				expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
 			}
+
 			if (setup.storage) {
 				const path = setup.storage;
 				const original = join(dir, ".git");
@@ -445,6 +504,7 @@ const run = (setup: Setup, args: string[] = []) => {
 				mkdirSync(join(storage, ".."), {recursive: true});
 				const name = (from: string, to: string) => (path.relative ? relative(from, to) : to);
 				history = git(dir, "rev-list", "--objects", "--all");
+
 				if (path.binding === "alternates-file") {
 					const outside = join(dir, "outside-objects");
 					renameSync(join(original, "objects"), outside);
@@ -460,8 +520,15 @@ const run = (setup: Setup, args: string[] = []) => {
 						: join(original, "objects");
 					const stored = path.through ? join(dir, "outside-storage") : storage;
 					renameSync(source, stored);
-					if (path.through) symlinkSync(name(join(storage, ".."), stored), storage);
-					if (path.binding === "gitdir") symlinkSync(name(dir, storage), original);
+
+					if (path.through) {
+						symlinkSync(name(join(storage, ".."), stored), storage);
+					}
+
+					if (path.binding === "gitdir") {
+						symlinkSync(name(dir, storage), original);
+					}
+
 					if (path.binding === "commondir") {
 						mkdirSync(original);
 						writeFileSync(join(original, "HEAD"), readFileSync(join(stored, "HEAD")));
@@ -470,9 +537,14 @@ const run = (setup: Setup, args: string[] = []) => {
 						// spelling valid while the common directory is borrowed from a worktree.
 						symlinkSync(name(original, join(storage, "worktrees")), join(original, "worktrees"));
 					}
-					if (path.binding === "objects") symlinkSync(name(original, storage), source);
+
+					if (path.binding === "objects") {
+						symlinkSync(name(original, storage), source);
+					}
+
 					if (path.binding === "alternates") {
 						let next = storage;
+
 						for (let i = 0; i < path.hops; i++) {
 							const objects = i === path.hops - 1 ? source : join(dir, `alternate-${i}`);
 							mkdirSync(join(objects, "info"), {recursive: true});
@@ -481,17 +553,23 @@ const run = (setup: Setup, args: string[] = []) => {
 						}
 					}
 				}
+
 				expect(git(dir, "rev-list", "--objects", "--all")).toBe(history);
 				expect(git(dir, "check-ignore", storage)).toBe(storage);
 				const registered = git(dir, "worktree", "list", "--porcelain", "-z");
-				for (const worktree of ["catchup-900", "driver"])
+
+				for (const worktree of ["catchup-900", "driver"]) {
 					expect(registered).toContain(`worktree ${realpathSync(join(dir, "boxes", worktree))}\0`);
+				}
 			}
 		}
+
 		writeFileSync(join(dir, "setup.json"), JSON.stringify(setup));
+
 		for (const cmd of ["gh", "git", "node", "pnpm", "nice", "sleep", "date"]) {
 			writeFileSync(join(bin, cmd), `#!${process.execPath}\n${stub}`, {mode: 0o755});
 		}
+
 		const ran = spawnSync("sh", [script, "900", "520", ...args], {
 			encoding: "utf8",
 			timeout: 15_000,
@@ -530,6 +608,7 @@ const run = (setup: Setup, args: string[] = []) => {
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
 		expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
+
 		// Its own checkout is gone once the run passed the usage check, success or failure, unless it
 		// holds MAIN's Git storage, or MAIN cannot be read to tell: then a line says why it stayed.
 		if (calls.length > 0) {
@@ -545,8 +624,12 @@ const run = (setup: Setup, args: string[] = []) => {
 				setup.deepStorage ??
 				setup.sharedAdmin ??
 				setup.unwalkable;
-			if (setup.cleanup && planted === undefined) expect(guarded, ran.stdout).toBe(false);
+
+			if (setup.cleanup && planted === undefined) {
+				expect(guarded, ran.stdout).toBe(false);
+			}
 		}
+
 		const remaining = readdirSync(join(dir, "boxes"));
 		const keptHead = setup.cleanup
 			? spawnSync("/usr/bin/git", ["-C", dir, "rev-parse", "--verify", "refs/keep/pr/900"], {
@@ -609,6 +692,7 @@ const assertHead = (calls: Call[]) => {
 		expect(call.args).toContain("--match-head-commit");
 		expect(call.args[call.args.indexOf("--match-head-commit") + 1]).toBe(tip);
 	}
+
 	for (const call of calls.filter((c) => c.key && ["checks", "trust", "apps"].includes(c.key))) {
 		expect(call.args[1]).toContain(tip);
 	}
@@ -861,11 +945,13 @@ describe("catchup, today's tooling", () => {
 						expect(got.code, got.text).toBe(lands ? 0 : 1);
 						const tried = merges(got.calls);
 						expect(tried).toHaveLength(reached ? 1 : 0);
+
 						for (const call of tried) {
 							expect(
 								call.args.filter((a) => a.startsWith("--") && a !== "--match-head-commit"),
 							).toEqual(["--squash"]);
 						}
+
 						const stacked = got.calls.filter((c) => c.key === "stack");
 						expect(stacked.map((c) => c.args)).toEqual(
 							reached && stack === "same" ? [["stack", "merge", "900", "--squash", "--yes"]] : [],
@@ -875,6 +961,7 @@ describe("catchup, today's tooling", () => {
 						);
 						assertHead(got.calls);
 					}
+
 					for (const args of [
 						["--merge-method", "squash"],
 						["--merge-method", "merge"],
@@ -920,6 +1007,7 @@ describe("catchup, today's tooling", () => {
 							expect(ran.status, ran.stderr).toBe(0);
 							return ran.stdout.trim();
 						};
+
 						try {
 							git("init", "-q", "--initial-branch=main");
 							git("config", "user.name", "Fixture");
@@ -936,24 +1024,37 @@ describe("catchup, today's tooling", () => {
 								rows.map((r) => JSON.stringify({...r, side})),
 							);
 							const logs = ["runs", "notes"].map((name) => join(dir, `field/${name}.jsonl`));
-							for (const log of logs) writeFileSync(log, `${prefix.join("\n")}\n`);
+
+							for (const log of logs) {
+								writeFileSync(log, `${prefix.join("\n")}\n`);
+							}
+
 							writeFileSync(join(dir, "ordinary.txt"), "base\n");
 							git("add", ".");
 							git("commit", "-qm", "base");
 							git("branch", "peer");
+
 							for (const [i, branch] of ["main", "peer"].entries()) {
 								git("checkout", "-q", branch);
-								for (const log of logs)
+
+								for (const log of logs) {
 									writeFileSync(log, `${[...prefix, ...tails[i]!].join("\n")}\n`);
-								if (conflict) writeFileSync(join(dir, "ordinary.txt"), `${branch}\n`);
+								}
+
+								if (conflict) {
+									writeFileSync(join(dir, "ordinary.txt"), `${branch}\n`);
+								}
+
 								git("add", ".");
 								git("commit", "-qm", branch);
 							}
+
 							git("update-ref", "refs/remotes/origin/main", "peer");
 							git("checkout", "-q", "main");
 							const before = git("rev-parse", "HEAD");
 							const got = run({...green, merge: true, repo: dir});
 							expect(got.code, got.text).toBe(conflict ? 1 : 0);
+
 							if (conflict) {
 								expect(git("rev-parse", "HEAD")).toBe(before);
 								expect(git("status", "--porcelain")).toBe("");
@@ -966,12 +1067,16 @@ describe("catchup, today's tooling", () => {
 											c.key === "merge",
 									),
 								).toBe(false);
-							} else
+							} else {
 								for (const log of logs) {
 									const actual = readFileSync(log, "utf8").trimEnd().split("\n");
 									expect(actual.sort()).toEqual([...prefix, ...tails.flat()].sort());
-									for (const line of actual) expect(() => JSON.parse(line)).not.toThrow();
+
+									for (const line of actual) {
+										expect(() => JSON.parse(line)).not.toThrow();
+									}
 								}
+							}
 						} finally {
 							rmSync(dir, {recursive: true, force: true});
 						}
@@ -1002,8 +1107,17 @@ describe("catchup, today's tooling", () => {
 							...patch,
 						});
 						expect(got.code, got.text).toBe(1);
-						for (const path of ["exact box", "exact box-gitdata", "later box", "driver", "sibling"])
+
+						for (const path of [
+							"exact box",
+							"exact box-gitdata",
+							"later box",
+							"driver",
+							"sibling",
+						]) {
 							expect(got.remaining).toContain(path);
+						}
+
 						// The catch-up checkout holds nothing of MAIN's, so the EXIT trap force-removes it.
 						expect(got.remaining).not.toContain("catchup-900");
 						expect(got.keptHead).toBe("");
@@ -1012,19 +1126,24 @@ describe("catchup, today's tooling", () => {
 								c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")),
 						);
 						expect(touched).toHaveLength(1);
+
 						for (const call of touched) {
 							expect(call.args).toContain("--force");
 							expect(call.args.at(-1)).toMatch(/\/catchup-900$/);
 						}
 					}
+
 					// Positive case keeps this law red until cleanup exists; absence alone is insufficient.
 					const landed = run({...green, branch: `fabrikalfa/cleanup-${suffix}`, cleanup: "clean"});
 					expect(landed.code, landed.text).toBe(0);
 					expect(landed.remaining).not.toContain("catchup-900");
 					const mergedAt = landed.calls.findIndex((c) => c.key === "merge");
-					for (const [i, c] of landed.calls.entries())
-						if (c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref")))
+
+					for (const [i, c] of landed.calls.entries()) {
+						if (c.cmd === "git" && (c.args.includes("remove") || c.args.includes("update-ref"))) {
 							expect(i).toBeGreaterThan(mergedAt);
+						}
+					}
 				},
 			),
 			{seed: 3191, numRuns: 3},
@@ -1039,6 +1158,7 @@ describe("catchup, today's tooling", () => {
 				const got = run({...green, branch: `fabrikalfa/${suffix}`, cleanup: "clean"});
 				expect(got.code, got.text).toBe(0);
 				expect(got.keptHead).toBe(got.checkedTip);
+
 				for (const path of [
 					"exact box",
 					"exact box-gitdata",
@@ -1046,10 +1166,14 @@ describe("catchup, today's tooling", () => {
 					"later box-gitdata",
 					"catchup-900",
 					"driver",
-				])
+				]) {
 					expect(got.remaining).not.toContain(path);
-				for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"])
+				}
+
+				for (const path of ["sibling box", "sibling box-gitdata", "sibling", "state"]) {
 					expect(got.remaining).toContain(path);
+				}
+
 				expect(got.state).toBe("saved wait");
 				const removes = got.calls.filter(
 					(c) => c.cmd === "git" && c.args.includes("worktree") && c.args.includes("remove"),
@@ -1121,28 +1245,45 @@ describe("catchup, today's tooling", () => {
 					// The catch-up checkout holds nothing of MAIN's here, so whatever the trouble, EXIT
 					// force-removes it; only the branch's other worktrees and boxes wait on the trouble.
 					expect(has("catchup-900")).toBe(false);
+
 					if (trouble === "list") {
 						expect(got.text).toMatch(/^kept worktrees: [^\n]+$/m);
 						expect(got.keptHead).toBe(got.checkedTip);
-						for (const path of ["driver", "sibling"]) expect(has(path)).toBe(true);
-						for (const path of ["exact box", "later box"]) expect(has(path)).toBe(false);
+
+						for (const path of ["driver", "sibling"]) {
+							expect(has(path)).toBe(true);
+						}
+
+						for (const path of ["exact box", "later box"]) {
+							expect(has(path)).toBe(false);
+						}
 					}
+
 					if (trouble === "keep") {
 						expect(got.keptHead).toBe("");
 						expect(got.text).toMatch(/^kept worktree driver: [^\n]+$/m);
 						expect(got.text).toMatch(/^kept box exact box: [^\n]+$/m);
-						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(true);
+
+						for (const path of ["driver", "exact box", "later box"]) {
+							expect(has(path)).toBe(true);
+						}
 					}
+
 					if (trouble === "unregistered") {
-						for (const path of ["driver", "exact box", "later box"]) expect(has(path)).toBe(false);
+						for (const path of ["driver", "exact box", "later box"]) {
+							expect(has(path)).toBe(false);
+						}
 					}
+
 					if (trouble === "twins") {
 						for (const path of ["driver", "driver twin"]) {
 							expect(has(path)).toBe(true);
 							expect(got.text).toMatch(new RegExp(`^kept worktree ${path}: [^\\n]+$`, "m"));
 						}
-						for (const path of ["catchup-900", "exact box", "later box"])
+
+						for (const path of ["catchup-900", "exact box", "later box"]) {
 							expect(has(path)).toBe(false);
+						}
 					}
 				}
 			}),
@@ -1159,17 +1300,26 @@ describe("catchup, today's tooling", () => {
 					const got = run({...green, failures});
 					const stopped = failures.findIndex((n) => n >= 3);
 					expect(got.code, got.text).toBe(stopped < 0 ? 0 : 1);
+
 					for (const [i, key] of reads.entries()) {
 						const expected = stopped >= 0 && i > stopped ? 0 : Math.min(failures[i]! + 1, 3);
 						expect(got.calls.filter((c) => c.key === key).length, key).toBe(expected);
 					}
+
 					const waits = failures
 						.slice(0, stopped < 0 ? 5 : stopped + 1)
 						.flatMap((n) => (n === 0 ? [] : n === 1 ? ["1"] : ["1", "2"]));
 					expect(got.calls.filter((c) => c.cmd === "sleep").map((c) => c.args[0])).toEqual(waits);
 					expect(merges(got.calls)).toHaveLength(stopped < 0 ? 1 : 0);
-					if (stopped > 0) expect(got.text).toContain(tip);
-					if (stopped >= 0) expect(got.text).toContain("gh");
+
+					if (stopped > 0) {
+						expect(got.text).toContain(tip);
+					}
+
+					if (stopped >= 0) {
+						expect(got.text).toContain("gh");
+					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1216,10 +1366,12 @@ describe("catchup, today's tooling", () => {
 					const merged = answer === "green" || answer === "startup";
 					expect(got.code, got.text).toBe(merged ? 0 : 1);
 					expect(merges(got.calls)).toHaveLength(merged ? 1 : 0);
+
 					for (const [i, key] of reads.entries()) {
 						const count = i > stop ? 0 : failures[i]! + 1 + (key === "checks" ? pending : 0);
 						expect(got.calls.filter((c) => c.key === key).length, key).toBe(count);
 					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1239,15 +1391,24 @@ describe("catchup, today's tooling", () => {
 				}),
 				({pending, steps}) => {
 					const clock = [0];
-					for (const step of steps) clock.push(clock.at(-1)! + step);
+
+					for (const step of steps) {
+						clock.push(clock.at(-1)! + step);
+					}
+
 					const seconds = clock.map((t) => (t === 3600 ? 3601 : t));
 					// The green answer is the check read after the pending ones.
 					const late = seconds[pending + 1]! >= 3600;
 					const got = run({...green, pending, clock: seconds});
 					expect(got.code, got.text).toBe(late ? 1 : 0);
 					expect(merges(got.calls)).toHaveLength(late ? 0 : 1);
-					if (late) expect(got.text).toMatch(/not done .* after an hour/);
-					else expect(got.text).not.toContain("after an hour");
+
+					if (late) {
+						expect(got.text).toMatch(/not done .* after an hour/);
+					} else {
+						expect(got.text).not.toContain("after an hour");
+					}
+
 					assertHead(got.calls);
 				},
 			),
@@ -1383,12 +1544,15 @@ describe("catchup closes the tickets a merged PR names, today's tooling", () => 
 								: [],
 						),
 					);
-					for (const n of named)
+
+					for (const n of named) {
 						expect(got.text).toContain(
 							tickets[n] === "open"
 								? `pr 900: closed ticket ${n}\n`
 								: `pr 900: ticket ${n} is not open (already closed, or no such ticket); left as it is`,
 						);
+					}
+
 					expect(got.posts.every((p) => p.home.endsWith("/fh"))).toBe(true);
 				},
 			),

@@ -33,7 +33,9 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
 type Update = acp.SessionUpdate;
 
 const noteSystem = (id: string, meta: Record<string, unknown> | null | undefined) => {
-	if (meta?.system !== undefined) note(`system ${id} ${JSON.stringify(meta.system)}`);
+	if (meta?.system !== undefined) {
+		note(`system ${id} ${JSON.stringify(meta.system)}`);
+	}
 };
 
 const here = process.cwd();
@@ -98,7 +100,10 @@ const fresh = (): Session => ({
 
 /** A session kept on disk: its turns, counted from its prompts. */
 const loaded = (id: string): {readonly session: Session; readonly updates: Update[]} | null => {
-	if (!existsSync(historyOf(id))) return null;
+	if (!existsSync(historyOf(id))) {
+		return null;
+	}
+
 	const updates = readFileSync(historyOf(id), "utf8")
 		.split("\n")
 		.filter(Boolean)
@@ -127,40 +132,72 @@ const app = acp
 	})
 	.onRequest(acp.methods.agent.session.load, async (ctx) => {
 		const found = loaded(ctx.params.sessionId);
-		if (found === null) throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+
+		if (found === null) {
+			throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+		}
+
 		sessions.set(ctx.params.sessionId, found.session);
 		noteSystem(ctx.params.sessionId, ctx.params._meta);
-		for (const update of found.updates)
+
+		for (const update of found.updates) {
 			await ctx.client.notify(acp.methods.client.session.update, {
 				sessionId: ctx.params.sessionId,
 				update,
 			});
+		}
+
 		return {modes: modesOf(found.session), configOptions: configOf(found.session)};
 	})
 	.onRequest(acp.methods.agent.session.resume, (ctx) => {
 		const found = loaded(ctx.params.sessionId);
-		if (found === null) throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+
+		if (found === null) {
+			throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+		}
+
 		sessions.set(ctx.params.sessionId, found.session);
 		noteSystem(ctx.params.sessionId, ctx.params._meta);
 		return {modes: modesOf(found.session), configOptions: configOf(found.session)};
 	})
 	.onRequest(acp.methods.agent.session.setConfigOption, (ctx) => {
 		const s = sessions.get(ctx.params.sessionId);
-		if (s === undefined) throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+
+		if (s === undefined) {
+			throw acp.RequestError.resourceNotFound(ctx.params.sessionId);
+		}
+
 		const value = String(ctx.params.value);
-		if (ctx.params.configId === "mode") s.mode = value;
-		if (ctx.params.configId === "model") s.model = value;
-		if (ctx.params.configId === "effort") s.effort = value;
+
+		if (ctx.params.configId === "mode") {
+			s.mode = value;
+		}
+
+		if (ctx.params.configId === "model") {
+			s.model = value;
+		}
+
+		if (ctx.params.configId === "effort") {
+			s.effort = value;
+		}
+
 		return {configOptions: configOf(s)};
 	})
 	.onNotification(acp.methods.agent.session.cancel, (ctx) => {
 		const s = sessions.get(ctx.params.sessionId);
-		if (s !== undefined) s.cancelled = true;
+
+		if (s !== undefined) {
+			s.cancelled = true;
+		}
 	})
 	.onRequest(acp.methods.agent.session.prompt, async (ctx) => {
 		const sessionId = ctx.params.sessionId;
 		const s = sessions.get(sessionId);
-		if (s === undefined) throw acp.RequestError.resourceNotFound(sessionId);
+
+		if (s === undefined) {
+			throw acp.RequestError.resourceNotFound(sessionId);
+		}
+
 		s.cancelled = false;
 		s.turns += 1;
 		const text = ctx.params.prompt
@@ -176,7 +213,10 @@ const app = acp
 		};
 		/** One step of the turn: false once the turn was cancelled. */
 		const step = async () => {
-			if (slow) await pause(1_000);
+			if (slow) {
+				await pause(1_000);
+			}
+
 			return !s.cancelled;
 		};
 		keep({sessionUpdate: "user_message_chunk", content: {type: "text", text}});
@@ -186,7 +226,8 @@ const app = acp
 				await send({sessionUpdate: "agent_thought_chunk", content: {type: "text", text: "hmm"}});
 				await send({sessionUpdate: "agent_thought_chunk", content: {type: "text", text: "ok"}});
 			}
-			if (/\bplan\b/.test(text))
+
+			if (/\bplan\b/.test(text)) {
 				await send({
 					sessionUpdate: "plan",
 					entries: [
@@ -194,16 +235,25 @@ const app = acp
 						{content: "answer", priority: "medium", status: "pending"},
 					],
 				});
+			}
+
 			if (/\bmode\b/.test(text)) {
 				s.mode = "plan";
 				await send({sessionUpdate: "current_mode_update", currentModeId: "plan"});
 			}
-			if (/\btitle\b/.test(text))
+
+			if (/\btitle\b/.test(text)) {
 				await send({sessionUpdate: "session_info_update", title: "A fake session"});
+			}
+
 			const quotes: string[] = [];
 			const files = [...new Set(text.match(/\b[\w-]+\.txt\b/g) ?? [])];
+
 			for (const [i, file] of files.entries()) {
-				if (!(await step())) return "cancelled";
+				if (!(await step())) {
+					return "cancelled";
+				}
+
 				const id = `t${s.turns}.${i + 1}`;
 				await send({
 					sessionUpdate: "tool_call",
@@ -223,8 +273,12 @@ const app = acp
 					status: there ? "completed" : "failed",
 				});
 			}
+
 			if (/\bwrite\b/.test(text)) {
-				if (!(await step())) return "cancelled";
+				if (!(await step())) {
+					return "cancelled";
+				}
+
 				const id = `t${s.turns}.w`;
 				const call = {
 					toolCallId: id,
@@ -251,30 +305,48 @@ const app = acp
 				const allowed =
 					answer.outcome.outcome === "selected" &&
 					(answer.outcome.optionId === "yes" || answer.outcome.optionId === "always");
-				if (allowed) appendFileSync(join(here, "written.txt"), "written\n");
+
+				if (allowed) {
+					appendFileSync(join(here, "written.txt"), "written\n");
+				}
+
 				quotes.push(allowed ? "wrote written.txt" : "was not allowed to write");
 				await send({
 					sessionUpdate: "tool_call_update",
 					toolCallId: id,
 					status: allowed ? "completed" : "failed",
 				});
-				if (answer.outcome.outcome === "cancelled") return "cancelled";
+
+				if (answer.outcome.outcome === "cancelled") {
+					return "cancelled";
+				}
 			}
-			if (!(await step())) return "cancelled";
+
+			if (!(await step())) {
+				return "cancelled";
+			}
+
 			const said = quotes.length === 0 ? [`Turn ${s.turns}: noted.`] : quotes;
 			const messageId = `m${s.turns}`;
-			for (const [i, line] of said.entries())
+
+			for (const [i, line] of said.entries()) {
 				await send({
 					sessionUpdate: "agent_message_chunk",
 					messageId,
 					content: {type: "text", text: i === 0 ? line : `\n${line}`},
 				});
+			}
+
 			return "end_turn";
 		};
 
 		const stopReason = await turn();
+
 		// `untallied`: a harness that reports no tokens for the turn, which is not a turn of 0.
-		if (/\buntallied\b/.test(text)) return {stopReason};
+		if (/\buntallied\b/.test(text)) {
+			return {stopReason};
+		}
+
 		const input = 100 + text.length;
 		const output = 10;
 		s.used += input + output;

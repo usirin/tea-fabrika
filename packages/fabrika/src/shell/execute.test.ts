@@ -50,9 +50,17 @@ it("reports a stopped pipeline when an earlier stage already ended", async () =>
 				Effect.provideService(HostJobs, jobs),
 				Effect.provideService(Programs, programList([...SMALL, listed(wait, Layer.empty)])),
 			);
-			if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+			if (started.kind !== "running") {
+				return yield* Effect.die("tsh did not start");
+			}
+
 			yield* tell(started.run, "line", "seq --to 1 | wait");
-			while (!reading) yield* Effect.sleep(Duration.millis(5));
+
+			while (!reading) {
+				yield* Effect.sleep(Duration.millis(5));
+			}
+
 			// Let the producer finish after delivering its one value.
 			yield* Effect.sleep(Duration.millis(20));
 			yield* tell(started.run, "signal", "interrupt");
@@ -83,7 +91,11 @@ const session = (storage: Storage) =>
 			{printed: printed.hear, ready: ready.hear},
 			{id: `tsh:execute-${runs}`, storage},
 		).pipe(Effect.provideService(Programs, SMALL_LIST), Effect.provideService(HostJobs, jobs));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
+
+		if (started.kind !== "running") {
+			return yield* Effect.die("tsh did not start");
+		}
+
 		let told = 0;
 		const line = (text: string) =>
 			Effect.gen(function* () {
@@ -100,8 +112,9 @@ const session = (storage: Storage) =>
 		/** Wait until tsh has printed a line that has `text` in it: a job's end comes when it comes. */
 		const heard = (text: string) =>
 			Effect.gen(function* () {
-				while (!printed.values.some((p) => p.text.includes(text)))
+				while (!printed.values.some((p) => p.text.includes(text))) {
 					yield* Effect.sleep(Duration.millis(5));
+				}
 			});
 		const said = () => printed.values.map((p) => p.text);
 		return {started, line, heard, said};
@@ -153,8 +166,11 @@ describe("tsh: a job saved by older code", () => {
 				// Asked again, it is refused again, and says so again.
 				const before = said().filter((text) => text.includes(SAVED_BY_OLDER_CODE)).length;
 				yield* line("attach %1 &");
-				while (said().filter((text) => text.includes(SAVED_BY_OLDER_CODE)).length === before)
+
+				while (said().filter((text) => text.includes(SAVED_BY_OLDER_CODE)).length === before) {
 					yield* Effect.sleep(Duration.millis(5));
+				}
+
 				// The way out it names.
 				expect((yield* line("stop %1")).err).toEqual(["[1] dropped  tally"]);
 				expect((yield* line("jobs")).out).toEqual(["[2] running   tally", "      total 4"]);

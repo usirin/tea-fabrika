@@ -127,6 +127,7 @@ describe("the name rule: refused before any harness starts", () => {
 				folder,
 				Effect.gen(function* () {
 					const whys: Record<string, string> = {};
+
 					for (const name of [
 						"Scout",
 						"all",
@@ -137,8 +138,10 @@ describe("the name rule: refused before any harness starts", () => {
 						"a b",
 						"",
 						"x".repeat(65),
-					])
+					]) {
 						whys[name] = whyOf(yield* Effect.flip(summon(name)));
+					}
+
 					return {whys, list: yield* (yield* SummonManager).list};
 				}),
 			);

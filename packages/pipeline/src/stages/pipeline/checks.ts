@@ -91,19 +91,25 @@ const checksAt = (setup: CheckSetup, head: string) =>
 				.filter((why) => why !== "")
 				.join("\n"),
 		});
-		if (setup.commands.length === 0)
+
+		if (setup.commands.length === 0) {
 			return {
 				...ran([]),
 				tail: "[build] checks names no command, so nothing says whether this head holds.",
 			};
+		}
+
 		const asked = setup.folder(head);
 		// The real path: vitest names a test file by it, and a temp folder is a link on macOS.
 		const real = yield* Effect.result(fs.realPath(asked));
-		if (real._tag === "Failure")
+
+		if (real._tag === "Failure") {
 			return {
 				...ran([]),
 				tail: `The copy of ${head} could not be read, so no check ran there.`,
 			};
+		}
+
 		const folder = real.success;
 		/** One try, stopped with all it started past `within`. `None`: it ran past. */
 		const once = ([file, ...args]: readonly string[]): Effect.Effect<Option.Option<Exited>> =>
@@ -119,13 +125,16 @@ const checksAt = (setup: CheckSetup, head: string) =>
 				const reports = yield* Effect.result(
 					fs.makeTempDirectoryScoped({prefix: "checks-report-"}),
 				);
-				if (reports._tag === "Failure")
+
+				if (reports._tag === "Failure") {
 					return {
 						result: "not_run",
 						failed: [],
 						why: `\`${said}\` did not run: no folder could be made for its report.`,
 						ran: {command: said, code: null, ms: 0},
 					} satisfies Did;
+				}
+
 				const out = path.join(reports.success, "report.json");
 				const words = command.map((word) => word.replaceAll("{out}", out));
 				const [took, exited] = yield* Effect.timed(
@@ -137,29 +146,37 @@ const checksAt = (setup: CheckSetup, head: string) =>
 					}),
 				);
 				const ms = Math.round(Duration.toMillis(took));
-				if (Option.isNone(exited))
+
+				if (Option.isNone(exited)) {
 					return {
 						result: "not_run",
 						failed: [],
 						why: `\`${said}\` timed out: it ran past ${Duration.format(setup.within)}, and was stopped with all it started.`,
 						ran: {command: said, code: null, ms},
 					} satisfies Did;
+				}
+
 				const {code} = exited.value;
 				const output = `${exited.value.out}${exited.value.err}`.replaceAll(out, "{out}");
-				if (NOT_STARTED.has(code))
+
+				if (NOT_STARTED.has(code)) {
 					return {
 						result: "not_run",
 						failed: [],
 						why: `\`${said}\` could not start: ${output.trim().slice(0, 300)}`,
 						ran: {command: said, code: null, ms},
 					} satisfies Did;
-				if (code === 0)
+				}
+
+				if (code === 0) {
 					return {
 						result: "green",
 						failed: [],
 						why: "",
 						ran: {command: said, code, ms},
 					} satisfies Did;
+				}
+
 				// A report that is missing or does not read names none: it never turns red into green.
 				const failures = command.some((word) => word.includes("{out}"))
 					? yield* fs.readFileString(out).pipe(
