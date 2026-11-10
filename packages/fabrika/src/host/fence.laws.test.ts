@@ -764,7 +764,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"rules",
-				'if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) return true;',
+				'if (rules.reach === "inbox-ignores-fence" && isOpenInbox(db, rules, stream)) {\n\t\treturn true;\n\t}',
 				"if (isOpenInbox(db, rules, stream)) return true;",
 			]),
 	},
@@ -773,7 +773,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				"if (name === null) return false;\n\t\treturn stream === name",
+				"if (name === null) {\n\t\t\treturn false;\n\t\t}\n\n\t\treturn stream === name",
 				"if (name === null) return openInbox(stream);\n\t\treturn stream === name",
 			]),
 	},
@@ -827,7 +827,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 			plant(
 				[
 					"rules",
-					'if (fencedName(db, fence) !== name) return {ok: false, why: "lost"};',
+					'if (fencedName(db, fence) !== name) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 					'if (!db.all("SELECT 1 FROM names WHERE name = ? AND fence >= ?", name, fence)[0]) return {ok: false, why: "lost"};',
 				],
 				[
@@ -847,7 +847,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+				'if (names.get(name)?.fence !== fence) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 				'if ((names.get(name)?.fence ?? 0) < fence) return {ok: false, why: "lost"};',
 			]),
 	},
@@ -909,7 +909,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 				],
 				[
 					"memory",
-					'if (names.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
+					'if (names.get(name)?.fence !== fence) {\n\t\t\treturn {ok: false, why: "lost"};\n\t\t}',
 					'if (leases.get(name)?.fence !== fence) return {ok: false, why: "lost"};',
 				],
 			),
@@ -920,7 +920,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"rules",
-				"const repeat = seen(db, stream, id);\n\tif (repeat) return {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};\n\tconst data",
+				"const repeat = seen(db, stream, id);\n\n\tif (repeat) {\n\t\treturn {ok: true, pos: num(repeat.pos), rev: num(repeat.rev), dup: true};\n\t}\n\n\tconst data",
 				"const data",
 			]),
 	},
@@ -929,7 +929,7 @@ const PLANTS: Record<string, {readonly kind: Impl["kind"]; readonly make: () => 
 		make: () =>
 			plant([
 				"memory",
-				"if (repeat) return {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};",
+				"if (repeat) {\n\t\t\treturn {ok: true, pos: repeat.pos, rev: repeat.rev, dup: true};\n\t\t}",
 				"",
 			]),
 	},

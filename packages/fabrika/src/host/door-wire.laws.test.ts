@@ -322,7 +322,7 @@ const PLANTS: Record<string, () => Promise<Options>> = {
 	// The Worker's own 404 answers without reading the body.
 	workerKeepsBody: () =>
 		plant(
-			'if (name === null) return drained(req, new Response("not found", {status: 404}));',
+			'if (name === null) {\n\t\t\treturn drained(req, new Response("not found", {status: 404}));\n\t\t}',
 			'if (name === null) return new Response("not found", {status: 404});',
 		),
 };

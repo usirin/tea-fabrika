@@ -263,7 +263,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// after 20 tries this plant first edited; it comes back here at one try, where no answer is said.
 	noResend: () =>
 		plant(
-			'if (tries === 1) note(false, "unreachable", null);',
+			'if (tries === 1) {\n\t\t\t\t\tnote(false, "unreachable", null);\n\t\t\t\t}',
 			'if (tries >= 1) { note(false, "unreachable", null); return yield* Effect.fail(new StoreConflictError(expected, -1)); }',
 		),
 };

@@ -632,12 +632,15 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 		),
 	// The lease check does not look at whose lease it is.
 	otherFenceMissed: () =>
-		plantGate("if (lease !== null && lease.fence !== o.fence) return false;\n\t\t\t\t", ""),
+		plantGate(
+			"if (lease !== null && lease.fence !== o.fence) {\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\t",
+			"",
+		),
 	// The lease check takes a lease past its end, or a row the alarm took, for a lost one: the
 	// clock fences, as before rule B. Added with `gateWaitsForRenew`, so it is seen to fail.
 	runOutIsLost: () =>
 		plantGate(
-			"if (lease !== null && lease.fence !== o.fence) return false;",
+			"if (lease !== null && lease.fence !== o.fence) {\n\t\t\t\t\treturn false;\n\t\t\t\t}",
 			"if (lease === null || lease.fence !== o.fence || lease.expires_at <= Date.now()) return false;",
 		),
 	// The send goes out with no lease check at all.
@@ -650,7 +653,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	// past its end too. Added with `gateHoldsOnRunOut`, which alone catches it.
 	sendsOnRunOut: () =>
 		plantGate(
-			"if (lease !== null && lease.expires_at - Date.now() > marginMs) return true;",
+			"if (lease !== null && lease.expires_at - Date.now() > marginMs) {\n\t\t\t\t\treturn true;\n\t\t\t\t}",
 			"return true;",
 		),
 };

@@ -2773,7 +2773,11 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 		),
 	// An agent is allowed to invite.
 	agentInvites: () =>
-		plant("door", 'if (by.kind !== "user") return refuse(403, "only a person invites");', ""),
+		plant(
+			"door",
+			'if (by.kind !== "user") {\n\t\t\treturn refuse(403, "only a person invites");\n\t\t}',
+			"",
+		),
 	// An agent session takes its grant's end, ignoring the person's session.
 	longAgent: () => plant("door", "Math.min(g.expires, live)", "g.expires"),
 	// A spent challenge is not deleted, so it works again.
@@ -2789,7 +2793,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 			[
 				["return letIn({id, name: as});", "return letIn({id: s.id, name: as});"],
 				[
-					'else if (m.invited.has(id)) this.#fact(me, "joined", {id, name});',
+					'else if (m.invited.has(id)) {\n\t\t\t\tthis.#fact(me, "joined", {id, name});\n\t\t\t}',
 					'else if (m.invited.has(id) || [...m.invited.values()].includes(name)) this.#fact(me, "joined", {id, name});',
 				],
 			],
@@ -2798,21 +2802,21 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	removesLast: () =>
 		plant(
 			"door",
-			'if (m.members.has(id) && m.members.size === 1) return refuse(403, "the last member stays");',
+			'if (m.members.has(id) && m.members.size === 1) {\n\t\t\treturn refuse(403, "the last member stays");\n\t\t}',
 			'if (false) return refuse(403, "the last member stays");',
 		),
 	// A closed door answers 401 instead of 403.
 	closedIs401: () =>
 		plant(
 			"door",
-			'if (c.kind === "closed") return refuse(403, "this ledger has no door");',
+			'if (c.kind === "closed") {\n\t\t\treturn refuse(403, "this ledger has no door");\n\t\t}',
 			'if (c.kind === "closed") return refuse(401, "this ledger has no door");',
 		),
 	// No credential answers 403 instead of 401.
 	noCredIs403: () =>
 		plant(
 			"door",
-			'if (token === null || Redacted.value(token) === "") return refuse(401, "no credential");',
+			'if (token === null || Redacted.value(token) === "") {\n\t\t\treturn refuse(401, "no credential");\n\t\t}',
 			'if (token === null || Redacted.value(token) === "") return refuse(403, "no credential");',
 		),
 	// The door checks a login against the first listed key only.
@@ -2833,7 +2837,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	grantAnyObject: () =>
 		plant(
 			"door",
-			'if (g.address !== address) return refuse(401, "the grant is for another ledger");',
+			'if (g.address !== address) {\n\t\t\treturn refuse(401, "the grant is for another ledger");\n\t\t}',
 			"",
 		),
 	// Old `agent:<id>` rows no longer read.
@@ -2881,7 +2885,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	refreshesByName: () =>
 		plant(
 			"door",
-			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) return letIn({id, name: as});",
+			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {\n\t\t\t\treturn letIn({id, name: as});\n\t\t\t}",
 			"if ((await verify(signature, text, NAMESPACE, s.keys)) !== null) {\n\t\t\t\tawait this.#ask(as, (k) => k.of(as), () => true);\n\t\t\t\treturn letIn({id, name: as});\n\t\t\t}",
 		),
 	// The founder is asked about at every login by a known name, even after being taken off.
@@ -2942,7 +2946,7 @@ const PLANTS: Record<string, () => Promise<Mod>> = {
 	limitIgnored: () =>
 		plant(
 			"keys-github",
-			"if (wait !== null) yield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));",
+			"if (wait !== null) {\n\t\t\t\t\t\t\tyield* Ref.update(waitUntil, (u) => Math.max(u, now + wait));\n\t\t\t\t\t\t}",
 			"",
 		),
 	// The wait holds back questions by id only: a question by name still goes out.
