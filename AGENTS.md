@@ -339,8 +339,10 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service that holds many is named in the plural, as
-  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
-  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`. Test tooling follows the same
+  names: a test helper or shared suite is read through its module, as Effect writes
+  `SqlEventLogServerUnencryptedStorageTest.suite(...)`, so `SinkTest.suite(nodeSql)`, never a bare
+  `sinkSuite(...)` ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
