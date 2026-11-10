@@ -446,7 +446,7 @@ describe("p98, a span that ends is never dropped", () => {
 		{generated: SinkError.fields.reason},
 		({generated}) =>
 			Effect.forEach(
-				["unreachable", generated],
+				["unreachable", generated] as const,
 				(value) => {
 					const {db, sql} = home();
 					return Effect.gen(function* () {
