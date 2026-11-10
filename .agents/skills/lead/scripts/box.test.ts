@@ -1203,6 +1203,47 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 		);
 	});
 
+	// Plants: say only "commits check failed"; drop the commit, the step or the count past five.
+	// 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
+	it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
+		const rule = fc.constantFrom(
+			"unsigned_commit",
+			"build_touched_exam",
+			"broken_chain",
+			"stale_link",
+		);
+		// A stale link holds only for a step the lane signed (tests, here); others are waived.
+		const answer = fc
+			.record({
+				why: rule,
+				sha: fc.stringMatching(/^[0-9a-f]{40}$/),
+				step: fc.option(fc.constantFrom("tests", "build"), {nil: undefined}),
+			})
+			.map((a) => (a.why === "stale_link" ? {...a, step: "tests" as const} : a));
+		fc.assert(
+			fc.property(fc.array(answer, {minLength: 1, maxLength: 7}), (answers) =>
+				fixture((b) => {
+					const lines = answers.map((a) => JSON.stringify({_tag: "stuck", ...a}));
+					b.setup({
+						operations: [{path: "src/a.ts", text: "run\n"}],
+						check: {status: 1, text: `${lines.join("\n")}\n`},
+					});
+					expect(b.run().code).toBe(0);
+					const got = b.fetch();
+					expect(got.code, got.text).toBe(1);
+					const said = answers.map(
+						(a) => `${a.why} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`,
+					);
+					const more = said.length > 5 ? `; and ${said.length - 5} more` : "";
+					expect(got.text.trim().split("\n").at(-1)).toBe(
+						`stuck commits check failed: ${said.slice(0, 5).join("; ")}${more}`,
+					);
+				}),
+			),
+			{seed: 429, numRuns: 4, endOnFailure: true},
+		);
+	}, 180_000);
+
 	// Plant: trust the installed checker's scope skip. Review round 1, finding 4.
 	it("K1 scenario: an unsigned commit outside the exam list is refused on a plain fetch", () => {
 		fixture((b) => {
@@ -1212,7 +1253,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 				...b.env,
 				T321_FETCH: "1",
 			});
-			refused(got, /unlinked_commit|commits check failed/);
+			refused(got, /commits check failed: unlinked_commit [0-9a-f]{8}/);
 		});
 	});
 
