@@ -179,10 +179,13 @@ function install(input) {
   return { report };
 }
 
+// oxlint-disable-next-line import/no-commonjs -- Electron's -r preload loads this CommonJS hook synchronously before the app entry point.
 module.exports = { install };
 
 if (process.versions.electron && process.type === "browser") {
+  // oxlint-disable-next-line typescript/no-require-imports, typescript/no-var-requires -- Electron must be loaded synchronously to install the hook before the app entry point.
   const electron = require("electron");
+  // oxlint-disable-next-line typescript/no-require-imports, typescript/no-var-requires -- The CommonJS preload needs its report writer synchronously before the app entry point.
   const { writeFileSync } = require("node:fs");
   const path = process.env.FABRIKA_E2E_REPORT;
   globalThis.__fabrikaE2E = install({
