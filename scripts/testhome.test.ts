@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
 // scenario: one real worker under the repository's configured pool.
@@ -22,17 +23,9 @@ it("scenario: L4 worker sees an isolated home and no XDG folders", () => {
   }
 
   const ran = spawnSync(
-    "nice",
+    process.execPath,
     [
-      "-n",
-      "19",
-      "volta",
-      "run",
-      "--node",
-      "26.13.0",
-      "pnpm",
-      "exec",
-      "vitest",
+      fileURLToPath(new URL("vitest.mjs", import.meta.resolve("vitest/package.json"))),
       "run",
       "--maxWorkers=1",
       "scripts/testhome.test.ts",
