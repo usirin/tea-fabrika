@@ -3,6 +3,7 @@
 # Private words are literal, case-insensitive strings, one per line, outside the Git tree.
 # Diagnostics name only the kind and added-line number, never matched text or private words.
 # In a diff, an added line that only respaces a line the same file's diff removes is old text.
+# A line is read the way git writes it: up to the newline, and nothing else ends one.
 set -eu
 # Only deliberate diagnostics use fd 3. Shell and tool failures may contain private paths.
 exec 3>&2 2>/dev/null
@@ -38,7 +39,8 @@ try:
     except FileNotFoundError:
         words = []
         print('leakgrep: private word list is missing; checking built-in shapes only', file=diagnostics)
-    text = Path(sys.argv[1]).read_text()
+    # Bytes, then UTF-8: reading as text would rewrite the line ends before the check saw them.
+    text = Path(sys.argv[1]).read_bytes().decode('utf-8')
 except (OSError, UnicodeError):
     refuse('cannot read check input')
 
@@ -66,8 +68,10 @@ def kinds_of(line):
 # Ticket 500 (owner, 2026-11-09): a line that only changes spacing is old text. Two lines hold the
 # same text when they are equal after each run of spaces and tabs becomes one space, the ends are
 # trimmed and one last ; or , is dropped. Runs are collapsed, never deleted, so two words never join.
+# A carriage return before the newline is part of the line end here, as it always was. The scan
+# itself still reads it.
 def same_text(line):
-    text = re.sub(r'[ \t]+', ' ', line).strip(' ')
+    text = re.sub(r'[ \t]+', ' ', line.removesuffix('\r')).strip(' ')
     return text[:-1].rstrip(' ') if text.endswith((';', ',')) else text
 
 added = []
@@ -77,7 +81,8 @@ removed = {}
 file = None
 in_hunk = False
 old_header = False
-for number, line in enumerate(text.splitlines(), 1):
+# Git ends a diff line at the newline only, so the check does too.
+for number, line in enumerate(text.split('\n'), 1):
     if sys.argv[2] == 'diff':
         if line.startswith('diff '): file = number if line.startswith('diff --git ') else None
         if line.startswith('diff --git '): in_hunk = False
