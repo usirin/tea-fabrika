@@ -185,7 +185,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
   A stop after the time limit takes the agent's whole process group with it.
 - Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (the question
-  is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
+  is in `reason`), 30 stuck, 40 skip (`answer: skip <why>`: nothing here for the step, such as a
+  mutation step whose diff has no product lines; its field row says `skip`, which review's order
+  check takes in place of a mutation row), 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
   drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
   worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`

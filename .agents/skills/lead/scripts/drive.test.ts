@@ -29,6 +29,7 @@ import {
 	leftIn,
 	machine,
 	reportOf,
+	rowOf,
 } from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
@@ -58,6 +59,7 @@ const answer = fc.constantFrom(
 	"answer: send tests a law looks wrong",
 	"answer: send plan",
 	"answer: ask which version",
+	"answer: skip no product file changed",
 	"answer: stuck no network",
 	"no answer at all",
 );
@@ -109,6 +111,89 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 			}),
 			options,
 		);
+	});
+});
+
+describe("drive takes a skip answer, today's tooling", () => {
+	const why = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
+	const steps = fc.constantFrom("tests", "build", "mutation", "review") as fc.Arbitrary<
+		"tests" | "build" | "mutation" | "review"
+	>;
+	const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
+		machine.update.step_read_ok({phase: "reading", ask: {...ask, step}}, {
+			type: "step_read_ok",
+			value: {
+				head: ask.base,
+				commits: 0,
+				unsigned: [],
+				exam: [],
+				leaks: [],
+				left: [],
+				manifests: [],
+				plancheck: null,
+				report,
+				problem: null,
+			},
+		} as never);
+
+	// Plant: drop skip from the answer line, so it reads as no_answer and is stuck (t374 mutation1,
+	// 2026-11-09: "answer: skip no product file changed" was recorded as stuck:no_answer).
+	it("a skip answer is a skip outcome with exit 40 and the step's why, and the box goes", () => {
+		fc.assert(
+			fc.property(steps, why, fc.constantFrom("", "`", "**"), (step, text, wrap) => {
+				const [s, cmds] = read(step, `report body\n\n${wrap}answer: skip ${text}${wrap}`);
+				expect(s.phase).toBe("recording");
+				if (s.phase !== "recording") return;
+				expect(s.outcome).toEqual({kind: "skip", why: "step_said"});
+				expect(s.why).toBe(text);
+				expect(s.kept).toBe(false);
+				const cmd = cmds[0] as {outcome: string; exit: number; keep: boolean};
+				expect(cmd.outcome).toBe("skip:step_said");
+				expect(cmd.exit).toBe(40);
+				expect(cmd.keep).toBe(false);
+			}),
+			options,
+		);
+	});
+
+	// Plant: map skip to stopped, so box.sh's review order check refuses a skipped mutation step.
+	it("a skip's field row says skip, and no other outcome's does", () => {
+		const names = [
+			"done",
+			"send:tests:exam_paths",
+			"send:build:step_said",
+			"ask:lead:question",
+			"skip:step_said",
+			"stuck:no_answer",
+			"stuck:record_failed",
+		];
+		for (const name of names) {
+			const want = {done: "pass", send: "fail", ask: "parked", skip: "skip"}[
+				name.split(":")[0] as "done"
+			];
+			expect(rowOf(name)).toBe(want ?? "stopped");
+		}
+		expect(names.filter((n) => rowOf(n) === "skip")).toEqual(["skip:step_said"]);
+	});
+
+	// Plant: give skip the stuck code. Each verb keeps an exit code of its own.
+	it("each answer verb gets its own exit code", () => {
+		const exits = new Map<string, number>();
+		for (const line of [
+			"answer: done",
+			"answer: send tests x",
+			"answer: send build x",
+			"answer: send plan x",
+			"answer: ask x",
+			"answer: skip x",
+			"answer: stuck x",
+		]) {
+			const [, cmds] = read("review", line);
+			exits.set(line, (cmds[0] as {exit: number}).exit);
+		}
+		expect(new Set(exits.values()).size).toBe(exits.size);
+		expect(exits.get("answer: skip x")).toBe(40);
+		expect(exits.get("answer: stuck x")).toBe(30);
 	});
 });
 
