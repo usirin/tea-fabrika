@@ -52,6 +52,7 @@ it("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call lookup plant
                 fixture.Host.pipe(Effect.asVoid, Effect.provide(fixture.default)),
               );
               yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
+                Effect.asVoid,
                 Effect.provide(localState()),
                 Effect.provide(
                   Layer.mergeAll(

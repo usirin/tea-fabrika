@@ -84,42 +84,31 @@ for (const kind of ["node", "wire"] as const) {
         return;
       }
 
-      const urls = new Map<number, string>();
+      const stages = new Map<number, Effect.Success<ReturnType<typeof recordWire>>>();
 
       for (const cap of [1, 1_000_000_000]) {
         const scope = Effect.runSync(Scope.make());
         scopes.push(scope);
-        urls.set(cap, await Effect.runPromise(recordWire(cap).pipe(Scope.provide(scope))));
+        stages.set(cap, await Effect.runPromise(recordWire(cap).pipe(Scope.provide(scope))));
       }
 
       driver = (name, cap) => {
-        const call = <A>(schema: Schema.Schema<A>, chain: Chain, at: number, operation: unknown) =>
-          Effect.tryPromise(async () => {
-            const reply = await fetch(urls.get(cap)!, {
-              method: "POST",
-              body: JSON.stringify({ name, chain, at, operation }),
-              headers: { "content-type": "application/json" },
-            });
-
-            if (!reply.ok) {
-              throw new Error(`record HTTP ${reply.status}: ${await reply.text()}`);
-            }
-
-            return (await reply.json()) as { value?: unknown; error?: unknown };
-          }).pipe(
-            Effect.orDie,
-            Effect.flatMap((reply) =>
-              reply.error === undefined
-                ? Schema.decodeUnknownEffect(schema)(reply.value).pipe(Effect.orDie)
-                : Schema.decodeUnknownEffect(SinkError)(reply.error).pipe(Effect.orDie, Effect.flatMap(Effect.fail)),
+        const [project, part] = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
+        )(name);
+        const stub = stages.get(cap)!.record(project, part);
+        const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
+          Effect.tryPromise({ try: invoke, catch: (cause: unknown) => cause }).pipe(
+            Effect.catch((error) =>
+              Schema.decodeUnknownEffect(SinkError)(error).pipe(Effect.orDie, Effect.flatMap(Effect.fail)),
             ),
+            Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
           );
-        // The HTTP fixture carries encoded public answers, just as RecordManager's caller does.
         return {
-          write: (chain, at, rows) => call(Written, chain, at, { _tag: "write", rows }),
-          read: (chain, at, after) => call(Page, chain, at, { _tag: "read", after }),
-          content: (chain, at, id) => call(Lookup, chain, at, { _tag: "content", id }),
-          deleteContent: (chain, at, id, by) => call(Lookup, chain, at, { _tag: "deleteContent", id, by }),
+          write: (chain, at, rows) => call(Written, () => stub.write(chain, at, rows)),
+          read: (chain, at, after) => call(Page, () => stub.read(chain, at, after)),
+          content: (chain, at, id) => call(Lookup, () => stub.content(chain, at, id)),
+          deleteContent: (chain, at, id, by) => call(Lookup, () => stub.deleteContent(chain, at, id, by)),
         } satisfies Part;
       };
     });
