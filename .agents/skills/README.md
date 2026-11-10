@@ -41,6 +41,11 @@ needs a fresh read and approval. `plancheck.sh --approved` checks that digest at
 `box.sh run --step` checks order and slots, saves run facts, and redacts output. Step-commit checks
 owners and staged formatting; its `--commit-only` route leaves missing notes for `fetch --sign`.
 
+Review sweeps every law and decided note, then answers once with all blocking classes and
+confirmed follow-up tickets. The lead skill holds the standing review brief.
+After a merge, catch-up retains the checked head in MAIN and removes safe boxes and linked worktrees.
+An exam change needs no owner read when its labels fit and both loosening and mutation find zero hits.
+
 For a stacked child, the brief records the parent ticket, branch and signed build head. The driver
 records the child before starting it. The stack lands with `gh stack merge <pr> --squash`, then
 `gh stack sync --prune` moves the rest onto main ([0004](../../.decisions/0004-squash-merges-and-native-stacks.md)). The child
@@ -54,4 +59,5 @@ environment.
 
 `pnpm lint` runs `lead/scripts/skillscheck.sh`. Each source folder with `SKILL.md` must have a
 `.claude/skills/<name>` link to that folder. Copies, missing links and wrong targets fail. Unrelated
-Claude-only skills are allowed.
+Claude-only skills are allowed. The check also requires the standing review, driver and landing
+clauses in their owning sections. Wrapping is free; wording changes need a tests-owned rule update.

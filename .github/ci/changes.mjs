@@ -9,19 +9,20 @@ import {fileURLToPath} from "node:url";
 const all = {check: true, test: true, next: true, e2e: true, field: true};
 const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
+const commits = "next/apps/fabrika/src/exam/commits.ts";
 /** @param {string} path */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path);
-const readTrees = [
-	"programs/",
-	"fixtures/",
-	"packages/",
-	"next/",
-	".agents/skills/",
-	".claude/skills/",
-];
+const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
+const skillTrees = [".agents/skills/", ".claude/skills/"];
+/** @param {string} path */
+const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
+/** Skill prose is checked in the changes job on every event. @param {string} path */
+const prose = (path) =>
+	(path.startsWith(".agents/skills/") && path.endsWith(".md") && !script(path)) ||
+	/^\.claude\/skills\/[^/]+$/.test(path);
 const readFolders = new Set(["brief", "briefs", "prompt", "prompts"]);
 /**
- * Markdown a program or test reads: skills, briefs, prompts and fixtures are inputs, not prose.
+ * Markdown a program or test reads: briefs, prompts and fixtures are inputs.
  * @param {string} path
  */
 const reads = (path) =>
@@ -32,7 +33,8 @@ const reads = (path) =>
 			.slice(0, -1)
 			.some((dir) => readFolders.has(dir)));
 /** @param {string} path */
-const markdown = (path) => path.endsWith(".md") && !reads(path);
+const markdown = (path) =>
+	path.endsWith(".md") && !reads(path) && !skillTrees.some((tree) => path.startsWith(tree));
 /** @param {string} path */
 const safe = (path) => rows(path) || markdown(path);
 /** @param {string} path */
@@ -50,11 +52,15 @@ const old = (path) =>
 export const classify = (paths, event) => {
 	if (event !== "pull_request" || paths === null || paths.length === 0) return {...all};
 	if (paths.some(reads)) return {...all, field: paths.some(rows)};
+	/** @param {string} path */
+	const quiet = (path) => safe(path) || prose(path);
 	return {
-		check: !paths.every(safe),
-		test: !paths.every((path) => safe(path) || (path.startsWith("next/") && path !== helper)),
-		next: !paths.every((path) => safe(path) || old(path)),
-		e2e: !paths.every((path) => safe(path) || path.startsWith("next/")),
+		check: !paths.every(quiet),
+		test: !paths.every(
+			(path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits),
+		),
+		next: !paths.every((path) => quiet(path) || script(path) || old(path)),
+		e2e: !paths.every((path) => quiet(path) || script(path) || path.startsWith("next/")),
 		field: paths.some(rows),
 	};
 };

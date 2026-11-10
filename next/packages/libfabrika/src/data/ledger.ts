@@ -77,21 +77,20 @@ export class Ledger extends Context.Service<
 	/** Any other object: the project's stub. A rejected call is `unreachable`; an answer that does
 	 *  not decode, `bad_row`. Each call ends one `ledger.call` span on the caller's side. */
 	static readonly remote = (stub: LedgerCalls, who: Who): Layer.Layer<Ledger> => {
-		const call = Effect.fn("ledger.call")(function* <A>(
-			method: keyof LedgerCalls,
+		const call = Effect.fn("ledger.call")(function* <A, M extends keyof LedgerCalls>(
+			name: M,
 			stream: string,
 			answer: Schema.Decoder<A>,
-			send: () => Promise<unknown>,
+			...args: Parameters<LedgerCalls[M]>
 		): Effect.fn.Return<A, LedgerError> {
 			yield* Effect.annotateCurrentSpan({
-				"rpc.method": method,
+				"rpc.method": name,
 				...short({[STREAM]: stream, [tag("reader")]: who.reader}),
 			});
+			const fail = () => new LedgerError({why: "unreachable"});
 			// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
-			return yield* Effect.tryPromise({
-				try: send,
-				catch: () => new LedgerError({why: "unreachable"}),
-			}).pipe(
+			const io = Effect.tryPromise({try: () => Reflect.apply(stub[name], stub, args), catch: fail});
+			return yield* io.pipe(
 				Effect.flatMap((raw) =>
 					Schema.decodeUnknownEffect(answer)(raw).pipe(
 						Effect.mapError(() => new LedgerError({why: "bad_row"})),
@@ -102,14 +101,10 @@ export class Ledger extends Context.Service<
 		});
 		const page = Schema.Array(Entry);
 		return Layer.succeed(Ledger, {
-			append: (stream, id, line) =>
-				call("append", stream, Appended, () => stub.append(stream, id, line)),
+			append: (stream, id, line) => call("append", stream, Appended, stream, id, line),
 			read: (stream, after) =>
-				pages(after, (from) =>
-					call("read", stream, page, () => stub.read(stream, from, who.reader)),
-				),
-			wait: (stream, after) =>
-				call("wait", stream, Waited, () => stub.wait(stream, after, who.reader)),
+				pages(after, (from) => call("read", stream, page, stream, from, who.reader)),
+			wait: (stream, after) => call("wait", stream, Waited, stream, after, who.reader),
 		});
 	};
 }

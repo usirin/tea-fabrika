@@ -20,6 +20,7 @@ export {
 	valueFor,
 } from "./log.ts";
 export {type RecordCalls, RecordManager, Written} from "./records.ts";
+export {recordPart} from "./record-part.ts";
 export {Referee, type Sql, type SqlValue} from "./referee.ts";
 export {SinkError, SpanSink} from "./sink.ts";
 export {

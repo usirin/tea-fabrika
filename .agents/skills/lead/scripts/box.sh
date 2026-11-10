@@ -5,12 +5,297 @@
 #   box.sh run   <name> <prompt-file> <out> --step tests|build|mutation|review
 #   box.sh fetch <name> <branch> [--sign <step> --ticket <n>]
 #   box.sh gc [--dry-run]                     remove boxes whose work is safe elsewhere (gc.ts says how)
+#   box.sh rm    <name>                       remove a clean pair whose commits MAIN retains
 # Paths come from env.sh beside this script.
 set -eu
 . "$(dirname "$0")/env.sh"
 if [ "${1:-}" = gc ]; then
 	shift
 	exec node "$(dirname "$0")/gc.ts" "$@"
+fi
+if [ "${1:-}" = rm ]; then
+	name=${2:-}
+	[ "$#" = 2 ] || { echo "usage: box.sh rm <name>" >&2; exit 2; }
+	python3 - "$name" <<'PY'
+from pathlib import Path
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
+
+name = sys.argv[1]
+
+def keep(why, code=1):
+    print(f"kept box {name}: {why}")
+    sys.exit(code)
+
+if not name or name in (".", "..") or any(c in name for c in "/\\") or any(unicodedata.category(c) == "Cc" for c in name):
+    # Escape control characters so even a bad name has one result line.
+    name = repr(name)
+    keep("invalid name", 2)
+
+# Git sees neither inherited settings nor the box's config and hooks.
+env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+           GIT_CONFIG_SYSTEM=os.devnull, GIT_ATTR_NOSYSTEM="1",
+           GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0",
+           GIT_NO_REPLACE_OBJECTS="1", GIT_PAGER="cat", LC_ALL="C")
+
+try:
+    boxes = Path(os.environ["BOXES"]).resolve()
+    work, data = boxes / name, boxes / f"{name}-gitdata"
+    if work.is_symlink() or data.is_symlink():
+        keep("symlinked target")
+    if not work.exists() and not data.exists():
+        print(f"absent box {name}")
+        sys.exit(0)
+    if not work.is_dir() or not data.is_dir():
+        keep("missing or invalid pair")
+    main = Path(os.environ["MAIN"]).resolve(strict=True)
+    if work.resolve(strict=True).parent != boxes or data.resolve(strict=True).parent != boxes:
+        keep("target outside BOXES")
+    def holds(root, protected):
+        # File identity also catches different path casing on a case-insensitive disk.
+        return any(root == parent or (root.exists() and parent.exists() and root.samefile(parent))
+                   for parent in (protected, *protected.parents))
+
+    state = boxes / "state"
+    if any(holds(root, protected)
+           for root in (work, data) for protected in (main, state, state.resolve())):
+        keep("pair holds MAIN or saved state")
+
+    def protect_main_storage():
+        protected = set()
+
+        def resolve(path):
+            # Keep each link as well as its destination. Removing either breaks MAIN.
+            if path == path.parent:
+                return path
+            parent = resolve(path.parent)
+            current = parent / path.name
+            protected.add(current)
+            if current.is_symlink():
+                return resolve(parent / os.readlink(current))
+            current.stat()
+            return parent.parent if path.name == ".." else current
+
+        def read_path(path):
+            value = resolve(path).read_text().removesuffix("\n")
+            if not value or any(c in value for c in "\0\r\n"):
+                raise ValueError("unsupported MAIN storage path")
+            return value
+
+        def walk(gitdir, common, objects):
+            # Every entry below MAIN's storage roots counts, at any depth: packs, loose folders,
+            # refs, logs, the index and names Git may add later. A link anywhere is followed and
+            # both ends are kept; a link that cannot be followed stops cleanup. Other worktrees'
+            # admin folders are their own storage, not MAIN's.
+            others = common / "worktrees"
+            stack, walked = [gitdir, common, *objects], set()
+            while stack:
+                real = resolve(stack.pop())
+                if real in walked or not real.is_dir():
+                    continue
+                walked.add(real)
+                for child in sorted(os.listdir(real)):
+                    entry = real / child
+                    protected.add(entry)
+                    if entry == others and entry != gitdir:
+                        continue
+                    if entry.is_symlink() or entry.is_dir():
+                        stack.append(entry)
+
+        # Read only MAIN's bindings from outside. Never ask the box's Git config.
+        gitdir = resolve(main / ".git")
+        if gitdir.is_file():
+            pointer = read_path(main / ".git")
+            if not pointer.startswith("gitdir: "):
+                raise ValueError("unsupported MAIN gitdir")
+            gitdir = resolve(main / pointer[8:])
+        common = gitdir
+        if os.path.lexists(gitdir / "commondir"):
+            common = resolve(gitdir / read_path(gitdir / "commondir"))
+        pending, seen = [common / "objects"], set()
+        while pending:
+            objects = resolve(pending.pop())
+            if not objects.is_dir():
+                raise ValueError("unsupported MAIN object directory")
+            if objects in seen:
+                continue
+            seen.add(objects)
+            info = objects / "info"
+            if os.path.lexists(info):
+                info = resolve(info)
+                alternates = info / "alternates"
+                if os.path.lexists(alternates):
+                    for value in resolve(alternates).read_text().splitlines():
+                        if not value or value.startswith('"') or "\0" in value:
+                            raise ValueError("unsupported MAIN alternate")
+                        pending.append(objects / value)
+        walk(gitdir, common, seen)
+        if any(holds(root, path) for root in (work, data) for path in protected):
+            keep("pair holds MAIN Git storage")
+
+    protect_main_storage()
+
+    def plain(path):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("missing or unsupported metadata")
+        return path.read_bytes()
+
+    pointer = re.fullmatch(rb"gitdir: ([^\x00\r\n]+)\n?", plain(work / ".git"))
+    if pointer is None:
+        keep("invalid gitdir pointer")
+    if (work / pointer[1].decode()).resolve(strict=True) != data:
+        keep("gitdir pointer does not name this pair")
+    head = plain(data / "HEAD")
+    if not re.fullmatch(rb"(?:ref: refs/heads/[^\x00-\x20\x7f]+|[0-9a-f]{40})\n?", head):
+        keep("unsupported HEAD")
+    for folder in ("refs", "objects"):
+        if (data / folder).is_symlink() or not (data / folder).is_dir():
+            keep("missing or unsupported metadata")
+    if any(os.path.lexists(data / p) for p in ("commondir", "shallow", "info/grafts")) or list(data.glob("sharedindex.*")):
+        keep("unsupported shared, shallow or graft metadata")
+    # Operation state and linked worktrees can hold commits and staged files outside this index.
+    # Unknown metadata also stays: deletion needs proof for every saved state.
+    ordinary = {"HEAD", "ORIG_HEAD", "index", "config", "config.worktree", "description",
+                "hooks", "info", "logs", "refs", "objects", "packed-refs", "branches",
+                "FETCH_HEAD", "COMMIT_EDITMSG"}
+    if any(entry.name not in ordinary for entry in data.iterdir()):
+        keep("operation, linked worktree or unknown metadata")
+
+    def git(args, inspect=None):
+        command = ["git", "-C", str(main)]
+        if inspect is not None:
+            command += [f"--git-dir={inspect}", f"--work-tree={work}"]
+        command += ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+                    "-c", "core.attributesFile=/dev/null", "-c", "core.untrackedCache=false"]
+        result = subprocess.run(command + args, env=env, capture_output=True)
+        if result.returncode or result.stderr:
+            raise ValueError("Git inspection failed")
+        return result.stdout
+
+    def unreadable(error):
+        raise error
+
+    tips, symbolic = set(), set()
+    original = data / "ORIG_HEAD"
+    if os.path.lexists(original):
+        value = plain(original)
+        if not re.fullmatch(rb"[0-9a-f]{40}\n?", value):
+            keep("unsupported ORIG_HEAD")
+        tips.add(value.strip())
+    # Read saved reflogs, including older stashes. Remote reflogs are fetched copies.
+    # Do not copy logs or config.
+    logs = data / "logs"
+    if os.path.lexists(logs):
+        if logs.is_symlink() or not logs.is_dir():
+            keep("unsupported reflog metadata")
+        for folder, dirs, files in os.walk(logs, followlinks=False, onerror=unreadable):
+            if any((Path(folder) / entry).is_symlink() for entry in dirs):
+                keep("symlinked reflog metadata")
+            if Path(folder) == logs / "refs":
+                dirs[:] = [entry for entry in dirs if entry != "remotes"]
+            for entry in files:
+                for line in plain(Path(folder) / entry).splitlines():
+                    match = re.fullmatch(rb"([0-9a-f]{40}) ([0-9a-f]{40}) [^\x00\r\n]+", line)
+                    if match is None:
+                        keep("unsupported reflog entry")
+                    tips.update(oid for oid in match.groups() if oid != b"0" * 40)
+    # FETCH_HEAD records fetched copies, not saved work.
+    fetched = data / "FETCH_HEAD"
+    if os.path.lexists(fetched):
+        for line in plain(fetched).splitlines():
+            match = re.fullmatch(rb"([0-9a-f]{40})\t(?:not-for-merge)?\t[^\x00\r\n]*", line)
+            if match is None:
+                keep("unsupported fetch metadata")
+
+    # Only small metadata is copied. Object files stay where they are, read through an alternate.
+    with tempfile.TemporaryDirectory(prefix="box-inspect-") as temporary:
+        inspect = Path(temporary)
+        (inspect / "HEAD").write_bytes(head)
+        (inspect / "index").write_bytes(plain(data / "index"))
+        # Keep Git's original racy-index check. A fresh timestamp could hide a same-size edit.
+        stamp = (data / "index").stat()
+        os.utime(inspect / "index", ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        (inspect / "config").write_text("[core]\nrepositoryformatversion = 0\nbare = false\n")
+        for folder, dirs, files in os.walk(data / "refs", followlinks=False, onerror=unreadable):
+            relative = Path(folder).relative_to(data)
+            saved = relative.parts[:2] != ("refs", "remotes")
+            (inspect / relative).mkdir(parents=True, exist_ok=True)
+            for entry in dirs:
+                if (Path(folder) / entry).is_symlink():
+                    raise ValueError("symlinked ref metadata")
+            for entry in files:
+                source = Path(folder) / entry
+                value = plain(source)
+                if re.fullmatch(rb"[0-9a-f]{40}\n?", value):
+                    if saved:
+                        tips.add(value.strip())
+                elif re.fullmatch(rb"ref: refs/[^\x00-\x20\x7f]+\n?", value):
+                    if saved:
+                        symbolic.add(value[5:].strip().decode())
+                else:
+                    raise ValueError("unsupported ref metadata")
+                (inspect / relative / entry).write_bytes(value)
+        packed = data / "packed-refs"
+        if packed.exists() or packed.is_symlink():
+            value = plain(packed)
+            for line in value.splitlines():
+                if not line.startswith(b"#") and not re.fullmatch(rb"(?:[0-9a-f]{40} refs/[^\x00-\x20\x7f]+|\^[0-9a-f]{40})", line):
+                    raise ValueError("unsupported packed refs")
+            (inspect / "packed-refs").write_bytes(value)
+        objects = str(data / "objects")
+        if "\n" in objects or "\r" in objects:
+            keep("unsupported object path")
+        (inspect / "objects/info").mkdir(parents=True)
+        (inspect / "objects/info/alternates").write_text(objects + "\n")
+        entries = git(["ls-files", "--stage", "-v", "-z"], inspect).split(b"\0")
+        if any(entry and not entry.startswith(b"H ") for entry in entries):
+            keep("unsupported index flags")
+        # Status must never enter a submodule and read its own config or hooks.
+        if any(entry.startswith(b"H 160000 ") for entry in entries):
+            keep("unsupported submodule metadata")
+        if git(["status", "--porcelain=v1", "-z", "--untracked-files=no"], inspect):
+            keep("tracked changes")
+        for line in git(["for-each-ref", "--format=%(refname) %(objectname)"], inspect).splitlines():
+            ref, tip = line.split(b" ", 1)
+            if ref.startswith(b"refs/remotes/"):
+                continue
+            tips.add(tip)
+            # A replace ref also saves the original object's name in its path.
+            if ref.startswith(b"refs/replace/"):
+                tips.add(ref[len(b"refs/replace/"):])
+        for ref in symbolic | {"HEAD"}:
+            tips.update(git(["rev-parse", "--verify", f"{ref}^{{object}}"], inspect).splitlines())
+        retained = git(["for-each-ref", "--format=%(objectname)", "refs/heads/", "refs/tags/", "refs/keep/", "refs/stash", "refs/notes/"]).splitlines()
+        # Enumerate only MAIN's retained history. Mere object presence and remote refs prove nothing.
+        # Keep annotation objects themselves, including signatures and nested tags.
+        reachable = set()
+        if retained:
+            reachable.update(git(["rev-list", "--objects", "--no-object-names",
+                                  *[tip.decode() for tip in retained]]).splitlines())
+        if any(tip not in reachable for tip in tips):
+            keep("tip not retained in MAIN")
+
+    try:
+        protect_main_storage()
+        shutil.rmtree(work)
+    except OSError:
+        keep("work removal failed; pair may be partly removed")
+    try:
+        protect_main_storage()
+        shutil.rmtree(data)
+    except OSError:
+        keep("work removed; git data removal failed and may be partial")
+    print(f"removed box {name}")
+except (OSError, ValueError, RuntimeError) as error:
+    keep(str(error) if type(error) is ValueError else "inspection or removal failed")
+PY
+	exit "$?"
 fi
 here=$(cd "$(dirname "$0")" && pwd -P)
 exec python3 - "$here" "$@" <<'PY'
@@ -114,8 +399,10 @@ def new_box():
     # A lane that starts one box per step continues its own branch: that head is a valid base too.
     own = any(git("rev-parse", "-q", "--verify", r + "^{commit}").stdout.decode().strip() == head for r in ("refs/heads/" + branch, "refs/remotes/origin/" + branch))
     if head != rev("origin/main") and not own:
-        if not verified(head, "build"): refuse("base_not_signed: verified build head required")
-        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/"), "parent lookup failed").splitlines()
+        # A lead commit (a merge of main, a lockfile commit) is signed and checked like a step's, so
+        # it is a base too (layers and themes, 2026-11-09: a lead commit left both lanes stuck).
+        if not (verified(head, "build") or verified(head, "lead")): refuse("base_not_signed: verified build or lead head required")
+        branches = must(git("for-each-ref", "--format=%(refname:short)", "--points-at=" + head, "refs/heads/fabrikalfa/", "refs/remotes/origin/fabrikalfa/"), "parent lookup failed").splitlines()
         if not branches: refuse("base_not_signed: no parent branch at head")
         parent = branches[0] + "@" + head
     # Two live lanes must not write one ticket. A branch that shares the ticket blocks only while it
@@ -131,9 +418,10 @@ def new_box():
         if lane in open_heads[0]: return True
         return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
     # A branch whose change is only field/*.jsonl rows is the lead logging runs, not a lane writing
-    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name.
+    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name,
+    # from where it left main: a lane base on an older main would count main's newer files as its.
     def rows_only(other):
-        changed = must(git("diff", "--name-only", "--no-renames", head + "..." + other), "branch paths unreadable").splitlines()
+        changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
         return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
     for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
@@ -290,6 +578,11 @@ def fetch_box():
                     if signed.returncode: refuse("sign failed " + sha)
             state["fetched-head"] = head; save(state)
         lane_root = state.get("root", state["base"])
+        # A lead merge of main brings main's own commits into root..head, and the checker calls each
+        # one unsigned (layers tests10, 2026-11-09). Start at the merge-base with origin/main when it
+        # holds the root, so only the lane's commits are judged; a root off main keeps its root.
+        joined = must(git("merge-base", head, "origin/main"), "merge-base with origin/main failed")
+        if ancestor(lane_root, joined): lane_root = joined
         checked = call(["pnpm", "commits", "check", "--base", lane_root, "--head", head])
         # A stale link is judged here only for a step the lane itself has signed. A step the lane
         # has not reached yet (lead, before catch-up) may hold a newer link from an older PR on the

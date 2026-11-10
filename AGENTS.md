@@ -16,9 +16,10 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 | You want to | Read | Write |
 |---|---|---|
-| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
+| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. A pull request that builds or finishes a Tier 1 row or a tracked plan item updates that row in `tier-1.md` and "Where we are now" in the README in the same pull request; if the step's owner list does not allow it, the lead updates them the same day ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)). |
 | Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
 | Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
+| Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md), one table per model, one row per behavior | The row, in the same pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)). |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
@@ -57,8 +58,9 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
-[PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
+`next/` is on main, and 18 of Tier 1's 37 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -99,7 +101,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
-  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
+  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
@@ -131,6 +133,14 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
+  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
+  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with the hit list in the PR. Only real loosening waits on the owner.
+  The lead merges any pull request, product code and exam changes included, with `catchup.sh`
+  once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
+  loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
+  owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
 - **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
@@ -387,12 +397,16 @@ brief carries these caps. Each one came from a laptop that became unusable.
   Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
-  and skips `test` and `e2e`. Only today's files: it skips `next`. Markdown that a program or skill reads counts as code.
+  and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
+  Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
+  `e2e`: its one reader, `skillscheck.sh`, runs in `changes`. Skill scripts run `check` and `test`, and vitest
+  picks only the tests that `?raw`-import them (`script-reads` in `pnpm lint` keeps those imports whole).
+  Other Markdown that a program or skill reads counts as code.
   Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
-- "Under load" means at most 8 code agents, one `pnpm typecheck` at a time across all of
+- "Under load" means at most 12 code agents, one `pnpm typecheck` at a time across all of
   them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
   the wait, so that loop never ends), one Electron test app at a time, and one Docker
   box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
@@ -400,7 +414,9 @@ brief carries these caps. Each one came from a laptop that became unusable.
   same day, the owner asking again, with 4 running and the load near 9. Two type checks at
   once, not the agent count, is what froze it before. Raised to 8 on 2026-11-08 (owner): Codex
   step runs are light on the laptop. Still one type check at a time. If it feels slow, drop back
-  to 5.
+  to 5. Raised to 12 on 2026-11-09 (owner,
+  [0012](./.decisions/0012-twelve-agents-at-once.md)): most lane agents wait on Codex steps, and
+  two type checks at once, not the agent count, is what froze it. If it feels slow, drop back to 8.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`
   in a subshell first.

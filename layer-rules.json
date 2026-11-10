@@ -5,6 +5,14 @@
 			"paths": ["next/apps"]
 		},
 		{
+			"name": "next-node",
+			"paths": ["next/packages/libfabrika/src/node"]
+		},
+		{
+			"name": "next-workers",
+			"paths": ["next/packages/libfabrika/src/workers"]
+		},
+		{
 			"name": "next-programs",
 			"paths": ["next/programs"]
 		},

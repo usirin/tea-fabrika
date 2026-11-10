@@ -331,14 +331,17 @@ describe("the line tool", {timeout: 30_000}, () => {
 				const home = yield* freshHome;
 				yield* hostOn(home, []);
 				const agent = yield* agentOn(home, "claude");
-				yield* agent.line("counter &");
+				yield* agent.line("tally &");
+				yield* agent.line("tell %1 add 2");
+				// `jobs` shows the copy row only once the copy is live; tally's total says it is.
+				yield* agent.jobWhen(1, (d) => Array.isArray(d.lines) && d.lines.includes("[1] total 2"));
 				const jobs = yield* agent.line("jobs");
 				const wrong = yield* agent.line("attach %99");
 				return {jobs, wrong};
 			}),
 		);
 		expect(seen.jobs).toEqual({
-			data: {_tag: "said", lines: ["[1] running   counter"], status: 0},
+			data: {_tag: "said", lines: ["[1] running   tally", "      total 2"], status: 0},
 		});
 		expect(seen.wrong).toMatchObject({data: {_tag: "said"}});
 		expect(Reflect.get(Object(seen.wrong.data), "status")).not.toBe(0);

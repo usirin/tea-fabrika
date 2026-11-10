@@ -3,9 +3,9 @@
 # Bring a pull request up to date with main, sign the new merge as the lead, push, wait for every
 # check on that exact head, then squash it pinned to that head. We only squash.
 # Run it in the background.
-#   - each pull request gets its own checkout (BOXES/catchup-<pr>), removed when the run ends, and
-#     one lock is held while it fetches, merges, signs and pushes, so two catch-ups never share a
-#     tree or the notes ref
+#   - each pull request gets its own checkout (BOXES/catchup-<pr>), force-removed when the run ends
+#     unless it holds MAIN's Git storage, and one lock is held while it fetches, merges, signs and
+#     pushes, so two catch-ups never share a tree or the notes ref
 #   - merges origin/main in as fabrikalfa[bot] (the person as co-author) when the head lacks it,
 #     and signs only that new merge commit as lead. It never signs a step's commit: an unsigned
 #     step commit fails the commits check, and goes back to its own step to sign
@@ -16,6 +16,8 @@
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
 #     again first, then `gh stack merge <pr> --squash --yes` lands it
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
+#   - once the squash is on main, closes each ticket the PR description names on a line of its
+#     own, `fabrika close ticket <N>`, and prints what it closed (0015)
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -36,16 +38,289 @@ read_gh() {
 		attempt=$((attempt + 1))
 	done
 }
+# close_named: once GitHub says MERGED and the squash commit is on main, close each ticket the PR
+# description names on a line of its own, `fabrika close ticket <N>` (0015). Nothing else closes
+# one: no GitHub keyword, trailer or signed ticket. Each close gets a comment naming the PR and
+# its merge commit, through the tracker's own `post` command, as agent:lead. Its list shows only
+# open tickets, so one not on it (already closed, or no such ticket) is said and skipped. Trouble
+# here prints a line and never turns a landed merge red.
+TRACKER_HOME=${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}
+tracker() { FABRIKA_HOME=$TRACKER_HOME node "$MAIN/apps/fabrika/src/cli.ts" post "$@" --as lead 2>&1; }
+# The tracker's first ERROR line, never its stack, which names local paths.
+first_error() { printf '%s\n' "$1" | grep -m 1 ERROR || echo "no reason given"; }
+close_named() {
+	landed=""
+	# A stack merges asynchronously: give it a few minutes to say MERGED.
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		landed=$(read_gh pr view "$pr" -R "$GH_REPO" --json state,mergeCommit \
+			-q '"\(.state) \(.mergeCommit.oid // "")"') || landed=""
+		case $landed in "MERGED "?*) break ;; esac
+		sleep 30
+	done
+	case $landed in
+	"MERGED "?*) oid=${landed#MERGED } ;;
+	*) landed=${landed% }; echo "pr $pr: not confirmed merged (${landed:-no answer}); closed no tickets"; return 0 ;;
+	esac
+	if ! { git fetch -q origin main && git merge-base --is-ancestor "$oid" origin/main; }; then
+		echo "pr $pr: merge commit $oid is not on main; closed no tickets"
+		return 0
+	fi
+	body=$(read_gh pr view "$pr" -R "$GH_REPO" --json body -q .body) ||
+		{ echo "pr $pr: cannot read the description; closed no tickets"; return 0; }
+	named=$(printf '%s\n' "$body" | tr -d '\r' |
+		awk '/^[ \t]*fabrika close ticket [0-9]+[ \t]*$/ && !seen[$4 + 0]++ {print $4 + 0}')
+	[ -n "$named" ] || { echo "pr $pr: no fabrika close ticket line; closed no tickets"; return 0; }
+	listed=$(tracker list) || { echo "pr $pr: cannot read the tracker; closed no tickets: $(echo $named)"; return 0; }
+	note=$W/.fabrika-close-note
+	for n in $named; do
+		state=$(printf '%s\n' "$listed" | sed -n "s/.*: #$n \([a-z]*\) .*/\1/p" | head -n 1)
+		case $state in
+		open)
+			printf 'Closed by the merge of https://github.com/%s/pull/%s, merge commit %s.\n' \
+				"$GH_REPO" "$pr" "$oid" >"$note"
+			if ! said=$(tracker comment "$n" --body-file "$note"); then
+				echo "pr $pr: ticket $n not closed, the comment failed: $(first_error "$said")"
+			elif ! said=$(tracker close "$n"); then
+				echo "pr $pr: ticket $n not closed: $(first_error "$said")"
+			else
+				echo "pr $pr: closed ticket $n"
+			fi
+			;;
+		*) echo "pr $pr: ticket $n is not open (already closed, or no such ticket); left as it is" ;;
+		esac
+	done
+}
+# sweep <mode> <pr> <branch> <tip> <checkout> <box.sh>: `checkout` removes this run's own
+# checkout, forced, unless it holds MAIN's Git storage; `landed` keeps the checked head and removes
+# the branch's boxes and its one driver worktree, each only when that is safe.
+sweep() {
+python3 - "$@" <<'PY'
+from pathlib import Path
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+mode, pr, branch, tip, checkout, box_script = sys.argv[1:]
+main = Path(os.environ["MAIN"]).resolve()
+boxes = Path(os.environ["BOXES"]).resolve()
+
+def kept(item, why):
+    # Paths from Git may contain newlines. Keep each result on one line.
+    label = str(item).replace("\n", "\\n").replace("\r", "\\r")
+    print(f"kept {label}: {why}", flush=True)
+
+def git(*args):
+    try:
+        return subprocess.run(["git", "-C", str(main), *args], capture_output=True)
+    except OSError:
+        return subprocess.CompletedProcess(args, 1)
+
+try:
+    def holds(root, protected):
+        return any(root == parent or (root.exists() and parent.exists() and root.samefile(parent))
+                   for parent in (protected, *protected.parents))
+
+    def main_storage():
+        protected = set()
+
+        def resolve(path):
+            # Keep each link as well as its destination. Removing either breaks MAIN.
+            if path == path.parent:
+                return path
+            parent = resolve(path.parent)
+            current = parent / path.name
+            protected.add(current)
+            if current.is_symlink():
+                return resolve(parent / os.readlink(current))
+            current.stat()
+            return parent.parent if path.name == ".." else current
+
+        def read_path(path):
+            value = resolve(path).read_text().removesuffix("\n")
+            if not value or any(c in value for c in "\0\r\n"):
+                raise ValueError("unsupported MAIN storage path")
+            return value
+
+        def walk(gitdir, common, objects):
+            # Every entry below MAIN's storage roots counts, at any depth: packs, loose folders,
+            # refs, logs, the index and names Git may add later. A link anywhere is followed and
+            # both ends are kept; a link that cannot be followed stops cleanup. Other worktrees'
+            # admin folders are their own storage, not MAIN's.
+            others = common / "worktrees"
+            stack, walked = [gitdir, common, *objects], set()
+            while stack:
+                real = resolve(stack.pop())
+                if real in walked or not real.is_dir():
+                    continue
+                walked.add(real)
+                for child in sorted(os.listdir(real)):
+                    entry = real / child
+                    protected.add(entry)
+                    if entry == others and entry != gitdir:
+                        continue
+                    if entry.is_symlink() or entry.is_dir():
+                        stack.append(entry)
+
+        # Read only MAIN's bindings from outside. Never ask a candidate's Git config.
+        gitdir = resolve(main / ".git")
+        if gitdir.is_file():
+            pointer = read_path(main / ".git")
+            if not pointer.startswith("gitdir: "):
+                raise ValueError("unsupported MAIN gitdir")
+            gitdir = resolve(main / pointer[8:])
+        common = gitdir
+        if os.path.lexists(gitdir / "commondir"):
+            common = resolve(gitdir / read_path(gitdir / "commondir"))
+        pending, seen = [common / "objects"], set()
+        while pending:
+            objects = resolve(pending.pop())
+            if not objects.is_dir():
+                raise ValueError("unsupported MAIN object directory")
+            if objects in seen:
+                continue
+            seen.add(objects)
+            info = objects / "info"
+            if os.path.lexists(info):
+                info = resolve(info)
+                alternates = info / "alternates"
+                if os.path.lexists(alternates):
+                    for value in resolve(alternates).read_text().splitlines():
+                        if not value or value.startswith('"') or "\0" in value:
+                            raise ValueError("unsupported MAIN alternate")
+                        pending.append(objects / value)
+        walk(gitdir, common, seen)
+        return protected, gitdir
+
+    def storage_reason(path, pointer_required):
+        """Why the path must stay, or None when nothing of MAIN's lives in it."""
+        root = path.resolve()
+        state = boxes / "state"
+        try:
+            protected, gitdir = main_storage()
+            # Worktree removal also deletes the worktree's admin folder, outside its checkout.
+            # Read the checkout's own pointer from outside; never ask its Git config.
+            places, admin = [root], None
+            pointer = path / ".git"
+            if pointer_required or os.path.lexists(pointer):
+                if pointer.is_symlink() or not pointer.is_file():
+                    raise ValueError("unsupported worktree pointer")
+                line = pointer.read_text().removesuffix("\n")
+                if not line.startswith("gitdir: ") or any(c in line for c in "\0\r\n"):
+                    raise ValueError("unsupported worktree pointer")
+                admin = (path / line[8:]).resolve(strict=True)
+                places.append(admin)
+            if any(holds(place, kept_path) for place in places for kept_path in protected) \
+                    or (admin is not None and holds(admin, gitdir)):
+                return "holds MAIN Git storage"
+        except (OSError, ValueError, RuntimeError):
+            return "cannot read MAIN Git storage"
+        if path.is_symlink() or any(holds(root, protected)
+                                   for protected in (main, state, state.resolve())):
+            return "MAIN, saved state or symlinked target"
+        return None
+
+    def remove_worktree(path, fields):
+        label = f"worktree {path.name}"
+        reason = storage_reason(path, True)
+        if reason:
+            kept(label, reason)
+        elif not retained:
+            kept(label, "checked head not retained")
+        elif any(field.split(" ", 1)[0] in ("locked", "prunable") for field in fields):
+            kept(label, "locked or unreadable worktree")
+        elif git("worktree", "remove", str(path)).returncode:
+            kept(label, "worktree removal refused or failed")
+
+    def remove_checkout(path):
+        # This run's own checkout goes on every exit, forced, unless it holds MAIN's storage.
+        if path.is_symlink():
+            kept(f"worktree {path.name}", "symlinked target")
+            return
+        if not os.path.lexists(path):
+            return
+        reason = storage_reason(path, False)
+        if reason:
+            kept(f"worktree {path.name}", reason)
+            return
+        git("worktree", "remove", "--force", "--force", str(path))
+        if os.path.lexists(path):
+            shutil.rmtree(path)
+
+    if mode == "checkout":
+        remove_checkout(Path(checkout))
+    else:
+        retained = git("update-ref", f"refs/keep/pr/{pr}", tip).returncode == 0
+        if not retained:
+            kept(f"head {tip}", "MAIN retention failed")
+
+        listing = git("worktree", "list", "--porcelain", "-z")
+        worktrees = []
+        if listing.returncode:
+            kept("worktrees", "cannot read registered worktrees")
+        else:
+            try:
+                for record in listing.stdout.split(b"\0\0"):
+                    if not record:
+                        continue
+                    fields = record.rstrip(b"\0").decode().split("\0")
+                    if not fields[0].startswith("worktree "):
+                        raise ValueError("unreadable registration")
+                    paths = [field[9:] for field in fields if field.startswith("worktree ")]
+                    branches = [field[7:] for field in fields if field.startswith("branch ")]
+                    if len(paths) != 1 or len(branches) > 1:
+                        raise ValueError("ambiguous registration")
+                    worktrees.append((Path(paths[0]), branches, fields))
+            except (UnicodeError, ValueError):
+                worktrees = []
+                kept("worktrees", "ambiguous or unreadable registration")
+
+        # Read only plain HEAD files from outside the boxes. Never ask their Git config.
+        for data in sorted(boxes.glob("*-gitdata")):
+            name = data.name[:-8]
+            try:
+                head = data / "HEAD"
+                if data.is_symlink() or head.is_symlink() or not head.is_file():
+                    raise ValueError("unreadable HEAD")
+                value = head.read_text()
+                target = f"ref: refs/heads/{branch}"
+                if value not in (target, target + "\n"):
+                    if not re.fullmatch(r"(?:ref: refs/heads/[^\x00-\x20\x7f]+|[0-9a-f]{40})\n?", value):
+                        kept(f"box {name}", "unreadable HEAD")
+                    continue
+                if not retained:
+                    kept(f"box {name}", "checked head not retained")
+                    continue
+                result = subprocess.run(["sh", box_script, "rm", name], capture_output=True, text=True)
+                if result.stdout.strip():
+                    print(result.stdout.rstrip(), flush=True)
+                else:
+                    kept(f"box {name}", "box removal failed")
+            except (OSError, ValueError, UnicodeError):
+                kept(f"box {name}", "unreadable metadata or removal failed")
+
+        drivers = [(path, fields) for path, branches, fields in worktrees
+                   if branches == [f"refs/heads/{branch}"] and path.resolve() != Path(checkout).resolve() and path.resolve() != main]
+        for path, fields in drivers:
+            if len(drivers) != 1:
+                kept(f"worktree {path.name}", "ambiguous driver branch")
+            else:
+                remove_worktree(path, fields)
+except OSError:
+    kept("cleanup", "operating error")
+PY
+}
 mkdir -p "$BOXES"
 until mkdir "$LOCK" 2>/dev/null; do sleep 5; done
-# EXIT drops the lock while it is held and removes this run's own checkout, success or failure;
+# EXIT drops the lock while it is held and force-removes this run's own checkout, success or
+# failure, unless the checkout holds MAIN's Git storage: then it stays, with a line saying why.
 # INT and TERM end the run (and so run EXIT), never carry on past a signal.
 held=yes
 cleanup() {
 	[ "$held" = no ] || rmdir "$LOCK" 2>/dev/null || true
-	cd "$BOXES"
-	git -C "$MAIN" worktree remove --force --force "$W" 2>/dev/null || rm -rf "$W"
-	git -C "$MAIN" worktree prune 2>/dev/null || true
+	cd "$BOXES" || return 0
+	sweep checkout "$pr" "" "" "$W" "" || echo "kept worktree catchup-$pr: inspection failed"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
@@ -95,10 +370,12 @@ fi
 # The commits check is never trusted by its name: any workflow can name a job `commits`
 # (docs/how-to/sign-a-step-commit.md). Read the runs of main's `.github/workflows/commits.yaml` on
 # this head instead: exactly one, from `pull_request_target` (so main's copy ran, not the PR's),
-# completed with success, and its own check run made by GitHub Actions.
+# completed with success, and its own check run made by GitHub Actions. A run that never started
+# (`startup_failure`: no job ran and no check run exists, as in GitHub's pull_request_target
+# pause of 2026-11-09) is not counted; reopening the PR starts a fresh one.
 trusted=$(read_gh api "repos/$GH_REPO/actions/runs?head_sha=$tip&per_page=100" \
 	-q '.workflow_runs[]|select(.path==".github/workflows/commits.yaml")|"\(.id)\t\(.event)\t\(.status)\t\(.conclusion)\t\(.check_suite_id)"')
-target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target"')
+target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target" && $4!="startup_failure"')
 if [ "$(printf '%s\n' "$target" | grep -c .)" != 1 ]; then
 	echo "pr $pr: want exactly one pull_request_target run of commits.yaml at $tip, got: ${trusted:-none}" >&2
 	exit 1
@@ -131,3 +408,12 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 	esac
 fi
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
+close_named || echo "pr $pr: closing tickets failed; close them by hand"
+# A landed merge stays successful even if cleanup must keep a working copy. The EXIT trap then
+# removes the catch-up checkout itself.
+if cd "$MAIN"; then
+	sweep landed "$pr" "$head" "$tip" "$W" "$LEAD/box.sh" || echo "kept cleanup: inspection failed"
+else
+	echo "kept cleanup: cannot leave catch-up checkout"
+fi
+exit 0

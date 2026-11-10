@@ -28,8 +28,8 @@ const passes = [
 	'export const Send = Schema.TaggedStruct("send", {m: Schema.Unknown});',
 ].join("\n");
 
-describe("no-hand-tag", () => {
-	const all = plant({
+describe("no-hand-tag", async () => {
+	const all = await plant({
 		[FIRES]: fires,
 		[PASSES]: passes,
 		[LOG]: fires,

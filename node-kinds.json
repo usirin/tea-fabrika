@@ -1,32 +1,8 @@
 {
 	"entryExportConventions": {
-		"bound-by-class-name": {
-			"files": "experiments/145-many-objects/server.ts",
-			"exports": ["Lane", "Person", "Project"]
-		},
-		"bundler-generated-import": {
-			"files": "effect-stub.ts",
-			"exports": ["inert"]
-		},
-		"dynamic-import-main": {
-			"files": "s{1,2,3,4,5}.ts",
-			"exports": ["main"]
-		},
-		"measured-bundle-entry": {
-			"files": "s1-browser-client.ts",
-			"exports": ["run"]
-		},
-		"hot-reloaded-module": {
-			"files": "experiments/183-hmr/versions.ts",
-			"exports": ["Program"]
-		},
 		"saved-builder-output": {
 			"files": "experiments/results/178-lane-rehearsal/**/*.ts",
 			"exports": ["slugify"]
-		},
-		"bound-by-class-name-in-package": {
-			"files": "egress-worker.ts",
-			"exports": ["Locked", "Open", "Opened"]
 		}
 	}
 }

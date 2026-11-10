@@ -466,9 +466,12 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
 - **C2, mail delivery:** at least once. After N crashes on one message, it
   moves to `<pid>/dead`, recording its process, program, registered name,
   tries, limit, letter id, build and each throw's error class. A message can
-  arrive twice, so a job must handle a repeat. N comes from
-  `[coordination] max_deliveries = 3`, which a program can change for its own
-  inbox.
+  arrive twice, so a job must handle a repeat. N is the delivery limit, 3 by
+  default and from 1 to 32: the program's own `maxDeliveries` in its
+  declaration wins, else the trusted wiring's `Policy.maxDeliveries`.
+  *Fixed 2026-11-09 to match P34 ([PR 535](https://github.com/usirin/tea-fabrika/pull/535)).
+  It said: N comes from `[coordination] max_deliveries = 3`, a config key the
+  code does not have.*
   Owner decided 2026-11-08: one stream per process start, `<pid>/dead`; each entry carries `process`, `program` and `name`.
 - **C3, leases (2026-10-25; renew logging 2026-10-31):** a claim lasts 30 s
   and is renewed every 10 s, a third, as etcd's keepalive. An old holder stays
@@ -480,10 +483,35 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   (`packages/fabrika/src/host/supervisor.ts`, experiments 99 to 102): OTP's
   strategies, restart types, restart intensity with escalation to the parent,
   Kubernetes-style backoff, and limits. Each restart is an entry.
+  *As built 2026-11-09 (P34, [PR 535](https://github.com/usirin/tea-fabrika/pull/535), `next/`):*
+  Tier 1 has no process that starts another, so P34 built a one-child
+  supervisor in `next/packages/libfabrika/src/app/supervisor.ts`, rethought and
+  not ported. It restarts the one crashed program inside an intensity window
+  (5 in 5 s by default), with doubling backoff (100 ms to 800 ms). Past the
+  brake it writes `down` with its `until`, and tries again then; nothing
+  escalates to a parent. Strategies, restart types and escalation wait for
+  Tier 4 ([Tier 1's slice](../plan/tier-1.md)). The decision above stands.
+  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  Tier 1's supervision is OTP's top-level supervisor. One root per brain, its children the
+  brain's named programs, `one_for_one`, child specs with OTP's restart types, and OTP's
+  intensity and period (1 in 5 s) unless a reason is written. A restart is at once: no
+  Kubernetes-style backoff. Past intensity the root stops its children and itself; the brain marks
+  the name `failed`, logs it and asks the person, and only a person restarts it. The `down {until}`
+  retry above goes. P34c builds it. Sibling strategies, nested trees and links still wait for Tier 4.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* not one root per brain. Each program is its
+  own OTP application with its own top-level supervisor, under the brain as the node. Past
+  intensity only that program stops and asks the person; every other program keeps running. Fault
+  isolation per program is required from the first version.
 - **C5, which OTP calls stay:** coordination sits where OTP sits, so it
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
   still owed, since experiment 99 came before experiment 107.
+  *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
+  with tickets 404 to 406 for what it found.*
+  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  each difference from OTP's supervisor is written with its reason in two places, here and in the
+  opening table of P34c's plan. A reason comes from Durable Objects or from
+  [a browser is always a client](./a-browser-is-always-a-client.md); code already written is not one.
 - **The desk keeps its name;** workspaces are the numbered layouts inside it.
 - **Limits** (money, turns, seconds, tokens) moved up to the app layer as
   `LimitManager` (A2).
@@ -504,6 +532,42 @@ new code fixes all six.
 Two differences stay, each with its reason written in the code: names are
 never freed (a name is a stream, and the log keeps every stream), and only the
 parent sends exit signals (a job cannot kill a job it does not own).
+
+Five more differences stay in `next/`. [Experiment 239](../../experiments/239-supervision-vs-otp.md)
+found them with no written reason; these are the reasons. Paths are under
+`next/packages/libfabrika/src/`.
+
+- **The supervisor lives inside the program's own object,** not in a process of its own. It is a
+  tea machine (`app/supervisor.ts:59`) that the runner steps (`app/runner.ts:310-431`). Its
+  receipts and its pending action are saved in that object's own SQLite
+  (`coordination/recovery-store.ts:18`), beside the step they guard, and it saves the pending
+  action before it acts, so an eviction at any point resumes from what was saved. Its backoff and
+  `down` deadlines sit on the object's one alarm (`app/runner.ts:292`). A supervisor elsewhere
+  would keep that state one hop away from the step. C4 says why there is one child.
+  *Walked back 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  the supervisor becomes one root per brain, in the project object beside the process tree, so a
+  restart is counted in the same transaction as the `exited` and `started` facts it causes. The
+  receipts and dead letters stay in the program's object. P34c writes the new reason.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* one top-level supervisor per program, not one
+  per brain, so one program's crash loop never stops another.
+- **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
+  ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
+  canceled watch's `DOWN` is dropped every time (`coordination/process.ts:423-429`): once the
+  watch is canceled, that `DOWN` serves nobody.
+- **A `DOWN` is a letter, not a separate signal.** It lands in the inbox under a signal id that
+  only the brain may write (`coordination/process.ts:61-72`, `:183-184`, `:415-430`). So there is
+  one durable stream, kept like any other, and a browser reads its `DOWN`s from
+  `client:<id>/inbox` like any letter. A browser has no pid and could not take an OTP signal.
+- **No selective receive.** Every letter reaches the program in inbox order; none waits in the
+  inbox for a later match. That is Elm's shape: one `update` takes every Msg
+  ([Elm first](./elm-first.md)). A program may still say no to a letter with `refuse`, but it
+  cannot leave one for later.
+- **Exit is a fenced `brutal_kill` in Tier 1.** There is no shutdown timeout and no terminate
+  step: `exited` is written at once (`coordination/process-manager.ts:182-214`). Steps run one at
+  a time under one permit (`app/runner.ts:224`), and a retired process's later writes are refused
+  (`door/door.ts:1350`, `:1356`), so nothing lands half-written. The doubt: once an agent run is
+  a Cmd (Tiers 4 and 5), an exit mid-run may need a graceful stop that tells the agent to end and
+  records what it cost. Nothing in Tier 1 runs one, so this is checked again then.
 
 ### What the first pass proposed, and what became of it
 

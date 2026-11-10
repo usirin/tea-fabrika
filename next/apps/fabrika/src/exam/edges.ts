@@ -15,9 +15,8 @@
 // GitHub Actions it also writes them to the step summary and puts a note on each line of the diff.
 // It exits 2 when it could not read something. The answer comes back by hand for now: the lead agent
 // relays each line to the owner and posts the answer on the pull request (P35, flag 2).
-import {join} from "node:path";
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
-import {Config, Console, Effect, Exit, FileSystem, Option, Schema, Stream} from "effect";
+import {Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream} from "effect";
 import {ChildProcess} from "effect/process";
 import {parseSync} from "oxc-parser";
 
@@ -123,12 +122,13 @@ const main = Effect.gen(function* () {
 	const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
 	const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));
 	const fs = yield* FileSystem.FileSystem;
+	const paths = yield* Path.Path;
 	const before = new Map<string, string>();
 	const after = new Map<string, string>();
 	for (const path of changed.filter((p) => CODE.test(p))) {
 		if (atBase.has(path)) before.set(path, yield* at(["show", `${base}:${path}`]));
-		if (yield* fs.exists(join(top, path)))
-			after.set(path, yield* fs.readFileString(join(top, path)));
+		if (yield* fs.exists(paths.join(top, path)))
+			after.set(path, yield* fs.readFileString(paths.join(top, path)));
 	}
 	const found = yield* asks(before, after);
 	const head =

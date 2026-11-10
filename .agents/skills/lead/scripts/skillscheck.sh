@@ -4,13 +4,19 @@
 set -eu
 python3 - "${1:-.}" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 root = Path(sys.argv[1])
 sources = root / ".agents/skills"
 bad = []
-# Today's tooling, T321 slice 1a. Each clause has one source and one section.
-# An empty section means the whole skill. No spelling aliases or legacy phrase list.
+# Today's tooling, T321 slice 1a and T325 slice 1b: one clause table, one parser.
+# Each clause has one source and one section. An empty section means the whole skill.
+# No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
+# required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
+leak = "leakgrep.sh checks added text; private words stay outside the repo."
+caps = "The test config and typecheck.sh hold worker, home and typecheck limits."
+effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [
     ("lead", "Scripts", "K19", "box.sh run and runplan.sh strip secret settings and redact saved output."),
     ("lead", "Scripts", "K1", "fetch --sign checks owners and signs missing notes in MAIN."),
@@ -19,11 +25,20 @@ clauses = [
     ("lead", "Steps", "K3", "box.sh run --step checks order and slots, and saves the run row."),
     ("step-commit", "", "K4", "stepcommit.sh checks named paths, owners, exam paths and staged formatting."),
     ("plan", "", "K11", "plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments."),
+    ("lead", "Scripts", "K6", leak),
+    ("plan", "Scripts", "K6", leak),
+    ("guidelines", "10. Open a docs-only pull request", "K6", leak),
+    ("tests", "Go easy on the machine", "K9", caps),
+    ("build", "Go easy on the machine", "K9", caps),
+    ("mutation", "Go easy on the machine", "K9", caps),
+    ("tests", "Steps", "K20", effect),
 ]
-import re
+def normalized(text):
+    return " ".join(text.replace("`", "").replace("**", "").split())
 def sections(text):
-    found = {"": []}
-    section, fence = "", None
+    # CommonMark fences: a closing fence uses the opening's character, is at least as long and has
+    # no info string. A section holds its subsections; "" holds every line.
+    found, open_, fence = {"": []}, [], None
     for line in text.splitlines():
         mark = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
         if fence:
@@ -33,13 +48,17 @@ def sections(text):
         if mark:
             fence = mark[1]
             continue
-        heading = re.match(r"^##\s+(.+?)\s*#*\s*$", line)
+        heading = re.match(r"^(#{2,6})\s+(.+?)\s*#*\s*$", line)
         if heading:
-            section = heading[1]
-        found.setdefault(section, []).append(line)
-        if section:
-            found[""].append(line)
-    return {key: " ".join(" ".join(lines).split()) for key, lines in found.items()}
+            level = len(heading[1])
+            open_ = [(n, l) for n, l in open_ if l < level] + [(normalized(heading[2]), level)]
+            for name, _ in open_:
+                found.setdefault(name, [])
+            continue
+        found[""].append(line)
+        for name, _ in open_:
+            found[name].append(line)
+    return {key: normalized(" ".join(lines)) for key, lines in found.items()}
 
 # A tree holding none of the clause sources is a links-only tree (the laws' generated repos).
 # Once any clause source exists, a removed one drops no clause: each it held is reported.
@@ -50,10 +69,10 @@ for skill, section, check, clause in clauses:
         continue
     if not source.is_file():
         bad.append(f".agents/skills/{skill}/SKILL.md: {check} source missing for clause: {clause}")
-    elif clause not in sections(source.read_text()).get(section, ""):
+    elif normalized(clause) not in sections(source.read_text()).get(section, ""):
         bad.append(f".agents/skills/{skill}/SKILL.md: {check} missing clause in {section or 'skill'}: {clause}")
 count = 0
-for source in sorted(sources.iterdir()):
+for source in sorted(sources.iterdir()) if sources.is_dir() else []:
     if not (source / "SKILL.md").is_file():
         continue
     count += 1
@@ -68,6 +87,102 @@ for source in sorted(sources.iterdir()):
         continue
     if target != source.resolve(strict=True):
         bad.append(f".claude/skills/{source.name}: link points to the wrong source")
+
+# Fixed clauses, scoped to their owning section. Wrapping is free; changing their
+# words changes this tests-owned writing format. These are instructions, not proof
+# that a future reviewer followed them.
+exam = (
+    "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
+    "Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.",
+    "The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
+)
+review = (
+    "Sweep, do not sample. For each law in the plan's table, list every way in: each public call, each cut point, and each saved or binding state. Check each one.",
+    "A finding names its class and every case of it.",
+    "A law written as examples over a class the plan names is a defect when a found case escapes those examples.",
+    "On a re-review, read every line the last fixes changed and what calls them first. Then finish the remaining checks.",
+    "Read every decided note the PR builds, following the plan's references and the change itself.",
+    "Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law. Each blocker cites that source and shows the missed case.",
+)
+answer = (
+    "Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.",
+    "n counts blocking classes. Each class lists every affected case. m counts distinct confirmed tracker tickets linked in this answer.",
+    "Give every finding in that answer, grouped by class, most serious first.",
+    "Name each checked decided note and say where the change follows or breaks it.",
+    "Use tracker_query to find an existing ticket, or tracker_file with value: {title, body, from: {_tag: \"pr\", url, step: \"review\"}}. Record the returned ID.",
+    "If filing fails, include the exact pending payload for lead to retry. Do not count it as filed or start another review round for it.",
+)
+cleanup = (
+    "After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.",
+    "Remove the registered catchup-<pr> worktree, exact-branch boxes through box.sh rm, and the driver's linked MAIN worktree on that exact branch. Never remove MAIN itself.",
+    "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
+    "Print one line per retained item and continue. Cleanup never changes a landed merge's success.",
+    "Saved plans, reports, logs and state/ remain.",
+)
+rules = {
+    ".agents/skills/review/SKILL.md": {
+        "step:Check": review, "step:Answer": answer,
+    },
+    ".agents/skills/lead/SKILL.md": {
+        "heading:Review brief template": (
+            "Ticket:", "Version:", "Approved plan:", "Parent base:", "Reviewed head:",
+            "Decided notes:", "Last fixes:", *review, *answer,
+        ),
+        "step:Land it": (*cleanup, *exam),
+    },
+    "AGENTS.md": {"bullet:Every pull request": exam},
+}
+
+def section(text, key):
+    kind, title = key.split(":", 1)
+    patterns = {
+        "heading": r"^(#{1,6}) " + re.escape(title) + r"\s*$",
+        "step": r"^\d+\. \*\*" + re.escape(title) + r"\b[^\n]*",
+        "bullet": r"^- \*\*" + re.escape(title) + r"\b[^\n]*",
+    }
+    # Fenced examples cannot supply a missing owning section.
+    lines = text.splitlines(); active = []; fence = None
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*(`{3,}|~{3,})", line):
+            fence = None if fence else line.strip()[0]
+            continue
+        if not fence:
+            active.append((i, line))
+    for pos, (i, line) in enumerate(active):
+        match = re.match(patterns[kind], line, re.I)
+        if not match:
+            continue
+        end = len(lines)
+        for j, following in active[pos + 1:]:
+            if (kind == "heading" and re.match(r"^#{1," + str(len(match[1])) + r"} ", following)) or (
+                kind != "heading" and re.match(r"^(?:#{1,6} |\d+\. \*\*|- \*\*)", following)
+            ):
+                end = j; break
+        return " ".join("\n".join(lines[i:end]).split())
+    return ""
+
+for path, sections in rules.items():
+    try:
+        text = (root / path).read_text()
+    except OSError:
+        bad.append(f"{path}: missing required file")
+        continue
+    for key, clauses in sections.items():
+        body = section(text, key)
+        for clause in clauses:
+            if " ".join(clause.split()).lower() not in body.lower():
+                bad.append(f"{path}: missing {key}: {clause}")
+    if path == ".agents/skills/lead/SKILL.md":
+        body = section(text, "heading:Review brief template")
+        for pattern in (
+            r"(?:only|restrict\w* to).{0,100}(?:real|live) run",
+            r"(?:real|live) run (?:could|can|would) hit",
+            r"(?:at most|no more than|under|within|limit(?:ed)? to|max(?:imum)?)\s+\d+\s+lines?",
+            r"\b\d+[- ]lines?\s+(?:cap|limit|answer|report)",
+            r"\b(?:line cap|line limit)\s*[:=]?\s*\d+",
+        ):
+            if re.search(pattern, body, re.I):
+                bad.append(f"{path}: forbidden review restriction: {pattern}")
 for message in bad:
     print(message, file=sys.stderr)
 if not bad:

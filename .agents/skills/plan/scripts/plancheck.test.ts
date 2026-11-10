@@ -1,6 +1,34 @@
+import "./plancheck.sh?raw";
+import "../../lead/scripts/leakgrep.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+import "../../lead/scripts/box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/drive.ts?raw";
+import "../../lead/scripts/fieldrow.py?raw";
+import "../../lead/scripts/runplan.sh?raw";
+import "../../lead/scripts/env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/gc.ts?raw";
+import "../../lead/scripts/redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/botpush.mjs?raw";
+import "../../lead/scripts/clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../exam-paths.json?raw";
 import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import fc from "fast-check";
@@ -17,7 +45,13 @@ const check = (body: string, marker = "Plancheck-Version: 2") => {
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, `Approved by the lead agent, builds ticket 520.\n\n${marker}\n\n${body}\n`);
-		const ran = spawnSync("sh", [script, plan], {encoding: "utf8", timeout: 5_000});
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
+		const ran = spawnSync("sh", [script, plan], {
+			encoding: "utf8",
+			timeout: 5_000,
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
 		return {code: ran.status, text: ran.stdout + ran.stderr};
@@ -31,10 +65,12 @@ const handoff = (text: string, draft = false) => {
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, text);
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
 		const ran = spawnSync("sh", [script, ...(draft ? ["--draft"] : []), plan], {
 			encoding: "utf8",
 			timeout: 5_000,
-			env: {...process.env, TYPESAFE_API_KEY: undefined},
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
@@ -890,7 +926,13 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
 	try {
 		const path = join(folder, "plan.md");
 		writeFileSync(path, Buffer.from(text));
-		const ran = spawnSync("sh", [script, mode, path], {encoding: "utf8", timeout: 5_000});
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
+		const ran = spawnSync("sh", [script, mode, path], {
+			encoding: "utf8",
+			timeout: 5_000,
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
 		return {code: ran.status, text: ran.stdout + ran.stderr};
@@ -1067,6 +1109,74 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
 				expect(modeCheck(approved(duplicate), "--approved").code).toBe(1);
 			}),
 			{seed: 321, numRuns: 3},
+		);
+	});
+});
+
+describe("T325 K6 plancheck, today's tooling", () => {
+	// No domain Schema for draft text. Plant: skip the shared checker or ignore its refusal.
+	it("checks every draft addition with leakgrep and preserves clean plans", () => {
+		fc.assert(
+			fc.property(
+				fc.record({suffix: word, leak: fc.boolean(), draft: fc.boolean()}),
+				({suffix, leak, draft}) => {
+					const dir = mkdtempSync(join(tmpdir(), "pc-leak-"));
+					try {
+						const root = join(dir, "repo"),
+							scripts = join(root, ".agents/skills");
+						for (const part of ["plan", "lead", "step-commit"])
+							mkdirSync(join(scripts, part, "scripts"), {recursive: true});
+						for (const file of [
+							"plan/scripts/plancheck.sh",
+							"lead/scripts/leakgrep.sh",
+							"step-commit/scripts/exam.py",
+						])
+							cpSync(join(import.meta.dirname, "../..", file), join(scripts, file));
+						cpSync(
+							join(import.meta.dirname, "../../../../exam-paths.json"),
+							join(root, "exam-paths.json"),
+						);
+						symlinkSync(
+							join(import.meta.dirname, "../../../../node_modules"),
+							join(root, "node_modules"),
+						);
+						expect(spawnSync("git", ["init", "-q", root]).status).toBe(0);
+						const privateWord = `private_${suffix}`;
+						const words = join(dir, "words");
+						writeFileSync(
+							words,
+							`${privateWord}\n${"https://github.com/usirin/tea-fabrika".split("/").slice(-2).join("\n")}\n`,
+						);
+						const plan = join(root, "plan.md");
+						writeFileSync(
+							plan,
+							`${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 2\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
+						);
+						const run = () =>
+							spawnSync(
+								"sh",
+								[join(scripts, "plan/scripts/plancheck.sh"), ...(draft ? ["--draft"] : []), plan],
+								{
+									cwd: root,
+									encoding: "utf8",
+									timeout: 5_000,
+									env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+								},
+							);
+						const out = run();
+						expect(out.error).toBeUndefined();
+						expect(out.status, out.stdout + out.stderr).toBe(leak ? 1 : 0);
+						writeFileSync(
+							join(scripts, "lead/scripts/leakgrep.sh"),
+							"#!/bin/sh\necho 'leakgrep: planted refusal' >&2\nexit 1\n",
+						);
+						expect(run().status).toBe(1);
+					} finally {
+						rmSync(dir, {recursive: true, force: true});
+					}
+				},
+			),
+			{seed: 325, numRuns: 6},
 		);
 	});
 });

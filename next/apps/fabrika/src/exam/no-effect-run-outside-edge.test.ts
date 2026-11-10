@@ -77,8 +77,8 @@ const OLD_EDGES = [
 	"next/apps/fabrika/alchemy.run.ts",
 ];
 
-describe("no-effect-run-outside-edge", () => {
-	const all = plant({
+describe("no-effect-run-outside-edge", async () => {
+	const all = await plant({
 		[FIRES]: runs,
 		[PASSES]: passes,
 		[EDGE]: edges,
