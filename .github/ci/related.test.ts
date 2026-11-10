@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import * as fc from "fast-check";
-import { afterAll, beforeAll, expect, it } from "vitest";
-import { createVitest, type Vitest } from "vitest/node";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
+import { parse } from "yaml";
+import { measured } from "../../vitest.shards.ts";
 
 // Today's CI for both versions. Vitest 5.0.5's public node API, read in
 // dist/chunks/plugin.d.C8mmycim.d.ts and cli-api.De07GUeT.js: `related` takes absolute
@@ -86,4 +88,105 @@ it("real skill Markdown subsets select no test", async () => {
     }),
     options,
   );
+});
+
+// Today's CI serves both versions. The baseline deliberately has no next/ CLI filter.
+describe("next workflow coverage", () => {
+  const nextWorkflow = parse(readFileSync(join(root, ".github/workflows/check.yaml"), "utf8")).jobs.next;
+  const indices: number[] = nextWorkflow.strategy.matrix.shard;
+  const expression: string = nextWorkflow.steps.find((step: { env?: { SHARD?: string } }) => step.env?.SHARD)?.env
+    .SHARD;
+  const denominator = Number(/\/([1-9]\d*)$/.exec(expression)?.[1]);
+  const contexts: Vitest[] = [];
+  let nextSpecs: TestSpecification[];
+  const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
+  const partition = async (specs: TestSpecification[]) => {
+    const kept: string[][] = [];
+
+    for (const context of contexts.slice(1)) {
+      const Sequencer = context.config.sequence.sequencer;
+      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+    }
+
+    return kept;
+  };
+  const complete = (kept: string[][], universe: string[]) => {
+    expect(kept.flat().toSorted()).toEqual(universe.toSorted());
+    expect(new Set(kept.flat()).size).toBe(kept.flat().length);
+  };
+  beforeAll(async () => {
+    const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
+    contexts.push(baseline);
+    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
+
+    for (const index of indices) {
+      contexts.push(
+        await createVitest("test", {
+          root,
+          watch: false,
+          maxWorkers: 1,
+          shard: `${index}/${denominator}`,
+        }),
+      );
+    }
+  });
+  afterAll(async () => {
+    for (const context of contexts) {
+      await context.close();
+    }
+  });
+
+  it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
+    // Real config discovery and each configured sequencer run without executing a test.
+    expect(Number.isInteger(denominator)).toBe(true);
+    expect(indices.toSorted((a, b) => a - b)).toEqual(Array.from({ length: denominator }, (_, i) => i + 1));
+    const universe = nextSpecs.map(repoPath);
+    expect(universe.length).toBeGreaterThan(0);
+    expect(new Set(universe).size).toBe(universe.length);
+    const kept: string[][] = [];
+
+    for (const context of contexts.slice(1)) {
+      const specs = await context.globTestSpecifications(["next/"]);
+      const Sequencer = context.config.sequence.sequencer;
+      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+    }
+
+    complete(kept, universe);
+  });
+
+  it("real configured shards preserve generated subsets, order and unmeasured files", async () => {
+    // External test specifications have no domain Schema. Reuse real discovery, at most 12 files.
+    await fc.assert(
+      fc.asyncProperty(
+        fc.subarray(nextSpecs, { maxLength: 10 }),
+        fc.array(fc.nat(), { minLength: 12, maxLength: 12 }),
+        fc.stringMatching(/^[a-z]{1,16}$/),
+        async (subset, order, suffix) => {
+          const project = nextSpecs[0]!.project;
+          const unknown = ["a", "b"].map((letter) =>
+            project.createSpecification(join(root, `next/apps/fabrika/src/unmeasured-${suffix}-${letter}.test.ts`)),
+          );
+
+          for (const spec of unknown) {
+            expect(Object.hasOwn(measured, repoPath(spec))).toBe(false);
+          }
+
+          const files = [...subset, ...unknown];
+          const shuffled = files
+            .map((spec, i) => ({ spec, rank: order[i]! }))
+            .toSorted((a, b) => a.rank - b.rank)
+            .map(({ spec }) => spec);
+          const first = await partition(files);
+          complete(first, files.map(repoPath));
+
+          for (const permutation of [shuffled, files.toReversed()]) {
+            const kept = await partition(permutation);
+            complete(kept, files.map(repoPath));
+            expect(kept.map((paths) => paths.toSorted())).toEqual(first.map((paths) => paths.toSorted()));
+          }
+        },
+      ),
+      options,
+    );
+  });
 });
