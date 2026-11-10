@@ -21,7 +21,15 @@ import {join} from "node:path";
 import {nameOf} from "@kampus/pipeline/stages/outcome";
 import fc from "fast-check";
 import {afterAll, describe, expect, it} from "vitest";
-import {leftIn, machine} from "./drive.ts";
+import {
+	claudeProfile,
+	claudeTail,
+	freshBox,
+	holdsElectron,
+	leftIn,
+	machine,
+	reportOf,
+} from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
 const options = {seed: 119120, numRuns: 300};
@@ -43,6 +51,7 @@ const ask = {
 	events: "",
 	err: "",
 	minutes: 60,
+	started: 0,
 };
 const answer = fc.constantFrom(
 	"answer: done laws: green",
@@ -207,6 +216,61 @@ describe("leftIn reads a real box, today's tooling", () => {
 	});
 });
 
+describe("T383 drive never passes off an older run's report, today's tooling", () => {
+	const suffixes = [
+		"",
+		"-gitdata",
+		"-prompt.md",
+		".md",
+		".jsonl",
+		".err",
+		".log",
+		"-plan.md",
+		"-plan.jsonl",
+	];
+	// Plants: check only the box folder and prompt, as before; skip a free number; start below n.
+	// p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
+	// 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
+	it("picks the first box number from n up that no older file holds", () => {
+		const left = fc.array(fc.tuple(fc.integer({min: 1, max: 6}), fc.constantFrom(...suffixes)));
+		fc.assert(
+			fc.property(
+				fc.constantFrom("plan", "review", "build"),
+				fc.integer({min: 1, max: 4}),
+				left,
+				(step, n, files) => {
+					const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
+					const box = freshBox("p12", step, n, (name) => taken.has(name));
+					const i = Number(box.slice(`p12-${step}`.length));
+					expect(box).toBe(`p12-${step}${i}`);
+					expect(i).toBeGreaterThanOrEqual(n);
+					for (const suffix of suffixes) expect(taken.has(`${box}${suffix}`)).toBe(false);
+					for (let j = n; j < i; j += 1)
+						expect(suffixes.some((suffix) => taken.has(`p12-${step}${j}${suffix}`))).toBe(true);
+				},
+			),
+			options,
+		);
+	});
+
+	// Plants: return the path whenever the file exists; compare to the ms without the whole second.
+	it("gives a report only when this run wrote it, never one from before its start", () => {
+		const started = fc.integer({min: 1_000_000, max: 2_000_000_000_000});
+		const mtime = fc.option(fc.integer({min: -10_000_000, max: 10_000_000}), {nil: null});
+		fc.assert(
+			fc.property(started, mtime, (at, offset) => {
+				const written = offset === null ? null : at + offset;
+				const got = reportOf("r.md", at, written);
+				const second = Math.floor(at / 1000) * 1000;
+				expect(got).toBe(written !== null && written >= second ? "r.md" : null);
+				if (written !== null && written >= at) expect(got).toBe("r.md");
+				if (written !== null && written < second) expect(got).toBeNull();
+			}),
+			options,
+		);
+	});
+});
+
 describe("T388 drive accepts a step once its backup push lands, today's tooling", () => {
 	// Plants: a landed push still recorded stuck; the head left at the base; a refused push accepted.
 	// ci375 build, 2026-11-09: a signed, green build came back stuck:push_failed on a notes race
@@ -221,6 +285,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 					exam: [],
 					leaks: [],
 					left: [],
+					manifests: [],
 					plancheck: null,
 					report,
 					problem: null,
@@ -246,5 +311,66 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 			}),
 			options,
 		);
+	});
+});
+
+describe("drive holds the Electron lock outside the box, today's tooling", () => {
+	const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+		"plan" | "tests" | "build" | "mutation" | "review"
+	>;
+	const name = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+
+	it("holds it for mutation always, and for any other step only when started with --electron", () => {
+		fc.assert(
+			fc.property(steps, fc.boolean(), (step, flagged) => {
+				expect(holdsElectron(step, flagged)).toBe(step === "mutation" || flagged);
+			}),
+			options,
+		);
+	});
+
+	it("tells the agent the lock is held exactly when drive holds it", () => {
+		fc.assert(
+			fc.property(steps, fc.boolean(), (step, flagged) => {
+				const told = claudeTail({step, ticket: "1"}, flagged).includes("state/electron.lock");
+				expect(told).toBe(holdsElectron(step, flagged));
+			}),
+			options,
+		);
+	});
+
+	it("never lets the box write the lock or anything else in BOXES/state", () => {
+		fc.assert(
+			fc.property(steps, name, (step, box) => {
+				const profile = claudeProfile("/h", "/h/boxes", box, step);
+				expect(profile).not.toContain("/h/boxes/state");
+				expect(profile).not.toContain("electron");
+			}),
+			options,
+		);
+	});
+
+	it("pinned: the profile allows writes only to the box, its git data and the caches", () => {
+		// pinned: ticket 382 widens nothing. A change here is a change to what the box can reach.
+		expect(claudeProfile("/h", "/h/boxes", "l-build1", "build")).toBe(`(version 1)
+(allow default)
+(deny file-read* file-write* (subpath "/h/.fabrika/step-keys") (literal "/h/.fabrika/leak-words") (subpath "/h/.codex"))
+(deny file-write* (subpath "/h"))
+(allow file-write* (subpath "/h/boxes/l-build1") (subpath "/h/boxes/l-build1-gitdata") (subpath "/h/.claude") (subpath "/h/.cache") (subpath "/h/.local") (subpath "/h/.npm") (subpath "/h/Library") (regex #"^/h/\\.claude\\.json"))
+`);
+	});
+
+	it("scenario: --electron on a Codex box is refused before anything starts", () => {
+		const dir = mkdtempSync(join(tmpdir(), "drive-electron-"));
+		const brief = join(dir, "brief.md");
+		writeFileSync(brief, "brief");
+		const r = spawnSync(
+			process.execPath,
+			[join(import.meta.dirname, "drive.ts"), "l", "build", brief, "--electron"],
+			{encoding: "utf8", env: {...process.env, BOXES: join(dir, "boxes")}},
+		);
+		rmSync(dir, {recursive: true, force: true});
+		expect(r.status).toBe(2);
+		expect(r.stderr).toContain("--electron is for --agent claude");
 	});
 });

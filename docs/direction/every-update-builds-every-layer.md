@@ -36,6 +36,8 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
   links, trap exit and leases stay in Tier 4, since Tier 1 has no process that starts another
   and no claims. *Changed 2026-11-06: this note and the tiers gave Tier 1's coordination only the
   mailbox, who belongs and grants, which clashed with the five layers' header.*
+  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): the restart follows OTP's top-level supervisor, at once and
+  with no backoff; past the brake a name is `failed` until a person restarts it.*
 - **A pass is not done until it runs everywhere it should.** "Everywhere" means a
   browser tab and an Electron window, on the laptop and on Cloudflare, one command
   apart ([local is the cloud](./local-is-the-cloud.md)).

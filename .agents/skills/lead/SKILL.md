@@ -118,7 +118,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone; drive runs it at start |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
@@ -152,8 +152,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
-- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. One mutation
-  step at a time holds `BOXES/state/electron.lock`; the next waits.
+- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. Start any
+  other Claude step whose laws or shots run the app with `--electron`. The box cannot write
+  `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
+  it for the whole step; the next Electron step waits. The sandbox is unchanged.
 - It starts a box at `--from`, else the lane's last head (`BOXES/state/<lane>.json`, moved only
   by a step it accepted) or the newest tip on origin of the branch or its `-wip` backup when that
   is ahead of it, else `origin/main`. So a lead commit (a merge of main, a lockfile commit) pushed
@@ -186,7 +188,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   is in `reason`), 30 stuck, 2 usage, 3 refused (8 agents running: Codex boxes plus Claude steps
   drive started, under 20 GB free after `box.sh gc`, or the lane's branch checked out in a
   worktree, which the end-of-step fetch could not update). It never retries. A stuck step keeps its
-  box. The commits check reads the whole lane, from where it left main, so each earlier step's
+  box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
+  when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
   one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
@@ -246,6 +249,8 @@ visible, and never weaken the rules to hide this message.
    Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.
    The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
+   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
+   Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
    Apply the labels rule and both zero-hit checks together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
@@ -291,9 +296,10 @@ visible, and never weaken the rules to hide this message.
    metadata, unknown state, and any pair holding MAIN or BOXES/state.
    An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
-10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
-    `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
-    main checkout, plus any build the app needs to start. The owner runs the app from there and
+10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
+    own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
+    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 

@@ -4,13 +4,15 @@
 // report's path.
 //
 //   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
-//                 [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>]
-//                 [--plan <approved plan>] [--plan-only]
+//                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
+//                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // Claude runs `claude -p` in the same kind of box, under sandbox-exec: it cannot read the step keys,
 // the leak words or Codex's login, and it writes only its box. It commits with plain git; drive
 // then signs its work as one commit through stepcommit, with main's own signer. Mutation runs on
-// Claude only (it binds ports and starts Electron), one Electron step at a time.
+// Claude only (it binds ports and starts Electron), one Electron step at a time. The box cannot
+// write state/electron.lock, so drive holds it for the whole step, outside the box: for mutation,
+// and for a Claude step started with --electron (a step whose laws or shots run the app).
 //
 // The step is a tea machine on the Effect engine, made of the pipeline's moves:
 //
@@ -49,6 +51,7 @@ import {
 	readFileSync,
 	renameSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import {homedir} from "node:os";
@@ -140,6 +143,8 @@ const Ask = Schema.Struct({
 	events: Schema.String,
 	err: Schema.String,
 	minutes: Schema.Number,
+	/** When this run started, in ms: a report older than this is not this run's. */
+	started: Schema.Number,
 });
 type Ask = typeof Ask.Type;
 
@@ -310,6 +315,43 @@ const decide = (ask: Ask, read: Read): Judged => {
 	}
 };
 
+/** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
+const BOX_FILES = [
+	"",
+	"-gitdata",
+	"-prompt.md",
+	".md",
+	".jsonl",
+	".err",
+	".log",
+	"-plan.md",
+	"-plan.jsonl",
+];
+
+/**
+ * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
+ * once returned an older run's `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
+ */
+export const freshBox = (
+	lane: string,
+	step: string,
+	n: number,
+	taken: (name: string) => boolean,
+): string => {
+	for (let i = n; ; i += 1) {
+		const box = `${lane}-${step}${i}`;
+		if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) return box;
+	}
+};
+
+/**
+ * The report's path when this run wrote it: the file exists (`mtime` is its mtime in ms) and is no
+ * older than the run's start, read to the whole second for file systems that keep only seconds. A
+ * run that wrote none, such as one box.sh refused before the agent started, gives no report.
+ */
+export const reportOf = (path: string, started: number, mtime: number | null): string | null =>
+	mtime !== null && mtime >= Math.floor(started / 1000) * 1000 ? path : null;
+
 // ---------------------------------------------------------------- the machine
 
 type Step = readonly [Model, readonly Cmds[]];
@@ -425,6 +467,12 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 	return {code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? ""};
 };
 const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
+
+/** This run's report, or `null` when it wrote none. */
+const writtenReport = (ask: Ask) => {
+	const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
+	return reportOf(ask.report, ask.started, mtime);
+};
 
 /** The paths env.sh gives every lead script. */
 const loadEnv = (): Env => {
@@ -657,7 +705,8 @@ const handlers = (env: Env) => {
 			}),
 		step_read: (ask: Ask) =>
 			Effect.sync((): Read => {
-				const report = existsSync(ask.report) ? readFileSync(ask.report, "utf8") : "";
+				const written = writtenReport(ask);
+				const report = written === null ? "" : readFileSync(written, "utf8");
 				const left = ask.step === "plan" ? [] : leftIn(join(env.BOXES, ask.box), ask.branch);
 				const empty = {
 					commits: 0,
@@ -847,7 +896,7 @@ const handlers = (env: Env) => {
 					outcome,
 					why: ok ? e.why : `${e.why} (${notes.join("; ")})`,
 					exit: ok ? e.exit : 30,
-					report: ask.report,
+					report: writtenReport(ask),
 					kept: keep,
 					ended,
 				};
@@ -891,19 +940,24 @@ const CLAUDE_TOOLS: Record<StepName, string> = {
  * every command it starts (no reading the step keys, leak words or Codex's login; writes only in
  * its box and the caches it needs), and settings that say the same to Claude's own tools.
  */
-const claudeArgs = (env: Env, ask: Ask) => {
-	const home = homedir();
-	const work = join(env.BOXES, ask.box);
-	const writable = ask.step === "plan" ? [] : [work, join(env.BOXES, `${ask.box}-gitdata`)];
+export const claudeProfile = (home: string, boxes: string, box: string, step: StepName) => {
+	const work = join(boxes, box);
+	const writable = step === "plan" ? [] : [work, join(boxes, `${box}-gitdata`)];
 	const allow = [...writable, ".claude", ".cache", ".local", ".npm", "Library"].map(
 		(p) => `(subpath "${p.startsWith("/") ? p : join(home, p)}")`,
 	);
-	const profile = `(version 1)
+	return `(version 1)
 (allow default)
 (deny file-read* file-write* (subpath "${home}/.fabrika/step-keys") (literal "${home}/.fabrika/leak-words") (subpath "${home}/.codex"))
 (deny file-write* (subpath "${home}"))
 (allow file-write* ${allow.join(" ")} (regex #"^${home}/\\.claude\\.json"))
 `;
+};
+
+const claudeArgs = (env: Env, ask: Ask) => {
+	const home = homedir();
+	const work = join(env.BOXES, ask.box);
+	const profile = claudeProfile(home, env.BOXES, ask.box, ask.step);
 	const sb = join(env.BOXES, `${ask.box}.sb`);
 	writeFileSync(sb, profile);
 	// The file's name is how the cap counts Claude steps drive started (pgrep -f).
@@ -1074,8 +1128,15 @@ const holderOf = (porcelain: string, branch: string): string | null => {
 	return null;
 };
 
+/**
+ * Whether drive holds `BOXES/state/electron.lock` for the whole step. The box cannot write the
+ * lock (its sandbox writes only the box and caches), so drive takes it outside, before the agent
+ * starts: always for mutation, and for any Claude step started with `--electron`.
+ */
+export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
+
 /** What a Claude step is told on top of the brief: its skill, and how its work is committed. */
-const claudeTail = (ask: Ask) => {
+export const claudeTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
 	const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
 	const commit =
 		ask.step === "plan"
@@ -1083,16 +1144,15 @@ const claudeTail = (ask: Ask) => {
 			: ask.step === "review"
 				? "Commit nothing and change no file.\n"
 				: `Commit your work here with plain git: \`git add <paths>\`, then \`git commit -m "T${ask.ticket} ${ask.step}: <subject>"\`. Do not run stepcommit or pnpm commits sign: you hold no step key, and drive.ts signs your commits as one commit after you answer. Never push, never rewrite history.\n`;
-	const electron =
-		ask.step === "mutation"
-			? "One Electron app at a time on this laptop: start at most one, and close it before you answer.\n"
-			: "";
-	return `\n\n---\n${skill}${commit}${electron}`;
+	const lock = holdsElectron(ask.step, electron)
+		? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
+		: "";
+	return `\n\n---\n${skill}${commit}${lock}`;
 };
 
 const usage = () => {
 	console.error(
-		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+		"usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
 	);
 	process.exit(2);
 };
@@ -1141,6 +1201,11 @@ const main = () => {
 		usage();
 	if (step === "mutation" && agent !== "claude") {
 		console.error("drive.ts: mutation binds ports and starts Electron; run it with --agent claude");
+		process.exit(2);
+	}
+	const electron = args.includes("--electron");
+	if (electron && agent !== "claude") {
+		console.error("drive.ts: --electron is for --agent claude; a Codex box cannot start Electron");
 		process.exit(2);
 	}
 	if (agent === "codex" && flag(args, "--model") !== undefined) {
@@ -1210,13 +1275,13 @@ const main = () => {
 		process.exit(2);
 	}
 	const s = step as StepName;
-	let n = (saved?.steps.filter((e) => e.step === s).length ?? 0) + 1;
-	while (
-		existsSync(join(env.BOXES, `${lane}-${s}${n}`)) ||
-		existsSync(join(env.BOXES, `${lane}-${s}${n}-prompt.md`))
-	)
-		n += 1;
-	const box = `${lane}-${s}${n}`;
+	const box = freshBox(
+		lane,
+		s,
+		(saved?.steps.filter((e) => e.step === s).length ?? 0) + 1,
+		(name) => existsSync(join(env.BOXES, name)),
+	);
+	const n = Number(box.slice(`${lane}-${s}`.length));
 	const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
 	const claude = agent === "claude";
 	const ask: Ask = {
@@ -1237,12 +1302,15 @@ const main = () => {
 		events: s === "plan" ? at("-plan.jsonl") : at(".jsonl"),
 		err: at(".err"),
 		minutes: Number(process.env.DRIVE_MINUTES ?? 60),
+		started: Date.now(),
 	};
 	const count = (pattern: string) =>
 		sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
 	const agents = count("^codex exec") + count("drive-claude-settings");
 	if (args.includes("--plan-only")) {
-		console.log(JSON.stringify({outcome: "plan-only", ...ask, agents}));
+		console.log(
+			JSON.stringify({outcome: "plan-only", ...ask, agents, electron: holdsElectron(s, electron)}),
+		);
 		return;
 	}
 	if (agents >= 8) {
@@ -1254,15 +1322,22 @@ const main = () => {
 		);
 		process.exit(3);
 	}
-	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk.
-	spawnSync("sh", [join(HERE, "box.sh"), "gc"], {stdio: ["ignore", 2, 2]});
+	// Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
+	// naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
+	const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
+		stdio: ["ignore", "pipe", 2],
+		encoding: "utf8",
+		maxBuffer: 16 * 1024 * 1024,
+	});
+	process.stderr.write(gc.stdout ?? "");
 	const free = freeGb(env.BOXES);
 	if (free === null || free < MIN_FREE_GB) {
 		const said = free === null ? "df could not read the free space" : `${free} GB free`;
+		const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
 		console.log(
 			JSON.stringify({
 				outcome: "refused",
-				reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}`,
+				reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
 			}),
 		);
 		process.exit(3);
@@ -1287,11 +1362,11 @@ const main = () => {
 			: "";
 	writeFileSync(
 		ask.prompt,
-		readFileSync(brief, "utf8") + (claude ? claudeTail(ask) : "") + TAIL + verdict,
+		readFileSync(brief, "utf8") + (claude ? claudeTail(ask, electron) : "") + TAIL + verdict,
 	);
 
 	const program = Effect.gen(function* () {
-		if (s === "mutation") yield* takeElectron(env);
+		if (holdsElectron(s, electron)) yield* takeElectron(env);
 		// One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
 		if (s === "tests" || s === "build" || s === "mutation")
 			while (sh("pgrep", ["-x", "tsgo"]).code === 0) yield* Effect.sleep("20 seconds");
@@ -1315,7 +1390,7 @@ const main = () => {
 			from: base,
 			head: end.head,
 			reason: end.why,
-			report: ask.report,
+			report: writtenReport(ask),
 			kept: end.kept,
 			exit: exitOf(end.outcome),
 			...(claude ? {model: ask.model, session: ask.session} : {}),
