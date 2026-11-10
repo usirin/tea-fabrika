@@ -1,7 +1,7 @@
 ---
 id: 0037
 title: Every implicit state machine in next/ is made explicit, one named type with its transitions in one place, never flags, a position in code or an order two parties assume
-status: accepted
+status: amended-in-part by [0045](0045-one-tea-machine-per-file.md)
 date: 2026-11-09
 tags: [state-machine, control-state, tagged-union, tea, properties, replay, next]
 ---
@@ -36,6 +36,8 @@ sql.transaction(() => { if (!ready) makeTables(); ready = true; return step() })
 type Tables = "cold" | "ready"
 const next = (state: Tables, committed: boolean): Tables => (committed ? "ready" : state)
 ```
+
+*Amended 2026-11-09 by [0045](0045-one-tea-machine-per-file.md): the form is always a tea machine. The "tagged union plus one transition function" form below no longer holds; everything else here does.*
 
 ## Context
 
