@@ -1,12 +1,14 @@
 // P14, next/ (Tier 1, ticket 286): the program client's rules, p1 and p3 and the counter folds, as
-// properties on one tea machine (plan A5, decision 0046). Written before `app/client.ts`'s
-// `clientMachine`, `app/window.ts` and `app/patch.ts#applyPatch` (docs/plan/ticket-115.md p1, p3; the
-// plan's "Shared client data" and "Checked views"). The modules load by `import()` inside each test,
-// so a missing one is a red test and not a file that cannot be collected.
+// properties on one tea machine (plan A5 and A7, decision 0046). Written before `app/client.ts`'s
+// `clientMachineFor`, `app/window.ts` and `app/patch.ts#applyPatch` (docs/plan/ticket-115.md p1, p3;
+// the plan's "Shared client data" and "Checked views"). The modules load by `import()` inside each
+// test, so a missing one is a red test and not a file that cannot be collected.
 //
 // The shape these laws hold the modules to, from the plan's sketches (the build may add more):
-// - `clientMachine` (app/client.ts): a tea machine whose Model is `Client` and whose `init(null)` is
-//   the empty client: no pending letter, `written` 0, `seen` 0, no view. It has no Cmds of its own.
+// - `clientMachineFor(checks)` (app/client.ts, A7): a machine factory. It returns one tea machine
+//   whose Model is `Client` and whose `init(null)` is the empty client: no pending letter, `written`
+//   0, `seen` 0, no view. `checks` is `{decode?: (pid) => (view) => unknown}`, each program's own
+//   decoder by pid, captured by the factory: never in the Model, a Msg or a Cmd's input.
 // - `press {pid, m}`: reserves slot `n = written` as `{_tag: "dating", n, pid, m, seen, viewRev}` with
 //   the view revision shown for `pid` (0 if none) and `seen`; `written` grows by one.
 // - `dated {n, letter, sentAt}`: the slot `n` becomes `{_tag: "ready", ..., letter, sentAt}`. No slot,
@@ -14,10 +16,11 @@
 // - `reply {letter, answer}`: `answer` is `Sent` (accepted or refused), or `{_tag: "unreachable"}` or
 //   `{_tag: "unknown"}`. Only a matching accepted or refused answer removes that one letter.
 // - `read {rev}`: raises `seen` to `rev`, never lowers it, and moves no letter.
+// - `notice {pid, note}`: one view notification, checked with `checks.decode(pid)` (any JSON view when
+//   there is none). It moves no letter. When the client wants a whole view it asks the machine's one
+//   Cmd, `ask {pid}`, and nothing else; otherwise it asks nothing.
 // - `outbox(c)` (app/client.ts, a read of the Model): the ready letters in slot order, each with the
 //   letter id it first got.
-// - `notice`: a view notification. Its form is the lead's open call (this round's answer): the p3 and
-//   counter laws below still call today's `notice(c, pid, note, decode)` until it is made.
 // - `applyPatch(before, ops)`: an Effect `Result` of the next value; it never changes `before`.
 // - `ClientRecord` and `failureRecord(error)` (app/window.ts): a record row holds ids, numbers and
 //   fixed words only.
@@ -58,45 +61,39 @@ type Client = {
 
 type Answer = {readonly _tag: string; readonly [key: string]: unknown};
 
-/** The client's Msgs these laws draw. `notice` waits on the lead's call (header). */
+type Notice = {readonly type: "notice"; readonly pid: string; readonly note: unknown};
+
+/** The client's Msgs these laws draw. */
 type ClientMsg =
 	| {readonly type: "press"; readonly pid: string; readonly m: unknown}
 	| {readonly type: "dated"; readonly n: number; readonly letter: Letter; readonly sentAt: string}
 	| {readonly type: "reply"; readonly letter: Letter; readonly answer: Answer}
-	| {readonly type: "read"; readonly rev: number};
+	| {readonly type: "read"; readonly rev: number}
+	| Notice;
+
+type Cmd = {readonly type: string; readonly [key: string]: unknown};
 
 type Step = {
 	readonly prev: Client;
 	readonly msg: ClientMsg;
 	readonly next: Client;
-	readonly cmds: ReadonlyArray<unknown>;
+	readonly cmds: ReadonlyArray<Cmd>;
 };
 
-type Update = (s: Client, m: ClientMsg) => readonly [Client, ReadonlyArray<unknown>];
+type Update = (s: Client, m: ClientMsg) => readonly [Client, ReadonlyArray<Cmd>];
 
 interface ClientMachine {
-	readonly init: (loaded: Client | null, ctx: object) => readonly [Client, ReadonlyArray<unknown>];
+	readonly init: (loaded: Client | null, ctx: object) => readonly [Client, ReadonlyArray<Cmd>];
 	readonly update: Readonly<Record<string, Update>>;
 }
 
-/** What the machine laws run on: the real machine and its read, or a planted copy of either. */
-interface MachineApi {
-	readonly clientMachine: ClientMachine;
-	readonly outbox: (c: Client) => ReadonlyArray<Pending>;
-}
+/** What a client checks a view with (A7): each program's own decoder, by pid. */
+type Checks = {readonly decode?: (pid: string) => (view: unknown) => unknown};
 
-/** Today's view step, which the p3 and counter laws still call until the lead's call on `notice`. */
-interface ClientApi {
-	readonly emptyClient: Client;
-	readonly press: (c: Client, input: {pid: string; m: unknown}) => Client;
-	readonly dated: (c: Client, n: number, stamp: {letter: Letter; sentAt: string}) => Client;
+/** What the machine laws run on: the real factory and its read, or a planted copy of either. */
+interface MachineApi {
+	readonly clientMachineFor: (checks: Checks) => ClientMachine;
 	readonly outbox: (c: Client) => ReadonlyArray<Pending>;
-	readonly notice: (
-		c: Client,
-		pid: string,
-		note: unknown,
-		decode: (u: unknown) => unknown,
-	) => {readonly client: Client; readonly ask: boolean};
 }
 
 interface WindowApi {
@@ -111,7 +108,6 @@ interface PatchApi {
 	) => Result.Result<unknown, unknown>;
 }
 
-const client = async (): Promise<ClientApi> => (await import(LOAD)) as ClientApi;
 const patching = async (): Promise<PatchApi> => (await import(PATCH)) as PatchApi;
 
 const windowing = async (): Promise<WindowApi> => {
@@ -123,27 +119,88 @@ const windowing = async (): Promise<WindowApi> => {
 
 const machine = async (): Promise<MachineApi> => {
 	const api = (await import(LOAD)) as Partial<MachineApi>;
-	expect(api.clientMachine, "app/client.ts exports clientMachine").toBeDefined();
+	expect(api.clientMachineFor, "app/client.ts exports the factory clientMachineFor").toBeTypeOf(
+		"function",
+	);
 	expect(api.outbox, "app/client.ts keeps outbox, a read of the Model").toBeTypeOf("function");
 	return api as MachineApi;
 };
+
+/** The real factory with one Msg's step of every machine it makes rewired: a plant's one break. */
+const rewired = (
+	api: MachineApi,
+	type: ClientMsg["type"],
+	wrap: (real: Update) => Update,
+): MachineApi => ({
+	...api,
+	clientMachineFor: (checks) => {
+		const made = api.clientMachineFor(checks);
+		const real = made.update[type];
+		expect(real, `clientMachineFor's machine has a ${type} step`).toBeTypeOf("function");
+		return {...made, update: {...made.update, [type]: wrap(real as Update)}};
+	},
+});
 
 /** The real machine with one Msg's step post-processed: a plant's one break. */
 const planted = (
 	api: MachineApi,
 	type: ClientMsg["type"],
-	change: (out: readonly [Client, ReadonlyArray<unknown>], s: Client, m: ClientMsg) => Client,
-): MachineApi => {
-	const real = api.clientMachine.update[type];
-	expect(real, `clientMachine has a ${type} step`).toBeTypeOf("function");
-	const step: Update = (s, m) => {
-		const out = (real as Update)(s, m);
+	change: (out: readonly [Client, ReadonlyArray<Cmd>], s: Client, m: ClientMsg) => Client,
+): MachineApi =>
+	rewired(api, type, (real) => (s, m) => {
+		const out = real(s, m);
 		return [change(out, s, m), out[1]];
-	};
-	return {
-		...api,
-		clientMachine: {...api.clientMachine, update: {...api.clientMachine.update, [type]: step}},
-	};
+	});
+
+/**
+ * Folds one fixed list of Msgs through the machine with tea's own runner, from its real `init`
+ * (or a saved `loaded` Model), and hands back the steps and the final Model. A step that throws
+ * fails the run, so a law that folds junk proves it never throws.
+ */
+const stepped = (
+	m: ClientMachine,
+	list: ReadonlyArray<ClientMsg>,
+	loaded?: Client,
+): {readonly steps: ReadonlyArray<Step>; readonly final: Client} => {
+	let out: {steps: ReadonlyArray<Step>; final: Client} | undefined;
+	propertyTrace(
+		m as never,
+		{} as never,
+		fc.constant(list) as never,
+		((steps: ReadonlyArray<Step>, final: Client) => {
+			out = {steps, final};
+			return null;
+		}) as never,
+		{
+			numRuns: 1,
+			failOnUndeclaredCmd: true,
+			...(loaded === undefined ? {} : {loaded: loaded as never}),
+		},
+	);
+
+	if (out === undefined) {
+		throw new Error("the fold of a fixed list never ran");
+	}
+
+	return out;
+};
+
+const notice = (pid: string, note: unknown): Notice => ({type: "notice", pid, note});
+
+/** Whether a notice step asked for a whole view. It asks nothing, or the one Cmd `ask {pid}` for its
+ *  own pid and nothing more: the decoder never rides in a Cmd. */
+const asks = (step: Step | undefined): boolean => {
+	expect(step, "the fold reached this step").toBeDefined();
+	const {msg, cmds} = step as Step;
+
+	if (cmds.length === 0) {
+		return false;
+	}
+
+	expect(cmds, "a notice asks at most one whole view, for its own pid").toEqual([
+		{type: "ask", pid: (msg as Notice).pid},
+	]);
+	return true;
 };
 
 // --- p1: a letter is never lost -----------------------------------------------------------------
@@ -154,9 +211,27 @@ type Op =
 	| {readonly op: "press"; readonly pid: string; readonly m: {type: string}}
 	| {readonly op: "dated"; readonly slot: number; readonly dup: boolean}
 	| {readonly op: "reply"; readonly nth: number; readonly kind: string}
-	| {readonly op: "read"; readonly rev: number};
+	| {readonly op: "read"; readonly rev: number}
+	| {readonly op: "notice"; readonly pid: string; readonly note: unknown};
 
-/** Blind events: the same presses, dating answers and replies as before A5, plus reads. */
+/** View notes for p1: wholes, patches at any revision, and junk. None of them may move a letter. */
+const p1Notes = fc.oneof(
+	fc.record({
+		type: fc.constant("whole"),
+		rev: fc.nat(9),
+		view: fc.record({count: fc.integer({min: -5, max: 5})}),
+	}),
+	fc.record({
+		type: fc.constant("patch"),
+		base: fc.nat(9),
+		rev: fc.nat(10),
+		patch: fc.constant([{op: "replace", path: "/count", value: 1}]),
+	}),
+	fc.jsonValue(),
+);
+
+/** Blind events: the same presses, dating answers and replies as before A5, plus reads and (A7)
+ *  view notices. The lists grew by ten so the old events keep their reach. */
 const ops = fc.array(
 	fc.oneof(
 		{
@@ -187,8 +262,16 @@ const ops = fc.array(
 			weight: 2,
 			arbitrary: fc.record({op: fc.constant("read" as const), rev: fc.nat(40)}),
 		},
+		{
+			weight: 2,
+			arbitrary: fc.record({
+				op: fc.constant("notice" as const),
+				pid: fc.constantFrom(...PIDS),
+				note: p1Notes,
+			}),
+		},
 	) as fc.Arbitrary<Op>,
-	{minLength: 1, maxLength: 60},
+	{minLength: 1, maxLength: 70},
 );
 
 const answerFor = (kind: string): Answer =>
@@ -214,6 +297,10 @@ const toMsgs = (list: ReadonlyArray<Op>): ReadonlyArray<ClientMsg> => {
 
 		if (o.op === "read") {
 			return {type: "read", rev: o.rev};
+		}
+
+		if (o.op === "notice") {
+			return notice(o.pid, o.note);
 		}
 
 		if (o.op === "dated") {
@@ -247,9 +334,19 @@ const lettersKept = (api: MachineApi, steps: ReadonlyArray<Step>): string | null
 	let presses = 0;
 	let seen = 0;
 
-	for (const {msg, next} of steps) {
+	for (const {prev, msg, next} of steps) {
 		if (msg.type === "press") {
-			model.push({n: presses++, letter: null, pid: msg.pid, m: msg.m});
+			const n = presses++;
+			model.push({n, letter: null, pid: msg.pid, m: msg.m});
+			// A press keeps what this client showed and had read when it was made.
+			const slot = next.pending.find((p) => p.n === n);
+			const want = {viewRev: prev.views[msg.pid]?.rev ?? 0, seen: prev.seen};
+
+			if (slot?.viewRev !== want.viewRev || slot.seen !== want.seen) {
+				return `press: slot ${n} captured ${JSON.stringify(slot)}, it showed ${JSON.stringify(want)}`;
+			}
+		} else if (msg.type === "notice") {
+			// A view notice moves no letter: the model stays as it was.
 		} else if (msg.type === "dated") {
 			const slot = model.find((x) => x.n === msg.n);
 
@@ -310,19 +407,22 @@ const lettersKept = (api: MachineApi, steps: ReadonlyArray<Step>): string | null
 	return null;
 };
 
+/** p1 is not about the decoder: its machine checks no view beyond JSON. */
+const P1_CHECKS: Checks = {};
+
 const p1 = (api: MachineApi) =>
 	propertyTrace(
-		api.clientMachine as never,
+		api.clientMachineFor(P1_CHECKS) as never,
 		{} as never,
 		msgs as never,
 		((steps: ReadonlyArray<Step>) => lettersKept(api, steps)) as never,
 		{seed: SEED, numRuns: RUNS},
 	);
 
-describe("p1: a letter is never lost (clientMachine)", () => {
+describe("p1: a letter is never lost (clientMachineFor)", () => {
 	it("only a matching terminal answer removes a letter; written grows per press; ids never repeat", async () => {
 		const api = await machine();
-		const [empty] = api.clientMachine.init(null, {});
+		const [empty] = api.clientMachineFor(P1_CHECKS).init(null, {});
 		expect(empty).toEqual({written: 0, seen: 0, pending: [], views: {}});
 		p1(api);
 	});
@@ -333,7 +433,7 @@ describe("p1: a letter is never lost (clientMachine)", () => {
 			settled = 0,
 			dating = 0;
 		const run = propertyTrace(
-			api.clientMachine as never,
+			api.clientMachineFor(P1_CHECKS) as never,
 			{} as never,
 			msgs as never,
 			((steps: ReadonlyArray<Step>, final: Client) => {
@@ -355,7 +455,7 @@ describe("p1: a letter is never lost (clientMachine)", () => {
 			dating: true,
 		});
 
-		for (const type of ["press", "dated", "reply", "read"]) {
+		for (const type of ["press", "dated", "reply", "read", "notice"]) {
 			expect(run.msgCounts.get(type)?.acted ?? 0, `${type} acted`).toBeGreaterThan(0);
 		}
 	});
@@ -391,6 +491,23 @@ describe("p1: a letter is never lost (clientMachine)", () => {
 			p1(planted(api, "read", ([c]) => ({...c, pending: c.pending.slice(1)}))),
 		).toThrow();
 	});
+	it("plant: a notice that moves a letter is caught", async () => {
+		const api = await machine();
+		expect(() =>
+			p1(planted(api, "notice", ([c]) => ({...c, pending: c.pending.slice(1)}))),
+		).toThrow();
+	});
+	it("plant: a press that does not keep the view revision it showed is caught", async () => {
+		const api = await machine();
+		expect(() =>
+			p1(
+				planted(api, "press", ([c]) => ({
+					...c,
+					pending: c.pending.map((p) => (p.n === c.written - 1 ? {...p, viewRev: 0} : p)),
+				})),
+			),
+		).toThrow();
+	});
 });
 
 // --- p3: views move forward by one ------------------------------------------------------------
@@ -401,7 +518,8 @@ const json: fc.Arbitrary<unknown> = fc
 	.filter((v) => !JSON.stringify(v).includes("__proto__"));
 
 const objects = fc.dictionary(fc.string({maxLength: 6}), json, {maxKeys: 5});
-const decodeAny = (u: unknown): unknown => u;
+const A = "process_a";
+const B = "process_b";
 
 const isJson = (u: unknown): boolean => {
 	try {
@@ -411,8 +529,36 @@ const isJson = (u: unknown): boolean => {
 	}
 };
 
-/** One law per rule, each a function of the client under test, so a plant can run the same check. */
-const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
+/** A program's view decoder that takes any JSON object and refuses everything else, the way a
+ *  view schema refuses: by its own Schema error. */
+const objectView = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json));
+
+/** A decoder with a bug: it throws a plain error on everything. */
+const throwing = (): unknown => {
+	throw new Error("not a view");
+};
+
+/** Checks that accept every object view these laws draw: none, the identity, and a schema's own. */
+const accepting: fc.Arbitrary<Checks> = fc.constantFrom<Checks>(
+	{},
+	{decode: () => (view) => view},
+	{decode: () => objectView},
+);
+
+/** Every kind of checks: ones that accept, one that refuses by its schema, one that throws, and
+ *  one that tells two pids apart. */
+const anyChecks: fc.Arbitrary<Checks> = fc.oneof(
+	accepting,
+	fc.constantFrom<Checks>(
+		{decode: () => Schema.decodeUnknownSync(Schema.Struct({count: Schema.Int}))},
+		{decode: () => throwing},
+		{decode: (pid) => (pid === A ? throwing : (view) => view)},
+	),
+);
+
+/** One law per rule, each a function of the machine factory under test, so a plant can run the
+ *  same check. Each folds `notice` Msgs through the machine from its real init (A7). */
+const viewLaws: Readonly<Record<string, (api: MachineApi) => void>> = {
 	"forward by one": (api) =>
 		fc.assert(
 			fc.property(
@@ -420,214 +566,244 @@ const viewLaws: Readonly<Record<string, (api: ClientApi) => void>> = {
 				objects,
 				fc.integer({min: 1, max: 1000}),
 				fc.integer({min: 2, max: 9}),
-				(a, b, rev, gap) => {
-					const first = api.notice(
-						api.emptyClient,
-						"process_a",
-						{type: "whole", rev, view: a},
-						decodeAny,
-					);
-					expect(first.client.views["process_a"]).toEqual({rev, view: a});
-					expect(first.ask).toBe(false);
-					const next = api.notice(
-						first.client,
-						"process_a",
-						{type: "patch", base: rev, rev: rev + 1, patch: diff(a, b)},
-						decodeAny,
-					);
-					expect(next.client.views["process_a"]).toEqual({rev: rev + 1, view: b});
-					expect(next.ask).toBe(false);
-					// Older and equal revisions do nothing and ask for nothing.
-					const old = api.notice(
-						next.client,
-						"process_a",
-						{type: "patch", base: rev - 1, rev, patch: diff(b, a)},
-						decodeAny,
-					);
-					expect(old.client.views).toEqual(next.client.views);
-					expect(old.ask).toBe(false);
-					// A gap leaves the view and asks for a whole.
-					const hole = api.notice(
-						next.client,
-						"process_a",
-						{type: "patch", base: rev + gap, rev: rev + gap + 1, patch: diff(b, a)},
-						decodeAny,
-					);
-					expect(hole.client.views).toEqual(next.client.views);
-					expect(hole.ask).toBe(true);
-					// A whole copy always replaces, a lower revision included (data was reset).
-					const reset = api.notice(
-						next.client,
-						"process_a",
-						{type: "whole", rev: 1, view: a},
-						decodeAny,
-					);
-					expect(reset.client.views["process_a"]).toEqual({rev: 1, view: a});
+				accepting,
+				(a, b, rev, gap, checks) => {
+					const {steps} = stepped(api.clientMachineFor(checks), [
+						notice(A, {type: "whole", rev, view: a}),
+						notice(A, {type: "patch", base: rev, rev: rev + 1, patch: diff(a, b)}),
+						// Older and equal revisions do nothing and ask for nothing.
+						notice(A, {type: "patch", base: rev - 1, rev, patch: diff(b, a)}),
+						// A gap leaves the view and asks for a whole.
+						notice(A, {type: "patch", base: rev + gap, rev: rev + gap + 1, patch: diff(b, a)}),
+						// A whole copy always replaces, a lower revision included (data was reset).
+						notice(A, {type: "whole", rev: 1, view: a}),
+					]);
+					const [first, next, old, hole, reset] = steps;
+					expect(first?.next.views[A]).toEqual({rev, view: a});
+					expect(asks(first)).toBe(false);
+					expect(next?.next.views[A]).toEqual({rev: rev + 1, view: b});
+					expect(asks(next)).toBe(false);
+					expect(old?.next.views).toEqual(next?.next.views);
+					expect(asks(old)).toBe(false);
+					expect(hole?.next.views).toEqual(next?.next.views);
+					expect(asks(hole)).toBe(true);
+					expect(reset?.next.views[A]).toEqual({rev: 1, view: a});
+					expect(asks(reset)).toBe(false);
 				},
 			),
 			{seed: SEED, numRuns: RUNS},
 		),
 	"real diffs reach their target": (api) =>
 		fc.assert(
-			fc.property(fc.array(objects, {minLength: 2, maxLength: 8}), (views) => {
-				let c = api.notice(
-					api.emptyClient,
-					"process_a",
-					{type: "whole", rev: 7, view: views[0]},
-					decodeAny,
-				).client;
-
-				for (let i = 1; i < views.length; i++) {
-					c = api.notice(
-						c,
-						"process_a",
-						{type: "patch", base: 6 + i, rev: 7 + i, patch: diff(views[i - 1], views[i])},
-						decodeAny,
-					).client;
-				}
-
-				expect(c.views["process_a"]).toEqual({rev: 6 + views.length, view: views.at(-1)});
+			fc.property(fc.array(objects, {minLength: 2, maxLength: 8}), accepting, (views, checks) => {
+				const {steps, final} = stepped(api.clientMachineFor(checks), [
+					notice(A, {type: "whole", rev: 7, view: views[0]}),
+					...views
+						.slice(1)
+						.map((view, i) =>
+							notice(A, {type: "patch", base: 7 + i, rev: 8 + i, patch: diff(views[i], view)}),
+						),
+				]);
+				expect(final.views[A]).toEqual({rev: 6 + views.length, view: views.at(-1)});
+				// A real diff at the shown revision never asks for a whole.
+				expect(steps.map(asks)).toEqual(steps.map(() => false));
 			}),
 			{seed: SEED, numRuns: RUNS},
 		),
-	"junk never throws and changes nothing": (api) =>
+	"junk never throws and changes nothing, with any decoder": (api) =>
 		fc.assert(
-			fc.property(json, fc.jsonValue(), objects, (junk, other, good) => {
-				const base = api.notice(
-					api.emptyClient,
-					"process_a",
-					{type: "whole", rev: 3, view: good},
-					decodeAny,
-				).client;
-
-				for (const note of [
-					junk,
-					other,
+			fc.property(json, fc.jsonValue(), objects, anyChecks, (junk, other, good, checks) => {
+				const isNote = (u: unknown): boolean =>
+					typeof u === "object" &&
+					u !== null &&
+					((u as {type?: unknown}).type === "whole" || (u as {type?: unknown}).type === "patch");
+				const bad = [
 					{type: "patch", base: 3, rev: 4, patch: "junk"},
 					{type: "patch", base: 3, rev: 4, patch: 7},
 					{type: "patch", base: 3, rev: 4, patch: [{op: "add", path: "/__proto__/x", value: 1}]},
 					{type: "patch", base: 3, rev: 4, patch: [{op: "add", path: "no-slash", value: 1}]},
-				]) {
-					expect(api.notice(base, "process_a", note, decodeAny).client.views).toEqual(base.views);
+				];
+				const {steps} = stepped(api.clientMachineFor(checks), [
+					notice(A, {type: "whole", rev: 3, view: good}),
+					...[junk, other, ...bad].map((note) => notice(A, note)),
+				]);
+
+				expect(steps).toHaveLength(7);
+
+				for (const [i, step] of steps.entries()) {
+					if (i === 0) {
+						continue;
+					}
+
+					expect(step.next.views).toEqual(step.prev.views);
+
+					// Junk that is no view note does nothing and asks nothing. A bad patch at the shown
+					// revision (steps 3 to 6) asks for a whole.
+					if (i >= 3) {
+						expect(asks(step)).toBe(true);
+					} else if (!isNote((step.msg as Notice).note)) {
+						expect(asks(step)).toBe(false);
+					}
 				}
 
 				expect(({} as {x?: unknown}).x).toBeUndefined();
 			}),
 			{seed: SEED, numRuns: RUNS},
 		),
-	"a candidate the decoder refuses is never installed": (api) =>
+	// A7: the decoder is the program's own, looked up by the notice's pid. One that refuses by its
+	// schema and one that throws are refusals alike; the other pid's decoder accepts.
+	"a candidate the decoder refuses is never installed, and only its own pid's decoder decides": (
+		api,
+	) =>
 		fc.assert(
-			fc.property(objects, fc.string(), (good, text) => {
-				const base = api.notice(
-					api.emptyClient,
-					"process_a",
-					{type: "whole", rev: 3, view: good},
-					decodeAny,
-				).client;
-				const reject = (): unknown => {
-					throw new Error("not a view");
-				};
-				const refused = api.notice(
-					base,
-					"process_a",
-					{type: "patch", base: 3, rev: 4, patch: [{op: "replace", path: "", value: text}]},
-					reject,
-				);
-				expect(refused.client.views).toEqual(base.views);
-				expect(refused.ask).toBe(true);
-			}),
+			fc.property(
+				objects,
+				fc.string(),
+				fc.constantFrom(A, B),
+				fc.constantFrom("refuses", "throws"),
+				(good, text, pid, how) => {
+					const other = pid === A ? B : A;
+					// "refuses" takes the object view and refuses the string; "throws" refuses both.
+					const refuser = how === "refuses" ? objectView : throwing;
+					const checks: Checks = {decode: (p) => (p === pid ? refuser : (view) => view)};
+					const patch = {
+						type: "patch",
+						base: 3,
+						rev: 4,
+						patch: [{op: "replace", path: "", value: text}],
+					};
+					const {steps} = stepped(api.clientMachineFor(checks), [
+						notice(pid, {type: "whole", rev: 3, view: good}),
+						notice(other, {type: "whole", rev: 3, view: good}),
+						notice(pid, patch),
+						notice(other, patch),
+					]);
+					const [whole, otherWhole, refused, otherPatch] = steps;
+
+					if (how === "refuses") {
+						expect(whole?.next.views[pid]).toEqual({rev: 3, view: good});
+						expect(asks(whole)).toBe(false);
+					} else {
+						// A refused whole is never installed either, and asks for a whole again.
+						expect(whole?.next.views[pid]).toBeUndefined();
+						expect(asks(whole)).toBe(true);
+					}
+
+					expect(otherWhole?.next.views[other]).toEqual({rev: 3, view: good});
+					expect(refused?.next.views).toEqual(refused?.prev.views);
+					expect(asks(refused)).toBe(true);
+					expect(otherPatch?.next.views[other]).toEqual({rev: 4, view: text});
+					expect(asks(otherPatch)).toBe(false);
+				},
+			),
 			{seed: SEED, numRuns: RUNS},
 		),
 	"the old view is never mutated, untouched views keep their reference": (api) =>
 		fc.assert(
-			fc.property(objects, objects, (a, b) => {
+			fc.property(objects, objects, accepting, (a, b, checks) => {
 				const frozen = structuredClone(a);
-				const c0 = api.notice(
-					api.emptyClient,
-					"process_a",
-					{type: "whole", rev: 1, view: a},
-					decodeAny,
-				).client;
-				const other = api.notice(
-					c0,
-					"process_b",
-					{type: "whole", rev: 1, view: {k: 1}},
-					decodeAny,
-				).client;
-				const c1 = api.notice(
-					other,
-					"process_a",
-					{type: "patch", base: 1, rev: 2, patch: diff(a, b)},
-					decodeAny,
-				).client;
+				const {steps} = stepped(api.clientMachineFor(checks), [
+					notice(A, {type: "whole", rev: 1, view: a}),
+					notice(B, {type: "whole", rev: 1, view: {k: 1}}),
+					notice(A, {type: "patch", base: 1, rev: 2, patch: diff(a, b)}),
+				]);
+				const patched = steps[2];
 				expect(a).toEqual(frozen);
-				expect(c1.views["process_b"]).toBe(other.views["process_b"]);
+				expect(patched?.prev.views[A]?.view).toEqual(frozen);
+				expect(patched?.next.views[B]).toBe(patched?.prev.views[B]);
 			}),
 			{seed: SEED, numRuns: RUNS},
 		),
 };
 
-describe("p3: views move forward by one (client)", () => {
-	for (const [name, law] of Object.entries(viewLaws)) {
-		it(name, async () => law(await client()));
+const FORWARD = "forward by one";
+const JUNK = "junk never throws and changes nothing, with any decoder";
+
+const REFUSED =
+	"a candidate the decoder refuses is never installed, and only its own pid's decoder decides";
+
+const MUTATED = "the old view is never mutated, untouched views keep their reference";
+
+const law = (name: string, api: MachineApi): void => {
+	const run = viewLaws[name];
+	expect(run, `a view law named ${name}`).toBeTypeOf("function");
+	(run as (api: MachineApi) => void)(api);
+};
+
+/** The note a Msg carries when it is a notice of an object, else an empty one. */
+const carried = (m: ClientMsg): {type?: unknown; base?: unknown; rev?: unknown} =>
+	m.type === "notice" && typeof m.note === "object" && m.note !== null ? m.note : {};
+
+describe("p3: views move forward by one (clientMachineFor)", () => {
+	for (const name of Object.keys(viewLaws)) {
+		it(name, async () => law(name, await machine()));
 	}
 
-	// Plants (p3): apply across a gap; install a string count; mutate the old view.
+	// Plants (p3): apply across a gap; install a string count; mutate the old view. Each rewires the
+	// real machine's `notice` step, or the factory's checks, with one break.
 	it("plant: applying across a gap is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			notice: (c, pid, note, d) => {
-				const n = note as {type?: string; patch?: unknown};
-				const at = c.views[pid]?.rev ?? 0;
-				return n.type === "patch"
-					? real.notice(c, pid, {...n, base: at, rev: at + 1}, d)
-					: real.notice(c, pid, note, d);
-			},
-		};
-		expect(() => viewLaws["forward by one"]?.(broken)).toThrow();
+		const broken = rewired(await machine(), "notice", (real) => (s, m) => {
+			const n = carried(m);
+			const at = m.type === "notice" ? (s.views[m.pid]?.rev ?? 0) : 0;
+			return m.type === "notice" && n.type === "patch"
+				? real(s, {...m, note: {...n, base: at, rev: at + 1}})
+				: real(s, m);
+		});
+		expect(() => law(FORWARD, broken)).toThrow();
+	});
+	it("plant: a gap that asks for no whole view, or asks for another pid, is caught", async () => {
+		const api = await machine();
+		const silent = rewired(api, "notice", (real) => (s, m) => [real(s, m)[0], []]);
+		expect(() => law(FORWARD, silent)).toThrow();
+		const elsewhere = rewired(api, "notice", (real) => (s, m) => {
+			const [next, cmds] = real(s, m);
+			return [next, cmds.map((c) => ({...c, pid: "process_z"}))];
+		});
+		expect(() => law(FORWARD, elsewhere)).toThrow();
 	});
 	it("plant: installing a candidate the decoder refused is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			notice: (c, pid, note, _d) => real.notice(c, pid, note, decodeAny),
+		const api = await machine();
+		// The factory drops the program's decoder and checks only that a view is JSON.
+		const broken: MachineApi = {...api, clientMachineFor: () => api.clientMachineFor({})};
+		expect(() => law(REFUSED, broken)).toThrow();
+	});
+	it("plant: a decoder looked up by another pid is caught", async () => {
+		const api = await machine();
+		const broken: MachineApi = {
+			...api,
+			clientMachineFor: (checks) =>
+				api.clientMachineFor(
+					checks.decode === undefined
+						? {}
+						: {decode: () => (checks.decode as (pid: string) => (v: unknown) => unknown)(A)},
+				),
 		};
-		expect(() =>
-			viewLaws["a candidate the decoder refuses is never installed"]?.(broken),
-		).toThrow();
+		expect(() => law(REFUSED, broken)).toThrow();
 	});
 	it("plant: mutating the old view is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			notice: (c, pid, note, d) => {
-				const out = real.notice(c, pid, note, d);
-				const cur = c.views[pid]?.view;
+		const broken = rewired(await machine(), "notice", (real) => (s, m) => {
+			const out = real(s, m);
+			const cur = m.type === "notice" ? s.views[m.pid]?.view : undefined;
 
-				if (typeof cur === "object" && cur !== null) {
-					Object.assign(cur, {leak: 1});
-				}
+			if (typeof cur === "object" && cur !== null) {
+				Object.assign(cur, {leak: 1});
+			}
 
-				return out;
-			},
-		};
-		expect(() =>
-			viewLaws["the old view is never mutated, untouched views keep their reference"]?.(broken),
-		).toThrow();
+			return out;
+		});
+		expect(() => law(MUTATED, broken)).toThrow();
 	});
 	it("plant: a throwing client on junk is caught", async () => {
-		const real = await client();
-		const broken: ClientApi = {
-			...real,
-			notice: (c, pid, note, d) =>
-				note === null || typeof note !== "object" || Array.isArray(note)
-					? (() => {
-							throw new Error("boom");
-						})()
-					: real.notice(c, pid, note, d),
-		};
-		expect(() => viewLaws["junk never throws and changes nothing"]?.(broken)).toThrow();
+		const broken = rewired(await machine(), "notice", (real) => (s, m) => {
+			const note = m.type === "notice" ? m.note : null;
+
+			if (note === null || typeof note !== "object" || Array.isArray(note)) {
+				throw new Error("boom");
+			}
+
+			return real(s, m);
+		});
+		expect(() => law(JUNK, broken)).toThrow();
 	});
 });
 
@@ -709,10 +885,13 @@ const counterMachine = Machine.make({
 });
 
 /** The independent fold: the count after `msgs` is what arithmetic says, reset to zero included. */
-const fold = (msgs: ReadonlyArray<{type: string}>): number =>
+const counted = (msgs: ReadonlyArray<{type: string}>): number =>
 	msgs.reduce((n, m) => (m.type === "inc" ? n + 1 : m.type === "dec" ? n - 1 : 0), 0);
 
-describe("the counter's typed views and resends agree with an independent fold", () => {
+/** The counter's checks: its view decoder is the counter's own model schema, for every pid. */
+const counterChecks: Checks = {decode: () => Schema.decodeUnknownSync(CounterModel)};
+
+describe("the counter's typed views and resends agree with an independent fold (clientMachineFor)", () => {
 	it.effect.prop(
 		"each distinct letter moves the shown count once, however many times it is resent, and the cache is not the truth",
 		{
@@ -723,41 +902,38 @@ describe("the counter's typed views and resends agree with an independent fold",
 		},
 		({msgs, resends}) =>
 			Effect.promise(async () => {
-				const api = await client();
-				const decode = Schema.decodeUnknownSync(CounterModel);
+				const api = await machine();
+				const client = api.clientMachineFor(counterChecks);
 				// The "brain": the real counter machine, stepping each distinct letter once, saving letters.
 				let [model] = counterMachine.init(null, {});
 				let rev = 0;
 				const saved: Array<{type: string}> = [];
 				const seenLetters = new Set<string>();
-				let c = api.emptyClient;
-				c = api.notice(
-					c,
-					"process_a",
-					{type: "whole", rev, view: {count: model.count}},
-					decode,
-				).client;
+				// The client shows the first whole view, takes every press, and dates every slot.
+				const dated = stepped(client, [
+					notice(A, {type: "whole", rev, view: {count: model.count}}),
+					...msgs.map((m): ClientMsg => ({type: "press", pid: A, m})),
+					...msgs.map((_, n): ClientMsg => ({
+						type: "dated",
+						n,
+						letter: `letter_${n}`,
+						sentAt: SENT_AT,
+					})),
+				]).final;
+				const notes: Array<ClientMsg> = [];
 
-				for (const m of msgs) {
-					c = api.press(c, {pid: "process_a", m});
-				}
-
-				for (const n of msgs.keys()) {
-					c = api.dated(c, n, {letter: `letter_${n}`, sentAt: "2026-11-09T00:00:00.000Z"});
-				}
-
-				const send = (n: number): void => {
-					const letter = api.outbox(c).find((p) => p.n === n)?.letter;
+				for (const n of [...msgs.keys(), ...resends.filter((r) => r < msgs.length)]) {
+					const letter = api.outbox(dated).find((p) => p.n === n)?.letter;
 
 					if (letter === undefined || seenLetters.has(letter)) {
-						return;
+						continue;
 					} // a resend: placed once already
 
 					seenLetters.add(letter);
 					const m = msgs[n];
 
 					if (m === undefined) {
-						return;
+						continue;
 					}
 
 					const [next] = applyCell(counterMachine, model, m as never);
@@ -765,46 +941,54 @@ describe("the counter's typed views and resends agree with an independent fold",
 					model = next;
 					saved.push(m);
 					rev++;
-					c = api.notice(c, "process_a", {type: "patch", base: rev - 1, rev, patch}, decode).client;
-				};
-
-				for (const n of [...msgs.keys(), ...resends.filter((r) => r < msgs.length)]) {
-					send(n);
+					notes.push(notice(A, {type: "patch", base: rev - 1, rev, patch}));
 				}
 
-				expect(c.views["process_a"]?.view).toEqual({count: fold(saved)});
-				expect(c.views["process_a"]?.view).toEqual({
-					count: fold(msgs.filter((_, n) => seenLetters.has(`letter_${n}`))),
+				// The brain's view notices reach the client as `notice` Msgs; none of them asks again.
+				const shown = stepped(client, notes, dated);
+				expect(shown.steps.map((s) => s.cmds)).toEqual(shown.steps.map(() => []));
+				const c = shown.final;
+				expect(c.views[A]?.view).toEqual({count: counted(saved)});
+				expect(c.views[A]?.view).toEqual({
+					count: counted(msgs.filter((_, n) => seenLetters.has(`letter_${n}`))),
 				});
-				// Discarding the view cache loses no saved count: a whole view from the saved letters restores it.
-				const cleared = {...c, views: {}};
-				const restored = api.notice(
-					cleared,
-					"process_a",
-					{type: "whole", rev, view: {count: fold(saved)}},
-					decode,
-				).client;
-				expect(restored.views["process_a"]?.view).toEqual(c.views["process_a"]?.view);
+				// Discarding the view cache loses no saved count: a client loaded with its letters and no
+				// views, sent a whole view from the saved letters, shows the same count.
+				const restored = stepped(
+					client,
+					[notice(A, {type: "whole", rev, view: {count: counted(saved)}})],
+					{...c, views: {}},
+				).final;
+				expect(restored.views[A]?.view).toEqual(c.views[A]?.view);
 			}),
 		{arbitrary: {seed: SEED, runs: 150}},
 	);
-	it("a patch that makes a string count is not installed", async () => {
-		const api = await client();
-		const decode = Schema.decodeUnknownSync(CounterModel);
-		const base = api.notice(
-			api.emptyClient,
-			"process_a",
-			{type: "whole", rev: 1, view: {count: 1}},
-			decode,
-		).client;
-		const out = api.notice(
-			base,
-			"process_a",
-			{type: "patch", base: 1, rev: 2, patch: [{op: "replace", path: "/count", value: "2"}]},
-			decode,
+	it("a patch that makes a string count is never installed, and asks for a whole view", async () => {
+		const api = await machine();
+		fc.assert(
+			fc.property(
+				fc.integer({min: -1000, max: 1000}),
+				fc.integer({min: 1, max: 1000}),
+				fc.oneof(fc.integer().map(String), fc.string()),
+				(count, rev, text) => {
+					const {steps} = stepped(api.clientMachineFor(counterChecks), [
+						notice(A, {type: "whole", rev, view: {count}}),
+						notice(A, {
+							type: "patch",
+							base: rev,
+							rev: rev + 1,
+							patch: [{op: "replace", path: "/count", value: text}],
+						}),
+					]);
+					const out = steps[1];
+					expect(out?.next.views[A]).toEqual({rev, view: {count}});
+					expect(asks(out)).toBe(true);
+				},
+			),
+			// The round 4 law was this one case, the plan's plant "pass string count": kept so the
+			// property is no narrower than it.
+			{seed: SEED, numRuns: RUNS, examples: [[1, 1, "2"]]},
 		);
-		expect(out.client.views["process_a"]).toEqual({rev: 1, view: {count: 1}});
-		expect(out.ask).toBe(true);
 	});
 });
 

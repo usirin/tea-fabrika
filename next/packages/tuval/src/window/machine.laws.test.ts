@@ -4,7 +4,9 @@
 // Written before `window/machine.ts`; the modules load by `import()` inside each test.
 //
 // The shape these laws hold the module to, from the plan's sketch (the build may add more):
-// - `windowMachine`: a tea machine; its ctx is `{layout}`, a `Layout` (desktop/layout.ts). Its model
+// - `windowMachineFor(checks)` (A7): the file's one export of a machine, a factory. `checks` is
+//   libfabrika's `ClientChecks`, `{decode?: (pid) => (view) => unknown}`, passed through to the
+//   client. The machine it returns is a tea machine; its ctx is `{layout}`, a `Layout` (desktop/layout.ts). Its model
 //   holds `link` (a `Link`, transport/link.ts), `client` (an app/client.ts `Client`: `pending`,
 //   `written`, `views`) and `opened`, the pids opened on this dial.
 // - Msgs, by `type`: every `linkMachine` Msg, unchanged, steps the link; `press {pid, m}` reserves a
@@ -18,10 +20,13 @@
 // - Going online (`admitted` on the current dial) asks `open` once per distinct pid of the layout
 //   and `send` for every letter that is ready, in slot order, each once. Not online asks no `send`.
 //   Leaving online forgets what was opened and sent, so the next dial starts over.
-// - `client` moves only by `clientMachine` (app/client.ts, plan A5), stepped by hand as the link is:
-//   `press` steps it with `press {pid, m}`, `now_ok` with `dated {n, ...value}`, `send_ok` with
-//   `reply {letter, answer}` and `seen {rev}` with `read {rev}`. Views wait on the lead's call on
-//   `notice`, so the client law below compares the client's letters, `written` and `seen` only.
+// - `client` moves only by the machine `clientMachineFor(checks)` makes (app/client.ts, plan A5 and
+//   A7), with the window's own `checks`, stepped by hand as the link is: `press` steps it with
+//   `press {pid, m}`, `now_ok` with `dated {n, ...value}`, `send_ok` with `reply {letter, answer}`,
+//   `seen {rev}` with `read {rev}`, `view {pid, note}` with `notice {pid, note}`, and an `open_ok` on
+//   the current dial with `notice {pid, note: {type: "whole", ...value}}`; an `open_ok` from an old
+//   dial is stale and moves nothing. The client law below compares letters, `written`, `seen` and
+//   views.
 import {applyCell} from "@demlik/tea";
 import {arbGuidedSequence, propertyTrace} from "@demlik/tea/pbt";
 import {describe, expect, it} from "@effect/vitest";
@@ -59,10 +64,53 @@ interface Machine {
 	readonly model: unknown;
 }
 
-const machine = async (): Promise<Machine> => {
-	const m = ((await import("./machine.ts")) as {windowMachine?: Machine}).windowMachine;
-	expect(m, "window/machine.ts exports windowMachine").toBeDefined();
-	return m as Machine;
+/** What a client checks a view with (A7): each program's own decoder, by pid. */
+type Checks = {readonly decode?: (pid: string) => (view: unknown) => unknown};
+
+/** The checks the window laws run with: as round 4 ran them, any JSON view. */
+const NO_CHECKS: Checks = {};
+
+/** The checks the client law draws on: none, one that accepts, one that refuses by its schema
+ *  (a negative count, which the view Msgs draw), one that throws, and one per pid. */
+const CHECKS: ReadonlyArray<readonly [string, Checks]> = [
+	["no decoder", NO_CHECKS],
+	["a decoder that accepts", {decode: () => (view) => view}],
+	[
+		"a decoder that refuses a negative count",
+		{
+			decode: () =>
+				Schema.decodeUnknownSync(
+					Schema.Struct({count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))}),
+				),
+		},
+	],
+	[
+		"a decoder that throws",
+		{
+			decode: () => () => {
+				throw new Error("not a view");
+			},
+		},
+	],
+	[
+		"a decoder for one pid only",
+		{
+			decode: (pid) =>
+				pid === "process_b"
+					? () => {
+							throw new Error("not a view");
+						}
+					: (view) => view,
+		},
+	],
+];
+
+const machine = async (checks: Checks = NO_CHECKS): Promise<Machine> => {
+	const api = (await import("./machine.ts")) as {windowMachineFor?: (checks: Checks) => Machine};
+	expect(api.windowMachineFor, "window/machine.ts exports the factory windowMachineFor").toBeTypeOf(
+		"function",
+	);
+	return (api.windowMachineFor as (checks: Checks) => Machine)(checks);
 };
 
 const layoutApi = async (): Promise<{
@@ -511,13 +559,17 @@ type ClientMachine = {
 	readonly init: (loaded: unknown, ctx: object) => readonly [Model["client"], ReadonlyArray<Cmd>];
 };
 
-const clientMachine = async (): Promise<ClientMachine> => {
+/** The library's client machine, made by its factory with `checks`: the same checks the window
+ *  under test was made with. */
+const clientMachineFor = async (checks: Checks): Promise<ClientMachine> => {
 	const lib = (await import("@kampus/libfabrika")) as {
-		readonly ProgramClient?: {readonly clientMachine?: ClientMachine};
+		readonly ProgramClient?: {readonly clientMachineFor?: (checks: Checks) => ClientMachine};
 	};
-	const m = lib.ProgramClient?.clientMachine;
-	expect(m, "the library's ProgramClient exports clientMachine").toBeDefined();
-	return m as ClientMachine;
+	const make = lib.ProgramClient?.clientMachineFor;
+	expect(make, "the library's ProgramClient exports the factory clientMachineFor").toBeTypeOf(
+		"function",
+	);
+	return (make as (checks: Checks) => ClientMachine)(checks);
 };
 
 /** The window's lists with its `seen` Msg drawn too, for the client law only: the other laws keep
@@ -535,9 +587,20 @@ const readLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
 	);
 };
 
-/** The client's Msg for one window Msg, or null when the window does not move its letters. */
-const clientMsg = (msg: Msg): Msg | null => {
-	const cmd = msg["cmd"] as {readonly n?: number; readonly letter?: string} | undefined;
+/** The client's Msg for one window Msg, or null when the window does not move its client. `prev` is
+ *  the window before the Msg: an `open_ok` counts only on the dial that is online now. */
+const clientMsg = (prev: Model, msg: Msg): Msg | null => {
+	const cmd = msg["cmd"] as
+		| {readonly n?: number; readonly letter?: string; readonly pid?: string; readonly dial?: number}
+		| undefined;
+
+	if (msg.type === "open_ok") {
+		const current = online(prev) && prev.link["dial"] === cmd?.dial;
+		return current
+			? {type: "notice", pid: cmd?.pid, note: {type: "whole", ...(msg["value"] as object)}}
+			: null;
+	}
+
 	return msg.type === "press"
 		? {type: "press", pid: msg["pid"], m: msg["m"]}
 		: msg.type === "now_ok"
@@ -546,15 +609,18 @@ const clientMsg = (msg: Msg): Msg | null => {
 				? {type: "reply", letter: cmd?.letter, answer: msg["value"]}
 				: msg.type === "seen"
 					? {type: "read", rev: msg["rev"]}
-					: null;
+					: msg.type === "view"
+						? {type: "notice", pid: msg["pid"], note: msg["note"]}
+						: null;
 };
 
-/** What of the client these laws compare: its letters, presses and reads, not its views. */
-const letters = (c: Model["client"]): string =>
+/** What of the client these laws compare: its letters, presses, reads and views. */
+const held = (c: Model["client"]): string =>
 	JSON.stringify({
 		written: c.written,
 		seen: (c as {readonly seen?: unknown}).seen,
 		pending: c.pending,
+		views: c.views,
 	});
 
 /** The window's client is the client machine's own fold of what the window was told. */
@@ -564,17 +630,14 @@ const clientFold =
 		let client = cm.init(null, {})[0];
 
 		for (const {prev, msg, next} of steps) {
-			const own = clientMsg(msg);
-			// Views wait on the call on `notice`: the fold reads the window's own, so a press still
-			// captures the revision shown.
-			client = {...client, views: prev.client.views};
+			const own = clientMsg(prev, msg);
 
 			if (own !== null) {
 				client = applyCell(cm as never, client as never, own as never)[0] as never;
 			}
 
-			if (letters(next.client) !== letters(client)) {
-				return `${msg.type}: the window's client is ${letters(next.client)}, the client machine's is ${letters(client)}`;
+			if (held(next.client) !== held(client)) {
+				return `${msg.type}: the window's client is ${held(next.client)}, the client machine's is ${held(client)}`;
 			}
 		}
 
@@ -731,20 +794,22 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 		);
 	});
 
-	it("the parent steps the client by hand: its letters, written and seen are the client machine's own fold", async () => {
-		const m = await machine();
-		const cm = await clientMachine();
+	for (const [named, checks] of CHECKS) {
+		it(`the parent steps the client by hand: its letters, written, seen and views are the client machine's own fold, with the same checks (${named})`, async () => {
+			const m = await machine(checks);
+			const cm = await clientMachineFor(checks);
 
-		for (const [, layout, tiles] of LAYOUTS) {
-			propertyTrace(
-				m as never,
-				{layout} as never,
-				readLists(m, layout, tiles) as never,
-				clientFold(cm) as never,
-				opts as never,
-			);
-		}
-	});
+			for (const [, layout, tiles] of LAYOUTS) {
+				propertyTrace(
+					m as never,
+					{layout} as never,
+					readLists(m, layout, tiles) as never,
+					clientFold(cm) as never,
+					opts as never,
+				);
+			}
+		});
+	}
 });
 
 // Plants: reverse two letters; send offline; skip the resend; keep opened after a reconnect; re-read
@@ -820,9 +885,44 @@ describe("window machine plants: each break is caught by the law that names it",
 						]
 					: [m, c],
 		));
+	it("a view installed by hand, past the client machine and its decoder, is caught (A7)", async () => {
+		const [, checks] = CHECKS[2] as (typeof CHECKS)[number];
+		const cm = await clientMachineFor(checks);
+		const real = await machine(checks);
+		const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
+		// The window puts a whole view straight into its client, where the client machine would
+		// first run the program's decoder on it.
+		const planted = broken(real, ([m, c], _s, msg) => {
+			const note = msg["note"] as {type?: unknown; rev?: unknown; view?: unknown} | undefined;
+			return msg.type === "view" && note?.type === "whole"
+				? [
+						{
+							...m,
+							client: {
+								...m.client,
+								views: {
+									...m.client.views,
+									[String(msg["pid"])]: {rev: Number(note.rev), view: note.view} as never,
+								},
+							},
+						},
+						c,
+					]
+				: [m, c];
+		});
+		expect(() =>
+			propertyTrace(
+				planted as never,
+				{layout} as never,
+				readLists(real, layout, tiles) as never,
+				clientFold(cm) as never,
+				opts as never,
+			),
+		).toThrow();
+	});
 	it("a client edited by hand, not stepped as the client machine, is caught (A5)", async () => {
-		const cm = await clientMachine();
-		const real = await machine();
+		const cm = await clientMachineFor(NO_CHECKS);
+		const real = await machine(NO_CHECKS);
 		const [, layout, tiles] = LAYOUTS[2] as (typeof LAYOUTS)[number];
 		// The window drops the oldest letter on an unreachable answer, by hand, where the client
 		// machine has no Msg that does.
