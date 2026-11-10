@@ -100,6 +100,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
   (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
   [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
+- **In `next/`, use the platform through Alchemy, never directly,** in the cloud and on the laptop
+  alike: no `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw
+  platform type, and nothing that starts or talks to the local runtime except through Alchemy. A
+  gap is patched locally with its upstream issue filed the same day; a direct use stays only as a
+  marked edge with the issue link. The six gaps 0042 lists are patched without an issue (its
+  amendment, 2026-11-09). Today's direct uses move with their ports, and the lint rule is
+  ticket 506 ([0042](./.decisions/0042-platform-pieces-go-through-alchemy.md)).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
@@ -156,6 +163,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
+  subject, with front files and an `internal/` no other room imports, and it re-exports no other
+  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
+  never from its own. A new file goes in its room now, before the move lands
+  ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
@@ -214,6 +226,11 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   it, before you give a lean; a guess comes after, marked as a guess. If the plain way
   clashes with a stated goal, say so in one line, and let the owner pick. Never hide it
   behind a custom design.
+- **Try an existing tool before you hand-write one.** A plan or pull request that adds a check, a
+  script or a tool names the widely used tools it looked at, with a link each, and uses one or
+  says what it cannot do, with proof. "We could write it quickly" is not a reason. A hand-written
+  check lists its edge cases before the code, each with a test
+  ([0040](./.decisions/0040-existing-tools-before-hand-written.md)).
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in
   TypeScript. Parents are written by hand and step their children. Exceptions
   are named in [`docs/direction/elm-first.md`](./docs/direction/elm-first.md)
@@ -402,9 +419,10 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`, Effect's own from ticket 466's sweep: 2 spaces, 120 columns, no
-semicolons, no trailing commas, spaces inside braces
-([0029](./.decisions/0029-format-and-names-follow-effect.md)). The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
+as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
+and trailing commas, function parameters and call arguments included
+([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off
