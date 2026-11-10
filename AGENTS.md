@@ -496,6 +496,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
   `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
   area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
+- A step that needs ports, sockets or its own processes runs in a container with its own network
+  (`--network none` while test code runs), never behind a hole in the laptop sandbox: no
+  `allowLocalBinding`, no unix-socket allowance, no patch of the tool. No key, login or home folder
+  goes in. Docker not running ends the step `stuck`
+  ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
 
 ### Tool facts that cost us time
 
