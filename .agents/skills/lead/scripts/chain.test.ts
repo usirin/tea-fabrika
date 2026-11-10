@@ -1,0 +1,349 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./chain.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+import "./catchup.sh?raw";
+import "./box.sh?raw";
+import "./leakgrep.sh?raw";
+import "./fieldrow.py?raw";
+import "./runplan.sh?raw";
+import "./env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "../../plan/scripts/plancheck.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+import fc from "fast-check";
+import {describe, expect, it} from "vitest";
+import {
+	briefOf,
+	exitOf,
+	judgedOf,
+	type Line,
+	lineOf,
+	makeMachine,
+	moveOf,
+	sectionsOf,
+	STEPS,
+	type StepName,
+	stepsTable,
+} from "./chain.ts";
+
+// Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
+const options = {seed: 119120, numRuns: 300};
+const step = fc.constantFrom(...STEPS);
+const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+const word = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
+
+const outcome = fc.oneof(
+	fc.constant("done"),
+	fc.constant("skip:step_said"),
+	fc.constantFrom("send:tests:step_said", "send:build:step_said", "send:tests:exam_paths"),
+	fc.constant("send:plan:plancheck"),
+	fc.constantFrom("ask:lead:question", "ask:lead:lockfile"),
+	fc.constantFrom("refused:agent_cap", "refused:low_disk"),
+	fc.constantFrom("refused:plan_unapproved", "refused:shared_ticket", "refused:branch_checked_out"),
+	fc.constantFrom("stuck:timeout", "stuck:no_answer", "stuck:crash", "stuck:fetch_failed"),
+);
+
+const line = (o: string, head: string, reason = "why"): Line => ({
+	outcome: o,
+	head,
+	reason,
+	report: null,
+	box: "b",
+	exit: 0,
+});
+
+describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
+	it("done walks tests -> build -> mutation -> review -> open; skip walks the same way", () => {
+		const walk: Record<StepName, string> = {
+			tests: "build",
+			build: "mutation",
+			mutation: "review",
+			review: "open",
+		};
+		for (const s of STEPS)
+			for (const o of ["done", "skip:step_said"]) {
+				const m = moveOf(s, line(o, "h"), 0, 0);
+				expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
+				if (m._tag === "step") expect(m.note).toBe("");
+			}
+	});
+
+	it("a send goes to the step it names with the sender's word; a send to plan parks", () => {
+		fc.assert(
+			fc.property(step, step, word, (from, to, why) => {
+				const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 0);
+				expect(m).toMatchObject({_tag: "step", step: to});
+				if (m._tag === "step") expect(m.note).toContain(why);
+				expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 0)._tag).toBe("park");
+			}),
+			options,
+		);
+	});
+
+	it("a question goes to judgment, a lockfile ask parks with drive's own words", () => {
+		fc.assert(
+			fc.property(step, word, (s, why) => {
+				expect(moveOf(s, line("ask:lead:question", "h", why), 0, 0)._tag).toBe("judge");
+				const m = moveOf(s, line("ask:lead:lockfile", "h", why), 0, 0);
+				expect(m).toEqual({_tag: "park", reason: why});
+			}),
+			options,
+		);
+	});
+
+	it("a full laptop waits, up to six times, then parks; any other refusal parks at once", () => {
+		fc.assert(
+			fc.property(step, fc.nat({max: 10}), (s, waits) => {
+				for (const r of ["refused:agent_cap", "refused:low_disk"])
+					expect(moveOf(s, line(r, "h"), 0, waits)._tag).toBe(waits >= 6 ? "park" : "wait");
+				for (const r of ["refused:plan_unapproved", "refused:branch_checked_out"])
+					expect(moveOf(s, line(r, "h"), 0, waits)._tag).toBe("park");
+			}),
+			options,
+		);
+	});
+
+	it("a stuck goes to judgment until three in a row on one step, then parks", () => {
+		fc.assert(
+			fc.property(step, fc.nat({max: 6}), word, (s, stucks, why) => {
+				const m = moveOf(s, line(`stuck:${why.replaceAll(" ", "_")}`, "h", why), stucks, 0);
+				expect(m._tag).toBe(stucks >= 3 ? "park" : "judge");
+			}),
+			options,
+		);
+	});
+
+	it("every outcome has exactly one move, never a throw", () => {
+		fc.assert(
+			fc.property(step, outcome, fc.nat({max: 4}), fc.nat({max: 8}), (s, o, stucks, waits) => {
+				const m = moveOf(s, line(o, "h"), stucks, waits);
+				expect(["step", "wait", "judge", "open", "park"]).toContain(m._tag);
+			}),
+			options,
+		);
+	});
+});
+
+describe("T341 the judgment agent's answer, today's tooling", () => {
+	it("reads the last answer line: a send names a step and carries its note; park carries its why", () => {
+		fc.assert(
+			fc.property(step, word, word, (s, note, chatter) => {
+				const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
+				expect(sent).toMatchObject({_tag: "step", step: s});
+				if (sent._tag === "step") expect(sent.note).toContain(note);
+				expect(judgedOf(`answer: send ${s} old\n${chatter}\nanswer: park ${note}`)).toEqual({
+					_tag: "park",
+					reason: note,
+				});
+			}),
+			options,
+		);
+	});
+
+	it("no answer line, or one naming a step that is not a step, parks", () => {
+		expect(judgedOf("I think the build should run again").toString()).toBe(judgedOf("").toString());
+		expect(judgedOf("answer: send plan fix it")._tag).toBe("park");
+		expect(judgedOf("")._tag).toBe("park");
+	});
+});
+
+describe("T341 the lane brief is cut into one brief per step, today's tooling", () => {
+	const laneBrief = [
+		"Shared: ticket 7, today's tooling.",
+		"## tests",
+		"Write the laws.",
+		"## build",
+		"Make them green.",
+		"## mutation",
+		"Run stryker.",
+		"## review",
+		"Sweep.",
+		"## pr",
+		"# T7 the title",
+		"What changed.",
+	].join("\n");
+
+	it("each step gets the shared head, its own section, and the lane's facts", () => {
+		fc.assert(
+			fc.property(step, sha, sha, fc.nat({max: 20}), word, (s, head, root, round, note) => {
+				const cut = sectionsOf(laneBrief);
+				const text = briefOf(cut, s, {
+					ticket: "7",
+					branch: "fabrikalfa/x",
+					plan: "p.md",
+					root,
+					head,
+					round,
+					heads: {tests: head},
+					note,
+				});
+				expect(text).toContain("Shared: ticket 7");
+				expect(text).toContain(cut.sections[s] ?? "nothing");
+				for (const other of STEPS)
+					if (other !== s) expect(text).not.toContain(cut.sections[other] ?? "nothing");
+				expect(text).not.toContain("What changed.");
+				expect(text).toContain(`round ${round}`);
+				expect(text).toContain(`Last round: ${note}`);
+				expect(text).toContain(head.slice(0, 8));
+				// A review gets the two full SHAs its template needs; a mutation its build range.
+				if (s === "review") {
+					expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
+					expect(text).toContain(`Parent base: origin/main at ${root}`);
+				}
+				if (s === "mutation") expect(text).toContain("T=7, BUILD=");
+			}),
+			options,
+		);
+	});
+
+	it("format: the pr section's first line is the title; a heading's case does not matter", () => {
+		const cut = sectionsOf(laneBrief.replace("## pr", "## PR"));
+		expect(cut.sections.pr?.split("\n")[0]).toBe("# T7 the title");
+		expect(Object.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
+	});
+});
+
+describe("T341 drive's last line is what the chain reads, today's tooling", () => {
+	it("takes the last JSON line with an outcome, over gc chatter before it, and none is null", () => {
+		fc.assert(
+			fc.property(outcome, sha, word, fc.integer({min: 0, max: 40}), (o, head, reason, exit) => {
+				const out = `keep box x: busy\n${JSON.stringify({outcome: "plan-only"})}\n${JSON.stringify({outcome: o, head, reason, report: null, box: "b", exit})}\n`;
+				expect(lineOf(out, 1)).toEqual({outcome: o, head, reason, report: null, box: "b", exit});
+				expect(lineOf("nothing here\n", 30)).toBeNull();
+			}),
+			options,
+		);
+	});
+});
+
+describe("T341 the lane machine, stepped by hand, today's tooling", () => {
+	const machine = makeMachine(16);
+	const start = () => {
+		const [idle] = machine.init();
+		return machine.update.start(idle, {type: "start", step: "tests", max: 16});
+	};
+	const ran = (m: ReturnType<typeof start>[0], l: Line) =>
+		machine.update.step_run_ok(m, {type: "step_run_ok", value: l} as never);
+
+	it("a clean lane runs the four steps, opens the PR and lands it, with exit 0", () => {
+		let [m, cmds] = start();
+		expect(cmds[0]).toMatchObject({type: "step_run", step: "tests", round: 1});
+		const heads: string[] = [];
+		for (const [i, s] of STEPS.entries()) {
+			expect(m).toMatchObject({phase: "stepping", step: s});
+			const head = String(i + 1).repeat(40);
+			heads.push(head);
+			[m, cmds] = ran(m, line("done", head));
+		}
+		expect(m.phase).toBe("opening");
+		expect(cmds[0]).toMatchObject({type: "pr_open", head: heads[3]});
+		[m, cmds] = machine.update.pr_open_ok(m, {
+			type: "pr_open_ok",
+			value: {pr: 42, detail: "opened"},
+		} as never);
+		expect(cmds[0]).toMatchObject({type: "land", pr: 42});
+		[m] = machine.update.land_ok(m, {
+			type: "land_ok",
+			value: {ok: true, detail: "merged"},
+		} as never);
+		expect(m.phase).toBe("over");
+		if (m.phase === "over") {
+			expect(m.end.kind).toBe("done");
+			expect(exitOf(m.end)).toBe(0);
+			expect(m.lane.heads).toEqual({
+				tests: heads[0],
+				build: heads[1],
+				mutation: heads[2],
+				review: heads[3],
+			});
+		}
+	});
+
+	it("a send back reruns the named step with the sender's word in its note", () => {
+		fc.assert(
+			fc.property(step, word, (to, why) => {
+				let [m, cmds] = start();
+				[m, cmds] = ran(m, line("done", "a".repeat(40)));
+				[m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
+				expect(m).toMatchObject({phase: "stepping", step: to});
+				expect(cmds[0]).toMatchObject({type: "step_run", step: to, round: 3});
+				if (cmds[0]?.type === "step_run") expect(cmds[0].note).toContain(why);
+			}),
+			options,
+		);
+	});
+
+	it("a stuck asks for judgment; the judgment's send reruns that step, its park ends as ask (exit 20)", () => {
+		fc.assert(
+			fc.property(step, word, (to, why) => {
+				let [m, cmds] = start();
+				[m, cmds] = ran(m, line("stuck:timeout", "", why));
+				expect(m.phase).toBe("judging");
+				expect(cmds[0]).toMatchObject({type: "judge", step: "tests"});
+				const [sent, after] = machine.update.judge_ok(m, {
+					type: "judge_ok",
+					value: {text: `answer: send ${to} ${why}`},
+				} as never);
+				expect(sent).toMatchObject({phase: "stepping", step: to});
+				expect(after[0]).toMatchObject({type: "step_run", step: to});
+				const [parked] = machine.update.judge_ok(m, {
+					type: "judge_ok",
+					value: {text: `answer: park ${why}`},
+				} as never);
+				expect(parked).toMatchObject({phase: "over", end: {kind: "ask", reason: why}});
+				if (parked.phase === "over") expect(exitOf(parked.end)).toBe(20);
+			}),
+			options,
+		);
+	});
+
+	it("a refusal for a full laptop waits and then runs the same step again", () => {
+		let [m, cmds] = start();
+		[m, cmds] = ran(m, line("refused:agent_cap", ""));
+		expect(m.phase).toBe("waiting");
+		expect(cmds[0]).toMatchObject({type: "wait"});
+		[m, cmds] = machine.update.wait_ok(m, {
+			type: "wait_ok",
+			value: {ok: true, detail: ""},
+		} as never);
+		expect(m).toMatchObject({phase: "stepping", step: "tests"});
+		// The step's head does not move on a refusal or a stuck; it moves on done, send and skip.
+		if (m.phase === "stepping") expect(m.lane.head).toBe("");
+	});
+
+	it("the step cap parks the lane as ask, never loops forever", () => {
+		const small = makeMachine(2);
+		const [idle] = small.init();
+		let [m] = small.update.start(idle, {type: "start", step: "tests", max: 2});
+		[m] = small.update.step_run_ok(m, {
+			type: "step_run_ok",
+			value: line("done", "a".repeat(40)),
+		} as never);
+		[m] = small.update.step_run_ok(m, {
+			type: "step_run_ok",
+			value: line("send:tests:step_said", "b".repeat(40)),
+		} as never);
+		expect(m).toMatchObject({phase: "over", end: {kind: "ask"}});
+	});
+});
+
+describe("T341 the pull request's steps table, today's tooling", () => {
+	it("one row per step with its list dollars by run, and a total", () => {
+		const rows = stepsTable("/nonexistent/rows.jsonl", [
+			{step: "tests", outcome: "done", box: "l-tests1", run: "t1-tests"},
+			{step: "build", outcome: "done", box: "l-build1", run: "t1-build"},
+		]);
+		expect(rows).toHaveLength(5);
+		expect(rows[2]).toContain("| tests | l-tests1 | done |");
+		expect(rows.at(-1)).toBe("| total | | | 0.00 |");
+	});
+});
