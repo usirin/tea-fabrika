@@ -145,21 +145,16 @@ const launch = async (startupGate = false) => {
 		return {child, folder, url, output: () => output, observed};
 	}
 
-	for (;;) {
-		if (child.exitCode !== null) {
-			throw new Error(`P12 dev.ts did not start: ${output}`);
-		}
-
-		try {
-			if ((await fetch(url)).ok) {
-				break;
+	// Wait for the stage's own ready line, not for the first HTTP answer. workerd answers HTTP
+	// while the stage still makes its startup calls, and a kill in that gap fails the startup.
+	await new Promise<void>((done, fail) => {
+		child.stdout!.on("data", () => {
+			if (output.includes('{"ready":')) {
+				done();
 			}
-		} catch {
-			/* Listener is not ready. */
-		}
-
-		await pause();
-	}
+		});
+		child.once("exit", () => fail(new Error(`P12 dev.ts did not start: ${output}`)));
+	});
 
 	return {child, folder, url, output: () => output, observed};
 };
