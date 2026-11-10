@@ -34,9 +34,11 @@
 //
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
-// whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start (8 agents running: Codex boxes plus
-// Claude steps drive started, under 20 GB free after box.sh gc, or the lane's branch checked out in
-// a worktree, which the fetch could not update). It never retries. A stuck step
+// whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
+// any agent ran: `refused:<check>`, one of agent_cap (8 agents running: Codex boxes plus Claude
+// steps drive started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
+// branch checked out in a worktree, which the fetch could not update), or a box.sh new start check
+// (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
 // files or commits off its branch. DRIVE_MINUTES (default 60) is how long the agent may run
 // before it is stopped and the step is stuck.
@@ -107,8 +109,31 @@ const drive = outcomesOf({
 });
 type Outcome = typeof drive.schema.Type;
 
-const exitOf = (o: Outcome): number => {
+/**
+ * The start checks, before any agent runs: box.sh new's, then drive's own (the agent cap, free disk,
+ * the lane's branch held by a worktree). A no from one is not a step's answer, so it is its own end,
+ * `refused:<check>` with exit 3, and never counts as a stuck step (ticket 428).
+ */
+const BOX_CHECKS = [
+	"plan_unapproved",
+	"base_not_signed",
+	"shared_ticket",
+	"root_not_ancestor",
+] as const;
+const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out"] as const;
+type Check = (typeof CHECKS)[number];
+type Refused = {readonly kind: "refused"; readonly check: Check};
+/** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
+type End = Outcome | Refused;
+
+/** The name an end prints as: an outcome's own, or `refused:<check>`. */
+export const endName = (e: End): string =>
+	e.kind === "refused" ? `refused:${e.check}` : nameOf(e);
+
+const exitOf = (o: End): number => {
 	switch (o.kind) {
+		case "refused":
+			return 3;
 		case "done":
 			return 0;
 		case "send":
@@ -177,8 +202,14 @@ const Read = Schema.Struct({
 type Read = typeof Read.Type;
 
 const Done = Schema.Struct({ok: Schema.Boolean, detail: Schema.String});
+/** What box.sh new did: made the box, refused it at a named start check, or failed. */
+const Started = Schema.TaggedUnion({
+	made: {},
+	refused: {check: Schema.Literals(BOX_CHECKS), detail: Schema.String},
+	failed: {detail: Schema.String},
+});
 
-const boxNew = act("box_new", {input: Ask, ok: Done, err: ["unknown"]});
+const boxNew = act("box_new", {input: Ask, ok: Started, err: ["unknown"]});
 const stepRead = gather("step_read", {input: Ask, ok: Read, err: ["unknown"]});
 const backupPush = act("backup_push", {
 	input: Schema.Struct({ask: Ask, head: Schema.String}),
@@ -219,7 +250,7 @@ type Model =
 	| {
 			readonly phase: "recording" | "over";
 			readonly ask: Ask;
-			readonly outcome: Outcome;
+			readonly outcome: End;
 			readonly why: string;
 			readonly head: string;
 			readonly kept: boolean;
@@ -262,6 +293,7 @@ const greenOf = (report: string) => {
 };
 
 type Judged = {readonly outcome: Outcome; readonly why: string};
+type Ended = {readonly outcome: End; readonly why: string};
 const stuck = (why: Extract<Outcome, {kind: "stuck"}>["why"], text: string): Judged => ({
 	outcome: {kind: "stuck", why},
 	why: text,
@@ -368,12 +400,12 @@ type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Judged, head: string, left: readonly string[] = []): Step => {
+const recordIt = (ask: Ask, j: Ended, head: string, left: readonly string[] = []): Step => {
 	const kept = j.outcome.kind === "stuck" || left.length > 0;
 	const why = left.length > 0 ? `${j.why} (box kept: ${left.join(", ")})` : j.why;
 	const entry = record({
 		ask,
-		outcome: nameOf(j.outcome),
+		outcome: endName(j.outcome),
 		why,
 		head,
 		exit: exitOf(j.outcome),
@@ -399,7 +431,15 @@ export const machine = defineMachine({
 		},
 		box_new_ok: (s, m): Step => {
 			if (s.phase !== "starting") return stay(s);
-			if (!m.value.ok) return recordIt(s.ask, stuck("box_failed", m.value.detail), s.ask.base);
+			const started = m.value;
+			if (started._tag === "refused")
+				return recordIt(
+					s.ask,
+					{outcome: {kind: "refused", check: started.check}, why: started.detail},
+					s.ask.base,
+				);
+			if (started._tag === "failed")
+				return recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base);
 			return [{phase: "drafting", ask: s.ask}, []];
 		},
 		box_new_err: (s): Step =>
@@ -689,6 +729,22 @@ export const leftIn = (box: string, branch: string): string[] => {
 	];
 };
 
+/**
+ * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
+ * check's no; any other failure, or a line naming no known check, is the box failing.
+ */
+export const startedOf = (code: number, err: string): typeof Started.Type => {
+	if (code === 0) return {_tag: "made"};
+	const line = err
+		.split("\n")
+		.toReversed()
+		.map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))
+		.find((m) => m !== null);
+	const check = BOX_CHECKS.find((c) => c === line?.[1]);
+	if (code === 3 && line && check) return {_tag: "refused", check, detail: line[2] ?? ""};
+	return {_tag: "failed", detail: `box.sh new: ${tail(err)}`};
+};
+
 const handlers = (env: Env) => {
 	const box = (...args: string[]) => sh("sh", [join(HERE, "box.sh"), ...args]);
 	const git = (...args: string[]) =>
@@ -711,7 +767,7 @@ const handlers = (env: Env) => {
 					cmd.lane,
 				);
 				writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
-				return {ok: r.code === 0, detail: r.code === 0 ? "" : `box.sh new: ${tail(r.err)}`};
+				return startedOf(r.code, r.err);
 			}),
 		step_read: (ask: Ask) =>
 			Effect.sync((): Read => {
@@ -891,7 +947,10 @@ const handlers = (env: Env) => {
 				const outcome = ok ? e.outcome : "stuck:record_failed";
 				const keep = e.keep || !ok;
 				// A stuck step, or a build sent back for exam paths, does not move the lane's head.
-				const accepted = !outcome.startsWith("stuck") && outcome !== "send:tests:exam_paths";
+				const accepted =
+					!outcome.startsWith("stuck") &&
+					!outcome.startsWith("refused") &&
+					outcome !== "send:tests:exam_paths";
 				const state = join(env.BOXES, "state", `${ask.lane}.json`);
 				const saved = existsSync(state)
 					? (JSON.parse(readFileSync(state, "utf8")) as Lane)
@@ -1326,7 +1385,7 @@ const main = () => {
 	if (agents >= 8) {
 		console.log(
 			JSON.stringify({
-				outcome: "refused",
+				outcome: endName({kind: "refused", check: "agent_cap"}),
 				reason: `${agents} agents running (Codex boxes and drive's Claude steps); the cap is 8`,
 			}),
 		);
@@ -1346,7 +1405,7 @@ const main = () => {
 		const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
 		console.log(
 			JSON.stringify({
-				outcome: "refused",
+				outcome: endName({kind: "refused", check: "low_disk"}),
 				reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
 			}),
 		);
@@ -1362,8 +1421,14 @@ const main = () => {
 				list.code === 0
 					? `${branch} is checked out in ${holder}; detach it there (git switch --detach) first`
 					: `git worktree list failed: ${tail(list.err)}`;
-			console.log(JSON.stringify({outcome: "refused", reason: said}));
-			process.exit(3);
+			const check = list.code === 0 ? "branch_checked_out" : null;
+			console.log(
+				JSON.stringify({
+					outcome: check ? endName({kind: "refused", check}) : "stuck:worktree_unreadable",
+					reason: said,
+				}),
+			);
+			process.exit(check ? 3 : 30);
 		}
 	}
 	const verdict =
@@ -1392,7 +1457,7 @@ const main = () => {
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`drive stopped in ${end.phase}`);
 		const line = {
-			outcome: nameOf(end.outcome),
+			outcome: endName(end.outcome),
 			lane,
 			step: s,
 			agent: ask.agent,

@@ -24,12 +24,14 @@ import {afterAll, describe, expect, it} from "vitest";
 import {
 	claudeProfile,
 	claudeTail,
+	endName,
 	freshBox,
 	holdsElectron,
 	leftIn,
 	machine,
 	reportOf,
 	rowOf,
+	startedOf,
 } from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; leftIn reads a real git box.
@@ -194,6 +196,83 @@ describe("drive takes a skip answer, today's tooling", () => {
 		expect(new Set(exits.values()).size).toBe(exits.size);
 		expect(exits.get("answer: skip x")).toBe(40);
 		expect(exits.get("answer: stuck x")).toBe(30);
+	});
+});
+
+describe("T428 a start check's no is a refusal, not a stuck step, today's tooling", () => {
+	const checks = [
+		"plan_unapproved",
+		"base_not_signed",
+		"shared_ticket",
+		"root_not_ancestor",
+	] as const;
+	const check = fc.constantFrom(...checks);
+	const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
+	const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), {maxLength: 3});
+	const boxNewOk = (value: ReturnType<typeof startedOf>) =>
+		machine.update.box_new_ok({phase: "starting", ask: {...ask, step: "tests"}}, {
+			type: "box_new_ok",
+			value,
+		} as never);
+
+	// Plants: read any non-zero exit as a refusal; take a check name box.sh never prints; drop the
+	// detail. 28 of 72 stuck results on 2026-11-09 were box.sh new saying no before any agent ran.
+	it("box.sh new's exit 3 with a refused line names the check; any other failure is the box failing", () => {
+		fc.assert(
+			fc.property(check, detail, noise, fc.constantFrom(0, 1, 2, 3, 127), (c, d, before, code) => {
+				const err = [...before, `refused ${c}: ${d}`, ""].join("\n");
+				const got = startedOf(code, err);
+				if (code === 0) expect(got).toEqual({_tag: "made"});
+				else if (code === 3) expect(got).toEqual({_tag: "refused", check: c, detail: d});
+				else expect(got._tag).toBe("failed");
+				// A stuck line, or an unknown check, is never a refusal.
+				expect(startedOf(3, `stuck ${c}: ${d}\n`)._tag).toBe("failed");
+				expect(startedOf(3, `refused not_a_check_${c}: ${d}\n`)._tag).toBe("failed");
+			}),
+			options,
+		);
+	});
+
+	// Plants: record a refusal as stuck:box_failed, give it the stuck exit, keep its box, or let it
+	// move the lane's head. The stuck rate then counts steps no agent ran.
+	it("a refusal ends at once as refused:<check>, exit 3, nothing kept, and never reads as stuck", () => {
+		fc.assert(
+			fc.property(check, detail, (c, d) => {
+				const [state, cmds] = boxNewOk({_tag: "refused", check: c, detail: d});
+				expect(state.phase).toBe("recording");
+				const cmd = cmds[0] as {outcome: string; exit: number; keep: boolean; why: string};
+				expect(cmd.outcome).toBe(`refused:${c}`);
+				expect(cmd.outcome.startsWith("stuck")).toBe(false);
+				expect(cmd.exit).toBe(3);
+				expect(cmd.keep).toBe(false);
+				expect(cmd.why).toBe(d);
+				expect(rowOf(cmd.outcome)).not.toBe("pass");
+			}),
+			options,
+		);
+	});
+
+	// Plant: let a refusal swallow a real box failure (a clone or install that broke).
+	it("a box that failed to start is still stuck:box_failed and kept for the lead", () => {
+		fc.assert(
+			fc.property(detail, (d) => {
+				const [, cmds] = boxNewOk({_tag: "failed", detail: d});
+				const cmd = cmds[0] as {outcome: string; exit: number; keep: boolean};
+				expect(cmd.outcome).toBe("stuck:box_failed");
+				expect(cmd.exit).toBe(30);
+				expect(cmd.keep).toBe(true);
+			}),
+			options,
+		);
+	});
+
+	// Plant: give drive's own refusals and box.sh's checks names that clash with a step outcome.
+	it("format: every refusal prints as refused:<check>, apart from the five step verbs", () => {
+		for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out"] as const) {
+			const name = endName({kind: "refused", check: c});
+			expect(name).toBe(`refused:${c}`);
+			expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
+		}
 	});
 });
 
