@@ -156,7 +156,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
   returns nothing, and reads one part through a selector, as in
   `useRuntime(run, (m) => m.views[id])`. No stand-in hook.
-- **In `next/`, no bare `of` and no `xOf` names.** Today's `nameOf` and `outcomesOf`
+- **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
+  Effect does it: `Lease.of(...)` under `import * as Lease`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
   stay until that code goes.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner
   picks, and ideas the owner wants to try out there first. What a tryout teaches
@@ -282,8 +284,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   ```
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
-  every pull request, prose included. An Effect service name is never plural: one that holds many is
-  `<Thing>Manager`, such as `LeaseManager`.
+  every pull request, prose included. An Effect service that holds many is named in the plural, as
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
+  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
@@ -363,7 +366,9 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`: tabs, 100 columns. The lint rules are in `.oxlintrc.json`:
+are in `.oxfmtrc.json`, Effect's own from ticket 466's sweep: 2 spaces, 120 columns, no
+semicolons, no trailing commas, spaces inside braces
+([0029](./.decisions/0029-format-and-names-follow-effect.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:
 [oxlint and oxfmt](./docs/direction/oxlint-and-oxfmt.md). Never switch a rule off
