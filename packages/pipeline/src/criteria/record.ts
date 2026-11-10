@@ -1,19 +1,19 @@
-import {Context, Effect, Layer, Ref} from "effect";
-import {Ledger, readFacts, sendFact} from "../asks/ledger.ts";
-import {bookOf, firstTaskOf, foldLedger, planFor} from "../asks/rules.ts";
-import {type Owner, type TicketId, taskId} from "../ids.ts";
+import { Context, Effect, Layer, Ref } from "effect";
+import { Ledger, readFacts, sendFact } from "../asks/ledger.ts";
+import { bookOf, firstTaskOf, foldLedger, planFor } from "../asks/rules.ts";
+import { type Owner, type TicketId, taskId } from "../ids.ts";
 import {
-	apply,
-	type Book,
-	byReview,
-	currentOf,
-	EMPTY,
-	historyOf,
-	nextId,
-	type Row,
-	type Stated,
-	type Verdict,
-	withRound,
+  apply,
+  type Book,
+  byReview,
+  currentOf,
+  EMPTY,
+  historyOf,
+  nextId,
+  type Row,
+  type Stated,
+  type Verdict,
+  withRound,
 } from "./book.ts";
 
 // Where a ticket's criteria and their verdicts are kept for the stages that
@@ -47,54 +47,52 @@ import {
 
 /** What the record holds for one ticket: its criteria now, and every verdict, oldest first. */
 export interface Held {
-	readonly criteria: readonly [Stated, ...Stated[]];
-	readonly verdicts: readonly Verdict[];
+  readonly criteria: readonly [Stated, ...Stated[]];
+  readonly verdicts: readonly Verdict[];
 }
 
 /** What a review hands the record: one round at one commit. */
 export interface Judgement {
-	/** The ticket's criteria, as the review read them. */
-	readonly criteria: readonly Stated[];
-	readonly rows: readonly Row[];
-	/** What it found that no criterion covers, each as what has to be true. */
-	readonly found: readonly string[];
-	readonly head: string;
-	/** Where its proof is, in words a person can follow. */
-	readonly proof: string;
+  /** The ticket's criteria, as the review read them. */
+  readonly criteria: readonly Stated[];
+  readonly rows: readonly Row[];
+  /** What it found that no criterion covers, each as what has to be true. */
+  readonly found: readonly string[];
+  readonly head: string;
+  /** Where its proof is, in words a person can follow. */
+  readonly proof: string;
 }
 
-type Unknown = {readonly _tag: "unknown"};
+type Unknown = { readonly _tag: "unknown" };
 
 export class CriteriaRecord extends Context.Service<
-	CriteriaRecord,
-	{
-		/** The ticket's criteria and verdicts. `null`: the record holds no criteria for it. */
-		readonly read: (ticket: TicketId) => Effect.Effect<Held | null, Unknown>;
-		/** Keep a review's round: each row that holds against the book's words, and what it found. */
-		readonly judged: (ticket: TicketId, judgement: Judgement) => Effect.Effect<void, Unknown>;
-	}
+  CriteriaRecord,
+  {
+    /** The ticket's criteria and verdicts. `null`: the record holds no criteria for it. */
+    readonly read: (ticket: TicketId) => Effect.Effect<Held | null, Unknown>;
+    /** Keep a review's round: each row that holds against the book's words, and what it found. */
+    readonly judged: (ticket: TicketId, judgement: Judgement) => Effect.Effect<void, Unknown>;
+  }
 >()("CriteriaRecord") {}
 
 /** The book's criteria now, and its verdicts. `null`: it holds none. Pure. */
 export function heldOf(book: Book): Held | null {
-	const [first, ...rest] = currentOf(book).map(({id, version, text}) => ({id, version, text}));
-	return first === undefined ? null : {criteria: [first, ...rest], verdicts: book.verdicts};
+  const [first, ...rest] = currentOf(book).map(({ id, version, text }) => ({ id, version, text }));
+  return first === undefined ? null : { criteria: [first, ...rest], verdicts: book.verdicts };
 }
 
 /** The rows of a judgement whose criterion the review read in the book's own words for that version. Pure. */
 export function kept(book: Book, judgement: Judgement): readonly Row[] {
-	return judgement.rows.filter((row) => {
-		const read = judgement.criteria.find(
-			(c) => c.id === row.criterion && c.version === row.version,
-		);
-		const words = historyOf(book, row.criterion)?.wordings.find((w) => w.version === row.version);
-		return read !== undefined && words !== undefined && words.text === read.text;
-	});
+  return judgement.rows.filter((row) => {
+    const read = judgement.criteria.find((c) => c.id === row.criterion && c.version === row.version);
+    const words = historyOf(book, row.criterion)?.wordings.find((w) => w.version === row.version);
+    return read !== undefined && words !== undefined && words.text === read.text;
+  });
 }
 
 /** A judgement, folded into a book: its kept rows, and what it found, under `task`. Pure. */
 export const keep = (book: Book, judgement: Judgement, task: Owner): Book =>
-	withRound(book, {...judgement, rows: kept(book, judgement), task});
+  withRound(book, { ...judgement, rows: kept(book, judgement), task });
 
 /** The one task a ticket no plan holds has: every criterion it learns goes under it. */
 const ONLY = taskId("t1");
@@ -113,42 +111,40 @@ const ONLY = taskId("t1");
  * and the rows on it are not kept. Pure.
  */
 export function followed(book: Book, criteria: readonly Stated[]): Book {
-	const steps = criteria.reduce((b, c): Book => {
-		const entry = b.live.find((e) => e.id === c.id);
+  const steps = criteria.reduce((b, c): Book => {
+    const entry = b.live.find((e) => e.id === c.id);
 
-		if (entry === undefined) {
-			return c.id === nextId(b) && c.version === 1
-				? apply(b, {type: "added", task: ONLY, text: c.text, by: "plan"})
-				: b;
-		}
+    if (entry === undefined) {
+      return c.id === nextId(b) && c.version === 1
+        ? apply(b, { type: "added", task: ONLY, text: c.text, by: "plan" })
+        : b;
+    }
 
-		const last = entry.wordings[entry.wordings.length - 1];
-		return last !== undefined && c.version === last.version + 1 && c.text !== last.text
-			? apply(b, {type: "reworded", id: c.id, text: c.text, by: "owner"})
-			: b;
-	}, book);
-	const gone = steps.live.filter((e) => !byReview(e) && !criteria.some((c) => c.id === e.id));
-	return gone.reduce((b, e) => apply(b, {type: "removed", id: e.id}), steps);
+    const last = entry.wordings[entry.wordings.length - 1];
+    return last !== undefined && c.version === last.version + 1 && c.text !== last.text
+      ? apply(b, { type: "reworded", id: c.id, text: c.text, by: "owner" })
+      : b;
+  }, book);
+  const gone = steps.live.filter((e) => !byReview(e) && !criteria.some((c) => c.id === e.id));
+  return gone.reduce((b, e) => apply(b, { type: "removed", id: e.id }), steps);
 }
 
 /** A judgement, folded into the book of a ticket no plan holds: the book follows what the review read, then keeps the round. Pure. */
 export const followedThenKept = (book: Book, judgement: Judgement): Book =>
-	keep(followed(book, judgement.criteria), judgement, ONLY);
+  keep(followed(book, judgement.criteria), judgement, ONLY);
 
 /** A record in memory, starting from `books` (by ticket). Two layers made from one share it. */
 export function memoryRecord(books: ReadonlyMap<TicketId, Book> = new Map()) {
-	const ref = Ref.makeUnsafe<ReadonlyMap<TicketId, Book>>(new Map(books));
-	const layer = Layer.succeed(CriteriaRecord, {
-		read: (ticket) => Ref.get(ref).pipe(Effect.map((all) => heldOf(all.get(ticket) ?? EMPTY))),
-		judged: (ticket, judgement) =>
-			Ref.update(ref, (all) =>
-				new Map(all).set(ticket, followedThenKept(all.get(ticket) ?? EMPTY, judgement)),
-			),
-	});
-	return {
-		layer,
-		book: (ticket: TicketId): Book | null => Effect.runSync(Ref.get(ref)).get(ticket) ?? null,
-	};
+  const ref = Ref.makeUnsafe<ReadonlyMap<TicketId, Book>>(new Map(books));
+  const layer = Layer.succeed(CriteriaRecord, {
+    read: (ticket) => Ref.get(ref).pipe(Effect.map((all) => heldOf(all.get(ticket) ?? EMPTY))),
+    judged: (ticket, judgement) =>
+      Ref.update(ref, (all) => new Map(all).set(ticket, followedThenKept(all.get(ticket) ?? EMPTY, judgement))),
+  });
+  return {
+    layer,
+    book: (ticket: TicketId): Book | null => Effect.runSync(Ref.get(ref)).get(ticket) ?? null,
+  };
 }
 
 /**
@@ -157,49 +153,49 @@ export function memoryRecord(books: ReadonlyMap<TicketId, Book> = new Map()) {
  * so what a review finds goes under the plan's first task.
  */
 export const ledgerRecord = Layer.effect(
-	CriteriaRecord,
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		const folded = Effect.map(readFacts, foldLedger).pipe(Effect.provideService(Ledger, ledger));
-		return {
-			read: (ticket) =>
-				Effect.map(folded, (state) => {
-					const plan = planFor(state, ticket);
-					const book = plan === null ? null : bookOf(state, plan);
-					return book === null ? null : heldOf(book);
-				}),
-			judged: (ticket, judgement) =>
-				Effect.gen(function* () {
-					const state = yield* folded;
-					const plan = planFor(state, ticket);
-					const book = plan === null ? null : bookOf(state, plan);
-					const task = plan === null ? null : firstTaskOf(state, plan);
+  CriteriaRecord,
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    const folded = Effect.map(readFacts, foldLedger).pipe(Effect.provideService(Ledger, ledger));
+    return {
+      read: (ticket) =>
+        Effect.map(folded, (state) => {
+          const plan = planFor(state, ticket);
+          const book = plan === null ? null : bookOf(state, plan);
+          return book === null ? null : heldOf(book);
+        }),
+      judged: (ticket, judgement) =>
+        Effect.gen(function* () {
+          const state = yield* folded;
+          const plan = planFor(state, ticket);
+          const book = plan === null ? null : bookOf(state, plan);
+          const task = plan === null ? null : firstTaskOf(state, plan);
 
-					if (plan === null || book === null || task === null) {
-						return;
-					}
+          if (plan === null || book === null || task === null) {
+            return;
+          }
 
-					const rows = kept(book, judgement);
+          const rows = kept(book, judgement);
 
-					// A round with no row kept still judges what earlier rounds found.
-					if (rows.length > 0 || judgement.found.length > 0 || book.live.some(byReview)) {
-						yield* sendFact(
-							{
-								type: "judged",
-								plan,
-								task,
-								head: judgement.head,
-								proof: judgement.proof,
-								rows,
-								found: judgement.found,
-							},
-							{by: "review"},
-						).pipe(
-							Effect.catchTag("Fenced", () => Effect.die("an unfenced send was fenced")),
-							Effect.provideService(Ledger, ledger),
-						);
-					}
-				}),
-		};
-	}),
+          // A round with no row kept still judges what earlier rounds found.
+          if (rows.length > 0 || judgement.found.length > 0 || book.live.some(byReview)) {
+            yield* sendFact(
+              {
+                type: "judged",
+                plan,
+                task,
+                head: judgement.head,
+                proof: judgement.proof,
+                rows,
+                found: judgement.found,
+              },
+              { by: "review" },
+            ).pipe(
+              Effect.catchTag("Fenced", () => Effect.die("an unfenced send was fenced")),
+              Effect.provideService(Ledger, ledger),
+            );
+          }
+        }),
+    };
+  }),
 );

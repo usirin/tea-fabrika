@@ -1,6 +1,6 @@
-import {Context, Duration, Effect, Layer, Schema, Stream, Tracer} from "effect";
-import {KeyValueStore} from "effect/persistence";
-import {RunRecord, type Storage, StorageBroken, storageOf} from "../program/storage.ts";
+import { Context, Duration, Effect, Layer, Schema, Stream, Tracer } from "effect";
+import { KeyValueStore } from "effect/persistence";
+import { RunRecord, type Storage, StorageBroken, storageOf } from "../program/storage.ts";
 
 // A job's record, read: what `Traces.read(traceId)` answers. One host job (a tsh line, a lane,
 // `hello world`) leaves one record, a Durable Object keyed by the job's trace id, the
@@ -37,23 +37,23 @@ export const JobEnd = Schema.Literals(["done", "failed", "stopped"]);
 export type JobEnd = typeof JobEnd.Type;
 
 /** A stop someone asked for: who, as a writer's text, and why. A person's Ctrl-C gives no why. */
-export const JobStop = Schema.Struct({by: Schema.String, why: Schema.NullOr(Schema.String)});
+export const JobStop = Schema.Struct({ by: Schema.String, why: Schema.NullOr(Schema.String) });
 export type JobStop = typeof JobStop.Type;
 
 /** What was started and how it ended. Written by the host (#72): `null` in a record until it does. */
 export const Job = Schema.Struct({
-	/** The host's number for it: `%1`. */
-	n: Schema.Int,
-	/** What was started: the line as typed, or what the app started. */
-	text: Schema.String,
-	/** Who started it, as the door stamped the host's write (`user:<id>`, `agent:<id> for:<id>`). */
-	by: Schema.String,
-	/** Which host ran it. */
-	host: Schema.String,
-	/** Unix ms. */
-	started: Schema.Number,
-	/** `null`: still running. */
-	ended: Schema.NullOr(Schema.Struct({how: JobEnd, at: Schema.Number})),
+  /** The host's number for it: `%1`. */
+  n: Schema.Int,
+  /** What was started: the line as typed, or what the app started. */
+  text: Schema.String,
+  /** Who started it, as the door stamped the host's write (`user:<id>`, `agent:<id> for:<id>`). */
+  by: Schema.String,
+  /** Which host ran it. */
+  host: Schema.String,
+  /** Unix ms. */
+  started: Schema.Number,
+  /** `null`: still running. */
+  ended: Schema.NullOr(Schema.Struct({ how: JobEnd, at: Schema.Number })),
 });
 export type Job = typeof Job.Type;
 
@@ -64,46 +64,46 @@ export const SpanTags = Schema.Record(Schema.String, SpanTag);
 
 /** A moment inside a span: `told add`, `sent n`, `msg add`. */
 export const SpanEvent = Schema.Struct({
-	name: Schema.String,
-	/** Unix ms. */
-	at: Schema.Number,
-	tags: SpanTags,
+  name: Schema.String,
+  /** Unix ms. */
+  at: Schema.Number,
+  tags: SpanTags,
 });
 export type SpanEvent = typeof SpanEvent.Type;
 
 /** One span of the job's trace, from any host. */
 export const Span = Schema.Struct({
-	span: SpanId,
-	/** `null`: a root span. One whose parent is not in the record hangs off a span nobody exported. */
-	parent: Schema.NullOr(SpanId),
-	name: Schema.String,
-	/** Whose span it is (`service.name`): one colour per service in the tile. */
-	service: Schema.String,
-	/** Unix ms, to the microsecond. */
-	start: Schema.Number,
-	end: Schema.Number,
-	status: Schema.Literals(["unset", "ok", "error"]),
-	tags: SpanTags,
-	events: Schema.Array(SpanEvent),
-	/** Who sent it, as the door stamped the exporter. */
-	by: Schema.String,
+  span: SpanId,
+  /** `null`: a root span. One whose parent is not in the record hangs off a span nobody exported. */
+  parent: Schema.NullOr(SpanId),
+  name: Schema.String,
+  /** Whose span it is (`service.name`): one colour per service in the tile. */
+  service: Schema.String,
+  /** Unix ms, to the microsecond. */
+  start: Schema.Number,
+  end: Schema.Number,
+  status: Schema.Literals(["unset", "ok", "error"]),
+  tags: SpanTags,
+  events: Schema.Array(SpanEvent),
+  /** Who sent it, as the door stamped the exporter. */
+  by: Schema.String,
 });
 export type Span = typeof Span.Type;
 
 /** One Msg one machine run folded: the Msg, the state after it, and the Cmds it started. */
 export const Step = Schema.Struct({
-	run: Schema.String,
-	machine: Schema.String,
-	id: Schema.String,
-	/** 1, 2, 3 ... per machine run, across its restarts. */
-	n: Schema.Int,
-	/** Unix ms. */
-	at: Schema.Number,
-	msg: Schema.Unknown,
-	/** As the machine's state schema encodes it. */
-	state: Schema.Unknown,
-	cmds: Schema.Array(Schema.Unknown),
-	by: Schema.String,
+  run: Schema.String,
+  machine: Schema.String,
+  id: Schema.String,
+  /** 1, 2, 3 ... per machine run, across its restarts. */
+  n: Schema.Int,
+  /** Unix ms. */
+  at: Schema.Number,
+  msg: Schema.Unknown,
+  /** As the machine's state schema encodes it. */
+  state: Schema.Unknown,
+  cmds: Schema.Array(Schema.Unknown),
+  by: Schema.String,
 });
 export type Step = typeof Step.Type;
 
@@ -113,12 +113,12 @@ export type Step = typeof Step.Type;
  * open. A child run started meanwhile nests under it the same way (`jobWrites`' `spanOf`).
  */
 export const Opened = Schema.Struct({
-	/** The run, or the hosted name, whose span it is. */
-	run: Schema.String,
-	span: SpanId,
-	/** Unix ms. */
-	at: Schema.Number,
-	by: Schema.String,
+  /** The run, or the hosted name, whose span it is. */
+  run: Schema.String,
+  span: SpanId,
+  /** Unix ms. */
+  at: Schema.Number,
+  by: Schema.String,
 });
 export type Opened = typeof Opened.Type;
 
@@ -129,21 +129,21 @@ export type Opened = typeof Opened.Type;
  * the one part of a record a person can delete.
  */
 export const KeptContent = Schema.Struct({
-	span: SpanId,
-	input: Schema.NullOr(Schema.String),
-	output: Schema.NullOr(Schema.String),
+  span: SpanId,
+  input: Schema.NullOr(Schema.String),
+  output: Schema.NullOr(Schema.String),
 });
 
 /** One span's content, deleted by a person: the span stays, and this says who, when and why. */
 export const DeletedContent = Schema.Struct({
-	span: SpanId,
-	deleted: Schema.Struct({
-		/** The person, as the door stamped them: `user:<id>`. */
-		by: Schema.String,
-		/** Unix ms, on the record's clock. */
-		at: Schema.Number,
-		why: Schema.String,
-	}),
+  span: SpanId,
+  deleted: Schema.Struct({
+    /** The person, as the door stamped them: `user:<id>`. */
+    by: Schema.String,
+    /** Unix ms, on the record's clock. */
+    at: Schema.Number,
+    why: Schema.String,
+  }),
 });
 
 export const Content = Schema.Union([KeptContent, DeletedContent]);
@@ -151,16 +151,16 @@ export type Content = typeof Content.Type;
 
 /** A job's whole record, read: what the trace tile draws. */
 export const JobTrace = Schema.Struct({
-	trace: TraceId,
-	job: Schema.NullOr(Job),
-	/** Each run's storage record: its status, flags and machine runs. */
-	runs: Schema.Array(RunRecord),
-	/** By start. */
-	spans: Schema.Array(Span),
-	/** By run, machine run and number. */
-	steps: Schema.Array(Step),
-	/** By when they opened. A run taken over has one per host that ran it, the newest last. */
-	opened: Schema.Array(Opened),
+  trace: TraceId,
+  job: Schema.NullOr(Job),
+  /** Each run's storage record: its status, flags and machine runs. */
+  runs: Schema.Array(RunRecord),
+  /** By start. */
+  spans: Schema.Array(Span),
+  /** By run, machine run and number. */
+  steps: Schema.Array(Step),
+  /** By when they opened. A run taken over has one per host that ran it, the newest last. */
+  opened: Schema.Array(Opened),
 });
 export type JobTrace = typeof JobTrace.Type;
 
@@ -172,65 +172,65 @@ export type JobTrace = typeof JobTrace.Type;
  * door adds who sent it, never the body.
  */
 export const JobCall = Schema.Union([
-	Schema.Struct({op: Schema.Literal("get"), key: Schema.String}),
-	Schema.Struct({op: Schema.Literal("set"), key: Schema.String, value: Schema.String}),
-	Schema.Struct({op: Schema.Literal("remove"), key: Schema.String}),
-	Schema.Struct({op: Schema.Literal("size")}),
-	Schema.Struct({op: Schema.Literal("keys")}),
-	Schema.Struct({
-		op: Schema.Literal("step"),
-		run: Schema.String,
-		machine: Schema.String,
-		id: Schema.String,
-		at: Schema.Number,
-		msg: Schema.Unknown,
-		state: Schema.Unknown,
-		cmds: Schema.Array(Schema.Unknown),
-	}),
-	Schema.Struct({
-		op: Schema.Literal("began"),
-		n: Schema.Int,
-		text: Schema.String,
-		host: Schema.String,
-		at: Schema.Number,
-		/**
-		 * Who started the job, as its table says (./jobs.ts): the sender, or an agent working for
-		 * the sender. Left out, or naming anyone else, the record keeps the sender (./job-rules.ts).
-		 */
-		by: Schema.optionalKey(Schema.String),
-	}),
-	Schema.Struct({
-		op: Schema.Literal("ended"),
-		how: JobEnd,
-		at: Schema.Number,
-		/** Who asked the job to stop, and why, as its table kept it. Left out: it ended on its own. */
-		stop: Schema.optionalKey(JobStop),
-	}),
-	Schema.Struct({
-		op: Schema.Literal("opened"),
-		run: Schema.String,
-		span: SpanId,
-		at: Schema.Number,
-	}),
-	Schema.Struct({op: Schema.Literal("spanOf"), run: Schema.String}),
-	Schema.Struct({op: Schema.Literal("read")}),
-	/**
-	 * Delete one span's content, and say why. Only a person may: a call the door stamped as an
-	 * agent's is refused, as no agent answers what the machine asked a person.
-	 */
-	Schema.Struct({op: Schema.Literal("deleteContent"), span: SpanId, why: Schema.String}),
+  Schema.Struct({ op: Schema.Literal("get"), key: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("set"), key: Schema.String, value: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("remove"), key: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("size") }),
+  Schema.Struct({ op: Schema.Literal("keys") }),
+  Schema.Struct({
+    op: Schema.Literal("step"),
+    run: Schema.String,
+    machine: Schema.String,
+    id: Schema.String,
+    at: Schema.Number,
+    msg: Schema.Unknown,
+    state: Schema.Unknown,
+    cmds: Schema.Array(Schema.Unknown),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("began"),
+    n: Schema.Int,
+    text: Schema.String,
+    host: Schema.String,
+    at: Schema.Number,
+    /**
+     * Who started the job, as its table says (./jobs.ts): the sender, or an agent working for
+     * the sender. Left out, or naming anyone else, the record keeps the sender (./job-rules.ts).
+     */
+    by: Schema.optionalKey(Schema.String),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("ended"),
+    how: JobEnd,
+    at: Schema.Number,
+    /** Who asked the job to stop, and why, as its table kept it. Left out: it ended on its own. */
+    stop: Schema.optionalKey(JobStop),
+  }),
+  Schema.Struct({
+    op: Schema.Literal("opened"),
+    run: Schema.String,
+    span: SpanId,
+    at: Schema.Number,
+  }),
+  Schema.Struct({ op: Schema.Literal("spanOf"), run: Schema.String }),
+  Schema.Struct({ op: Schema.Literal("read") }),
+  /**
+   * Delete one span's content, and say why. Only a person may: a call the door stamped as an
+   * agent's is refused, as no agent answers what the machine asked a person.
+   */
+  Schema.Struct({ op: Schema.Literal("deleteContent"), span: SpanId, why: Schema.String }),
 ]);
 export type JobCall = typeof JobCall.Type;
 
 /** What the record answers a `read`: the runs by name only, read through `Storage` here. */
 export const RecordRead = Schema.Struct({
-	job: Schema.NullOr(Job),
-	runs: Schema.Array(Schema.String),
-	spans: Schema.Array(Span),
-	steps: Schema.Array(Step),
-	opened: Schema.Array(Opened),
-	/** By span id. */
-	content: Schema.Array(Content),
+  job: Schema.NullOr(Job),
+  runs: Schema.Array(Schema.String),
+  spans: Schema.Array(Span),
+  steps: Schema.Array(Step),
+  opened: Schema.Array(Opened),
+  /** By span id. */
+  content: Schema.Array(Content),
 });
 export type RecordRead = typeof RecordRead.Type;
 
@@ -238,61 +238,54 @@ export type RecordRead = typeof RecordRead.Type;
 export type RecordCalls = (trace: string, call: JobCall) => Effect.Effect<unknown, StorageBroken>;
 
 const decodeAs =
-	<A>(schema: Schema.Codec<A, unknown>, what: string) =>
-	(answer: unknown) =>
-		Schema.decodeUnknownEffect(schema)(answer).pipe(
-			Effect.mapError((cause) => new StorageBroken({message: `the record's ${what}`, cause})),
-		);
+  <A>(schema: Schema.Codec<A, unknown>, what: string) =>
+  (answer: unknown) =>
+    Schema.decodeUnknownEffect(schema)(answer).pipe(
+      Effect.mapError((cause) => new StorageBroken({ message: `the record's ${what}`, cause })),
+    );
 
-const Value = Schema.Struct({value: Schema.NullOr(Schema.String)});
-const Size = Schema.Struct({size: Schema.Int});
-const Keys = Schema.Struct({keys: Schema.Array(Schema.String)});
+const Value = Schema.Struct({ value: Schema.NullOr(Schema.String) });
+const Size = Schema.Struct({ size: Schema.Int });
+const Keys = Schema.Struct({ keys: Schema.Array(Schema.String) });
 
 const kvError = (method: string, key?: string) => (e: StorageBroken) =>
-	new KeyValueStore.KeyValueStoreError({
-		method,
-		message: e.message,
-		...(key === undefined ? {} : {key}),
-		cause: e,
-	});
+  new KeyValueStore.KeyValueStoreError({
+    method,
+    message: e.message,
+    ...(key === undefined ? {} : { key }),
+    cause: e,
+  });
 
 /** The record's `state` table as a `KeyValueStore`: what `Storage` sits on. */
 const recordKv = (calls: RecordCalls, trace: string) =>
-	KeyValueStore.makeStringOnly({
-		get: (key) =>
-			calls(trace, {op: "get", key}).pipe(
-				Effect.flatMap(decodeAs(Value, "answer to get")),
-				Effect.map((a) => a.value ?? undefined),
-				Effect.mapError(kvError("get", key)),
-			),
-		set: (key, value) =>
-			calls(trace, {op: "set", key, value}).pipe(
-				Effect.asVoid,
-				Effect.mapError(kvError("set", key)),
-			),
-		remove: (key) =>
-			calls(trace, {op: "remove", key}).pipe(
-				Effect.asVoid,
-				Effect.mapError(kvError("remove", key)),
-			),
-		// Nothing in a record is ever deleted.
-		clear: Effect.fail(
-			new KeyValueStore.KeyValueStoreError({
-				method: "clear",
-				message: "a job's record is never cleared",
-			}),
-		),
-		size: calls(trace, {op: "size"}).pipe(
-			Effect.flatMap(decodeAs(Size, "answer to size")),
-			Effect.map((a) => a.size),
-			Effect.mapError(kvError("size")),
-		),
-		keys: calls(trace, {op: "keys"}).pipe(
-			Effect.flatMap(decodeAs(Keys, "answer to keys")),
-			Effect.map((a) => a.keys),
-			Effect.mapError(kvError("keys")),
-		),
-	});
+  KeyValueStore.makeStringOnly({
+    get: (key) =>
+      calls(trace, { op: "get", key }).pipe(
+        Effect.flatMap(decodeAs(Value, "answer to get")),
+        Effect.map((a) => a.value ?? undefined),
+        Effect.mapError(kvError("get", key)),
+      ),
+    set: (key, value) =>
+      calls(trace, { op: "set", key, value }).pipe(Effect.asVoid, Effect.mapError(kvError("set", key))),
+    remove: (key) => calls(trace, { op: "remove", key }).pipe(Effect.asVoid, Effect.mapError(kvError("remove", key))),
+    // Nothing in a record is ever deleted.
+    clear: Effect.fail(
+      new KeyValueStore.KeyValueStoreError({
+        method: "clear",
+        message: "a job's record is never cleared",
+      }),
+    ),
+    size: calls(trace, { op: "size" }).pipe(
+      Effect.flatMap(decodeAs(Size, "answer to size")),
+      Effect.map((a) => a.size),
+      Effect.mapError(kvError("size")),
+    ),
+    keys: calls(trace, { op: "keys" }).pipe(
+      Effect.flatMap(decodeAs(Keys, "answer to keys")),
+      Effect.map((a) => a.keys),
+      Effect.mapError(kvError("keys")),
+    ),
+  });
 
 /**
  * The `Storage` of one job's runs, in its record: the same interface a program takes from
@@ -300,13 +293,11 @@ const recordKv = (calls: RecordCalls, trace: string) =>
  * job is handed this one, as tsh hands its storage to every run of a line today.
  */
 export const jobStorage = (calls: RecordCalls, trace: string): Storage =>
-	storageOf(
-		Layer.succeed(KeyValueStore.KeyValueStore, recordKv(calls, trace)),
-		(run, machine, id, step) =>
-			calls(trace, {op: "step", run, machine, id, ...step}).pipe(Effect.asVoid),
-	);
+  storageOf(Layer.succeed(KeyValueStore.KeyValueStore, recordKv(calls, trace)), (run, machine, id, step) =>
+    calls(trace, { op: "step", run, machine, id, ...step }).pipe(Effect.asVoid),
+  );
 
-const SpanOf = Schema.Struct({span: Schema.NullOr(SpanId)});
+const SpanOf = Schema.Struct({ span: Schema.NullOr(SpanId) });
 
 /**
  * The host's writes to a job's record: when it started and how it ended, and the span each of
@@ -319,49 +310,46 @@ const SpanOf = Schema.Struct({span: Schema.NullOr(SpanId)});
  *   start(build, {}).pipe(Effect.withParentSpan(up ?? traceOf("lane:700")));
  */
 export const jobWrites = (calls: RecordCalls, trace: string) => ({
-	began: (job: {
-		readonly n: number;
-		readonly text: string;
-		readonly host: string;
-		readonly at: number;
-		readonly by?: string;
-	}) => calls(trace, {op: "began", ...job}).pipe(Effect.asVoid),
-	/** `stop`: who asked it to stop, and why; `null`, it ended on its own. */
-	ended: (how: JobEnd, at: number, stop: JobStop | null = null) =>
-		calls(trace, {op: "ended", how, at, ...(stop === null ? {} : {stop})}).pipe(Effect.asVoid),
-	/** Keep the span `run`'s work hangs under. Kept before it returns. */
-	opened: (run: string, span: string, at: number) =>
-		calls(trace, {op: "opened", run, span, at}).pipe(Effect.asVoid),
-	/** The newest span `run` opened, as a parent in this job's trace. `null`: it opened none. */
-	spanOf: (run: string): Effect.Effect<Tracer.ExternalSpan | null, StorageBroken> =>
-		calls(trace, {op: "spanOf", run}).pipe(
-			Effect.flatMap(decodeAs(SpanOf, "answer to spanOf")),
-			Effect.map((a) =>
-				a.span === null
-					? null
-					: Tracer.externalSpan({traceId: trace, spanId: a.span, sampled: true}),
-			),
-		),
+  began: (job: {
+    readonly n: number;
+    readonly text: string;
+    readonly host: string;
+    readonly at: number;
+    readonly by?: string;
+  }) => calls(trace, { op: "began", ...job }).pipe(Effect.asVoid),
+  /** `stop`: who asked it to stop, and why; `null`, it ended on its own. */
+  ended: (how: JobEnd, at: number, stop: JobStop | null = null) =>
+    calls(trace, { op: "ended", how, at, ...(stop === null ? {} : { stop }) }).pipe(Effect.asVoid),
+  /** Keep the span `run`'s work hangs under. Kept before it returns. */
+  opened: (run: string, span: string, at: number) => calls(trace, { op: "opened", run, span, at }).pipe(Effect.asVoid),
+  /** The newest span `run` opened, as a parent in this job's trace. `null`: it opened none. */
+  spanOf: (run: string): Effect.Effect<Tracer.ExternalSpan | null, StorageBroken> =>
+    calls(trace, { op: "spanOf", run }).pipe(
+      Effect.flatMap(decodeAs(SpanOf, "answer to spanOf")),
+      Effect.map((a) =>
+        a.span === null ? null : Tracer.externalSpan({ traceId: trace, spanId: a.span, sampled: true }),
+      ),
+    ),
 });
 
 /** Reading a job's record failed: it could not be reached, or it answered what no record says. */
 export class TraceUnread extends Schema.TaggedError<TraceUnread>()("TraceUnread", {
-	trace: Schema.String,
-	message: Schema.String,
+  trace: Schema.String,
+  message: Schema.String,
 }) {}
 
 /** One job's record, read: the service the trace tile asks, so where the records live can change. */
 export class Traces extends Context.Service<
-	Traces,
-	{
-		readonly read: (trace: string) => Effect.Effect<JobTrace, TraceUnread>;
-		/**
-		 * The record now, then again after each write to it, for a reader that follows a job as it
-		 * goes. Writes that come while a read is out are read together, once. It ends only on a read
-		 * that fails.
-		 */
-		readonly watch: (trace: string) => Stream.Stream<JobTrace, TraceUnread>;
-	}
+  Traces,
+  {
+    readonly read: (trace: string) => Effect.Effect<JobTrace, TraceUnread>;
+    /**
+     * The record now, then again after each write to it, for a reader that follows a job as it
+     * goes. Writes that come while a read is out are read together, once. It ends only on a read
+     * that fails.
+     */
+    readonly watch: (trace: string) => Stream.Stream<JobTrace, TraceUnread>;
+  }
 >()("@kampus/fabrika-old/Traces") {}
 
 /** How often a record that says nothing of its writes is read again while it is followed. */
@@ -383,13 +371,13 @@ export const polled: Changes = () => Stream.tick(POLL);
  * one, so a burst of writes costs one read, not one each.
  */
 export const watchOn = <E>(
-	read: Effect.Effect<JobTrace, E>,
-	changes: Stream.Stream<void>,
+  read: Effect.Effect<JobTrace, E>,
+  changes: Stream.Stream<void>,
 ): Stream.Stream<JobTrace, E> =>
-	changes.pipe(
-		Stream.buffer({capacity: 1, strategy: "sliding"}),
-		Stream.mapEffect(() => read),
-	);
+  changes.pipe(
+    Stream.buffer({ capacity: 1, strategy: "sliding" }),
+    Stream.mapEffect(() => read),
+  );
 
 /**
  * `Traces` over the records `calls` reaches. A trace nobody wrote reads as an empty record.
@@ -397,40 +385,40 @@ export const watchOn = <E>(
  * (`Records`, ./records.ts); records behind the door are polled.
  */
 export const layerTraces = (calls: RecordCalls, changes: Changes = polled) =>
-	Layer.succeed(Traces, tracesOn(calls, changes));
+  Layer.succeed(Traces, tracesOn(calls, changes));
 
 const tracesOn = (calls: RecordCalls, changes: Changes): Traces["Service"] => {
-	const read = (trace: string) =>
-		Effect.gen(function* () {
-			const id = yield* Schema.decodeUnknownEffect(TraceId)(trace);
-			const raw = yield* calls(id, {op: "read"}).pipe(Effect.flatMap(decodeAs(RecordRead, "read")));
-			const storage = jobStorage(calls, id);
-			const runs: RunRecord[] = [];
+  const read = (trace: string) =>
+    Effect.gen(function* () {
+      const id = yield* Schema.decodeUnknownEffect(TraceId)(trace);
+      const raw = yield* calls(id, { op: "read" }).pipe(Effect.flatMap(decodeAs(RecordRead, "read")));
+      const storage = jobStorage(calls, id);
+      const runs: RunRecord[] = [];
 
-			for (const run of raw.runs) {
-				const record = yield* storage.record(run);
+      for (const run of raw.runs) {
+        const record = yield* storage.record(run);
 
-				if (record !== null) {
-					runs.push(record);
-				}
-			}
+        if (record !== null) {
+          runs.push(record);
+        }
+      }
 
-			return {
-				trace: id,
-				job: raw.job,
-				runs,
-				spans: raw.spans,
-				steps: raw.steps,
-				opened: raw.opened,
-			};
-		}).pipe(
-			Effect.mapError(
-				(e) =>
-					new TraceUnread({
-						trace,
-						message: "message" in e ? String(e.message) : String(e),
-					}),
-			),
-		);
-	return Traces.of({read, watch: (trace) => watchOn(read(trace), changes(trace))});
+      return {
+        trace: id,
+        job: raw.job,
+        runs,
+        spans: raw.spans,
+        steps: raw.steps,
+        opened: raw.opened,
+      };
+    }).pipe(
+      Effect.mapError(
+        (e) =>
+          new TraceUnread({
+            trace,
+            message: "message" in e ? String(e.message) : String(e),
+          }),
+      ),
+    );
+  return Traces.of({ read, watch: (trace) => watchOn(read(trace), changes(trace)) });
 };

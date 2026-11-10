@@ -24,36 +24,36 @@
 // every writer. So it must not change while the person stays the same (a GitHub login may be
 // renamed; GitHub's numeric id never is), and two services must never give the same id: each
 // starts its ids with its own name (`github:<n>`).
-import {Context, Effect, Layer, Schema} from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 
 /** A person as a keys service knows them: their id, the name they go by now, and their keys. */
 export const Signers = Schema.Struct({
-	/** Never changes while the person is the same, and names its service first: `github:7`. */
-	id: Schema.String,
-	/** The name they go by at the service now (on GitHub, their login). It may change. */
-	name: Schema.String,
-	/** Public keys as key lines (`ssh-ed25519 AAAA...`). Any one of them may sign for the person. */
-	keys: Schema.Array(Schema.String),
+  /** Never changes while the person is the same, and names its service first: `github:7`. */
+  id: Schema.String,
+  /** The name they go by at the service now (on GitHub, their login). It may change. */
+  name: Schema.String,
+  /** Public keys as key lines (`ssh-ed25519 AAAA...`). Any one of them may sign for the person. */
+  keys: Schema.Array(Schema.String),
 });
 export type Signers = typeof Signers.Type;
 
 /** The keys service could not be asked, or did not answer as it should. */
 export class KeysUnreachable extends Schema.TaggedError<KeysUnreachable>()("KeysUnreachable", {
-	why: Schema.String,
+  why: Schema.String,
 }) {}
 
 export class Keys extends Context.Service<
-	Keys,
-	{
-		/** Who has the id `id`, and the keys that may sign for them; null: nobody does. */
-		readonly byId: (id: string) => Effect.Effect<Signers | null, KeysUnreachable>;
-		/** Who goes by `name` now, and the keys that may sign for them; null: nobody does. */
-		readonly of: (name: string) => Effect.Effect<Signers | null, KeysUnreachable>;
-	}
+  Keys,
+  {
+    /** Who has the id `id`, and the keys that may sign for them; null: nobody does. */
+    readonly byId: (id: string) => Effect.Effect<Signers | null, KeysUnreachable>;
+    /** Who goes by `name` now, and the keys that may sign for them; null: nobody does. */
+    readonly of: (name: string) => Effect.Effect<Signers | null, KeysUnreachable>;
+  }
 >()("@kampus/fabrika-old/Keys") {}
 
 /** Nobody has any id or name: for a door that asks nobody's keys (a local one, or a closed one). */
 export const layerNobody: Layer.Layer<Keys> = Layer.succeed(
-	Keys,
-	Keys.of({byId: () => Effect.succeed(null), of: () => Effect.succeed(null)}),
+  Keys,
+  Keys.of({ byId: () => Effect.succeed(null), of: () => Effect.succeed(null) }),
 );

@@ -21,33 +21,33 @@
 // The twin (`twin.ts`) runs the same `LEDGER_ENTRY` with the same `ledgerBindings` in Miniflare.
 // This file loads Alchemy, which reads the working folder once as it loads, so no test imports it.
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import {COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings} from "@kampus/fabrika-old/local";
+import { COMPATIBILITY_DATE, LEDGER_ENTRY, ledgerBindings } from "@kampus/fabrika-old/local";
 import * as Alchemy from "alchemy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import {Config, Effect, Option} from "effect";
-import {type ServerConfig, serverDoor} from "./config.ts";
+import { Config, Effect, Option } from "effect";
+import { type ServerConfig, serverDoor } from "./config.ts";
 
 /** The GitHub token, if one is set. Effect's env provider reads an empty one as none. */
 const githubToken = Config.option(Config.Redacted("LEDGER_GITHUB_TOKEN"));
 
 export const ledgerStack = (c: ServerConfig) =>
-	Alchemy.Stack(
-		`fabrika-${c.name}`,
-		{providers: Cloudflare.providers(), state: Alchemy.localState()},
-		Effect.gen(function* () {
-			const token = Option.getOrUndefined(yield* githubToken);
-			const worker = yield* Cloudflare.Worker("Ledger", {
-				name: c.name,
-				main: LEDGER_ENTRY,
-				compatibility: {date: COMPATIBILITY_DATE},
-				observability: {enabled: false},
-				env: {
-					LEDGER: Cloudflare.DurableObject("Ledger"),
-					JOB_RECORD: Cloudflare.DurableObject("JobRecord"),
-					...ledgerBindings({door: serverDoor(c)}),
-					...(token === undefined ? {} : {GITHUB_TOKEN: token}),
-				},
-			}).pipe(RemovalPolicy.retain());
-			return {url: worker.url};
-		}),
-	);
+  Alchemy.Stack(
+    `fabrika-${c.name}`,
+    { providers: Cloudflare.providers(), state: Alchemy.localState() },
+    Effect.gen(function* () {
+      const token = Option.getOrUndefined(yield* githubToken);
+      const worker = yield* Cloudflare.Worker("Ledger", {
+        name: c.name,
+        main: LEDGER_ENTRY,
+        compatibility: { date: COMPATIBILITY_DATE },
+        observability: { enabled: false },
+        env: {
+          LEDGER: Cloudflare.DurableObject("Ledger"),
+          JOB_RECORD: Cloudflare.DurableObject("JobRecord"),
+          ...ledgerBindings({ door: serverDoor(c) }),
+          ...(token === undefined ? {} : { GITHUB_TOKEN: token }),
+        },
+      }).pipe(RemovalPolicy.retain());
+      return { url: worker.url };
+    }),
+  );

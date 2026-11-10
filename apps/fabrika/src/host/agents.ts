@@ -1,10 +1,10 @@
-import {Ledger, Shell, Traces} from "@kampus/fabrika-old";
-import {type AgentOptions, type InTile, type JobAnswer, serveAgent} from "@kampus/fabrika-old/mcp";
-import {Author, PullRequests, RepoTree} from "@tea-fabrika/tracker";
-import {Context, Effect, type Scope} from "effect";
-import type {SocketServer} from "effect/socket";
-import {appPrograms} from "../tsh.ts";
-import type {AgentSessions} from "./agent-session.ts";
+import { Ledger, Shell, Traces } from "@kampus/fabrika-old";
+import { type AgentOptions, type InTile, type JobAnswer, serveAgent } from "@kampus/fabrika-old/mcp";
+import { Author, PullRequests, RepoTree } from "@tea-fabrika/tracker";
+import { Context, Effect, type Scope } from "effect";
+import type { SocketServer } from "effect/socket";
+import { appPrograms } from "../tsh.ts";
+import type { AgentSessions } from "./agent-session.ts";
 
 // The host's agents' socket, `<home>/host/mcp`: each agent's MCP bridge attaches here (the app's
 // `fabrika mcp --as <name>`), and is served the app's programs as tools (`@kampus/fabrika-old/mcp`).
@@ -71,81 +71,79 @@ import type {AgentSessions} from "./agent-session.ts";
 
 /** A screen's port name, `run:<id>`, as a run in a tile; a run's id starts with its program's name. */
 const inTile = (port: string): InTile | null => {
-	if (!port.startsWith("run:")) {
-		return null;
-	}
+  if (!port.startsWith("run:")) {
+    return null;
+  }
 
-	const run = port.slice("run:".length);
-	const at = run.indexOf(":");
-	return {run, program: at === -1 ? run : run.slice(0, at)};
+  const run = port.slice("run:".length);
+  const at = run.indexOf(":");
+  return { run, program: at === -1 ? run : run.slice(0, at) };
 };
 
 /** Serve every agent that attaches to `server`, until the host stops. */
 export const serveAgents = (options: {
-	readonly server: SocketServer.SocketServer["Service"];
-	/** The screens' names now. */
-	readonly ports: () => Iterable<string>;
-	/**
-	 * Said with each agent's name once its handshake is read, in the agent's scope: the host lists
-	 * who is attached by it, for the top bar's agents (host/serve.ts).
-	 */
-	readonly attached: (name: string) => Effect.Effect<void, never, Scope.Scope>;
-	/** Job n of the host's table now, with its lines (job-lines.ts), for the `job` tool. */
-	readonly job: (n: number) => JobAnswer | null;
-	/** Stop job n for an agent, and why (host/serve.ts), for the `stop` tool. */
-	readonly stop: NonNullable<AgentOptions["stop"]>;
-	/** Restart the host for an agent, and why (host/serve.ts), for the `restart` tool; none, no tool. */
-	readonly restart?: AgentOptions["restart"];
-	/** Run one line in an agent's own tile (host/serve.ts), for the `line` tool. */
-	readonly line: NonNullable<AgentOptions["line"]>;
-	/**
-	 * Agent `name`'s own session on the home's ledger server, held in the agent's scope
-	 * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
-	 * the host's.
-	 */
-	readonly sessionFor: AgentSessions | null;
+  readonly server: SocketServer.SocketServer["Service"];
+  /** The screens' names now. */
+  readonly ports: () => Iterable<string>;
+  /**
+   * Said with each agent's name once its handshake is read, in the agent's scope: the host lists
+   * who is attached by it, for the top bar's agents (host/serve.ts).
+   */
+  readonly attached: (name: string) => Effect.Effect<void, never, Scope.Scope>;
+  /** Job n of the host's table now, with its lines (job-lines.ts), for the `job` tool. */
+  readonly job: (n: number) => JobAnswer | null;
+  /** Stop job n for an agent, and why (host/serve.ts), for the `stop` tool. */
+  readonly stop: NonNullable<AgentOptions["stop"]>;
+  /** Restart the host for an agent, and why (host/serve.ts), for the `restart` tool; none, no tool. */
+  readonly restart?: AgentOptions["restart"];
+  /** Run one line in an agent's own tile (host/serve.ts), for the `line` tool. */
+  readonly line: NonNullable<AgentOptions["line"]>;
+  /**
+   * Agent `name`'s own session on the home's ledger server, held in the agent's scope
+   * (host/agent-session.ts); `null`: the home keeps its own ledger file, and each agent writes on
+   * the host's.
+   */
+  readonly sessionFor: AgentSessions | null;
 }) =>
-	Effect.gen(function* () {
-		const {server, ports, attached, job, stop, restart, line, sessionFor} = options;
-		const ledger = yield* Ledger;
-		const person = yield* Author;
-		const pullRequests = yield* PullRequests;
-		const repoTree = yield* RepoTree;
-		const traces = yield* Traces;
-		/** An agent's list: the app's programs as `who` writes, with every person-only input taken out. */
-		const listOn = (on: Ledger["Service"], who: Author["Service"]) =>
-			Shell.forAgent(Shell.programList(appPrograms(on, who, pullRequests, traces, repoTree)));
-		/** What agent `who` is served: its own session's programs, or the read-only door, with why. */
-		const programsFor: AgentOptions["programsFor"] = (who) =>
-			sessionFor === null
-				? Effect.succeed({list: listOn(ledger, who), readOnly: null})
-				: sessionFor(who.id).pipe(
-						Effect.map((session) => ({
-							list: listOn(Context.get(session, Ledger), Context.get(session, Author)),
-							readOnly: null,
-						})),
-						Effect.catchTag("ConnectFailed", ({why}) =>
-							Effect.logWarning("agent_refused").pipe(
-								Effect.annotateLogs({agent: who.id, why}),
-								Effect.as({list: listOn(ledger, who), readOnly: {why}}),
-							),
-						),
-					);
-		return yield* server.run((socket) =>
-			serveAgent(socket, {
-				person: person.id,
-				programsFor,
-				tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
-				job,
-				stop,
-				restart,
-				line,
-				attached: (who) => attached(who.id),
-			}).pipe(
-				Effect.catchCause((cause) =>
-					Effect.logWarning("fabrika host: an agent's link failed", cause),
-				),
-				Effect.andThen(Effect.logDebug("fabrika host: an agent went")),
-			),
-		);
-	});
+  Effect.gen(function* () {
+    const { server, ports, attached, job, stop, restart, line, sessionFor } = options;
+    const ledger = yield* Ledger;
+    const person = yield* Author;
+    const pullRequests = yield* PullRequests;
+    const repoTree = yield* RepoTree;
+    const traces = yield* Traces;
+    /** An agent's list: the app's programs as `who` writes, with every person-only input taken out. */
+    const listOn = (on: Ledger["Service"], who: Author["Service"]) =>
+      Shell.forAgent(Shell.programList(appPrograms(on, who, pullRequests, traces, repoTree)));
+    /** What agent `who` is served: its own session's programs, or the read-only door, with why. */
+    const programsFor: AgentOptions["programsFor"] = (who) =>
+      sessionFor === null
+        ? Effect.succeed({ list: listOn(ledger, who), readOnly: null })
+        : sessionFor(who.id).pipe(
+            Effect.map((session) => ({
+              list: listOn(Context.get(session, Ledger), Context.get(session, Author)),
+              readOnly: null,
+            })),
+            Effect.catchTag("ConnectFailed", ({ why }) =>
+              Effect.logWarning("agent_refused").pipe(
+                Effect.annotateLogs({ agent: who.id, why }),
+                Effect.as({ list: listOn(ledger, who), readOnly: { why } }),
+              ),
+            ),
+          );
+    return yield* server.run((socket) =>
+      serveAgent(socket, {
+        person: person.id,
+        programsFor,
+        tiles: () => [...ports()].flatMap((port) => inTile(port) ?? []),
+        job,
+        stop,
+        restart,
+        line,
+        attached: (who) => attached(who.id),
+      }).pipe(
+        Effect.catchCause((cause) => Effect.logWarning("fabrika host: an agent's link failed", cause)),
+        Effect.andThen(Effect.logDebug("fabrika host: an agent went")),
+      ),
+    );
+  });

@@ -1,5 +1,5 @@
-import {Context} from "effect";
-import type {Line, Stage} from "./check.ts";
+import { Context } from "effect";
+import type { Line, Stage } from "./check.ts";
 
 // What a line typed at tsh is called in a trace: what ran, not what was typed.
 // Each stage is its program's name, then each input it was told on, with each
@@ -18,28 +18,24 @@ import type {Line, Stage} from "./check.ts";
 export type Short = (value: string) => string | null;
 
 /** How values are shortened in a title. Whoever starts tsh hands it in. Left out: every value is left out. */
-export const Shorten = Context.Reference<Short>("tsh/Shorten", {defaultValue: () => () => null});
+export const Shorten = Context.Reference<Short>("tsh/Shorten", { defaultValue: () => () => null });
 
 /** A stage, by what ran and what it was told about. */
 const stageTitle = (stage: Stage, short: Short): string => {
-	const told = new Map<string, string[]>();
+  const told = new Map<string, string[]>();
 
-	for (const {name, source} of stage.told) {
-		const refs = told.get(name) ?? [];
-		const ref =
-			source.kind === "value" && typeof source.value === "string" ? short(source.value) : null;
-		told.set(name, ref === null ? refs : [...refs, ref]);
-	}
+  for (const { name, source } of stage.told) {
+    const refs = told.get(name) ?? [];
+    const ref = source.kind === "value" && typeof source.value === "string" ? short(source.value) : null;
+    told.set(name, ref === null ? refs : [...refs, ref]);
+  }
 
-	return [stage.entry.program.name, ...[...told].flatMap(([name, refs]) => [name, ...refs])].join(
-		" ",
-	);
+  return [stage.entry.program.name, ...[...told].flatMap(([name, refs]) => [name, ...refs])].join(" ");
 };
 
 /** A line, by what ran: its stages, as a pipe joins them. */
 export const titleOf = (line: Line, short: Short): string =>
-	line.stages.map((stage) => stageTitle(stage, short)).join(" | ");
+  line.stages.map((stage) => stageTitle(stage, short)).join(" | ");
 
 /** A job started again by `attach`: the programs it runs, as a pipe joins them. */
-export const attachTitleOf = (programs: readonly string[]): string =>
-	`attach ${programs.join(" | ")}`;
+export const attachTitleOf = (programs: readonly string[]): string => `attach ${programs.join(" | ")}`;

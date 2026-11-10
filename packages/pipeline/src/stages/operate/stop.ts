@@ -1,13 +1,13 @@
-import {Schema} from "effect";
-import {asksOnStall} from "../../asks/rules.ts";
-import {BuildReport} from "../build/machine.ts";
-import {BuildOutcome} from "../build/outcome.ts";
-import {Item} from "../build/ticket.ts";
-import {nameOf} from "../outcome.ts";
-import type {Reviewed} from "../review/program.ts";
-import type {Place} from "../review/sheet.ts";
-import {ShipOutcome} from "../ship/outcome.ts";
-import {LoopOutcome} from "./outcome.ts";
+import { Schema } from "effect";
+import { asksOnStall } from "../../asks/rules.ts";
+import { BuildReport } from "../build/machine.ts";
+import { BuildOutcome } from "../build/outcome.ts";
+import { Item } from "../build/ticket.ts";
+import { nameOf } from "../outcome.ts";
+import type { Reviewed } from "../review/program.ts";
+import type { Place } from "../review/sheet.ts";
+import { ShipOutcome } from "../ship/outcome.ts";
+import { LoopOutcome } from "./outcome.ts";
 
 // The loop's decisions, as pure functions: what each stage handed back, and
 // what the loop does next. The machine (./machine.ts) only carries them out.
@@ -40,49 +40,49 @@ import {LoopOutcome} from "./outcome.ts";
 
 /** How one build child ended, as the loop is handed it. */
 export const BuildEnd = Schema.Struct({
-	outcome: BuildOutcome,
-	name: Schema.String,
-	report: BuildReport,
+  outcome: BuildOutcome,
+  name: Schema.String,
+  report: BuildReport,
 });
 export type BuildEnd = typeof BuildEnd.Type;
 
 /** How one ship child ended. `outcome: null`: read mode stopped at the write it would send, named in `said`. */
 export const ShipEnd = Schema.Struct({
-	outcome: Schema.NullOr(ShipOutcome),
-	said: Schema.String,
+  outcome: Schema.NullOr(ShipOutcome),
+  said: Schema.String,
 });
 export type ShipEnd = typeof ShipEnd.Type;
 
 /** One round, as the loop records it. Each stage's part is `null` until that stage has ended. */
 export const Round = Schema.Struct({
-	n: Schema.Finite,
-	/** The build's outcome, by name. */
-	built: Schema.String,
-	pr: Schema.NullOr(Schema.String),
-	head: Schema.NullOr(Schema.String),
-	/** The builder added a commit this round. */
-	changed: Schema.Boolean,
-	/** The review's outcome, by name. */
-	reviewed: Schema.NullOr(Schema.String),
-	/**
-	 * How many were open after the round: the review's count, or 1 when the
-	 * ship sent the passed head back. `null`: no review ended this round.
-	 */
-	open: Schema.NullOr(Schema.Finite),
-	/** What was open, as the next round is told it. */
-	items: Schema.Array(Item),
-	/** The ship's outcome, by name. */
-	shipped: Schema.NullOr(Schema.String),
-	/** What this round's agents cost, in dollars. */
-	spend: Schema.Finite,
-	/**
-	 * What went wrong in the round, in the stages' own words: why the build
-	 * stopped, each review form code refused (`problemsOf`, ../review/machine.ts)
-	 * and why the review stopped. Kept here, in the loop's own state, so it
-	 * outlives the stages' state that the tidy-up clears, and it is in the
-	 * loop's end result.
-	 */
-	problems: Schema.Array(Schema.String),
+  n: Schema.Finite,
+  /** The build's outcome, by name. */
+  built: Schema.String,
+  pr: Schema.NullOr(Schema.String),
+  head: Schema.NullOr(Schema.String),
+  /** The builder added a commit this round. */
+  changed: Schema.Boolean,
+  /** The review's outcome, by name. */
+  reviewed: Schema.NullOr(Schema.String),
+  /**
+   * How many were open after the round: the review's count, or 1 when the
+   * ship sent the passed head back. `null`: no review ended this round.
+   */
+  open: Schema.NullOr(Schema.Finite),
+  /** What was open, as the next round is told it. */
+  items: Schema.Array(Item),
+  /** The ship's outcome, by name. */
+  shipped: Schema.NullOr(Schema.String),
+  /** What this round's agents cost, in dollars. */
+  spend: Schema.Finite,
+  /**
+   * What went wrong in the round, in the stages' own words: why the build
+   * stopped, each review form code refused (`problemsOf`, ../review/machine.ts)
+   * and why the review stopped. Kept here, in the loop's own state, so it
+   * outlives the stages' state that the tidy-up clears, and it is in the
+   * loop's end result.
+   */
+  problems: Schema.Array(Schema.String),
 });
 export type Round = typeof Round.Type;
 
@@ -92,22 +92,22 @@ export type Round = typeof Round.Type;
  * the stage outcome the loop read does not say it.
  */
 export const Next = Schema.Union([
-	Schema.Struct({go: Schema.Literal("review")}),
-	Schema.Struct({go: Schema.Literal("ship"), head: Schema.String}),
-	Schema.Struct({go: Schema.Literal("build"), items: Schema.Array(Item)}),
-	Schema.Struct({
-		go: Schema.Literal("end"),
-		outcome: LoopOutcome,
-		said: Schema.optionalKey(Schema.String),
-	}),
+  Schema.Struct({ go: Schema.Literal("review") }),
+  Schema.Struct({ go: Schema.Literal("ship"), head: Schema.String }),
+  Schema.Struct({ go: Schema.Literal("build"), items: Schema.Array(Item) }),
+  Schema.Struct({
+    go: Schema.Literal("end"),
+    outcome: LoopOutcome,
+    said: Schema.optionalKey(Schema.String),
+  }),
 ]);
 export type Next = typeof Next.Type;
 
 const end = (outcome: LoopOutcome, said?: string): Next =>
-	said === undefined ? {go: "end", outcome} : {go: "end", outcome, said};
+  said === undefined ? { go: "end", outcome } : { go: "end", outcome, said };
 
 const where = (place: Place) =>
-	`${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}`;
+  `${place.file}:${place.first === place.last ? place.first : `${place.first}-${place.last}`}`;
 
 /**
  * What a review left open, as the next round is told it: each open criterion
@@ -115,43 +115,41 @@ const where = (place: Place) =>
  * sends back before any reviewer reads the change.
  */
 export function openItems(reviewed: Pick<Reviewed, "outcome" | "criteria">): readonly Item[] {
-	if (reviewed.outcome.kind === "send" && reviewed.outcome.why === "checks_red") {
-		return [
-			{
-				criterion: null,
-				text: "A check is red at the head.",
-				says: "The repository's checks failed on the pushed commit, so no reviewer read it.",
-				where: [],
-				wants: ["The repository's typecheck, lint and tests all pass."],
-			},
-		];
-	}
+  if (reviewed.outcome.kind === "send" && reviewed.outcome.why === "checks_red") {
+    return [
+      {
+        criterion: null,
+        text: "A check is red at the head.",
+        says: "The repository's checks failed on the pushed commit, so no reviewer read it.",
+        where: [],
+        wants: ["The repository's typecheck, lint and tests all pass."],
+      },
+    ];
+  }
 
-	return reviewed.criteria
-		.filter((criterion) => criterion.state === "open")
-		.map((criterion) => ({
-			criterion: criterion.from === "ticket" ? criterion.id : null,
-			text: criterion.text,
-			says: criterion.says,
-			where: criterion.where.map(where),
-			wants: criterion.findings.map((finding) => finding.wants),
-		}));
+  return reviewed.criteria
+    .filter((criterion) => criterion.state === "open")
+    .map((criterion) => ({
+      criterion: criterion.from === "ticket" ? criterion.id : null,
+      text: criterion.text,
+      says: criterion.says,
+      where: criterion.where.map(where),
+      wants: criterion.findings.map((finding) => finding.wants),
+    }));
 }
 
 /** After a build: review it, or stop. */
 export function afterBuild(round: number, built: BuildEnd): Next {
-	const {outcome} = built;
+  const { outcome } = built;
 
-	switch (outcome.kind) {
-		case "done":
-			return !outcome.changed && round > 1
-				? end({kind: "ask", who: "owner", for: "no_change"})
-				: {go: "review"};
-		case "skip":
-			return end({kind: "skip", why: outcome.why});
-		default:
-			return end({kind: "stuck", why: "build"});
-	}
+  switch (outcome.kind) {
+    case "done":
+      return !outcome.changed && round > 1 ? end({ kind: "ask", who: "owner", for: "no_change" }) : { go: "review" };
+    case "skip":
+      return end({ kind: "skip", why: outcome.why });
+    default:
+      return end({ kind: "stuck", why: "build" });
+  }
 }
 
 /**
@@ -159,13 +157,8 @@ export function afterBuild(round: number, built: BuildEnd): Next {
  * build again, told them, or stop and ask the owner.
  */
 function again(rounds: readonly Round[], items: readonly Item[]): Next {
-	const opens = [
-		...rounds.slice(0, -1).flatMap((r) => (r.open === null ? [] : [r.open])),
-		items.length,
-	];
-	return asksOnStall(opens)
-		? end({kind: "ask", who: "owner", for: "no_progress"})
-		: {go: "build", items};
+  const opens = [...rounds.slice(0, -1).flatMap((r) => (r.open === null ? [] : [r.open])), items.length];
+  return asksOnStall(opens) ? end({ kind: "ask", who: "owner", for: "no_progress" }) : { go: "build", items };
 }
 
 /**
@@ -178,31 +171,29 @@ function again(rounds: readonly Round[], items: readonly Item[]): Next {
  * loop stops rather than ship what nobody reviewed.
  */
 export function afterReview(
-	rounds: readonly Round[],
-	reviewed: Pick<Reviewed, "outcome">,
-	items: readonly Item[],
+  rounds: readonly Round[],
+  reviewed: Pick<Reviewed, "outcome">,
+  items: readonly Item[],
 ): Next {
-	const {outcome} = reviewed;
+  const { outcome } = reviewed;
 
-	switch (outcome.kind) {
-		case "done": {
-			const built = rounds.at(-1)?.head ?? null;
-			return built !== null && outcome.head === built
-				? {go: "ship", head: built}
-				: end(
-						{kind: "stuck", why: "review"},
-						`the review passed ${outcome.head}, and this round built ${built ?? "nothing"}`,
-					);
-		}
-		case "send":
-			return rounds.length === 0 ? end({kind: "stuck", why: "review"}) : again(rounds, items);
-		case "skip":
-			return outcome.why === "draft"
-				? end({kind: "stuck", why: "review"})
-				: end({kind: "skip", why: outcome.why});
-		default:
-			return end({kind: "stuck", why: "review"});
-	}
+  switch (outcome.kind) {
+    case "done": {
+      const built = rounds.at(-1)?.head ?? null;
+      return built !== null && outcome.head === built
+        ? { go: "ship", head: built }
+        : end(
+            { kind: "stuck", why: "review" },
+            `the review passed ${outcome.head}, and this round built ${built ?? "nothing"}`,
+          );
+    }
+    case "send":
+      return rounds.length === 0 ? end({ kind: "stuck", why: "review" }) : again(rounds, items);
+    case "skip":
+      return outcome.why === "draft" ? end({ kind: "stuck", why: "review" }) : end({ kind: "skip", why: outcome.why });
+    default:
+      return end({ kind: "stuck", why: "review" });
+  }
 }
 
 /**
@@ -210,23 +201,21 @@ export function afterReview(
  * builder, else nothing. The round that shipped keeps it as its open list.
  */
 export function shipItems(shipped: ShipEnd): readonly Item[] {
-	const {outcome} = shipped;
+  const { outcome } = shipped;
 
-	if (outcome?.kind !== "send" || outcome.to !== "builder") {
-		return [];
-	}
+  if (outcome?.kind !== "send" || outcome.to !== "builder") {
+    return [];
+  }
 
-	return [
-		{
-			criterion: null,
-			text: `The ship stage sent it back: ${nameOf(outcome)}.`,
-			says: "The review passed, and the pull request still could not be shipped.",
-			where: [],
-			wants: [
-				"The pull request can be shipped: checks green, no conflicts, nothing left unanswered.",
-			],
-		},
-	];
+  return [
+    {
+      criterion: null,
+      text: `The ship stage sent it back: ${nameOf(outcome)}.`,
+      says: "The review passed, and the pull request still could not be shipped.",
+      where: [],
+      wants: ["The pull request can be shipped: checks green, no conflicts, nothing left unanswered."],
+    },
+  ];
 }
 
 /**
@@ -236,30 +225,30 @@ export function shipItems(shipped: ShipEnd): readonly Item[] {
  * round after round stops the loop to ask the owner. Anything else ends.
  */
 export function afterShip(pr: string, rounds: readonly Round[], shipped: ShipEnd): Next {
-	const {outcome} = shipped;
+  const { outcome } = shipped;
 
-	if (outcome === null) {
-		return end({kind: "ask", who: "owner", for: "ship"});
-	}
+  if (outcome === null) {
+    return end({ kind: "ask", who: "owner", for: "ship" });
+  }
 
-	switch (outcome.kind) {
-		case "done":
-			return end({
-				kind: "done",
-				part: outcome.part,
-				pr,
-				head: outcome.commit,
-				rounds: rounds.at(-1)?.n ?? rounds.length,
-			});
-		case "send":
-			if (outcome.to !== "builder") {
-				return end({kind: "ask", who: "owner", for: "ship"});
-			}
+  switch (outcome.kind) {
+    case "done":
+      return end({
+        kind: "done",
+        part: outcome.part,
+        pr,
+        head: outcome.commit,
+        rounds: rounds.at(-1)?.n ?? rounds.length,
+      });
+    case "send":
+      if (outcome.to !== "builder") {
+        return end({ kind: "ask", who: "owner", for: "ship" });
+      }
 
-			return again(rounds, shipItems(shipped));
-		case "ask":
-			return end({kind: "ask", who: "owner", for: "ship"});
-		default:
-			return end({kind: "stuck", why: "ship"});
-	}
+      return again(rounds, shipItems(shipped));
+    case "ask":
+      return end({ kind: "ask", who: "owner", for: "ship" });
+    default:
+      return end({ kind: "stuck", why: "ship" });
+  }
 }
