@@ -106,7 +106,76 @@ const valid = (label: string, extra: string) => ({
 	},
 });
 type Workflow = ReturnType<typeof valid>;
+const wiring = fc
+	.tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"))
+	.map(([label, extra, whitespace, gap]) => {
+		const clean = valid(label, extra);
+		if (whitespace) {
+			clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
+			for (const step of clean.jobs.next.steps.slice(1))
+				step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
+		}
+		return clean;
+	});
 const plants: [string, (workflow: Workflow) => void][] = [
+	[
+		"review: extra exec Vitest invocation",
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!, run: `exec ${w.jobs.next.steps[0]!.run}`});
+		},
+	],
+	...[
+		"vitest run next/",
+		"pnpm vitest run next/",
+		"npx vitest run next/",
+		"./node_modules/.bin/vitest run next/",
+		'pnpm exec "vitest" run next/',
+		'env CI=true pnpm exec vitest run next/ --shard "$SHARD"',
+		'echo before; pnpm exec vitest run next/ --shard "$SHARD"; echo after',
+		'echo before\npnpm exec vitest run next/ --shard "$SHARD"\necho after',
+		"pnpm exec vitest run next/; pnpm exec vitest run next/",
+	].map((run): [string, (w: Workflow) => void] => [
+		`extra Vitest spelling: ${run}`,
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!, run});
+		},
+	]),
+	...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
+		`review: extra multiline ${["", "Chromium", "e2e", "edges"][index]} invocation`,
+		(w) => {
+			w.jobs.next.steps.push({
+				...w.jobs.next.steps[index]!,
+				run: `echo before\n${w.jobs.next.steps[index]!.run}\necho after`,
+			});
+		},
+	]),
+	[
+		"review: SHARD matrix.sha rd",
+		(w) => {
+			w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/6`;
+		},
+	],
+	...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
+		`review: ${["", "Chromium", "e2e", "edges"][index]} guard matrix.sha rd`,
+		(w) => {
+			w.jobs.next.steps[index]!.if = w.jobs.next.steps[index]!.if!.replace(
+				"matrix.shard",
+				"matrix.sha rd",
+			);
+		},
+	]),
+	[
+		"review: Chromium path next/ apps",
+		(w) => {
+			w.jobs.next.steps[1]!.if = w.jobs.next.steps[1]!.if!.replace("next/apps", "next/ apps");
+		},
+	],
+	[
+		"review: edges event pull_ request",
+		(w) => {
+			w.jobs.next.steps[3]!.if = w.jobs.next.steps[3]!.if!.replace("pull_request", "pull_ request");
+		},
+	],
 	[
 		"next missing shard",
 		(w) => {
@@ -368,32 +437,38 @@ const plants: [string, (workflow: Workflow) => void][] = [
 	],
 ];
 
-it("accepts generated valid wiring and rejects every isolated wiring plant", () => {
+it("accepts generated valid wiring", () => {
 	fc.assert(
-		fc.property(name, name, fc.boolean(), (label, extra, whitespace) => {
-			const clean = valid(label, extra);
-			if (whitespace) {
-				clean.jobs.next.steps[0]!.env!.SHARD = `\${{matrix.shard}}/6`;
-				for (const step of clean.jobs.next.steps.slice(1))
-					step.if = `\${{ ${step.if?.replaceAll(" && ", "  &&  ")} }}`;
-			}
+		fc.property(wiring, (clean) => {
 			expect(lint(JSON.stringify(clean))).toEqual([]);
-			for (const [plant, mutate] of plants) {
-				const broken = structuredClone(clean);
-				mutate(broken);
-				expect(lint(JSON.stringify(broken)), plant).not.toEqual([]);
-			}
+		}),
+		options,
+	);
+});
+
+it.each(plants)("rejects isolated wiring plant: %s", (plant, mutate) => {
+	fc.assert(
+		fc.property(wiring, (clean) => {
+			expect(lint(JSON.stringify(clean))).toEqual([]);
+			const broken = structuredClone(clean);
+			mutate(broken);
+			expect(lint(JSON.stringify(broken)), plant).not.toEqual([]);
 		}),
 		options,
 	);
 });
 
 it("names the next command whose step or condition is wrong", () => {
-	const broken = structuredClone(valid("label", "extra"));
-	broken.jobs.next.steps[1]!.if = "matrix.shard == 1";
-	expect(lint(JSON.stringify(broken))).toEqual([
-		"check.yaml: next runs pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium once on shard 1 with its original condition",
-	]);
+	fc.assert(
+		fc.property(wiring, fc.constantFrom(1, 2, 3), fc.boolean(), (broken, index, missingGuard) => {
+			const step = broken.jobs.next.steps[index]!;
+			step.if = missingGuard ? (index === 2 ? "true" : "matrix.shard == 1") : "false";
+			expect(lint(JSON.stringify(broken))).toEqual([
+				`check.yaml: next runs ${step.run} once on shard 1 with its original condition`,
+			]);
+		}),
+		options,
+	);
 });
 
 it("format: the checked-in workflow passes the same wiring lint", () => {
