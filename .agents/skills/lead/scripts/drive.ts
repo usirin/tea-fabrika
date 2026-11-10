@@ -66,6 +66,7 @@ import {nameOf, outcomesOf} from "@kampus/pipeline/stages/outcome";
 import {Effect, Schema, Stream} from "effect";
 import {
 	checkHolds,
+	heldRules,
 	laneRoot,
 	lockfileBehind,
 	startHead,
@@ -729,6 +730,17 @@ export const leftIn = (box: string, branch: string): string[] => {
 	];
 };
 
+/** Why the commits check held the step: each rule and commit, else its exit and last lines. */
+export const commitsSaid = (
+	check: {code: number; out: string; err: string},
+	laneSteps: ReadonlySet<string>,
+): string => {
+	const rules = heldRules(check.out, laneSteps);
+	return rules.length > 0
+		? `commits check: ${rules.slice(0, 5).join("; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
+		: `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
+};
+
 /**
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
  * check's no; any other failure, or a line naming no known check, is the box failing.
@@ -871,9 +883,10 @@ const handlers = (env: Env) => {
 							);
 				if (check.code > 1) return failed("commits check", check);
 				// Exit 1 holds the step unless every stuck answer it gave was a waived stale link.
-				const holds = checkHolds(check.code, check.out, stepsIn(env, ask.root, head));
+				const laneSteps = stepsIn(env, ask.root, head);
+				const holds = checkHolds(check.code, check.out, laneSteps);
 				const unsigned = [
-					...(holds ? [`commits check: ${tail(check.out + check.err)}`] : []),
+					...(holds ? [commitsSaid(check, laneSteps)] : []),
 					...unsignedIn(env, ask, head),
 				];
 				return {
