@@ -24,9 +24,18 @@
 // The moves, pure (`moveOf`): tests done -> build -> mutation -> review -> open -> land. A send goes
 // to the step it names; a send to plan parks, since only the lead approves a plan. A lockfile ask
 // parks too: the lead refreshes it outside the box. Any other ask, and any stuck, goes to the
-// judgment agent, except a start refusal: agent_cap and low_disk wait and retry, the rest park.
-// A lane parks after CHAIN_STEPS steps (default 16), after three stucks in a row on one step, or
-// after six waits in a row. Exit codes: 0 landed, 20 parked (ask), 30 stuck, 2 usage.
+// judgment agent. A start refusal for a full laptop (agent_cap, low_disk) is retried on one named
+// Effect Schedule (`slotSchedule`); any other refusal parks. Every limit is a Context.Reference with
+// an overridable default (the defaults: a step retried every 5 minutes, 6 times; 3 stucks in a row
+// on one step; 16 steps a lane), and `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS` and
+// `CHAIN_STEPS` override them from outside. Running out of retries is a typed `RetriesExhausted`,
+// reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0 landed, 20 parked
+// (ask), 30 stuck, 2 usage.
+//
+// Each step's record is a Schema value (`StepRecord`) written to `state/<lane>-chain.json` before
+// the step starts and again when it ends, so a resume (`--start <step>`) needs nothing in memory.
+// The chain holds every right (the bot's push, the PR, catch-up); a box or the judgment agent holds
+// only its model login (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness through drive.ts (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
 //
 // The lane brief is one Markdown file. Its text before the first `## ` heading goes to every step.
 // Then one section per step, `## tests`, `## build`, `## mutation`, `## review`, and `## pr`, the
@@ -49,7 +58,7 @@ import {join} from "node:path";
 import {defineMachine} from "@demlik/tea";
 import {run} from "@demlik/tea/effect";
 import {act, intentOf} from "@kampus/pipeline/primitives";
-import {Effect, Schema} from "effect";
+import {Context, Duration, Effect, Schedule, Schema} from "effect";
 import {claudeProfile, type Env, loadEnv, sh} from "./drive.ts";
 import {wipOf} from "./lane.ts";
 
@@ -58,9 +67,38 @@ export const STEPS = ["tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
 
-const MAX_STUCK = 3;
-const MAX_WAITS = 6;
-const WAIT_MINUTES = 5;
+// ---------------------------------------------------------------- the limits
+
+/** Minutes between two tries of a step drive refused for a full laptop. */
+export const WaitMinutes = Context.Reference<number>("chain/WaitMinutes", {defaultValue: () => 5});
+/** How many times such a step is tried again before `RetriesExhausted`. */
+export const MaxWaits = Context.Reference<number>("chain/MaxWaits", {defaultValue: () => 6});
+/** Stucks in a row on one step before the lane parks without asking. */
+export const MaxStucks = Context.Reference<number>("chain/MaxStucks", {defaultValue: () => 3});
+/** Steps a lane may run before it parks. */
+export const MaxSteps = Context.Reference<number>("chain/MaxSteps", {defaultValue: () => 16});
+
+/** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
+export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
+
+/** drive refused the step for a full laptop (agent_cap or low_disk); retried on `slotSchedule`. */
+export class SlotRefused extends Schema.TaggedError<SlotRefused>()("SlotRefused", {
+	check: Schema.String,
+	reason: Schema.String,
+}) {}
+
+/** A named schedule ran out; the lane reports it as stuck. */
+export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted>()("RetriesExhausted", {
+	schedule: Schema.String,
+	times: Schema.Number,
+	reason: Schema.String,
+}) {}
+
+/** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
+export const slotRefusal = (outcome: string): string | null => {
+	const [verb, check = ""] = outcome.split(":");
+	return verb === "refused" && (check === "agent_cap" || check === "low_disk") ? check : null;
+};
 
 // ---------------------------------------------------------------- what drive said
 
@@ -104,7 +142,6 @@ export const lineOf = (out: string, exit: number): Line | null => {
 /** The next move after a step's outcome, as data. */
 export type Move =
 	| {readonly _tag: "step"; readonly step: StepName; readonly note: string}
-	| {readonly _tag: "wait"}
 	| {readonly _tag: "judge"}
 	| {readonly _tag: "open"}
 	| {readonly _tag: "park"; readonly reason: string};
@@ -119,9 +156,10 @@ const after: Record<StepName, StepName | null> = {
 
 /**
  * The Check, pure: what drive's outcome means for the lane. `stucks` counts stucks in a row on
- * this step, `waits` the waits in a row.
+ * this step, against the `MaxStucks` limit. A slot refusal never reaches here: the step's Cmd
+ * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
-export const moveOf = (step: StepName, line: Line, stucks: number, waits: number): Move => {
+export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
 	const [verb, to = "", why = ""] = line.outcome.split(":");
 	switch (verb) {
 		case "done": {
@@ -141,14 +179,10 @@ export const moveOf = (step: StepName, line: Line, stucks: number, waits: number
 			if (why === "lockfile") return {_tag: "park", reason: line.reason};
 			return {_tag: "judge"};
 		case "refused":
-			if (to === "agent_cap" || to === "low_disk")
-				return waits >= MAX_WAITS
-					? {_tag: "park", reason: `drive refused ${MAX_WAITS} times in a row: ${line.reason}`}
-					: {_tag: "wait"};
 			return {_tag: "park", reason: `drive refused: ${line.outcome}: ${line.reason}`};
 		default:
-			return stucks >= MAX_STUCK
-				? {_tag: "park", reason: `${step} stuck ${MAX_STUCK} times in a row: ${line.reason}`}
+			return stucks >= maxStucks
+				? {_tag: "park", reason: `${step} stuck ${maxStucks} times in a row: ${line.reason}`}
 				: {_tag: "judge"};
 	}
 };
@@ -250,13 +284,29 @@ const LineS = Schema.Struct({
 
 const Done = Schema.Struct({ok: Schema.Boolean, detail: Schema.String});
 
-const stepRun = act("step_run", {input: Run, ok: LineS, err: ["unknown"]});
+const stepRun = act("step_run", {input: Run, ok: LineS, err: ["RetriesExhausted", "unknown"]});
 
-const wait = act("wait", {
-	input: Schema.Struct({round: Schema.Number}),
-	ok: Done,
-	err: ["unknown"],
+/** One step's record, saved before it starts (`line` null) and again when it ends. */
+export const StepRecord = Schema.Struct({
+	round: Schema.Number,
+	step: Schema.Literals(STEPS),
+	note: Schema.String,
+	startedAt: Schema.String,
+	endedAt: Schema.NullOr(Schema.String),
+	line: Schema.NullOr(LineS),
+	/** The judgment agent's box and answer after this step, when one was asked. */
+	judged: Schema.NullOr(Schema.Struct({box: Schema.String, answer: Schema.String})),
 });
+export type StepRecord = typeof StepRecord.Type;
+
+/** The lane's chain record, `state/<lane>-chain.json`. */
+export const ChainRecord = Schema.Struct({
+	lane: Schema.String,
+	pr: Schema.NullOr(Schema.Number),
+	landed: Schema.NullOr(Schema.String),
+	steps: Schema.Array(StepRecord),
+});
+export type ChainRecord = typeof ChainRecord.Type;
 
 const judge = act("judge", {
 	input: Schema.Struct({step: Schema.Literals(STEPS), line: LineS, round: Schema.Number}),
@@ -274,7 +324,6 @@ const land = act("land", {input: Schema.Struct({pr: Schema.Number}), ok: Done, e
 
 type Cmds =
 	| ReturnType<typeof stepRun>
-	| ReturnType<typeof wait>
 	| ReturnType<typeof judge>
 	| ReturnType<typeof prOpen>
 	| ReturnType<typeof land>;
@@ -288,13 +337,15 @@ type Lane = {
 	readonly head: string;
 	readonly heads: Partial<Record<StepName, string>>;
 	readonly stucks: number;
-	readonly waits: number;
 };
+
+/** The limits the machine reads, from the References, once at start. */
+export type Limits = {readonly maxSteps: number; readonly maxStucks: number};
 
 type Model =
 	| {readonly phase: "idle"; readonly lane: Lane}
 	| {
-			readonly phase: "stepping" | "waiting";
+			readonly phase: "stepping";
 			readonly lane: Lane;
 			readonly step: StepName;
 			readonly note: string;
@@ -304,7 +355,7 @@ type Model =
 	| {readonly phase: "landing"; readonly lane: Lane; readonly pr: number}
 	| {readonly phase: "over"; readonly lane: Lane; readonly end: End};
 
-type Msg = {readonly type: "start"; readonly step: StepName; readonly max: number};
+type Msg = {readonly type: "start"; readonly step: StepName};
 type Step = readonly [Model, readonly Cmds[]];
 
 const stay = (s: Model): Step => [s, []];
@@ -317,18 +368,13 @@ const runStep = (lane: Lane, step: StepName, note: string): Step => {
 	return [{phase: "stepping", lane: next, step, note}, [asked]];
 };
 
-/** Take a move: a step, a wait, the judgment agent, the pull request or a park. */
+/** Take a move: a step, the judgment agent, the pull request or a park. */
 const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): Step => {
 	if (move._tag === "step" && lane.round >= max)
-		return over(lane, {kind: "ask", reason: `${max} steps ran (CHAIN_STEPS); the lane parks`});
+		return over(lane, {kind: "ask", reason: `${max} steps ran (MaxSteps); the lane parks`});
 	switch (move._tag) {
 		case "step":
 			return runStep(lane, move.step, move.note);
-		case "wait":
-			return [
-				{phase: "waiting", lane: {...lane, waits: lane.waits + 1}, step, note: ""},
-				[wait({round: lane.round, intent: intentOf("wait", lane.round, lane.waits)})],
-			];
 		case "judge":
 			return [
 				{phase: "judging", lane, step, line},
@@ -344,14 +390,11 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): 
 	}
 };
 
-export const makeMachine = (max: number) =>
+export const makeMachine = ({maxSteps, maxStucks}: Limits) =>
 	defineMachine({
 		types: {model: {} as Model, msg: {} as Msg, ctx: undefined},
-		cmds: [stepRun, wait, judge, prOpen, land],
-		init: (): Step => [
-			{phase: "idle", lane: {round: 0, head: "", heads: {}, stucks: 0, waits: 0}},
-			[],
-		],
+		cmds: [stepRun, judge, prOpen, land],
+		init: (): Step => [{phase: "idle", lane: {round: 0, head: "", heads: {}, stucks: 0}}, []],
 		update: {
 			start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
 			step_run_ok: (s, m): Step => {
@@ -365,21 +408,24 @@ export const makeMachine = (max: number) =>
 					heads:
 						verb === "done" && line.head ? {...s.lane.heads, [s.step]: line.head} : s.lane.heads,
 					stucks: verb === "stuck" ? s.lane.stucks + 1 : 0,
-					waits: verb === "refused" ? s.lane.waits : 0,
 				};
-				return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, lane.waits), max);
+				return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, maxStucks), maxSteps);
 			},
-			step_run_err: (s): Step =>
+			// A typed RetriesExhausted (the slot schedule ran out) or any other failure: stuck, with why.
+			step_run_err: (s, m): Step =>
 				s.phase === "stepping"
-					? over(s.lane, {kind: "stuck", reason: `drive.ts ${s.step} could not be started`})
+					? over(s.lane, {
+							kind: "stuck",
+							reason:
+								m.error._tag === "RetriesExhausted"
+									? `${s.step}: ${m.error.schedule} ran out after ${m.error.times} tries: ${m.error.reason}`
+									: `drive.ts ${s.step} could not be started`,
+						})
 					: stay(s),
-			wait_ok: (s): Step => (s.phase === "waiting" ? runStep(s.lane, s.step, s.note) : stay(s)),
-			wait_err: (s): Step =>
-				s.phase === "waiting" ? over(s.lane, {kind: "stuck", reason: "the wait failed"}) : stay(s),
 			judge_ok: (s, m): Step => {
 				if (s.phase !== "judging") return stay(s);
 				const move = judgedOf(m.value.text);
-				return take(s.lane, s.step, s.line, move, max);
+				return take(s.lane, s.step, s.line, move, maxSteps);
 			},
 			judge_err: (s): Step =>
 				s.phase === "judging"
@@ -493,11 +539,23 @@ const handlers = (s: Setup) => {
 		root?: string;
 		steps: {step: string; outcome: string; head: string}[];
 	} => (existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : {steps: []});
-	const moves: unknown[] = [];
-	const record = (move: unknown) => {
-		moves.push(move);
-		writeFileSync(`${chainState}.tmp`, `${JSON.stringify({lane: s.lane, moves}, null, "\t")}\n`);
+	// The chain record, a Schema value read and written whole: what a resume needs is on disk.
+	const readRecord = (): ChainRecord =>
+		existsSync(chainState)
+			? Schema.decodeUnknownSync(ChainRecord)(JSON.parse(readFileSync(chainState, "utf8")))
+			: {lane: s.lane, pr: null, landed: null, steps: []};
+	const writeRecord = (r: ChainRecord) => {
+		const text = JSON.stringify(Schema.encodeSync(ChainRecord)(r), null, "\t");
+		writeFileSync(`${chainState}.tmp`, `${text}\n`);
 		renameSync(`${chainState}.tmp`, chainState);
+	};
+	/** Replace this round's record (one per round), or add it. */
+	const saveStep = (entry: StepRecord) => {
+		const r = readRecord();
+		const steps = r.steps.some((e) => e.round === entry.round)
+			? r.steps.map((e) => (e.round === entry.round ? entry : e))
+			: [...r.steps, entry];
+		writeRecord({...r, steps});
 	};
 	const headsOf = () => {
 		const heads: Partial<Record<StepName, string>> = {};
@@ -536,26 +594,77 @@ const handlers = (s: Setup) => {
 					...(claude ? ["--agent", "claude", "--model", s.model] : []),
 					...(claude && s.electron.has(cmd.step) ? ["--electron"] : []),
 				];
+				const entry: StepRecord = {
+					round: cmd.round,
+					step: cmd.step,
+					note: cmd.note,
+					startedAt: new Date().toISOString(),
+					endedAt: null,
+					line: null,
+					judged: null,
+				};
+				saveStep(entry);
 				note(
 					`round ${cmd.round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
 				);
-				const ran = yield* spawnEffect("node", args, {errFile});
-				const line = lineOf(ran.out, ran.code) ?? {
-					outcome: "stuck:crash",
-					head: "",
-					reason: `drive.ts exited ${ran.code} with no outcome line; see ${errFile}`,
-					report: null,
-					box: "",
-					exit: 30,
-				};
-				record({round: cmd.round, step: cmd.step, ...line});
+				const minutes = yield* WaitMinutes;
+				const times = yield* MaxWaits;
+				// One drive run; a slot refusal is a typed failure the schedule retries.
+				const once = Effect.gen(function* () {
+					const ran = yield* spawnEffect("node", args, {errFile});
+					const line = lineOf(ran.out, ran.code) ?? {
+						outcome: "stuck:crash",
+						head: "",
+						reason: `drive.ts exited ${ran.code} with no outcome line; see ${errFile}`,
+						report: null,
+						box: "",
+						exit: 30,
+					};
+					const check = slotRefusal(line.outcome);
+					if (check !== null) {
+						note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
+						return yield* Effect.fail(new SlotRefused({check, reason: line.reason}));
+					}
+					return line;
+				});
+				const line = yield* once.pipe(
+					Effect.retry({schedule: slotSchedule(minutes), times}),
+					Effect.catchTag("SlotRefused", (e) =>
+						Effect.fail(
+							new RetriesExhausted({
+								schedule: `slotSchedule(${minutes} minutes)`,
+								times: times + 1,
+								reason: `${e.check}: ${e.reason}`,
+							}),
+						),
+					),
+					Effect.tapError((e) =>
+						Effect.sync(() => {
+							saveStep({
+								...entry,
+								endedAt: new Date().toISOString(),
+								line: {
+									outcome: `stuck:${e._tag}`,
+									head: "",
+									reason: e.reason,
+									report: null,
+									box: "",
+									exit: 30,
+								},
+							});
+							note(`round ${cmd.round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
+						}),
+					),
+					// tea's err channel takes a plain tagged record; the class stays inside the handler.
+					Effect.mapError((e) => ({
+						_tag: "RetriesExhausted" as const,
+						schedule: e.schedule,
+						times: e.times,
+						reason: e.reason,
+					})),
+				);
+				saveStep({...entry, endedAt: new Date().toISOString(), line});
 				return line;
-			}),
-		wait: () =>
-			Effect.gen(function* () {
-				note(`waiting ${WAIT_MINUTES} minutes for a slot`);
-				yield* Effect.sleep(`${WAIT_MINUTES} minutes`);
-				return {ok: true, detail: ""};
 			}),
 		judge: (cmd: {step: StepName; line: Line; round: number}) =>
 			Effect.gen(function* () {
@@ -632,10 +741,12 @@ const handlers = (s: Setup) => {
 					`chain.ts judgment for ${s.lane} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
 				]);
 				if (row.code === 0) appendFileSync(join(env.BOXES, `${s.lane}-rows.jsonl`), row.out);
-				note(
-					`judgment: ${move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`}`,
-				);
-				record({round: cmd.round, judge: box, move});
+				const answer =
+					move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
+				note(`judgment: ${answer}`);
+				const r = readRecord();
+				const last = r.steps.find((e) => e.round === cmd.round);
+				if (last) saveStep({...last, judged: {box, answer}});
 				return {text};
 			}),
 		pr_open: (cmd: {head: string}) =>
@@ -671,7 +782,7 @@ const handlers = (s: Setup) => {
 				const existing = Number(listed.out.trim());
 				if (listed.code === 0 && Number.isInteger(existing) && existing > 0) {
 					note(`PR ${existing} already open on ${s.branch}`);
-					record({open: existing});
+					writeRecord({...readRecord(), pr: existing});
 					return {pr: existing, detail: "existing"};
 				}
 				const body = [
@@ -704,7 +815,7 @@ const handlers = (s: Setup) => {
 						detail: `gh pr create failed: ${made.out.trim().split("\n").at(-1) ?? ""}`,
 					};
 				note(`opened https://github.com/${env.GH_REPO}/pull/${pr}`);
-				record({open: pr});
+				writeRecord({...readRecord(), pr});
 				return {pr, detail: "opened"};
 			}),
 		land: (cmd: {pr: number}) =>
@@ -715,7 +826,7 @@ const handlers = (s: Setup) => {
 				});
 				const last = ran.out.trim().split("\n").at(-1) ?? "";
 				note(`catchup.sh exited ${ran.code}: ${last}`);
-				record({land: cmd.pr, code: ran.code});
+				writeRecord({...readRecord(), landed: ran.code === 0 ? new Date().toISOString() : null});
 				return {ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}`};
 			}),
 	};
@@ -806,15 +917,15 @@ export const chainMain = (args: string[], env: Env) =>
 			electron: stepSet(flag(args, "--electron")),
 			model: flag(args, "--model") ?? "sonnet",
 		};
-		const max = Number(process.env.CHAIN_STEPS ?? 16);
-		const machine = makeMachine(max);
+		const limits: Limits = {maxSteps: yield* MaxSteps, maxStucks: yield* MaxStucks};
+		const machine = makeMachine(limits);
 		const handle = yield* run(machine, {
 			ctx: undefined,
 			interpret: handlers(setup),
 			terminal: (m) => m.phase === "over",
 		});
 		const runtime = yield* handle.ready;
-		yield* runtime.dispatch({type: "start", step: start, max});
+		yield* runtime.dispatch({type: "start", step: start});
 		const end = yield* runtime.done();
 		if (end.phase !== "over") return yield* Effect.die(`chain stopped in ${end.phase}`);
 		console.log(
@@ -830,6 +941,16 @@ export const chainMain = (args: string[], env: Env) =>
 		return end.end;
 	});
 
+/** A limit's override from the environment, when set and a number. */
+const overridden =
+	(ref: Context.Reference<number>, name: string) =>
+	<E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E, never> => {
+		const v = Number(process.env[name]);
+		return process.env[name] !== undefined && Number.isFinite(v)
+			? Effect.provideService(self, ref, v)
+			: self;
+	};
+
 const main = () => {
 	const env = loadEnv();
 	Effect.runPromise(
@@ -838,6 +959,11 @@ const main = () => {
 				const end = yield* chainMain(process.argv.slice(2), env);
 				process.exitCode = exitOf(end);
 			}),
+		).pipe(
+			overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
+			overridden(MaxWaits, "CHAIN_WAITS"),
+			overridden(MaxStucks, "CHAIN_STUCKS"),
+			overridden(MaxSteps, "CHAIN_STEPS"),
 		),
 	).catch((e: unknown) => {
 		console.log(JSON.stringify({outcome: "stuck", reason: String(e), exit: 30}));

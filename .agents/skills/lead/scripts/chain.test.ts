@@ -19,17 +19,22 @@ import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
+import {Schema} from "effect";
 import fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {
 	briefOf,
+	ChainRecord,
 	exitOf,
 	judgedOf,
 	type Line,
 	lineOf,
 	makeMachine,
 	moveOf,
+	RetriesExhausted,
 	sectionsOf,
+	slotRefusal,
+	slotSchedule,
 	STEPS,
 	type StepName,
 	stepsTable,
@@ -71,7 +76,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 		};
 		for (const s of STEPS)
 			for (const o of ["done", "skip:step_said"]) {
-				const m = moveOf(s, line(o, "h"), 0, 0);
+				const m = moveOf(s, line(o, "h"), 0, 3);
 				expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 				if (m._tag === "step") expect(m.note).toBe("");
 			}
@@ -80,10 +85,10 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 	it("a send goes to the step it names with the sender's word; a send to plan parks", () => {
 		fc.assert(
 			fc.property(step, step, word, (from, to, why) => {
-				const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 0);
+				const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
 				expect(m).toMatchObject({_tag: "step", step: to});
 				if (m._tag === "step") expect(m.note).toContain(why);
-				expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 0)._tag).toBe("park");
+				expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
 			}),
 			options,
 		);
@@ -92,42 +97,70 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 	it("a question goes to judgment, a lockfile ask parks with drive's own words", () => {
 		fc.assert(
 			fc.property(step, word, (s, why) => {
-				expect(moveOf(s, line("ask:lead:question", "h", why), 0, 0)._tag).toBe("judge");
-				const m = moveOf(s, line("ask:lead:lockfile", "h", why), 0, 0);
+				expect(moveOf(s, line("ask:lead:question", "h", why), 0, 3)._tag).toBe("judge");
+				const m = moveOf(s, line("ask:lead:lockfile", "h", why), 0, 3);
 				expect(m).toEqual({_tag: "park", reason: why});
 			}),
 			options,
 		);
 	});
 
-	it("a full laptop waits, up to six times, then parks; any other refusal parks at once", () => {
+	it("a slot refusal is the one outcome the schedule retries; any refusal that reaches the moves parks", () => {
 		fc.assert(
-			fc.property(step, fc.nat({max: 10}), (s, waits) => {
-				for (const r of ["refused:agent_cap", "refused:low_disk"])
-					expect(moveOf(s, line(r, "h"), 0, waits)._tag).toBe(waits >= 6 ? "park" : "wait");
-				for (const r of ["refused:plan_unapproved", "refused:branch_checked_out"])
-					expect(moveOf(s, line(r, "h"), 0, waits)._tag).toBe("park");
+			fc.property(step, outcome, (s, o) => {
+				const [verb, check] = o.split(":");
+				const slot = verb === "refused" && (check === "agent_cap" || check === "low_disk");
+				expect(slotRefusal(o)).toBe(slot ? check : null);
+				if (verb === "refused") expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");
 			}),
 			options,
 		);
 	});
 
-	it("a stuck goes to judgment until three in a row on one step, then parks", () => {
+	it("the slot schedule is spaced by the wait, and running out is a typed RetriesExhausted", () => {
 		fc.assert(
-			fc.property(step, fc.nat({max: 6}), word, (s, stucks, why) => {
-				const m = moveOf(s, line(`stuck:${why.replaceAll(" ", "_")}`, "h", why), stucks, 0);
-				expect(m._tag).toBe(stucks >= 3 ? "park" : "judge");
+			fc.property(fc.integer({min: 1, max: 60}), word, (minutes, why) => {
+				expect(slotSchedule(minutes)).toBeDefined();
+				const e = new RetriesExhausted({
+					schedule: `slotSchedule(${minutes} minutes)`,
+					times: 7,
+					reason: why,
+				});
+				expect(e._tag).toBe("RetriesExhausted");
+				expect(e.reason).toBe(why);
 			}),
+			options,
+		);
+	});
+
+	it("a stuck goes to judgment until MaxStucks in a row on one step, then parks", () => {
+		fc.assert(
+			fc.property(
+				step,
+				fc.nat({max: 6}),
+				fc.integer({min: 1, max: 5}),
+				word,
+				(s, stucks, max, why) => {
+					const m = moveOf(s, line(`stuck:${why.replaceAll(" ", "_")}`, "h", why), stucks, max);
+					expect(m._tag).toBe(stucks >= max ? "park" : "judge");
+				},
+			),
 			options,
 		);
 	});
 
 	it("every outcome has exactly one move, never a throw", () => {
 		fc.assert(
-			fc.property(step, outcome, fc.nat({max: 4}), fc.nat({max: 8}), (s, o, stucks, waits) => {
-				const m = moveOf(s, line(o, "h"), stucks, waits);
-				expect(["step", "wait", "judge", "open", "park"]).toContain(m._tag);
-			}),
+			fc.property(
+				step,
+				outcome,
+				fc.nat({max: 4}),
+				fc.integer({min: 1, max: 8}),
+				(s, o, stucks, max) => {
+					const m = moveOf(s, line(o, "h"), stucks, max);
+					expect(["step", "judge", "open", "park"]).toContain(m._tag);
+				},
+			),
 			options,
 		);
 	});
@@ -226,10 +259,10 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
 });
 
 describe("T341 the lane machine, stepped by hand, today's tooling", () => {
-	const machine = makeMachine(16);
+	const machine = makeMachine({maxSteps: 16, maxStucks: 3});
 	const start = () => {
 		const [idle] = machine.init();
-		return machine.update.start(idle, {type: "start", step: "tests", max: 16});
+		return machine.update.start(idle, {type: "start", step: "tests"});
 	};
 	const ran = (m: ReturnType<typeof start>[0], l: Line) =>
 		machine.update.step_run_ok(m, {type: "step_run_ok", value: l} as never);
@@ -306,24 +339,36 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 		);
 	});
 
-	it("a refusal for a full laptop waits and then runs the same step again", () => {
-		let [m, cmds] = start();
-		[m, cmds] = ran(m, line("refused:agent_cap", ""));
-		expect(m.phase).toBe("waiting");
-		expect(cmds[0]).toMatchObject({type: "wait"});
-		[m, cmds] = machine.update.wait_ok(m, {
-			type: "wait_ok",
-			value: {ok: true, detail: ""},
-		} as never);
-		expect(m).toMatchObject({phase: "stepping", step: "tests"});
-		// The step's head does not move on a refusal or a stuck; it moves on done, send and skip.
-		if (m.phase === "stepping") expect(m.lane.head).toBe("");
+	it("a RetriesExhausted on the step's err channel ends the lane as stuck (exit 30), naming the schedule", () => {
+		fc.assert(
+			fc.property(word, fc.integer({min: 1, max: 9}), (why, times) => {
+				const [m] = start();
+				const [over] = machine.update.step_run_err(m, {
+					type: "step_run_err",
+					error: {
+						_tag: "RetriesExhausted",
+						schedule: "slotSchedule(5 minutes)",
+						times,
+						reason: why,
+					},
+				} as never);
+				expect(over).toMatchObject({phase: "over", end: {kind: "stuck"}});
+				if (over.phase === "over") {
+					expect(over.end.reason).toContain("slotSchedule(5 minutes)");
+					expect(over.end.reason).toContain(why);
+					expect(exitOf(over.end)).toBe(30);
+					// Nothing moved: the lane's head is where it was.
+					expect(over.lane.head).toBe("");
+				}
+			}),
+			options,
+		);
 	});
 
 	it("the step cap parks the lane as ask, never loops forever", () => {
-		const small = makeMachine(2);
+		const small = makeMachine({maxSteps: 2, maxStucks: 3});
 		const [idle] = small.init();
-		let [m] = small.update.start(idle, {type: "start", step: "tests", max: 2});
+		let [m] = small.update.start(idle, {type: "start", step: "tests"});
 		[m] = small.update.step_run_ok(m, {
 			type: "step_run_ok",
 			value: line("done", "a".repeat(40)),
@@ -345,5 +390,41 @@ describe("T341 the pull request's steps table, today's tooling", () => {
 		expect(rows).toHaveLength(5);
 		expect(rows[2]).toContain("| tests | l-tests1 | done |");
 		expect(rows.at(-1)).toBe("| total | | | 0.00 |");
+	});
+});
+
+describe("T341 the chain record is a Schema value, today's tooling", () => {
+	it("a step's record round-trips through encode and decode, before and after the step", () => {
+		fc.assert(
+			fc.property(step, fc.nat({max: 20}), outcome, sha, word, (s, round, o, head, why) => {
+				const before = {
+					lane: "l",
+					pr: null,
+					landed: null,
+					steps: [
+						{round, step: s, note: why, startedAt: "t", endedAt: null, line: null, judged: null},
+					],
+				};
+				const after = {
+					...before,
+					pr: 7,
+					steps: [
+						{
+							...before.steps[0],
+							endedAt: "u",
+							line: line(o, head, why),
+							judged: {box: "b", answer: why},
+						},
+					],
+				};
+				for (const r of [before, after])
+					expect(
+						Schema.decodeUnknownSync(ChainRecord)(
+							JSON.parse(JSON.stringify(Schema.encodeSync(ChainRecord)(r))),
+						),
+					).toEqual(r);
+			}),
+			options,
+		);
 	});
 });

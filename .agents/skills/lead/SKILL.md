@@ -231,9 +231,15 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
   steps-and-dollars table in its body, and runs `catchup.sh`. A `send` goes to the step it names,
   with the sender's word in that step's brief. A send to plan parks: only the lead approves a plan.
-  A lockfile ask parks with drive's own instructions. A full laptop (`refused:agent_cap`,
-  `refused:low_disk`) waits five minutes and tries again, six times at most. Any other refusal
-  parks.
+  A lockfile ask parks with drive's own instructions. Any other refusal parks.
+- **Retries and limits** (decided with the clanka walk, 2026-11-09): a step drive refused for a full
+  laptop (`refused:agent_cap`, `refused:low_disk`) is retried on one named Effect `Schedule`,
+  `slotSchedule`, and running out is a typed `RetriesExhausted`, reported as stuck with the schedule's
+  name. Every limit is a `Context.Reference` with a default the environment may override:
+  `WaitMinutes` 5 (`CHAIN_WAIT_MINUTES`), `MaxWaits` 6 (`CHAIN_WAITS`), `MaxStucks` 3
+  (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
+  with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
+  ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
 - **Judgment** (an `ask:lead:question`, or a `stuck`): the chain starts `claude -p` in the main
   checkout, read-only (`Read,Glob,Grep`, under the same sandbox profile as a Claude plan step), with
   the lane's state file and the step's report. It answers one line: `answer: send <step> <note>`
@@ -242,10 +248,14 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
   Claude (Electron or socket work), `--electron` the ones that run the app.
 - **Where it ends:** one JSON line, `outcome` `done` (landed, exit 0), `ask` (parked, exit 20,
-  the why in `reason`) or `stuck` (exit 30). `CHAIN_STEPS` (default 16) caps the steps a lane may
-  run before it parks. `state/<lane>.md` gets a `chain:` line for every move, so the status page
-  reads the lane as before, and `state/<lane>-chain.json` keeps each drive line and judgment.
-  The step state file, boxes, rows and exit codes are drive's own, unchanged.
+  the why in `reason`) or `stuck` (exit 30). `state/<lane>.md` gets a `chain:` line for every move,
+  so the status page reads the lane as before. `state/<lane>-chain.json` is the chain record, a
+  Schema value (`ChainRecord`): one `StepRecord` per round, written before the step starts and again
+  when it ends (drive's line, the judgment's answer), plus the PR number and when it landed, so a
+  resume needs nothing in memory. The step state file, boxes, rows and exit codes are drive's own,
+  unchanged. The chain holds every right (the bot's push, the PR, catch-up); a box and the judgment
+  agent hold only their model login ([0028](../../../.decisions/0028-the-parent-holds-every-right.md)),
+  and the steps run the unmodified harness through `drive.ts`.
 - **Watching:** `tail -f BOXES/state/<lane>.md`. To stop a lane, stop the chain process: the
   running step's process group goes with it, and drive records that step as stuck. Start the chain
   again with `--start <step>` to go on from there.
