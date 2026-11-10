@@ -1,10 +1,12 @@
 import { applyCell } from "@demlik/tea";
 import { Result } from "effect";
+import * as fc from "fast-check";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open } from "../desk/desk.ts";
+import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
 import { decodeKeys, defaults, Does, type Keys } from "../desk/keymap.ts";
 import type { HostNow } from "../messages.ts";
 import type { JobEnded } from "../tile-jobs.ts";
@@ -20,6 +22,7 @@ import {
   EXPLAIN_ON,
   FRAME,
   fileWord,
+  frameKey,
   focusFollows,
   type Frame,
   type FrameMsg,
@@ -36,6 +39,7 @@ import {
   keyWord,
   lineIn,
   matching,
+  type MidKey,
   middleFree,
   nowhereNote,
   opensOf,
@@ -1262,4 +1266,187 @@ it("focus follows a zoom: zooming or unzooming the focused tile is a change that
   expect(focusFollows(zoomed)).not.toBe(focusFollows(split));
   expect(focusFollows(back)).toBe(focusFollows(split));
   expect(focusFollows(null)).toBe("");
+});
+
+// Ticket 589: an Escape the hold kept while the host's answer was out goes to the frame too, as a
+// fresh one does. `frameKey(frame, key, actual, waiting, delivery)` is the pure decision the page
+// makes for a key before it reaches a tile (desk.tsx): it answers the same frame when the key
+// goes on. `actual` is the desk's own prefix and question; `waiting` is the hold's outstanding
+// key. Only a fresh key counts `waiting` as the desk being mid-key: a passed key already had its
+// turn at the host.
+describe("a held Escape reaches the frame (ticket 589)", () => {
+  const key = (name: string, k = name): Key => ({
+    name,
+    press: { key: k, code: "", ctrl: name.startsWith("<c-"), alt: false, meta: false, shift: false },
+  });
+  const ctrlB = key("<c-b>", "b");
+  const escape = key("<esc>", "Escape");
+  const unarmed: MidKey = { armed: false, asking: false };
+  const PREFIX_ONLY: HoldMsg = { type: "takes", takes: { all: false, keys: ["<c-b>"] } };
+  const ALL: HoldMsg = { type: "takes", takes: { all: true, keys: [] } };
+  const on: Frame = frameUpdate(FRAME, { type: "info", focus: null });
+  const withAsks: Frame = frameUpdate(on, { type: "show", what: "asks" });
+
+  /** The real hold, folded from its real init: the model at the end and each step's Cmds. */
+  const foldHold = (msgs: readonly HoldMsg[]) => {
+    let hold: Hold = holdMachine.init(null, undefined)[0];
+    const steps: (readonly HoldCmd[])[] = [];
+
+    for (const msg of msgs) {
+      const [next, cmds] = applyCell<Hold, HoldMsg, HoldCmd>(holdMachine, hold, msg);
+      hold = next;
+      steps.push(cmds);
+    }
+
+    return { hold, steps };
+  };
+
+  /**
+   * What the page does with the Cmds of one step, as holdStep does (desk.tsx): the hold's final
+   * model is installed first, then each key passed on goes through the frame decision, and goes to
+   * the tile only when the frame leaves it.
+   */
+  const settle = (frame: Frame, hold: Hold, cmds: readonly HoldCmd[], actual: MidKey) => {
+    const tile: string[] = [];
+    let now = frame;
+
+    for (const c of cmds) {
+      if (c.type !== "pass") {
+        continue;
+      }
+
+      const next = frameKey(now, c.key.press.key, actual, hold.waiting !== null, c.held ? "passed" : "fresh");
+
+      if (next !== now) {
+        now = next;
+        continue;
+      }
+
+      tile.push(c.key.press.key);
+    }
+
+    return { frame: now, tile };
+  };
+
+  /** C-b i: the prefix is acknowledged, `i` is sent, and the host's desk comes back unarmed. */
+  const INFO_ON_PENDING: readonly HoldMsg[] = [
+    PREFIX_ONLY,
+    { type: "key", key: ctrlB },
+    ALL,
+    { type: "answer", id: 0, took: true },
+    { type: "key", key: key("i") },
+    PREFIX_ONLY,
+  ];
+
+  // scenario: the exact order of the report, show then desk then answer, with no clock: the key
+  // `i` is out, Escape is pressed before its answer and kept, and the answer lets it go on.
+  it("scenario: a held Escape leaves info mode when the answer lets it go", () => {
+    const { hold, steps } = foldHold([
+      ...INFO_ON_PENDING,
+      { type: "key", key: escape },
+      { type: "answer", id: 1, took: true },
+    ]);
+    expect(steps[5]).toEqual([]);
+    expect(steps.at(-1)).toEqual([{ type: "pass", key: escape, held: true }]);
+    const out = settle(on, hold, steps.at(-1) ?? [], unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    expect(out.tile).toEqual([]);
+  });
+
+  // scenario: Escape, then a key the host takes, in one release: the hold's final model is waiting
+  // again, and that wait must not reserve the Escape that went on before it.
+  it("scenario: a later key at the host does not hold back an earlier passed Escape", () => {
+    const { hold, steps } = foldHold([
+      ...INFO_ON_PENDING,
+      { type: "key", key: escape },
+      { type: "key", key: ctrlB },
+      { type: "answer", id: 1, took: true },
+    ]);
+    const cmds = steps.at(-1) ?? [];
+    expect(cmds.map((c) => c.type)).toEqual(["pass", "press"]);
+    expect(hold.waiting).not.toBeNull();
+    const out = settle(on, hold, cmds, unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    expect(out.tile).toEqual([]);
+  });
+
+  const frames = fc.record({ info: fc.boolean(), over: fc.boolean() }).map(({ info, over }) => {
+    const base = info ? on : FRAME;
+    return over ? frameUpdate(base, { type: "show", what: "asks" }) : base;
+  });
+  const layers = (f: Frame) => (f.over.kind === "none" ? 0 : 1) + (f.info.kind === "on" ? 1 : 0);
+
+  it("decides Escape alike fresh and passed, and dismisses at most one layer", () => {
+    fc.assert(
+      fc.property(frames, fc.boolean(), fc.boolean(), fc.boolean(), (f, armed, asking, waiting) => {
+        const actual = { armed, asking };
+        const passed = frameKey(f, "Escape", actual, waiting, "passed");
+        const fresh = frameKey(f, "Escape", actual, waiting, "fresh");
+        // Same ownership, same transition: a passed key ignores the wait, a fresh one adds it.
+        expect(passed).toEqual(frameUpdate(f, { type: "escape", desk: actual }));
+        expect(fresh).toEqual(frameKey(f, "Escape", { armed: armed || waiting, asking }, false, "passed"));
+        // One layer at a time (Apple's HIG): never both the over and info mode.
+        expect(layers(f) - layers(passed)).toBeLessThanOrEqual(1);
+        expect(layers(f) - layers(fresh)).toBeLessThanOrEqual(1);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: Escape pressed while the host still owns the outstanding key `i`. It is the hold's
+  // to keep, so neither the frame nor a tile has it until the answer.
+  it("scenario: a fresh Escape while a key is out at the host is kept, not dismissed", () => {
+    const { hold, steps } = foldHold([...INFO_ON_PENDING, { type: "key", key: escape }]);
+    expect(hold.waiting?.key).toEqual(key("i"));
+    expect(hold.held).toEqual([escape]);
+    expect(steps.at(-1)).toEqual([]);
+    expect(frameKey(on, "Escape", unarmed, hold.waiting !== null, "fresh")).toBe(on);
+  });
+
+  const others = fc.array(fc.constantFrom("a", "b", "1", "ArrowLeft", "Tab"), { minLength: 1, maxLength: 30 });
+
+  it("leaves every other held key to the tile, once each and in order, never to the frame", () => {
+    fc.assert(
+      fc.property(frames, others, fc.boolean(), (f, names, armed) => {
+        const { hold, steps } = foldHold([
+          PREFIX_ONLY,
+          { type: "key", key: ctrlB },
+          ...names.map((n): HoldMsg => ({ type: "key", key: key(n) })),
+          { type: "answer", id: 0, took: true },
+        ]);
+        const cmds = steps.at(-1) ?? [];
+        expect(cmds.map((c) => (c.type === "pass" ? c.key.name : c.type))).toEqual(names);
+        const actual = { armed, asking: false };
+        const out = settle(f, hold, cmds, actual);
+        expect(out.frame).toBe(f);
+        expect(out.tile).toEqual(names);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  // scenario: a key the host rejects goes on held, and a dropped link lets the queue go on; both
+  // reach the frame through the same decision, and the dropped link forgets the key in flight.
+  it("scenario: a rejected Escape and an Escape released by a dropped link both leave info mode", () => {
+    const rejected = foldHold([ALL, { type: "key", key: escape }, PREFIX_ONLY, { type: "answer", id: 0, took: false }]);
+    const cmds = rejected.steps.at(-1) ?? [];
+    expect(cmds).toEqual([{ type: "pass", key: escape, held: true }]);
+    expect(settle(on, rejected.hold, cmds, unarmed).frame.info).toEqual({ kind: "off" });
+
+    const dropped = foldHold([
+      PREFIX_ONLY,
+      { type: "key", key: ctrlB },
+      { type: "key", key: escape },
+      { type: "down" },
+    ]);
+    const released = dropped.steps.at(-1) ?? [];
+    // The key in flight is dropped, as it may be taken; only the queued Escape goes on.
+    expect(released).toEqual([{ type: "pass", key: escape, held: true }]);
+    expect(dropped.hold.up).toBe(false);
+    const out = settle(on, dropped.hold, released, unarmed);
+    expect(out.frame.info).toEqual({ kind: "off" });
+    expect(out.tile).toEqual([]);
+    // With an over up, the same Escape closes only it.
+    expect(settle(withAsks, dropped.hold, released, unarmed).frame.info).toEqual({ kind: "on", explained: null });
+  });
 });
