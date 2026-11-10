@@ -1,4 +1,4 @@
-import {Duration, Effect, Option, Scope, Semaphore, Stream} from "effect";
+import {Clock, Duration, Effect, Option, Scope, Semaphore} from "effect";
 import type {AnyRunning} from "../program/listed.ts";
 import type {AnyRun} from "../program/program.ts";
 import {viewOf} from "../program/program.ts";
@@ -88,8 +88,11 @@ export interface Drive {
 	readonly call: (name: string, args: unknown) => Effect.Effect<Answer>;
 }
 
-/** How long a fresh run is given to show its first state. */
-const FIRST_STATE = Duration.seconds(5);
+/**
+ * How long a call on a program input waits, from the call on: for the connection, the run's start,
+ * room in its mailbox and its handler, all on one deadline. OTP's `gen_server:call` default.
+ */
+const CAP = Duration.seconds(5);
 
 /** What a run's window shows now: its view of its machine, or `null` (no view, or no state yet). */
 const viewNow = (run: AnyRun): unknown => {
@@ -98,19 +101,6 @@ const viewNow = (run: AnyRun): unknown => {
 	return declared === undefined || state === null || state === undefined
 		? null
 		: declared.of(state);
-};
-
-/** Done once the run's window has something to show, or a few seconds on. A run with no view is ready at once. */
-const shown = (run: AnyRun) => {
-	const declared = viewOf(run.program);
-	const machine = declared === undefined ? undefined : run.machines[declared.machine];
-	if (machine === undefined) return Effect.void;
-	return machine.changes.pipe(
-		Stream.filter((s) => s !== null),
-		Stream.runHead,
-		Effect.timeoutOption(FIRST_STATE),
-		Effect.asVoid,
-	);
 };
 
 export const driveFor = (options: {
@@ -169,7 +159,6 @@ export const driveFor = (options: {
 					Effect.andThen(Effect.sync(() => mine.delete(program))),
 					Effect.forkIn(scope),
 				);
-				yield* shown(started.run);
 				return Option.some(started);
 			});
 
@@ -240,37 +229,59 @@ export const driveFor = (options: {
 						),
 					);
 				case "input":
-					return Effect.gen(function* () {
-						const running = yield* runOf(c.program);
-						if (Option.isNone(running))
-							return {
-								kind: "refused",
-								why: `${c.program} did not start with no flags: start it in a tile instead`,
-							} as const;
-						const {run} = running.value;
-						const word = yield* run.offer(c.input, c.value);
-						if (word !== "queued")
-							return {
-								kind: "refused",
-								why: `${c.program}'s ${c.input} took nothing: ${word}`,
-							} as const;
-						return {
-							kind: "done",
-							data: {program: c.program, run: run.id, word, view: viewNow(run)},
-						} as const;
-					});
+					return input(c);
 			}
 		};
 
+		/**
+		 * A call on a program input: the agent's run of it asks, and the answer shows the view once
+		 * that input's own handler has returned. Waiting for the connection, the run's start, room and
+		 * the handler spend one {@link CAP} from the call on. Past it, a value that went in answers
+		 * queued with the view as it is, its work going on; one that did not is refused, and nothing of
+		 * it is sent later. The connection is held until the view is read.
+		 */
+		const input = (c: Extract<Call, {readonly kind: "input"}>): Effect.Effect<Answer> =>
+			Effect.gen(function* () {
+				const began = yield* Clock.currentTimeMillis;
+				const left = Clock.currentTimeMillis.pipe(
+					Effect.map((now) => Duration.millis(Math.max(0, Duration.toMillis(CAP) - (now - began)))),
+				);
+				const notQueued: Answer = {
+					kind: "refused",
+					why: `${c.program}'s ${c.input} took nothing: not queued in ${Duration.toMillis(CAP) / 1000} seconds`,
+				};
+				// The permit is the scope's from the moment it is taken, so a deadline at that instant leaks none.
+				const permit = yield* one.takeScoped(1).pipe(Effect.timeoutOption(CAP));
+				if (Option.isNone(permit)) return notQueued;
+				const running = yield* runOf(c.program);
+				if (Option.isNone(running))
+					return {
+						kind: "refused",
+						why: `${c.program} did not start with no flags: start it in a tile instead`,
+					} as const;
+				const {run} = running.value;
+				const word = yield* run
+					.ask(c.input, c.value, yield* left)
+					.pipe(Effect.catchTag("TimeoutError", () => Effect.succeed(null)));
+				if (word === null) return notQueued;
+				if (word !== "queued")
+					return {
+						kind: "refused",
+						why: `${c.program}'s ${c.input} took nothing: ${word}`,
+					} as const;
+				return {
+					kind: "done",
+					data: {program: c.program, run: run.id, word, view: viewNow(run)},
+				} as const;
+			}).pipe(Effect.scoped);
+
 		const drive: Drive = {
-			call: (name, args) =>
-				one.withPermit(
-					call(
-						listed.has(name)
-							? callOf(list, name, args)
-							: {kind: "refused", why: `there is no tool ${name}`},
-					),
-				),
+			call: (name, args) => {
+				const c: Call = listed.has(name)
+					? callOf(list, name, args)
+					: {kind: "refused", why: `there is no tool ${name}`};
+				return c.kind === "input" ? input(c) : one.withPermit(call(c));
+			},
 		};
 		return {drive, tools};
 	});

@@ -9,6 +9,7 @@ import {
 	Cause,
 	Clock,
 	Deferred,
+	type Duration,
 	Effect,
 	Equal,
 	Exit,
@@ -823,6 +824,22 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
 	 */
 	offer(name: string, value: unknown): Effect.Effect<Word>;
 	/**
+	 * The same as `offer`, but it answers once the handler of THIS value has
+	 * returned, an OTP `call` to `offer`'s `cast`; or once `within` ran out,
+	 * spent waiting for room and for the handler alike. `"queued"` means the
+	 * value went in, as for `offer`, never that its work succeeded: at the
+	 * time it may still be waiting or running, and goes on. The run's end
+	 * answers every ask it holds. A value that never went in within the time
+	 * fails `TimeoutError`, and nothing of it is sent later. Every other word
+	 * is `offer`'s. A manual input's ack does not answer it: its handler's
+	 * return does.
+	 */
+	ask(
+		name: string,
+		value: unknown,
+		within: Duration.Input,
+	): Effect.Effect<Word, Cause.TimeoutError>;
+	/**
 	 * Listen to an output from now on. A value sent before it came is not
 	 * kept and not heard: to hear from the first instant, give the listener
 	 * to `start`. Returns the way to stop listening. A listener that throws
@@ -1041,6 +1058,16 @@ interface Waiter {
 	readonly done: Deferred.Deferred<Word> | undefined;
 }
 
+/**
+ * One `ask`'s receipt, by the delivery it told: one per value told, so two equal values have two.
+ * `admitted`: set where the value goes in, never by the asker waking later. `replied`: done once
+ * its handler has exited, or the run has ended.
+ */
+interface Receipt {
+	admitted: boolean;
+	readonly replied: Deferred.Deferred<void>;
+}
+
 /** A control input's own line: its values, and one token per value told and not yet handled. */
 interface Control {
 	readonly values: Queue.Queue<Delivery<unknown>>;
@@ -1154,9 +1181,24 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				yield* SubscriptionRef.make<Shown>({state: null, newest: null, copies: [], over: false}),
 			);
 		const ended = yield* Deferred.make<Ended<E>>();
+		/** Each `ask` still waiting, by the delivery it told. Kept in memory only, and only while it waits. */
+		const receipts = new Map<Delivery<unknown>, Receipt>();
+		/** The value went in: marked here, in the same turn as its insertion. */
+		const admit = (told: Delivery<unknown>) => {
+			const receipt = receipts.get(told);
+			if (receipt !== undefined) receipt.admitted = true;
+		};
+		/** Its handler has exited: the ask that told it may answer. */
+		const reply = (told: Delivery<unknown>) =>
+			Effect.sync(() => {
+				const receipt = receipts.get(told);
+				if (receipt !== undefined) Deferred.doneUnsafe(receipt.replied, Effect.void);
+			});
 		let open = true;
 		const finish = () => {
 			open = false;
+			// Every ask the run holds is answered: in flight or unread, nobody will hand it on now.
+			for (const receipt of receipts.values()) Deferred.doneUnsafe(receipt.replied, Effect.void);
 			// Shut: nobody reads after the end, and an offer still waiting for room is let go with `stopped`.
 			for (const waiter of queue.splice(0))
 				if (waiter.done !== undefined) Deferred.doneUnsafe(waiter.done, Effect.succeed("stopped"));
@@ -1281,6 +1323,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				held += 1;
 				counted(letter.to, 1);
 				queued(letter.to);
+				admit(letter.told);
 			}
 			Queue.offerUnsafe(letters, letter);
 		};
@@ -1333,6 +1376,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 						return Effect.fail(new MailboxFull({input: name, capacity: CONTROL}));
 					counted(name, 1);
 					Queue.offerUnsafe(control.values, told);
+					admit(told);
 					return Effect.succeed(queued(name));
 				}
 				// Nobody passes a writer already waiting.
@@ -1349,18 +1393,22 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 				const control = controls.get(name);
 				if (control !== undefined) {
 					control.waiting += 1;
-					return Queue.offer(control.tokens, true).pipe(
-						Effect.ensuring(
-							Effect.sync(() => {
-								control.waiting -= 1;
+					// Only the wait for a token may be given up: one taken goes in, in the same turn.
+					return Effect.uninterruptibleMask((restore) =>
+						restore(Queue.offer(control.tokens, true)).pipe(
+							Effect.ensuring(
+								Effect.sync(() => {
+									control.waiting -= 1;
+								}),
+							),
+							Effect.map((taken): Word => {
+								if (!taken || !open) return "stopped";
+								counted(name, 1);
+								Queue.offerUnsafe(control.values, told);
+								admit(told);
+								return queued(name);
 							}),
 						),
-						Effect.map((taken): Word => {
-							if (!taken || !open) return "stopped";
-							counted(name, 1);
-							Queue.offerUnsafe(control.values, told);
-							return queued(name);
-						}),
 					);
 				}
 				if (queue.length === 0 && held < program.capacity) {
@@ -1380,6 +1428,45 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							flush();
 						}),
 					),
+				);
+			});
+		/**
+		 * `offer`, answered once this value's own handler has exited, or `within` on. One deadline for
+		 * the wait for room and the wait for the handler; running out stops only the waiting.
+		 */
+		const ask = (
+			name: string,
+			value: unknown,
+			within: Duration.Input,
+		): Effect.Effect<Word, Cause.TimeoutError> =>
+			Effect.suspend(() => {
+				// Its own delivery, so its receipt is its own, whatever value another ask told.
+				const told: Delivery<unknown> = {value, ack: Effect.void};
+				const receipt: Receipt = {admitted: false, replied: Deferred.makeUnsafe<void>()};
+				receipts.set(told, receipt);
+				return putWaiting(name, told).pipe(
+					Effect.flatMap((word) =>
+						word === "queued"
+							? Deferred.await(receipt.replied).pipe(
+									Effect.andThen(Effect.sync(() => mark(`answered ${name}`, {[ATTR.input]: name}))),
+									Effect.as(word),
+								)
+							: Effect.succeed(word),
+					),
+					Effect.timeoutOption(within),
+					Effect.flatMap(
+						Option.match({
+							onSome: (word) => Effect.succeed(word),
+							// Whether it went in was marked where it went in; the waiter has left by now.
+							onNone: () => {
+								mark(`timed out ${name}`, {[ATTR.input]: name});
+								return receipt.admitted
+									? Effect.succeed("queued" as const)
+									: Effect.fail(new Cause.TimeoutError(`${name} was not queued in time`));
+							},
+						}),
+					),
+					Effect.ensuring(Effect.sync(() => receipts.delete(told))),
 				);
 			});
 
@@ -1428,7 +1515,12 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							forks,
 							Effect.suspend(() => handler.handler(handed(name, told))).pipe(
 								Effect.asVoid,
-								Effect.ensuring(Effect.sync(() => Queue.takeUnsafe(control.tokens))),
+								// Its handler's exit, not its fiber's launch, answers the ask that told it.
+								Effect.ensuring(
+									Effect.sync(() => Queue.takeUnsafe(control.tokens)).pipe(
+										Effect.andThen(reply(told)),
+									),
+								),
 								Effect.catchCause((cause) => Deferred.failCause(failed, cause)),
 							),
 						);
@@ -1453,7 +1545,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 							continue;
 						}
 						const handler = handlers[letter.to] as (value: unknown) => Effect.Effect<unknown>;
-						if ((yield* handler(handed(letter.to, letter.told))) === ending) return;
+						const answered = yield* Effect.suspend(() =>
+							handler(handed(letter.to, letter.told)),
+						).pipe(Effect.ensuring(reply(letter.told)));
+						if (answered === ending) return;
 					}
 				});
 				yield* Effect.raceFirst(
@@ -1565,6 +1660,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 			program,
 			tell: (name, value) => put(name, {value, ack: Effect.void}),
 			offer: (name, value) => putWaiting(name, {value, ack: Effect.void}),
+			ask,
 			listen: (name, listener) => {
 				const these = listeners.get(name);
 				// Its type comes from the output `name`, and `send` hands it only values that output's shape took.
