@@ -260,6 +260,52 @@
 	},
 	"overrides": [
 		{
+			"files": ["apps/fabrika/**"],
+			"rules": { "fabrika/e2e-windows": "error" }
+		},
+		{
+			// Today's app reserves Electron launches for the audited test launcher.
+			"files": ["apps/fabrika/**"],
+			"excludeFiles": ["apps/fabrika/src/testing/electron-launch.ts"],
+			"rules": {
+				"eslint/no-restricted-imports": [
+					"error",
+					{
+						"paths": [
+							{
+								"name": "@radix-ui/colors",
+								"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+							},
+							{
+								"name": "playwright",
+								"importNames": ["_electron"],
+								"allowTypeImports": true,
+								"message": "Use src/testing/electron-launch.ts inside runE2e."
+							},
+							{
+								"name": "playwright-core",
+								"importNames": ["_electron"],
+								"allowTypeImports": true,
+								"message": "Use src/testing/electron-launch.ts inside runE2e."
+							},
+							{
+								"name": "@playwright/test",
+								"importNames": ["_electron"],
+								"allowTypeImports": true,
+								"message": "Use src/testing/electron-launch.ts inside runE2e."
+							}
+						],
+						"patterns": [
+							{
+								"group": ["@radix-ui/colors/*"],
+								"message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+							}
+						]
+					}
+				]
+			}
+		},
+		{
 			// Test files only: an `expect` that sits only inside an `if` may never run.
 			// `!` is allowed here: a test that hits a missing value fails on its own.
 			"files": ["**/*.test.ts"],

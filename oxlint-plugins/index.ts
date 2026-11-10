@@ -2,6 +2,7 @@
 // came from and what it was measured against.
 import type {Plugin} from "@oxlint/plugins";
 import {doorIsLibrary} from "./door-is-library.ts";
+import {e2eWindows} from "./e2e-windows.ts";
 import {edgeComment} from "./edge-comment.ts";
 import {effectFunctions} from "./effect-functions.ts";
 import {noBareDisable} from "./no-bare-disable.ts";
@@ -37,6 +38,7 @@ const plugin: Plugin = {
 	rules: {
 		"door-is-library": doorIsLibrary,
 		"edge-comment": edgeComment,
+		"e2e-windows": e2eWindows,
 		"effect-functions": effectFunctions,
 		"no-bare-disable": noBareDisable,
 		"no-bare-tell": noBareTell,

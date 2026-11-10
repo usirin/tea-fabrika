@@ -13,6 +13,39 @@ They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](h
 
 Three rules only advise: `no-effect-promise`, `no-raw-try-catch` and `prefer-schema-arbitrary`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these three. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
 
+## Today's Electron test windows
+
+Ticket 389 adds `e2e-windows` and reserves Playwright's `_electron` value import for
+`apps/fabrika/src/testing/electron-launch.ts` with `eslint/no-restricted-imports`.
+The reservation and alternate-launch checks cover today's whole app. Native window
+calls are checked in root e2e drivers, `shots.ts` and `src/testing/`. Only
+`electron-hook.cjs` may set native hiding or position. Product `main.ts` is outside
+the native-call rule. Type-only imports, locator and DOM focus, headless Chromium,
+size-only bounds and content sizes stay allowed. Existing Radix restrictions stay on.
+
+The scan copied all 153 current app source files to their real config paths and read
+every finding, on 2026-11-09. The before row restores main's `e2e.ts` in that copy.
+Imports and launch calls are counted separately.
+
+| Scan | Real | False | Unknown | Findings |
+|---|---:|---:|---:|---|
+| Before tests' conversion | 8 | 0 | 0 | Three `_electron` imports, three launches, two position writes |
+| After tests' conversion | 5 | 0 | 0 | Lane import and launch; summon import, launch and position write, awaiting build |
+
+`e2e-windows.test.ts` batches generated aliases, optional and literal computed calls,
+native handles, renamed BrowserWindow bindings, shadows and allowed page calls through
+real oxlint, seed 119120, 12 runs. The rejected source snippets are its lint plants.
+Separate mutations that match every receiver, ignore renamed imports or ignore a native
+handle each failed that property and were reverted. Zero final findings alone would
+not measure false alarms.
+
+This rule has no types. Unknown helper returns, transfers through object fields,
+nonliteral computed methods, reflection and imports through another module can escape
+it. Raw executable spawning also escapes it: the existing `e2e.ts` single-instance
+check uses `execFile`, which the approved plan did not list. The runtime hook observes
+ordinary wrapped setters and native focus events; prototype or native bypasses remain
+outside that claim. Hook behavior and real Electron checks belong to build and lead.
+
 ## Effect property data advice
 
 `prefer-schema-arbitrary` is today's tooling for `next/**/*.test.{ts,tsx}`. It asks for Effect data only when a fast-check data constructor has written schema evidence: an `Arbitrary<typeof S.Type>` annotation, a map through `S.make` or `S.cases.x.make`, or a generated binding passed to a named Effect Schema check. Imports, callback scopes and simple aliases are resolved. Nested constructors give one message at the outer constructor. Property runners pass. Names and shared record keys alone prove nothing.

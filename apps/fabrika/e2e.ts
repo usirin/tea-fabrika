@@ -10,8 +10,9 @@ import {layerSqliteSync} from "@kampus/fabrika-old/sqlite";
 import {kindOf, nameOf} from "@kampus/pipeline/tickets/ticket";
 import {SEVEN, SEVEN_TITLE} from "@tea-fabrika/tracker/seven";
 import {Effect} from "effect";
-import {_electron, type ElectronApplication, type Locator, type Page} from "playwright";
+import type {ElectronApplication, Locator, Page} from "playwright";
 import {PROTOCOL} from "./src/link.ts";
+import {launchElectron, runE2e} from "./src/testing/electron-launch.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -1307,11 +1308,7 @@ const launch = async (on: string) => {
 	for (const [name, value] of Object.entries(process.env))
 		if (value !== undefined && name !== "FABRIKA_FOREGROUND") testEnv[name] = value;
 	testEnv.FABRIKA_HOME = on;
-	const app = await _electron.launch({
-		executablePath: electronPath,
-		args: [here],
-		env: testEnv,
-	});
+	const app = await launchElectron({home: on, env: testEnv});
 	await noBrowser(app).catch(async (e: unknown) => {
 		await app.close().catch(() => {});
 		throw e;
@@ -1920,7 +1917,7 @@ const lookFocus = async () => {
 	const app = await launch(own);
 	try {
 		await app.evaluate(({BrowserWindow}) =>
-			BrowserWindow.getAllWindows()[0]?.setBounds({x: 0, y: 0, width: 1200, height: 600}),
+			BrowserWindow.getAllWindows()[0]?.setBounds({width: 1200, height: 600}),
 		);
 		const page = await app.firstWindow();
 		await prompted(page, "t1");
@@ -3317,22 +3314,24 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) await keysLook();
-else if (process.argv.includes("--drag")) await borderDrag();
-else if (process.argv.includes("--tiles")) await tilesLook();
-else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
-else if (process.argv.includes("--focus")) await focusShots();
-else if (process.argv.includes("--tracker-focus")) await trackerFocus();
-else await all();
-const after = await pgrep(here);
-check(
-	"the host stopped by its pid: pgrep finds nothing of this app left",
-	after.length === 0,
-	after,
-);
-const sock = await stat(join(home, "host", "sock")).then(
-	() => true,
-	() => false,
-);
-check("the host took its socket away as it stopped", !sock);
-console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);
+await runE2e(async () => {
+	if (process.argv.includes("--keys")) await keysLook();
+	else if (process.argv.includes("--drag")) await borderDrag();
+	else if (process.argv.includes("--tiles")) await tilesLook();
+	else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
+	else if (process.argv.includes("--focus")) await focusShots();
+	else if (process.argv.includes("--tracker-focus")) await trackerFocus();
+	else await all();
+	const after = await pgrep(here);
+	check(
+		"the host stopped by its pid: pgrep finds nothing of this app left",
+		after.length === 0,
+		after,
+	);
+	const sock = await stat(join(home, "host", "sock")).then(
+		() => true,
+		() => false,
+	);
+	check("the host took its socket away as it stopped", !sock);
+	console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);
+});
