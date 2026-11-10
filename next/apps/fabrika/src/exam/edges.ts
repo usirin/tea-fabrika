@@ -32,6 +32,7 @@ const EDGE_RULES: ReadonlySet<string> = new Set([
 	"fabrika/no-promises",
 	"fabrika/no-effect-run-outside-edge",
 ]);
+
 const DISABLE = /^\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
 const REASON = /\s--\s+/;
 const CODE = /\.[cm]?[jt]sx?$/;

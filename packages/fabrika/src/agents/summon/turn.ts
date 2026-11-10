@@ -26,11 +26,14 @@ const Active = Schema.Struct({
 	turn: Count,
 	began: Schema.Finite,
 });
+
 const Turn = Schema.Struct({active: Schema.NullOr(Active)});
 type Turn = typeof Turn.Type;
+
 type TurnMsg =
 	| {readonly type: "told"; readonly active: typeof Active.Type}
 	| {readonly type: "ended"};
+
 const turnState = defineMachine({
 	types: {model: {} as Turn, msg: {} as TurnMsg, ctx: undefined},
 	cmds: [],
@@ -43,12 +46,14 @@ const turnState = defineMachine({
 
 const Status = Schema.Struct({name: Schema.String, text: Schema.String});
 const Said = Schema.Struct({name: Schema.String, text: Schema.String});
+
 const Asked = Schema.Struct({
 	name: Schema.String,
 	ask: Schema.String,
 	title: Schema.String,
 	answer: Schema.Literals(["waiting", "allowed", "refused"]),
 });
+
 const Result = Schema.Struct({
 	name: Schema.String,
 	/** The number the agent gave the prompt. `null`: it was cancelled before it had one. */

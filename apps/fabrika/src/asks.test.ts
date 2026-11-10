@@ -26,6 +26,7 @@ const NOON = new Date(2026, 9, 30, 12).getTime();
 
 type Msg = MsgOf<typeof asksMachine>;
 type Load = ReturnType<typeof load>;
+
 const step = (s: Asks, m: Msg): readonly [Asks, readonly Load[]] =>
 	applyCell<Asks, Msg, Load>(asksMachine, s, m);
 
@@ -35,12 +36,16 @@ const entriesOf = (...facts: readonly (readonly [number, Entry["by"], Fact])[]):
 
 const filed = (ticket: number, title: string) =>
 	[ticket, owner, {type: "filed", title, body: ""}] as const;
+
 const asked = (ticket: number, ask: string, what: string) =>
 	[ticket, agent("plan"), {type: "asked", ask, what, picks: ["yes", "no"]}] as const;
+
 const answered = (ticket: number, ask: string) =>
 	[ticket, owner, {type: "answered", ask, pick: "yes", note: ""}] as const;
+
 const started = (ticket: number, run: string) =>
 	[ticket, agent("build"), {type: "started", run, stage: "build", task: "t-1", log: null}] as const;
+
 const ended = (ticket: number, run: string, outcome: Extract<Fact, {type: "ended"}>["outcome"]) =>
 	[
 		ticket,
@@ -60,6 +65,7 @@ const loaded = (entries: readonly Entry[], kept: Marks = NO_MARKS): Asks => {
 	const [ticked] = step(read, {type: "tick", now: NOON + HOUR});
 	return ticked;
 };
+
 const HOUR = 60 * MINUTE;
 
 const facts = entriesOf(

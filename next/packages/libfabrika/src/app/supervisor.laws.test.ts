@@ -13,25 +13,32 @@ import {Supervision} from "../coordination/recovery.ts";
 import {syncTest} from "../testing.ts";
 
 const SEED = 119120;
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 type Policy = typeof policy;
 type Msg = {readonly type: string; readonly [key: string]: unknown};
+
 type Model = {
 	readonly recovery: {readonly _tag: string; readonly until?: number};
 	readonly pending: unknown;
 	readonly [key: string]: unknown;
 };
+
 type Ctx = {policy: Policy; process: string; name: string; build: string; at: number};
+
 type Supervisor = {
 	readonly Policy: Schema.Codec<Policy>;
 	readonly supervisor: Machine<Model, Msg, Msg, never, Ctx>;
 };
+
 const modulePath = "./supervisor.ts";
+
 const subject = async (): Promise<Supervisor> => {
 	expect(
 		existsSync(new URL(modulePath, import.meta.url)),
@@ -39,13 +46,16 @@ const subject = async (): Promise<Supervisor> => {
 	).toBe(true);
 	return await import(modulePath);
 };
+
 const ctx: Ctx = {policy, process: A, name: "counter:1", build: "build-a", at: 0};
+
 /** The saved wait: a down's own `until`, else the pending start action's. */
 const savedWait = (model: Model): number | undefined => {
 	if (model.recovery._tag === "down") return model.recovery.until;
 	const pending = model.pending as {readonly type?: unknown; readonly until?: unknown} | null;
 	return pending?.type === "start" && typeof pending.until === "number" ? pending.until : undefined;
 };
+
 const thrown = (seq: number, at: number, process = A): Msg => ({
 	type: "threw",
 	at,

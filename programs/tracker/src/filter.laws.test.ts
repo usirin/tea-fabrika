@@ -35,6 +35,7 @@ import {summaryOf, type Write} from "./ticket.ts";
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
+
 type Cmd =
 	| ReturnType<typeof load>
 	| ReturnType<typeof save>
@@ -42,6 +43,7 @@ type Cmd =
 	| ReturnType<typeof duplicates>
 	| ReturnType<typeof saveHints>
 	| ReturnType<typeof folders>;
+
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -57,7 +59,9 @@ const TITLES = [
 	"Crash on save",
 	"Dark mode for the list",
 ] as const;
+
 const PR_TITLES = ["Fix login", "docs: typo", "Save without a crash", "Dark Mode", "Bump effect"];
+
 /** Pieces of the titles above, some in other case or with spaces around, and some that hit nothing. */
 const FINDS = [
 	"",
@@ -80,6 +84,7 @@ const write: fc.Arbitrary<Write> = fc.oneof(
 	ticket.map((t): Write => ({kind: "close", ticket: t})),
 	ticket.map((t): Write => ({kind: "reopen", ticket: t})),
 );
+
 /** Mostly tickets filed, so a list has a few, and closes and reopens, so it has both states. */
 const fact: fc.Arbitrary<Fact> = fc.oneof(
 	{
@@ -90,6 +95,7 @@ const fact: fc.Arbitrary<Fact> = fc.oneof(
 	{arbitrary: fc.constant<Fact>({type: "reopened"}), weight: 1},
 	{arbitrary: fc.constant<Fact>({type: "commented", body: "Seen it too."}), weight: 1},
 );
+
 const entry: fc.Arbitrary<Entry> = fc.record({
 	pos: fc.nat({max: 30}),
 	ticket,
@@ -97,6 +103,7 @@ const entry: fc.Arbitrary<Entry> = fc.record({
 	at: fc.nat({max: 30}),
 	fact,
 });
+
 const pullRequest: fc.Arbitrary<PullRequest> = fc
 	.record({
 		number: fc.integer({min: 1, max: 9}),
@@ -109,10 +116,12 @@ const pullRequest: fc.Arbitrary<PullRequest> = fc
 		repo: "https://github.com/owner/repo",
 		url: `https://github.com/owner/repo/pull/${p.number}`,
 	}));
+
 const after = fc.nat({max: 30});
 const show = fc.constantFrom<Show>("open", "closed", "all");
 const find = fc.constantFrom(...FINDS);
 const saveOf = (i: string, w: Write, next: number) => save({id: i, write: w, next});
+
 const hintAsk = (t: number) =>
 	duplicates({ticket: t, filed: {title: "Login fails", body: ""}, candidates: []});
 
@@ -163,6 +172,7 @@ const table: MsgArbitraryTable<Msg> = {
 		saveHints.err(saveHints({ticket: t, hints: []}), {_tag: "unreachable"}, 0),
 	),
 };
+
 /** Lists of Msgs, long enough to load tickets, read pull requests, and filter them a few times. */
 const lists = fc.array(arbMsg(table), {maxLength: 40, size: "max"});
 const OPTS = {numRuns: 400, seed: 1};
@@ -175,17 +185,21 @@ const matches = (text: string, title: string) => {
 	const wanted = text.trim().toLowerCase();
 	return wanted === "" || title.toLowerCase().includes(wanted);
 };
+
 const fitsShow = (s: Show, t: {readonly state: Ticket["state"]}) => s === "all" || t.state === s;
 const fits = (s: Tracker, t: Ticket) => fitsShow(s.show, t) && matches(s.find, t.title);
 
 const asked = (step: TrackerStep) => step.cmds.filter((c) => c.type === "pull_requests");
+
 const isPullRequestsAnswer = (msg: Msg) =>
 	msg.type === "pull_requests_ok" || msg.type === "pull_requests_err";
+
 /** Deep equal, or throw with the difference, so a failed law says what it saw. */
 const same = (a: unknown, b: unknown) => {
 	expect(a).toEqual(b);
 	return true;
 };
+
 /** The list page, or `null` when a ticket is open. */
 const listOf = (s: Tracker) => {
 	const page = shownOf(s).page;
@@ -362,11 +376,13 @@ const MACHINE_LAWS = [
 	quitStopsReads,
 	waitIsOn,
 ];
+
 const VIEW_LAWS = [ticketsFit, ticketsAll, pullRequestsShown, countsMatch, filterShown];
 
 // ---------------------------------------------------------------- planted mistakes
 
 const real = tracker.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...tracker,
@@ -459,8 +475,10 @@ const owned = (pos: number, number: number, f: Fact): Entry => ({
 	at: pos,
 	fact: f,
 });
+
 const filed = (pos: number, number: number, title: string) =>
 	owned(pos, number, {type: "filed", title, body: ""});
+
 const pr = (number: number, title: string, draft = false): PullRequest => ({
 	repo: "https://github.com/owner/repo",
 	number,
@@ -469,6 +487,7 @@ const pr = (number: number, title: string, draft = false): PullRequest => ({
 	draft,
 	at: number,
 });
+
 const steps = (...msgs: readonly Msg[]) => replay(tracker, {ctx: undefined, msgs});
 
 describe("the tracker's filters and pull requests", () => {

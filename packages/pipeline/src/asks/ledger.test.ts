@@ -54,8 +54,10 @@ const on = <A, E>(
 
 const entriesOf = (ledger: Layer.Layer<Ledger>) =>
 	Effect.runPromise(Effect.provide(readFacts, ledger));
+
 const holderIn = (ledger: Layer.Layer<Ledger>, ticket: TicketId) =>
 	Effect.runPromise(Effect.provide(holderOf(ticket), ledger));
+
 const send = (fact: Fact) => Effect.orDie(sendFact(fact));
 
 /** The defect `body` dies with, by its message. */
@@ -94,6 +96,7 @@ const started1 = (args: readonly string[]) => {
 	});
 	return {ready, done};
 };
+
 const proc = (args: readonly string[]) => started1(args).done;
 
 // The realistic case: experiment 89's real plans and rulings, three tickets

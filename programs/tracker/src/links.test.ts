@@ -153,6 +153,7 @@ const bits = fc.constantFrom(
 	":",
 	"x.com",
 );
+
 const bodies = fc.array(bits, {maxLength: 40}).map((b) => b.join(""));
 
 const join = (pieces: readonly Piece[]) =>

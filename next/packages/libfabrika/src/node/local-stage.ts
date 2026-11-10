@@ -1,8 +1,10 @@
 import {Effect, FileSystem, Path, Result, Schema, Semaphore} from "effect";
 import {BrainEvent} from "../app/brain-event.ts";
+
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
 	reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
 }) {}
+
 // Events have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
 const PendingEvent = Schema.declare<typeof BrainEvent.Type>((raw): raw is typeof BrainEvent.Type =>
 	Result.isSuccess(Schema.decodeUnknownResult(BrainEvent, {onExcessProperty: "error"})(raw)),

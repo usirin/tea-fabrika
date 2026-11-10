@@ -42,11 +42,13 @@ const HealthColumns = Schema.Struct({
 	lag: Schema.NullOr(Schema.Number),
 	spanId: Schema.NullOr(Schema.String),
 });
+
 const decodeHealth = Schema.decodeUnknownSync(HealthColumns);
 const decodeHour = Schema.decodeUnknownSync(Schema.Struct({hour: Schema.Int}));
 const decodeDay = Schema.decodeUnknownSync(Schema.Struct({day: Schema.Int}));
 const decodeCount = Schema.decodeUnknownSync(Schema.Struct({n: Schema.Int}));
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({seq: Schema.Int}));
+
 const decodeSummary = Schema.decodeUnknownSync(
 	Schema.Struct({
 		piece: Schema.String,

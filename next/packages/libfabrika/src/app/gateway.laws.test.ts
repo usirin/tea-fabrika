@@ -9,6 +9,7 @@ import {nodeSql} from "../data/sqlite.ts";
 import {Answer, Attached} from "../transport/wire.ts";
 
 const SEED = 119120;
+
 const generated = fc.record({
 	id: fc.oneof(fc.string(), fc.integer()),
 	after: fc.nat({max: 120}),
@@ -20,6 +21,7 @@ const generated = fc.record({
 		maxLength: 12,
 	}),
 });
+
 const chosen = {
 	id: 1,
 	after: 100,
@@ -28,6 +30,7 @@ const chosen = {
 	ping: 42,
 	ids: Array.from({length: 12}, (_, n) => `${n}${"x".repeat(2000)}`),
 };
+
 const law = (
 	name: string,
 	check: (input: ReturnType<typeof generated.generate>["value"]) => Effect.Effect<void, unknown>,
@@ -46,12 +49,14 @@ const law = (
 			},
 		);
 	});
+
 type Connection = {
 	frame: (text: string) => Effect.Effect<void, unknown>;
 	ring: (stream: string, rev: number) => Effect.Effect<void>;
 	wake: () => Effect.Effect<void>;
 	probe: (session: string) => Effect.Effect<number | null>;
 };
+
 const online = () =>
 	Attached.cases.online.make({
 		client: "gateway/session-1",
@@ -106,6 +111,7 @@ const setup = Effect.fnUntraced(function* (
 		},
 	};
 });
+
 const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
 	JSON.stringify({jsonrpc: "2.0", id, method: "ledger.wait", params: {stream, after}});
 

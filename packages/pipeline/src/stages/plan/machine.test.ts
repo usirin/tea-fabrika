@@ -22,6 +22,7 @@ const step = (s: PlanState, msg: AnyMsg) => applyCell<PlanState, AnyMsg, PlanCmd
 
 const URL = "https://github.com/acme/widgets/issues/7";
 const SETTINGS: Settings = {model: "opus", effort: "medium", budget: 1};
+
 const TICKET: PlanTicket = {
 	url: URL,
 	number: 7,
@@ -30,6 +31,7 @@ const TICKET: PlanTicket = {
 	body: "It does.",
 	at: "c".repeat(40),
 };
+
 const SPENT: Spend = {costUsd: 0.3, tokens: 1000, context: 400, turns: 3, minutes: 0.5};
 
 const good: Plan = {
@@ -59,6 +61,7 @@ const good: Plan = {
 	pointers: [],
 	questions: [],
 };
+
 const coded: Plan = {
 	...good,
 	tasks: [
@@ -79,6 +82,7 @@ function drafting(facts: string | null, tries = 3, names: readonly string[] = []
 }
 
 const runOf = (s: PlanState) => runSub.deps(s)?.run ?? null;
+
 const finished = (s: PlanState, output: Plan | null, spend: Spend = SPENT) => ({
 	type: "plan_finished",
 	key: "k",

@@ -115,6 +115,7 @@ const METHODS = [
 	"readLast",
 	"lease",
 ] as const;
+
 export type Method = (typeof METHODS)[number];
 export const isMethod = (m: string): m is Method => METHODS.some((x) => x === m);
 
@@ -138,6 +139,7 @@ const numbersOf = (v: unknown, keys: readonly string[]): Record<string, number> 
 	}
 	return out;
 };
+
 const asLimits = (v: unknown): L.Limits => numbersOf(v, ["usd", "tokens", "wallMs", "children"]);
 const asCost = (v: unknown): L.Cost => numbersOf(v, ["usd", "tokens"]);
 

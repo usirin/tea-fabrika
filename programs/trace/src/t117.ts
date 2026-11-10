@@ -272,4 +272,5 @@ export const T117_MADE_UP = shapeOf({model: "made-up-model", harness: "codex"});
 
 export const ASTRA_LANE_1 =
 	astra(100_000, 60_000, 5_000) + astra(50_000, 20_000, 2_000) + astra(80_000, 40_000, 8_000);
+
 export const ASTRA_LANE_2 = astra(120_000, 100_000, 4_000) + astra(40_000, 0, 1_000);

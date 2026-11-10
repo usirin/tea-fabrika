@@ -70,6 +70,7 @@ const passing = (brief: Brief): Form => ({
 });
 
 const scripted = createReviewProgram();
+
 /** review, with a scripted reviewer that passes every criterion. Everything else is the review program's own. */
 export const reviewScripted = defineProgram({
 	...scripted,

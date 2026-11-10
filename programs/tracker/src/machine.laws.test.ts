@@ -37,6 +37,7 @@ import type {Write} from "./ticket.ts";
 
 type Machine = typeof tracker;
 type Msg = MsgOf<Machine>;
+
 type Cmd =
 	| ReturnType<typeof load>
 	| ReturnType<typeof save>
@@ -44,6 +45,7 @@ type Cmd =
 	| ReturnType<typeof duplicates>
 	| ReturnType<typeof saveHints>
 	| ReturnType<typeof folders>;
+
 type TrackerStep = Step<Tracker, Msg, Cmd>;
 
 // ---------------------------------------------------------------- generators
@@ -52,18 +54,21 @@ const owner = {kind: "user", id: "owner"} as const;
 const ticket = fc.integer({min: 1, max: 3});
 /** Three message ids, so an answer often names the write that is out, and often does not. */
 const id = fc.constantFrom("w1", "w2", "w3");
+
 const write: fc.Arbitrary<Write> = fc.oneof(
 	fc.constant<Write>({kind: "file", title: "Login fails", body: ""}),
 	ticket.map((t): Write => ({kind: "close", ticket: t})),
 	ticket.map((t): Write => ({kind: "reopen", ticket: t})),
 	ticket.map((t): Write => ({kind: "comment", ticket: t, body: "Seen it too."})),
 );
+
 const fact: fc.Arbitrary<Fact> = fc.constantFrom<Fact>(
 	{type: "filed", title: "Login fails", body: ""},
 	{type: "commented", body: "Seen it too."},
 	{type: "closed"},
 	{type: "reopened"},
 );
+
 const entry: fc.Arbitrary<Entry> = fc.record({
 	pos: fc.nat({max: 30}),
 	ticket,
@@ -71,11 +76,14 @@ const entry: fc.Arbitrary<Entry> = fc.record({
 	at: fc.nat({max: 30}),
 	fact,
 });
+
 const after = fc.nat({max: 30});
 const saveOf = (i: string, w: Write, next: number) => save({id: i, write: w, next});
+
 /** The ask for a duplicate hint on `t`, as an answer names it. */
 const asked = (t: number) =>
 	duplicates({ticket: t, filed: {title: "Login fails", body: ""}, candidates: []});
+
 /** Jev's answers: none, or a few, some above the floor and some below. */
 const scores = fc.array(
 	fc.record({of: ticket, yes: fc.constantFrom(0.1, FLOOR - 0.01, FLOOR, 0.95)}),
@@ -132,6 +140,7 @@ const table: MsgArbitraryTable<Msg> = {
 		.tuple(ticket, fc.constantFrom("unreachable" as const, "refused" as const))
 		.map(([t, tag]) => saveHints.err(saveHints({ticket: t, hints: []}), {_tag: tag}, 0)),
 };
+
 /** Lists of Msgs, long enough to queue a few writes and answer them. */
 const lists = fc.array(arbMsg(table), {maxLength: 40, size: "max"});
 const OPTS = {numRuns: 400, seed: 1};
@@ -142,9 +151,11 @@ const ctx = stubCtxThrowingProxy<undefined>();
 const saves = (step: TrackerStep) => step.cmds.filter((c) => c.type === "save");
 const loads = (step: TrackerStep) => step.cmds.filter((c) => c.type === "load");
 const isLoadAnswer = (msg: Msg) => msg.type === "load_ok" || msg.type === "load_err";
+
 /** The step answered the save that was out: the one for the write at the front. */
 const answeredFront = ({prev, msg}: TrackerStep) =>
 	(msg.type === "save_ok" || msg.type === "save_err") && prev.saving[0]?.id === msg.cmd.id;
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Step `machine` on from `from`, keeping every Cmd it asks for. */
@@ -363,6 +374,7 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = tracker.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...tracker,

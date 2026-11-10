@@ -40,6 +40,7 @@ const NOT_A_LANE = "f".repeat(32);
 const lanesIn = (timeline: readonly Entry[]): readonly string[] => [
 	...new Set(timeline.flatMap((e) => (e.fact.type === "started" ? [e.fact.trace ?? ""] : []))),
 ];
+
 /** A lane is open: a step not ended, or an ask not answered. */
 const anyOpen = (timeline: readonly Entry[]): boolean => {
 	const ended = new Set(timeline.flatMap((e) => (e.fact.type === "ended" ? [e.fact.run] : [])));
@@ -55,6 +56,7 @@ const anyOpen = (timeline: readonly Entry[]): boolean => {
 
 const traces = [...new Set(TIMELINES.flatMap(lanesIn))];
 const ids = fc.constantFrom(...traces, NOT_A_LANE);
+
 const record = (id: string): JobTrace => ({
 	trace: id,
 	job: null,
@@ -63,7 +65,9 @@ const record = (id: string): JobTrace => ({
 	steps: [],
 	opened: [],
 });
+
 const times = [...new Set(TIMELINES.flatMap((tl) => tl.map((e) => e.at)))];
+
 const rows = fc.constantFrom(
 	...traces.map((t) => `lane:${t}`),
 	"job",
@@ -93,6 +97,7 @@ const table: MsgArbitraryTable<Msg> = {
 	}),
 	step: arbRecordMsg("step", {by: fc.constantFrom(-1, 1)}),
 };
+
 const lists = fc.array(arbMsg(table), {maxLength: 30, size: "max"});
 const OPTS = {numRuns: 300, seed: 141};
 const ctx = stubCtxThrowingProxy<undefined>();
@@ -112,6 +117,7 @@ const every = (law: (step: TraceStep) => void) =>
 /** The ticket a state shows, or `null` in the job view. */
 const numberOf = (s: Model): number | null =>
 	s.shows.kind === "ticket" ? s.shows.facts.number : null;
+
 /** The facts a ticket view has read, or `null`. */
 const timelineOf = (s: Model): readonly Entry[] | null =>
 	s.shows.kind === "ticket" && s.shows.facts.at === "read" ? s.shows.facts.timeline : null;
@@ -123,6 +129,7 @@ const depsOf = (type: string, s: Model): readonly unknown[] =>
 		const deps: unknown = sub.deps(s);
 		return deps === null || deps === undefined ? [] : [deps];
 	});
+
 /** The trace ids the `follow` entries ask for, as `{id}` or `{ids}`. */
 const followedIn = (s: Model): readonly string[] =>
 	depsOf("follow", s).flatMap((d): string[] => {
@@ -135,9 +142,11 @@ const followedIn = (s: Model): readonly string[] =>
 
 /** The state after these Msgs, from the real init. */
 const after = (msgs: readonly Msg[]): Model => foldEvents(trace, ctx, null, msgs).finalState;
+
 /** A ticket shown with these facts read. */
 const showing = (timeline: readonly Entry[], more: readonly Msg[] = []): Model =>
 	after([{type: "ticket", number: NUMBER}, {type: "facts", number: NUMBER, timeline}, ...more]);
+
 const atOf = (s: Model): number | null | undefined =>
 	s.shows.kind === "ticket" ? s.shows.at : undefined;
 

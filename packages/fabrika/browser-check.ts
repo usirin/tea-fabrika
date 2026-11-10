@@ -84,6 +84,7 @@ for (const [file, input] of Object.entries(result.metafile.inputs))
 		if (!importedBy.has(imported.path)) importedBy.set(imported.path, file);
 
 const show = (file: string) => relative(process.cwd(), file) || file;
+
 const chain = (file: string): string[] => {
 	const seen: string[] = [];
 	// The metafile names files from the working directory; esbuild's importer is absolute.
@@ -97,24 +98,30 @@ const chain = (file: string): string[] => {
 
 const modules = Object.keys(result.metafile.inputs).length;
 const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
+
 const counts = Object.fromEntries(
 	FORBIDDEN.map((f) => [
 		f.name,
 		new Set(hits.filter((h) => h.rule === f.name).map((h) => h.spec)).size,
 	]),
 );
+
 console.log(
 	`browser bundle of ${show(entry)}: ${modules} modules, ${Math.round(bytes / 1024)} KB, ${result.errors.length} errors`,
 );
+
 console.log(
 	Object.entries(counts)
 		.map(([name, n]) => `${name}: ${n}`)
 		.join(", "),
 );
+
 const seenSpecs = new Set<string>();
+
 for (const hit of hits) {
 	if (seenSpecs.has(hit.spec)) continue;
 	seenSpecs.add(hit.spec);
 	console.log(`  ${hit.spec}  <-  ${chain(hit.importer).join("  <-  ")}`);
 }
+
 process.exitCode = hits.length === 0 && result.errors.length === 0 ? 0 : 1;

@@ -7,11 +7,13 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
 	reason: Schema.String,
 	message: Schema.optionalKey(Schema.String),
 }) {}
+
 export const hash = Effect.fn("build.hash")((text: string) =>
 	Digest.Digest.use((digest) =>
 		digest.digestHex(Digest.sha256, new TextEncoder().encode(text)),
 	).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
+
 export const bundle = Effect.fn("build.bundle")(function* (input: string, plugins: Array<Plugin>) {
 	const options = {input, plugins, platform: "browser" as const, external: ["cloudflare:workers"]};
 	const fail = (error: unknown) => new BuildError({reason: "bundle", message: String(error)});

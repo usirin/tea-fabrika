@@ -27,6 +27,7 @@ import {describe, expect, it} from "vitest";
 
 const script = process.env.T318_LOOSENING_SCRIPT ?? join(import.meta.dirname, "loosening.sh");
 const word = fc.stringMatching(/^[a-z]{2,12}$/);
+
 const input = fc.record({
 	name: word,
 	extra: word,
@@ -35,6 +36,7 @@ const input = fc.record({
 	delta: fc.integer({min: 1, max: 8}),
 	space: fc.constantFrom(" ", "\n\t"),
 });
+
 type Input = {
 	name: string;
 	extra: string;
@@ -43,6 +45,7 @@ type Input = {
 	delta: number;
 	space: string;
 };
+
 const source = (
 	v: Input,
 	body = "expect(value).toBe(value);",
@@ -51,6 +54,7 @@ const source = (
 	options = "",
 ) =>
 	`${v.title}${modifier}(${JSON.stringify(title)}, () => { fc.assert(fc.property(fc.integer({min: ${-v.count}, max: ${v.count}}), value => { ${body} }), {numRuns: ${v.count}${options}}); });\n`;
+
 const env = {
 	...process.env,
 	GIT_CONFIG_NOSYSTEM: "1",
@@ -58,7 +62,9 @@ const env = {
 	GIT_TERMINAL_PROMPT: "0",
 	TYPESAFE_API_KEY: undefined,
 };
+
 type File = string | {content: string; mode: number} | {link: string};
+
 const compare = (before: Record<string, File>, after: Record<string, File>, mapping?: string) => {
 	const dir = mkdtempSync(join(tmpdir(), "loosening-"));
 	const git = (...args: string[]) => {
@@ -116,7 +122,9 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const file = "checks/nested/generated.test.ts";
+
 const flagged = (v: Input, before: string, after: string, kind: string, mapping?: string) => {
 	const got = compare({[file]: before}, {[file]: after}, mapping);
 	expect(got.code, got.text).toBe(1);

@@ -41,6 +41,7 @@ const SMALL_LIST = programList(SMALL);
 
 const Waiting = Schema.Struct({phase: Schema.Literals(["waiting", "over"])});
 type Waiting = typeof Waiting.Type;
+
 const waiting = defineMachine({
 	types: {
 		model: {} as Waiting,
@@ -92,6 +93,7 @@ const lazy = defineProgram({
 	outputs: {},
 	main: () => Effect.sleep(Duration.millis(200)),
 });
+
 let runs = 0;
 
 /** One tsh on a storage. `line` tells it a line and answers what it printed for it, and its status. */
@@ -322,6 +324,7 @@ describe("tsh: kept jobs", () => {
 // ---------------------------------------------------------------- fabrika's own programs
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
+
 /** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
 const clear: PrFacts = {
 	head: HEADS.final,
@@ -335,6 +338,7 @@ const clear: PrFacts = {
 	comments: [],
 	main: {tested: "main0", tip: "main0"},
 };
+
 /** The recorded pull request, open at the head that merged. */
 const opened = changed(recorded("change-final.json"), (repo) => {
 	repo.pullRequest.state = "OPEN";

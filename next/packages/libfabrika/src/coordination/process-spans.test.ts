@@ -28,6 +28,7 @@ import {Down} from "./process.ts";
 
 // Retain refs and marker suffixes through 40 characters, including the old 11..12.
 const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
+
 // Effect 4.1.1 has runs/seed but no examples option. Keep the old cases in the callback.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -39,11 +40,13 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 const nat = (max: number) =>
 	Schema.Int.check(
 		Schema.isBetween({minimum: 0, maximum: max}),
 		Schema.makeFilter((n) => !Object.is(n, -0)),
 	);
+
 const date = Arbitrary.schema(
 	Schema.Date.check(
 		Schema.isBetweenDate({minimum: new Date("1900-01-01"), maximum: new Date("2100-01-01")}),
@@ -66,6 +69,7 @@ const capture = () => {
 			spans.filter((span) => span.name === name && span.status._tag === "Ended"),
 	};
 };
+
 const records = () => {
 	const sink = storage();
 	const parts = new Map<string, ReturnType<typeof storage>>();
@@ -87,8 +91,10 @@ const records = () => {
 		),
 	};
 };
+
 const recorded = (process: string) =>
 	RecordManager.use((records) => Stream.runCollect(records.read(Chain.cases.job.make({process}))));
+
 const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) => {
 	for (const row of rows) {
 		const text = JSON.stringify({attributes: row.attributes, events: row.events, links: row.links});

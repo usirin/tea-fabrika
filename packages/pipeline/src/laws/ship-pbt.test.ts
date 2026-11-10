@@ -60,6 +60,7 @@ const READY: ShipFacts = {
 	criteria: CRITERIA,
 	verdicts: metAt("A"),
 };
+
 const reads = readShipFacts({pr: pbt.PR});
 
 describe("ship, as property tests", () => {

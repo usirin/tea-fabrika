@@ -8,6 +8,7 @@ import * as T from "./index.ts";
 
 const state = (ttl = 600_000, most = 3) => T.Waiting.make({rows: [], most, ttl});
 const runs = {seed: 119120, numRuns: 100};
+
 const knock = (
 	s: ReturnType<typeof state>,
 	key: string,
@@ -26,6 +27,7 @@ const knock = (
 		pass: null,
 		at,
 	});
+
 describe("P10 waiting rows", () => {
 	it("p43: one checked key, two tabs, one stable code until expiry", () => {
 		// Plant: append duplicate clients without a Set. The two-tab match must fail.

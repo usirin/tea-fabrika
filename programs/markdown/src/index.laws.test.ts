@@ -25,6 +25,7 @@ const text = fc.oneof(
 	fc.constantFrom("# Hi", "- a\n- b", "| a |\n|---|\n| 1 |", "```\ncode\n```", "> q", "---", ""),
 	fc.string({maxLength: 80}),
 );
+
 /** One entry per Msg type: leaving one out does not compile. */
 const table: MsgArbitraryTable<Msg> = {show: arbRecordMsg("show", {text})};
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 20});
@@ -85,6 +86,7 @@ const keepsTheFirst: Page = {
 		show: (s, m) => [s.root.children.length > 0 ? s : {root: Root.fromMarkdown(m.text)}, []],
 	},
 };
+
 const startsWithAHeading: Page = {...page, init: () => [{root: Root.fromMarkdown("# Page")}, []]};
 
 describe("the markdown page's laws", () => {

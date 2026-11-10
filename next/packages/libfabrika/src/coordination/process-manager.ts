@@ -31,6 +31,7 @@ type Failure = ProcessError | LedgerError;
  * key. Every fact this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & {readonly by: string};
+
 const failed = Effect.fnUntraced(function* (error: Failure) {
 	yield* Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: error.why});
 });

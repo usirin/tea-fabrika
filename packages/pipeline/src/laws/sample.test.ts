@@ -17,7 +17,9 @@ const parts = {
 	laws: queue.queueLaws,
 	show: queue.showQueueMsg,
 };
+
 const choices = (length: number) => Arbitrary.array(Arbitrary.schema(CHOICE), {maxLength: length});
+
 const holds = (run: (cs: readonly number[]) => boolean, length: number) =>
 	Effect.runSync(Arbitrary.checkEffect(choices(length), run, {runs: 200, seed: 118}));
 

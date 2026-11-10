@@ -53,11 +53,13 @@ export class Key {
 	/** The registered name whose lease the write was sent under. */
 	readonly name: string;
 	readonly fence: number;
+
 	private constructor(text: string, name: string, fence: number) {
 		this.text = text;
 		this.name = name;
 		this.fence = fence;
 	}
+
 	static {
 		mint = (text, name, fence) => {
 			const key = new Key(text, name, fence);
@@ -65,6 +67,7 @@ export class Key {
 			return key;
 		};
 	}
+
 	/** True for a key this module made. A key forged with a cast is not one. */
 	get real(): boolean {
 		return this.#minted && minted.has(this);

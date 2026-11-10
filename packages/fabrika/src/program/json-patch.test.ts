@@ -8,6 +8,7 @@ import {apply, diff, type Json, PatchMisfit} from "./json-patch.ts";
 // a pointer must escape them (RFC 6901).
 
 const key = fc.oneof(fc.string({maxLength: 6}), fc.constantFrom("a/b", "~", "~1", "", "0"));
+
 const json: fc.Arbitrary<Json> = fc.letrec<{v: Json}>((tie) => ({
 	v: fc.oneof(
 		{depthSize: "small"},

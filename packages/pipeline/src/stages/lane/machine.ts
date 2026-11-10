@@ -332,6 +332,7 @@ const note = (s: Held, task: Owner, f: Flow, open: number): Step => {
 export const childSub = listen("lane_child", (s: Lane) =>
 	s.phase === "running" ? {child: s.child} : null,
 );
+
 export const ownerSub = listen("lane_owner", (s: Lane) =>
 	s.phase === "waiting" ? {plan: s.job.plan, asks: s.asks} : null,
 );

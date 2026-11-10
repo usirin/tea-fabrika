@@ -59,13 +59,16 @@ const Loose = Schema.Struct({
 	parent: Schema.NullOr(Schema.String),
 	traceId: Schema.String,
 });
+
 const strict = {onExcessProperty: "error"} as const;
 const decodeLoose = Schema.decodeUnknownResult(Loose, strict);
 const isParent = Schema.is(Schema.NullOr(ParentText));
 const decodeLine = Schema.decodeUnknownResult(Line, strict);
+
 const decodeId = Schema.decodeUnknownResult(
 	Schema.Struct({stream: Entry.fields.stream, id: Entry.fields.id}),
 );
+
 const decodeRow = Schema.decodeUnknownSync(Row);
 const decodeRing = Schema.decodeUnknownSync(Ring);
 const decodeHead = Schema.decodeUnknownSync(Head);
@@ -73,6 +76,7 @@ const decodeLast = Schema.decodeUnknownSync(Last);
 const decodeLag = Schema.decodeUnknownSync(Lag);
 
 const encoder = new TextEncoder();
+
 const bytes = (texts: ReadonlyArray<string | null>): number =>
 	texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
 

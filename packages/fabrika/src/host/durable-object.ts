@@ -39,6 +39,7 @@ import * as L from "./rules.ts";
 export {JobRecord} from "./job-record.ts";
 
 type Cursor = {toArray(): L.SqlRow[]};
+
 type Storage = {
 	sql: {exec(sql: string, ...bind: L.Value[]): Cursor};
 	transactionSync<T>(fn: () => T): T;
@@ -46,6 +47,7 @@ type Storage = {
 	setAlarm(at: number): Promise<void>;
 	deleteAlarm(): Promise<void>;
 };
+
 type Ctx = {
 	/** `name`: what `idFromName` was given, when workerd knows it. */
 	id?: {name?: string};
@@ -53,6 +55,7 @@ type Ctx = {
 	acceptWebSocket(ws: WorkerSocket, tags: string[]): void;
 	getWebSockets(tag?: string): WorkerSocket[];
 };
+
 type Env = {
 	LEDGER: Namespace;
 	/** The jobs' records (`job-record.ts`). Left out: this ledger keeps none, and refuses their calls. */
@@ -95,10 +98,12 @@ const keysOf = (env: Env): Layer.Layer<Keys> | null => {
 /** A shared door with no keys to ask is closed: nobody could prove who they are. */
 const closedWithout = (config: DoorConfig, keys: Layer.Layer<Keys> | null): DoorConfig =>
 	config.kind === "shared" && keys === null ? {kind: "closed" as const} : config;
+
 type Stub = {fetch(req: Request): Promise<Response>} & Record<
 	string,
 	((...args: unknown[]) => Promise<unknown>) | undefined
 >;
+
 type Namespace = {idFromName(name: string): unknown; get(id: unknown): Stub};
 
 /** If an alarm run dies halfway, the alarm comes back after this long. */
@@ -545,8 +550,10 @@ const rpc =
 
 const refused = (r: {status: number; why: string}) =>
 	Response.json({error: r.why}, {status: r.status});
+
 const answer = (r: {ok: true; value: unknown} | {ok: false; status: number; why: string}) =>
 	r.ok ? Response.json(r.value) : refused(r);
+
 /**
  * A session's answer, to the one who logged in: the one line where its token leaves its
  * `Redacted`. Through `answer` it would go out as `"<redacted>"`.

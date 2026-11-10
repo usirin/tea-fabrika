@@ -141,6 +141,7 @@ const askedFields = {
 	lean: Schema.String,
 	why: Schema.String,
 };
+
 const questionFields = {
 	...askedFields,
 	cost: Schema.optionalKey(Schema.String),
@@ -191,35 +192,41 @@ const goalOf = <J extends Schema.Top, C extends Schema.Top>(job: J, criterion: C
 // What the planner writes: no ids, its stories named in plain words.
 const draftCriterion = Criterion;
 const draftJob = Job;
+
 const draftTask = Schema.Struct({
 	...taskFields,
 	job: draftJob,
 	/** The single claims after the job. May be empty when the job says it all. */
 	criteria: Schema.Array(draftCriterion),
 });
+
 const draftGoal = goalOf(draftJob, draftCriterion);
 
 // A next version: each task and criterion may name the id it keeps.
 const keepsCriterion = {keeps: Schema.optionalKey(CriterionId)};
 const revisedCriterion = value({...keepsCriterion, ...claimFields(StoryId)});
 const revisedJob = value({...keepsCriterion, ...claimFields(StoryId), ...jobFields});
+
 const revisedTask = value({
 	keeps: Schema.optionalKey(TaskId),
 	...taskFields,
 	job: revisedJob,
 	criteria: Schema.Array(revisedCriterion),
 });
+
 const revisedQuestion = value({keeps: Schema.optionalKey(QuestionId), ...questionFields});
 const revisedGoal = goalOf(revisedJob, revisedCriterion);
 
 // Every task, criterion and question under its id.
 const numberedCriterion = entity(CriterionId, {version: Version, ...claimFields(StoryId)});
 const numberedJob = entity(CriterionId, {version: Version, ...claimFields(StoryId), ...jobFields});
+
 const numberedTask = entity(TaskId, {
 	...taskFields,
 	job: numberedJob,
 	criteria: Schema.Array(numberedCriterion),
 });
+
 const numberedQuestion = entity(QuestionId, questionFields);
 const numberedGoal = goalOf(numberedJob, numberedCriterion);
 

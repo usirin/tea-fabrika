@@ -127,6 +127,7 @@ const ThroughRows = Schema.Struct({
 	findings: Schema.Array(Schema.Struct({id: Schema.String, fault: Schema.String})),
 	mutants: Schema.Array(Schema.Struct({mutant: Schema.String, why: Schema.String})),
 });
+
 export type Through = typeof ThroughRows.Type;
 
 /** What a person decided: every step after the plan that judges or writes is told it. */
@@ -232,6 +233,7 @@ const carried = {
 	 */
 	touched: Schema.optionalKey(Schema.Array(Schema.String)),
 };
+
 export const Carry = Schema.Struct(carried);
 export type Carry = typeof Carry.Type;
 
@@ -263,6 +265,7 @@ export const StepEnd = Schema.Struct({
 export type StepEnd = typeof StepEnd.Type;
 
 const LaneIn = Schema.Struct({number: Schema.Finite, lane: LaneId});
+
 const StepIn = Schema.Struct({
 	number: Schema.Finite,
 	/** The lane's count of steps run: run ids and intents are named by it, so none is used twice. */
@@ -271,6 +274,7 @@ const StepIn = Schema.Struct({
 	round: Schema.Finite,
 	carry: Carry,
 });
+
 const AskIn = Schema.Struct({
 	number: Schema.Finite,
 	ask: Schema.String,
@@ -285,6 +289,7 @@ const AskIn = Schema.Struct({
 	/** The head a merge's question is about, as the person sees it: the `asked` fact keeps it (self-fix PR 10). */
 	head: Schema.optionalKey(Schema.String),
 });
+
 /** How the lane ended, for what it takes with it. Left out: a lane saved before this key still reads. */
 const ReleaseIn = Schema.Struct({...LaneIn.fields, outcome: Schema.optionalKey(LaneOutcome)});
 
@@ -300,11 +305,13 @@ const ReadIn = Schema.Struct({number: Schema.Finite});
 
 export const readFiled = gather("lane_read", {input: ReadIn, ok: Filed, err: Unknown});
 export const claimLane = act("lane_claim", {input: LaneIn, ok: LaneId, err: Unknown});
+
 export const releaseLane = act("lane_release", {
 	input: ReleaseIn,
 	ok: Schema.Literal("released"),
 	err: Unknown,
 });
+
 export const runStep = act("lane_step", {input: StepIn, ok: StepEnd, err: Unknown});
 export const askPerson = act("lane_ask", {input: AskIn, ok: Schema.Null, err: Unknown});
 
@@ -421,6 +428,7 @@ const Stop = Schema.Struct({outcome: StopOutcome, said: Schema.String, at: Resum
 type Stop = typeof Stop.Type;
 
 const Over = {phase: Schema.Literal("over"), number: Schema.Finite, trail: Schema.Array(Row)};
+
 const Releasing = {
 	...Held.fields,
 	phase: Schema.Literal("releasing"),
@@ -542,6 +550,7 @@ export type Move =
 const stuck = (why: Extract<LaneOutcome, {kind: "stuck"}>["why"]): Move => ({
 	end: {kind: "stuck", why},
 });
+
 const merged: Move = {end: {kind: "done", part: false}};
 
 /** The step after each step, when it ended well or on its own `skip`. */

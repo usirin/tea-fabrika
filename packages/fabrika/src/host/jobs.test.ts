@@ -43,6 +43,7 @@ const TABLE: Jobs = {
 	jobs: [job(1, "t1"), job(2, "t2"), job(3, "t2", "running"), job(4, null)],
 	next: 5,
 };
+
 const numbers = (jobs: readonly Job[]) => jobs.map((one) => one.n);
 
 describe("whose a job is", () => {
@@ -71,6 +72,7 @@ const CLAUDE = "agent:claude for:github:7";
 const PERSON = "user:github:7";
 
 const ctx = stubCtxThrowingProxy<undefined>();
+
 /** The table after `msgs`, from `loaded` (a fresh one: `null`). */
 const after = (msgs: readonly Msg[], loaded: Jobs | null = null): Jobs => {
 	const {states} = foldEvents(jobsMachine, ctx, loaded, msgs);
@@ -86,6 +88,7 @@ const counter = (run: string): StageRecord => ({
 	wire: null,
 	ended: false,
 });
+
 const began = (run: string, by: string): Msg => ({
 	type: "began",
 	text: "counter",
@@ -156,6 +159,7 @@ describe("a job keeps its writer", () => {
 // ---------------------------------------------------------------- the laws of a job's writer
 
 const run = fc.constantFrom("r1", "r2", "r3", "r4");
+
 const stage: fc.Arbitrary<StageRecord> = fc.record({
 	program: fc.constantFrom("counter", "seq"),
 	flags: fc.constant({}),
@@ -163,6 +167,7 @@ const stage: fc.Arbitrary<StageRecord> = fc.record({
 	wire: fc.constant(null),
 	ended: fc.constant(false),
 });
+
 const n = fc.integer({min: 1, max: 4});
 const owner = fc.constantFrom("t1", "t2", null);
 const writer = fc.constantFrom(CLAUDE, PERSON, "agent:lead for:github:7", "user:owner");
@@ -192,10 +197,12 @@ const arbs: MsgArbitraryTable<Msg> = {
 		why: fc.option(fc.string({minLength: 1, maxLength: 20}), {nil: null}),
 	}),
 };
+
 const lists = fc.array(arbMsg(arbs, {weights: {began: 3, stopping: 2}}), {
 	maxLength: 30,
 	size: "max",
 });
+
 /** Seed 119120: the shared one (AGENTS.md). */
 const OPTS = {numRuns: 300, seed: 119120};
 

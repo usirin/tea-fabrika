@@ -8,16 +8,20 @@ import {lintWorkflow as lint} from "./workflow-lint.ts";
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
 const options = {seed: 119120, numRuns: 100};
+
 const guard = (job: string) =>
 	`\${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.${job} != 'false') }}`;
+
 const env = {
 	BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
 	HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
 	EVENT: `\${{ github.event_name }}`,
 };
+
 const diff = {id: "diff", env, run: "node .github/ci/changes.mjs"};
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({maxLength: 20});
+
 const valid = (label: string, extra: string) => ({
 	name: label,
 	on: {push: {branches: ["main"]}, pull_request: null},
@@ -83,7 +87,9 @@ const valid = (label: string, extra: string) => ({
 		},
 	},
 });
+
 type Workflow = ReturnType<typeof valid>;
+
 const plants: [string, (workflow: Workflow) => void][] = [
 	[
 		"scan skips after failure",

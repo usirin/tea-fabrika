@@ -40,6 +40,7 @@ const root = resolve(import.meta.dirname, "../../../..");
 const script = join(import.meta.dirname, "stepcommit.sh");
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 const options = {seed: 321, numRuns: 3, endOnFailure: true};
+
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	const errors: Error[] = [];
 	for (const value of values) {
@@ -56,15 +57,19 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 	}
 	if (errors.length) throw new AggregateError(errors, errors.map((e) => e.message).join("\n"));
 };
+
 type Owner = "tests" | "build" | "lead" | "mutation";
+
 /** gh's answer to stepcommit's open-PR query. */
 const open = (nodes: unknown[], totalCount = nodes.length) => ({
 	data: {repository: {pullRequests: {totalCount, nodes}}},
 });
+
 const put = (path: string, value: string) => {
 	mkdirSync(dirname(path), {recursive: true});
 	writeFileSync(path, value);
 };
+
 const withRepo = (owners: Array<[string, string]>, f: (r: Repo) => void) => {
 	const r = new Repo(owners);
 	try {
@@ -73,12 +78,14 @@ const withRepo = (owners: Array<[string, string]>, f: (r: Repo) => void) => {
 		rmSync(r.dir, {recursive: true, force: true});
 	}
 };
+
 class Repo {
 	readonly dir = mkdtempSync(join(tmpdir(), "sc321-"));
 	readonly boxes = join(this.dir, "boxes");
 	readonly repo = join(this.boxes, "one");
 	readonly env: NodeJS.ProcessEnv;
 	readonly base: string;
+
 	constructor(owners: Array<[string, string]>) {
 		const bin = join(this.dir, "bin");
 		mkdirSync(this.repo, {recursive: true});
@@ -155,6 +162,7 @@ process.stdout.write(prs);
 			`ticket: 321\nbranch: fabrikalfa/one\nbase: ${this.base}\nplan: ${plan}\nplan-sha256: ${hash}\n`,
 		);
 	}
+
 	call(cmd: string, args: string[]) {
 		const r = spawnSync(cmd, args, {
 			cwd: this.repo,
@@ -165,11 +173,13 @@ process.stdout.write(prs);
 		expect(r.error).toBeUndefined();
 		return {code: r.status, text: r.stdout + r.stderr, stdout: r.stdout};
 	}
+
 	git(...args: string[]) {
 		const r = this.call("/usr/bin/git", args);
 		expect(r.code, r.text).toBe(0);
 		return r.stdout;
 	}
+
 	commit(step: Owner, paths: string[], only = false) {
 		return this.call("sh", [
 			script,
@@ -180,9 +190,11 @@ process.stdout.write(prs);
 			...paths,
 		]);
 	}
+
 	changed(path: string, text = 'export const value = "changed";\n') {
 		put(join(this.repo, path), text);
 	}
+
 	signs(): string[][] {
 		return existsSync(join(this.dir, "calls"))
 			? readFileSync(join(this.dir, "calls"), "utf8")
@@ -192,12 +204,14 @@ process.stdout.write(prs);
 					.filter((a: string[]) => a[0] === "commits")
 			: [];
 	}
+
 	asked(): boolean {
 		return (
 			existsSync(join(this.dir, "calls")) &&
 			readFileSync(join(this.dir, "calls"), "utf8").includes('["gh",')
 		);
 	}
+
 	/** An open PR on `branch` whose one commit carries a note for `ticket`. */
 	openPr(branch: string, ticket: string) {
 		this.git(
@@ -310,6 +324,49 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 								} else {
 									expect(got.code, got.text).not.toBe(0);
 									expect(got.text).toMatch(/not_owner|owner|unknown/);
+									expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+									expect(r.signs()).toEqual([]);
+								}
+							},
+						),
+					);
+				},
+			),
+			options,
+		);
+	});
+
+	// Plant: exact-only lookup (refuses a shot under the docs/ row), a plain string prefix
+	// (docs/shots/ also owning docs/shotsx/), or a '..' part escaping the row.
+	it("K4 a row ending in / owns every file under it, and nothing beside it", () => {
+		fc.assert(
+			fc.property(
+				word,
+				fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner),
+				(name, step) => {
+					each(["under", "deeper", "beside", "escape"], (kind) =>
+						withRepo(
+							[
+								["docs/shots/", step],
+								["src/foreign.ts", step === "tests" ? "build" : "tests"],
+							],
+							(r) => {
+								const path =
+									kind === "under"
+										? `docs/shots/${name}.png`
+										: kind === "deeper"
+											? `docs/shots/${name}/one.png`
+											: kind === "beside"
+												? `docs/shotsx/${name}.png`
+												: "docs/shots/../src/foreign.ts";
+								r.changed(kind === "escape" ? "src/foreign.ts" : path);
+								const got = r.commit(step, [path]);
+								expect(got.code).not.toBeNull();
+								if (kind === "under" || kind === "deeper") {
+									expect(got.code, got.text).toBe(0);
+									expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
+								} else {
+									expect(got.code, got.text).not.toBe(0);
 									expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
 									expect(r.signs()).toEqual([]);
 								}

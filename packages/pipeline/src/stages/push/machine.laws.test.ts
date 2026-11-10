@@ -43,6 +43,7 @@ const arbs: MsgArbitraryTable<Msg> = {
 };
 
 const opening: readonly Msg[] = [{type: "start", ask: ASK}];
+
 const lists = fc
 	.tuple(fc.boolean(), fc.array(arbMsg(arbs), {minLength: 1, maxLength: 40}))
 	.map(([open, rest]) => (open ? [...opening, ...rest] : rest));

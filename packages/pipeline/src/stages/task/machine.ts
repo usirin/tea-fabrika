@@ -63,6 +63,7 @@ export const TaskAsk = Schema.Struct({
 export type TaskAsk = typeof TaskAsk.Type;
 
 type At = {readonly task: TaskId; readonly round: number; readonly run: number};
+
 export type TaskRunSub = Sub<
 	"task_run",
 	At & {readonly brief: BuildBrief; readonly settings: Settings}
@@ -80,11 +81,13 @@ export const TaskReport = Schema.Struct({
 export type TaskReport = typeof TaskReport.Type;
 
 type Held = {readonly ask: TaskAsk; readonly settings: Settings; readonly session: string};
+
 type Read = Held & {
 	readonly view: TaskView;
 	readonly base: string;
 	readonly criteria: readonly [Criterion, ...Criterion[]];
 };
+
 type Done = Read & {readonly built: Built; readonly ran: Ran; readonly runs: number};
 
 export type Task =
@@ -114,10 +117,12 @@ type Step = readonly [Task, readonly TaskCmd[]];
 const stay = (s: Task): Step => [s, []];
 const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, session: s.session});
 const blank: TaskReport = {head: null, changed: false, runs: 0, problems: []};
+
 const end = (s: Held, outcome: TaskOutcome, report: Partial<TaskReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],
 ];
+
 const intent = (s: Held, step: string) =>
 	intentOf("task", s.ask.plan, s.ask.task, s.ask.round, step);
 

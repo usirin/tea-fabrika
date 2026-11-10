@@ -111,6 +111,7 @@ export interface AcpRefused {
 	readonly _tag: "acp_refused";
 	readonly message: string;
 }
+
 const refused = (message: string) => Effect.fail<AcpRefused>({_tag: "acp_refused", message});
 
 /** What the pump reads: the harness's own sends, and a mark to wait until all before it is folded. */

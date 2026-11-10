@@ -346,6 +346,7 @@ const handlers = (o: {
 };
 
 const decodeJob = Schema.decodeUnknownExit(Schema.fromJsonString(CatchupJob));
+
 const jobOf = (self: Self["Service"]) =>
 	self.reads.readStream(self.inbox).pipe(
 		Effect.orElseSucceed(() => []),

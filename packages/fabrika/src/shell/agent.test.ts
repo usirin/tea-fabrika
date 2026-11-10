@@ -44,6 +44,7 @@ const OTHER_AGENT = "agent:review for:github:7";
 const WRITERS = [PERSON, AGENT, OTHER_PERSON, OTHER_AGENT] as const;
 /** A writer text that names neither a person nor an agent (`writerOf` reads it as `null`). */
 const SOMEONE = "someone";
+
 /** Where `attach` says each writer's job goes on: an agent's tile by its name, a person's own. */
 const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
 	[PERSON]: "their own tile",
@@ -51,6 +52,7 @@ const TILE: Readonly<Record<(typeof WRITERS)[number], string>> = {
 	[OTHER_PERSON]: "their own tile",
 	[OTHER_AGENT]: "review's tile",
 };
+
 const LONG = "sleep --ms 60000";
 const LIST = programList(SMALL);
 

@@ -86,6 +86,7 @@ const pr = (ci: Check): PrFact => ({
 	head: "abc1234",
 	checks: [ci],
 });
+
 const queued = pr({name: "ci", status: "queued", conclusion: null});
 const failure = pr({name: "ci", status: "completed", conclusion: "failure"});
 const success = pr({name: "ci", status: "completed", conclusion: "success"});

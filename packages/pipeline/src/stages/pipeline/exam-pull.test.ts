@@ -11,6 +11,7 @@ const RULE: ExamChange = {
 	change: "turn on no-floating-promises",
 	why: "a dropped Effect never runs",
 };
+
 const WORKFLOW: ExamChange = {
 	path: ".github/workflows/ci.yml",
 	change: "run the laws on every push",

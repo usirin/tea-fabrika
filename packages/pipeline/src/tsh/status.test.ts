@@ -63,6 +63,7 @@ const session = (list: ProgramList) =>
 	});
 
 const url = (n: number) => `https://github.com/example/repo/pull/${n}`;
+
 /** Clear once a review has kept its rows: each closes the ticket the recorded body names ("Fixes #625"). */
 const clear: PrFacts = {
 	head: HEADS.final,

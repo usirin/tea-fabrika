@@ -30,19 +30,23 @@ import type {Heard, Note} from "./tools.ts";
 // any real rubric.
 
 export const PR = "https://github.com/example/repo/pull/628";
+
 export const HEADS = {
 	first: "6f4907a3ca552cf482652dd0f01b3aea3aa0853f",
 	final: "b695a2af332423e6e7840236c65d31e670cb5947",
 } as const;
+
 export const BASE = "6780a06ec56372cd3a073c7d8f5eb8d34c98959c";
 export type Which = keyof typeof HEADS;
 
 export const recorded = (name: string): string =>
 	readFileSync(new URL(`../../../../../fixtures/review/${name}`, import.meta.url), "utf8");
+
 /** The made-up rubric folder. It has `code.md` and `doc.md`, and no `skill.md`. */
 export const RUBRICS = fileURLToPath(
 	new URL("../../../../../fixtures/review/rubrics/", import.meta.url),
 );
+
 /**
  * `RUBRICS` as one word on a tsh line: quoted, so a checkout whose path has a space, such as one
  * under the app home in Library/Application Support, still names one folder (tracker 190).

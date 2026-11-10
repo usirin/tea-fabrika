@@ -33,6 +33,7 @@ const ticket = fc.stringMatching(/^[0-9]{1,12}$/);
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,24}$/);
 const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,16}$/);
 const role = fc.constantFrom(...ROLES);
+
 const anyNote = fc.record({
 	_tag: fc.constant("attested" as const),
 	step: role,
@@ -43,6 +44,7 @@ const anyNote = fc.record({
 	key: fc.string(),
 	sig: fc.string(),
 });
+
 const anyLink = fc.record({
 	_tag: fc.constant("attested" as const),
 	step: fc.constantFrom(...ROLES, "person" as const),
@@ -62,7 +64,9 @@ const anyLink = fc.record({
 	squash: sha,
 	keys: sha,
 });
+
 const signed = (note: Note, signer: Role | null = note.step) => ({note, signer});
+
 const commit = (n: Note, paths: string[] = []): Commit => ({
 	sha: n.to,
 	tree: n.to,
@@ -70,6 +74,7 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
 	paths,
 	signed: signed(n),
 });
+
 const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => ({
 	head: "head",
 	containsBase: true,
@@ -78,6 +83,7 @@ const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => 
 	notes: commits.flatMap((c) => (c.signed === null ? [] : [c.signed])),
 	...more,
 });
+
 const EXAM = examMatcher([
 	{glob: "exam-paths.json", why: ""},
 	{glob: "boundary-rules.json", why: ""},
@@ -86,10 +92,12 @@ const EXAM = examMatcher([
 	{glob: "next/**/*.test.ts", why: ""},
 	{glob: "fixtures/next/**", why: ""},
 ]);
+
 const answers = (p: PullRequest) => check(p, EXAM).answers;
 const DONE = {_tag: "done" as const};
 const stuck = (why: string, sha: string, more: object = {}) => ({_tag: "stuck", why, sha, ...more});
 const ask = (paths: string[]): Answer => ({_tag: "ask", who: "owner", for: "exam_read", paths});
+
 const examPaths = fc
 	.uniqueArray(filename, {minLength: 1, maxLength: 8})
 	.map((names) => names.map((name) => `next/${name}.test.ts`));
@@ -193,8 +201,10 @@ const key = fc
 		maxLength: 43,
 	})
 	.map((chars) => `AAAAC3NzaC1lZDI1NTE5AAAAI${chars.join("")}`);
+
 const line = (principal: string, key: string, ns = "fabrika-step") =>
 	`${principal} namespaces="${ns}" ssh-ed25519 ${key}`;
+
 const keyFile = fc
 	.tuple(
 		fc.uniqueArray(key, {minLength: 6, maxLength: 12}),
@@ -585,6 +595,7 @@ const logged = (n: Note, base: string, squash: string): Logged => ({
 	},
 	signer: n.step,
 });
+
 const chainData = fc
 	.tuple(route, fc.uniqueArray(sha, {minLength: 3, maxLength: 3}))
 	.filter(([r, ids]) => !r.trees.includes(ids[2]!))

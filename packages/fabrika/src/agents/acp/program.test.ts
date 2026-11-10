@@ -19,6 +19,7 @@ import {type Transcript, turnShapes} from "./transcript.ts";
 // two files, answer, follow up. Then the mechanism rows.
 
 type Flags = Given<(typeof acpProgram)["flags"]>;
+
 type Heard = {
 	readonly opened: ReturnType<typeof ear<unknown>>;
 	readonly said: ReturnType<typeof ear<string>>;
@@ -42,6 +43,7 @@ const promptsSent = (folder: string) => {
 };
 
 let runs = 0;
+
 /** One start of the acp program, kept under `id` in `storage`. */
 const life = (flags: Flags, storage: Storage, id: string) =>
 	Effect.gen(function* () {

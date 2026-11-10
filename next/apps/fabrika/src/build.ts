@@ -8,12 +8,14 @@ export type Built = {
 	readonly brain: string;
 	readonly programs: Readonly<Record<string, {readonly hash: string; readonly source: string}>>;
 };
+
 type Options = {
 	readonly out: string;
 	readonly files?: ReadonlyArray<string>;
 	readonly ledger?: ReadonlyArray<Row>;
 	readonly programs?: Readonly<Record<string, string>>;
 };
+
 export const build = Effect.fn("build.build")(function* (options: Options) {
 	const fs = yield* FileSystem.FileSystem,
 		path = yield* Path.Path;

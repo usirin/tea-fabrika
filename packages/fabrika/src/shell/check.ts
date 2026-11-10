@@ -132,10 +132,12 @@ const no = (at: number, why: string, guess?: string, status = 2): Refusal => ({
 /** A stop in the walk: the check is refused. Thrown inside this file only, and caught by `check`. */
 class Stop {
 	readonly refusal: Refusal;
+
 	constructor(refusal: Refusal) {
 		this.refusal = refusal;
 	}
 }
+
 const stop = (refusal: Refusal): never => {
 	throw new Stop(refusal);
 };

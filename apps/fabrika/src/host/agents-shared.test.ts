@@ -39,6 +39,7 @@ import {pathsOf, reach} from "./socket.ts";
 // is a fake that lists alice's key. No call leaves the laptop.
 
 const users = new Map<string, {id: number; keys: string[]}>();
+
 const fakeGitHub = async (req: Request): Promise<Response> => {
 	const url = new URL(req.url);
 	if (url.host !== "api.github.com") return new Response("not here", {status: 502});
@@ -118,6 +119,7 @@ const fieldsOf = (line: string): Record<string, string> => {
 	}
 	return out;
 };
+
 const said = (lines: readonly string[], message: string) =>
 	lines.map(fieldsOf).filter((f) => f.message === message);
 

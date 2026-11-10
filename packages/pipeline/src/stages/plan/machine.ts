@@ -147,6 +147,7 @@ const stay = (s: PlanState): Step => [s, []];
 const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, key: s.key});
 
 const blank: PlanReport = {plan: null, problems: [], tries: 0, facts: false, spend: nothing};
+
 const end = (s: Held, outcome: PlanOutcome, report: Partial<PlanReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],

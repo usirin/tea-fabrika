@@ -44,6 +44,7 @@ import {ledgerNameOf, localLedger, sqliteLedger} from "./ledger.ts";
 // one folder per commit they were read at, for the reviewer to read.
 const user = homedir();
 const home = homeOf(process.env, user);
+
 const read = await Effect.runPromise(
 	Effect.gen(function* () {
 		const path = yield* Path.Path;

@@ -113,6 +113,7 @@ const envelope = (line: unknown): Envelope => Option.getOrElse(decodeEnvelope(li
 /** The id of a request, which waits for an answer; `null` for anything else. */
 const askedId = (m: Envelope): Id | null =>
 	m.method !== undefined && m.id !== undefined && m.id !== null ? m.id : null;
+
 /** The id an answer is to; `null` for anything else. */
 const answeredId = (m: Envelope): Id | null =>
 	m.method === undefined && m.id !== undefined && m.id !== null ? m.id : null;
@@ -154,6 +155,7 @@ type Link = Data.TaggedEnum<{
 	 */
 	Replaying: {readonly conn: Conn; readonly queued: unknown[]; readonly streak: TimedRetryState};
 }>;
+
 const Link = Data.taggedEnum<Link>();
 
 /**

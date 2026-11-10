@@ -34,6 +34,7 @@ import {type Handle, StateRefused, type Storage, storageOf} from "./storage.ts";
 // ---------------------------------------------------------------- the toy
 
 const Item = Schema.Struct({name: Schema.String, n: Schema.Int});
+
 /** The tray's state, and the schema it is kept and read back through. */
 const Tray = Schema.Union([
 	Schema.Struct({phase: Schema.Literal("empty")}),
@@ -102,6 +103,7 @@ const place = () => {
 
 /** Every key and its bytes, as they stand. */
 const snapshot = (bytes: ReadonlyMap<string, string>) => new Map(bytes);
+
 /** The bytes of one machine run: its two slots. */
 const runBytes = (bytes: ReadonlyMap<string, string>, run: string, machine: string, id: string) =>
 	[...bytes].filter(([key]) =>
@@ -112,6 +114,7 @@ const runBytes = (bytes: ReadonlyMap<string, string>, run: string, machine: stri
 
 const go = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 const exitOf = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
+
 /** What a promise came to: its value, or the message it failed with. */
 const settled = <A>(promise: Promise<A>) =>
 	promise.then(
@@ -121,6 +124,7 @@ const settled = <A>(promise: Promise<A>) =>
 			why: error instanceof Error ? error.message : String(error),
 		}),
 	);
+
 const isRefusal = (
 	migrated: unknown,
 ): migrated is {readonly _tag: "refusal"; readonly reason: string} =>
@@ -133,6 +137,7 @@ const isRefusal = (
 const name = fc.constantFrom("cup", "jar", "", "lid e", "é");
 const item = fc.record({name, n: fc.integer({min: -1000, max: 1000})});
 const key = fc.constantFrom("a", "b", "k e", "");
+
 const tray$: fc.Arbitrary<Tray> = fc.oneof(
 	fc.constant({phase: "empty"} as const),
 	fc.record({
@@ -143,10 +148,12 @@ const tray$: fc.Arbitrary<Tray> = fc.oneof(
 		left: fc.option(name, {nil: null}),
 	}),
 );
+
 const older$: fc.Arbitrary<OlderTray> = fc.record({
 	phase: fc.constant("holding" as const),
 	count: fc.integer({min: 0, max: 9}),
 });
+
 /** A key the tray's schema names nowhere, and what it holds. */
 const excess = fc.record({
 	key: fc.constantFrom("extra", "count", "try"),
@@ -311,6 +318,7 @@ type Write =
 
 const id$ = fc.constantFrom("a", "b", "c/1", "d e", "é", "older");
 const machine$ = fc.constantFrom(MACHINE, MACHINE, MACHINE, "other");
+
 const write$: fc.Arbitrary<Write> = fc.oneof(
 	{
 		weight: 3,
@@ -391,6 +399,7 @@ type Later =
 	| {readonly do: "end"};
 
 const other$ = fc.constantFrom("a", "b");
+
 const later$: fc.Arbitrary<Later> = fc.oneof(
 	fc.constantFrom<Later>(
 		{do: "reopen"},
@@ -577,14 +586,17 @@ describe("refused bytes are never booted and never written over", () => {
 // ---------------------------------------------------------------- law: every reachable state is kept
 
 type Msg = MsgOf<typeof tray>;
+
 const table: MsgArbitraryTable<Msg> = {
 	put: arbRecordMsg("put", {name, n: fc.integer({min: -1000, max: 1000})}),
 	take: fc.constant({type: "take"} as const),
 	note: arbRecordMsg("note", {key, text: name}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 30});
 
 const ctx = stubCtxThrowingProxy<undefined>();
+
 /** Every state `machine` reaches from its init, by any list of Msgs, saves and loads back equal. */
 const keepsEvery = (machine: typeof tray) =>
 	fc.assert(

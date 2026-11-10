@@ -14,20 +14,25 @@ import {codexEnv} from "./harness.ts";
 // Whether the box starts, asked the way "the fence, in Codex's own box" asks (harness.test.ts).
 const boxHome = realpathSync(mkdtempSync(join(tmpdir(), "codex-box-")));
 const made: string[] = [boxHome];
+
 afterAll(() => {
 	for (const path of made) rmSync(path, {recursive: true, force: true});
 });
+
 const boxEnv = codexEnvOf(process.env, boxHome);
+
 const tried = spawnSync("codex", ["sandbox", "--", "/bin/sh", "-c", "exit 0"], {
 	cwd: boxHome,
 	env: boxEnv,
 	encoding: "utf8",
 	stdio: ["ignore", "ignore", "pipe"],
 });
+
 const noCodex =
 	tried.error !== undefined &&
 	"code" in tried.error &&
 	["ENOENT", "EACCES", "EPERM"].includes(String(tried.error.code));
+
 const insideABox = tried.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
 const SLOW = 120_000;
 

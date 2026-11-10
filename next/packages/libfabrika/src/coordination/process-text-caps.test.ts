@@ -32,6 +32,7 @@ const overText = Schema.String.check(Schema.isMinLength(CAP + 1), Schema.isMaxLe
 // refused length, including 258..1024, rather than only the 257 minimum.
 const options = {arbitrary: {seed: 119120, runs: 20, size: CAP * 4}};
 const schemaOptions = {arbitrary: {seed: 119120, runs: 100, size: CAP * 4}};
+
 // The installed Effect runner has no examples option; keep old inputs in the callback.
 const examples =
 	<A extends ReadonlyArray<unknown>, E, R>(
@@ -43,6 +44,7 @@ const examples =
 			discard: true,
 			concurrency: 1,
 		});
+
 const toW = Recipient.cases.process.make({process: W});
 
 const seed = (store: Storage) =>
@@ -54,20 +56,26 @@ const seed = (store: Storage) =>
 			from(),
 		);
 	}).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)));
+
 const monitor = (store: Storage, ref: string) =>
 	ProcessManager.use((p) => p.monitor(ref, A, from())).pipe(
 		Effect.provide(manager(store, watcher(W))),
 	);
+
 const exit = (store: Storage, why = "crashed") =>
 	ProcessManager.use((p) => p.exit(A, why, from())).pipe(Effect.provide(manager(store)));
+
 const fresh = (store: Storage) => receive(W).pipe(Effect.provide(manager(store, watcher(W))));
+
 const downs = (letters: ReadonlyArray<{readonly m: unknown}>) =>
 	letters.flatMap((letter) => {
 		const down = Schema.decodeUnknownOption(Down)(letter.m);
 		return down._tag === "Some" ? [down.value] : [];
 	});
+
 /** A request as a client sends it: raw, never passed through a schema's `make`. */
 const raw = (request: object) => request as Start;
+
 /** The call fails with a ProcessError and the ledger holds exactly what it held before. */
 const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) =>
 	Effect.gen(function* () {

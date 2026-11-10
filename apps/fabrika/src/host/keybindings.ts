@@ -44,10 +44,12 @@ interface Source {
 }
 
 type Value = string | readonly string[] | null;
+
 const version = (text: string | null) =>
 	createHash("sha256")
 		.update(text === null ? "missing" : `file:${text}`)
 		.digest("hex");
+
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
 const same = (a: Key, b: Key) => a._tag === b._tag && a.key === b.key;
 
@@ -63,6 +65,7 @@ const failed = (error: PlatformError.PlatformError) =>
 	new Refused({why: `save of keybindings.toml failed: ${saidOf(error)}`});
 
 export type KeybindingManager = Manager;
+
 export const KeybindingManager = Object.assign(ManagerService, {
 	make: (options: {readonly folder: string; readonly mac: boolean; readonly by: string}) =>
 		Effect.gen(function* () {

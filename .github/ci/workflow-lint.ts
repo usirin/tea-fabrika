@@ -6,20 +6,26 @@ import {parse} from "yaml";
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null && !Array.isArray(value);
+
 const map = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
+
 const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
 	Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : [];
+
 const commands = (job: Record<string, unknown>) =>
 	steps(job).flatMap((step) =>
 		typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
 	);
+
 const compact = (value: unknown) =>
 	typeof value === "string" ? value.replace(/\s+/g, "").replace(/^\$\{\{|\}\}$/g, "") : "";
+
 const env = {
 	BASE: `\${{ github.event.pull_request.base.sha || github.event.before }}`,
 	HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
 	EVENT: `\${{ github.event_name }}`,
 };
+
 const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
 export const lintWorkflow = (text: string): string[] => {

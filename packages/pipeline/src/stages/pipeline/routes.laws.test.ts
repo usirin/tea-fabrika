@@ -95,6 +95,7 @@ const EXAM_NAMES = Object.keys({
 	"stuck:unchecked": true,
 	"stuck:land_failed": true,
 } satisfies Record<Name<ExamOutcome>, true>);
+
 const PUSH_NAMES = Object.keys({
 	done: true,
 	"done:part": true,
@@ -102,6 +103,7 @@ const PUSH_NAMES = Object.keys({
 	"stuck:open_failed": true,
 	"stuck:post_failed": true,
 } satisfies Record<Name<PushOutcome>, true>);
+
 const MUTANTS_NAMES = Object.keys({
 	done: true,
 	"done:part": true,
@@ -169,11 +171,13 @@ const PAIRS: readonly {readonly step: LaneStep; readonly name: string}[] = STEPS
  * say (jidoka row 13). `guard`: checked when the lane starts, so it never arrives.
  */
 type Kind = "step" | "wait" | "once" | "meaning" | "guard";
+
 interface Hole {
 	readonly kind: Kind;
 	/** The jidoka table's row, or where else it was named. */
 	readonly row: string;
 }
+
 const hole = (kind: Kind, row: string): Hole => ({kind, row});
 
 const HOLES_BY_HAND: Readonly<Record<string, Hole>> = {
@@ -289,10 +293,12 @@ type Reach =
 	| {readonly go: "ask"; readonly for: string}
 	| {readonly go: "stop"}
 	| {readonly go: "end"};
+
 interface Needed {
 	readonly reach: Reach;
 	readonly row: string;
 }
+
 const asks = (kind: string, row: string): Needed => ({reach: {go: "ask", for: kind}, row});
 const stops = (row: string): Needed => ({reach: {go: "stop"}, row});
 
@@ -467,6 +473,7 @@ const stepOf = (key: string): LaneStep => {
 	if (step === undefined) throw new Error(`no step in ${key}`);
 	return step;
 };
+
 const nameIn = (key: string): string => key.slice(stepOf(key).length + 1);
 
 // ---------------------------------------------------------------------------------------------
@@ -566,6 +573,7 @@ const ENDS: ReadonlySet<string> = new Set([
 	"skip:closed",
 	...[...FINAL].map((why) => `stuck:${why}`),
 ]);
+
 const endsOnlyByDone = (d: Drive): readonly string[] =>
 	PAIRS.filter(({step}) => step !== "triage").flatMap(({step, name}) =>
 		MODES.flatMap((mode) => {
@@ -709,6 +717,7 @@ const Table = Schema.Record(
 	Schema.String,
 	Schema.Record(Schema.String, Schema.Struct({_tag: Schema.String})),
 );
+
 const tableNow = (): Readonly<Record<string, Readonly<Record<string, {readonly _tag: string}>>>> =>
 	"ROUTES" in routes ? Schema.decodeUnknownSync(Table)(routes.ROUTES) : {};
 

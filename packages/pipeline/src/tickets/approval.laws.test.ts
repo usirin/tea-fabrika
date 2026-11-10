@@ -13,6 +13,7 @@ const owner: Writer = {kind: "user", id: "owner"};
 const agent: Writer = {kind: "agent", id: "plan", for: "owner"};
 
 const writer = fc.constantFrom<Writer>(owner, agent, {kind: "agent", id: "review"});
+
 const fact = fc.oneof(
 	fc.constant<Fact>({type: "commented", body: "Seen it."}),
 	fc.constant<Fact>({type: "commented", body: "Skip part 2.", asks: "changes"}),
@@ -102,6 +103,7 @@ const answer = (text?: Hash) => ({
 const title = fc
 	.string({minLength: 1, maxLength: 20})
 	.filter((t) => /^\S(.*\S)?$/.test(t) && !/[\r\n]/.test(t));
+
 const body = fc.string({maxLength: 40});
 
 describe("an approval", () => {

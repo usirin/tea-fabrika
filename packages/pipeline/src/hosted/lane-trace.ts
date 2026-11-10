@@ -98,9 +98,11 @@ const reader =
 const parentOf = reader(
 	Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Struct({parent: Schema.String}))),
 );
+
 const fromOf = reader(
 	Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Struct({from: Schema.String}))),
 );
+
 const outcomeOf = reader(
 	Schema.decodeUnknownExit(
 		Schema.fromJsonString(
@@ -108,6 +110,7 @@ const outcomeOf = reader(
 		),
 	),
 );
+
 /** The lane's saved state: its phase, the child it waits on, the problems its report names. */
 const savedOf = reader(
 	Schema.decodeUnknownExit(

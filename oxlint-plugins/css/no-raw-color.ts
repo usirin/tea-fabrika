@@ -21,6 +21,7 @@ steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow
 		/\s+/,
 	),
 );
+
 // Includes deprecated names, which remain system colors rather than design tokens.
 const system = new Set(
 	`accentcolor accentcolortext activetext buttonborder buttonface buttontext canvas
@@ -30,8 +31,10 @@ buttonshadow captiontext inactiveborder inactivecaption inactivecaptiontext info
 menu menutext scrollbar threeddarkshadow threedface threedhighlight threedlightshadow threedshadow
 window windowframe windowtext`.split(/\s+/),
 );
+
 const functions =
 	/^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|device-cmyk|light-dark)$/i;
+
 const pipeTokens = new Set([
 	"--tile-wash",
 	"--tile-wash-on",
@@ -39,6 +42,7 @@ const pipeTokens = new Set([
 	"--tile-edge-on",
 	"--tile-edge-loud",
 ]);
+
 const colorProperty =
 	/^(?:color|.+-color|background(?:-.+)?|border(?:-.+)?|outline(?:-.+)?|(?:box|text)-shadow|fill|stroke(?:-.+)?|column-rule|text-(?:decoration|emphasis|stroke))$/i;
 

@@ -60,6 +60,7 @@ type Msg = AnyLoopMsg;
 const loopUpdate = stepOf<Loop, Msg, LoopCmd>(loop);
 
 const PR = "P";
+
 export const SETTINGS: LoopSettings = {
 	rubrics: "r",
 	model: "m",
@@ -232,6 +233,7 @@ type Count = {
 	/** What this round left open, once its review or its ship sent it back. `null`: nothing sent back yet. */
 	readonly now: number | null;
 };
+
 const NO_COUNT: Count = {round: 0, before: [], now: null};
 
 /** The count after one step: a review or a ship of the round asked now that sends it back sets `now`. */

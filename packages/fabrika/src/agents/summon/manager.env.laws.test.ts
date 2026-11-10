@@ -49,6 +49,7 @@ vi.mock("../acp/client.ts", async (original) => ({
 }));
 
 const made: string[] = [];
+
 afterEach(() => {
 	seen.opened.length = 0;
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});

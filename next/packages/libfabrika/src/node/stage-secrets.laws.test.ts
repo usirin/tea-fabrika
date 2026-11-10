@@ -38,9 +38,11 @@ const config = {
 	port: 18787,
 	build: "test",
 };
+
 const destinations = ["spans", "logs", "journal", "health", "outbox"] as const;
 type Destination = (typeof destinations)[number];
 type Outputs = Record<Destination, Array<unknown>>;
+
 const forms = (text: string) => [
 	text,
 	Buffer.from(text).toString("base64"),
@@ -48,6 +50,7 @@ const forms = (text: string) => [
 	encodeURIComponent(text),
 	JSON.stringify(text).slice(1, -1),
 ];
+
 const strings = (value: unknown): Array<string> => {
 	if (typeof value === "string") return [value];
 	if (Array.isArray(value)) return value.flatMap(strings);
@@ -55,6 +58,7 @@ const strings = (value: unknown): Array<string> => {
 		? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
 		: [];
 };
+
 const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
 	const forbidden = words.flatMap(forms);
 	const leaks: Array<Destination> = [];
@@ -67,11 +71,13 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
 	}
 	expect(leaks, "no named output may hold a secret or raw frame").toEqual([]);
 };
+
 const health = (db: DatabaseSync) =>
 	["health", "summary", "summarized", "sizes", "archived"].map((table) => ({
 		table,
 		rows: db.prepare(`SELECT * FROM ${table}`).all(),
 	}));
+
 const generated = fc.record({
 	word: fc.stringMatching(/^[a-zA-Z0-9]{12,24}$/),
 	pass: fc.stringMatching(/^[a-zA-Z0-9]{12,24}$/),
@@ -80,6 +86,7 @@ const generated = fc.record({
 		maxLength: 6,
 	}),
 });
+
 type Flow = ReturnType<typeof generated.generate>["value"];
 
 const flow = async (sample: Flow) => {
@@ -408,6 +415,7 @@ const flow = async (sample: Flow) => {
 it("pinned: [secrets] P12 bearer-type gap, control services require a Redacted bearer", () => {
 	expectTypeOf<Parameters<typeof control>[2]>().toEqualTypeOf<Redacted.Redacted<string>>();
 });
+
 it("[secrets] generated flows keep bearer, private material, bodies and raw frames out of every named output", async () => {
 	await fc.assert(
 		fc.asyncProperty(generated, async (sample) => {
@@ -437,6 +445,7 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
 		},
 	);
 });
+
 it("[secrets] the Worker control edge accepts the generated Redacted bearer without returning it", async () => {
 	await fc.assert(
 		fc.asyncProperty(generated, async (sample) => {

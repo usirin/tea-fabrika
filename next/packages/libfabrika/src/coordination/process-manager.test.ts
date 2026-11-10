@@ -22,10 +22,12 @@ import {
 } from "./process.test-support.ts";
 
 const hash = fc.string({minLength: 1, maxLength: 80});
+
 const fixture = (hash: string) => {
 	const CODE = {...originalCode, hash};
 	return {CODE, first: (id?: string, name?: string) => makeFirst(id, name, CODE)};
 };
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: A[],

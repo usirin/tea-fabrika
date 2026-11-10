@@ -15,21 +15,26 @@ import {
 
 const book = (...msgs: readonly CriteriaMsg[]): Book => msgs.reduce(apply, EMPTY);
 const T1 = taskId("t1");
+
 const added = (text: string, task: TaskId = T1): CriteriaMsg => ({
 	type: "added",
 	task,
 	text,
 	by: "plan",
 });
+
 const c = criterionId;
+
 const pass = (id: string, version: number, head = "A"): CriteriaMsg => ({
 	type: "judged",
 	row: {criterion: c(id), version, head, grade: "pass", proof: `review at ${head}`},
 });
+
 const fail = (id: string, version: number, head = "A"): CriteriaMsg => ({
 	type: "judged",
 	row: {criterion: c(id), version, head, grade: "fail", proof: `review at ${head}`},
 });
+
 const states = (b: Book, head = "A") =>
 	Object.fromEntries(standingAt(b, head).map((s) => [s.id, `${s.state}@v${s.version}`]));
 

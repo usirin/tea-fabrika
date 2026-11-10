@@ -265,6 +265,8 @@ describe("each rule refuses what it is there to refuse", () => {
 			"outside-input-constructor",
 			// T518's retired module is planted in one-id-module.test.ts.
 			"one-id-module",
+			// Generated files and their fix in padding-line-between-statements.test.ts.
+			"padding-line-between-statements",
 			// next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
 			"no-promises",
 			"no-effect-run-outside-edge",

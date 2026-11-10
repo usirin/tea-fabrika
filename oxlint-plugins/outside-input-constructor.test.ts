@@ -3,6 +3,7 @@ import {plant} from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(outside-input-constructor)";
 const file = "next/packages/libfabrika/src/data/id.ts";
+
 describe("P17a, outside input has typed failures", () => {
 	it("plants schema aliases and destructured decoder aliases in the door", async () => {
 		const door = "next/packages/libfabrika/src/door/door.ts";

@@ -34,14 +34,17 @@ const PR = "o/r#7";
 const HEADS = ["A", "B"] as const;
 const SETTINGS: Settings = {model: "m", effort: "low", budget: 1};
 const c = (n: number) => criterionId(`c${n}`);
+
 const CRITERIA: readonly Criterion[] = [
 	{id: c(1), version: 1, text: "every window opens", checked: false, evidence: null},
 	{id: c(2), version: 2, text: "the door locks", checked: false, evidence: "door.log"},
 ];
+
 const DEVIATIONS: readonly Deviations[] = [
 	{state: "none"},
 	{state: "listed", text: "criterion c1 is met another way"},
 ];
+
 const packAt = (head: string, checks: Pack["checks"]["state"], deviations: Deviations): Pack => ({
 	pr: PR,
 	head,
@@ -57,6 +60,7 @@ const packAt = (head: string, checks: Pack["checks"]["state"], deviations: Devia
 	rules: [],
 	rubrics: [{kind: "review-code", text: "r"}],
 });
+
 /** Mostly packs the gate lets through, so a review goes on to its reviewer. */
 const packs = fc.oneof(
 	{
@@ -72,7 +76,9 @@ const packs = fc.oneof(
 			.map(([head, checks]) => packAt(head, checks, {state: "none"})),
 	},
 );
+
 const pass = (n: number): Row => ({id: c(n), grade: "pass", where: [], says: "seen", limit: null});
+
 const FORMS: readonly Form[] = [
 	{rows: [pass(1), pass(2)], findings: [], skipped: []},
 	{
@@ -100,10 +106,12 @@ const FORMS: readonly Form[] = [
 	/** No row for c2: the Check refuses it, and the reviewer tries again. */
 	{rows: [pass(1)], findings: [], skipped: []},
 ];
+
 const NOTES: readonly Note[] = [
 	{title: "t", body: "b", at: null},
 	{title: "the lock is never tested", body: "c", at: {file: "door.ts", first: 3, last: 3}},
 ];
+
 const RANS: readonly Ran[] = [
 	noRun,
 	{
@@ -113,14 +121,17 @@ const RANS: readonly Ran[] = [
 		links: 0,
 	},
 ];
+
 const head = fc.constantFrom(...HEADS);
 const run = fc.integer({min: 1, max: 3});
 const note = fc.constantFrom(...NOTES);
 const UNKNOWN = {_tag: "unknown"} as const;
+
 const fileOf = (h: string, n: Note) => {
 	const id = noteIdOf(n);
 	return fileNote({pr: PR, id, note: n, intent: intentOf("review", PR, h, "note", id)});
 };
+
 const reads = gatherPack({pr: PR, head: null, rubrics: "r"});
 
 /** One entry per Msg type: leaving one out does not compile. */
@@ -159,8 +170,10 @@ const table: MsgArbitraryTable<Msg> = {
 		.tuple(head, note)
 		.map(([h, n]) => fileNote.err(fileOf(h, n), UNKNOWN, 0)),
 };
+
 /** Weighted to what moves a review on, so every phase is reached. */
 const WEIGHTS = {review_pack_ok: 4, review_note: 3, review_reviewed: 6, review_file_note_ok: 4};
+
 /** A review begins as its parent begins it, with `start`; the rest comes in any order. */
 const lists = fc
 	.tuple(table.start, fc.array(arbMsg(table, {weights: WEIGHTS}), {maxLength: 30, size: "max"}))

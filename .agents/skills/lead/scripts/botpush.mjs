@@ -8,12 +8,15 @@ import {createSign} from "node:crypto";
 import {fileURLToPath} from "node:url";
 
 const [dir, branch, src = "HEAD"] = process.argv.slice(2);
+
 if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/")))
 	throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
+
 // Check only committed additions, before reading credentials or making any network request.
 // A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
 // wide, and a failure says which part failed instead of exiting with no word.
 let diff;
+
 try {
 	diff = execFileSync(
 		"git",
@@ -24,6 +27,7 @@ try {
 	console.error("botpush: cannot read the diff from origin/main");
 	process.exit(1);
 }
+
 try {
 	execFileSync("sh", [fileURLToPath(new URL("./leakgrep.sh", import.meta.url))], {
 		cwd: dir,
@@ -33,7 +37,9 @@ try {
 } catch {
 	process.exit(1);
 }
+
 const APP = process.env.FABRIKA_APP_ID ?? "5640348";
+
 const REPO =
 	process.env.GH_REPO ??
 	execFileSync("git", ["-C", dir, "remote", "get-url", "origin"])
@@ -50,6 +56,7 @@ try {
 }
 
 const b64 = (s) => Buffer.from(s).toString("base64url");
+
 const raw = execFileSync("security", [
 	"find-generic-password",
 	"-s",
@@ -60,6 +67,7 @@ const raw = execFileSync("security", [
 ])
 	.toString()
 	.trim();
+
 const pem = raw.includes("BEGIN") ? raw : Buffer.from(raw, "base64").toString();
 const now = Math.floor(Date.now() / 1000);
 const body = `${b64(JSON.stringify({alg: "RS256", typ: "JWT"}))}.${b64(JSON.stringify({iat: now - 60, exp: now + 540, iss: APP}))}`;
@@ -77,7 +85,9 @@ const api = async (path, init = {}, auth = `Bearer ${jwt}`) => {
 	if (!r.ok) throw new Error(`${path}: ${r.status}`);
 	return r.json();
 };
+
 const inst = await api(`/repos/${REPO}/installation`);
+
 const tok = await api(`/app/installations/${inst.id}/access_tokens`, {
 	method: "POST",
 	body: JSON.stringify({
@@ -85,7 +95,9 @@ const tok = await api(`/app/installations/${inst.id}/access_tokens`, {
 		permissions: {contents: "write", workflows: "write"},
 	}),
 });
+
 const header = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${tok.token}`).toString("base64")}`;
+
 // No global or system git config, so no credential helper answers before the bot's token.
 const env = {
 	...process.env,
@@ -93,12 +105,14 @@ const env = {
 	GIT_CONFIG_NOSYSTEM: "1",
 	GIT_TERMINAL_PROMPT: "0",
 };
+
 const git = (...a) =>
 	execFileSync("git", ["-c", `http.https://github.com/.extraheader=${header}`, ...a], {
 		cwd: dir,
 		env,
 		stdio: ["ignore", "pipe", "pipe"],
 	}).toString();
+
 const url = `https://github.com/${REPO}.git`;
 // One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
 const refs = ["refs/notes/fabrika:refs/notes/fabrika"];

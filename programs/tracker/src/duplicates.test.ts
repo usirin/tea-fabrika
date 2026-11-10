@@ -17,6 +17,7 @@ import {type Shown, shownOf} from "./machine.ts";
 
 /** One value told to one of the tracker's inputs, by its name. */
 type Inputs = (typeof tracker)["inputs"];
+
 type Say = <K extends keyof Inputs & string>(
 	input: K,
 	value: PayloadOf<Inputs[K]>,

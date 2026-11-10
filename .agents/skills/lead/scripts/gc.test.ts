@@ -35,6 +35,7 @@ import {
 
 // Today's tooling. The decision is pure; the world (lsof, git, gh, botpush) is not run here.
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+
 const seen = fc.record({
 	name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/),
 	git: fc.option(
@@ -53,6 +54,7 @@ const seen = fc.record({
 	onRemote: fc.boolean(),
 	dirty: fc.option(fc.nat({max: 12}), {nil: null}),
 }) satisfies fc.Arbitrary<Seen>;
+
 const options = {seed: 119120, numRuns: 300};
 
 describe("box gc, today's tooling", () => {
@@ -151,6 +153,7 @@ describe("box gc, today's tooling", () => {
 });
 
 const prState = fc.constantFrom("OPEN" as const, "MERGED" as const, "CLOSED" as const);
+
 const worktree = fc.record({
 	branch: fc.option(fc.stringMatching(/^(fabrikalfa|person)\/[a-z0-9-]{1,10}(-wip)?$/), {
 		nil: null,

@@ -64,6 +64,7 @@ export const testConfig = {
 // Use Vitest's installed matcher, including its dot-path behavior.
 const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
 const workers = Number(process.env.FABRIKA_MAX_WORKERS ?? 3);
+
 if (!Number.isInteger(workers) || workers < 1)
 	throw new Error("FABRIKA_MAX_WORKERS must be a positive integer");
 
