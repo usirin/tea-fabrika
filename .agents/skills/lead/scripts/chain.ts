@@ -20,10 +20,12 @@
 //   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
+//   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
+//                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
 //   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> mutation -> review -> open -> land. A send goes
+// The moves, pure (`moveOf`): tests done -> build -> mutation -> review -> open -> loosen -> land. A send goes
 // to the step it names; a send to plan parks, since only the lead approves a plan. A lockfile ask
 // parks too: the lead refreshes it outside the box. Any other ask, and any stuck, goes to the
 // judgment agent. A start refusal for a full laptop (agent_cap, low_disk) is retried on one named
@@ -387,17 +389,45 @@ const prOpen = Cmd.make("pr_open", {
   err: ["unknown"],
 });
 
+const loosen = Cmd.make("loosen", {
+  input: Schema.Struct({ pr: Schema.Number, head: Schema.String }),
+  ok: Schema.Struct({ code: Schema.Number, text: Schema.String }),
+  err: ["unknown"],
+});
+
 const land = Cmd.make("land", {
   input: Schema.Struct({ pr: Schema.Number }),
   ok: Done,
   err: ["unknown"],
 });
 
-type Cmds = ReturnType<typeof stepRun> | ReturnType<typeof judge> | ReturnType<typeof prOpen> | ReturnType<typeof land>;
+type Cmds =
+  | ReturnType<typeof stepRun>
+  | ReturnType<typeof judge>
+  | ReturnType<typeof prOpen>
+  | ReturnType<typeof loosen>
+  | ReturnType<typeof land>;
 
 /** How the lane ends: landed, parked for the lead, or stuck. */
 export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string };
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
+
+/**
+ * The Check, pure: what loosening.sh's exit means before catch-up (0014). Exit 0 (no hits) lands,
+ * and `null` says so. Exit 1 is the hit list, parked for the lead's hand check. Anything else is an
+ * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
+ */
+export const looseningEnd = (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
+  const text = ran.text.trim();
+
+  if (ran.code === 0) {
+    return null;
+  }
+
+  return ran.code === 1
+    ? { kind: "ask", reason: `PR ${pr}: loosening.sh hits for the lead's hand check: ${text}` }
+    : { kind: "stuck", reason: `PR ${pr}: loosening.sh did not run clean (exit ${ran.code}): ${text}` };
+};
 
 type Lane = {
   readonly round: number;
@@ -419,6 +449,7 @@ type Model =
     }
   | { readonly phase: "judging"; readonly lane: Lane; readonly step: StepName; readonly line: Line }
   | { readonly phase: "opening"; readonly lane: Lane }
+  | { readonly phase: "loosening"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "landing"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "over"; readonly lane: Lane; readonly end: End };
 
@@ -456,7 +487,7 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): 
 export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
-    cmds: [stepRun, judge, prOpen, land],
+    cmds: [stepRun, judge, prOpen, loosen, land],
     init: (): Step => [{ phase: "idle", lane: { round: 0, head: "", heads: {}, stucks: 0 } }, []],
     update: {
       start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
@@ -511,8 +542,20 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           return over(s.lane, { kind: "stuck", reason: m.value.detail });
         }
 
-        return [{ phase: "landing", lane: s.lane, pr: m.value.pr }, [land({ pr: m.value.pr })]];
+        return [{ phase: "loosening", lane: s.lane, pr: m.value.pr }, [loosen({ pr: m.value.pr, head: s.lane.head })]];
       },
+      loosen_ok: (s, m): Step => {
+        if (s.phase !== "loosening") {
+          return stay(s);
+        }
+
+        const end = looseningEnd(s.pr, m.value);
+        return end === null ? [{ phase: "landing", lane: s.lane, pr: s.pr }, [land({ pr: s.pr })]] : over(s.lane, end);
+      },
+      loosen_err: (s): Step =>
+        s.phase === "loosening"
+          ? over(s.lane, { kind: "stuck", reason: `loosening.sh for PR ${s.pr} threw` })
+          : stay(s),
       pr_open_err: (s): Step =>
         s.phase === "opening" ? over(s.lane, { kind: "stuck", reason: "opening the PR threw" }) : stay(s),
       land_ok: (s, m): Step =>
@@ -903,6 +946,44 @@ const handlers = (s: Setup) => {
         note(`opened https://github.com/${env.GH_REPO}/pull/${pr}`);
         writeRecord({ ...readRecord(), pr });
         return { pr, detail: "opened" };
+      }),
+    // loosening.sh on the exam diff from where the lane leaves main to the reviewed head, run in
+    // the main checkout, which holds every step's commits. Its output, hits or not, goes on the PR
+    // as a comment before anything lands (0014); a comment that fails is exit 2, never a pass.
+    loosen: (cmd: { pr: number; head: string }) =>
+      Effect.sync(() => {
+        sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
+        const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
+
+        if (base.code !== 0 || !base.out.trim()) {
+          return { code: 2, text: `no merge-base of origin/main and ${cmd.head.slice(0, 8)}` };
+        }
+
+        const from = base.out.trim();
+        const ran = sh("sh", [join(HERE, "loosening.sh"), from, cmd.head], env.MAIN);
+        const text = [ran.out.trim(), ran.err.trim()].filter(Boolean).join("\n");
+        note(
+          `loosening.sh ${from.slice(0, 8)} ${cmd.head.slice(0, 8)} exited ${ran.code}: ${text.split("\n")[0] ?? ""}`,
+        );
+        const bodyFile = join(env.BOXES, `${s.lane}-loosening.md`);
+        writeFileSync(
+          bodyFile,
+          [
+            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.lane}\` after review and before catch-up (exit ${ran.code}):`,
+            "",
+            "```text",
+            text || "(no output)",
+            "```",
+            "",
+          ].join("\n"),
+        );
+        const posted = sh("gh", ["pr", "comment", String(cmd.pr), "-R", env.GH_REPO, "--body-file", bodyFile]);
+
+        if (posted.code !== 0) {
+          return { code: 2, text: `the loosening comment did not post on PR ${cmd.pr}: ${text}` };
+        }
+
+        return { code: ran.code, text };
       }),
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
