@@ -1,6 +1,7 @@
 import {readFileSync} from "node:fs";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
+import {parse} from "yaml";
 import {lintWorkflow as lint} from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
@@ -72,8 +73,27 @@ const valid = (label: string, extra: string) => ({
 		next: {
 			needs: "changes",
 			if: guard("next"),
-			"timeout-minutes": 15,
-			steps: [{run: "pnpm exec vitest run next/"}],
+			"timeout-minutes": 10,
+			strategy: {"fail-fast": false, matrix: {shard: [1, 2, 3, 4, 5, 6]}},
+			steps: [
+				{
+					run: 'pnpm exec vitest run next/ --shard "$SHARD"',
+					env: {SHARD: `\${{ matrix.shard }}/6`},
+				},
+				{
+					name: "chromium",
+					if: "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
+					run: "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+				},
+				{run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 1"},
+				{
+					name: "edges",
+					if: "matrix.shard == 1 && github.event_name == 'pull_request'",
+					env: {BASE: `\${{ github.event.pull_request.base.sha }}`},
+					run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+				},
+				{run: "pnpm install --frozen-lockfile"},
+			],
 		},
 		e2e: {
 			needs: "changes",
@@ -100,7 +120,236 @@ const valid = (label: string, extra: string) => ({
 
 type Workflow = ReturnType<typeof valid>;
 
+const wiring = fc
+	.tuple(name, name, fc.boolean(), fc.constantFrom("", " ", "  ", "\t", "\n"))
+	.map(([label, extra, whitespace, gap]) => {
+		const clean = valid(label, extra);
+
+		if (whitespace) {
+			clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
+
+			for (const step of clean.jobs.next.steps.slice(1, 4)) {
+				step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
+			}
+		}
+
+		return clean;
+	});
+
+// Pinned T376 second-review bypasses, also applied to every generated valid workflow.
+const extraCommands = [
+	{run: "pnpm test next/"},
+	{run: "pnpm run test"},
+	{run: 'pnpm exec vi""test run next/'},
+	{run: "cd next/apps/fabrika && node e2e.ts"},
+	{run: "node e2e.ts", "working-directory": "next/apps/fabrika"},
+	{run: "pnpm --filter @kampus/fabrika exec node e2e.ts"},
+	{run: 'node next/apps/fabrika/src/exam/../exam/edges.ts --base "$BASE"'},
+	{run: 'cd next/apps/fabrika/src/exam && node edges.ts --base "$BASE"'},
+	{run: "npx playwright@latest install chromium"},
+	{run: "pnpm --filter @kampus/fabrika exec playwright -- install chromium"},
+];
+
+it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run", (step) => {
+	const workflow = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+	expect(lint(JSON.stringify(workflow))).toEqual([]);
+	workflow.jobs.next.steps.push(step);
+	expect(lint(JSON.stringify(workflow))).not.toEqual([]);
+});
+
 const plants: [string, (workflow: Workflow) => void][] = [
+	...extraCommands.map((step): [string, (w: Workflow) => void] => [
+		`review2 extra command: ${step.run}`,
+		(w) => {
+			w.jobs.next.steps.push(step);
+		},
+	]),
+	...["missing", "duplicate"].map((fault): [string, (w: Workflow) => void] => [
+		`next ${fault} install`,
+		(w) => {
+			if (fault === "missing") {
+				w.jobs.next.steps.pop();
+			} else {
+				w.jobs.next.steps.push({...w.jobs.next.steps[4]!});
+			}
+		},
+	]),
+	[
+		"review: extra exec Vitest invocation",
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!, run: `exec ${w.jobs.next.steps[0]!.run}`});
+		},
+	],
+	...[
+		"vitest run next/",
+		"pnpm vitest run next/",
+		"npx vitest run next/",
+		"./node_modules/.bin/vitest run next/",
+		'pnpm exec "vitest" run next/',
+		'env CI=true pnpm exec vitest run next/ --shard "$SHARD"',
+		'echo before; pnpm exec vitest run next/ --shard "$SHARD"; echo after',
+		'echo before\npnpm exec vitest run next/ --shard "$SHARD"\necho after',
+		"pnpm exec vitest run next/; pnpm exec vitest run next/",
+	].map((run): [string, (w: Workflow) => void] => [
+		`extra Vitest spelling: ${run}`,
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!, run});
+		},
+	]),
+	...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
+		`review: extra multiline ${["", "Chromium", "e2e", "edges"][index]} invocation`,
+		(w) => {
+			w.jobs.next.steps.push({
+				...w.jobs.next.steps[index]!,
+				run: `echo before\n${w.jobs.next.steps[index]!.run}\necho after`,
+			});
+		},
+	]),
+	[
+		"review: SHARD matrix.sha rd",
+		(w) => {
+			w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.sha rd }}/6`;
+		},
+	],
+	...[1, 2, 3].map((index): [string, (w: Workflow) => void] => [
+		`review: ${["", "Chromium", "e2e", "edges"][index]} guard matrix.sha rd`,
+		(w) => {
+			w.jobs.next.steps[index]!.if = w.jobs.next.steps[index]!.if!.replace(
+				"matrix.shard",
+				"matrix.sha rd",
+			);
+		},
+	]),
+	[
+		"review: Chromium path next/ apps",
+		(w) => {
+			w.jobs.next.steps[1]!.if = w.jobs.next.steps[1]!.if!.replace("next/apps", "next/ apps");
+		},
+	],
+	[
+		"review: edges event pull_ request",
+		(w) => {
+			w.jobs.next.steps[3]!.if = w.jobs.next.steps[3]!.if!.replace("pull_request", "pull_ request");
+		},
+	],
+	[
+		"next missing shard",
+		(w) => {
+			w.jobs.next.strategy.matrix.shard.pop();
+		},
+	],
+	[
+		"next wrong denominator",
+		(w) => {
+			w.jobs.next.steps[0]!.env!.SHARD = `\${{ matrix.shard }}/3`;
+		},
+	],
+	[
+		"next fail fast",
+		(w) => {
+			w.jobs.next.strategy["fail-fast"] = true;
+		},
+	],
+	[
+		"next extra axis",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {os: ["ubuntu"]});
+		},
+	],
+	[
+		"next include",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {include: [{shard: 7}]});
+		},
+	],
+	[
+		"next exclude",
+		(w) => {
+			Object.assign(w.jobs.next.strategy.matrix, {exclude: [{shard: 6}]});
+		},
+	],
+	[
+		"next custom name",
+		(w) => {
+			Object.assign(w.jobs.next, {name: "next"});
+		},
+	],
+	[
+		"next duplicate command",
+		(w) => {
+			w.jobs.next.steps.push({...w.jobs.next.steps[0]!});
+		},
+	],
+	...[" --changed main", " --passWithNoTests", " file.test.ts"].map(
+		(suffix): [string, (w: Workflow) => void] => [
+			suffix,
+			(w) => {
+				w.jobs.next.steps[0]!.run += suffix;
+			},
+		],
+	),
+	[
+		"next test command inside a longer step",
+		(w) => {
+			w.jobs.next.steps[0]!.run = `echo before\n${w.jobs.next.steps[0]!.run}`;
+		},
+	],
+	[
+		"next no shard flag",
+		(w) => {
+			w.jobs.next.steps[0]!.run = "pnpm exec vitest run next/";
+		},
+	],
+	[
+		"next guarded test",
+		(w) => {
+			Object.assign(w.jobs.next.steps[0]!, {if: "false"});
+		},
+	],
+	[
+		"next classifier failure skips",
+		(w) => {
+			w.jobs.next.if = "needs.changes.outputs.next == 'true'";
+		},
+	],
+	...[1, 2, 3].flatMap((index): [string, (w: Workflow) => void][] => [
+		[
+			`next missing step ${index}`,
+			(w) => {
+				w.jobs.next.steps.splice(index, 1);
+			},
+		],
+		[
+			`next duplicate step ${index}`,
+			(w) => {
+				w.jobs.next.steps.push({...w.jobs.next.steps[index]!});
+			},
+		],
+		[
+			`next false step ${index}`,
+			(w) => {
+				w.jobs.next.steps[index]!.if = "false";
+			},
+		],
+	]),
+	[
+		"next e2e everywhere",
+		(w) => {
+			w.jobs.next.steps[2]!.if = "true";
+		},
+	],
+	[
+		"next chromium without file guard",
+		(w) => {
+			w.jobs.next.steps[1]!.if = "matrix.shard == 1";
+		},
+	],
+	[
+		"next edges without event guard",
+		(w) => {
+			w.jobs.next.steps[3]!.if = "matrix.shard == 1";
+		},
+	],
 	[
 		"scan skips after failure",
 		(w) => {
@@ -259,17 +508,35 @@ const plants: [string, (workflow: Workflow) => void][] = [
 	],
 ];
 
-it("accepts generated valid wiring and rejects every isolated wiring plant", () => {
+it("accepts generated valid wiring", () => {
 	fc.assert(
-		fc.property(name, name, (label, extra) => {
-			const clean = valid(label, extra);
+		fc.property(wiring, (clean) => {
 			expect(lint(JSON.stringify(clean))).toEqual([]);
+		}),
+		options,
+	);
+});
 
-			for (const [plant, mutate] of plants) {
-				const broken = structuredClone(clean);
-				mutate(broken);
-				expect(lint(JSON.stringify(broken)), plant).not.toEqual([]);
-			}
+it.each(plants)("rejects isolated wiring plant: %s", (plant, mutate) => {
+	fc.assert(
+		fc.property(wiring, (clean) => {
+			expect(lint(JSON.stringify(clean))).toEqual([]);
+			const broken = structuredClone(clean);
+			mutate(broken);
+			expect(lint(JSON.stringify(broken)), plant).not.toEqual([]);
+		}),
+		options,
+	);
+});
+
+it("names the next command whose step or condition is wrong", () => {
+	fc.assert(
+		fc.property(wiring, fc.constantFrom(1, 2, 3), fc.boolean(), (broken, index, missingGuard) => {
+			const step = broken.jobs.next.steps[index]!;
+			step.if = missingGuard ? (index === 2 ? "true" : "matrix.shard == 1") : "false";
+			expect(lint(JSON.stringify(broken))).toEqual([
+				`check.yaml: next runs ${step.run} once on shard 1 with its original condition`,
+			]);
 		}),
 		options,
 	);

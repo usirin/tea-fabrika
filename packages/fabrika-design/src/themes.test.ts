@@ -491,7 +491,7 @@ describe("law 2: each token in tokens.css is its value, in both looks", () => {
 		}).toEqual({defined: ["--focus", "--manti-focus-ring"], own: []});
 	});
 
-	// The owner, 2026-11-06: the Cmd-K palette has no dim, as Linear's and Discord's have none. The
+	// The owner, 2026-11-06: the Cmd-K palette has no dim, as Linear's and other apps' have none. The
 	// token stays for a real dialog, which keeps a dim, and Manti's overlay is set from it so none
 	// of Manti's own palette shows. Its step is the owner's pick by eye (principle 8): Radix Themes'
 	// overlay (blackA6 light, blackA8 dark), or a lighter step near Linear's dialog dim (about 26%

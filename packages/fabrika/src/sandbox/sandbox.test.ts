@@ -84,13 +84,13 @@ if (process.env.CI !== undefined && !osRuns) {
 }
 
 describe("the sandbox's environment", () => {
-	const workspace: Workspace = {root: "/b", home: "/b/home", tmp: "/b/tmp", work: "/b/work"};
+	const workspace: Workspace = {root: "/b", home: "/b/homedir", tmp: "/b/tmp", work: "/b/work"};
 
 	it("holds the run names, its own home and temp folder, and nothing else of the host's", () => {
 		expect(envOf(sh(""), workspace, {...parent, PATH: "/usr/bin:/bin"})).toEqual({
 			PATH: "/usr/bin:/bin",
 			LANG: "C",
-			HOME: "/b/home",
+			HOME: "/b/homedir",
 			TMPDIR: "/b/tmp",
 			CLAUDE_CODE_TMPDIR: "/b/tmp",
 		});
@@ -102,11 +102,11 @@ describe("the sandbox's environment", () => {
 	it("keeps where Volta holds the real tools, set or read from the PATH", () => {
 		const shim = "/o/.volta/bin:/usr/bin:/bin";
 		expect(envOf(sh(""), workspace, {PATH: shim, VOLTA_HOME: "/set/volta"})).toMatchObject({
-			HOME: "/b/home",
+			HOME: "/b/homedir",
 			VOLTA_HOME: "/set/volta",
 		});
 		expect(envOf(sh(""), workspace, {PATH: shim})).toMatchObject({
-			HOME: "/b/home",
+			HOME: "/b/homedir",
 			VOLTA_HOME: "/o/.volta",
 		});
 	});
@@ -124,12 +124,12 @@ describe("the sandbox's environment", () => {
 			env: {HOME: "/somewhere", MODE: "plan"},
 		});
 		expect(envOf(claude, workspace, parent)).toMatchObject({
-			HOME: "/b/home",
+			HOME: "/b/homedir",
 			MODE: "plan",
 			CLAUDE_CODE_OAUTH_TOKEN: "model-login",
 		});
 		const codex = sh("", {credential: {_tag: "codex", auth: Redacted.make("{}")}});
-		expect(envOf(codex, workspace, parent)).toMatchObject({CODEX_HOME: "/b/home/.codex"});
+		expect(envOf(codex, workspace, parent)).toMatchObject({CODEX_HOME: "/b/homedir/.codex"});
 	});
 });
 
