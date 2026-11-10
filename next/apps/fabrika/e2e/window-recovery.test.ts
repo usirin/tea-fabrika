@@ -68,8 +68,17 @@ const window = async (
 
 const first = async (tab: Tab): Promise<number> => (await counts(tab.page))[0] ?? Number.NaN;
 
-const settled = (tab: Tab, n: number, ms = 60_000) =>
-  until(`the first count to read ${n}`, async () => ((await first(tab)) === n ? true : undefined), ms);
+/** Waits for the first count to read `n`. A timeout names `label` (the kill and the tab, when given),
+ *  the count it waited for and the count it saw. */
+const settled = (tab: Tab, n: number, ms = 60_000, label?: string) =>
+  until(`the first count to read ${n}`, async () => ((await first(tab)) === n ? true : undefined), ms).catch(
+    async (error: unknown) => {
+      const seen = await first(tab).catch(() => Number.NaN);
+      throw new Error(`${label === undefined ? "" : `${label}: `}${String(error)} (expected ${n}, seen ${seen})`, {
+        cause: error,
+      });
+    },
+  );
 
 /** The inbox lines the stage saved for the counters: one `send` per letter, each id once. */
 const letters = (): ReadonlyArray<string> =>
@@ -77,18 +86,41 @@ const letters = (): ReadonlyArray<string> =>
     .filter((r) => r.tag === "send" && r.stream.endsWith("/inbox"))
     .map((r) => r.id);
 
-const expectOnePerLetter = (accepted: number): void => {
-  const ids = letters();
-  expect(new Set(ids).size, "no letter is saved twice").toBe(ids.length);
-  expect(ids.length, "every accepted letter is saved once").toBe(accepted);
+/**
+ * The letters one case must leave saved: those in the ledger when it starts, plus the presses it
+ * makes. Each case keeps its own, so a letter one case loses fails that case, by its label and its
+ * counts, and not every case after it (the lead's run of 2026-11-10: one file-wide counter turned one
+ * lost letter in "every kill in turn" run 5 into 15 later failures).
+ */
+const ledgerFor = (label: string) => {
+  const before = letters().length;
+  let pressed = 0;
+  const want = (): number => before + pressed;
+  return {
+    /** Counts presses this case made, each of which the ledger must hold once. */
+    pressed: (n = 1): void => {
+      pressed += n;
+    },
+    /** Waits up to `ms` for the ledger to hold every letter, then checks each is saved once. */
+    holds: async (ms = 30_000): Promise<void> => {
+      await until(
+        `${label}: the ledger to hold every accepted letter`,
+        () => (letters().length === want() ? true : undefined),
+        ms,
+      ).catch(() => undefined);
+      const ids = letters();
+      const counts = `expected ${want()} (${before} before the case, ${pressed} pressed in it), seen ${ids.length}`;
+      expect(new Set(ids).size, `${label}: no letter is saved twice; ${counts}`).toBe(ids.length);
+      expect(ids.length, `${label}: every accepted letter is saved once; ${counts}`).toBe(want());
+    },
+  };
 };
-
-let accepted = 0; // presses made so far, which the saved ledger must hold exactly
 
 describe("two windows mirror, press by press, and every press is measured", () => {
   it("scenario: a press shows in its own tab and the other window, five times", async () => {
     const a = await window();
     const b = await window();
+    const saved = ledgerFor("same-tab click");
     // Every case on this stage presses counter:1, so each counts from the value it starts at.
     const base = await first(a.tab);
 
@@ -97,13 +129,12 @@ describe("two windows mirror, press by press, and every press is measured", () =
         await press(a.tab.page, "Add one", 0);
         await settled(a.tab, base + n);
       });
-      accepted++;
+      saved.pressed();
       await timed("other-tab click", () => settled(b.tab, base + n));
       expect(await counts(b.tab.page)).toEqual(await counts(a.tab.page));
     }
 
-    await until("the ledger to hold the five", () => (letters().length === accepted ? true : undefined), 20_000);
-    expectOnePerLetter(accepted);
+    await saved.holds(20_000);
     samples["bundle bytes"] = [Buffer.byteLength(await (await fetch(`${stage.url}/window.js`)).text())];
   });
 
@@ -130,6 +161,7 @@ describe("an offline press lands once", () => {
   it("scenario: three presses while the browser is offline wait, show in the queue, and land once each", async () => {
     const a = await window();
     const b = await window();
+    const saved = ledgerFor("offline press");
     const base = await first(a.tab);
     await a.context.setOffline(true);
     await until("the frame to say offline", async () =>
@@ -140,7 +172,7 @@ describe("an offline press lands once", () => {
       await press(a.tab.page, "Add one", 0);
     }
 
-    accepted += 3;
+    saved.pressed(3);
     await expect.poll(() => a.tab.page.getByTestId("queue").innerText(), { timeout: 30_000 }).toMatch(/3/);
     expect(await first(b.tab), "nothing reached the other window yet").toBe(base);
     await a.context.setOffline(false);
@@ -149,7 +181,7 @@ describe("an offline press lands once", () => {
     await until("the queue to empty", async () =>
       (await a.tab.page.getByTestId("queue").innerText()).match(/\d+/)?.[0] === "0" ? true : undefined,
     );
-    expectOnePerLetter(accepted);
+    await saved.holds(0); // checked at once, as soon as the queue is empty
   });
 });
 
@@ -248,23 +280,19 @@ const recover = async (
   a: Awaited<ReturnType<typeof window>>,
   b: Awaited<ReturnType<typeof window>>,
 ): Promise<void> => {
+  const saved = ledgerFor(kill.label);
   const base = await first(a.tab);
   await press(a.tab.page, "Add one", 0);
-  accepted++;
-  await settled(b.tab, base + 1);
+  saved.pressed();
+  await settled(b.tab, base + 1, undefined, `${kill.label}, before the kill, tab b`);
   await timed(kill.label, async () => {
     await kill.run(stage);
     await press(a.tab.page, "Add one", 0); // pressed in the outage when there is one: it waits and resends
-    accepted++;
-    await settled(a.tab, base + 2, 100_000);
-    await settled(b.tab, base + 2, 100_000);
+    saved.pressed();
+    await settled(a.tab, base + 2, 100_000, `${kill.label}, tab a`);
+    await settled(b.tab, base + 2, 100_000, `${kill.label}, tab b`);
   });
-  await until(
-    "the ledger to hold every accepted letter",
-    () => (letters().length === accepted ? true : undefined),
-    30_000,
-  );
-  expectOnePerLetter(accepted);
+  await saved.holds(30_000);
 };
 
 // The stage's restart budget: the local runtime restarts a dead workerd at most 3 times within 60 s
@@ -406,6 +434,7 @@ describe("a brain call in flight does not hold the window, five times each (revi
     it(`scenario: a press in flight while workerd hangs past 10 s takes the frame off online, and lands once after (run ${n} of 5)`, async () => {
       const a = await window();
       const b = await window();
+      const saved = ledgerFor("hang detection, a send in flight");
       const base = await first(a.tab);
       const pid = workerd(stage);
       // edge: stops workerd by signal to hang the brain, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
@@ -414,7 +443,7 @@ describe("a brain call in flight does not hold the window, five times each (revi
       try {
         const t0 = performance.now();
         await press(a.tab.page, "Add one", 0); // process.send goes out; no answer comes
-        accepted++;
+        saved.pressed();
         const took = await leftOnline(a.tab, t0);
         (samples["hang detection, a send in flight"] ??= []).push(took);
         expect(took, "the hang is seen within BEAT + BEAT").toBeLessThanOrEqual(DETECTION + SLACK);
@@ -424,14 +453,9 @@ describe("a brain call in flight does not hold the window, five times each (revi
         stage.kill(pid, "SIGCONT");
       }
 
-      await settled(a.tab, base + 1, 100_000);
-      await settled(b.tab, base + 1, 100_000);
-      await until(
-        "the ledger to hold every accepted letter",
-        () => (letters().length === accepted ? true : undefined),
-        30_000,
-      );
-      expectOnePerLetter(accepted);
+      await settled(a.tab, base + 1, 100_000, "hang detection, a send in flight, tab a");
+      await settled(b.tab, base + 1, 100_000, "hang detection, a send in flight, tab b");
+      await saved.holds(30_000);
     });
 
     it(`scenario: a view.open in flight while the brain hangs past 10 s takes the frame off online, and the next dial shows the count (run ${n} of 5)`, async () => {
@@ -440,6 +464,7 @@ describe("a brain call in flight does not hold the window, five times each (revi
       const route = await routed(p.context);
       const tab = await p.tab(stage.url);
       await grant(stage, tab);
+      const saved = ledgerFor("hang detection, an open in flight");
       const base = await first(tab);
       const opens = route.sent("view.open");
       route.hangAt("view.open");
@@ -459,14 +484,9 @@ describe("a brain call in flight does not hold the window, five times each (revi
       );
       expect(await first(tab)).toBe(base);
       await press(tab.page, "Add one", 0);
-      accepted++;
-      await settled(tab, base + 1);
-      await until(
-        "the ledger to hold every accepted letter",
-        () => (letters().length === accepted ? true : undefined),
-        30_000,
-      );
-      expectOnePerLetter(accepted);
+      saved.pressed();
+      await settled(tab, base + 1, undefined, "hang detection, an open in flight");
+      await saved.holds(30_000);
     });
 
     it(`scenario: a renewed door.knock whose answer never comes does not hold the grant wait: the grant still takes the tab online (run ${n} of 5)`, async () => {
@@ -504,6 +524,7 @@ describe("a key edit saved while the brain restarts reaches the window, five tim
   for (const [n, key] of ["j", "k", "l", "m", "n"].entries()) {
     it(`scenario: counter.inc rebound to ${key} while workerd restarts takes effect after it (run ${n + 1} of 5)`, async () => {
       const a = await window();
+      const saved = ledgerFor(`key rebind to ${key}`);
       const base = await first(a.tab);
       const dead = workerd(stage);
       // edge: kills workerd by signal, since Alchemy's runtime has no form to crash it from outside, not reported, 0042 amendment 2026-11-09
@@ -547,13 +568,8 @@ describe("a key edit saved while the brain restarts reaches the window, five tim
 
       expect(took, `the edit saved during the restart rebinds counter.inc to ${key}`).toBe(true);
       await pause(3_000); // a press that lands late still counts
-      accepted += (await first(a.tab)) - base;
-      await until(
-        "the ledger to hold every accepted letter",
-        () => (letters().length === accepted ? true : undefined),
-        30_000,
-      );
-      expectOnePerLetter(accepted);
+      saved.pressed((await first(a.tab)) - base);
+      await saved.holds(30_000);
     });
   }
 });

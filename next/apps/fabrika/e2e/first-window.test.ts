@@ -585,9 +585,16 @@ describe("[secrets] the client queue, settings errors, ledger, spans, health, re
     const pass = `pass-${Date.now().toString(36)}Zq9`;
     // A bad key file with the made-up pass on a bad line: the tab shows the problem.
     writeFileSync(join(stage.home, "keybindings.toml"), `# ${pass}\n[keys]\n"${pass}" = ["a"]\n`);
+    // On a timeout, say what the settings streams held (tags only, never a body), so a run shows
+    // whether the stage saved nothing, only the good table, or a row under another tag.
     await until("the settings error to be saved", () =>
       ledgerRows(stage.home).some((r) => r.tag === "keys_failed") ? true : undefined,
-    );
+    ).catch((error: unknown) => {
+      const held = ledgerRows(stage.home)
+        .filter((r) => r.stream.endsWith("/settings"))
+        .map((r) => `${r.stream} ${r.tag}`);
+      throw new Error(`${String(error)}; the settings streams held ${JSON.stringify(held)}`, { cause: error });
+    });
     await tab.page.waitForTimeout(2_000); // the tab reads it on its settings wait
     const body = readFileSync(stage.key, "utf8")
       .split("\n")

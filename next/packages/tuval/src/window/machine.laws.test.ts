@@ -531,8 +531,8 @@ const pingLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
   guided(m, layout, cells(pids, { pings: true }), { maxLength: 70 });
 
 /** Lists for the connect law: every outcome, a removed key and Ask again included. */
-const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
-  guided(m, layout, cells(pids, { removal: true }), { maxLength: 70 });
+const linkLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>, loaded?: Model) =>
+  guided(m, layout, cells(pids, { removal: true }), { maxLength: 70, ...(loaded === undefined ? {} : { loaded }) });
 
 /** Lists for the view laws: longer, with notes that continue the shown revision, so patch runs
  *  of one, two and more form and end by a whole view, an ask and the link leaving online. */
@@ -585,6 +585,61 @@ const grantedLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => 
     .constantFrom(...variants)
     .chain(({ list, state }) =>
       lists(m, layout, pids, state).map((tail) => [...list, ...(tail as ReadonlyArray<Msg>)]),
+    );
+};
+
+/** Lists where every run ends a dial with letters and opens written on it and unanswered, then
+ *  goes on with a guided tail drawn from the state the real fold reached. The prefix comes online
+ *  on dial 1, settles the opens' writes, dates and writes two presses, then ends the dial by a close
+ *  or a stall, and in half the variants hears a late `send_ok` for the first letter from the ended
+ *  dial. Blind lists never reached an unanswered send whose dial ended and came online again (0 in
+ *  1,500 runs at seed 119120), so the resend law met no owed letter. */
+const owedLists = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) => {
+  const prefix: Array<Msg> = [];
+  const push = (msg: Msg): ReadonlyArray<Cmd> => {
+    prefix.push(msg);
+    return after(m, layout, prefix).cmds;
+  };
+  const handOver = (cmds: ReadonlyArray<Cmd>): ReadonlyArray<Cmd> => {
+    const writes = cmds.filter((c) => c.type === "write");
+
+    for (const c of writes) {
+      push({ type: "write_ok", cmd: c, value: null });
+    }
+
+    return writes;
+  };
+  handOver(push({ type: "admitted", dial: 1, ping: 0, ms: 0 }));
+  const sent: Array<Cmd> = [];
+
+  for (const [k, pid] of [pids[0], pids.at(-1)].entries()) {
+    const asked = push({ type: "press", pid, m: { type: "inc" } }).find((c) => c.type === "now");
+
+    if (asked !== undefined) {
+      sent.push(...handOver(push({ type: "now_ok", cmd: asked, value: { letter: `letter_owed_${k}`, sentAt } })));
+    }
+  }
+
+  const ends: ReadonlyArray<Msg> = [
+    { type: "closed", dial: 1, code: 1006, fingerprint: "a", ms: 0 },
+    { type: "stalled", dial: 1, ms: 0 },
+  ];
+  const first = sent[0];
+  const variants = ends.flatMap((end) => {
+    const late: ReadonlyArray<Msg> =
+      first === undefined
+        ? []
+        : [{ type: "send_ok", id: first["id"], dial: 1, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: 0 }];
+    return [
+      [...prefix, end],
+      [...prefix, end, ...late],
+    ].map((list) => ({ list, state: after(m, layout, list).state }));
+  });
+
+  return fc
+    .constantFrom(...variants)
+    .chain(({ list, state }) =>
+      linkLists(m, layout, pids, state).map((tail) => [...list, ...(tail as ReadonlyArray<Msg>)]),
     );
 };
 
@@ -702,12 +757,15 @@ const REPLY_RECORD =
 const CONNECT_RECORD =
   "connect record: each link outcome (online, waiting, closed, stalled, removed) is kept once, with its dial and the ms its Msg carries";
 
+const RESEND =
+  "A13 resend: a send or open in flight when its dial ends stays in the Model, is written once on the next dial that goes online, and a late answer from the ended dial does nothing";
+
 /** The laws whose lists must each reach a new grant going online, so a persistence answer is met. */
 const GRANTED_LAWS: ReadonlySet<string> = new Set([PERSIST, PERSIST_RECORD]);
 
 /** The laws that also run on lists where a key is removed and asked again, whose handlers' ms
  *  are drawn. */
-const LINK_LAWS: ReadonlySet<string> = new Set([CONNECT_RECORD, REPLY_RECORD]);
+const LINK_LAWS: ReadonlySet<string> = new Set([CONNECT_RECORD, REPLY_RECORD, RESEND]);
 
 /** A record is a real `ClientRecord`, with no field the schema does not name: a field the schema
  *  lacks, such as `patches` on a view row before the build adds it (A8), is not kept. */
@@ -911,6 +969,81 @@ const laws: Readonly<Record<string, Law>> = {
       if (online(prev) && online(next) && msg.type !== "view" && opens.length > 0) {
         return `${msg.type} opened again on the same dial`;
       }
+    }
+
+    return null;
+  },
+  // A13: a call whose dial ends stays in the Model and is written again on the next dial by the
+  // Model's own rules. Each send or open in flight when its dial's socket ends (written there and
+  // not answered) is owed: its letter stays pending, the step the link next goes online writes it
+  // once on that new dial, and any answer that names the ended dial leaves the window as it was.
+  [RESEND]: (steps) => {
+    /** The owed letters and open pids, with the dial each was written on. */
+    const owed = { letters: new Map<string, unknown>(), pids: new Map<string, unknown>() };
+    const ended = new Set<unknown>();
+    let flight: ReadonlyArray<Call> = [];
+
+    for (const step of steps) {
+      const { prev, msg, next, cmds, calls, call } = step;
+      const was = openDial(prev);
+      const is = openDial(next);
+
+      if (ANSWERS.has(msg.type) && ended.has(msg["dial"]) && msg["dial"] !== was) {
+        if (JSON.stringify(next) !== JSON.stringify(prev) || cmds.length > 0) {
+          return `a late ${msg.type} from ended dial ${String(msg["dial"])} (id ${String(msg["id"])}) moved the window or asked ${JSON.stringify(cmds.map((c) => c.type))}`;
+        }
+      }
+
+      if (was !== null && was !== is) {
+        // This step ended dial `was`: what was in flight on it, less what this step answered.
+        const answered = call !== null && msg.type !== "write_ok" ? wire(call.dial, call.id) : null;
+        const left = [...flight, ...calls].filter((c) => c.dial === was && wire(c.dial, c.id) !== answered);
+
+        for (const c of left) {
+          if (c.type === "send") {
+            const letter = String(c["letter"]);
+
+            if (!next.client.pending.some((p) => p.letter === letter)) {
+              return `${letter}, in flight on dial ${String(was)} when it ended, left the Model`;
+            }
+
+            owed.letters.set(letter, was);
+          } else if (c.type === "open") {
+            owed.pids.set(String(c["pid"]), was);
+          }
+        }
+
+        ended.add(was);
+      }
+
+      if (is !== null) {
+        ended.delete(is);
+      }
+
+      if (online(next) && (!online(prev) || prev.link["dial"] !== next.link["dial"])) {
+        const dial = next.link["dial"];
+
+        for (const [letter, from] of owed.letters) {
+          const again = kinds(calls, "send").filter((c) => c["letter"] === letter);
+
+          if (again.length !== 1 || again[0]?.dial !== dial) {
+            return `${letter}, unanswered when dial ${String(from)} ended, was written ${again.length} time(s) as dial ${String(dial)} went online (on ${JSON.stringify(again.map((c) => c.dial))})`;
+          }
+        }
+
+        for (const [pid, from] of owed.pids) {
+          const again = kinds(calls, "open").filter((c) => c["pid"] === pid);
+
+          if (again.length !== 1 || again[0]?.dial !== dial) {
+            return `the open of ${pid}, unanswered when dial ${String(from)} ended, was written ${again.length} time(s) as dial ${String(dial)} went online`;
+          }
+        }
+
+        owed.letters.clear();
+        owed.pids.clear();
+      }
+
+      flight = step.flight;
     }
 
     return null;
@@ -1415,6 +1548,11 @@ const fold = async (
   if (LINK_LAWS.has(name)) {
     propertyTrace(used as never, { layout } as never, linkLists(m, layout, tiles) as never, law, opts);
   }
+
+  // The resend law also runs on lists that each end a dial with letters and opens unanswered.
+  if (name === RESEND) {
+    propertyTrace(used as never, { layout } as never, owedLists(m, layout, tiles) as never, law, opts);
+  }
 };
 
 describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
@@ -1499,6 +1637,60 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
         }) as never,
         { ...opts, numRuns: 150 } as never,
       );
+    }
+
+    for (const [name, n] of Object.entries(seen)) {
+      expect(n, name).toBeGreaterThan(0);
+    }
+  });
+
+  it("good thing: the resend law's runs end a dial with a send and an open in flight, go online again, and hear late answers to them (A13)", async () => {
+    const m = await machine();
+    const seen = { owedSend: 0, owedOpen: 0, resent: 0, reopened: 0, lateToOwed: 0 };
+
+    for (const [, layout, tiles] of LAYOUTS) {
+      for (const made of [lists, linkLists, owedLists]) {
+        propertyTrace(
+          m as never,
+          { layout } as never,
+          made(m, layout, tiles) as never,
+          ((folded: ReadonlyArray<Folded>) => {
+            const owed = new Set<string>();
+            const owedBy = { send: 0, open: 0 };
+            let flight: ReadonlyArray<Call> = [];
+
+            for (const { prev, msg, next, calls, flight: after } of traced(folded)) {
+              const was = openDial(prev);
+
+              if (ANSWERS.has(msg.type) && owed.has(wire(msg["dial"], msg["id"]))) {
+                seen.lateToOwed++;
+              }
+
+              if (was !== null && was !== openDial(next)) {
+                for (const c of flight.filter((x) => x.dial === was)) {
+                  owed.add(wire(c.dial, c.id));
+                  owedBy.send += c.type === "send" ? 1 : 0;
+                  owedBy.open += c.type === "open" ? 1 : 0;
+                }
+              }
+
+              if (online(next) && !online(prev) && owedBy.send + owedBy.open > 0) {
+                seen.owedSend += owedBy.send;
+                seen.owedOpen += owedBy.open;
+                seen.resent += owedBy.send > 0 && calls.some((c) => c.type === "send") ? 1 : 0;
+                seen.reopened += owedBy.open > 0 && calls.some((c) => c.type === "open") ? 1 : 0;
+                owedBy.send = 0;
+                owedBy.open = 0;
+              }
+
+              flight = after;
+            }
+
+            return null;
+          }) as never,
+          { ...opts, numRuns: 150 } as never,
+        );
+      }
     }
 
     for (const [name, n] of Object.entries(seen)) {
@@ -2132,9 +2324,11 @@ describe("window machine plants: each break is caught by the law that names it",
         // A persist plant breaks the answer, so its lists always reach a new grant (folded by the planted machine).
         (GRANTED_LAWS.has(name)
           ? grantedLists(planted, layout, tiles)
-          : LINK_LAWS.has(name)
-            ? linkLists(real, layout, tiles)
-            : lists(real, layout, tiles)) as never,
+          : name === RESEND
+            ? owedLists(real, layout, tiles)
+            : LINK_LAWS.has(name)
+              ? linkLists(real, layout, tiles)
+              : lists(real, layout, tiles)) as never,
         ((steps: ReadonlyArray<Folded>) => laws[name]?.(traced(steps), tiles) ?? null) as never,
         opts as never,
       );
@@ -2315,6 +2509,99 @@ describe("window machine plants: each break is caught by the law that names it",
         ? [{ ...m, client: { ...m.client, views: { ...m.client.views, [A]: { rev: 99 } } } }, c]
         : [m, c],
     ));
+  // A13 resend: each plant breaks one part of "stays in the Model, written once on the next dial,
+  // a late answer does nothing". A plant has no trace, so it keeps on the Model, as `first` above
+  // does, the letters it saw written and whether a dial went online before.
+  type Marked = Model & { readonly wrote?: ReadonlyArray<string>; readonly wasOnline?: boolean };
+  const sentLetter = (x: Cmd): string => String((x["call"] as { letter?: unknown } | undefined)?.letter);
+  /** A plant that sees the letters written before this step (`before`), and marks the Model with
+   *  every letter its own Cmds write and whether it is online. */
+  const remembering =
+    (
+      change: (
+        out: readonly [Model, ReadonlyArray<Cmd>],
+        s: Marked,
+        before: ReadonlySet<string>,
+      ) => readonly [Model, ReadonlyArray<Cmd>],
+    ): Parameters<typeof broken>[1] =>
+    (out, state) => {
+      const s = state as Marked;
+      const before = new Set(s.wrote ?? []);
+      const [m, c] = change(out, s, before);
+      const wrote = [...before, ...writesIn(c).flatMap((x) => (x.type === "send" ? [String(x["letter"])] : []))];
+      return [{ ...m, wrote: [...new Set(wrote)], wasOnline: (s.wasOnline ?? false) || online(m) } as Model, c];
+    };
+  const goingOnline = (s: Model, m: Model): boolean => !online(s) && online(m);
+  it("not writing again, on the next dial, a letter written on an earlier one is caught (A13 resend)", () =>
+    expectCaught(
+      RESEND,
+      remembering(([m, c], s, before) =>
+        goingOnline(s, m) ? [m, writes(c, "send", (w) => w.filter((x) => !before.has(sentLetter(x))))] : [m, c],
+      ),
+    ));
+  it("writing an owed letter twice as the next dial goes online is caught (A13 resend)", () =>
+    expectCaught(
+      RESEND,
+      remembering(([m, c], s, before) =>
+        goingOnline(s, m)
+          ? [
+              m,
+              writes(c, "send", (w) => [
+                ...w,
+                ...w.filter((x) => before.has(sentLetter(x))).map((x, k) => ({ ...x, id: 3_000_000 + k })),
+              ]),
+            ]
+          : [m, c],
+      ),
+    ));
+  it("writing an owed letter on the ended dial, not the new one, is caught (A13 resend)", () =>
+    expectCaught(
+      RESEND,
+      remembering(([m, c], s, before) =>
+        goingOnline(s, m)
+          ? [
+              m,
+              writes(c, "send", (w) =>
+                w.map((x) => (before.has(sentLetter(x)) ? { ...x, dial: Number(x["dial"]) - 1 } : x)),
+              ),
+            ]
+          : [m, c],
+      ),
+    ));
+  it("not opening again, on the next dial, a view whose open had no answer is caught (A13 resend)", () =>
+    expectCaught(
+      RESEND,
+      remembering(([m, c], s) =>
+        goingOnline(s, m) && s.wasOnline === true ? [m, writes(c, "open", () => [])] : [m, c],
+      ),
+    ));
+  it("dropping a letter from the Model when its dial ends is caught (A13 resend)", () =>
+    expectCaught(
+      RESEND,
+      remembering(([m, c], s, before) =>
+        online(s) && !online(m)
+          ? [
+              { ...m, client: { ...m.client, pending: m.client.pending.filter((p) => !before.has(String(p.letter))) } },
+              c,
+            ]
+          : [m, c],
+      ),
+    ));
+  it("keeping an ended dial's calls in flight, so its late answer settles a letter, is caught (A13 resend)", () =>
+    // The one plant that names the build's own field: the window's `flight`, which A13 names.
+    expectCaught(RESEND, ([m, c], s) => {
+      type Flown = Model & { readonly flight: ReadonlyArray<{ readonly dial: unknown }> };
+      const was = openDial(s);
+      return was !== null && was !== openDial(m)
+        ? [
+            {
+              ...m,
+              flight: [...(m as Flown).flight, ...(s as Flown).flight.filter((f) => f.dial === was)],
+            } as Model,
+            c,
+          ]
+        : [m, c];
+    }));
   it("re-reading the displayed revision after the Cmd is caught (now)", () =>
     expectCaught(
       "now: a press captures what it showed, and reversed or failed answers still send in slot order",
@@ -2565,7 +2852,7 @@ describe("window machine: format of the Msgs", () => {
     expect(await ok({ _tag: "accepted", rev: 4, pos: 2 })).toBe(true);
     expect(await ok({ _tag: "refused", reason: "bad_msg" })).toBe(true);
     expect(await ok({ _tag: "accepted", rev: 4, pos: 2 }, 12.5)).toBe(true);
-    expect(await ok({ _tag: "accepted", rev: 4, pos: 2 }, undefined)).toBe(false);
+    expect(await accepts({ type: "send_ok", id: 7, dial: 3, value: { _tag: "accepted", rev: 4, pos: 2 } })).toBe(false);
     expect(await ok({ _tag: "accepted", rev: 4, pos: 2 }, -1)).toBe(false);
     expect(await ok({ _tag: "accepted", ms: 3 })).toBe(false);
     expect(await accepts({ type: "send_ok", dial: 3, value: { _tag: "accepted", rev: 4, pos: 2 }, ms: 3 })).toBe(false);
