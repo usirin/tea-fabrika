@@ -37,6 +37,10 @@ const check = (world: World) => {
       HOME: join(dir, "home"),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
+      // As on a CI machine: git has no committer identity to fall back on.
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "user.useConfigOnly",
+      GIT_CONFIG_VALUE_0: "true",
       FRESHMAIN_CALLS: join(dir, "calls"),
       TYPESAFE_API_KEY: undefined,
     };

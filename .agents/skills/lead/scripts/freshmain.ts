@@ -88,7 +88,9 @@ const check = Effect.fn("freshmain.check")(function* (pr: string, tip: string) {
       return yield* new Refused({ check: "merge", reason: `head ${tip} could not be checked out`, output: at.output });
     }
 
-    const merged = yield* run("merge", "git", "merge", "-q", "--no-commit", "--no-ff", main);
+    // Nothing is committed, but git asks for a committer before it merges, and a CI machine has none.
+    const nobody = ["-c", "user.name=freshmain", "-c", "user.email=freshmain@localhost"];
+    const merged = yield* run("merge", "git", ...nobody, "merge", "-q", "--no-commit", "--no-ff", main);
 
     if (merged.code !== 0) {
       return yield* new Refused({
