@@ -270,7 +270,8 @@ describe("P12 local twin lint", () => {
   law("uses installed Worker and R2 local registrations, including import aliases", ({ alias, name }) => {
     const body = [
       `import * as ${alias} from "@alchemy.run/cloudflare";`,
-      `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"});`,
+      // A generated name may be the host's, so include its binding.
+      `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
       `const bucket = ${alias}.R2.Bucket("Health", {name: "health"});`,
     ].join("\n");
     expect(scan("plant.ts", body)).toEqual([]);
