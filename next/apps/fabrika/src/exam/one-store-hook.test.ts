@@ -164,14 +164,21 @@ describe("one-store-hook", async () => {
 			symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
 			mkdirSync(dirname(join(at, OTHER_CALLS)), {recursive: true});
 			writeFileSync(join(at, OTHER_CALLS), otherCalls);
-			// A program package has its manifest, with a real pure entry at '.' (P16's layout rule).
+			// A program package has its manifest, with a real pure entry at '.' (P16's layout rule),
+			// and the files and dependencies its entry links: the layout rule refuses a link that
+			// resolves to nothing unless the manifest depends on it.
 			writeFileSync(
 				join(at, "next/programs/counter/package.json"),
 				JSON.stringify({
 					name: "@kampus/counter",
 					type: "module",
 					exports: {".": "./src/other-calls.ts"},
+					dependencies: {react: "catalog:"},
 				}),
+			);
+			writeFileSync(
+				join(at, "next/programs/counter/src/local-store.ts"),
+				"export const useSyncExternalStore = () => null;",
 			);
 			const ran = spawnSync(
 				join(ROOT, "node_modules", ".bin", "oxlint"),

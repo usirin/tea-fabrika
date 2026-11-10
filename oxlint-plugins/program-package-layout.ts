@@ -89,6 +89,65 @@ const worker = (name: string) =>
 		name,
 	);
 
+// What the package's manifest says of the names its code links: its own `imports` aliases and the
+// packages it depends on.
+type Names = {
+	readonly aliases: Readonly<Record<string, unknown>>;
+	readonly dependencies: ReadonlySet<string>;
+};
+
+// Every target string the manifest's `imports` names for a `#` link, under every runtime
+// condition, as `targetStrings` reads an export: the key itself, or each pattern key it matches,
+// with the match in every `*`.
+const aliasTargets = (names: Names, name: string): string[] =>
+	!name.startsWith("#")
+		? []
+		: Object.entries(names.aliases).flatMap(([key, target]) => {
+				if (key === name) {
+					return targetStrings(target);
+				}
+
+				const [before = "", after = "", ...more] = key.split("*");
+
+				return more.length === 0 &&
+					key.includes("*") &&
+					name.length > before.length + after.length &&
+					name.startsWith(before) &&
+					name.endsWith(after)
+					? targetStrings(target).map((path) =>
+							path.replaceAll("*", name.slice(before.length, name.length - after.length)),
+						)
+					: [];
+			});
+
+// A Worker runtime by its own name, or a `#` alias whose manifest entry names one anywhere.
+const runtimeName = (names: Names, name: string) =>
+	worker(name) || aliasTargets(names, name).some(worker);
+
+// A bare package name: no path, no `#` alias, no `scheme:`.
+const bare = (name: string) => !/^(?:[./#]|[a-z][a-z0-9+.-]*:)/i.test(name);
+
+// The package part of a bare name: `@scope/name` or `name`.
+const packageOf = (name: string) => /^(?:@[^/]+\/)?[^/]+/.exec(name)?.[0] ?? name;
+
+// A link the resolver cannot answer is fine only when it names a Node builtin (`node:`, which
+// no file stands for) or a package the manifest depends on (code outside the package, not yet
+// installed); a `#` alias is fine when every target its entry names is one of these. Anything
+// else, a missing file, an alias with no entry, an undeclared package or another scheme, is
+// unjudged.
+const known = (names: Names, name: string): boolean => {
+	if (name.startsWith("#")) {
+		const targets = aliasTargets(names, name);
+
+		return (
+			targets.length > 0 &&
+			targets.every((target) => !target.startsWith("#") && known(names, target))
+		);
+	}
+
+	return name.startsWith("node:") || (bare(name) && names.dependencies.has(packageOf(name)));
+};
+
 // A side-effect import or empty value re-export still loads its target. Only erased links stop here.
 const valueLink = (
 	kind: string | undefined,
@@ -179,8 +238,10 @@ const handlerObject = (
 // file says whether it loads Worker code: a Worker runtime import, a Worker class or a Worker
 // handler. `definesWorker` keeps the last two apart, for '.', whose runtime imports are reported
 // per line. A link by any other name is followed when it resolves inside the package (its own
-// name, a `#` import, an absolute path). What the rule cannot read is `unjudged`, never fine.
-const graph = (entries: readonly string[], root: string) => {
+// name, a `#` import, an absolute path). A `#` link is a Worker runtime import when its `imports`
+// entry names one, whatever the resolver answers. What the rule cannot read or resolve is
+// `unjudged`, never fine, unless `known` names it.
+const graph = (entries: readonly string[], root: string, names: Names) => {
 	const files = new Set<string>();
 	// The files that link a Worker runtime name themselves.
 	const runtime = new Set<string>();
@@ -228,13 +289,17 @@ const graph = (entries: readonly string[], root: string) => {
 		const link = (name: string | undefined) => {
 			if (name === undefined) {
 				unjudged.push(`'${at}' loads a module by a computed name`);
-			} else if (worker(name)) {
+			} else if (runtimeName(names, name)) {
 				loadsWorker = true;
 				runtime.add(file);
 			} else {
 				const target = resolver.sync(dirname(file), name).path;
 
-				if (target !== undefined && (name.startsWith(".") || inside(target))) {
+				if (target === undefined) {
+					if (!known(names, name)) {
+						unjudged.push(`'${at}' loads '${name}', which does not resolve`);
+					}
+				} else if (name.startsWith(".") || inside(target)) {
 					visit(target);
 				}
 			}
@@ -465,6 +530,18 @@ export const programPackageLayout: CreateRule = {
 		// subpath a pattern matches counts as offered.
 		const name = map(manifest) && typeof manifest.name === "string" ? manifest.name : "";
 		const raw = map(manifest) ? manifest.exports : undefined;
+		const names: Names = {
+			aliases: map(manifest) && map(manifest.imports) ? manifest.imports : {},
+			dependencies: new Set(
+				["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap(
+					(field) => {
+						const listed = map(manifest) ? manifest[field] : undefined;
+
+						return map(listed) ? Object.keys(listed) : [];
+					},
+				),
+			),
+		};
 		const keys = map(raw) ? Object.keys(raw) : [];
 		// A string, an array, null, or an object of conditions is the '.' export alone.
 		const exports: Record<string, unknown> =
@@ -514,7 +591,7 @@ export const programPackageLayout: CreateRule = {
 		const entries = [
 			...new Set(dotTargets.flatMap((path) => (path === undefined ? [] : [path]))),
 		].filter((path) => !declaration(path));
-		const dot = graph(entries, root);
+		const dot = graph(entries, root, names);
 		const pure = dot.files;
 		// The files oxlint lints here: in the package, by their own path (no symlink on the way),
 		// outside dependencies and the config's ignored folders. The per-line checks below see only
@@ -579,7 +656,7 @@ export const programPackageLayout: CreateRule = {
 		// libfabrika's own entry names stay refused even on pure code: the box is never the program's.
 		for (const key of subpaths) {
 			const targets = key === "./window" ? windowTargets : resolveKey(key);
-			const loaded = graph([...new Set(real(targets))], root);
+			const loaded = graph([...new Set(real(targets))], root, names);
 
 			for (const path of loaded.files) {
 				exported.add(path);
@@ -626,7 +703,7 @@ export const programPackageLayout: CreateRule = {
 					pure.has(file) &&
 					valueLink(node.importKind, node.specifiers) &&
 					typeof node.source.value === "string" &&
-					worker(node.source.value)
+					runtimeName(names, node.source.value)
 				) {
 					context.report({node, message: "Pure program code cannot import Worker runtime APIs."});
 				}
@@ -636,7 +713,7 @@ export const programPackageLayout: CreateRule = {
 					pure.has(file) &&
 					valueLink(node.exportKind, node.specifiers) &&
 					typeof node.source?.value === "string" &&
-					worker(node.source.value)
+					runtimeName(names, node.source.value)
 				) {
 					context.report({node, message: "Pure program code cannot export Worker runtime APIs."});
 				}
@@ -646,7 +723,7 @@ export const programPackageLayout: CreateRule = {
 					pure.has(file) &&
 					node.exportKind !== "type" &&
 					typeof node.source.value === "string" &&
-					worker(node.source.value)
+					runtimeName(names, node.source.value)
 				) {
 					context.report({node, message: "Pure program code cannot export Worker runtime APIs."});
 				}
@@ -654,14 +731,14 @@ export const programPackageLayout: CreateRule = {
 			ImportExpression(node) {
 				const name = literal(node.source);
 
-				if (pure.has(file) && name !== undefined && worker(name)) {
+				if (pure.has(file) && name !== undefined && runtimeName(names, name)) {
 					context.report({node, message: "Pure program code cannot load Worker runtime APIs."});
 				}
 			},
 			CallExpression(node) {
 				const name = required(node) ? literal(node.arguments[0]) : undefined;
 
-				if (pure.has(file) && name !== undefined && worker(name)) {
+				if (pure.has(file) && name !== undefined && runtimeName(names, name)) {
 					context.report({node, message: "Pure program code cannot load Worker runtime APIs."});
 				}
 			},
@@ -671,7 +748,7 @@ export const programPackageLayout: CreateRule = {
 						? literal(node.moduleReference.expression)
 						: undefined;
 
-				if (pure.has(file) && name !== undefined && worker(name)) {
+				if (pure.has(file) && name !== undefined && runtimeName(names, name)) {
 					context.report({node, message: "Pure program code cannot import Worker runtime APIs."});
 				}
 			},

@@ -70,15 +70,22 @@ The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times
 P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports
 its pure program at `.` and its real window at `./window`. A package awaiting a window needs
 no stub. Worker entries and Worker runtime imports in the pure import graph fail, through
-re-exports, helpers, cycles and literal dynamic imports. Type-only imports and re-exports pass,
-with either a declaration or a specifier marked `type`, and so do `types` export conditions and
-declaration files. This follows `docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan.
-On 2026-11-09 it checked 3 files in the real program tree: 0 findings, 0 false alarms; the
-counter's manifest and pure entry were inspected. Its 15 laws run the real oxlint plugin over
-generated layouts at seed 119120; with the rule switched off, 13 fail (the 2 left are the
-accept laws). The rule blocks. It does not resolve package aliases or computed dynamic imports;
-those need a future resolved-import check. It parses other files with `oxc-parser`, a dev
-dependency of this folder.
+re-exports, helpers, cycles, literal dynamic imports, `require`, and `#` aliases in the package's
+own `imports`. Type-only imports and re-exports pass, with either a declaration or a specifier
+marked `type`, and so do `types` export conditions and declaration files. This follows
+`docs/plan/tier-1-detail.md`, Packages, and the approved P16 plan. On 2026-11-10 it checked 3
+files in the real program tree: 0 findings, 0 false alarms. The counter's pure entry links three
+installed packages, which all resolve, so no link there went unresolved. Its 17 laws run the real
+oxlint plugin over generated layouts at seed 119120; with the rule switched off, 15 fail (the 2
+left are the accept law and the real-tree count). The rule blocks. What it cannot read it refuses
+as "cannot judge", never passes: a dynamic import or `require` by a computed name, a file that
+cannot be read or parsed, and a link that resolves to nothing. Two kinds of unresolved link stay
+fine: a `node:` builtin, which no file stands for, and a bare package name the manifest lists in
+`dependencies`, `devDependencies`, `peerDependencies` or `optionalDependencies`, which is code
+outside the package that may not be installed yet. A `#` alias that resolves to nothing is fine
+only when every target its `imports` entry names is one of these two. A `#` alias is a Worker
+runtime import when its `imports` entry names one under any condition, whatever the resolver
+answers. It parses other files with `oxc-parser`, a dev dependency of this folder.
 
 **Module resolution is a tool's, not ours** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)).
 The tools looked at:
@@ -116,6 +123,12 @@ What the resolver cannot do, with proof from 11.24.2 on a scratch package (2026-
 - **It resolves one subpath, and cannot list the subpaths a pattern offers.** `"./*": "./src/*.ts"`
   answers `@p16/x/server` with `src/server.ts`, but nothing asks it which subpaths exist. The rule
   lists the package files each target's `*` matches.
+- **It names a `#` alias's module only in an error, and answers for one condition.** For
+  `"imports": {"#cf": "cloudflare:workers"}`, `#cf` answers
+  `{"error": "Cannot find module 'cloudflare:workers'"}`, with no field for the name. For
+  `"#mix": {"default": "./src/program.ts", "workerd": "cloudflare:workers"}`, it answers
+  `src/program.ts` (2026-11-10). So the rule reads the `imports` entry itself, every target under
+  every condition and each pattern key, and judges each target by name.
 
 The hand-written part, and the generated case that tests each edge in
 `program-package-layout.test.ts`:
@@ -136,6 +149,8 @@ The hand-written part, and the generated case that tests each edge in
 | Every `*` in a target is the same text | the plants' two-`*` target |
 | A pattern target in build output, or under a symlinked folder, is listed | the plants' `dist/*.js` target and symlinked `src/lib` |
 | A link by a non-relative name (its own name, a `#` import) is followed when it resolves inside the package | the plants' `#server` import |
+| A `#` alias whose `imports` entry names a Worker runtime anywhere (a string, an array, a condition after a file target, a pattern key) is a Worker runtime import | links `imports alias`, `imports array`, `imports condition`, `imports pattern`, and the pinned review 6 `#cf` example |
+| A link that resolves to nothing is refused, save a `node:` builtin, a declared dependency, or a `#` alias whose every target is one | the plants' missing file, `#` with no entry, with a missing target or an undeclared target, undeclared package, own unexported subpath, `virtual:` scheme; the accept law's fine links |
 | A literal link is a string or a template literal with no `${}`; `require` and `import x = require()` are links; any other name is refused, never skipped | the plants' template literal, `require`, `import =` and computed import |
 | A file that cannot be read or parsed is refused, never read as empty | the plants' unparsable subpath and pure helper |
 | Pure code that oxlint does not lint line by line (outside the package, by a symlink, under `fixtures/`) is reported for the package | links `symlink`, `outside` under `condition` and `array dot`, and their two pinned examples; `fixtures/` has no test, as the harness lints with `--no-ignore` |

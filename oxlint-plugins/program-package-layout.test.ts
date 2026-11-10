@@ -91,6 +91,27 @@ const run = (
 };
 
 describe("fabrika/program-package-layout", () => {
+	// Review 6 of P16b: a link that resolves to nothing is unjudged, save these. A Node builtin has no
+	// file to resolve to, and a package the manifest depends on is outside code not installed in the
+	// scratch package; a `#` alias is fine when every target its entry names is one of them.
+	const fine: readonly {
+		readonly line: string;
+		readonly manifest: Readonly<Record<string, unknown>>;
+	}[] = [
+		{line: 'import {join} from "node:path"; export {join};', manifest: {}},
+		{line: 'export * from "dep-a";', manifest: {dependencies: {"dep-a": "1.0.0"}}},
+		{line: 'import "@scope/dep-b/sub";', manifest: {devDependencies: {"@scope/dep-b": "1.0.0"}}},
+		{line: 'export {x} from "dep-c";', manifest: {peerDependencies: {"dep-c": "1.0.0"}}},
+		{line: 'import "dep-d";', manifest: {optionalDependencies: {"dep-d": "1.0.0"}}},
+		{line: 'import "#path";', manifest: {imports: {"#path": "node:path"}}},
+		{
+			line: 'export * from "#lib/x";',
+			manifest: {
+				imports: {"#lib/*": {node: ["dep-a/*"], default: "node:fs"}},
+				dependencies: {"dep-a": "1.0.0"},
+			},
+		},
+	];
 	it("accepts a pure entry, conditional exports and a real ./window; no window needs no stub", () => {
 		fc.assert(
 			fc.property(name, fc.boolean(), (name, window) => {
@@ -108,6 +129,18 @@ describe("fabrika/program-package-layout", () => {
 				}
 
 				expect(run(name, exports, files)).toEqual([]);
+
+				for (const {line, manifest} of fine) {
+					expect(
+						run(
+							name,
+							exports,
+							{...files, "src/helper.ts": `${line}\nexport const helper = 1;`},
+							{manifest: (fields) => ({...fields, ...manifest})},
+						),
+						line,
+					).toEqual([]);
+				}
 			}),
 			runs,
 		);
@@ -318,6 +351,44 @@ describe("fabrika/program-package-layout", () => {
 								"src/server.ts": fetch,
 							},
 						},
+						// Review 6 of P16b: a link that resolved to nothing was dropped with no finding.
+						// Each names code the rule cannot see, and none is a Node builtin or a package
+						// the manifest depends on.
+						// scenario: a relative link to a missing file.
+						{exports: {".": `./${pure}`}, files: {[pure]: 'export * from "./missing.ts";'}},
+						// scenario: a `#` link the manifest has no `imports` entry for.
+						{exports: {".": `./${pure}`}, files: {[pure]: 'import "#server";'}},
+						// scenario: a `#` link whose entry names a missing file.
+						{
+							exports: {".": `./${pure}`},
+							files: {[pure]: 'import "#server";'},
+							package: {
+								manifest: (fields) => ({...fields, imports: {"#server": "./src/missing.ts"}}),
+							},
+						},
+						// scenario: a `#` link whose entry names, beside a builtin, a package the manifest
+						// does not depend on.
+						{
+							exports: {".": `./${pure}`},
+							files: {[pure]: 'import "#server";'},
+							package: {
+								manifest: (fields) => ({
+									...fields,
+									imports: {"#server": {node: "node:fs", default: "server-pkg"}},
+								}),
+							},
+						},
+						// scenario: a package the manifest does not depend on.
+						{exports: {".": `./${pure}`}, files: {[pure]: 'import "server-pkg";'}},
+						// scenario: the package's own name, for a subpath it does not export.
+						{exports: {".": `./${pure}`}, files: {[pure]: `import "@p16/${name}/server";`}},
+						// scenario: a module by another scheme, which no file stands for.
+						{exports: {".": `./${pure}`}, files: {[pure]: 'import "virtual:server";'}},
+						// scenario: the same, behind a subpath rather than '.'.
+						{
+							exports: {".": `./${pure}`, "./server": "./src/server.ts"},
+							files: {[pure]: program, "src/server.ts": 'export * from "./missing.ts";'},
+						},
 					];
 
 				for (const {exports, files, package: setup} of cases) {
@@ -455,8 +526,22 @@ describe("fabrika/program-package-layout", () => {
 	];
 	// How the Worker file is reached from its export: itself, a `.ts` link, a link written without
 	// an extension, which TypeScript resolves, a symlink to a file outside the package, or a link
-	// out of the package.
-	const links = ["same file", ".ts", "no extension", "symlink", "outside"] as const;
+	// out of the package. Review 6 of P16b: the Worker file itself, with its Worker runtime import
+	// behind a `#` alias in the package's own `imports`, as a string, an array, a nested condition
+	// after a file target, or a pattern key.
+	const links = [
+		"same file",
+		".ts",
+		"no extension",
+		"symlink",
+		"outside",
+		"imports alias",
+		"imports array",
+		"imports condition",
+		"imports pattern",
+	] as const;
+	// The Worker runtime name a shape links, if any.
+	const runtimeName = /"(cloudflare:workers|@kampus\/libfabrika\/box|workerd|miniflare)"/;
 	// How the package exports the Worker file: its own key, a pattern key, or a runtime condition
 	// of '.' beside the pure program. Review 3 of P16b: a fallback array on a key, inside a
 	// condition, or under a runtime condition of '.'; a pattern whose target has no `*`; and a
@@ -516,14 +601,37 @@ describe("fabrika/program-package-layout", () => {
 						// folder and from the Worker file's folder.
 						outside = `../../../outside/${last}.ts`,
 						up = `${"../".repeat(workerPath.split("/").length - 1)}${outside}`,
-						text = shapes[shape]!.text(c),
+						// The pure program sits beside the Worker file under '.', on the other condition.
+						beside = condition === "default" ? "import" : "default",
+						written = shapes[shape]!.text(c),
+						runtime = runtimeName.exec(written)?.[1],
+						// The beside condition's file target comes first, so the resolver answers with it.
+						aliases: Record<string, unknown> =
+							runtime === undefined
+								? {}
+								: link === "imports alias"
+									? {"#cf": runtime}
+									: link === "imports array"
+										? {"#cf": [runtime]}
+										: link === "imports condition"
+											? {"#cf": {[beside]: "./src/program.ts", [condition]: {default: runtime}}}
+											: link === "imports pattern"
+												? {"#cf/*": "*"}
+												: {},
+						text =
+							runtime === undefined || !link.startsWith("imports")
+								? written
+								: written.replace(
+										JSON.stringify(runtime),
+										JSON.stringify(link === "imports pattern" ? `#cf/${runtime}` : "#cf"),
+									),
 						files: Record<string, string> = {
 							"src/program.ts": "export const program = 1;",
 							[`${helperPath}.ts`]: "export const helper = 1;",
 							[`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
 							// The Worker code sits in the exported file, in a local file it loads, or
 							// outside the package.
-							...(link === "same file"
+							...(link === "same file" || link.startsWith("imports")
 								? {[`${workerPath}.${ext}`]: text}
 								: link === "symlink"
 									? {[outside]: text}
@@ -538,8 +646,6 @@ describe("fabrika/program-package-layout", () => {
 											}),
 						},
 						symlinks = link === "symlink" ? {[`${workerPath}.${ext}`]: outside} : {},
-						// The pure program sits beside the Worker file under '.', on the other condition.
-						beside = condition === "default" ? "import" : "default",
 						// The Worker file's subpaths under "./*", which "null pattern" shuts off.
 						shut = [
 							`./${workerPath.slice("src/".length)}`,
@@ -605,7 +711,13 @@ describe("fabrika/program-package-layout", () => {
 							[helperKey]: `./${helperPath}.ts`,
 						},
 						messages = (exports: unknown) =>
-							run(name, exports, files, {manifest: manifests[manifest], links: symlinks})
+							run(name, exports, files, {
+								manifest: (fields) => ({
+									...manifests[manifest](fields),
+									...(Object.keys(aliases).length === 0 ? {} : {imports: aliases}),
+								}),
+								links: symlinks,
+							})
 								.map((d) => d.message)
 								.sort();
 					// A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
@@ -843,6 +955,20 @@ describe("fabrika/program-package-layout", () => {
 						"Worker",
 						7,
 						"symlink",
+						"condition",
+						"workerd",
+						"name",
+					],
+					// pinned: review 6 of P16b, `"imports": {"#cf": "cloudflare:workers"}` with '.' (under
+					// "workerd") holding `import {WorkerEntrypoint} from "#cf"` and a class on it gave no
+					// finding: worker() saw only "#cf", and the resolver's error for the real name was dropped.
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/worker", "src/ui", "src/lib"],
+						"Worker",
+						0,
+						"imports alias",
 						"condition",
 						"workerd",
 						"name",
