@@ -19,7 +19,7 @@ export default mergeConfig(base, {
 			"@kampus/libfabrika/data": source("data/index.ts"),
 			"@kampus/libfabrika/coordination": source("coordination/index.ts"),
 			"@kampus/libfabrika/transport": source("transport/index.ts"),
-			"@kampus/libfabrika/sqlite": source("data/sqlite.ts"),
+			"@kampus/libfabrika/sqlite": source("ledger/NodeSqlite.ts"),
 		},
 	},
 });

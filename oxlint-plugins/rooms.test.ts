@@ -17,7 +17,7 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const SRC = "next/packages/libfabrika/src";
 
-const ROOMS = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"] as const;
+const ROOMS = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"] as const;
 
 /** Every room with every other room: 56 pairs, so no pair is left to a pattern nobody tried. */
 const PAIRS = ROOMS.flatMap((room) => ROOMS.filter((other) => other !== room).map((other) => [room, other] as const));
@@ -51,7 +51,7 @@ describe("fabrika/rooms: no room file re-exports another room's names", async ()
     // The plan's plant, with its real names.
     [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
     // A room's `internal/` file is a room file too.
-    [`${SRC}/door/internal/admit.ts`]: file(
+    [`${SRC}/gateway/internal/admit.ts`]: file(
       "/** @internal */",
       'export {Rev} from "../../ledger/Log.ts";', // 3
       "/** @internal */",
@@ -59,7 +59,7 @@ describe("fabrika/rooms: no room file re-exports another room's names", async ()
     ),
     // Not room files: the package's entry and the two platform folders put the rooms together.
     [`${SRC}/index.ts`]: file('export {Ledger} from "./ledger/Ledger.ts";'),
-    [`${SRC}/workers/index.ts`]: file('export {workersSql} from "../ledger/WorkersSql.ts";'),
+    [`${SRC}/cloudflare/index.ts`]: file('export {cloudflareSql} from "../ledger/CloudflareSql.ts";'),
     [`${SRC}/node/index.ts`]: file('export * from "../runtime/Runner.ts";'),
     // Another package's folders are not libfabrika's rooms.
     "next/packages/tuval/src/door/Door.ts": file('export {a} from "../ledger/Log.ts";'),
@@ -73,13 +73,13 @@ describe("fabrika/rooms: no room file re-exports another room's names", async ()
     }
 
     expect(linted(rooms, `${SRC}/processes/Mailbox.ts`)).toEqual([2]);
-    expect(linted(rooms, `${SRC}/door/internal/admit.ts`)).toEqual([3]);
+    expect(linted(rooms, `${SRC}/gateway/internal/admit.ts`)).toEqual([3]);
   });
 
   it("takes the entry file, the platform folders and another package", () => {
     for (const path of [
       `${SRC}/index.ts`,
-      `${SRC}/workers/index.ts`,
+      `${SRC}/cloudflare/index.ts`,
       `${SRC}/node/index.ts`,
       "next/packages/tuval/src/door/Door.ts",
     ]) {
@@ -101,7 +101,7 @@ describe("fabrika/rooms: src/ holds only the listed rooms and top files", async 
     ...ROOMS.map((room) => `${SRC}/${room}/Front.ts`),
     ...ROOMS.map((room) => `${SRC}/${room}/Front.test.ts`),
     `${SRC}/node/brain.ts`,
-    `${SRC}/workers/brain.ts`,
+    `${SRC}/cloudflare/brain.ts`,
     `${SRC}/index.ts`,
     `${SRC}/Id.ts`,
     `${SRC}/Id.test.ts`,
@@ -292,14 +292,14 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
       ]),
     ),
     // The plan's two plants, with their real names.
-    [`${SRC}/door/Door.ts`]: file(
+    [`${SRC}/gateway/Gateway.ts`]: file(
       'import {ledgerStore} from "../ledger/internal/ledgerStore.ts";', // 2
       'import {waiting} from "./internal/waiting.ts";', // 3
       // The override repeats the base rule's Radix entry, so it still fires here.
       'import {gray} from "@radix-ui/colors";', // 4
       "export const all = [ledgerStore, waiting, gray];",
     ),
-    [`${SRC}/workers/runtime.ts`]: file(
+    [`${SRC}/cloudflare/runtime.ts`]: file(
       'import {supervisor} from "../runtime/internal/supervisor.ts";', // 2
       'import {Runner} from "../runtime/Runner.ts";', // 3
       "export const all = [supervisor, Runner];",
@@ -326,8 +326,8 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
   };
   const linted = await plant(files);
 
-  // Plants (the plan's): `door/Door.ts` imports `../ledger/internal/ledgerStore.ts`, and
-  // `workers/runtime.ts` imports `../runtime/internal/supervisor.ts`.
+  // Plants (the plan's): `gateway/Gateway.ts` imports `../ledger/internal/ledgerStore.ts`, and
+  // `cloudflare/runtime.ts` imports `../runtime/internal/supervisor.ts`.
   it("fires on an import and on an export-from, in either spelling, for each of the 56 pairs", () => {
     for (const [room, other] of PAIRS) {
       expect(linted(restricted, front(room, other)), `${room} into ${other}`).toEqual([2, 3, 4, 5, 6, 7]);
@@ -336,8 +336,8 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
   });
 
   it("fires in the platform folders and the top files, and keeps the Radix entry", () => {
-    expect(linted(restricted, `${SRC}/door/Door.ts`)).toEqual([2, 4]);
-    expect(linted(restricted, `${SRC}/workers/runtime.ts`)).toEqual([2]);
+    expect(linted(restricted, `${SRC}/gateway/Gateway.ts`)).toEqual([2, 4]);
+    expect(linted(restricted, `${SRC}/cloudflare/runtime.ts`)).toEqual([2]);
     expect(linted(restricted, `${SRC}/node/brain.ts`)).toEqual([2]);
     expect(linted(restricted, `${SRC}/index.ts`)).toEqual([2]);
     expect(linted(restricted, `${SRC}/Testing.ts`)).toEqual([2]);
@@ -380,7 +380,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
     `${SRC}/runtime/internal/supervisor.laws.test.ts`,
     `${SRC}/processes/Process.test-support.ts`,
     `${SRC}/telemetry/P12Readers.laws.test.ts`,
-    `${SRC}/telemetry/internal/health.test.ts`,
+    `${SRC}/telemetry/internal/measurements.test.ts`,
     `${SRC}/Id.test-support.ts`,
   ];
   const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));

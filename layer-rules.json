@@ -6,16 +6,11 @@
     },
     {
       "name": "next-node",
-      "paths": [
-        "next/packages/libfabrika/src/node",
-        "next/packages/libfabrika/src/build.ts",
-        "next/packages/libfabrika/src/compiler.ts",
-        "next/packages/libfabrika/src/build-modules.d.ts"
-      ]
+      "paths": ["next/packages/libfabrika/src/node"]
     },
     {
       "name": "next-workers",
-      "paths": ["next/packages/libfabrika/src/workers"]
+      "paths": ["next/packages/libfabrika/src/cloudflare"]
     },
     {
       "name": "next-programs",
@@ -51,19 +46,36 @@
     },
     {
       "name": "next-door",
-      "paths": ["next/packages/libfabrika/src/door"]
+      "paths": ["next/packages/libfabrika/src/door", "next/packages/libfabrika/src/gateway"]
     },
     {
       "name": "next-app",
-      "paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
+      "paths": [
+        "next/packages/libfabrika/src/app",
+        "next/packages/libfabrika/src/testing.ts",
+        "next/packages/libfabrika/src/runtime",
+        "next/packages/libfabrika/src/Testing.ts"
+      ]
     },
     {
       "name": "next-coordination",
-      "paths": ["next/packages/libfabrika/src/coordination"]
+      "paths": [
+        "next/packages/libfabrika/src/coordination",
+        "next/packages/libfabrika/src/processes",
+        "next/packages/libfabrika/src/presence",
+        "next/packages/libfabrika/src/access",
+        "next/packages/libfabrika/src/runtime/ProcessStore*",
+        "next/packages/libfabrika/src/runtime/RecoveryStore*",
+        "next/packages/libfabrika/src/runtime/internal/recovery*"
+      ]
     },
     {
       "name": "next-data",
-      "paths": ["next/packages/libfabrika/src/data"]
+      "paths": [
+        "next/packages/libfabrika/src/data",
+        "next/packages/libfabrika/src/telemetry",
+        "next/packages/libfabrika/src/ledger"
+      ]
     },
     {
       "name": "next-transport",
@@ -71,12 +83,13 @@
     },
     {
       "name": "next-id-test-support",
-      "paths": ["next/packages/libfabrika/src/id.test-support.ts"]
+      "paths": ["next/packages/libfabrika/src/Id.test-support.ts"]
     },
     {
       "name": "next-id",
       "paths": [
         "next/packages/libfabrika/src/id.ts",
+        "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts"

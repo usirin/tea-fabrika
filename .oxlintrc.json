@@ -576,8 +576,8 @@
     {
       // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
       // another room's names, `src/` holds only what is listed here, every export in an `internal/`
-      // file is `@internal`, and the `values` files hold no service and no error. `folders` and
-      // `files` also name what main holds today (`data`, `coordination`, `app`, `id`, `testing`), so
+      // file is `@internal`, and the `values` files hold no service and no error. `folders` also
+      // names what the product files still hold (`data`, `coordination`), so
       // the rule fires on nothing before a file moves. Each old name leaves in the pull request that
       // empties it. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
       //
@@ -590,23 +590,9 @@
           "error",
           {
             "src": "next/packages/libfabrika/src",
-            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"],
-            "folders": ["node", "workers", "data", "coordination", "app"],
-            "files": [
-              "index",
-              "Id",
-              "Testing",
-              "ProcessId",
-              "Sql",
-              "Rev",
-              "id",
-              "testing",
-              "build",
-              "compiler",
-              "build-modules",
-              "build-assets",
-              "build-one-file"
-            ],
+            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"],
+            "folders": ["node", "cloudflare", "data", "coordination"],
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
             "values": ["ProcessId", "Sql", "Rev"]
           }
         ],

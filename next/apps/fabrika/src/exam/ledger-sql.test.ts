@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-ledger-sql)";
-const FILE = "next/packages/libfabrika/src/workers/runtime.ts";
+const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";
 
 describe("ledger SQL stays behind its service", () => {
   it("refuses ledger table reads and writes outside the service, including aliases and templates", async () => {
@@ -28,9 +28,9 @@ describe("ledger SQL stays behind its service", () => {
             .join("\n")}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
           const findings = await plant({
             [FILE]: body,
-            "next/packages/libfabrika/src/data/ledger-store.ts": body,
-            "next/packages/libfabrika/src/workers/runtime.test.ts": body,
-            "next/packages/libfabrika/src/coordination/process.test-support.ts": body,
+            "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts": body,
+            "next/packages/libfabrika/src/cloudflare/runtime.test.ts": body,
+            "next/packages/libfabrika/src/processes/Process.test-support.ts": body,
             "packages/today/runtime.ts": body,
             "next/allowed.ts":
               'sql.exec("SELECT * FROM stage_descriptors"); sql.exec("SELECT entries FROM directory");',
@@ -38,9 +38,9 @@ describe("ledger SQL stays behind its service", () => {
           expect(findings(CODE, FILE)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 
           for (const file of [
-            "next/packages/libfabrika/src/data/ledger-store.ts",
-            "next/packages/libfabrika/src/workers/runtime.test.ts",
-            "next/packages/libfabrika/src/coordination/process.test-support.ts",
+            "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts",
+            "next/packages/libfabrika/src/cloudflare/runtime.test.ts",
+            "next/packages/libfabrika/src/processes/Process.test-support.ts",
             "packages/today/runtime.ts",
             "next/allowed.ts",
           ]) {

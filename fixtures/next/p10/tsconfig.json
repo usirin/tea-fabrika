@@ -12,7 +12,7 @@
 			"@kampus/libfabrika/coordination": [
 				"../../../next/packages/libfabrika/src/coordination/index.ts"
 			],
-			"@kampus/libfabrika/sqlite": ["../../../next/packages/libfabrika/src/data/sqlite.ts"]
+			"@kampus/libfabrika/sqlite": ["../../../next/packages/libfabrika/src/ledger/NodeSqlite.ts"]
 		}
 	}
 }

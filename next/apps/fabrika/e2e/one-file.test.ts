@@ -92,7 +92,7 @@ describe("P16 real browser from a copied one-file build", () => {
               recursive: true,
               filter: (p) => !p.endsWith(".test.ts"),
             });
-            const file = join(ROOT, "next/packages/libfabrika/src/build.ts");
+            const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
             const api = (await import(pathToFileURL(file).href)) as Build;
             const built = await Effect.runPromise(

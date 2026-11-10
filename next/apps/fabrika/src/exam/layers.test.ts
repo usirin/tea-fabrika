@@ -653,8 +653,12 @@ describe("the rule file's rows give a file its part", () => {
     expect(rowsAt(REAL, "packages/fabrika/src/agents/claude/rules.ts")).toEqual(["fabrika-agents"]);
     expect(rowsAt(REAL, "packages/pipeline/src/laws/explore.ts")).toEqual(["own-search"]);
     expect(rowsAt(REAL, "packages/pipeline/src/laws/walk.ts")).toEqual(["pipeline"]);
-    expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.ts")).toEqual(["next-app"]);
-    expect(rowsAt(REAL, "next/packages/libfabrika/src/app/runner.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/Testing.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/runtime/Runner.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/runtime/ProcessStore.ts")).toEqual(["next-coordination"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/runtime/internal/recovery.test.ts")).toEqual([
+      "next-coordination",
+    ]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
   });
@@ -664,7 +668,7 @@ describe("every library file has exactly one row", () => {
   const under = "next/packages/libfabrika/src/";
   /** The library's folders the real rule file names: every row's folder pattern under `src/`. */
   const folders = REAL.flatMap((row) => row.paths)
-    .filter((pattern) => pattern.startsWith(under) && !pattern.endsWith(".ts"))
+    .filter((pattern) => pattern.startsWith(under) && !pattern.endsWith(".ts") && !pattern.includes("*"))
     .map((pattern) => pattern.slice(under.length));
   const tops = ["id", "testing", "index"];
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9-]{0,8}$/);
@@ -724,25 +728,19 @@ describe("every library file has exactly one row", () => {
 
 describe("planted breaks in the room folders", () => {
   const src = "next/packages/libfabrika/src";
-  const add = (name: string, paths: ReadonlyArray<string>) => (row: Row) =>
-    row.name === name ? { name, paths: [...row.paths, ...paths.map((p) => `${src}/${p}`)] } : row;
-  // The rule file as the move leaves it before the floors (the plan's config table, PRs 1 to 5):
-  // each old row gains its rooms' paths, and three patterns keep three runtime files in coordination.
+  // The rule file as the move leaves it before the floors (the plan's config table): each old row
+  // gained its rooms' paths, and three patterns keep three runtime files in coordination. Moving
+  // `runtime` into the coordination row is the plant.
   const rooms = (runtime: "next-app" | "next-coordination"): ReadonlyArray<Row> =>
-    REAL.map(add("next-id", ["Id.ts", "ProcessId.ts", "Sql.ts", "Rev.ts"]))
-      .map(add("next-data", ["telemetry", "ledger"]))
-      .map(
-        add("next-coordination", [
-          "processes",
-          "presence",
-          "access",
-          "runtime/ProcessStore*",
-          "runtime/RecoveryStore*",
-          "runtime/internal/recovery.ts",
-        ]),
-      )
-      .map(add(runtime, ["runtime"]))
-      .map(add("next-app", ["Testing.ts"]));
+    runtime === "next-app"
+      ? REAL
+      : REAL.map((row) =>
+          row.name === "next-app"
+            ? { name: row.name, paths: row.paths.filter((p) => p !== `${src}/runtime`) }
+            : row.name === "next-coordination"
+              ? { name: row.name, paths: [...row.paths, `${src}/runtime`] }
+              : row,
+        );
   const tree = plant({
     "packages/libfabrika/package.json": manifest(LIBRARY),
     "packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
@@ -799,30 +797,12 @@ describe("planted breaks in the room folders", () => {
     );
   });
 
-  // scenario: the room folders have no row on main yet, since no file has moved. Until a move PR
-  // adds the paths, a file planted in a room fails for having no row, so a move cannot land ahead
-  // of its rule file change.
-  it("scenario: on main's rule file a room folder has no row", () => {
-    const at = (file: string) => `packages/libfabrika/src/${file}`;
+  // scenario: the real rule file claims every room folder, since a move must not land ahead of its
+  // rule file change: a file planted in a room folder always has a row.
+  it("scenario: on the real rule file every room folder has a row", () => {
     const unclaimed = faults(tree)
       .filter((fault) => !fault.includes(" imports "))
       .map((fault) => fault.split(": ")[0]);
-    expect(unclaimed.sort()).toEqual(
-      [
-        "Id.ts",
-        "telemetry/Sink.ts",
-        "ledger/Log.ts",
-        "ledger/Ledger.ts",
-        "processes/Mailbox.ts",
-        "access/Members.ts",
-        "runtime/Runner.ts",
-        "runtime/ProcessStore.ts",
-        "runtime/RecoveryStore.ts",
-        "runtime/internal/recovery.ts",
-        "runtime/internal/supervisor.ts",
-      ]
-        .map(at)
-        .sort(),
-    );
+    expect(unclaimed).toEqual([]);
   });
 });

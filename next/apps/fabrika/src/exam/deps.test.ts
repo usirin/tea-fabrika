@@ -425,7 +425,7 @@ describe("planted breaks", () => {
     }),
     "packages/tuval/src/index.ts": lines(
       'import {wire} from "@kampus/libfabrika/transport";',
-      'import {log} from "@kampus/libfabrika/src/data/log.ts";',
+      'import {log} from "@kampus/libfabrika/src/ledger/Log.ts";',
       'import {lane} from "@kampus/pipeline";',
     ),
     "programs/counter/package.json": {
@@ -458,7 +458,7 @@ describe("planted breaks", () => {
   it("fires on each import break, and on nothing else", () => {
     expect([...importFaults(tree)].sort()).toEqual(
       [
-        'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/data/log.ts": ./src/data/log.ts is not in @kampus/libfabrika\'s exports',
+        'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/ledger/Log.ts": ./src/ledger/Log.ts is not in @kampus/libfabrika\'s exports',
         'packages/tuval/src/index.ts imports "@kampus/pipeline": @kampus/pipeline is not in its package.json',
         'programs/counter/src/index.ts imports "../../../packages/libfabrika/src/index.ts": a relative path out of its package',
         'apps/fabrika/src/brain.ts imports "electron": in an app, only src/entry/electron-main.ts may',
