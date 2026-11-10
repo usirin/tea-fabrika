@@ -182,7 +182,8 @@ it("L8: generated sharding assigns once to the least load including starts, inde
 
 it("vector: real CI medians include the previously unweighted scripts", () => {
   // Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
-  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(59.1);
+  // T554 refresh: plancheck.test.ts is the median of runs 42803733957, 42807559589 and 42801440878.
+  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(106.2);
   expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
   expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
@@ -385,8 +386,9 @@ it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
   // check run 42874119130, attempts 5 to 14, a median of 10.
   // Plant: restore catchup's old 47.2 seconds. Lane rows await the PR's own run.
+  // catchup.test.ts was split by PR 772 (ticket 572); its row is now main's 102.4 from run 42883743294.
   const expected = {
-    ".agents/skills/lead/scripts/catchup.test.ts": 689.1,
+    ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
     ".agents/skills/lead/scripts/box.test.ts": 348.7,
     ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
     ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
