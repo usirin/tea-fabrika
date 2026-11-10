@@ -28,6 +28,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const homes: string[] = [];
 const sha = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
+// The brain's exact bytes as one string: latin1 maps each byte 0 to 255 to one char.
+const brainBytes = (file: string) => readFileSync(file, "latin1");
 
 const text = fc
   .array(fc.constantFrom("雪", "🫖", "'", '"', "\\", "\r\n", "\n", "</script>", "a"), {
@@ -231,11 +233,15 @@ afterEach(() => {
 
 describe("P16 p33 one-file build", () => {
   it("scenario: latin1 preserves an invalid UTF-8 byte difference that utf8 hides", () => {
-    // Plant: substitute utf8 for latin1; replacement characters hide this byte difference.
-    const first = Buffer.from([0x61, 0xff, 0x62]);
-    const second = Buffer.from([0x61, 0xfe, 0x62]);
-    expect(second.toString("utf8")).toBe(first.toString("utf8"));
-    expect(second.toString("latin1")).not.toBe(first.toString("latin1"));
+    // Plant: make brainBytes read utf8; replacement characters hide this byte difference.
+    const home = mkdtempSync("/tmp/fh.");
+    homes.push(home);
+    const first = join(home, "first.mjs");
+    const second = join(home, "second.mjs");
+    writeFileSync(first, Buffer.from([0x61, 0xff, 0x62]));
+    writeFileSync(second, Buffer.from([0x61, 0xfe, 0x62]));
+    expect(readFileSync(second, "utf8")).toBe(readFileSync(first, "utf8"));
+    expect(brainBytes(second)).not.toBe(brainBytes(first));
   });
   it(
     "text embedding: generated compiled bytes survive exactly and outer import is inert",
@@ -279,10 +285,8 @@ describe("P16 p33 one-file build", () => {
         vi.setSystemTime(new Date("2031-01-01"));
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
-        // Plants: publish a clock-dependent comment, or flip one byte of the second brain.
-        expect(readFileSync(second.brain, "latin1"), "two clean builds write the same bytes").toBe(
-          readFileSync(first.brain, "latin1"),
-        );
+        // Plants: publish `// ${new Date().getUTCFullYear() % 7}`, or flip one byte of the second brain.
+        expect(brainBytes(second.brain), "two clean builds write the same bytes").toBe(brainBytes(first.brain));
 
         for (const f of [a, b]) {
           expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
