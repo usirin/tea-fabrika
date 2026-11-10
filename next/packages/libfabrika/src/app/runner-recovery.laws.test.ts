@@ -414,7 +414,7 @@ describe("P34 id reuse at the runner", () => {
               }),
             ),
         ),
-        { seed: 119120, numRuns: 25, examples: [["letter", 1, 2]] },
+        { seed: 119120, numRuns: 25 },
       );
     });
   }

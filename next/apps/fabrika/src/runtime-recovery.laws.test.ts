@@ -821,7 +821,8 @@ const RecoveryFlow = Schema.Struct({
   letter: Word,
   restart: Word,
   limit: Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 32 }))),
-  throws: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+  // Past the brake: the Worker's policy allows 5 restarts in 5 s, so a sixth quick crash goes down.
+  throws: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 7 })),
   healthy: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
   resends: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 })),
   reopen: Schema.Literals(["none", "throws", "healthy"]),
@@ -835,6 +836,8 @@ const RecoveryFlow = Schema.Struct({
 });
 type RecoveryFlow = typeof RecoveryFlow.Type;
 const FLOW_WAIT = 15_000;
+/** The crash that trips P34's decided Worker policy, 5 restarts in 5,000 ms: it goes down, not restarted. */
+const BRAKE = 6;
 
 const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean) => {
   const end = Date.now() + FLOW_WAIT;
@@ -878,6 +881,10 @@ const runFlow = async (flow: RecoveryFlow) => {
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
   const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
+  const downs = async () =>
+    (await w.project.read(`processes/${NAME}`, 0, "audit"))
+      .map((row) => ({ ...Object(row.body), _tag: row._tag }))
+      .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("down") }))(body));
   const deadRows = async (pids: ReadonlyArray<string>) =>
     (await Promise.all(pids.map((pid) => w.project.read(`${pid}/dead`, 0, "audit")))).flat();
   const limit = flow.limit ?? 3;
@@ -908,7 +915,29 @@ const runFlow = async (flow: RecoveryFlow) => {
       await w.reopenAll();
     }
 
+    // The brake: one down row for the crashed process, and nothing restarts it before its time.
+    let held: number | null = null;
+
+    if (n === BRAKE) {
+      const [down] = await until("down", downs, (found) => found.length > 0);
+      expect(down).toMatchObject({ process: chain.at(-1), crashes: BRAKE, until: expect.any(Number) });
+      held = Number(Reflect.get(Object(down), "until"));
+
+      // Resends while down wake nothing: no step, no try counted, no restart.
+      for (let r = 0; r < Math.max(1, flow.resends); r++) {
+        expect(await send(original, letter, "throw")).not.toMatchObject({ answer: { _tag: "ok" } });
+      }
+
+      expect(await restarts()).toHaveLength(n - 1);
+      expect(w.receipts(letter)).toMatchObject([{ tries: n }]);
+    }
+
     const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
+
+    if (held !== null) {
+      expect(Date.now()).toBeGreaterThanOrEqual(held);
+    }
+
     expect(rows).toHaveLength(n);
     expect(rows[n - 1]).toMatchObject({ after: chain.at(-1), name: NAME });
     const next = String(Reflect.get(Object(rows[n - 1]), "process"));
@@ -985,6 +1014,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   });
   expect(await w.project.read(`${NAME}/inbox`, 0, "audit")).toHaveLength(inbox);
   expect(await restarts()).toHaveLength(k);
+  expect(await downs()).toHaveLength(k >= BRAKE ? 1 : 0);
   expect(await deadEvents()).toHaveLength(dead.length);
 
   if (k > 0 || flow.fault !== "none") {
@@ -1016,16 +1046,19 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
     flowOptions,
   );
   // Effect Arbitrary: RecoveryFlow. Plant: throw away a checked refusal across RPC; clear pending
-  // work before an answer. One new Project RPC is lost, before or after the Project acts.
+  // work before an answer; drop the down call or its write. One new Project RPC is lost, before or
+  // after the Project acts. Every flow crashes past the brake, so it writes down and waits it out.
   effect.effect.prop(
     "recovery writes and process calls keep typed failures and retry saved actions",
     { flow: RecoveryFlow },
     ({ flow }) =>
       Effect.promise(async () => {
         const lost = flow.lost ?? { at: 1, side: "after" as const };
+        const throws = BRAKE + (flow.throws % 2);
         const { w, current, restarts, live, route } = await runFlow({
           ...flow,
-          throws: Math.max(1, flow.throws),
+          throws,
+          limit: Math.max(flow.limit ?? 32, throws),
           fault: "none",
           lost,
         });
@@ -1047,6 +1080,16 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         });
         expect(w.newCalls()).toBeGreaterThan(0);
         expect(w.lostDone()).toBe(lost.at <= w.newCalls());
+        // A restart whose request ID is the first start's: the Project refuses the reused ID, and
+        // that checked refusal crosses the Project RPC and stays a ProcessError.
+        const reused = await w
+          .process(String(next))
+          .object.restart({ id: NAME, build: "poison-a" })
+          .then(
+            () => ({ answer: "ok" }),
+            (error: unknown) => ({ error }),
+          );
+        expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
       }),
     flowOptions,
   );
