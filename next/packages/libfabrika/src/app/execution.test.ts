@@ -51,7 +51,7 @@ const declared = {
   state: { v: 1, schema: Model, upgrades: [] },
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
-  refuse: (s: typeof Model.Type) => (s.count === 3 ? { why: "limit", now: 3, most: 3 } : null),
+  refuse: (s: typeof Model.Type) => (s.count === 3 ? { reason: "limit", now: 3, most: 3 } : null),
   inputs: {},
   outputs: {},
   writes: {},
@@ -125,7 +125,7 @@ describe("P12 Effect execution adapter", () => {
                 [remote.fold({}, {}), "saved_letter"],
               ] as const) {
                 const result = yield* Effect.flip(action);
-                expect(result).toMatchObject({ _tag: "ProgramDown", why: reason });
+                expect(result).toMatchObject({ _tag: "ProgramDown", reason });
                 expect(JSON.stringify(result)).not.toContain("private RPC body");
               }
             }),

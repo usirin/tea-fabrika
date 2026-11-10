@@ -133,7 +133,7 @@ describe("P33, only the owning runner writes its answers", () => {
             expect(answer._tag, "runner writes only its own inbox and process").toBe(allowed ? "placed" : "refused");
 
             if (!allowed) {
-              expect(answer).toEqual({ _tag: "refused", why: "forbidden" });
+              expect(answer).toEqual({ _tag: "refused", reason: "forbidden" });
             }
           }
         }
@@ -179,7 +179,7 @@ describe("p21, send", () => {
         Effect.gen(function* () {
           expect(yield* send("notes:1", LETTER, m)).toEqual({
             _tag: "refused",
-            why: "bad_line",
+            reason: "bad_line",
           });
           expect(yield* inbox("notes:1")).toEqual([]);
         }).pipe(Effect.provide(mail())),
@@ -246,7 +246,7 @@ describe("p21, send", () => {
           expect(yield* send("notes:1", LETTER, saved, { sentAt: "later", seen: 2 })).toEqual(first);
           expect(yield* send("notes:1", LETTER, changed)).toEqual({
             _tag: "refused",
-            why: "id_reused",
+            reason: "id_reused",
           });
           expect((yield* inbox("notes:1")).length).toBe(2);
         }).pipe(Effect.provide(mail())),
@@ -258,15 +258,15 @@ describe("p21, send", () => {
       Effect.gen(function* () {
         expect(yield* send("notes:1", LETTER, m, { seen: 9 })).toEqual({
           _tag: "refused",
-          why: "seen_ahead",
+          reason: "seen_ahead",
         });
         expect(yield* send("notes:1", LETTER, m, { parent: "not-a-parent" })).toEqual({
           _tag: "refused",
-          why: "bad_parent",
+          reason: "bad_parent",
         });
         expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual({
           _tag: "refused",
-          why: "bad_trace",
+          reason: "bad_trace",
         });
         expect(yield* inbox("notes:1")).toEqual([]);
       }).pipe(Effect.provide(mail())),
@@ -351,7 +351,7 @@ describe("p21, receive", () => {
       (tag) =>
         Effect.gen(function* () {
           yield* send("notes:1", "letter_a", 1);
-          yield* raw("notes:1/inbox", "x-1", { _tag: tag, body: { why: "normal" } });
+          yield* raw("notes:1/inbox", "x-1", { _tag: tag, body: { reason: "normal" } });
           yield* send("notes:1", "letter_b", 2);
           expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a", "letter_b"]);
           expect((yield* inbox("notes:1")).map((e) => e._tag)).toEqual(["send", tag, "send"]);
@@ -375,7 +375,7 @@ describe("p21, receive", () => {
           });
           const failed = yield* Effect.flip(receive("notes:1"));
           expect(failed).toBeInstanceOf(LedgerError);
-          expect(failed.why).toBe("bad_row");
+          expect(failed.reason).toBe("bad_row");
         }).pipe(Effect.provide(mail())),
     ),
   );
@@ -436,13 +436,13 @@ describe("p21, no Layer fails at build", () => {
   it.effect("a Mailbox over a Ledger that always fails builds, and each call fails with its error", () =>
     check(json, [1], (m) => {
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ why: "unreachable" })),
-        read: () => Stream.fail(new LedgerError({ why: "unreachable" })),
-        wait: () => Effect.fail(new LedgerError({ why: "unreachable" })),
+        append: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
+        read: () => Stream.fail(new LedgerError({ reason: "unreachable" })),
+        wait: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
       });
       return Effect.gen(function* () {
-        expect((yield* Effect.flip(send("notes:1", LETTER, m))).why).toBe("unreachable");
-        expect((yield* Effect.flip(receive("notes:1"))).why).toBe("unreachable");
+        expect((yield* Effect.flip(send("notes:1", LETTER, m))).reason).toBe("unreachable");
+        expect((yield* Effect.flip(receive("notes:1"))).reason).toBe("unreachable");
       }).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))));
     }),
   );

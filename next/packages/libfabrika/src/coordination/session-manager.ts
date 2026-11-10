@@ -29,7 +29,7 @@ export const Session = Schema.Struct({
 export type Session = typeof Session.Type;
 
 export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
-  why: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
+  reason: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
 }) {}
 
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
@@ -63,11 +63,11 @@ export class SavedInput extends Schema.Opaque<SavedInput>()(
     const a = saved.input;
 
     if (saved.state._tag !== "delivered" || a.process !== process) {
-      return Result.fail(new SigningRefused({ why: "not_delivered" }));
+      return Result.fail(new SigningRefused({ reason: "not_delivered" }));
     }
 
     if (personOnly && (!a.personOnly || a.by._tag !== "person")) {
-      return Result.fail(new SigningRefused({ why: "person_only" }));
+      return Result.fail(new SigningRefused({ reason: "person_only" }));
     }
 
     return Result.succeed(Session.make({ by: a.by, parent: a.id, traceId: a.traceId, span: a.span }));
@@ -101,7 +101,7 @@ export class SessionManager extends Context.Service<
   static readonly layer = <R>(
     sql: Sql,
     membership: (key: string) => Effect.Effect<Writer, NotGranted | LedgerError, R>,
-    policy: { readonly input: (name: string) => boolean; readonly fact: (kind: string) => boolean },
+    policy: { readonly input: (name: string) => boolean; readonly event: (kind: string) => boolean },
   ): Layer.Layer<SessionManager, never, R> =>
     Layer.effect(
       SessionManager,
@@ -115,7 +115,7 @@ export class SessionManager extends Context.Service<
           );
         };
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({ try: step, catch: () => new LedgerError({ why: "storage" }) });
+          return yield* Effect.try({ try: step, catch: () => new LedgerError({ reason: "storage" }) });
         });
         const ended = (process: string) =>
           sql.exec("SELECT process FROM door_ended WHERE process=?", process).length > 0;
@@ -129,7 +129,7 @@ export class SessionManager extends Context.Service<
           // A signal id is the brain's alone: the signer refuses it before it reads or writes,
           // so no receipt binds one and the delivery's one receipt stays free.
           if (inSignalSpace(request.id) || inRunnerSpace(request.id)) {
-            return yield* new SigningRefused({ why: "signal" });
+            return yield* new SigningRefused({ reason: "signal" });
           }
 
           const saved = yield* stored(() => {
@@ -144,16 +144,16 @@ export class SessionManager extends Context.Service<
           return yield* stored(() =>
             sql.transaction(() => {
               if (ended(process)) {
-                return Result.fail(new SigningRefused({ why: "ended" }));
+                return Result.fail(new SigningRefused({ reason: "ended" }));
               }
 
               const current = load(parent);
 
               if (current === null) {
-                return Result.fail(new SigningRefused({ why: "not_delivered" }));
+                return Result.fail(new SigningRefused({ reason: "not_delivered" }));
               }
 
-              const session = SavedInput.sign(current, process, policy.fact(kind));
+              const session = SavedInput.sign(current, process, policy.event(kind));
 
               if (Result.isFailure(session)) {
                 return session;
@@ -173,7 +173,7 @@ export class SessionManager extends Context.Service<
                   receipt.process === process &&
                   receipt.kind === kind
                   ? Result.succeed(decodeSession(receipt.session))
-                  : Result.fail(new SigningRefused({ why: "spent" }));
+                  : Result.fail(new SigningRefused({ reason: "spent" }));
               }
 
               sql.exec(
@@ -209,7 +209,7 @@ export class SessionManager extends Context.Service<
             });
 
             if (!exists) {
-              return yield* new SigningRefused({ why: "not_delivered" });
+              return yield* new SigningRefused({ reason: "not_delivered" });
             }
 
             return yield* signer(parent, process, kind).pipe(Effect.provideService(SignRequest, { id }));
@@ -220,7 +220,7 @@ export class SessionManager extends Context.Service<
                 ensure();
 
                 if (ended(input.process)) {
-                  return Result.fail(new SigningRefused({ why: "ended" }));
+                  return Result.fail(new SigningRefused({ reason: "ended" }));
                 }
 
                 const prior = load(input.id);
@@ -232,7 +232,7 @@ export class SessionManager extends Context.Service<
                 if (prior !== null) {
                   return JSON.stringify(prior.input) === JSON.stringify(saved.input)
                     ? Result.succeed(undefined)
-                    : Result.fail(new SigningRefused({ why: "not_delivered" }));
+                    : Result.fail(new SigningRefused({ reason: "not_delivered" }));
                 }
 
                 sql.exec("INSERT INTO door_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
@@ -250,13 +250,13 @@ export class SessionManager extends Context.Service<
                 ensure();
 
                 if (ended(process)) {
-                  return Result.fail(new SigningRefused({ why: "ended" }));
+                  return Result.fail(new SigningRefused({ reason: "ended" }));
                 }
 
                 const saved = load(parent);
 
                 if (saved === null || saved.input.process !== process) {
-                  return Result.fail(new SigningRefused({ why: "not_delivered" }));
+                  return Result.fail(new SigningRefused({ reason: "not_delivered" }));
                 }
 
                 sql.exec(

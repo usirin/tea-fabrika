@@ -17,7 +17,7 @@ import {
   BRAIN,
   brain,
   CODE,
-  facts,
+  events,
   first,
   from,
   ids,
@@ -26,7 +26,7 @@ import {
   type Storage,
   watcher,
 } from "./process.test-support.ts";
-import { Activity, Dead, Owner, ProcessFact, ProcessTable, Recipient, recoverActivity } from "./process.ts";
+import { Activity, Dead, Owner, ProcessEvent, ProcessTable, Recipient, recoverActivity } from "./process.ts";
 
 const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A) => Effect.Effect<void, E, R>) =>
   Effect.gen(function* () {
@@ -106,7 +106,7 @@ describe("P33, saved state and process authority", () => {
   it.effect("down replay retains the full state and refuses a missing or foreign child", () =>
     check(
       fc.record({
-        why: hash,
+        reason: hash,
         crashes: fc.integer({ min: 1, max: 32 }),
         until: fc.integer(),
         build: hash,
@@ -117,16 +117,16 @@ describe("P33, saved state and process authority", () => {
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(undefined, undefined, { ...CODE, hash: build }), from());
-          yield* processes.exit(A, policy.why, from());
+          yield* processes.exit(A, policy.reason, from());
           const table = new ProcessTable(store.rows(), BRAIN);
-          expect(() => table.down(B, policy.why, brain().owner), "missing child is a typed refusal").not.toThrow();
-          expect(table.down(B, policy.why, brain().owner)).toMatchObject({
+          expect(() => table.down(B, policy.reason, brain().owner), "missing child is a typed refusal").not.toThrow();
+          expect(table.down(B, policy.reason, brain().owner)).toMatchObject({
             _tag: "Failure",
-            failure: { why: "ended" },
+            failure: { reason: "ended" },
           });
-          expect(table.down(A, policy.why, watcher(W).owner)).toMatchObject({
+          expect(table.down(A, policy.reason, watcher(W).owner)).toMatchObject({
             _tag: "Failure",
-            failure: { why: "not_parent" },
+            failure: { reason: "not_parent" },
           });
           yield* processes.down(A, policy, from());
           store.reopen();
@@ -141,17 +141,17 @@ describe("P33, saved state and process authority", () => {
     ),
   );
   it.effect("exit retries ignore fresh caller metadata but refuse a different reason", () =>
-    check(fc.uniqueArray(hash, { minLength: 2, maxLength: 2 }), [], ([why, other]) => {
+    check(fc.uniqueArray(hash, { minLength: 2, maxLength: 2 }), [], ([reason, other]) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first(), from());
-        yield* processes.exit(A, why!, from());
+        yield* processes.exit(A, reason!, from());
         const before = store.rows();
-        const retried = yield* Effect.exit(processes.exit(A, why!, from({ parent: null, for: "retry-person" })));
+        const retried = yield* Effect.exit(processes.exit(A, reason!, from({ parent: null, for: "retry-person" })));
         expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe("Success");
         const changed = yield* Effect.result(processes.exit(A, other!, from()));
-        expect(changed).toMatchObject({ _tag: "Failure", failure: { why: "ended" } });
+        expect(changed).toMatchObject({ _tag: "Failure", failure: { reason: "ended" } });
         expect(store.rows()).toEqual(before);
       }).pipe(Effect.provide(manager(store)));
     }),
@@ -194,7 +194,7 @@ describe("p79, process identity", () => {
             ProcessManager.use((p) => p.start(first("start:other", "counter:2"), from())).pipe(
               Effect.provide(manager(store, brain(), ids(A).next)),
             ),
-          )).why,
+          )).reason,
         ).toBe("id_collision");
         expect(store.rows()).toEqual(before);
       });
@@ -220,7 +220,7 @@ describe("p79, process identity", () => {
             first("start:counter:1", name),
             first("start:counter:1", "counter:1", { ...CODE, hash: build }),
           ]) {
-            expect((yield* Effect.flip(processes.start(changed, from()))).why).toBe("id_reused");
+            expect((yield* Effect.flip(processes.start(changed, from()))).reason).toBe("id_reused");
           }
 
           expect(store.rows()).toEqual(before);
@@ -259,7 +259,7 @@ describe("p79, predecessors and live info", () => {
         const processes = yield* ProcessManager;
         yield* processes.start(first(undefined, undefined, { ...CODE, hash: build }), from());
         const before = store.rows();
-        expect((yield* Effect.flip(processes.start(again(A), from()))).why).toBe("alive");
+        expect((yield* Effect.flip(processes.start(again(A), from()))).reason).toBe("alive");
         expect(store.rows()).toEqual(before);
       }).pipe(Effect.provide(manager(store)));
     });
@@ -278,9 +278,9 @@ describe("p79, predecessors and live info", () => {
           const error = yield* Effect.flip(
             processes.start(again(A, "restart:other", { program, hash: "build-a" }), from()),
           );
-          expect(error.why).toBe("name_taken");
+          expect(error.reason).toBe("name_taken");
           expect(store.rows()).toEqual(before);
-          expect((yield* facts("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
+          expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
         }).pipe(Effect.provide(manager(store)));
       },
     );
@@ -307,8 +307,8 @@ describe("p79, predecessors and live info", () => {
           expect(live).toHaveLength(1);
           const current = live[0]!;
           yield* processes.exit(current.process, "crashed", from());
-          expect((yield* Effect.flip(processes.start(again(A, "restart:stale"), from()))).why).toBe("stale");
-          expect((yield* facts("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(1);
+          expect((yield* Effect.flip(processes.start(again(A, "restart:stale"), from()))).reason).toBe("stale");
+          expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(1);
         }).pipe(Effect.provide(manager(store)));
       },
     ),
@@ -328,13 +328,13 @@ describe("p79, predecessors and live info", () => {
           yield* processes.exit(B, "crashed", from());
           const x = yield* processes.start(again(B), from());
           expect(x.process).toBe(X);
-          const restarts = (yield* facts("counter:1")).filter((row) => row._tag === "restarted");
+          const restarts = (yield* events("counter:1")).filter((row) => row._tag === "restarted");
           expect(restarts.map((row) => row.body)).toEqual([
             {
               process: B,
               after: A,
               name: "counter:1",
-              why: "crashed",
+              reason: "crashed",
               build,
               asked: BRAIN,
             },
@@ -342,7 +342,7 @@ describe("p79, predecessors and live info", () => {
               process: X,
               after: B,
               name: "counter:1",
-              why: "crashed",
+              reason: "crashed",
               build: "build-a",
               asked: BRAIN,
             },
@@ -375,16 +375,16 @@ describe("p79, predecessors and live info", () => {
     }),
   );
   it.effect("plant, overwrite exit reason: the first exact reason is durable and written once", () =>
-    check(fc.string({ minLength: 1, maxLength: 256 }), ["shutdown:requested"], (why) => {
+    check(fc.string({ minLength: 1, maxLength: 256 }), ["shutdown:requested"], (reason) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first(), from());
-        yield* processes.exit(A, why, from());
-        yield* processes.exit(A, why, from());
+        yield* processes.exit(A, reason, from());
+        yield* processes.exit(A, reason, from());
         yield* Effect.exit(processes.exit(A, "crashed", from()));
-        const exits = (yield* facts("counter:1")).filter((row) => row._tag === "exited");
-        expect(exits.map((row) => row.body)).toEqual([{ process: A, why, asked: BRAIN }]);
+        const exits = (yield* events("counter:1")).filter((row) => row._tag === "exited");
+        expect(exits.map((row) => row.body)).toEqual([{ process: A, reason, asked: BRAIN }]);
         expect(yield* processes.info).toEqual([]);
       }).pipe(Effect.provide(manager(store)));
     }),
@@ -411,7 +411,7 @@ describe("p79, names, parents and replay", () => {
             ),
           );
           expect(error._tag).toBe("ProcessError");
-          expect(error.why).toBe("name_taken");
+          expect(error.reason).toBe("name_taken");
         }
 
         expect(store.rows()).toEqual(before);
@@ -433,19 +433,19 @@ describe("p79, names, parents and replay", () => {
             ProcessManager.use((p) => p.exit(A, "killed", from({ by }))).pipe(
               Effect.provide(manager(store, watcher(W))),
             ),
-          )).why,
+          )).reason,
         ).toBe("not_parent");
         expect(store.rows()).toEqual(before);
         yield* ProcessManager.use((p) => p.exit(A, "normal", from())).pipe(Effect.provide(manager(store)));
         expect(
           (yield* Effect.flip(
             ProcessManager.use((p) => p.start(again(A), from({ by }))).pipe(Effect.provide(manager(store, watcher(W)))),
-          )).why,
+          )).reason,
         ).toBe("not_parent");
       });
     });
   });
-  it.effect("plant, reject additive tags or keep authority only in memory: replay skips unknown facts", () =>
+  it.effect("plant, reject additive tags or keep authority only in memory: replay skips unknown events", () =>
     check(fc.jsonValue(), [{ v: 2 }], (body) => {
       const store = storage();
       return Effect.gen(function* () {
@@ -470,17 +470,17 @@ describe("p79, names, parents and replay", () => {
   );
 });
 
-// P33: the fold trusts a ProcessFact only from the brain's own writer, `from().by` here.
+// P33: the fold trusts a ProcessEvent only from the brain's own writer, `from().by` here.
 const OTHER = "SHA256:not-the-brain";
 const toW = Recipient.cases.process.make({ process: W });
 
 const forger = (store: Storage, by: string, streamForLife: string) => ({
-  forge: (stream: string, fact: { readonly _tag: string } & Schema.JsonObject) =>
+  forge: (stream: string, event: { readonly _tag: string } & Schema.JsonObject) =>
     Ledger.use((ledger) =>
       ledger.append(
         stream === "counter:1" ? streamForLife : stream,
-        `forged:${fact._tag}`,
-        lineFor(from({ by }), fact),
+        `forged:${event._tag}`,
+        lineFor(from({ by }), event),
       ),
     ).pipe(Effect.provide(manager(store))),
   live: (process: string) => ProcessManager.use((p) => p.isLive(process)).pipe(Effect.provide(manager(store))),
@@ -491,7 +491,7 @@ const lawsFor = (
   store: Storage,
   by: string,
   stream: string,
-): Record<keyof typeof ProcessFact.cases, Effect.Effect<void, unknown>> => {
+): Record<keyof typeof ProcessEvent.cases, Effect.Effect<void, unknown>> => {
   const { forge, live, downs } = forger(store, by, stream);
   return {
     registered: Effect.gen(function* () {
@@ -513,7 +513,7 @@ const lawsFor = (
       expect(yield* live(B)).toBe(false);
     }),
     exited: Effect.gen(function* () {
-      yield* forge("counter:1", { _tag: "exited", process: A, why: "crashed" });
+      yield* forge("counter:1", { _tag: "exited", process: A, reason: "crashed" });
       expect(yield* live(A)).toBe(true);
     }),
     restarted: Effect.gen(function* () {
@@ -522,14 +522,20 @@ const lawsFor = (
         process: A,
         after: B,
         name: "counter:1",
-        why: "crashed",
+        reason: "crashed",
         build: CODE.hash,
       });
       const info = yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(manager(store)));
       expect(info.find((row) => row.process === A)?.restarts).toBe(0);
     }),
     down: Effect.gen(function* () {
-      yield* forge("counter:1", { _tag: "down", process: A, why: "crashed", crashes: 1, until: 0 });
+      yield* forge("counter:1", {
+        _tag: "down",
+        process: A,
+        reason: "crashed",
+        crashes: 1,
+        until: 0,
+      });
       expect(yield* live(A)).toBe(true);
     }),
     monitored: Effect.gen(function* () {
@@ -541,16 +547,16 @@ const lawsFor = (
       yield* ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(
         Effect.provide(manager(store, watcher(W))),
       );
-      yield* forge("processes", { _tag: "demonitored", ref: "watch:1", to: toW, why: "canceled" });
+      yield* forge("processes", { _tag: "demonitored", ref: "watch:1", to: toW, reason: "canceled" });
       yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(Effect.provide(manager(store)));
       expect(downs()).toHaveLength(1);
     }),
   };
 };
 
-describe("P33, the process fold ignores facts not written by the brain", () => {
-  for (const tag of Object.keys(ProcessFact.cases) as Array<keyof typeof ProcessFact.cases>) {
-    it.effect(`the fold ignores a fact tagged ${tag} whose by is not the brain's writer`, () => {
+describe("P33, the process fold ignores events not written by the brain", () => {
+  for (const tag of Object.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
+    it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () => {
       return check(
         fc.tuple(
           fc.string({ minLength: 1 }).filter((by) => by !== BRAIN),
@@ -631,7 +637,7 @@ describe("P33, names and client ids are checked against a pattern", () => {
   }
 });
 
-describe("P33, the brain writes process facts and `parent` keeps who asked", () => {
+describe("P33, the brain writes process events and `parent` keeps who asked", () => {
   it.effect("a start by caller X is written as the brain's key, with a parent that leads to X", () =>
     check(fc.string({ minLength: 1 }), ["SHA256:caller-x"], (X_KEY) => {
       const store = storage();
@@ -645,7 +651,7 @@ describe("P33, the brain writes process facts and `parent` keeps who asked", () 
           ),
         );
         yield* ProcessManager.use((p) => p.start(first(), from({ by: X_KEY, parent: asked })));
-        const written = store.rows().filter((row) => Object.hasOwn(ProcessFact.cases, row._tag));
+        const written = store.rows().filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
         expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
 
         for (const row of written) {

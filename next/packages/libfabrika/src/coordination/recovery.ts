@@ -51,7 +51,7 @@ export type Failure = typeof Failure.Type;
 export const Recovery = Schema.TaggedUnion({
   live: { process: ProcessId },
   ending: { process: ProcessId, failure: Failure },
-  down: { process: ProcessId, why: Text, crashes: Count, until: Millis },
+  down: { process: ProcessId, reason: Text, crashes: Count, until: Millis },
   starting: { after: ProcessId, request: Start.cases.again },
 });
 
@@ -85,7 +85,7 @@ export const Receipt = Schema.Struct({
   digest: Schema.optionalKey(Text),
   errors: Schema.Array(Text),
   tries: Millis,
-  result: Schema.NullOr(Schema.TaggedStruct("refused", { why: Schema.Literal("dead") })),
+  result: Schema.NullOr(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") })),
   process: ProcessId,
 }).check(
   Schema.makeFilter((r) =>

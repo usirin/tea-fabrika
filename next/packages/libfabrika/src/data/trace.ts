@@ -64,11 +64,11 @@ export type SpanRow = typeof SpanRow.Type;
 /** One per failed span, in its record part. Only `deleteContent` changes it, and only once. */
 export const Content = Schema.TaggedUnion({
   kept: { spanId: Schema.String, message: Schema.String },
-  deleted: { spanId: Schema.String, by: Schema.String, at: Schema.Int, why: Schema.String },
+  deleted: { spanId: Schema.String, by: Schema.String, at: Schema.Int, reason: Schema.String },
 });
 export type Content = typeof Content.Type;
 
-/** The last fact of a full part: its number, its size then, and the next part's name. */
+/** The last event of a full part: its number, its size then, and the next part's name. */
 export const Rolled = Schema.TaggedStruct("rolled", {
   part: Schema.Int,
   next: Schema.String,
@@ -118,14 +118,14 @@ export const Archived = Schema.TaggedStruct("archived", {
 export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
   /** `unreachable`: a record or archive call that never answered. `bad_row`: an answer or a row
    *  that does not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
-  why: Schema.Literals(["unreachable", "bad_row", "storage"]),
+  reason: Schema.Literals(["unreachable", "bad_row", "storage"]),
   /** Spans in memory that met a full disk; 0 otherwise. */
   held: Schema.Int,
 }) {}
 
 /** A thrown error as a typed one: a row that does not decode is `bad_row`, the rest `storage`. */
 export const sinkError = (error: unknown): SinkError =>
-  new SinkError({ why: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0 });
+  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0 });
 
 /** The class of a thrown or failed value, for `error.type`. */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);

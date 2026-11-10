@@ -130,7 +130,7 @@ describe("p97, process calls", () => {
         yield* processes.exit(A, "crashed", from());
         yield* receive(W);
         yield* processes.demonitor(ref, from());
-        yield* processes.down(A, { why: "intensity", crashes: 3, until: 50_000 }, from());
+        yield* processes.down(A, { reason: "intensity", crashes: 3, until: 50_000 }, from());
         expect(trace.ended("process.start")).toHaveLength(3);
 
         for (const name of [
@@ -146,7 +146,7 @@ describe("p97, process calls", () => {
         }
 
         const refusal = trace.ended("process.start")[2]!;
-        expect([...refusal.attributes].find(([key]) => key.endsWith(".why"))?.[1]).toBe("id_reused");
+        expect([...refusal.attributes].find(([key]) => key.endsWith(".reason"))?.[1]).toBe("id_reused");
         expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
         expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1]).toBe(
           placed.rev,

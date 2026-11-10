@@ -1,6 +1,6 @@
 // P17a, next/. The real SQLite turn decides membership and the append together.
 // Plants: cached admission, check then append in another turn, duplicate before admission,
-// dropped corrupt known facts, and a missing refusal span. No replacement writer lives here.
+// dropped corrupt known events, and a missing refusal span. No replacement writer lives here.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +18,7 @@ import type { Sql } from "../data/referee.ts";
 import { SpanSink } from "../data/sink.ts";
 import { nodeSql } from "../data/sqlite.ts";
 import { ClientManager } from "./client-manager.ts";
-import { MemberFact } from "./members.ts";
+import { MemberEvent } from "./members.ts";
 
 let appendAdmitted: typeof import("./authorization.ts").appendAdmitted;
 
@@ -61,7 +61,7 @@ const from = {
 const signed = { text: "already checked by the door", armored: "test signature", signer: root };
 
 const revoke = (key: string, id: string) =>
-  MemberFact.cases.revoked.make({
+  MemberEvent.cases.revoked.make({
     revoke: {
       id,
       key,
@@ -74,7 +74,7 @@ const revoke = (key: string, id: string) =>
   });
 
 const grant = () =>
-  MemberFact.cases.granted.make({
+  MemberEvent.cases.granted.make({
     grant: {
       id: "other",
       key: other,
@@ -189,7 +189,7 @@ describe("P17a, appendAdmitted", () => {
                   expect(yield* appendAdmitted(old, write)).toEqual(placed);
                 }
 
-                // Unknown future facts stay readable. Put revoke past the first ledger page too.
+                // Unknown future events stay readable. Put revoke past the first ledger page too.
                 const future = Schema.TaggedStruct("future.member", { n: Schema.Int });
 
                 for (let n = 0; n < history; n++) {
@@ -336,7 +336,7 @@ describe("P17a, appendAdmitted", () => {
                 Effect.gen(function* () {
                   expect(
                     yield* Effect.flip(appendAdmitted(old, { stream: "notes", id: "bad-history", line: line(body) })),
-                  ).toMatchObject({ _tag: "LedgerError", why: "bad_row" });
+                  ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
                   expect(yield* read("notes")).toEqual([]);
                 }).pipe(Effect.provide(fresh.layer)),
               );

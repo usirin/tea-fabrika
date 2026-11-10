@@ -613,8 +613,8 @@ def fetch_box():
             try: a = json.loads(l)
             except (ValueError, UnicodeError): a = None
             if isinstance(a, dict) and a.get("_tag") in ("done", "stuck", "ask", "send", "skip"):
-                if a["_tag"] == "stuck" and a.get("why") == "stale_link" and a.get("step") not in lane_steps:
-                    waived += 1; print(json.dumps({**a, "_tag": "skip", "why": "stale_link_outside_lane"})); continue
+                if a["_tag"] == "stuck" and a.get("reason") == "stale_link" and a.get("step") not in lane_steps:
+                    waived += 1; print(json.dumps({**a, "_tag": "skip", "reason": "stale_link_outside_lane"})); continue
                 answers.append(a); print(json.dumps(a))
             else: unreadable += 1
         # The checker skips paths outside its scope; every run commit still needs a valid link.
@@ -622,8 +622,8 @@ def fetch_box():
             note = read_note(sha)
             if person(sha): continue
             if not isinstance(note, dict) or not isinstance(note.get("step"), str) or not verified(sha, note["step"]):
-                print(json.dumps({"_tag": "stuck", "why": "unlinked_commit", "commit": sha}))
-                answers.append({"_tag": "stuck", "why": "unlinked_commit", "commit": sha})
+                print(json.dumps({"_tag": "stuck", "reason": "unlinked_commit", "commit": sha}))
+                answers.append({"_tag": "stuck", "reason": "unlinked_commit", "commit": sha})
         if unreadable or not (answers or waived): refuse("commits check unreadable output")
         # The checker exits 1 for any stuck answer; when every stuck it gave was waived, that exit is
         # explained. Any other failing exit still refuses.
@@ -634,7 +634,7 @@ def fetch_box():
                 sha = a.get("sha") or a.get("commit") or ""
                 step = " step " + a["step"] if isinstance(a.get("step"), str) else ""
                 paths = " " + " ".join(map(str, a["paths"][:3])) if isinstance(a.get("paths"), list) and a["paths"] else ""
-                return str(a.get("why") or a["_tag"]) + (" " + str(sha)[:8] if sha else "") + step + paths
+                return str(a.get("reason") or a["_tag"]) + (" " + str(sha)[:8] if sha else "") + step + paths
             held = [said(a) for a in answers if a["_tag"] == "stuck"]
             refuse("commits check failed: " + ("; ".join(held[:5]) + (f"; and {len(held) - 5} more" if len(held) > 5 else "") if held else "exit " + str(checked.returncode)))
     return 0

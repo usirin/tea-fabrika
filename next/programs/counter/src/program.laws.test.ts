@@ -78,30 +78,44 @@ describe("P11 real counter laws", () => {
       { seed: SEED, numRuns: 100 },
     );
   });
-  it("plant, leave a declaration out: real program declares saved state, ports, view and fact policy", async () => {
-    const { counter } = await import("./program.ts");
-    const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-    expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
-      name: "counter",
-      state: { v: 1 },
-      writes: {},
-    });
-    const p = Effect.runSync(
-      Effect.gen(function* () {
-        return (yield* (yield* ProgramLoader).load("counter")).stepper;
-      }).pipe(Effect.provide(ProgramLoader.layer({ counter }, {}))),
-    );
-    const boot = p.init(null);
-    expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
+  it.effect.prop(
+    "plant, leave a declaration out: real program declares saved state, ports, view and event policy",
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [0, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const { counter } = await import("./program.ts");
+            const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+            expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
+              name: "counter",
+              state: { v: 1 },
+              writes: {},
+            });
+            const p = Effect.runSync(
+              Effect.gen(function* () {
+                return (yield* (yield* ProgramLoader).load("counter")).stepper;
+              }).pipe(Effect.provide(ProgramLoader.layer({ counter }, {}))),
+            );
+            const boot = p.init(null);
+            expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
 
-    for (const type of ["inc", "dec", "reset"] as const) {
-      expect(counter.refuse({ count: 0 }, { type })).toBeNull();
-    }
+            for (const type of ["inc", "dec", "reset"] as const) {
+              expect(counter.refuse({ count: value }, { type })).toBeNull();
+            }
 
-    expect(p.step({ count: 0 }, { type: "inc", value: "wrong" })).toMatchObject({
-      _tag: "stepped",
-      view: { count: 1 },
-    });
-    expect(p.step({ count: 0 }, { type: "unknown" })).toMatchObject({ _tag: "refused", why: "bad_msg" });
-  });
+            expect(p.step({ count: value }, { type: "inc", value: "wrong" })).toMatchObject({
+              _tag: "stepped",
+              view: { count: value + 1 },
+            });
+            expect(p.step({ count: value }, { type: "unknown" })).toMatchObject({
+              _tag: "refused",
+              reason: "bad_msg",
+            });
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });

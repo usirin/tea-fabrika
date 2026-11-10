@@ -680,9 +680,9 @@ describe("plancheck, today's tooling", () => {
             ),
             { nil: undefined },
           ),
-          why: fc.constantFrom("the fix", "edit package.json", "`vitest.config.ts` and allowed_signers"),
+          reason: fc.constantFrom("the fix", "edit package.json", "`vitest.config.ts` and allowed_signers"),
         }),
-        ({ picked, separators, owner, possessive, why }) => {
+        ({ picked, separators, owner, possessive, reason }) => {
           const words = picked.map(({ path, wrap }) => wraps[wrap](path));
 
           if (possessive) {
@@ -695,7 +695,7 @@ describe("plancheck, today's tooling", () => {
           const counted = picked.map((e) => e.path).filter((p) => exam.includes(p) && (!other || p.includes("/")));
           const wrong = owner !== "tests";
           const line = (p: string) => `${p} is an exam path owned by ${owner}, not tests`;
-          const ran = check(table(["File", "Why", "Owner step"], [[cell, why, owner]]));
+          const ran = check(table(["File", "Why", "Owner step"], [[cell, reason, owner]]));
           expect(ran.code, `${cell}\n${ran.text}`).toBe(wrong && counted.length > 0 ? 1 : 0);
 
           for (const { path } of picked) {
@@ -719,7 +719,7 @@ describe("plancheck, today's tooling", () => {
               separators: ["; ", "; ", "; ", "; "],
               owner: "build",
               possessive: undefined,
-              why: "the fix",
+              reason: "the fix",
             },
           ],
           // pinned: ticket 520 review round 2 of the build, an extensionless exam path in an "and"
@@ -733,7 +733,7 @@ describe("plancheck, today's tooling", () => {
               separators: [" and ", " and ", " and ", " and "],
               owner: "build",
               possessive: undefined,
-              why: "the fix",
+              reason: "the fix",
             },
           ],
           // pinned: ticket 520 review round 3, `Makefile and package.json` owned by build passed
@@ -747,7 +747,7 @@ describe("plancheck, today's tooling", () => {
               separators: [" and ", " and ", " and ", " and "],
               owner: "build",
               possessive: undefined,
-              why: "build",
+              reason: "build",
             },
           ],
           // pinned: ticket 520 review round 4, punctuation hid an exam path. `Makefile and
@@ -761,7 +761,7 @@ describe("plancheck, today's tooling", () => {
               separators: [" and ", " and ", " and ", " and "],
               owner: "build",
               possessive: undefined,
-              why: "the fix",
+              reason: "the fix",
             },
           ],
           // pinned: ticket 520 review round 4, any possessive triggered the other-package exception.
@@ -775,7 +775,7 @@ describe("plancheck, today's tooling", () => {
               separators: [" ", " ", " ", " "],
               owner: "build",
               possessive: { repo: true, name: "repository", at: 1 },
-              why: "the fix",
+              reason: "the fix",
             },
           ],
           // pinned: ticket 520 review round 5, a Markdown link hid an exam path. The build-owned
@@ -786,7 +786,7 @@ describe("plancheck, today's tooling", () => {
               separators: [" ", " ", " ", " "],
               owner: "build",
               possessive: undefined,
-              why: "the fix",
+              reason: "the fix",
             },
           ],
         ],

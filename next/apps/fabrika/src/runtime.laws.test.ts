@@ -361,7 +361,7 @@ describe("P12 Project authority", () => {
     expect(result).toMatchObject({ _tag: "Failure" });
     const failure = Option.getOrThrow(Exit.findErrorOption(result));
     expect(failure).toBeInstanceOf(SigningRefused);
-    expect(failure).toMatchObject({ why: "person_only" });
+    expect(failure).toMatchObject({ reason: "person_only" });
   });
   law("a program's declared person-only input authorizes its person-only event", async ({ letter, write }) => {
     const w = await world(),
@@ -387,7 +387,7 @@ describe("P12 Project authority", () => {
       const result = await w.run(w.p.inbox(pid, input));
       return result._tag === "placed"
         ? { _tag: "accepted", rev: result.rev, pos: result.pos }
-        : { _tag: "refused", why: result.why };
+        : { _tag: "refused", reason: result.reason };
     });
     const pending = w.send(pid, "inc", letter).then(
       (answer) => ({ answer }),
@@ -502,7 +502,7 @@ describe("P12 Project saved and wire readers", () => {
     expect(Cause.hasFails(cause)).toBe(true);
     expect(Cause.findErrorOption(cause)).toMatchObject({
       _tag: "Some",
-      value: { _tag: "LedgerError", why: "bad_row" },
+      value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
   it("saved stage settings fail through the Project runtime's typed error channel", async () => {
@@ -607,14 +607,14 @@ describe("P12 WebCrypto failures", () => {
               expect(result).toMatchObject({ _tag: "Failure" });
               expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
                 _tag: "LedgerError",
-                why: "crypto",
+                reason: "crypto",
               });
             } else {
               // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
               const bucket = { put } as unknown as R2Bucket;
               await expect(bucketCalls(bucket).put("health", body, "0".repeat(64))).rejects.toMatchObject({
                 _tag: "LedgerError",
-                why: "crypto",
+                reason: "crypto",
               });
               expect(put).not.toHaveBeenCalled();
             }

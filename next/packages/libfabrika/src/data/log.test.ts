@@ -8,7 +8,7 @@
 //   `body`, every key required. `Entry` is a line plus `id`, `stream`, `pos`, `rev` and `arrivedAt`.
 // - `Referee.append(stream, id, line: unknown)` decodes the line with excess keys refused. A missing
 //   key, a wrong type, an empty `by`, `for`, `build` or `_tag`, or a key `Line` does not have is
-//   `{_tag: "refused", why: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
+//   `{_tag: "refused", reason: "bad_line"}`; a bad `parent` is `bad_parent`, a bad trace is `bad_trace`.
 //   Either way nothing is written.
 // - P17a exports the checked `InputId` schema; saved parents still accept legacy text.
 import { mkdtempSync, rmSync } from "node:fs";
@@ -108,7 +108,7 @@ const without = (key: string): Record<string, unknown> =>
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 const ENTRY_KEYS = [...KEYS, "id", "stream", "pos", "rev", "arrivedAt"].sort();
 
-const refused = (why: string) => ({ _tag: "refused", why });
+const refused = (reason: string) => ({ _tag: "refused", reason });
 
 /** Hands each line to the referee in turn, then answers what each got and what the stream holds. */
 const handIn = (lines: ReadonlyArray<unknown>) =>

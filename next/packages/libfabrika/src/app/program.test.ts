@@ -4,8 +4,9 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
+import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./entry.ts";
-import { Input, Program, stepper } from "./program.ts";
+import { Input, Program, Refusal, stepper } from "./program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
@@ -42,7 +43,7 @@ const authoring = () => ({
   state: { v: 1, upgrades: [] },
   view: (s: Model) => ({ count: s.count }),
   refuse: (s: Model, m: typeof Msg.Type) =>
-    m.type === "add" && s.count + m.n > 10 ? { why: "limit", now: s.count, most: 10 } : null,
+    m.type === "add" && s.count + m.n > 10 ? { reason: "limit", now: s.count, most: 10 } : null,
   inputs: {},
   outputs: {},
   writes: {},
@@ -229,7 +230,7 @@ describe("Program.make authoring laws, next/", () => {
         fc.property(declarations, change, ({ fields }, broken) => {
           const raw: unknown = { ...fields, ...broken };
           const p = Reflect.apply(Program.make, Program, [raw]);
-          expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ why: "load" }));
+          expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ reason: "load" }));
         }),
         parameters,
       );
@@ -253,7 +254,7 @@ describe("Program.make authoring laws, next/", () => {
           view: (s) => ({ count: s.count }),
           refuse: () => null,
         });
-        expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ why: "load" }));
+        expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ reason: "load" }));
       }),
       parameters,
     );
@@ -382,60 +383,92 @@ describe("P11 program contract and p22 refusal", () => {
       expect(() => Schema.decodeUnknownSync(Program.schema)({ ...spec(), ...broken })).toThrow();
     }
   });
-  it("plant, let settled bypass program.msg: only fold accepts checked Cmd replies", async () => {
-    const p = load(spec());
-    const before = { count: 2, replies: 0 };
-    const ok = { type: "save_ok", cmd: save({ n: 3 }), value: 3, at: 42 };
-    const err = { type: "save_err", cmd: save({ n: 3 }), error: { _tag: "disk" }, at: 42 };
+  it.effect.prop(
+    "plant, let settled bypass program.msg: only fold accepts checked Cmd replies",
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [3, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const p = load(spec());
+            const before = { count: 2, replies: 0 };
+            const ok = { type: "save_ok", cmd: save({ n: value }), value, at: 42 };
+            const err = { type: "save_err", cmd: save({ n: value }), error: { _tag: "disk" }, at: 42 };
 
-    for (const reply of [ok, err]) {
-      expect(p.fold(before, reply)).toMatchObject({
-        _tag: "stepped",
-        model: { count: 2, replies: 1 },
-      });
-      expect(p.step(before, reply)).toEqual({ _tag: "refused", why: "bad_msg" });
-    }
+            for (const reply of [ok, err]) {
+              expect(p.fold(before, reply)).toMatchObject({
+                _tag: "stepped",
+                model: { count: 2, replies: 1 },
+              });
+              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+            }
 
-    for (const reply of [
-      { ...ok, cmd: { type: "other", n: 3 } },
-      { ...ok, at: "42" },
-      { ...ok, value: "3" },
-      { ...err, error: { _tag: 3 } },
-    ]) {
-      expect(p.step(before, reply)).toEqual({ _tag: "refused", why: "bad_msg" });
-      expect(() => p.fold(before, reply)).toThrowError(
-        expect.objectContaining({ _tag: "ProgramDown", why: "saved_letter" }),
-      );
-    }
-  });
-  it("a Cmd with an async result schema cannot settle before validation finishes", async () => {
-    const asyncSave = {
-      ...save,
-      schema: {
-        ...save.schema,
-        ok: { "~standard": { validate: (value: unknown) => Promise.resolve({ value }) } },
-      },
-    };
-    const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
-    const p = load(broken);
-    expect(p.step({ count: 0, replies: 0 }, { type: "save_ok", cmd: save({ n: 1 }), value: 1, at: 42 })).toEqual({
-      _tag: "refused",
-      why: "bad_msg",
-    });
-  });
-  it("a saved-state failure conforms to its error schema", async () => {
-    const { ProgramDown } = await import("./program.ts");
-    let error: unknown;
+            for (const reply of [
+              { ...ok, cmd: { type: "other", n: value } },
+              { ...ok, at: "42" },
+              { ...ok, value: "3" },
+              { ...err, error: { _tag: 3 } },
+            ]) {
+              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+              expect(() => p.fold(before, reply)).toThrowError(
+                expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
+              );
+            }
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "a Cmd with an async result schema cannot settle before validation finishes",
+    { generated: Schema.Int },
+    ({ generated }) =>
+      Effect.forEach(
+        [1, generated],
+        (value) =>
+          Effect.promise(async () => {
+            const asyncSave = {
+              ...save,
+              schema: {
+                ...save.schema,
+                ok: { "~standard": { validate: (value: unknown) => Promise.resolve({ value }) } },
+              },
+            };
+            const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
+            const p = load(broken);
+            expect(
+              p.step({ count: 0, replies: 0 }, { type: "save_ok", cmd: save({ n: value }), value, at: 42 }),
+            ).toEqual({ _tag: "refused", reason: "bad_msg" });
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
+  it.effect.prop(
+    "a saved-state failure conforms to its error schema",
+    { generated: Schema.String },
+    ({ generated }) =>
+      Effect.forEach(
+        ["bad", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const { ProgramDown } = await import("./program.ts");
+            let error: unknown;
 
-    try {
-      load(spec()).init({ count: "bad", replies: 0 });
-    } catch (thrown) {
-      error = thrown;
-    }
+            try {
+              load(spec()).init({ count: value, replies: 0 });
+            } catch (thrown) {
+              error = thrown;
+            }
 
-    expect(error).toMatchObject({ _tag: "ProgramDown", why: "saved_state" });
-    expect(Schema.is(ProgramDown)(error)).toBe(true);
-  });
+            expect(error).toMatchObject({ _tag: "ProgramDown", reason: "saved_state" });
+            expect(Schema.is(ProgramDown)(error)).toBe(true);
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
   it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
     const { Program } = await import("./program.ts");
     const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
@@ -453,18 +486,40 @@ describe("P11 program contract and p22 refusal", () => {
       cmds: [save({ n: 3 })],
     });
   });
-  it("plant, collapse refusals: bad_msg differs from the program's limit fields", async () => {
-    const p = load(spec());
-    const before = { count: 7, replies: 0 };
-    expect(p.step(before, { type: "add", n: "3" })).toEqual({ _tag: "refused", why: "bad_msg" });
-    expect(p.step(before, { type: "add", n: 4 })).toEqual({
-      _tag: "refused",
-      why: "limit",
-      now: 7,
-      most: 10,
-    });
-    expect(before).toEqual({ count: 7, replies: 0 });
-  });
+  it.effect.prop(
+    "plant, collapse refusals: bad_msg differs from the program's limit fields",
+    { generated: Refusal },
+    ({ generated }) =>
+      Effect.forEach(
+        [{ reason: "" }, { reason: "limit", now: 7, most: 10 }, generated],
+        (refusal) =>
+          Effect.promise(async () => {
+            const p = load(spec());
+            const before = { count: 7, replies: 0 };
+            expect(p.step(before, { type: "add", n: "3" })).toEqual({
+              _tag: "refused",
+              reason: "bad_msg",
+            });
+            expect(p.step(before, { type: "add", n: 4 })).toEqual({
+              _tag: "refused",
+              reason: "limit",
+              now: 7,
+              most: 10,
+            });
+            expect(before).toEqual({ count: 7, replies: 0 });
+
+            // Review 2: an empty reason is legal and must survive the real stepper too.
+            const checked = load({ ...spec(), refuse: () => refusal });
+            expect(checked.step(before, { type: "add", n: 4 })).toEqual({
+              _tag: "refused",
+              ...refusal,
+            });
+            expect(before).toEqual({ count: 7, replies: 0 });
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
   it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", async () => {
     const p = load(spec());
     expect(p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 })).toMatchObject({
@@ -473,39 +528,72 @@ describe("P11 program contract and p22 refusal", () => {
       cmds: [save({ n: 4 })],
     });
   });
-  it("p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class", async () => {
-    expect(() => load(spec()).step({ count: 0, replies: 0 }, { type: "throw" })).toThrowError(
-      expect.objectContaining({ _tag: "ProgramDown", why: "step" }),
-    );
-  });
+  it.effect.prop(
+    "p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class",
+    { generated: Model },
+    ({ generated }) =>
+      Effect.forEach(
+        [{ count: 0, replies: 0 }, generated],
+        (value) =>
+          Effect.promise(async () => {
+            expect(() => load(spec()).step(value, { type: "throw" })).toThrowError(
+              expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 
   for (const part of ["model", "view", "cmd"] as const) {
-    it(`p25 plant, trust the returned ${part}: a malformed pure result is ProgramDown`, async () => {
-      const broken: unknown = {
-        ...spec(),
-        machine: {
-          ...machine,
-          update: {
-            ...machine.update,
-            add: () =>
-              part === "model"
-                ? [{ count: "bad", replies: 0 }, []]
-                : [{ count: 1, replies: 0 }, part === "cmd" ? [{ type: "save", n: "bad" }] : []],
-          },
-        },
-        view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
-      };
-      expect(() => load(broken).step({ count: 0, replies: 0 }, { type: "add", n: 1 })).toThrowError(
-        expect.objectContaining({ _tag: "ProgramDown", why: "step" }),
-      );
-    });
+    it.effect.prop(
+      `p25 plant, trust the returned ${part}: a malformed pure result is ProgramDown`,
+      { generated: Model.check(Schema.makeFilter((model) => model.count < 10)) },
+      ({ generated }) =>
+        Effect.forEach(
+          [{ count: 0, replies: 0 }, generated],
+          (value) =>
+            Effect.promise(async () => {
+              const broken: unknown = {
+                ...spec(),
+                machine: {
+                  ...machine,
+                  update: {
+                    ...machine.update,
+                    add: () =>
+                      part === "model"
+                        ? [{ count: "bad", replies: 0 }, []]
+                        : [{ count: 1, replies: 0 }, part === "cmd" ? [{ type: "save", n: "bad" }] : []],
+                  },
+                },
+                view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
+              };
+              expect(() => load(broken).step(value, { type: "add", n: 1 })).toThrowError(
+                expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
+              );
+            }),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary: { seed: 119120, runs: 12 } },
+    );
   }
 
-  it("plant, treat a saved poison letter as fresh bad_msg: folding fails closed", async () => {
-    expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: null })).toThrowError(
-      expect.objectContaining({ _tag: "ProgramDown", why: "saved_letter" }),
-    );
-  });
+  it.effect.prop(
+    "plant, treat a saved poison letter as fresh bad_msg: folding fails closed",
+    { generated: Schema.NullOr(Schema.String) },
+    ({ generated }) =>
+      Effect.forEach(
+        [null, generated],
+        (value) =>
+          Effect.promise(async () => {
+            expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: value })).toThrowError(
+              expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
+            );
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
   it("plant, give read ports write fields: read and write declarations are exclusive", async () => {
     const { Input } = await import("./program.ts");
     const decode = Schema.decodeUnknownSync(Input);
@@ -532,15 +620,26 @@ describe("P11 program contract and p22 refusal", () => {
       }),
     ).toThrow();
   });
-  it("plant, synthesize a parent: Write requires caused.parent or explicit own", async () => {
-    const { Write } = await import("./program.ts");
-    const decode = Schema.decodeUnknownSync(Write);
-    expect(decode({ _tag: "own", fact: { _tag: "polled", changed: false } })).toMatchObject({
-      _tag: "own",
-    });
-    expect(() => decode({ _tag: "caused", fact: { _tag: "saved" } })).toThrow();
-    expect(() => decode({ _tag: "caused", parent: "forged", fact: { _tag: "saved" } })).toThrow();
-  });
+  it.effect.prop(
+    "plant, synthesize a parent: Write requires caused.parent or explicit own",
+    { generated: Schema.String.check(Schema.makeFilter((s) => !Schema.is(ParentText)(s))) },
+    ({ generated }) =>
+      Effect.forEach(
+        ["forged", generated],
+        (value) =>
+          Effect.promise(async () => {
+            const { Write } = await import("./program.ts");
+            const decode = Schema.decodeUnknownSync(Write);
+            expect(decode({ _tag: "own", event: { _tag: "polled", changed: false } })).toMatchObject({
+              _tag: "own",
+            });
+            expect(() => decode({ _tag: "caused", event: { _tag: "saved" } })).toThrow();
+            expect(() => decode({ _tag: "caused", parent: value, event: { _tag: "saved" } })).toThrow();
+          }),
+        { concurrency: 1, discard: true },
+      ),
+    { arbitrary: { seed: 119120, runs: 12 } },
+  );
 });
 
 describe("P34 a program sets its own maxDeliveries, next/", () => {
