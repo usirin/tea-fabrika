@@ -225,6 +225,12 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Read the installed version.** Agents know older libraries. Before you write or judge
   code against one, read the lockfile's version and that version's docs. A lint rule that
   fires a lot means ask why before you call it a false alarm.
+  Before you write Effect code, read `node_modules/effect/AGENTS.md` in full. It ships inside the
+  installed package (`effect` 4.1.2 today, 433 lines), so it always matches the lockfile. Where
+  it and a decision here differ, the decision wins
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Effect's
+  maintainer briefs agents the same way
+  ([tim-smart/clanka's AGENTS.md](https://github.com/tim-smart/clanka/blob/master/AGENTS.md)).
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
@@ -350,6 +356,24 @@ patched in by the same command), so an Effect made and dropped fails it. `pnpm l
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
 Exact npm versions only, never a range: `pnpm lint` fails on one ([exact versions](./docs/direction/pin-exact-versions.md)).
+
+Run the narrowest check that still covers the change, as Effect's own repo asks of its agents
+([Effect-TS/effect-smol's AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md), "Validation").
+This table adds no rule: each row is a rule stated on this page, and `pnpm format` comes first in
+every row.
+
+| What changed | What to run here |
+|---|---|
+| Only Markdown that no program or skill reads, or `field/*.jsonl` rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
+| A skill script, or Markdown that a program or skill reads | as code, below |
+| Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
+| A dependency's version | as code; `pnpm lint` fails on a range |
+| A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
+| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
+| A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
+
+A report says which of these ran, and which could not run and why.
 
 `pnpm lint` fails on an export nobody uses that `unreachable-ledger.json` does
 not name yet (`pnpm lint:dead` runs that part alone). With code-graph 0.12.0,
