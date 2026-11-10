@@ -954,6 +954,42 @@ describe("planted breaks in the room folders", () => {
     expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
     expect(run.status).toBe(0);
   });
+
+  // scenario: the patched code-graph reads a subpath the package's `exports` map lacks as unresolved
+  // (demlik issue 915), since Node refuses such a subpath (`ERR_PACKAGE_PATH_NOT_EXPORTED`) and the
+  // tool's own kind for an import it cannot place is `unresolved`. Package `a` exports `.` as
+  // `src/index.ts` and `./low` as `src/low.ts`, and no `./missing`. `b` sits below `index.ts` and
+  // imports `"a/missing"`; `c` sits above it and imports `"a"`, the bare name. The patched tool reads
+  // the first as unresolved, no edge and no UP, and the second as `index.ts`, one downward edge.
+  // Plant: drop the bare-name check, so every miss falls back to the package's entry. `a/missing`
+  // then lands on `index.ts`, `b` reads as importing a higher row, and the tool reports 1 UP and
+  // exits 1.
+  it("scenario: an unexported subpath of a package is unresolved, not the package's entry file", () => {
+    const root = plant({
+      "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
+      "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
+      "pkgs/a/package.json": { name: "a", exports: { ".": "./src/index.ts", "./low": "./src/low.ts" } },
+      "pkgs/a/src/index.ts": "export const root = 1;\n",
+      "pkgs/a/src/low.ts": "export const low = 1;\n",
+      "pkgs/b/package.json": { name: "b" },
+      "pkgs/b/src/b.ts": 'import { missing } from "a/missing";\nexport const b = missing;\n',
+      "pkgs/c/package.json": { name: "c" },
+      "pkgs/c/src/c.ts": 'import { root } from "a";\nexport const c = root;\n',
+      "rules.json": {
+        layers: [
+          { name: "top", paths: ["pkgs/c"] },
+          { name: "mid", paths: ["pkgs/a/src/index.ts"] },
+          { name: "bottom", paths: ["pkgs/b"] },
+        ],
+      },
+    });
+    const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
+    const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
+    expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
+    expect(run.stdout).toContain("1 unresolved");
+    expect(run.stdout).toContain("pkgs/b/src/b.ts:1 a/missing");
+    expect(run.status).toBe(0);
+  });
 });
 
 // Ticket 477, kind 2: the floors. The rule file gives each room a `floor`, and the patched code-graph

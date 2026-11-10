@@ -38,7 +38,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
  function createTargetResolver(repoRoot) {
    const packages = workspacePackages(repoRoot, discoverPackageRoots(repoRoot));
    const nearest = createNearestTsconfigResolver();
-@@ -752,7 +781,13 @@ function createTargetResolver(repoRoot) {
+@@ -752,7 +781,17 @@ function createTargetResolver(repoRoot) {
    return (fromFile, specifier) => {
      if (specifier.startsWith(".")) return resolveRelative(repoRoot, fromFile, specifier);
      const pkg = matchPackage(specifier, packages);
@@ -47,13 +47,17 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
 +    // Patched (kamp-us/demlik#915, https://github.com/kamp-us/demlik/issues/915): a workspace
 +    // package's specifier resolves through its own `exports` map, subpath by subpath, so
 +    // `@scope/pkg/door` is the file `./door` names and not the package's one entry file.
-+    // `pkg.entry` stays the answer only when no key matches.
++    // An unmatched subpath is `unresolved`, the tool's own kind for an import it cannot place, as
++    // Node refuses a subpath the map does not export (`ERR_PACKAGE_PATH_NOT_EXPORTED`); falling back
++    // to `pkg.entry` is issue 915's bug again. `pkg.entry` stays the answer only for the bare package
++    // name.
 +    const file = exportedFile(repoRoot, pkg, specifier);
-+    return file === null ? { kind: "package", pkg } : { kind: "file", file };
++    if (file !== null) return { kind: "file", file };
++    return specifier === pkg.name ? { kind: "package", pkg } : { kind: "unresolved", specifier };
    };
  }
  
-@@ -2124,7 +2159,10 @@ var LayerSchema = z9.object({
+@@ -2124,7 +2163,10 @@ var LayerSchema = z9.object({
    name: z9.string().min(1),
    paths: z9.array(z9.string().min(1)).min(1),
    // Absent: anything below may be imported. Present: only these, so `[]` leaves only the layer itself.
@@ -65,7 +69,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
  }).strict();
  function importsIssue(layers) {
    const ranks = new Map(layers.map((layer, rank) => [layer.name, rank]));
-@@ -6501,7 +6539,15 @@ function discoverInFile2(unit) {
+@@ -6501,7 +6543,15 @@ function discoverInFile2(unit) {
    const { syntax, file } = unit;
    const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
    if (found.length === 0) return [];
@@ -82,7 +86,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    const locals = localExportNames(syntax);
    const isTest = isTestFile(file);
    return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({
-@@ -11035,7 +11081,24 @@ function compile(layer, pattern) {
+@@ -11035,7 +11085,24 @@ function compile(layer, pattern) {
  }
  function compileMatchers(layers) {
    const matchers = [];
@@ -108,7 +112,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
      const imports = layer.imports === void 0 ? null : new Set(layer.imports);
      for (const pattern of layer.paths) {
        matchers.push(compile({ name: layer.name, rank, imports }, pattern));
-@@ -11052,7 +11115,7 @@ function layerOf(repoRelPath, matchers) {
+@@ -11052,7 +11119,7 @@ function layerOf(repoRelPath, matchers) {
    if (winner === void 0) return null;
    for (const rival of matchers.slice(at + 1)) {
      if (compareSpecificity(winner.specificity, rival.specificity) !== 0) break;
@@ -117,7 +121,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
        throw new LayerTieError(repoRelPath, [winner.pattern, rival.pattern]);
      }
    }
-@@ -11065,6 +11128,7 @@ function directionOf(from, to) {
+@@ -11065,6 +11132,7 @@ function directionOf(from, to) {
  }
  function ruleBroken(from, to) {
    if (from.rank > to.rank) return "upward";
@@ -125,7 +129,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
    return "outside-imports";
  }
-@@ -11143,7 +11207,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+@@ -11143,7 +11211,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
    }
    return {
      layers: rules.layers.map((l) => l.name),
