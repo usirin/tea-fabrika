@@ -142,6 +142,12 @@ patchedDependencies:
   # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
   # drop at the release that has the fix.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
+  # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
+  # reports a late event for a folder made just before the watch began, so a Mac replaced the
+  # brain's workerd soon after a start, and after the three-replacement brake too. The patch
+  # passes on only a bundle whose hash differs. Drop this when Alchemy compares the bundle
+  # before it serves again (https://github.com/alchemy-run/alchemy/issues/3214).
+  '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
