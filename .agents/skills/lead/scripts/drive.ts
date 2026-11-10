@@ -956,6 +956,7 @@ export const claudeProfile = (home: string, boxes: string, box: string, step: St
 
 const claudeArgs = (env: Env, ask: Ask) => {
 	const home = homedir();
+	const work = join(env.BOXES, ask.box);
 	const profile = claudeProfile(home, env.BOXES, ask.box, ask.step);
 	const sb = join(env.BOXES, `${ask.box}.sb`);
 	writeFileSync(sb, profile);
