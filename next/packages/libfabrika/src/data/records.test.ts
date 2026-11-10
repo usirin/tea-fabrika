@@ -16,7 +16,7 @@
 //   `{_tag: "deleted", spanId, by, at, reason}`; `at` is the Clock's ms. `deleteContent` looks in every
 //   part, and a second delete changes nothing. Nothing but content is ever deleted.
 // - A part's tables in `RecordManager.sql`: `spans`, `content` and `rolled` (at most one row).
-// - `RecordManager.remote(stub)` asks `stub(name)` for the part's object; a call that rejects is
+// - `RecordManager.remote(stub)` asks `stub(name)` for the part's object; a call that fails is
 //   `unreachable`, an answer that does not decode `bad_row`. Its calls' names are the builder's, so
 //   the stub here answers any method.
 import { mkdtempSync, rmSync } from "node:fs";
@@ -474,7 +474,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
 
 describe("RecordManager.remote, the record object's stub", () => {
   /** A stub that answers any method the builder names; `then` stays undefined so it is no thenable. */
-  const stub = (answer: () => Promise<unknown>) => {
+  const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
     const make = (name: string): RecordCalls =>
       new Proxy(
@@ -493,7 +493,7 @@ describe("RecordManager.remote, the record object's stub", () => {
   };
 
   it.effect("each call goes to the part's own object, by its name", () => {
-    const { make, calls } = stub(() => Promise.resolve({ _tag: "written" }));
+    const { make, calls } = stub(() => Effect.succeed({ _tag: "written" }));
     return Effect.gen(function* () {
       const records = yield* RecordManager;
       expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual({ _tag: "written" });
@@ -510,8 +510,8 @@ describe("RecordManager.remote, the record object's stub", () => {
         [new Error("object went away"), generated],
         (value) =>
           Effect.gen(function* () {
-            const gone = stub(() => Promise.reject(value));
-            const odd = stub(() => Promise.resolve({ weird: 1 }));
+            const gone = stub(() => Effect.fail(value));
+            const odd = stub(() => Effect.succeed({ weird: 1 }));
             const unreachable = yield* Effect.flip(
               RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
                 Effect.provide(RecordManager.remote(gone.make)),
@@ -543,7 +543,7 @@ describe("RecordManager.remote, the record object's stub", () => {
           Effect.gen(function* () {
             const event = value;
             const page = (events: ReadonlyArray<unknown>) =>
-              stub(() => Promise.resolve({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
+              stub(() => Effect.succeed({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
             const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
             expect(good.map((r) => r.events)).toEqual([[event]]);
 
