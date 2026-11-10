@@ -151,6 +151,101 @@ describe("fabrika/program-package-layout", () => {
 			runs,
 		);
 	});
+	// Review 1 of P16b: the rule knew Worker entries and windows only by a fixed list of names.
+	const segment = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+	const key = fc
+		.array(segment, {minLength: 1, maxLength: 2})
+		.map((parts) => `./${parts.join("/")}`)
+		// Keep libfabrika's own entry names out, so only what an export loads can catch it.
+		.filter(
+			(key) => key !== "./window" && !/\/(?:worker|workers|workerd|box|brain)(?:\/|$)/.test(key),
+		);
+	const path = fc
+		.array(segment, {minLength: 1, maxLength: 2})
+		.map((parts) => `src/${parts.join("/")}`)
+		.filter((path) => path !== "src/program");
+	const three = (values: fc.Arbitrary<string>) =>
+		fc
+			.uniqueArray(values, {minLength: 3, maxLength: 3})
+			.map((all): [string, string, string] => [all[0] ?? "", all[1] ?? "", all[2] ?? ""]);
+	const shapes = [
+		(c: string) =>
+			`import {WorkerEntrypoint} from "cloudflare:workers"; export class ${c} extends WorkerEntrypoint {}`,
+		(c: string) => `export class ${c} extends DurableObject {}`,
+		(c: string) => `export const ${c} = class extends WorkflowEntrypoint {};`,
+		(c: string) => `class ${c} extends cloudflare.DurableObject {} export {${c}};`,
+		(c: string) => `export default {fetch() { return new Response("${c}"); }};`,
+		(c: string) => `export const ${c} = 1; export * from "@kampus/libfabrika/box";`,
+		(c: string) => `export const ${c} = () => import("workerd");`,
+		(c: string) => `import "miniflare"; export const ${c} = 1;`,
+	];
+	it("plants: a Worker entry or a window behind any other export key is refused, by what it loads", () => {
+		fc.assert(
+			fc.property(
+				name,
+				three(key),
+				three(path),
+				fc.stringMatching(/^[A-Z][A-Za-z0-9]{0,7}$/),
+				fc.nat({max: shapes.length - 1}),
+				fc.boolean(),
+				(
+					name,
+					[workerKey, windowKey, helperKey],
+					[workerPath, windowPath, helperPath],
+					c,
+					shape,
+					deep,
+				) => {
+					const workerMessage = `A program package has no Worker entry. libfabrika builds its box; '${workerKey}' is one.`,
+						windowMessage = `The window is exported at './window', never at '${windowKey}'.`,
+						unexported =
+							"Export the real window at './window'. A program without a window needs no stub.",
+						worker = `./${workerPath}.ts`,
+						view = `./${windowPath}.tsx`,
+						files: Record<string, string> = {
+							"src/program.ts": "export const program = 1;",
+							[`${helperPath}.ts`]: "export const helper = 1;",
+							[`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
+							// The Worker code sits in the exported file or in a local file it loads.
+							...(deep
+								? {
+										[`${workerPath}.ts`]: `export * from "./${workerPath.split("/").at(-1)}.impl.ts";`,
+										[`${workerPath}.impl.ts`]: shapes[shape]!(c),
+									}
+								: {[`${workerPath}.ts`]: shapes[shape]!(c)}),
+						},
+						base = {".": "./src/program.ts", "./window": view, [helperKey]: `./${helperPath}.ts`},
+						messages = (exports: unknown) => run(name, exports, files).map((d) => d.message);
+					// A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
+					expect(messages(base)).toEqual([]);
+					expect(messages({...base, [workerKey]: worker})).toEqual([workerMessage]);
+					const {"./window": _, ...moved} = base;
+					expect(messages({...moved, [windowKey]: view})).toEqual([windowMessage]);
+					// A window file nobody exports, at any path, still needs './window'.
+					expect(messages(moved)).toEqual([unexported]);
+					// The review's package: a Worker entry and the window both behind other keys.
+					expect(messages({...moved, [workerKey]: worker, [windowKey]: view}).sort()).toEqual(
+						[workerMessage, windowMessage].sort(),
+					);
+				},
+			),
+			{
+				...runs,
+				// Review 1 of P16b: "./server" loading a WorkerEntrypoint class and "./ui" loading a
+				// .tsx gave no finding, while the same package with "./worker" did.
+				examples: [
+					[
+						"program0",
+						["./server", "./ui", "./lib"],
+						["src/server", "src/ui", "src/lib"],
+						"Server",
+						0,
+						false,
+					],
+				],
+			},
+		);
+	});
 	it("plants: Worker runtime imports, re-exports and dynamic imports in the pure graph are refused", () => {
 		fc.assert(
 			fc.property(
