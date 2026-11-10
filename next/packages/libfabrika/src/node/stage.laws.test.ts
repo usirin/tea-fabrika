@@ -1,15 +1,16 @@
 // P12, next/. Real stage, durable outbox and recording; only platform calls are supplied.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Context, Effect, Exit, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import type { BrainEvent } from "../app/brain-event.ts";
+import { parseKeys } from "../app/keybindings.ts";
 import { ProcessIdGenerator } from "../coordination/process-id.ts";
 import { brainOutbox } from "./local-stage.ts";
 import { rssLayer } from "./stage.fixture.ts";
@@ -303,4 +304,76 @@ it("every observed exit is durable once across restart or brake, with its reason
       ],
     },
   );
+});
+
+// scenario: the real stage, the real file system and its watcher, only the control's fetch supplied.
+// P14's "Layout and key tables": a stage given the commands reads the person's `keybindings.toml`
+// under its home and hands the checked table to the brain through the trusted `settings` call,
+// read by `stage:<name>` from the file. Mutation (seed 119120) found no Node law for this handoff.
+it("a stage given key commands hands the checked key file to the brain's settings call", async () => {
+  const home = mkdtempSync(join(tmpdir(), "p14-keys-"));
+  const commands = ["counter.inc", "counter.dec", "counter.reset"];
+  const file = `[keys]\n"counter.inc" = ["a"]\n"counter.reset" = []\n`;
+  writeFileSync(join(home, "keybindings.toml"), file);
+  vi.stubEnv("FABRIKA_HOME", home);
+  type Call = { target: string; project: string; name: string; method: string; args: unknown[] };
+  const calls: Call[] = [];
+  const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+    const call = JSON.parse(String(options?.body)) as Call;
+    calls.push(call);
+    return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
+  });
+
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* startStage({ name: "keys-test", port: 18787, build: "test", home, keys: { commands } }, (local) =>
+            Effect.suspend(() => {
+              const plugin = [...local.mapUnsafe.values()].find(
+                (value) => typeof value === "object" && value !== null && "sockets" in value,
+              ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
+              Context.get(local, RuntimeLifecycle)({ type: "start", worker: "keys-test", pid: 27011 });
+              return plugin.start({ "fabrika-control": 27012 });
+            }),
+          );
+
+          // The publish is a real fetch outside any supplied clock; this bounds the wait.
+          for (let i = 0; i < 200 && !calls.some((call) => call.method === "settings"); i++) {
+            yield* Effect.sleep("10 millis");
+          }
+        }),
+      ).pipe(
+        Effect.provide(ProcessIdGenerator.layer),
+        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide(rssLayer(() => 0)),
+        Effect.provide(NodeServices.layer),
+      ),
+    );
+    const settings = calls.filter((call) => call.method === "settings");
+    expect(settings.length, "the key file reaches the brain").toBeGreaterThan(0);
+    const rows = parseKeys(file, commands);
+    expect(Result.isSuccess(rows)).toBe(true);
+
+    for (const call of settings) {
+      expect({ target: call.target, project: call.project, name: call.name }).toEqual({
+        target: "project",
+        project: "keys-test",
+        name: "",
+      });
+      expect(call.args).toHaveLength(1);
+      expect(call.args[0]).toMatchObject({
+        source: "file",
+        reader: "stage:keys-test",
+        rows: Result.isSuccess(rows) ? rows.success : null,
+      });
+      expect((call.args[0] as { id: string }).id).toMatch(/^keys-/);
+    }
+  } finally {
+    fetch.mockRestore();
+    kill.mockRestore();
+    vi.unstubAllEnvs();
+    rmSync(home, { recursive: true, force: true });
+  }
 });
