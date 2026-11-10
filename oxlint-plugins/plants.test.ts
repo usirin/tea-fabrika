@@ -319,6 +319,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-ledger-sql",
       "no-node-filesystem",
       "no-node-imports",
+      // libfabrika's rooms are planted at their real paths in rooms.test.ts.
+      "rooms",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.

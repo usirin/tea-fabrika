@@ -72,6 +72,8 @@ type Setup = {
   /** Head branches of the open PRs the fake gh lists; `gh: "down"` makes it fail. */
   openPrs?: string[];
   gh?: "down";
+  /** A ref the fake git deletes just before the first `rev-list`, as a lead's `git branch -D` mid-scan. */
+  dropOnWalk?: string;
 };
 
 const body = (
@@ -107,6 +109,9 @@ if (cmd === "nice") finish(run(args[2],args.slice(3)));
 if (cmd === "git") {
   let cwd=process.cwd();
   for(let i=0;i<args.length;i++) if(args[i]==="-C") cwd=path.resolve(cwd,args[++i]);
+  if(setup.dropOnWalk && args.includes("rev-list") && !fs.existsSync(path.join(dir,"dropped"))) {
+    fs.writeFileSync(path.join(dir,"dropped"),""); run("/usr/bin/git",["-C",cwd,"update-ref","-d",setup.dropOnWalk]);
+  }
   if(process.env.T321_FETCH==="1" && cwd===path.join(dir,"boxes/one")) {
     console.error("fixture refuses Git inside the box during fetch"); process.exit(98);
   }
@@ -953,6 +958,32 @@ describe("T321 K2 box start, today's tooling", () => {
       options,
     );
   }, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
+
+  // Plant: walk each branch by its name again after listing it (box.sh before ticket 567). A branch
+  // deleted during the scan then fails the start as "stuck base commit walk failed" with no reason,
+  // as layout-tests3 and layout-tests6 did on 2026-11-10.
+  it("K2 scenario: a branch deleted while the shared-ticket scan runs does not fail the start", () => {
+    fixture((b) => {
+      for (const name of ["fabrikalfa/aa-first", "fabrikalfa/zz-gone"]) {
+        b.git(b.main, "checkout", "-q", "-b", name, b.base);
+        b.commit(b.main, "src/b.ts", `${name}\n`);
+      }
+
+      b.git(b.main, "checkout", "-q", "main");
+      b.setup({ openPrs: [], dropOnWalk: "refs/heads/fabrikalfa/zz-gone" });
+      const got = b.new();
+      expect(existsSync(join(b.dir, "dropped")), "the fake git deleted the branch mid-scan").toBe(true);
+      expect(got.code, got.text).toBe(0);
+    });
+  });
+
+  // Plant: drop git's stderr from a failed git call's refusal.
+  it("K2 scenario: a git call that fails names git's own words in its stuck line", () => {
+    fixture((b) => {
+      const got = b.new("fabrikalfa/no-such-branch");
+      refused(got, /^stuck unknown ref fabrikalfa\/no-such-branch: fatal: Needed a single revision/m);
+    });
+  });
 
   // Plant: judge a field-rows branch by its diff from the lane's base, not from main. A lane that
   // started on an older main then sees main's newer files on the rows branch and refuses

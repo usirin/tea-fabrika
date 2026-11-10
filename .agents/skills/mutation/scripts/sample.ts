@@ -136,10 +136,22 @@ export const sample = ({
   });
 };
 
+/**
+ * Which diff the sample reads: `since..build` when a `since` is given, else the build commit
+ * against its first parent. A lane whose tip is the lead's merge of main has main's lines in
+ * `build^..build`, so drive's run samples from the lane's base, the pull request's own lines
+ * (p14-mutation-r1, 2026-11-10; ticket 568).
+ */
+export const diffRange = (build: string, since: string | undefined): readonly [string, string] => [
+  since ?? `${build}^`,
+  build,
+];
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
       build: { type: "string" },
+      since: { type: "string" },
       seed: { type: "string", default: "119120" },
       max: { type: "string", default: "150" },
       report: { type: "string" },
@@ -161,8 +173,7 @@ if (import.meta.main) {
       "--no-ext-diff",
       "--no-renames",
       "-U0",
-      `${values.build}^`,
-      values.build,
+      ...diffRange(values.build, values.since),
       "--",
       "*.ts",
       "*.tsx",

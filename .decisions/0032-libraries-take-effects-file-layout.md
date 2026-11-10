@@ -1,7 +1,7 @@
 ---
 id: 0032
 title: next/'s libraries take Effect's file layout, a flat src/ of PascalCase modules with prefixed variants, internal/ for private parts and a namespace index, never folders by area or kind
-status: amended-in-part by [0034](0034-libfabrika-folders-are-bounded-contexts.md), [0043](0043-rooms-on-floors.md)
+status: amended-in-part by [0034](0034-libfabrika-folders-are-bounded-contexts.md), [0043](0043-rooms-on-floors.md), [0051](0051-gateway-connection-and-node-by-job.md)
 date: 2026-11-09
 tags: [layout, files, names, modules, barrel, internal, effect, libfabrika, next]
 ---
@@ -73,6 +73,8 @@ namespace import, which this layout makes the normal way in.
 - **A variant is a prefixed sibling, not a folder:** `LedgerStore.ts`, `LedgerTransaction.ts`. A
   platform's version of a piece is a variant too: `NodeStage.ts`, `WorkersGateway.ts`, as Effect's
   platform packages name `NodeFileSystem` and `BrowserHttpClient`.
+  *The prefix for Cloudflare code is now `Cloudflare`, not `Workers`, and `stage` is `dev`
+  ([0051](0051-gateway-connection-and-node-by-job.md)); the rule of a prefixed variant holds.*
 - **A folder only for a concept's parts,** beside the file of the same name: `Gateway.ts` +
   `Gateway/Shard.ts`.
 - **Private code goes in `src/internal/`,** camelCase, with every export marked `/** @internal */`.

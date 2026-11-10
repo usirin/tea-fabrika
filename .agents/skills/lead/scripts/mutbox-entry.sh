@@ -35,6 +35,11 @@ arm() {
 	echo "$code" > "/out/$1/exit"
 }
 
+# With a base, the sample is the lane's own lines, base..build, not the build commit's alone: a
+# tip that merged main has main's lines against its first parent (ticket 568).
+if git rev-parse -q --verify refs/heads/base > /dev/null; then
+	export SINCE=refs/heads/base
+fi
 arm b "$T"
 b=$(cat /out/b/exit)
 

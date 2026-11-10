@@ -817,6 +817,10 @@ describe("trusted config files", () => {
           "why": "the step scripts' laws and planted breaks"
         },
         {
+          "glob": ".agents/skills/lead/scripts/catchup.test-support.ts",
+          "why": "the stubbed tools and Git fixture catchup.sh's laws share"
+        },
+        {
           "glob": ".agents/skills/lead/scripts/skillscheck.sh",
           "why": "the shared skills' source-and-link lint check"
         },

@@ -43,9 +43,11 @@ import {
   mutationDraft,
   mutboxAnswer,
   mutboxTail,
+  mutationTail,
   relatedIn,
   commitsSaid,
   decide,
+  dockerHolder,
   endName,
   freshBox,
   holdsElectron,
@@ -498,11 +500,78 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
 
   // Plant: give drive's own refusals and box.sh's checks names that clash with a step outcome.
   it("format: every refusal prints as refused:<check>, apart from the five step verbs", () => {
-    for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out"] as const) {
+    for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const) {
       const name = endName({ kind: "refused", check: c });
       expect(name).toBe(`refused:${c}`);
       expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
+  });
+});
+
+describe("T566 a mutation step while another Docker box runs is refused before its box, today's tooling", () => {
+  const pid = fc.integer({ min: 1, max: 99_999 });
+  const lock = fc.oneof(
+    pid.map(String),
+    pid.map((n) => ` ${n}\n`),
+    fc.constantFrom("", "abc", "-4", "0", "1.5"),
+  );
+
+  // Plants: count a dead run's lock as busy; count an absent or garbled lock as busy; drop the pid.
+  it("property: busy exactly when the lock names a positive pid that is alive, and it names that pid", () => {
+    fc.assert(
+      fc.property(fc.option(lock, { nil: null }), fc.boolean(), (text, alive) => {
+        const asked: number[] = [];
+        const holder = dockerHolder(text, (p) => {
+          asked.push(p);
+          return alive;
+        });
+        const n = Number(text?.trim());
+        const named = text !== null && Number.isInteger(n) && n > 0;
+        expect(holder).toBe(named && alive ? n : null);
+        expect(asked).toEqual(named ? [n] : []);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: layout-mutation3 on 2026-11-10, pid 97351 alive, is refused:docker_busy", () => {
+    expect(dockerHolder("97351", () => true)).toBe(97351);
+    expect(endName({ kind: "refused", check: "docker_busy" })).toBe("refused:docker_busy");
+  });
+});
+
+describe("T569 a review reads the lane's newest mutation report in its prompt, today's tooling", () => {
+  const stepName = fc.constantFrom("plan", "tests", "build", "mutation", "review");
+  const path = fc.stringMatching(/^\/b\/[a-z0-9]{1,6}\.md$/);
+  const row = fc.record({ step: stepName, report: fc.option(path, { nil: null }) });
+
+  // Plants: give it to every step; take the oldest mutation; drop the text; say nothing when none.
+  it("property: only a review gets it, the newest mutation row's report whole, else a plain note", () => {
+    fc.assert(
+      fc.property(stepName, fc.array(row, { maxLength: 8 }), fc.boolean(), (step, steps, readable) => {
+        const text = (p: string) => `report of ${p}`;
+        const tail = mutationTail(step, steps, (p) => (readable ? text(p) : null));
+        const newest = steps.filter((s) => s.step === "mutation" && s.report !== null).at(-1);
+
+        const whole = step === "review" && newest?.report !== undefined && newest.report !== null && readable;
+        expect(tail === "").toBe(step !== "review");
+        expect(tail.includes(text(newest?.report ?? "none"))).toBe(whole);
+        expect(tail.includes("cannot read outside itself")).toBe(whole);
+        expect(tail.includes("no mutation report")).toBe(step === "review" && !whole);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: p34w-review1 on 2026-11-10 gets ../p34w-mutation3.md's text, not mutation2's", () => {
+    const steps = [
+      { step: "mutation", report: "/b/p34w-mutation2.md" },
+      { step: "mutation", report: "/b/p34w-mutation3.md" },
+      { step: "tests", report: "/b/p34w-tests10.md" },
+    ];
+    const tail = mutationTail("review", steps, (p) => `text of ${p}`);
+    expect(tail).toContain("text of /b/p34w-mutation3.md");
+    expect(tail).not.toContain("mutation2");
   });
 });
 
