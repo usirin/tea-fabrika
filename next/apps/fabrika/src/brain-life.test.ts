@@ -295,11 +295,22 @@ describe("P12 local brain life", () => {
 				details(),
 			).toEqual([]);
 			const {brainOutbox} = await import("@kampus/libfabrika/node/local-stage");
-			const pending = await Effect.runPromise(
-				Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(
-					Effect.provide(NodeServices.layer),
-				),
-			);
+			const read = () =>
+				Effect.runPromise(
+					Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(
+						Effect.provide(NodeServices.layer),
+					),
+				);
+			// The stage writes `braked` after Alchemy stops, with a synced file write. Wait for
+			// that row, as `workerd` waits for a pid, and do not read the outbox once and hope.
+			const until = performance.now() + 10_000;
+			let pending = await read();
+
+			while (!pending.some((event) => event._tag === "braked") && performance.now() < until) {
+				await pause();
+				pending = await read();
+			}
+
 			expect(pending, details()).toEqual(
 				expect.arrayContaining([expect.objectContaining({_tag: "braked"})]),
 			);
