@@ -296,9 +296,10 @@ visible, and never weaken the rules to hide this message.
    metadata, unknown state, and any pair holding MAIN or BOXES/state.
    An annotated tag's own object ID must be reachable under MAIN's retained refs. Keeping only
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
-10. **After the merge:** comment the pull request's URL on its ticket and close it, write the
-    `MergeRow`, then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the
-    main checkout, plus any build the app needs to start. The owner runs the app from there and
+10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
+    own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
+    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 
