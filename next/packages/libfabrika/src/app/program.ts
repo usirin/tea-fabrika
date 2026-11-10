@@ -14,6 +14,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = {call(...args: A): R}["call"];
 type Declared = Schema.Codec<unknown, unknown>;
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
 const isCode = <F>(u: unknown): u is F => typeof u === "function";
+
 const code = <F>(expected: string) =>
 	Schema.declare((u: unknown): u is F => isCode<F>(u), {expected});
 
@@ -23,6 +24,7 @@ type Steps = {
 	readonly cmds?: ReadonlyArray<AnyCmdDef>;
 	readonly init: Code<[loaded: unknown, ctx: unknown], readonly [unknown, ReadonlyArray<unknown>]>;
 };
+
 const isSteps = (u: unknown): u is Steps =>
 	typeof u === "object" &&
 	u !== null &&
@@ -73,6 +75,7 @@ const InputSchema = Schema.TaggedUnion({
 		personOnly: Schema.optionalKey(Schema.Never),
 	},
 });
+
 export type Input = typeof InputSchema.Type;
 
 type ReadPort<Q extends Declared, A> = Omit<
@@ -86,12 +89,14 @@ type ReadPort<Q extends Declared, A> = Omit<
 
 const readInput = InputSchema.cases.read.make;
 const writeInput = InputSchema.cases.write.make;
+
 const readPort = <
 	Q extends Declared,
 	A extends (view: never, input: NoInfer<Q["Type"]>) => unknown,
 >(
 	spec: Omit<ReadPort<Q, A>, "_tag">,
 ): ReadPort<Q, A> => ({...readInput(spec), schema: spec.schema, answer: spec.answer});
+
 const writePort = <Q extends Declared>(
 	spec: Omit<typeof InputSchema.cases.write.Type, "_tag" | "schema"> & {readonly schema: Q},
 ) => ({...writeInput(spec), schema: spec.schema});
@@ -108,11 +113,14 @@ type InputConstructors = Omit<typeof InputSchema, "cases"> & {
 const readCase = Schema.make<InputConstructors["cases"]["read"]>(InputSchema.cases.read.ast, {
 	fields: InputSchema.cases.read.fields,
 });
+
 const writeCase = Schema.make<InputConstructors["cases"]["write"]>(InputSchema.cases.write.ast, {
 	fields: InputSchema.cases.write.fields,
 });
+
 Object.defineProperty(readCase, "make", {value: readPort});
 Object.defineProperty(writeCase, "make", {value: writePort});
+
 export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
 	...InputSchema,
 	cases: {read: readCase, write: writeCase},
@@ -142,10 +150,12 @@ const Declaration = Schema.Struct({
 });
 
 type Typed = {readonly type: string};
+
 type ProgramMachine = Steps & {
 	readonly model: Schema.Schema<unknown>;
 	readonly msg: Schema.Schema<Typed>;
 };
+
 type Description =
 	| string
 	| {
@@ -154,6 +164,7 @@ type Description =
 			readonly schema?: never;
 			readonly answer?: never;
 	  };
+
 type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
 	readonly schema: infer Q extends Declared;
 }
@@ -163,14 +174,17 @@ type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.
 	: K extends M["type"]
 		? Description
 		: never;
+
 type Ports<M extends Typed, I> = {
 	readonly [K in keyof I]: Port<M, K, I[K]>;
 };
+
 type ReadView<P> = P extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
 	readonly answer: (view: infer V, ...args: never[]) => unknown;
 }
 	? (view: V) => void
 	: never;
+
 // Check the selector's result after inferring ports. Checking read answers against V first
 // makes a nested Input constructor fix V to Json before the selector can infer it.
 type ViewFor<I> = {
@@ -178,6 +192,7 @@ type ViewFor<I> = {
 }[keyof I] extends (view: infer V) => void
 	? V
 	: unknown;
+
 type Policies<W> = {
 	readonly [K in keyof W]: {
 		readonly schema: Schema.Codec<
@@ -187,6 +202,7 @@ type Policies<W> = {
 		readonly personOnly: boolean;
 	};
 };
+
 type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
 	readonly name: string;
 	readonly maxDeliveries?: number;
@@ -203,10 +219,12 @@ type Spec<T extends ProgramMachine, V extends Schema.Json, I, O, W> = {
 	readonly writes: W & Policies<W>;
 	readonly wake: (model: NoInfer<T["model"]["Type"]>) => number | null;
 };
+
 type FilledPort<T extends ProgramMachine, P> =
 	P extends Pick<typeof InputSchema.cases.read.Type, "_tag">
 		? P
 		: Omit<typeof InputSchema.cases.write.Type, "schema"> & {readonly schema: T["msg"] & Declared};
+
 type FilledPorts<T extends ProgramMachine, I> = {
 	readonly [K in keyof I]: FilledPort<T, I[K]>;
 };
@@ -258,8 +276,10 @@ const Authoring = Schema.Struct({
 	writes: Declaration.fields.writes,
 	wake: Declaration.fields.wake,
 });
+
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
+
 const construct = (raw: unknown) =>
 	Result.flatMap(decodeAuthoring(raw), (spec) =>
 		decodeDeclaration({
@@ -309,6 +329,7 @@ const make = <
 	if (Result.isFailure(checked)) throw checked.failure;
 	return Schema.decodeUnknownSync(typedProgram(spec))(checked.success);
 };
+
 const makeEffect = Effect.fn("program.make")(function* <
 	T extends ProgramMachine,
 	V extends Schema.Json,
@@ -380,10 +401,13 @@ export type Stepper = {
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
+
 const isTyped = (u: unknown): u is Typed =>
 	typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+
 const decodeTyped = (u: unknown): Option.Option<Typed> =>
 	isTyped(u) ? Option.some(u) : Option.none();
+
 const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** Runs `f`, turning any throw into ProgramDown with `why`. */

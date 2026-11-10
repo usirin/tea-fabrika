@@ -41,6 +41,7 @@ import {describe, expect, it} from "vitest";
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 const tip = "0123456789abcdef0123456789abcdef01234567";
+
 const storageFiles = (root: string) => {
 	const files: Record<string, string> = {};
 	const visit = (path: string, name: string) => {
@@ -56,12 +57,14 @@ const storageFiles = (root: string) => {
 	visit(root, ".");
 	return files;
 };
+
 const reads = ["head", "checks", "trust", "apps", "logs"] as const;
 const options = {seed: 520, numRuns: 12};
 type Call = {cmd: string; args: string[]; key?: string};
 type Post = {sub: string; ticket?: number; as: string; home: string; body?: string};
 // The squash commit GitHub answers for the merged PR.
 const merged = "feedfacefeedfacefeedfacefeedfacefeedface";
+
 type Setup = {
 	repo?: string;
 	failures: number[];
@@ -107,6 +110,7 @@ type Setup = {
 	offMain?: boolean;
 	tickets?: Record<number, "open" | "closed">;
 };
+
 const green: Setup = {
 	failures: [0, 0, 0, 0, 0],
 	pending: 0,
@@ -115,6 +119,7 @@ const green: Setup = {
 	merge: false,
 	refused: "none",
 };
+
 // The stub uses the platform's absolute Node executable. Its PATH never contains a real gh,
 // node or pnpm, and each write-capable command is refused unless handled here.
 const stub = String.raw`
@@ -225,6 +230,7 @@ if (cmd === "date") {
 }
 die("unhandled tool: " + cmd);
 `;
+
 const run = (setup: Setup, args: string[] = []) => {
 	const dir = mkdtempSync(join(tmpdir(), "cu-"));
 	try {
@@ -593,7 +599,9 @@ const run = (setup: Setup, args: string[] = []) => {
 		rmSync(dir, {recursive: true, force: true});
 	}
 };
+
 const merges = (calls: Call[]) => calls.filter((c) => c.key === "merge");
+
 const assertHead = (calls: Call[]) => {
 	for (const call of merges(calls)) {
 		expect(call.args).toContain("--match-head-commit");

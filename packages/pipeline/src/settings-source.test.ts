@@ -43,6 +43,7 @@ const FIXTURE_ENV = {
 	GIT_COMMITTER_NAME: "owner",
 	GIT_COMMITTER_EMAIL: "owner@example.com",
 };
+
 const sh = (cwd: string, args: readonly string[]) =>
 	runChild("git", args, {cwd, env: FIXTURE_ENV}).pipe(
 		Effect.flatMap((ran) =>

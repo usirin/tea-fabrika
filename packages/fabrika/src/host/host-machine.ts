@@ -204,9 +204,11 @@ export const losesLease = (
 	(m.type === "lease_due" && m.fence === fence && m.until >= until + graceMs);
 
 type Holding = Extract<Host, {readonly phase: "owning" | "exiting"}>;
+
 /** 151: a renew had no answer: ask again every `retryRenewMs` from now, not at the next regular one. */
 const away = <S extends Holding>(s: S): S =>
 	s.away === true ? s : {...s, ticks: s.ticks + 1, away: true};
+
 /** A renew came back: the lease runs to the later end, and it is not away any more. */
 const back = <S extends Holding>(s: S, until: number): S =>
 	until > s.until || s.away === true ? {...s, until: Math.max(s.until, until), away: false} : s;

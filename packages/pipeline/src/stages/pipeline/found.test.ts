@@ -32,6 +32,7 @@ const QUESTION = {
 	lean: "The app's own.",
 	why: "One.",
 };
+
 const PLAN = Schema.decodeUnknownSync(HeldDraft)({
 	summary: "One form.",
 	stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
@@ -118,6 +119,7 @@ const mentions = (text: string) => text.match(/(?<!\w)@[a-z0-9][\w/-]*/gi) ?? []
 const references = (text: string) => text.match(/#\d+|\bgh-\d+|\/(?:issues|pull)\/\d+/gi) ?? [];
 const P1 = make(PropertyId)("p1");
 const Q1 = make(QuestionId)("q1");
+
 const FOUND: Finding = {
 	id: "f1",
 	state: "open",

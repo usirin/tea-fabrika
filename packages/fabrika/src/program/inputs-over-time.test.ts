@@ -29,6 +29,7 @@ const late = (go: Deferred.Deferred<void>, got: number[], capacity = CAPACITY) =
 		main: ({serve}) =>
 			Deferred.await(go).pipe(Effect.andThen(serve({n: (n) => Effect.sync(() => got.push(n))}))),
 	});
+
 const numbers = (count: number) => Array.from({length: count}, (_, i) => i);
 
 /** Sends on each line it is told. */

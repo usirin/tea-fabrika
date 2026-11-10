@@ -146,6 +146,7 @@ describe("the first open, with no area on the ledger (a6)", () => {
 // made up: the `folders` Cmd, its input `{}`, its answer `{folders}`, its error `unreachable`.
 const foldersOk = (list: readonly string[]): Msg => folders.ok(folders({}), {folders: list}, 0);
 const foldersErr: Msg = folders.err(folders({}), {_tag: "unreachable", why: "no network"}, 0);
+
 const foldersAsked = (msgs: readonly Msg[]) =>
 	steps(...msgs).cmds.filter((c) => c.type === "folders");
 

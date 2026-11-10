@@ -41,11 +41,13 @@ const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
 const folder = mkdtempSync(join(tmpdir(), "p9-mailbox-"));
 const opened: Array<DatabaseSync> = [];
 let files = 0;
+
 const fresh = (): Sql => {
 	const db = new DatabaseSync(join(folder, `ledger-${++files}.db`));
 	opened.push(db);
 	return nodeSql(db);
 };
+
 afterAll(() => {
 	for (const db of opened.splice(0)) if (db.isOpen) db.close();
 	rmSync(folder, {recursive: true, force: true});
@@ -66,12 +68,16 @@ const from = (over: Partial<From> = {}): From => ({
 	build: "b-7c1d073",
 	...over,
 });
+
 const send = (to: string, id: string, m: unknown, over: Partial<From> = {}) =>
 	Mailbox.use((mailbox) => mailbox.send(to, id, m, from(over)));
+
 const receive = (name: string, after = 0) =>
 	Mailbox.use((mailbox) => Stream.runCollect(mailbox.receive(name, after)));
+
 const inbox = (name: string) =>
 	Ledger.use((ledger) => Stream.runCollect(ledger.read(`${name}/inbox`, 0)));
+
 /** A line straight into the log, as another writer would put it. */
 const raw = (stream: string, id: string, over: Partial<Line>) =>
 	Ledger.use((ledger) =>
@@ -88,6 +94,7 @@ const raw = (stream: string, id: string, over: Partial<Line>) =>
 			...over,
 		}),
 	);
+
 const check = <A, E, R>(
 	arb: fc.Arbitrary<A>,
 	examples: NoInfer<A>[],
@@ -109,6 +116,7 @@ const check = <A, E, R>(
 			),
 		);
 	});
+
 const json = fc.jsonValue();
 
 describe("P33, only the owning runner writes its answers", () => {

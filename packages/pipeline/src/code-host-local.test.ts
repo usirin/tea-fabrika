@@ -29,6 +29,7 @@ import type {Form} from "./stages/review/sheet.ts";
 const PLAN = planOf(ticketId("https://github.com/example/words/issues/9"));
 const S1 = storyId("s1");
 const check = {how: "test", what: "node --test"} as const;
+
 const PLAN_DATA: Revision = {
 	summary: "Words can be counted, and the longest one found.",
 	stories: [
@@ -71,12 +72,14 @@ const PLAN_DATA: Revision = {
 	pointers: [],
 	questions: [],
 };
+
 const [C1, C2, C3, C4] = [
 	criterionId("c1"),
 	criterionId("c2"),
 	criterionId("c3"),
 	criterionId("c4"),
 ];
+
 const T1 = taskId("t1");
 const TASK = taskTarget(PLAN, T1);
 
@@ -94,12 +97,14 @@ const BASE_FILES: Readonly<Record<string, string>> = {
 	"AGENTS.md": "# Rules\n\nEvery change comes with a test.\n",
 	".fabrika/fabrika.toml": '[review]\ngoverned = [".fabrika/"]\n',
 };
+
 const WORDS = [
 	"export const count = (text) => text.split(/\\s+/).filter(Boolean).length;",
 	"export const longest = (text) =>",
 	'\ttext.split(/\\s+/).reduce((best, word) => (word.length > best.length ? word : best), "");',
 	"",
 ].join("\n");
+
 const testWith = (longestSays: string) =>
 	[
 		'import assert from "node:assert/strict";',
@@ -133,6 +138,7 @@ const FIXTURE_ENV = {
 	GIT_COMMITTER_NAME: "builder",
 	GIT_COMMITTER_EMAIL: "builder@example.com",
 };
+
 /** Effect's platform services, as `@effect/platform-node` gives them: the fixture's files and its git. */
 const onNode = <A, E>(
 	effect: Effect.Effect<
@@ -141,6 +147,7 @@ const onNode = <A, E>(
 		FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
 	>,
 ) => Effect.runPromise(effect.pipe(Effect.provide(nodeServices)));
+
 const sh = (cwd: string, file: string, args: readonly string[]) =>
 	runChild(file, args, {cwd, env: FIXTURE_ENV}).pipe(
 		Effect.flatMap((ran) =>
@@ -149,6 +156,7 @@ const sh = (cwd: string, file: string, args: readonly string[]) =>
 				: Effect.die(new Error(`${file} ${args.join(" ")} failed: ${ran.err}`)),
 		),
 	);
+
 const write = (dir: string, files: Readonly<Record<string, string>>) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
@@ -158,6 +166,7 @@ const write = (dir: string, files: Readonly<Record<string, string>>) =>
 			yield* fs.writeFileString(path.join(dir, name), text);
 		}
 	});
+
 /** Commit everything in `dir`, and answer the new head. */
 const commit = (dir: string, files: Readonly<Record<string, string>>, message: string) =>
 	Effect.gen(function* () {
@@ -174,6 +183,7 @@ interface World {
 	readonly ghCalls: string;
 	readonly path: string | undefined;
 }
+
 let world: World;
 
 beforeAll(async () => {
@@ -215,6 +225,7 @@ beforeAll(async () => {
 // ---------------------------------------------------------------- the reviewer
 
 const RAN = {spend: noSpend, tools: ["Read"], refused: [], links: 0};
+
 const row = (id: CriterionId) => ({
 	id,
 	grade: "pass" as const,
@@ -222,11 +233,13 @@ const row = (id: CriterionId) => ({
 	says: "The test shows it.",
 	limit: null,
 });
+
 const passing = (brief: Brief): Form => ({
 	rows: brief.criteria.map((c) => row(c.id)),
 	findings: [],
 	skipped: [],
 });
+
 /** c3 fails: `longest` keeps the first of two equal words, and no test pins which. */
 const failingC3 = (brief: Brief): Form => ({
 	rows: brief.criteria.map((c) =>

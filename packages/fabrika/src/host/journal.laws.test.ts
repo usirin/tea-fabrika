@@ -25,6 +25,7 @@ type Mod = {readonly journalStore: typeof realJournal.journalStore};
 const real: Mod = {journalStore: realJournal.journalStore};
 
 const madeDirs: string[] = [];
+
 afterAll(() => {
 	for (const d of madeDirs) rmSync(d, {recursive: true, force: true});
 });
@@ -56,12 +57,14 @@ interface Save {
 	readonly drop: number;
 	readonly lands: boolean;
 }
+
 interface Done {
 	readonly save: Save;
 	readonly expected: number;
 	/** What the save said, and when, from its start: null, it had not settled by the end. */
 	readonly end: {readonly ok: boolean; readonly rev: number | null; readonly at: number} | null;
 }
+
 interface Run {
 	readonly done: readonly Done[];
 	/** The state stream's ids, as it ends. */

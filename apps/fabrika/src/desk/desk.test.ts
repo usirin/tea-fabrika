@@ -791,6 +791,7 @@ const table = (text: string): Keys => {
 	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
 	return answer.success;
 };
+
 /** The host swaps the desk's table: the file was saved. */
 const swap = (text: string): DeskMsg => ({type: "keys", keys: table(text)});
 

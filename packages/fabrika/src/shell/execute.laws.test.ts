@@ -67,6 +67,7 @@ const session = (storage: Storage) =>
 
 /** One job: what it adds before the restart, and whether older code then saved its total. */
 const Job = fc.record({add: fc.integer({min: 1, max: 8}), older: fc.boolean()});
+
 /** One to four jobs, and the order the new tsh attaches them in. */
 const jobsAndOrder = fc.array(Job, {minLength: 1, maxLength: 4}).chain((jobs) =>
 	fc.tuple(

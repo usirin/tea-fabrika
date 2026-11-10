@@ -13,6 +13,7 @@ const token = (key: string | number): string =>
 	String(key).replaceAll("~", "~0").replaceAll("/", "~1");
 
 type Plain = {readonly [key: string]: unknown};
+
 const isPlain = (u: unknown): u is Plain =>
 	typeof u === "object" && u !== null && !Array.isArray(u);
 

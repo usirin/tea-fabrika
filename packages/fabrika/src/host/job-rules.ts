@@ -76,6 +76,7 @@ const text = (row: SqlRow | undefined, key: string): string | null => {
 	const v = row?.[key];
 	return typeof v === "string" ? v : null;
 };
+
 const num = (row: SqlRow | undefined, key: string): number => Number(row?.[key] ?? 0);
 
 /**
@@ -86,6 +87,7 @@ export type Heads = Map<
 	string,
 	{readonly n: number; readonly state: Json; readonly since: number; readonly chain: number}
 >;
+
 const headKey = (run: string, machine: string, id: string) => JSON.stringify([run, machine, id]);
 
 /** A JSON value as JSON reads it back: what a patch is made from. */

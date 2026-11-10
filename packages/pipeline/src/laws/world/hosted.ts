@@ -90,6 +90,7 @@ const TICKET = ticketId("o/r#7");
 const PLAN_ID = planOf(TICKET);
 const LANE = "lane:7";
 const T1 = taskId("t1");
+
 const JOB: LaneJob = {
 	plan: PLAN_ID,
 	settings: {model: "m", effort: "low", budget: 1},
@@ -97,6 +98,7 @@ const JOB: LaneJob = {
 	rubrics: "r",
 	at: 0,
 };
+
 const UNKNOWN = {_tag: "unknown" as const};
 
 /** The plan's view, as the ledger and the code host say now. Pure. */

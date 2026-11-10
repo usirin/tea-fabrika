@@ -227,6 +227,7 @@ export const ChildInfo = Schema.Struct({
 	type: ChildType,
 });
 export type ChildInfo = typeof ChildInfo.Type;
+
 /** What a call answers: OTP's `{ok, ...}` or `{error, Why}`. */
 export const Answer = Schema.Union([
 	Schema.Struct({ok: Schema.Literal(true), incarnation: Schema.Number}),
@@ -243,6 +244,7 @@ const Caller = Schema.Struct({id: Schema.String, replyTo: Schema.String});
 export type Caller = typeof Caller.Type;
 const Outgoing = Schema.Struct({id: Schema.String, replyTo: Schema.String, res: Answer});
 export type Outgoing = typeof Outgoing.Type;
+
 const Waiting = Schema.Struct({
 	id: Schema.String,
 	replyTo: Schema.String,
@@ -363,6 +365,7 @@ export type Start = {
 	/** 102: the child's limits; the ledger keeps them from its first start. */
 	readonly limits?: ChildSpec["limits"];
 };
+
 /** The one stop the `stops` Sub sends: which signal to which run, at `at` (0: now). */
 export type Stop = {
 	readonly name: string;
@@ -370,6 +373,7 @@ export type Stop = {
 	readonly signal: Signal;
 	readonly at: number;
 };
+
 export type SupervisorSub =
 	| Sub<"starts", {readonly list: readonly Start[]}>
 	| Sub<"stops", Stop>
@@ -398,6 +402,7 @@ const put = (s: S, c: Child): S => ({
 	...s,
 	children: s.children.map((x) => (x.name === c.name ? c : x)),
 });
+
 const drop = (s: S, name: string): S => ({
 	...s,
 	children: s.children.filter((x) => x.name !== name),
@@ -409,6 +414,7 @@ const answer = (s: S, to: Caller, res: Answer): S => ({
 	outbox: [...s.outbox, {id: to.id, replyTo: to.replyTo, res}],
 	answered: [...s.answered, {id: to.id, res}].slice(-MEMO),
 });
+
 const answerAll = (s: S, res: Answer): S =>
 	s.waiting.reduce<S>((acc, w) => answer(acc, w, res), {...s, waiting: []});
 
@@ -834,6 +840,7 @@ export const createSupervisor = (
 
 /** The body of 99's `start_child` cast. */
 export const StartChild = Schema.Struct({start_child: ChildSpec});
+
 /** What a call asks, on the wire. */
 export const RequestBody = Schema.Union([
 	Schema.Struct({op: Schema.Literal("start_child"), spec: ChildSpec}),
@@ -843,6 +850,7 @@ export const RequestBody = Schema.Union([
 	}),
 	Schema.Struct({op: Schema.Literal("which_children")}),
 ]);
+
 /** The body of a call: `id` is the idempotency key and the reply's correlation id. */
 export const CallBody = Schema.Struct({
 	id: Schema.String,

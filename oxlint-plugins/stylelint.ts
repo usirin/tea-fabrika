@@ -8,16 +8,20 @@ import type {CssResult} from "./css-support.ts";
 
 const ROOT = process.cwd();
 const configFile = join(ROOT, "stylelint.config.ts");
+
 const tracked = spawnSync("git", ["ls-files", "-z", "--", "apps", "packages", "programs", "next"], {
 	cwd: ROOT,
 	encoding: "utf8",
 	maxBuffer: 2 ** 30,
 });
+
 if (tracked.status !== 0) {
 	console.error(`stylelint could not list tracked CSS: ${tracked.stderr}`);
 	process.exit(2);
 }
+
 const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+
 if (files.length === 0) {
 	console.error("stylelint: no tracked CSS files");
 	process.exit(2);

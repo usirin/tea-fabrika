@@ -12,6 +12,7 @@ import {programsOf} from "./fabrika-list.ts";
 
 const {complete, EMPTY} = Shell;
 const list = programsOf(defaultConfig("/tsh"));
+
 const JOBS: Shell.Jobs = {
 	next: 2,
 	jobs: [
@@ -27,6 +28,7 @@ const JOBS: Shell.Jobs = {
 		},
 	],
 };
+
 const candidates = (line: string, jobs: Shell.Jobs = EMPTY) =>
 	complete(line, list, jobs).candidates;
 

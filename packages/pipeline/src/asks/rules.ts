@@ -188,11 +188,14 @@ export interface Folded {
 const buildKey = (plan: PlanId, task: TaskId, build: number) => `${plan}/${task}/${build}`;
 /** The ask to approve version `version` of `plan`. */
 export const planAskId = (plan: PlanId, version: number): AskId => askId(`plan:${plan}@${version}`);
+
 /** The ask a stuck task, or the whole plan's list, raises the `time`-th time it is stuck. */
 export const stuckId = (plan: PlanId, task: Owner, time: number): AskId =>
 	askId(`stuck:${plan}/${task}/${time}`);
+
 /** The ask to rule on `ticket`. */
 export const rulingId = (ticket: TicketId): AskId => askId(`ruling:${ticket}`);
+
 /** The check `by` raised on build `build` of a task. */
 export const checkId = (plan: PlanId, task: TaskId, build: number, by: string): AskId =>
 	askId(`check:${buildKey(plan, task, build)}:${by}`);

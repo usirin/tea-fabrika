@@ -12,6 +12,7 @@ import {nodeSql} from "./sqlite.ts";
 import type {SpanRow} from "./trace.ts";
 
 type Lookup = {_tag: "found"; content: unknown} | {_tag: "absent"; rolled: boolean};
+
 type Part = {
 	write: (
 		rows: ReadonlyArray<{span: SpanRow; content: string | null}>,
@@ -31,6 +32,7 @@ const SEED = 119120;
 const pageBoundary: [number, string, number] = [503, "private failure", 42];
 const rollAtCap: [number[], number, number] = [[1, 2], 1000, 0];
 afterAll(() => rmSync(home, {recursive: true, force: true}));
+
 const span = (n: number): SpanRow => ({
 	traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
 	spanId: n.toString(16).padStart(16, "0"),

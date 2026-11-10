@@ -19,6 +19,7 @@ import type {CreateRule} from "@oxlint/plugins";
 import type {Node} from "./match.ts";
 
 const STORE_HOOKS = new Set(["useModel", "useSyncExternalStore", "useRuntime", "useMachine"]);
+
 const ONLY =
 	"`useSyncExternalStore` is not allowed in `next/`. Read the model through `useRuntime` from `@demlik/tea/react` (docs/direction/react-compiler.md, C4).";
 

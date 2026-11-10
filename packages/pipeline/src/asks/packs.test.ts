@@ -19,7 +19,9 @@ const numbers = (name: string) =>
 		outputs: {n: output(Schema.Int, "A number.")},
 		main: () => Effect.void,
 	});
+
 const core = numbers("core");
+
 /** A pack with these wires. `misfit` never starts it, so it makes no services. */
 const packOf = (
 	listens: Readonly<Record<string, string>>,

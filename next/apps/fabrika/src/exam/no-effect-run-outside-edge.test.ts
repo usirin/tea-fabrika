@@ -23,6 +23,7 @@ const runs = [
 	"export const g = FiberSet.runtimePromise(set)();", // 11
 	"export const h = FiberSet.makeRuntimePromise();", // 12
 ].join("\n");
+
 const RUN_LINES = [4, 5, 6, 7, 8, 9, 11, 12];
 
 const passes = [

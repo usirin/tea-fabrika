@@ -5,6 +5,7 @@ import {GOOD, P1, P2, pid} from "./scripted.ts";
 
 const at = {version: 1, head: "c1"};
 const tests = testsOf(GOOD.answers);
+
 const run = (p1: "red" | "green", p2: "red" | "green") =>
 	readRun(
 		[P1, P2],

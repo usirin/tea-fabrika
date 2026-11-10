@@ -27,6 +27,7 @@ const cli = vi.hoisted(() => ({
 		| Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>
 		| undefined,
 }));
+
 vi.mock("@effect/platform-node", async (original) => {
 	const actual = await original<typeof import("@effect/platform-node")>();
 	return {
@@ -194,28 +195,34 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 			{seed: 119120, numRuns: 10},
 		);
 	});
+
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
 	...(await original<typeof import("@kampus/libfabrika/node/build")>()),
 	bundlePrograms: () => Effect.succeed({counter: {hash: "counter-build", source: "counter"}}),
 	bundle: () => Effect.succeed({output: [{type: "chunk", code: "export default {};"}]}),
 }));
+
 vi.mock("./exam/compiler.ts", async (original) => ({
 	...(await original<typeof import("./exam/compiler.ts")>()),
 	compile: (_file: string, code: string) => ({code}),
 	check: () => [],
 }));
+
 vi.mock("./local-stage.ts", () => ({
 	localStage: () => Effect.fail({reason: "test_stage_ready"}),
 }));
 
 const root = resolve(import.meta.dirname, "../../../..");
+
 const generated = fc.record({
 	name: fc.uuid(),
 	label: fc.string(),
 	port: fc.integer({min: 1024, max: 65535}),
 });
+
 const boundary = {name: "saved-home", label: "first build", port: 18787};
+
 const recorded = (folder: string, source: string, text: string, failPublish: boolean) => {
 	const out = join(folder, "build"),
 		pending = join(folder, ".fabrika-build-test"),

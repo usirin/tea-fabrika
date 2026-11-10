@@ -27,6 +27,7 @@ const Seen = Schema.Struct({
 	incarnation: Schema.Number,
 	reason: Schema.String,
 });
+
 const WatcherState = Schema.Struct({
 	monitors: Monitors,
 	downs: Schema.Array(Seen),
@@ -36,6 +37,7 @@ type WatcherState = typeof WatcherState.Type;
 type RetrySub = Sub<"retries", {readonly list: readonly Retry[]}>;
 
 const monitors = update({retryMs: 50});
+
 const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
 	const r = monitors(s.monitors, m);
 	const o = r.outcome;
@@ -48,6 +50,7 @@ const step = (s: WatcherState, m: MonitorMsg): [WatcherState, MonitorCmd[]] => {
 		[...r.cmds],
 	];
 };
+
 const watcher = defineMachine<WatcherState, MonitorMsg, MonitorCmd, RetrySub, undefined>({
 	types: {
 		model: {} as WatcherState,
@@ -113,16 +116,19 @@ const watcherProgram = (targets: readonly string[]) =>
 	});
 
 const Count = Schema.Struct({n: Schema.Number, cursor: Schema.Number});
+
 const Body = Schema.Struct({
 	crash: Schema.optional(Schema.Boolean),
 	stop: Schema.optional(Schema.Boolean),
 });
+
 const counter = defineMachine({
 	types: {model: {} as typeof Count.Type, msg: {} as {type: "inc"; rev: number}, ctx: undefined},
 	cmds: [],
 	init: (loaded) => [loaded ?? {n: 0, cursor: 0}, []],
 	update: {inc: (s, m) => (m.rev <= s.cursor ? [s, []] : [{n: s.n + 1, cursor: m.rev}, []])},
 });
+
 const target = defineProgram({
 	name: "target",
 	description: "Counts; crashes after a crash message; returns after a stop message.",
@@ -150,11 +156,13 @@ const target = defineProgram({
 });
 
 const sleep = (ms: number) => Effect.sleep(Duration.millis(ms));
+
 const until = (done: Effect.Effect<boolean, unknown, Ledger>, ms = 15_000) =>
 	Effect.gen(function* () {
 		const t0 = Date.now();
 		while (!(yield* done) && Date.now() - t0 < ms) yield* sleep(20);
 	});
+
 const downsOf = Effect.map(savedState("watcher:1", WatcherState), (s) => s.state?.downs ?? []);
 
 describe("monitor", () => {

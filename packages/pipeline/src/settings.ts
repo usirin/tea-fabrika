@@ -292,9 +292,11 @@ export interface SettingsInvalid {
 	readonly _tag: "settings_invalid";
 	readonly why: string;
 }
+
 const invalid = (why: string): SettingsInvalid => ({_tag: "settings_invalid", why});
 
 const BARE = /^[A-Za-z0-9_-]+$/;
+
 /** A key as TOML writes it: `failure.floor`, `pack."@acme/desk"`, `packs[0]`. */
 const keyOf = (path: ReadonlyArray<PropertyKey | {readonly key: PropertyKey}>) =>
 	path
@@ -310,6 +312,7 @@ const formatter = SchemaIssue.makeFormatterStandardSchemaV1({
 	leafHook: (issue) =>
 		issue._tag === "UnexpectedKey" ? "no such key or table" : SchemaIssue.defaultLeafHook(issue),
 });
+
 /** Each problem on a line of its own, led by the key it is at. */
 const whyOf = (issue: SchemaIssue.Issue) =>
 	formatter(issue)

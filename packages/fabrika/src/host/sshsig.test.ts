@@ -5,7 +5,9 @@ import {keyFileOf, keyFileText, keyLineOf, keyOnly, parse, sign, verify} from ".
 // away. Only its public half is here. `ssh-keygen -Y verify` said: Good "fabrika-ledger" signature.
 const OPENSSH_KEY =
 	"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIETuSGZxryszIPBvnpi+QdpZR0FTah8q8SCLcnheuzi8 test key";
+
 const OPENSSH_MESSAGE = "fabrika ledger login\nledger: http://127.0.0.1/demo\n";
+
 const OPENSSH_SIGNATURE = `-----BEGIN SSH SIGNATURE-----
 U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgRO5IZnGvKzMg8G+emL5B2llHQV
 NqHyrxIItyeF67OLwAAAAOZmFicmlrYS1sZWRnZXIAAAAAAAAABnNoYTUxMgAAAFMAAAAL

@@ -73,6 +73,7 @@ export const refine = createRefineLoop({
 });
 
 const nothing: Spent = {costUsd: 0, tokens: 0, context: 0, turns: 0, minutes: 0};
+
 const add = (a: Spent, b: Spend): Spent => ({
 	costUsd: a.costUsd + b.costUsd,
 	tokens: a.tokens + b.tokens,
@@ -97,6 +98,7 @@ export type SortReport = typeof SortReport.Type;
 type Held = {readonly ask: SortAsk; readonly settings: Settings; readonly key: string};
 type Read = Held & {readonly ticket: SortTicket};
 type Known = Read & {readonly context: SortContext};
+
 type Answered = Known & {
 	readonly answer: SortAnswer;
 	readonly tries: number;
@@ -140,6 +142,7 @@ const held = (s: Held): Held => ({ask: s.ask, settings: s.settings, key: s.key})
 const known = (s: Known): Known => ({...held(s), ticket: s.ticket, context: s.context});
 
 const blank: SortReport = {answer: null, wrote: [], problems: [], tries: 0, spend: nothing};
+
 const end = (s: Held, outcome: SortOutcome, report: Partial<SortReport> = {}): Step => [
 	{...held(s), phase: "over", outcome, report: {...blank, ...report}},
 	[],
@@ -160,6 +163,7 @@ const writeAt = (s: Answered, writes: readonly SortWrite[], at: number): Step =>
 	const asked = writeOne({write, intent: intentOf("sort", s.ticket.url, at + 1, write.op)});
 	return [{...known(s), ...answered(s), phase: "writing", writes, wrote: at, asked}, [asked]];
 };
+
 const answered = (s: Answered) => ({answer: s.answer, tries: s.tries, spend: s.spend});
 
 /** A sorter Msg, folded into the refine combo, and what it ends in. */

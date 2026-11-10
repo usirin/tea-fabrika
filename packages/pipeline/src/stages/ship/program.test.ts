@@ -54,6 +54,7 @@ const clear: PrFacts = {
 	comments: [],
 	main: ON_TIP,
 };
+
 const PART = {id: TICKET, link: "part_of_it"} as const;
 
 /** How the fake world answers for one pull request. */

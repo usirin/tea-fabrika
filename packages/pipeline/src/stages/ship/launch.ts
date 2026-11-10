@@ -93,6 +93,7 @@ export interface Parts {
 
 const refuse = () =>
 	Effect.die(new Error("this run only reads: it has no write side, and asked for one"));
+
 /** The write side of a read-only run: there is none. A call to it is a bug, and dies. */
 export const noWrites = Layer.succeed(CodeHostWrites, {
 	enqueue: refuse,

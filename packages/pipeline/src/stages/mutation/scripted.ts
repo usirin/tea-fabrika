@@ -68,6 +68,7 @@ export const KILLED_ALL: Ran = {
 	killed: 10,
 	survived: [],
 };
+
 export const ONE_SURVIVED: Ran = {...KILLED_ALL, killed: 9, survived: [SURVIVED]};
 
 /** One run of the repo's own tests: green or red, each failing test by name, and the output's last lines. */
@@ -116,6 +117,7 @@ export const fakes = (script: Script) =>
 	);
 
 type AnyMsg = {readonly type: string; readonly [field: string]: unknown};
+
 const step = (s: Mutation, msg: AnyMsg) =>
 	applyCell<Mutation, AnyMsg, MutationCmd>(mutation, s, msg);
 

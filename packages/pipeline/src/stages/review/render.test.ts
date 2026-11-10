@@ -10,11 +10,13 @@ import {verdictsOf} from "./verdict.ts";
 const BRIEF = briefOf(WHOLE);
 const C1 = criterionId("c1");
 const C2 = criterionId("c2");
+
 const sheetOf = (form: Form, brief = BRIEF): Sheet => {
 	const made = readForm(brief, form);
 	if (made.answer !== "sheet") throw new Error(made.problems.join("; "));
 	return made.sheet;
 };
+
 const comments = (form: Form, brief = BRIEF) => {
 	const sheet = sheetOf(form, brief);
 	return render(brief, sheet, verdictsOf(brief.kinds, sheet));
@@ -28,6 +30,7 @@ const FOUND = {
 	proof: "Grep for `exit 3` under docs/ finds nothing.",
 	wants: "The reference page names exit 3.",
 } as const;
+
 const FAILING: Form = {
 	rows: [
 		{
@@ -55,6 +58,7 @@ const FAILING: Form = {
 	],
 	skipped: [{what: "The test run", why: "No shell."}],
 };
+
 const PASSING: Form = {
 	rows: [
 		{id: C1, grade: "pass", where: [], says: "The test covers it.", limit: null},

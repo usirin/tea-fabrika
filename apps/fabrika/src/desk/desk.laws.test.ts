@@ -52,12 +52,14 @@ type Msg = MsgOf<Machine>;
 type DeskStep = Step<Desk, Msg, DeskCmd>;
 
 const tile = fc.constantFrom("t1", "t2", "t3", "t4", "t5", "t6");
+
 const run = fc.constantFrom(
 	{id: "counter:1", program: "counter"},
 	{id: "tracker:1", program: "tracker"},
 	{id: "ticket:1", program: "ticket"},
 	{id: "trace:1", program: "trace"},
 );
+
 /** A line's runs with a view: mostly one, sometimes two or three, each run once. */
 const line = fc
 	.uniqueArray(run, {minLength: 1, maxLength: 3, selector: (r) => r.id})
@@ -66,8 +68,10 @@ const line = fc
 		if (first === undefined) throw new Error("a line has a run");
 		return [first, ...rest] as const;
 	});
+
 /** Half the keys are the prefix, so most lists split, zoom, close and walk a good deal. */
 const after = ["|", "-", "h", "j", "k", "l", "<arrowup>", "z", "x", "N", "<c-h>", "<c-l>"];
+
 /**
  * The turn and fold keys come less often, so they do not crowd out the questions and the closes;
  * x and y come a little more, so a question is asked and answered yes in most runs.
@@ -77,6 +81,7 @@ const key = fc.oneof(
 	{arbitrary: fc.constantFrom(...after, "y", "n", "<c-c>", "a"), weight: 3},
 	{arbitrary: fc.constantFrom(" ", "f", "x", "y"), weight: 1},
 );
+
 /** A strip's node: a tile, or a container, that exists or not. */
 const node = fc.constantFrom("t1", "t2", "t3", "t4", "c1", "c2", "c3", "c4", "c5");
 
@@ -162,6 +167,7 @@ const table: MsgArbitraryTable<Msg> = {
 	kill_ok: fc.constant(kill.ok(killing, null, 0)),
 	kill_err: failed(kill.errType, killing),
 };
+
 /**
  * Lists of Msgs, mostly keys. Not tea's `arbMsgSequence`: at fast-check's default size its lists
  * come out about ten long (demlik#744), too short to make a few workspaces and close them again.
@@ -174,6 +180,7 @@ const random = fc.array(
 	}),
 	{maxLength: 60, size: "max"},
 );
+
 /**
  * A line of three typed in t1, its window t2 focused and asked to close, then answered y once or
  * twice. Random keys seldom get that far, and a window's close is a rule of its own.
@@ -192,16 +199,20 @@ const asked: readonly Msg[] = [
 	{type: "key", key: "<c-b>", at: 0},
 	{type: "key", key: "x", at: 0},
 ];
+
 const yes: Msg = {type: "key", key: "y", at: 0};
+
 const windowFirst = fc.constantFrom<readonly Msg[]>(
 	[],
 	[],
 	[...asked, yes],
 	[...asked, yes, ...asked.slice(1), yes],
 );
+
 const lists = fc
 	.tuple(windowFirst, random)
 	.map(([first, rest]): readonly Msg[] => [...first, ...rest]);
+
 /**
  * Lists with agents' tiles in them: the same Msgs, and now and then the host asks for claude's or
  * lead's tile, before, between and after the person's keys (tracker 185b, PR 3).
@@ -212,6 +223,7 @@ const agentLists = fc.array(
 	}),
 	{maxLength: 60, size: "max"},
 );
+
 const OPTS = {numRuns: 400, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();
 
@@ -245,10 +257,13 @@ const atTheEnd = (
 });
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 const tileIds = (s: Desk): ReadonlySet<string> =>
 	new Set(s.at === "over" ? [] : s.workspaces.flatMap((ws) => tilesOf(ws).map((t) => t.id)));
+
 const sameSet = (a: readonly string[], b: readonly string[]) =>
 	a.length === b.length && a.every((x) => b.includes(x));
+
 const tilesIn = (cmds: readonly DeskCmd[], type: "open" | "stop" | "close") =>
 	cmds.flatMap((c) => (c.type === type ? [c.tile] : []));
 
@@ -268,6 +283,7 @@ const kept = (s: Open): Saved => ({
 
 /** Press keys a moment apart, long after any list's keys: the repeat window is over by then. */
 const LATE = 1_000_000;
+
 const press = (machine: Machine, from: Desk, keys: readonly string[]) => {
 	let s = from;
 	const cmds: DeskCmd[] = [];
@@ -486,11 +502,13 @@ const broken = (machine: Machine): readonly string[] =>
 // ---------------------------------------------------------------- planted mistakes
 
 const real = deskMachine.update;
+
 /** The real machine with one cell changed. */
 const plant = (update: Partial<Machine["update"]>): Machine => ({
 	...deskMachine,
 	update: {...real, ...update},
 });
+
 /** The desk with focus put on this tile, in the active workspace. */
 const focusOn = (s: Open, focused: string): Open => {
 	const [first, ...rest] = s.workspaces.map((ws) =>

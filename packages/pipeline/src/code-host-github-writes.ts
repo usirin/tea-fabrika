@@ -32,6 +32,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) { id state headRefOid mergeable isInMergeQueue isMergeQueueEnabled }
   }
 }`;
+
 const Stands = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -46,6 +47,7 @@ const Stands = Schema.Struct({
 		}),
 	}),
 });
+
 type Standing = (typeof Stands.Type)["data"]["repository"]["pullRequest"];
 
 /**
@@ -58,6 +60,7 @@ export const ENQUEUE_WRITE = `
 mutation($pull: ID!, $head: GitObjectID!) {
   enqueuePullRequest(input: { pullRequestId: $pull, expectedHeadOid: $head }) { mergeQueueEntry { id } }
 }`;
+
 const Enqueued = Schema.Struct({
 	data: Schema.Struct({
 		enqueuePullRequest: Schema.Struct({mergeQueueEntry: Schema.Struct({id: Schema.String})}),
@@ -121,6 +124,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) { id state baseRefName headRefOid mergeable mergeCommit { oid } }
   }
 }`;
+
 const MergeStands = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -138,6 +142,7 @@ const MergeStands = Schema.Struct({
 		}),
 	}),
 });
+
 type MergeStanding = (typeof MergeStands.Type)["data"]["repository"];
 
 /**
@@ -151,6 +156,7 @@ mutation($pull: ID!, $head: GitObjectID!, $method: PullRequestMergeMethod!) {
     pullRequest { mergeCommit { oid } }
   }
 }`;
+
 const MergedNow = Schema.Struct({
 	data: Schema.Struct({
 		mergePullRequest: Schema.Struct({
@@ -186,6 +192,7 @@ const methodOf = (repo: MergeStanding): "SQUASH" | "MERGE" | "REBASE" | null =>
 				: null;
 
 const Branch = Schema.Struct({protected: Schema.Boolean});
+
 /**
  * The rules GitHub holds for one branch: its rulesets' rules, the
  * organisation's too, and a classic protection rule. Read as GraphQL: the
@@ -197,6 +204,7 @@ const RULES_READ = `query($owner: String!, $name: String!, $ref: String!) {
     ref(qualifiedName: $ref) { branchProtectionRule { id } rules(first: 1) { totalCount } }
   }
 }`;
+
 const RefRules = Schema.Struct({
 	data: Schema.Struct({
 		repository: Schema.Struct({
@@ -209,6 +217,7 @@ const RefRules = Schema.Struct({
 		}),
 	}),
 });
+
 const GitCommit = Schema.Struct({sha: Schema.String, tree: Schema.Struct({sha: Schema.String})});
 const MadeCommit = Schema.Struct({sha: Schema.String});
 const GitRef = Schema.Struct({object: Schema.Struct({sha: Schema.String})});

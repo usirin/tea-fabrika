@@ -10,6 +10,7 @@ const SEED = 119120;
 // Defer export lookup so the red base's missing exports do not prevent law collection.
 const LIBRARY = "@kampus/libfabrika";
 const TESTING = "@kampus/libfabrika/testing";
+
 const msgs = fc.array(fc.constantFrom({type: "inc"}, {type: "dec"}, {type: "reset"}), {
 	maxLength: 30,
 });

@@ -10,6 +10,7 @@ import {fcProcessIds, processId} from "../id.test-support.ts";
 const SEED = 119120;
 const start = Effect.runSync(processId);
 const after = Effect.runSync(processId);
+
 const events = [
 	{type: "started", start, after: null, build: "build-a", reason: "open"},
 	{type: "waiting", after: start, until: 250, reason: "crash"},
@@ -18,6 +19,7 @@ const events = [
 	{type: "stop"},
 	{type: "stopped"},
 ] as const;
+
 const lifecycle = fc.record({
 	start: fcProcessIds,
 	after: fcProcessIds,
@@ -25,8 +27,10 @@ const lifecycle = fc.record({
 	until: fc.nat(),
 	reason: fc.string(),
 });
+
 const normalLife = {start, after, build: "build-a", until: 250, reason: "crash"};
 const stopInFlight = [events[0], {type: "stop"}, events[1], events[2], {type: "stopped"}] as const;
+
 const messages = lifecycle.map(
 	({start, after, build, until, reason}) =>
 		[
@@ -38,6 +42,7 @@ const messages = lifecycle.map(
 			{type: "stopped"},
 		] as const,
 );
+
 const message = messages.chain((msgs) => fc.constantFrom(...msgs));
 
 describe("P12 stage machine laws", () => {

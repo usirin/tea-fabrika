@@ -127,6 +127,7 @@ export interface ConfigInvalid {
 	readonly _tag: "config_invalid";
 	readonly why: string;
 }
+
 const invalid = (why: string): ConfigInvalid => ({_tag: "config_invalid", why});
 
 /** A file's text as a config: parsed, held to the schema, its paths taken from `folder`. */

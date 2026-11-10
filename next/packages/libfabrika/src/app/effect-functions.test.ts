@@ -26,11 +26,13 @@ import {Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager
 import {ProgramRunner} from "./runner.ts";
 
 const CHECK = {seed: 119120, numRuns: 40};
+
 const text = fc.string({
 	unit: fc.constantFrom("a", "b", "7", ":", "_"),
 	minLength: 1,
 	maxLength: 180,
 });
+
 const hex = (length: number) =>
 	fc
 		.string({
@@ -39,7 +41,9 @@ const hex = (length: number) =>
 			maxLength: length - 1,
 		})
 		.map((rest) => `1${rest}`);
+
 const context = fc.record({traceId: hex(32), spanId: hex(16)});
+
 const attributes = fc.record({
 	stream: text,
 	id: text,
@@ -48,11 +52,13 @@ const attributes = fc.record({
 	build: text,
 	value: fc.integer(),
 });
+
 const PROCESS = "process_01jc9q4w7zfm8s5r2t6v0xkb4d";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const DAY = 86_400_000;
 const BIG = 1_000_000_000;
 const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+
 const request = Effect.fn("test.request")(function* <A, E, R>(body: Effect.Effect<A, E, R>) {
 	return yield* body;
 });
@@ -67,8 +73,10 @@ const capture = (delegate?: Tracer.Tracer, spans: Array<Tracer.Span> = []) => {
 	});
 	return {spans, tracer};
 };
+
 const tags = (span: Tracer.Span) => Object.fromEntries(span.attributes);
 const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent, (p) => p.spanId));
+
 const ended = (span: Tracer.Span, ok: boolean) => {
 	expect(span.status._tag, span.name).toBe("Ended");
 	const status = span.status;
@@ -76,14 +84,17 @@ const ended = (span: Tracer.Span, ok: boolean) => {
 	expect(Exit.isSuccess(status.exit), span.name).toBe(ok);
 	expect(status.endTime >= status.startTime, span.name).toBe(true);
 };
+
 const child = (span: Tracer.Span, parent: Tracer.AnySpan) => {
 	expect(span.traceId, span.name).toBe(parent.traceId);
 	expect(parentId(span), span.name).toBe(parent.spanId);
 };
+
 const cut = (key: string, value: string) =>
 	value.length <= 128
 		? {[key]: value}
 		: {[key]: value.slice(0, 128), [`${key}.length`]: value.length};
+
 const clock = (now: () => number): Clock.Clock => ({
 	currentTimeMillisUnsafe: now,
 	currentTimeMillis: Effect.sync(now),
@@ -93,6 +104,7 @@ const clock = (now: () => number): Clock.Clock => ({
 	monotonicTimeNanos: Effect.sync(() => BigInt(now()) * 1_000_000n),
 	sleep: () => Effect.void,
 });
+
 const disk = () => {
 	const db = new DatabaseSync(":memory:");
 	const actual = nodeSql(db);
@@ -109,6 +121,7 @@ const disk = () => {
 	};
 	return {db, sql, fault};
 };
+
 const line = (
 	a: typeof attributes extends fc.Arbitrary<infer A> ? A : never,
 	traceId: string,
@@ -713,6 +726,7 @@ describe("T285, sink keep-law", () => {
 // A small real program. The checked writer is the test's door adapter; the runner,
 // mailbox, session manager, process store, sink and record manager are the real ones.
 const Model = Schema.Struct({replies: Schema.Int});
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("work"), value: Schema.Int}),
 	Schema.Struct({
@@ -725,16 +739,19 @@ const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("throw")}),
 	Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number}),
 ]);
+
 const work = Cmd.make("work", {
 	input: Schema.Struct({value: Schema.Int}),
 	ok: Schema.Int,
 	err: ["handler_failed", "bad_cmd"],
 });
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["seen_ahead", "bad_cmd"],
 });
+
 const machine = Machine.make({
 	model: Model,
 	msg: Msg,
@@ -763,6 +780,7 @@ const machine = Machine.make({
 		write_err: (s) => [{replies: s.replies + 1}, []],
 	},
 });
+
 const program = {
 	name: "trace-test",
 	machine,
@@ -779,7 +797,9 @@ const program = {
 	writes: {saved: {schema: Schema.TaggedStruct("saved", {value: Schema.Int}), personOnly: false}},
 	wake: () => null,
 };
+
 const decodeIncoming = Schema.decodeUnknownSync(Incoming);
+
 const runnerWorld = (
 	a: {readonly name: string; readonly build: string; readonly key: string},
 	signer: {readonly traceId: string; readonly spanId: string},

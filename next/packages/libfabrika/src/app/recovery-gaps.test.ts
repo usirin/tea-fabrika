@@ -44,36 +44,44 @@ import {
 import {type Descriptor, ProgramRunner} from "./runner.ts";
 
 const NAME = "counter:1";
+
 const policy = {
 	maxDeliveries: 3,
 	intensity: 5,
 	periodMs: 5000,
 	backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5000},
 };
+
 const owner = Writer.cases.person.make({key: "SHA256:caller", for: from().for});
+
 const Model = Schema.Struct({
 	count: Schema.Int,
 	replies: Schema.Int,
 	queue: Schema.NullOr(Schema.String),
 });
 type Model = typeof Model.Type;
+
 const Msg = Schema.Union([
 	Schema.Struct({type: Schema.Literal("poison")}),
 	Schema.Struct({type: Schema.Literal("add"), n: Schema.Int}),
 	Schema.Struct({type: Schema.Literal("wait")}),
 	Schema.Struct({type: Schema.Literal("queue"), parent: Schema.String}),
 ]);
+
 const wait = Cmd.make("wait", {input: Schema.Struct({}), ok: Schema.Null, err: []});
+
 const write = Cmd.make("write", {
 	input: Schema.Struct({stream: Schema.String, write: Schema.Json}),
 	ok: Schema.Json,
 	err: ["not_delivered", "ended", "spent"],
 });
+
 type Wiring = {
 	policy: typeof policy;
 	recovery: {sql: Sql; name: string; capacity: number};
 	fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
+
 const runnerLayer: (p: Descriptor, options: Wiring) => ReturnType<typeof ProgramRunner.layer> =
 	ProgramRunner.layer;
 
@@ -276,10 +284,12 @@ const world = Effect.fnUntraced(function* () {
 		},
 	};
 });
+
 const lives = read(`processes/${NAME}`);
 const inbox = read(`${NAME}/inbox`);
 const exitBody = Schema.decodeUnknownSync(Schema.Struct({process: Schema.String}));
 const restartBody = Schema.decodeUnknownSync(Schema.Struct({after: Schema.String}));
+
 const restart = (r: (typeof ProgramRunner)["Service"], id: string, build: string) =>
 	Effect.gen(function* () {
 		expect(r.restart, "P34 trusted Restart operation is missing").toBeTypeOf("function");

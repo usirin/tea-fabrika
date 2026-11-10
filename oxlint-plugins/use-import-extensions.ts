@@ -30,6 +30,7 @@ const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"
 
 const isFile = (path: string): boolean =>
 	statSync(path, {throwIfNoEntry: false})?.isFile() === true;
+
 const isFolder = (path: string): boolean =>
 	statSync(path, {throwIfNoEntry: false})?.isDirectory() === true;
 

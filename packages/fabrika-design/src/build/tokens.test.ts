@@ -117,6 +117,7 @@ const readToken = async (dir: string, token: string): Promise<Table> => {
 // ---- running the build on a copy ---------------------------------------------------------------
 
 const copies: string[] = [];
+
 afterAll(() => {
 	for (const dir of copies) rmSync(dir, {recursive: true, force: true});
 });
@@ -444,11 +445,13 @@ const look =
 	(t: Table): void => {
 		tableIn(t, "colors")[key] = value;
 	};
+
 const without =
 	(...keys: readonly string[]) =>
 	(t: Table): void => {
 		for (const key of keys) delete t[key];
 	};
+
 const with_ =
 	(key: string, value: unknown) =>
 	(t: Table): void => {

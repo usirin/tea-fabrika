@@ -80,6 +80,7 @@ const passing = (brief: Brief): Form => ({
 	findings: [],
 	skipped: [{what: "The test run", why: "No shell."}],
 });
+
 const failing = (brief: Brief): Form => ({
 	...passing(brief),
 	rows: passing(brief).rows.map((row) =>
@@ -98,6 +99,7 @@ const failing = (brief: Brief): Form => ({
 		},
 	],
 });
+
 /** Every criterion met, and one real problem no criterion names: a rubric's standing check. */
 const standing = (brief: Brief): Form => ({
 	...passing(brief),
@@ -112,6 +114,7 @@ const standing = (brief: Brief): Form => ({
 		},
 	],
 });
+
 /**
  * A form TypeScript takes and its schema does not: a line that is not a
  * number. What an agent's answer can look like once it has crossed a
@@ -130,9 +133,11 @@ const offTheLines = (form: Form): Form => ({
 		},
 	],
 });
+
 const drafts =
 	(form: (brief: Brief) => Form) =>
 	(brief: Brief): Drafted => ({answer: "form", form: form(brief), ...RAN});
+
 const never = (): Drafted => {
 	throw new Error("the reviewer was started");
 };
@@ -898,6 +903,7 @@ interface LifeOptions extends World {
 
 /** The criteria record on a disk: the rows a review kept outlive the life that kept them, as the ledger's do. */
 const records = new WeakMap<ReturnType<typeof mortalDisk>, ReturnType<typeof memoryRecord>>();
+
 const recordOn = (disk: ReturnType<typeof mortalDisk>) => {
 	const record = records.get(disk) ?? memoryRecord();
 	records.set(disk, record);

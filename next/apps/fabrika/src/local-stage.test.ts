@@ -15,6 +15,7 @@ import {vi} from "vitest";
 vi.mock("../alchemy.run.ts", () => ({
 	stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
 }));
+
 vi.mock("alchemy/Deploy", () => ({
 	deploy: ({stack}: {stack: Context.Context<never>}) =>
 		Effect.gen(function* () {
@@ -34,11 +35,13 @@ vi.mock("alchemy/Deploy", () => ({
 }));
 
 const homes: Array<string> = [];
+
 const home = () => {
 	const folder = mkdtempSync(join(tmpdir(), "p12-m-"));
 	homes.push(folder);
 	return folder;
 };
+
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllEnvs();

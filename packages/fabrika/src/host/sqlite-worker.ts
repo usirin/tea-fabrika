@@ -9,6 +9,7 @@ import {dispatch, type Method, openDb} from "./sqlite-driver.ts";
 type Call = {id: number; method: Method; args: unknown[]; now: number};
 
 const port = parentPort;
+
 if (port !== null) {
 	const {db} = openDb(String(workerData.path));
 	const graceMs = Number(workerData.graceMs ?? 1000);

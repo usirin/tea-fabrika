@@ -52,6 +52,7 @@ const TICKET = `${REPO}/issues/1`;
 const PR = `${REPO}/pull/9`;
 /** The ticket the recorded pull request's body closes ("Fixes #625"): the one its review keeps rows for, and ship reads. */
 const SERVES = "kamp-us/tea-fabrika-sandbox#625";
+
 const FLAGS = {
 	rubrics: RUBRICS,
 	model: "opus",
@@ -100,6 +101,7 @@ const passing = (brief: Brief): Form => ({
 	findings: [],
 	skipped: [],
 });
+
 /** Criterion 4 fails, with one finding that says what would close it. */
 const failing = (brief: Brief): Form => ({
 	...passing(brief),
@@ -119,6 +121,7 @@ const failing = (brief: Brief): Form => ({
 		},
 	],
 });
+
 /** The brief's first `n` criteria fail, each with a finding that says what would close it. */
 const failingFirst =
 	(n: number) =>
@@ -141,12 +144,14 @@ const failingFirst =
 			})),
 		};
 	};
+
 const RAN = {
 	spend: {costUsd: 0.25, tokens: 1000, context: 1000, turns: 2, minutes: 0.1},
 	tools: [],
 	refused: [],
 	links: 0,
 };
+
 const drafts =
 	(form: (brief: Brief) => Form) =>
 	(brief: Brief): Drafted => ({answer: "form", form: form(brief), ...RAN});
@@ -262,14 +267,17 @@ function world(
  * test's time, and long enough that a run told the ticket just after the kill still finds it held.
  */
 const TTL_MS = 1500;
+
 /** One start's leases (one process's), on a ledger the starts may share. */
 const lanesOn = (ledger: Layer.Layer<Ledger>) =>
 	layerLanes({ttlMs: TTL_MS}).pipe(Layer.provideMerge(ledger));
+
 /** The lane that holds `ticket`'s lease now, read from the ledger. */
 const holderNow = (ledger: Layer.Layer<Ledger>, ticket: string) =>
 	Effect.runSync(holderOf(ticketId(ticket)).pipe(Effect.provide(ledger)));
 
 type OperateRun = RunOf<typeof operateProgram>;
+
 type Heard = {
 	readonly steps: ReturnType<typeof ear<Step>>;
 	readonly ended: ReturnType<typeof ear<Ended>>;

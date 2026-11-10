@@ -123,6 +123,7 @@ export interface PackRefused {
 	readonly name: string;
 	readonly why: string;
 }
+
 const refused = (name: string, why: string): PackRefused => ({_tag: "pack_refused", name, why});
 
 const isRecordOfStrings = (value: unknown): value is Readonly<Record<string, string>> =>

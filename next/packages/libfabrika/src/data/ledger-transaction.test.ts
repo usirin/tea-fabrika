@@ -9,9 +9,11 @@ import type {Sql} from "./referee.ts";
 import {nodeSql} from "./sqlite.ts";
 
 const opened: Array<DatabaseSync> = [];
+
 afterEach(() => {
 	for (const db of opened.splice(0)) db.close();
 });
+
 const line = (n: number): Line => ({
 	by: "SHA256:brain",
 	for: "person-a",
@@ -23,6 +25,7 @@ const line = (n: number): Line => ({
 	_tag: "fact",
 	body: {n},
 });
+
 const setup = (
 	ring: (to: string, stream: string, rev: number) => Effect.Effect<void, LedgerError> = () =>
 		Effect.void,

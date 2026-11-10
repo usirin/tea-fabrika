@@ -40,6 +40,7 @@ const LIVE: Section = {
 	fold: false,
 	rows: [row("7", "Approve plan"), row("8", "Stuck: checks red"), row("9", "Answer the question")],
 };
+
 const LATER: Section = {id: "later", title: "Later", fold: true, rows: [row("4", "Pick a name")]};
 const stops = stopsOf([LIVE, LATER], new Set());
 
@@ -187,6 +188,7 @@ describe("the palette's bold letters and the tooltip's wait", () => {
 });
 
 const noop = () => {};
+
 const menu = (sections: readonly Section[], from: MenuProps["from"] = "top") =>
 	renderToStaticMarkup(
 		createElement(Menu, {

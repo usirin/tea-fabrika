@@ -27,6 +27,7 @@ type Msg = MsgOf<Count>;
 const table: MsgArbitraryTable<Msg> = {
 	add: arbRecordMsg("add", {n: fc.integer({min: -50, max: 50})}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 40});
 const OPTS = {numRuns: 300, seed: 1};
 const ctx = stubCtxThrowingProxy<undefined>();

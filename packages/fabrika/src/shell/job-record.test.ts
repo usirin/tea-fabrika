@@ -38,6 +38,7 @@ beforeAll(async () => {
 	await mf.ready;
 	url = (await mf.unsafeGetDirectURL()).origin;
 });
+
 afterAll(async () => {
 	await mf.dispose();
 });

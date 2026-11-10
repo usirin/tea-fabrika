@@ -7,8 +7,10 @@ import {type Editor, type EditorMsg, matching} from "./machine.ts";
 import type {Snapshot} from "./program.ts";
 
 const spelling = (key: Key) => `${key._tag === "after_prefix" ? "<prefix>" : ""}${spell(key.key)}`;
+
 const spoken = (keys: Keys, key: Key) =>
 	`${key._tag === "after_prefix" ? `${spell(keys.prefix)} then ` : ""}${spell(key.key)}`;
+
 const systemReason: Readonly<Record<string, string>> = {
 	"<m-q>": "Quit the app",
 	"<m-h>": "Hide the app",
@@ -16,6 +18,7 @@ const systemReason: Readonly<Record<string, string>> = {
 	"<m- >": "Open Spotlight",
 	"<a-m-escape>": "Force quit an app",
 };
+
 const shortcut = (key: Key) => {
 	if (key._tag === "after_prefix") return null;
 	const parts = spell(key.key).split("+");

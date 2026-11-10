@@ -293,6 +293,7 @@ const mayImport = (db: Db, founder: string | null, who: Stamp): Refused | null =
 // No parameter property here: Node runs this file by stripping its types, and cannot strip one.
 class Stop extends Error {
 	readonly refused: Refused;
+
 	constructor(refused: Refused) {
 		super(refused.why);
 		this.refused = refused;

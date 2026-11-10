@@ -1109,6 +1109,7 @@ const longNames = (count: number) =>
 			"deny",
 		]),
 	);
+
 /** The box runs 254 lines of `longNames` and stops at 256, so these two stand on each side of what we allow. */
 const FENCE_BYTES_MOST = 220;
 const FENCE_BYTES_LEAST = 240;
@@ -1121,6 +1122,7 @@ const deepPatterns = (count: number) =>
 			return [n % 2 === 0 ? key : `${key}/**`, "deny"];
 		}),
 	);
+
 /** The box runs about 210 lines of `deepPatterns`, so these two stand on each side of what we allow. */
 const DEEP_MOST = 140;
 const DEEP_LEAST = 180;
@@ -1216,26 +1218,31 @@ describe("a config as flags", () => {
 const boxHome = realpathSync(mkdtempSync(join(tmpdir(), "codex-box-")));
 afterAll(() => rmSync(boxHome, {recursive: true, force: true}));
 const boxEnv = codexEnvOf(process.env, boxHome);
+
 const codexBox = (cwd: string, config: Record<string, unknown>, line: string) =>
 	spawnSync("codex", ["sandbox", ...flagsOf(config), "--", "/bin/sh", "-c", line], {
 		cwd,
 		env: boxEnv,
 		stdio: "ignore",
 	}).status;
+
 const tried = spawnSync("codex", ["sandbox", "--", "/bin/sh", "-c", "exit 0"], {
 	cwd: boxHome,
 	env: boxEnv,
 	encoding: "utf8",
 	stdio: ["ignore", "ignore", "pipe"],
 });
+
 // Each is how a look along the PATH says no. A folder a box closes answers EPERM, not ENOENT.
 const noCodex =
 	tried.error !== undefined &&
 	"code" in tried.error &&
 	["ENOENT", "EACCES", "EPERM"].includes(String(tried.error.code));
+
 // A box cannot start inside another box, and nothing is wrong with either. Agents run these tests
 // inside one, with `codex` on the PATH. Only this one line says so: any other failure is a failure.
 const insideABox = tried.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
+
 /** Why Codex's box did not start, with its version. Empty when it did. */
 const boxBroken = (): string => {
 	if (tried.status === 0) return "";
@@ -1243,6 +1250,7 @@ const boxBroken = (): string => {
 	const said = (tried.stderr ?? "").trim().split("\n").slice(-3).join(" ");
 	return `${version} found, its box does not start (exit ${tried.status}): ${tried.error?.message ?? said}`;
 };
+
 const SLOW = 120_000;
 
 type Config = ReturnType<typeof codexConfig>;

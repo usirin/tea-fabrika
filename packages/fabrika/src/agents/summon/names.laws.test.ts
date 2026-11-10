@@ -47,6 +47,7 @@ const table: MsgArbitraryTable<NamesMsg> = {
 	taken: arbRecordMsg("taken", {name: entry}),
 	freed: arbRecordMsg("freed", {name: fc.constantFrom(...WORDS, "nobody")}),
 };
+
 const lists = arbMsgSequence(arbMsg(table), {maxLength: 30});
 const OPTS = {numRuns: 100, seed: 1};
 

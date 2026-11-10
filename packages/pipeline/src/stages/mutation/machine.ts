@@ -57,6 +57,7 @@ const ScopeIn = Schema.Struct({
 	kept: Schema.Array(CodeRef),
 	exam: Schema.Array(Schema.String),
 });
+
 const TestsIn = Schema.Struct({head: Schema.String});
 
 export const readScope = gather("mutation_scope", {input: ScopeIn, ok: Scope, err: Unknown});
@@ -133,6 +134,7 @@ const stay = (s: Mutation): Step => [s, []];
 const scoped = (s: Scoped): Scoped => ({ask: s.ask, spans: s.spans});
 
 const blank: MutationReport = {changes: [], spans: [], ran: null, failed: []};
+
 const end = (s: Held, outcome: MutationOutcome, report: Partial<MutationReport> = {}): Step => [
 	{ask: s.ask, phase: "over", outcome, report: {...blank, ...report}},
 	[],

@@ -37,9 +37,12 @@ import {describe, expect, it} from "vitest";
 // Today's tooling. Run each plant in a disposable copy of the script beside this test.
 const script = join(import.meta.dirname, "plancheck.sh");
 const options = {seed: 520, numRuns: 24};
+
 const table = (heads: string[], rows: string[][]) =>
 	[heads, heads.map(() => "---"), ...rows].map((row) => `| ${row.join(" | ")} |`).join("\n");
+
 const laws = (cell: string) => table(["Law", "Generator", "Plant"], [["holds", cell, "break it"]]);
+
 const check = (body: string, marker = "Plancheck-Version: 2") => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-"));
 	try {
@@ -59,7 +62,9 @@ const check = (body: string, marker = "Plancheck-Version: 2") => {
 		rmSync(folder, {recursive: true, force: true});
 	}
 };
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{0,8}$/);
+
 const handoff = (text: string, draft = false) => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-300-"));
 	try {
@@ -79,6 +84,7 @@ const handoff = (text: string, draft = false) => {
 		rmSync(folder, {recursive: true, force: true});
 	}
 };
+
 const constructor = fc.constantFrom(
 	"boolean",
 	"integer",
@@ -100,6 +106,7 @@ const constructor = fc.constantFrom(
 	"uint8Array",
 	"shuffledSubarray",
 );
+
 const allowed = fc.oneof(
 	fc.constantFrom("lint", "type"),
 	fc
@@ -117,6 +124,7 @@ const allowed = fc.oneof(
 		.tuple(fc.constantFrom("vector", "format", "pinned", "scenario"), word)
 		.map(([label, why]) => `${label}: ${why}`),
 );
+
 const refused = fc.oneof(
 	fc.constantFrom("example-based", "examples(3)", "TBD", "todo", "?", "hand-picked", "", "none"),
 	word.map((name) => `fc.unknown_${name}`),
@@ -133,7 +141,9 @@ const refused = fc.oneof(
 		"fc.string trailing text",
 	),
 );
+
 const wrap = fc.constantFrom("", "`", "**", "_");
+
 const cell = fc.oneof(
 	allowed.map((text) => ({text, pass: true})),
 	refused.map((text) => ({text, pass: false})),
@@ -892,6 +902,7 @@ describe("plancheck, today's tooling", () => {
 
 // T321 keeps normal saved-plan reads above. New structure checks run at the approval boundary.
 const digest = (body: string) => createHash("sha256").update(Buffer.from(body)).digest("hex");
+
 const complete = (extra = "") =>
 	[
 		"# Today's tooling",
@@ -919,8 +930,10 @@ const complete = (extra = "") =>
 		"None.",
 		extra,
 	].join("\n");
+
 const approved = (body: string, note = "the decided note") =>
 	`Approved by the lead agent, builds ${note}; body ${digest(body).slice(0, 12)}\nPlancheck-Version: 2\n${body}`;
+
 const modeCheck = (text: string, mode: "--draft" | "--approved") => {
 	const folder = mkdtempSync(join(tmpdir(), "pc-321-"));
 	try {

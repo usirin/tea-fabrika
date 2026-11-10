@@ -24,6 +24,7 @@ const constructors = new Set([
 	"jsonValue",
 	"uint8Array",
 ]);
+
 const checks = new Set([
 	"is",
 	"decodeSync",

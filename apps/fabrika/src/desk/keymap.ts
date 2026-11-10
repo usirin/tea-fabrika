@@ -775,6 +775,7 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
 // ---------------------------------------------------------------- a key, as the file spells it
 
 const WORDS: Readonly<Record<string, string>> = {c: "ctrl", a: "alt", s: "shift", m: "cmd"};
+
 const SPOKEN: Readonly<Record<string, string>> = Object.fromEntries(
 	Object.entries(NAMED).map(([word, name]) => [name, word]),
 );

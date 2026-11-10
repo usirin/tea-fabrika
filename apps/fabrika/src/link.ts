@@ -130,18 +130,21 @@ export const greet = Cmd.make("greet", {
 	ok: Done,
 	err: [],
 });
+
 /** Hand the line on: to the host's clients, or to the app's relay. */
 export const deliver = Cmd.make("deliver", {
 	input: Schema.Struct({m: Schema.Unknown}),
 	ok: Done,
 	err: [],
 });
+
 /** The other side speaks another version: say so plainly. */
 export const refuse = Cmd.make("refuse", {
 	input: Schema.Struct({theirs: Schema.Int, ours: Schema.Int}),
 	ok: Done,
 	err: [],
 });
+
 /** Close the socket. */
 export const drop = Cmd.make("drop", {
 	input: Schema.Struct({why: Schema.String}),

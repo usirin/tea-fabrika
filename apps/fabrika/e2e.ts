@@ -117,6 +117,7 @@ const home = await mkdtemp(join(tmpdir(), "fabrika-home-"));
 const env = {...process.env, FABRIKA_HOME: home};
 
 const saved: string[] = [];
+
 const shot = async (page: Page, name: string) => {
 	const file = join(shots, `${name}.png`);
 	await page.screenshot({path: file});
@@ -141,6 +142,7 @@ const until = async <T>(what: string, look: () => Promise<T>, ok: (seen: T) => b
 };
 
 const tile = (page: Page, id: string) => page.locator(`[data-tile="${id}"]`);
+
 /**
  * A tile's screen, as text: its rows, with no trailing spaces. Empty while it is not drawn, as the
  * first tile is not until the host is up: `until` is what waits, and a look here never ends it.
@@ -149,15 +151,19 @@ const screen = async (page: Page, id: string) => {
 	const text = tile(page, id).locator(".screen-text");
 	return (await text.count()) === 0 ? "" : ((await text.textContent({timeout: 2000})) ?? "");
 };
+
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
+
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
 	page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
+
 const focused = (page: Page) =>
 	page.locator('[data-tile][aria-current="true"]').getAttribute("data-tile", {timeout: 2000});
 
 const shows = (page: Page, id: string, what: string, ok: (text: string) => boolean) =>
 	until(`${id}: ${what}`, () => screen(page, id), ok);
+
 const prompted = (page: Page, id: string) =>
 	shows(page, id, "the prompt", (t) => lastRow(t) === "tsh$");
 
@@ -206,6 +212,7 @@ const focusIs = (page: Page, id: string) =>
 		() => focused(page),
 		(f) => f === id,
 	);
+
 const tilesAre = (page: Page, ids: readonly string[]) =>
 	until(
 		`the tiles ${ids.join(" ")}`,
@@ -219,28 +226,33 @@ const asked = (page: Page) =>
 		.getByRole("alertdialog")
 		.textContent({timeout: 2000})
 		.then((t) => t ?? "");
+
 const askedIs = (page: Page, question: string) =>
 	until(
 		`the question ${question}`,
 		() => asked(page),
 		(q) => q === question,
 	);
+
 const noQuestion = (page: Page) =>
 	until(
 		"no question",
 		() => page.getByRole("alertdialog").count(),
 		(n) => n === 0,
 	);
+
 /** The word in a tile's state slot, or "" for none. */
 const stateIn = async (page: Page, id: string) => {
 	const state = tile(page, id).locator(".titlebar .state");
 	return (await state.count()) === 0 ? "" : ((await state.textContent({timeout: 2000})) ?? "");
 };
+
 /** 1 when a tile's title bar says it is closing, else 0. */
 const closingIn = async (page: Page, id: string) =>
 	(await stateIn(page, id)) === "closing" ? 1 : 0;
 
 const countIn = (page: Page, id: string) => tile(page, id).getByLabel("count", {exact: true});
+
 const windowCount = (app: ElectronApplication) =>
 	app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows().length);
 
@@ -270,6 +282,7 @@ const noBrowser = async (app: ElectronApplication) => {
 	if (!swapped)
 		throw new Error("shell.openExternal was not swapped: this run would open a real browser");
 };
+
 /** What main has asked the browser to open, in order. */
 const openedOutside = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {opened?: string[]}).opened ?? []);
@@ -286,6 +299,7 @@ const activate = async (app: ElectronApplication) => {
 /** The popover that holds the page's focus: its id, or `null`. */
 const overHolds = (page: Page) =>
 	page.evaluate(() => document.activeElement?.closest("[data-over]")?.id ?? null);
+
 const gone = (page: Page, id: string) =>
 	until(
 		`#${id} to close`,
@@ -373,6 +387,7 @@ const popovers = async (page: Page) => {
 
 /** Every text a locator finds now, none when it finds nothing: a look that never waits. */
 const textsOf = (at: Locator) => at.evaluateAll((all) => all.map((el) => el.textContent ?? ""));
+
 /**
  * The window's own status region for its mode: not a tile's closing note, and not the top bar's
  * host item, which are status regions too. Waits until there is one, and it says `want`.
@@ -383,7 +398,9 @@ const modeSaid = (page: Page, want: string) =>
 		() => textsOf(page.locator('[role="status"]:not([data-tile] *):not(.topbar *)')),
 		(said) => said.length === 1 && said[0] === want,
 	);
+
 const bottomLine = (page: Page) => page.locator("footer.bottomline");
+
 /** Waits until the bottom line's INFO words hold `want`. */
 const explained = (page: Page, want: string) =>
 	until(
@@ -394,6 +411,7 @@ const explained = (page: Page, want: string) =>
 
 /** The bottom line's info item, by its name, which stays `info` whether the mode is on or off. */
 const infoItem = (page: Page) => bottomLine(page).getByRole("button", {name: /info$/});
+
 /** Click t3, and wait until focus is back in it. */
 const backInT3 = async (page: Page) => {
 	await tile(page, "t3").click();
@@ -1328,12 +1346,14 @@ const alive = (pid: number) => {
 		return false;
 	}
 };
+
 /** The pid the host wrote in its home, or none. */
 const hostPid = async (on: string) => {
 	const text = await readFile(join(on, "host", "pid"), "utf8").catch(() => "");
 	const pid = Number.parseInt(text, 10);
 	return Number.isInteger(pid) ? pid : null;
 };
+
 /**
  * The jobs in the host's one table, as kept in `<home>/storage/jobs` (host/run.ts), read from the
  * files and never opened: an open takes the table over from the host that runs on it
@@ -1360,12 +1380,14 @@ const keptJobs = async (on: string): Promise<readonly Shell.Job[]> => {
 	const table: Shell.Jobs = JSON.parse(newest.body);
 	return table.jobs;
 };
+
 /** The pids whose command line names `what`, as pgrep finds them. */
 const pgrep = (what: string) =>
 	promisify(execFile)("pgrep", ["-f", what]).then(
 		(r) => r.stdout.split("\n").filter((l) => l !== ""),
 		(): string[] => [],
 	);
+
 /** Stop a process by its pid, as the test's own clean-up, and wait for it to be gone. */
 const stop = async (pid: number) => {
 	if (alive(pid)) process.kill(pid, "SIGTERM");
@@ -1540,6 +1562,7 @@ const ours = (pid: number) =>
 		(r) => r.stdout.includes(here),
 		() => false,
 	);
+
 /** Kill a host this run started, as a crash does: SIGKILL, so it cleans nothing up. */
 const crash = async (pid: number) => {
 	check(`pid ${pid} is a host of this build, started by this run`, await ours(pid), pid);
@@ -1600,6 +1623,7 @@ const noInterrupts = (app: ElectronApplication) =>
 		const now: unknown = dialog.showMessageBox;
 		return now === box;
 	});
+
 /** What main was asked that would interrupt a person, in order. */
 const interruptions = (app: ElectronApplication) =>
 	app.evaluate(() => (globalThis as {asked?: string[]}).asked ?? []);
@@ -1613,6 +1637,7 @@ const LINK = '[role="status"][aria-label="the link to the host"]';
 const UP = "host up";
 /** The host's item: the first button of the link, before any Try again. */
 const HOST = `${LINK} button`;
+
 /**
  * From now on, note each change in what the window says of the link: a word may be up for a
  * moment only.
@@ -1634,9 +1659,11 @@ const watchNotes = (page: Page) =>
 		},
 		{host: HOST, up: UP},
 	);
+
 /** The words the window said of the link since `watchNotes`, in order, with no host up. */
 const notesSaid = (page: Page) =>
 	page.evaluate((up) => ((globalThis as {said?: string[]}).said ?? []).filter((t) => t !== up), UP);
+
 /** What the window says of the link now, by the host item's name, or "" for none drawn. */
 const noteNow = (page: Page) =>
 	page
@@ -1647,6 +1674,7 @@ const noteNow = (page: Page) =>
 			(t) => t ?? "",
 			() => "",
 		);
+
 /**
  * A part that works says nothing: on a fresh home with nothing asking and no agent attached, the
  * top bar's right end is the host's quiet icon alone, with no word and no `·`. C-b A and C-b S
@@ -1688,6 +1716,7 @@ const quietAtRest = async (page: Page) => {
 		sync,
 	);
 };
+
 /** The host's few lines, opened from its word in the top bar, then closed again. */
 const hostLines = async (page: Page) => {
 	const host = page.locator(LINK).getByRole("button", {name: /^host /});
@@ -1697,11 +1726,13 @@ const hostLines = async (page: Page) => {
 	await host.click();
 	return lines;
 };
+
 /** The tile that holds the page's focus, or none. */
 const focusedIn = (page: Page) =>
 	page.evaluate(
 		() => document.activeElement?.closest("[data-tile]")?.getAttribute("data-tile") ?? null,
 	);
+
 /** The desk is back: the host's item is its quiet up icon with no word, and nothing is dimmed. */
 const deskBack = (page: Page) =>
 	until(
@@ -1899,6 +1930,7 @@ const lookIs = async (app: ElectronApplication, page: Page, look: "dark" | "ligh
 			}),
 	);
 };
+
 /** The tile a title bar's slot, name and state belong to, as the page draws them. */
 const titleOf = (page: Page, id: string) =>
 	tile(page, id)
@@ -1908,6 +1940,7 @@ const titleOf = (page: Page, id: string) =>
 			slot: bar.querySelector(".slot")?.textContent ?? "",
 			name: bar.querySelector(".name")?.textContent ?? "",
 		}));
+
 /** A click on a tile's title bar: it focuses the tile and presses nothing in its body. */
 const focusOn = async (page: Page, id: string) => {
 	await tile(page, id).locator(".titlebar").click();
@@ -2788,6 +2821,7 @@ const STATES = [
 	"closing",
 	"pipe",
 ] as const;
+
 type State = (typeof STATES)[number];
 
 /** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
@@ -2816,6 +2850,7 @@ const FOCUS = {
 	"asks-dot": "apps/fabrika/docs/focus",
 	"map-you": "programs/map/docs/focus",
 } as const;
+
 const LOOKS = ["dark", "light"] as const;
 
 /** T245 A and B, today's tracker: actual keyboard focus, with the built app's CSS cascade. */
@@ -3324,15 +3359,19 @@ else if (process.argv.includes("--aria")) process.exitCode = await ariaStage();
 else if (process.argv.includes("--focus")) await focusShots();
 else if (process.argv.includes("--tracker-focus")) await trackerFocus();
 else await all();
+
 const after = await pgrep(here);
+
 check(
 	"the host stopped by its pid: pgrep finds nothing of this app left",
 	after.length === 0,
 	after,
 );
+
 const sock = await stat(join(home, "host", "sock")).then(
 	() => true,
 	() => false,
 );
+
 check("the host took its socket away as it stopped", !sock);
 console.log(`screenshots:\n${saved.map((s) => `  ${s}`).join("\n")}`);

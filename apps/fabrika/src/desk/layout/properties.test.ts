@@ -30,6 +30,7 @@ type BuildStep =
 const orientation = fc.constantFrom<Orientation>("horizontal", "vertical");
 
 const splitOf = fc.record({kind: fc.constant("split" as const), at: fc.nat(), orientation});
+
 const onTile = <K extends "turn" | "fold" | "unfold">(kind: K) =>
 	fc.record({kind: fc.constant(kind), at: fc.nat()});
 

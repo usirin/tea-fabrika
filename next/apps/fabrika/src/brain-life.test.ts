@@ -11,12 +11,15 @@ import {Effect} from "effect";
 const homes: Array<string> = [];
 const children: Array<ChildProcess> = [];
 const groups: Array<number> = [];
+
 const home = () => {
 	const h = mkdtempSync(join(tmpdir(), "p12-l-"));
 	homes.push(h);
 	return h;
 };
+
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+
 const living = (pid: number) => {
 	try {
 		process.kill(pid, 0);
@@ -25,6 +28,7 @@ const living = (pid: number) => {
 		return false;
 	}
 };
+
 afterEach(async () => {
 	for (const child of children.splice(0))
 		// A child killed by a signal keeps `exitCode` null; `signalCode` says it already ended.
@@ -41,6 +45,7 @@ afterEach(async () => {
 	}
 	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
 });
+
 const tree = (parent: number) => {
 	const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], {encoding: "utf8"})
 		.split("\n")
@@ -53,6 +58,7 @@ const tree = (parent: number) => {
 		for (const row of rows) if (pids.has(row.parent)) pids.add(row.pid);
 	return rows.filter((r) => pids.has(r.pid));
 };
+
 const launch = async (startupGate = false) => {
 	readFileSync(resolve(import.meta.dirname, "../dev.ts"), "utf8");
 	const folder = home();
@@ -126,6 +132,7 @@ const launch = async (startupGate = false) => {
 	}
 	return {child, folder, url, output: () => output, observed};
 };
+
 const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
 	const until = performance.now() + 10_000;
 	const details = () =>

@@ -9,6 +9,7 @@ import {pathsOf} from "./host/socket.ts";
 import {startHost} from "./start-host.ts";
 
 const made: string[] = [];
+
 afterEach(() => {
 	vi.unstubAllEnvs();
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});

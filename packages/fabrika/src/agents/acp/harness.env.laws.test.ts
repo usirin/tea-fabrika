@@ -19,6 +19,7 @@ const made: string[] = [];
 const SECRET = "T237-hidden-bytes-";
 const secretOf = (path: string) => `${SECRET}${randomBytes(12).toString("hex")}:${path}\n`;
 const TEXT = "ordinary text\n";
+
 afterEach(() => {
 	for (const folder of made.splice(0)) rmSync(folder, {recursive: true, force: true});
 });
@@ -147,9 +148,11 @@ const seatbelt = spawnSync(
 		encoding: "utf8",
 	},
 );
+
 const nested = seatbelt.stderr?.includes("sandbox_apply: Operation not permitted") ?? false;
 const noSeatbelt = process.platform !== "darwin" || seatbelt.error !== undefined || nested;
 const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+
 const leaked = (f: ReturnType<typeof fixture>, out: string) => [
 	...f.secrets.filter((secret) => out.includes(secret.trim())),
 	...(out.includes(SECRET) ? [SECRET] : []),

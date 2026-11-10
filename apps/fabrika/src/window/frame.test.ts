@@ -82,19 +82,23 @@ it("K18: moved keys update palette search, prefix hints, keycaps and spoken word
 	expect(capOf("<s-m-w>")).toBe("⇧⌘W");
 	expect(JSON.stringify(zoom)).not.toContain("C-b z");
 });
+
 /** The default prefix, as keyName spells it. */
 const PREFIX = "<c-b>";
+
 /** The keybindings file's table, one line per argument; a refusal fails the test. */
 const table = (...lines: readonly string[]): Keys => {
 	const answer = decodeKeys(lines.join("\n"), true);
 	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
 	return answer.success;
 };
+
 const SHAPES = new Map([
 	["tracker", {takes: [], sends: ["ticket"]}],
 	["ticket", {takes: ["ticket"], sends: ["ticket"]}],
 	["trace", {takes: ["ticket"], sends: []}],
 ]);
+
 /** `tracker | ticket | trace` typed in t1, its windows in t2 and t3, t2 focused, showing #7. */
 const lined = fold([
 	{
@@ -108,6 +112,7 @@ const lined = fold([
 	},
 	{type: "click", tile: "t2"},
 ]);
+
 const SHOWN = new Map([["ticket:1", 7]]);
 
 const now = (over: Partial<AsksNow> = {}): AsksNow => ({
@@ -117,6 +122,7 @@ const now = (over: Partial<AsksNow> = {}): AsksNow => ({
 	why: null,
 	...over,
 });
+
 const ask = (over: Partial<Ask> = {}): Ask => ({
 	key: "7/a-1",
 	ticket: 7,

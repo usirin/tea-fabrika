@@ -8,15 +8,19 @@ import {Appended, Entry, Line, PAGE, Waited} from "./log.ts";
 
 const CHECK = {seed: 119120, numRuns: 40};
 const text = fc.string({minLength: 1, maxLength: 260});
+
 const hex = (bytes: number) =>
 	fc
 		.uint8Array({minLength: bytes, maxLength: bytes})
 		.map((a) => `1${Buffer.from(a).toString("hex").slice(1)}`);
+
 const context = fc.record({traceId: hex(16), spanId: hex(8)});
+
 const cut = (key: string, value: string) =>
 	value.length <= 128
 		? {[key]: value}
 		: {[key]: value.slice(0, 128), [`${key}.length`]: value.length};
+
 const capture = () => {
 	const spans: Array<Tracer.NativeSpan> = [];
 	const tracer = Tracer.make({
@@ -28,6 +32,7 @@ const capture = () => {
 	});
 	return {spans, tracer};
 };
+
 const line = (traceId: string, body: string) =>
 	Line.make({
 		by: "writer",
