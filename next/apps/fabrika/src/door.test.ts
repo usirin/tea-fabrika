@@ -298,6 +298,8 @@ const world = Effect.fnUntraced(function* (
 		deliver: (_: Delivery): DeliveryCheck => Effect.void,
 		notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
 		next: () => C.ProcessIdGenerator.use((g) => g.next),
+		// What the injected program answers a delivered letter with, as the runner's Sent does.
+		answer: undefined as {readonly _tag: "refused"; readonly reason: string} | undefined,
 	};
 	const deliver = (process: string, envelope: Envelope, trace: {traceId: string; spanId: string}) =>
 		Effect.gen(function* () {
@@ -324,6 +326,7 @@ const world = Effect.fnUntraced(function* (
 				});
 				if (placing._tag === "refused") return yield* new LedgerError({reason: "refused"});
 			}
+			return controls.answer;
 		});
 	const settings = {
 		founder,
@@ -1995,6 +1998,33 @@ describe("P10 inputs, retries and signer", () => {
 				}).pipe(w.provide);
 			}),
 	);
+	// scenario: two program answers cover both branches of the dead-letter rule.
+	for (const [reason, answered] of [
+		["dead", {_tag: "refused", reason: "dead"}],
+		["full", {_tag: "refused", reason: "full"}],
+	] as const)
+		it.effect(
+			`scenario: a ${reason} refusal from the program ${reason === "dead" ? "stops the outbox with its bare reason" : "keeps its full reply"}`,
+			() =>
+				Effect.gen(function* () {
+					const w = yield* world();
+					yield* Effect.gen(function* () {
+						const d = yield* Door;
+						const {client} = yield* online(d, w);
+						w.controls.answer = answered;
+						const reply = yield* d.route(client, "process.send", request(`answer-${reason}`));
+						expect(reply).toEqual(
+							reason === "dead"
+								? {_tag: "refused", reason: "dead"}
+								: {_tag: "ok", result: answered},
+						);
+						// The saved answer is replayed the same way for the same letter.
+						expect(yield* d.route(client, "process.send", request(`answer-${reason}`))).toEqual(
+							reply,
+						);
+					}).pipe(w.provide);
+				}),
+		);
 	it.effect(
 		"question 16: authority is saved before delivery, and a failed delivery retries the same parent",
 		() =>
