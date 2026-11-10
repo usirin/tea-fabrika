@@ -293,6 +293,9 @@ catalogs:
     oxc-parser:
       specifier: 0.157.0
       version: 0.157.0
+    oxc-resolver:
+      specifier: 11.24.2
+      version: 11.24.2
     oxc-transform-react:
       specifier: 0.157.0
       version: 0.157.0
@@ -731,6 +734,9 @@ importers:
       oxc-parser:
         specifier: 'catalog:'
         version: 0.157.0
+      oxc-resolver:
+        specifier: 'catalog:'
+        version: 11.24.2
       postcss-value-parser:
         specifier: 'catalog:'
         version: 4.2.0
