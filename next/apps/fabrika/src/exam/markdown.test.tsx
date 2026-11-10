@@ -10,17 +10,17 @@ const bounded = (min: number, max: number) =>
 	Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 const int = (min: number, max: number) =>
 	Schema.Int.check(Schema.isBetween({minimum: min, maximum: max}));
+const Text = Schema.Union([
+	bounded(0, 4096),
+	Schema.Literals(["مرحبا 🌱", "# Hi", "- a\n- b", "| a |\n|---|\n| 1 |", "> q", "---", ""]),
+]);
+const Alt = bounded(0, 512);
 const MarkdownCases = Arbitrary.schema(
 	Schema.Struct({
-		text: Schema.Union([
-			bounded(0, 4096),
-			Schema.Literals(["مرحبا 🌱", "# Hi", "- a\n- b", "| a |\n|---|\n| 1 |", "> q", "---", ""]),
-		]),
+		text: Text,
 		depth: int(0, 8),
 		nodes: int(0, 32),
-		alt: bounded(0, 512).check(Schema.isPattern(/^[a-zA-Z0-9 ]*$/)),
-		scheme: bounded(1, 24),
-		url: bounded(0, 512),
+		alt: Alt,
 	}),
 );
 const escape = (s: string) =>
@@ -31,10 +31,52 @@ const escape = (s: string) =>
 		.replaceAll('"', "&quot;")
 		.replaceAll("'", "&#x27;");
 const safe = (html: string) => {
-	expect(html).not.toMatch(/<(?:script|img|iframe|object|embed|svg)\b/i);
+	// Only renderer-owned Markdown elements may appear. No list of dangerous raw tags.
+	const elements = new Set([
+		"p",
+		"h1",
+		"h2",
+		"h3",
+		"h4",
+		"h5",
+		"h6",
+		"ul",
+		"ol",
+		"li",
+		"strong",
+		"em",
+		"del",
+		"a",
+		"pre",
+		"code",
+		"span",
+		"blockquote",
+		"table",
+		"thead",
+		"tbody",
+		"tr",
+		"th",
+		"td",
+		"hr",
+		"br",
+		"input",
+	]);
+	for (const tag of html.matchAll(/<\/?([a-z][a-z0-9-]*)\b/gi))
+		expect(elements.has((tag[1] ?? "").toLowerCase())).toBe(true);
 	expect(html).not.toMatch(/<[^>]+\son[a-z]+\s*=/i);
 	for (const match of html.matchAll(/\bhref=["']([^"']*)["']/gi))
 		expect(match[1]).toMatch(/^https?:\/\//i);
+};
+const rawOmitted = (render: (source: string) => string, tag: string) => {
+	// Empty raw HTML, even a tag Markdown itself uses, contributes no element.
+	expect(render(`<${tag} data-p8="raw"></${tag}>`)).toBe("");
+	expect(render(`before <${tag} data-p8="raw"></${tag}> after`)).toBe("<p>before  after</p>");
+};
+const Tag = bounded(1, 32).check(Schema.isPattern(/^[a-z][a-z0-9-]*$/));
+const altText = (html: string, alt: string) => {
+	safe(html);
+	expect(html).not.toMatch(/<img\b/i);
+	expect(html).toContain(escape(alt));
 };
 const codeText = (html: string, text: string) => {
 	safe(html);
@@ -54,51 +96,67 @@ const drawing = (): Drawing => {
 		"P22 sources present: bind real parser, window, code renderer and keyed exports; failed imports are failures",
 	);
 };
+const paths = [
+	"root.ts",
+	"window.tsx",
+	"markdown.ts",
+	"draw.tsx",
+	"drawn.tsx",
+	"highlight.ts",
+	"highlight.tsx",
+	"highlighter.ts",
+].flatMap((file) => [
+	`../../../../programs/notes/src/${file}`,
+	`../../../../programs/notes/${file}`,
+]);
+const presence = (files: ReadonlySet<string>, load: () => Drawing): Drawing | null => {
+	if (!paths.some((p) => files.has(p))) return null;
+	const d = load();
+	for (const name of ["parse", "draw", "code", "keyed"] as const)
+		if (typeof d[name] !== "function") throw new Error(`missing drawing export: ${name}`);
+	return d;
+};
 const present = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
-	for (const file of ["root.ts", "window.tsx", "markdown.ts", "draw.tsx", "highlight.ts"])
-		if (
-			yield* fs.exists(new URL(`../../../../programs/notes/src/${file}`, import.meta.url).pathname)
-		)
-			return true;
-	return false;
+	const found = new Set<string>();
+	for (const p of paths) if (yield* fs.exists(new URL(p, import.meta.url).pathname)) found.add(p);
+	return presence(found, drawing);
 }).pipe(Effect.provide(NodeFileSystem.layer));
 const withDrawing = (ctx: {skip: (reason?: string) => never}, law: (d: Drawing) => void) =>
 	Effect.gen(function* () {
-		if (!(yield* present)) ctx.skip("not built: P22 drawing");
-		law(drawing());
+		const d = yield* present;
+		if (d === null) ctx.skip("not built: P22 drawing");
+		law(d);
 	});
 
 it.effect.prop(
 	"not built: P22 / parse and draw are deterministic, omit HTML and draw images as alt",
-	{c: MarkdownCases},
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
 	({c}, ctx) =>
 		withDrawing(ctx, (d) => {
 			const root = d.parse(c.text);
 			expect(d.parse(c.text)).toEqual(root);
 			expect(d.draw(root)).toBe(d.draw(d.parse(c.text)));
 			safe(d.draw(root));
-			for (const text of [
-				"<script>alert(1)</script>",
-				"<img src=x onerror=alert(1)>",
-				`<svg onload=alert(1)>${escape(c.alt)}</svg>`,
-			])
-				safe(d.draw(d.parse(text)));
-			const image = d.draw(d.parse(`![${escape(c.alt)}](https://example.test/p.png)`));
-			safe(image);
-			expect(image).not.toContain("<img");
-			expect(image).toContain(escape(c.alt));
+			for (const tag of [c.tag, "div", "style", "video", "script", "img", "svg", "p", "a", "span"])
+				rawOmitted((s) => d.draw(d.parse(s)), tag);
+			// Escape Markdown punctuation; Unicode is passed unchanged to the parser.
+			for (const alt of [c.alt, "مرحبا 🧪 שלום ![]()_*`<> &.,:;?\\"]) {
+				const source = alt.replace(/[\\`*_[\]{}()<>!#]/g, "\\$&").replaceAll("&", "&amp;");
+				altText(d.draw(d.parse(`![${source}](https://example.test/p.png)`)), alt);
+			}
 		}),
 	options,
 );
 
 it.effect.prop(
 	"not built: P22 / only http and https links survive in data and drawing",
-	{c: MarkdownCases},
+	{c: Arbitrary.schema(Schema.Struct({scheme: bounded(1, 24), url: bounded(0, 512)}))},
 	({c}, ctx) =>
 		withDrawing(ctx, (d) => {
 			for (const scheme of ["javascript", "JAVASCRIPT", "data", "file", "relative", c.scheme]) {
-				const url = scheme === "relative" ? "./other.md" : `${scheme}:example`;
+				const url =
+					scheme === "relative" ? "./other.md" : `${scheme}:${new URLSearchParams({q: c.url})}`;
 				const tree = d.parse(`[click](${url})`),
 					html = d.draw(tree);
 				safe(html);
@@ -127,6 +185,10 @@ it.effect.prop(
 				for (const element of ["strong", "em", "code", "del"])
 					expect(html).toContain(`<${element}>`);
 			codeText(d.code(null, c.text), c.text);
+			for (const lang of ["ts", "html"]) codeText(d.code(lang, c.text), c.text);
+			const colored = d.code("ts", `const n = 1;\n// ${c.text}`);
+			codeText(colored, `const n = 1;\n// ${c.text}`);
+			expect(colored).toMatch(/<span\b[^>]*style=/);
 			const keys = d.keyed([c.text, c.alt, c.text]);
 			expect(new Set(keys.map((k) => k.key)).size).toBe(3);
 			expect(d.keyed([c.text, c.alt, c.text])).toEqual(keys);
@@ -135,7 +197,7 @@ it.effect.prop(
 );
 
 // format: exact syntax tree is the ported storage/drawing vocabulary, not a hand-picked law.
-it.effect("not built: P22 / format: block and inline vocabulary from the source port", (ctx) =>
+it.effect("format: not built: P22 / block and inline vocabulary from the source port", (ctx) =>
 	withDrawing(ctx, (d) => {
 		expect(d.keyed(["a", "b", "a"]).map((k) => k.key)).toEqual(["a#0", "b#0", "a#1"]);
 		const text =
@@ -174,16 +236,22 @@ it.effect("not built: P22 / format: block and inline vocabulary from the source 
 
 it.prop(
 	"checker clean control: escaped text and http/https links are safe",
-	{c: MarkdownCases},
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
 	({c}) => {
 		safe(`<p>${escape(c.text)}</p><a href="https://example.test/a">link</a>`);
 		codeText(`<pre><code>${escape(c.text)}</code></pre>`, c.text);
+		codeText(
+			`<pre><code><span style="color:#ffffff">${escape(c.text)}</span></code></pre>`,
+			c.text,
+		);
+		rawOmitted((s) => (s.startsWith("before") ? "<p>before  after</p>" : ""), c.tag);
+		altText(`<p>${escape(c.alt)}</p>`, c.alt);
 	},
 	options,
 );
 it.prop(
 	"checker plants: raw HTML, javascript links, images, lost text and repeated keys fail",
-	{c: MarkdownCases},
+	{c: Arbitrary.schema(Schema.Struct({text: Text, alt: Alt, tag: Tag}))},
 	({c}) => {
 		for (const html of [
 			"<script>alert(1)</script>",
@@ -191,34 +259,40 @@ it.prop(
 			'<img src="https://example.test/a">',
 		])
 			expect(() => safe(html)).toThrow();
+		for (const tag of [c.tag, "div", "style", "video", "p", "a", "span"])
+			expect(() => rawOmitted((s) => s, tag)).toThrow();
+		expect(() => altText(`<p>${escape(c.alt)}!</p>`, `${c.alt}!lost`)).toThrow();
+		expect(() => codeText(`<pre><code><span>${c.text}<img></span></code></pre>`, c.text)).toThrow();
 		expect(() => codeText(`<pre><code>${escape(c.text)}!</code></pre>`, c.text)).toThrow();
 		expect(() => expect(new Set(["same", "same"]).size).toBe(2)).toThrow();
 	},
 	options,
 );
 
-// A local source-presence checker. A complete import may still fail; it is never absence.
-const presence = (files: ReadonlyMap<string, string>, load: () => Drawing) => {
-	if (files.size === 0) return "pending";
-	for (const file of ["root.ts", "window.tsx", "highlight.ts"])
-		if (!files.has(file)) throw new Error(`partial target: ${file}`);
-	load();
-	return "bound";
-};
-const TargetFiles = Arbitrary.schema(
-	Schema.Struct({name: bounded(1, 96), content: bounded(0, 128), count: int(0, 4)}),
-);
+const TargetFiles = Arbitrary.schema(Schema.Struct({content: bounded(0, 128)}));
 it.prop(
 	"presence checker controls: absent, partial, failed-import and complete targets",
 	{c: TargetFiles},
 	({c}) => {
-		const complete = new Map(["root.ts", "window.tsx", "highlight.ts"].map((f) => [f, c.content]));
 		const noBinding = () => {
-			throw new Error("failed import");
+			throw new Error(`failed import: ${c.content}`);
 		};
-		expect(presence(new Map(), noBinding)).toBe("pending");
-		expect(() => presence(new Map([[c.name, c.content]]), noBinding)).toThrow();
-		expect(() => presence(complete, noBinding)).toThrow("failed import");
+		expect(presence(new Set(), noBinding)).toBeNull();
+		for (const file of [
+			"root.ts",
+			"markdown.ts",
+			"drawn.tsx",
+			"highlighter.ts",
+			"highlight.ts",
+			"highlight.tsx",
+			"window.tsx",
+			"draw.tsx",
+		])
+			for (const p of [
+				`../../../../programs/notes/src/${file}`,
+				`../../../../programs/notes/${file}`,
+			])
+				expect(() => presence(new Set([p]), noBinding)).toThrow("failed import");
 		// Checker-only dummy; no product law calls it.
 		const clean: Drawing = {
 			parse: (s) => s,
@@ -226,8 +300,11 @@ it.prop(
 			code: (_l, s) => escape(s),
 			keyed: (s) => s.map((_, i) => ({key: String(i)})),
 		};
-		expect(presence(complete, () => clean)).toBe("bound");
-		expect(() => expect(presence(new Map(), noBinding)).toBe("passed")).toThrow();
+		expect(presence(new Set(paths), () => clean)).toBe(clean);
+		// @ts-expect-error Deliberately incomplete module: the real presence helper must reject it.
+		const incomplete: Drawing = {...clean, code: undefined};
+		expect(() => presence(new Set(paths), () => incomplete)).toThrow("missing drawing export");
+		expect(() => expect(presence(new Set(), noBinding)).toBe("passed")).toThrow();
 	},
 	options,
 );

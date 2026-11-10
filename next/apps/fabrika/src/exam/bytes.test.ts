@@ -87,7 +87,7 @@ const names = (graph: Observed) => [
 	...graph.chunks.flatMap((c) => [...c.imports, ...c.dynamic, ...c.modules]),
 ];
 const mcp = (id: string) =>
-	/(?:^|[/\\])@modelcontextprotocol(?:[/\\+]|$)|[/\\]libfabrika[/\\]src[/\\]mcp(?:[/.]|$)/i.test(
+	/(?:^|[/\\])(?:@modelcontextprotocol(?:[/\\+]|$)|@kampus[/\\]libfabrika[/\\]mcp(?:[/\\]|$))|[/\\]libfabrika[/\\]src[/\\]mcp(?:[/.]|$)/i.test(
 		id,
 	);
 const drawing = (id: string) =>
@@ -202,6 +202,9 @@ it.effect.prop(
 				clean(graph, drawing);
 				for (const forbidden of [
 					"@modelcontextprotocol/client/stdio",
+					"@kampus/libfabrika/mcp",
+					"@kampus/libfabrika/mcp/client",
+					`@kampus/libfabrika/mcp/${Array.from(g.text, (c) => c.codePointAt(0)!.toString(16)).join("-") || "serve"}/client`,
 					"micromark/lib/parse",
 					"mdast-util-from-markdown",
 					"@pierre/highlights",
@@ -226,7 +229,13 @@ it.effect.prop(
 					const bad = observations.builds[n];
 					if (!bad) return yield* Effect.die("no planted graph");
 					expect(() =>
-						clean(bad, forbidden.startsWith("@modelcontextprotocol") ? mcp : drawing),
+						clean(
+							bad,
+							forbidden.startsWith("@modelcontextprotocol") ||
+								forbidden.startsWith("@kampus/libfabrika/mcp")
+								? mcp
+								: drawing,
+						),
 					).toThrow();
 				}
 			}
@@ -235,7 +244,8 @@ it.effect.prop(
 );
 
 it.effect(
-	"not built: P13 / notes top level through P12's programBox has no drawing dependencies",
+	// scenario: build the actual notes package through the real local bundler once.
+	"scenario: not built: P13 / notes top level through P12's programBox has no drawing dependencies",
 	(ctx) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem,

@@ -9,6 +9,7 @@ import {expect, it} from "@effect/vitest";
 import {
 	Alarm,
 	CheckedWriter,
+	Door,
 	Id,
 	Program,
 	ProgramDown,
@@ -23,16 +24,27 @@ import {
 } from "@kampus/libfabrika";
 import {
 	Mailbox,
+	ClientManager,
 	Owner,
 	ProcessManager,
 	ProcessStore,
+	ProcessIdGenerator,
 	Recipient,
 	Start,
 	Writer,
 } from "@kampus/libfabrika/coordination";
-import {Doorbell, Ledger, LedgerTransaction} from "@kampus/libfabrika/data";
+import {
+	Archive,
+	Doorbell,
+	Ledger,
+	LedgerTransaction,
+	RecordManager,
+	SpanSink,
+} from "@kampus/libfabrika/data";
 import {nodeSql} from "@kampus/libfabrika/sqlite";
+import {KeyLine, writeSshsig} from "@kampus/libfabrika/transport";
 import {Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream} from "effect";
+import {Base64, Base64Url} from "effect/encoding";
 import {TestClock} from "effect/testing";
 
 const opts = {arbitrary: {seed: 119120, runs: 300, size: 4096, concurrency: 1}};
@@ -198,6 +210,109 @@ const world = Effect.fnUntraced(function* (
 		);
 	return {
 		runner,
+		door: Effect.fnUntraced(function* (runner: typeof ProgramRunner.Service) {
+			// Ephemeral signing material only. This helper reads no key file.
+			const web = <A>(f: () => Promise<A>) =>
+				Effect.tryPromise({try: f, catch: () => new Error("test crypto failed")});
+			const pair = yield* web(() =>
+				crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
+			);
+			const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
+			const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+			const blob = new Uint8Array(51);
+			new DataView(blob.buffer).setUint32(0, 11);
+			blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
+			new DataView(blob.buffer).setUint32(15, 32);
+			blob.set(raw, 19);
+			const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+			const founder = {
+				name: "P8",
+				person,
+				keys: [line],
+				window: Base64Url.encode(raw),
+				by: "SHA256:exam-founder",
+				build,
+			};
+			const env = Layer.mergeAll(
+				ledger,
+				ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+				SpanSink.layer(sql, {object: process}),
+				RecordManager.memory(4 * 1024 * 1024),
+				Archive.memory,
+				Id.Generator.layer,
+				ProcessIdGenerator.layer,
+			);
+			let deliveries = 0;
+			const layer = Door.layer({
+				sql,
+				founder,
+				name: "p8",
+				url: "https://fabrika.test/p8",
+				origins: ["https://fabrika.test"],
+				versions: [1],
+				location: "exam",
+				build,
+				waiting: {most: 20, ttl: 600000},
+				ping: {min: 10000, max: 60000},
+				inputCap: 4096,
+				spentCap: 4096,
+				nextProcess: () => Id.Generator.use((g) => g.next(Id.Process)).pipe(Effect.orDie),
+				deliver: (_p, _envelope, _span, input) =>
+					Effect.suspend(() => {
+						deliveries++;
+						return runner.msg(input);
+					}),
+				notify: () => Effect.void,
+				inputs: {
+					schema: Msg,
+					personOnly: [],
+					raw: [],
+					log: Schema.toCodecJson(Msg),
+					name: (m) => m.type,
+				},
+				facts: {personOnly: []},
+			}).pipe(Layer.provide(env));
+			const connect = Effect.gen(function* () {
+				const door = yield* Door.pipe(Effect.provide(layer)),
+					client = yield* door.connect(),
+					nonce = yield* door.challenge(client);
+				const signed = yield* writeSshsig({
+					text: `fabrika-hello\nhttps://fabrika.test/p8\nexam\n${nonce}`,
+					line,
+					space: "fabrika-client",
+					sign: (bytes) =>
+						web(() => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes))).pipe(
+							Effect.map((a) => new Uint8Array(a)),
+						),
+				});
+				expect(
+					(yield* door.initialize(
+						client,
+						{
+							versions: [1],
+							has: [],
+							ping: "30s",
+							key: Base64Url.encode(raw),
+							tab: "exam",
+							nonce,
+							platform: "browser",
+							os: "ios",
+							sentAt: "2030-01-01T00:00:00Z",
+							as: "window",
+							signed,
+						},
+						{url: "https://fabrika.test/p8", tab: "exam", name: fingerprint},
+					))._tag,
+				).toBe("online");
+				return {door, client};
+			});
+			return {
+				connect,
+				deliveries: () => deliveries,
+				bindings: () =>
+					sql.exec("SELECT value FROM door_bindings").map((r) => JSON.parse(String(r.value))),
+			};
+		}),
 		store,
 		append,
 		updates,
@@ -272,10 +387,10 @@ it.prop(
 	"p22: malformed fresh shapes are bad_msg; plants cannot replace program refusal",
 	{c: RefusalCases},
 	({c}) => {
-		const {body: _body, ...want} = c;
+		const {body, ...want} = c;
 		const pure = Result.getOrThrow(stepper(makeProgram(() => want)));
 		refusal(pure.step(empty, {type: "save", body: 17}), {why: "bad_msg"});
-		refusal(pure.step(empty, {type: "save", body: "", base: 0, work: false}), want);
+		refusal(pure.step(empty, {type: "save", body, base: 0, work: false}), want);
 		expect(() => refusal({_tag: "refused", why: `${want.why}!`}, want)).toThrow();
 	},
 	opts,
@@ -392,8 +507,8 @@ it.effect.prop(
 // Source: next/packages/libfabrika/src/workers/supervision.laws.test.ts at 9b48d622b5d4.
 it.effect.prop(
 	"p25: default delivery limit counts three fresh failures, then returns dead",
-	{c: RefusalCases},
-	({c}) =>
+	{body: Arbitrary.schema(Body)},
+	({body}) =>
 		Effect.gen(function* () {
 			const w = yield* world(
 				makeProgram(() => null, true),
@@ -401,7 +516,7 @@ it.effect.prop(
 			);
 			yield* w.boot;
 			const runner = yield* w.runner(),
-				input = incoming(1, c.body);
+				input = incoming(1, body);
 			for (let tries = 1; tries <= 3; tries++) {
 				const result = yield* Effect.exit(runner.msg(input));
 				if (tries === 3) expect(result).toEqual(Exit.succeed({_tag: "refused", why: "dead"}));
@@ -420,18 +535,67 @@ it.effect.prop(
 		}),
 	opts,
 );
+const terminalAnswer = (actual: unknown) => expect(actual).toEqual({_tag: "refused", why: "dead"});
+it.effect.prop(
+	"p25: the real Door answers dead on terminal delivery and its saved settled retry",
+	{body: Arbitrary.schema(Body)},
+	({body}) =>
+		Effect.gen(function* () {
+			const w = yield* world(
+				makeProgram(() => null, true),
+				true,
+			);
+			yield* w.boot;
+			const runner = yield* w.runner(),
+				sender = yield* w.door(runner),
+				first = yield* sender.connect;
+			const request = {
+				pid: process,
+				letter: id("letter", 1),
+				m: {type: "save", body, base: 0, work: false},
+				sentAt: "2030-01-01T00:00:00Z",
+				seen: 0,
+			};
+			for (let tries = 1; tries <= 3; tries++) {
+				const answer = yield* Effect.exit(first.door.route(first.client, "process.send", request));
+				if (tries < 3) {
+					failedAs(answer, "step");
+					yield* w.recover(runner);
+				} else {
+					expect(Exit.isSuccess(answer)).toBe(true);
+					if (Exit.isSuccess(answer)) terminalAnswer(answer.value);
+				}
+			}
+			expect(sender.deliveries()).toBe(3);
+			expect(sender.bindings()).toMatchObject([
+				{state: {_tag: "settled", result: {_tag: "refused", why: "dead"}}},
+			]);
+			// A new real Door layer reads the saved binding; the runner must not receive a fourth delivery.
+			const restarted = yield* sender.connect;
+			terminalAnswer(yield* restarted.door.route(restarted.client, "process.send", request));
+			expect(sender.deliveries()).toBe(3);
+			expect(w.dead()).toHaveLength(1);
+			expect(yield* w.rows()).toEqual([]);
+			for (const bad of [
+				{_tag: "ok", result: {_tag: "refused", why: "dead"}},
+				{_tag: "ok", result: body},
+			])
+				expect(() => terminalAnswer(bad)).toThrow();
+		}),
+	{arbitrary: {seed: 119120, runs: 20, size: 4096, concurrency: 1}},
+);
 
 it.effect.prop(
 	"p25: saved failure restarts with backoff, no dead move and no down before the brake",
-	{c: RefusalCases},
-	({c}) =>
+	{body: Arbitrary.schema(Body)},
+	({body}) =>
 		Effect.gen(function* () {
 			const w = yield* world(
 				makeProgram(() => replayRefuse({calls: 0}), true),
 				true,
 			);
 			yield* w.boot;
-			const input = incoming(1, c.body),
+			const input = incoming(1, body),
 				placed = yield* w.append(input);
 			if (placed._tag !== "placed") return yield* Effect.die("seed append refused");
 			yield* w.store.save({saved: {v: 1, build, model: empty, after: 0}, turn: null, cmds: []}, [
@@ -456,7 +620,7 @@ it.prop(
 	"checker controls: append-first, patch, Cmd, changed refusal and swallowed throw plants fail",
 	{c: RefusalCases},
 	({c}) => {
-		const {body: _body, ...want} = c;
+		const {body, ...want} = c;
 		refusal({_tag: "refused", ...want}, want);
 		unchanged(
 			{log: [], model: empty, patches: [], cmds: []},
@@ -466,7 +630,7 @@ it.prop(
 			expect(() => unchanged({[part]: []}, {[part]: ["planted"]})).toThrow();
 		expect(() => refusal({_tag: "refused", why: "bad_msg", now: 4097}, want)).toThrow();
 		expect(() => failedAs(Exit.succeed({_tag: "refused", why: "step"}), "step")).toThrow();
-		expect(() => unchanged({body: "saved", version: 1}, empty)).toThrow();
+		expect(() => unchanged({body, version: 1}, empty)).toThrow();
 	},
 	opts,
 );
@@ -483,6 +647,19 @@ type NotesSnapshot = {
 	readonly view: unknown;
 	readonly patches: ReadonlyArray<unknown>;
 	readonly cmds: ReadonlyArray<unknown>;
+	readonly history: ReadonlyArray<NoteHistory>;
+};
+type SaveDetails = {
+	readonly how?: "pause" | "leave" | "done" | "kept";
+	readonly from?: {readonly note: string; readonly version: number};
+};
+type NoteHistory = SaveDetails & {
+	readonly note: string;
+	readonly version: number;
+	readonly body: string;
+	readonly by: string;
+	readonly arrivedAt: number;
+	readonly sentAt: string;
 };
 type SavedAnswer =
 	| {readonly _tag: "accepted"; readonly rev: number; readonly pos: number}
@@ -490,24 +667,22 @@ type SavedAnswer =
 type NotesDriver = {
 	readonly most: number;
 	readonly snapshot: Effect.Effect<NotesSnapshot>;
-	readonly save: (s: {
-		readonly id: string;
-		readonly note: string;
-		readonly body: string;
-		readonly base: number;
-		readonly sentAt: string;
-		readonly by: typeof writer;
-	}) => Effect.Effect<SavedAnswer>;
+	readonly save: (
+		s: SaveDetails & {
+			readonly id: string;
+			readonly note: string;
+			readonly body: string;
+			readonly base: number;
+			readonly sentAt: string;
+			readonly by: typeof writer;
+		},
+	) => Effect.Effect<SavedAnswer>;
 	readonly frozen: Effect.Effect<{
 		readonly a3: SavedAnswer;
 		readonly a4: SavedAnswer;
 		readonly retryA3: SavedAnswer;
 		readonly staleA3: SavedAnswer;
-		readonly history: ReadonlyArray<{
-			readonly note: string;
-			readonly version: number;
-			readonly body: string;
-		}>;
+		readonly history: ReadonlyArray<NoteHistory>;
 		readonly final: ReadonlyArray<{
 			readonly note: string;
 			readonly version: number;
@@ -540,16 +715,47 @@ const accepted = (a: SavedAnswer) => {
 };
 const unchangedNotes = (before: NotesSnapshot, after: NotesSnapshot) =>
 	expect(after).toEqual(before);
+const SaveCases = Arbitrary.schema(
+	Schema.Struct({
+		body: Body,
+		how: Schema.optionalKey(Schema.Literals(["pause", "leave", "done", "kept"])),
+		from: Schema.optionalKey(
+			Schema.Struct({
+				note: Schema.Literals([note, "note_0000000000e008000000000002"]),
+				version: number(0, 64),
+			}),
+		),
+		arrivedAt: number(0, 281474976710655),
+		clock: number(0, 281474976710655),
+	}),
+);
+const savedMetadata = (actual: unknown, expected: unknown) => expect(actual).toEqual(expected);
+const staleAnswer = (actual: SavedAnswer, now: number) =>
+	expect(actual).toEqual({_tag: "refused", why: "changed_elsewhere", now});
+const tooLong = (actual: SavedAnswer, most: number) =>
+	expect(actual).toEqual({_tag: "refused", why: "too_long", most});
 
 it.effect.prop(
 	"not built: P13 / p52 saves exact bytes and writer; skewed writer clocks never decide",
-	{c: RefusalCases},
+	{c: SaveCases},
 	({c}, ctx) =>
 		Effect.gen(function* () {
 			const a = yield* notes(ctx),
 				b = requireNotes();
-			accepted(yield* a.save(saveInput(1, c.body, 0)));
-			accepted(yield* b.save({...saveInput(1, c.body, 0), sentAt: "1990-01-01T00:00:00Z"}));
+			const details: SaveDetails = {
+				...(c.how === undefined ? {} : {how: c.how}),
+				...(c.from === undefined ? {} : {from: c.from}),
+			};
+			const sentAt = new Date(c.clock).toISOString();
+			yield* TestClock.setTime(c.arrivedAt);
+			accepted(yield* a.save({...saveInput(1, c.body, 0), ...details, sentAt}));
+			accepted(
+				yield* b.save({
+					...saveInput(1, c.body, 0),
+					...details,
+					sentAt: new Date(281474976710655 - c.clock).toISOString(),
+				}),
+			);
 			const left = yield* a.snapshot,
 				right = yield* b.snapshot;
 			expect(left.model).toEqual(right.model);
@@ -558,9 +764,41 @@ it.effect.prop(
 			expect(left.log[0]).toMatchObject({
 				by: writer.key,
 				for: writer.for,
-				sentAt: "2030-01-01T00:00:00Z",
-				body: {m: {type: "save", value: {body: c.body}}},
+				arrivedAt: c.arrivedAt,
+				sentAt,
+				body: {m: {type: "save", value: {note, base: 0, body: c.body, ...details}}},
 			});
+			const Value = Schema.Struct({
+				body: Schema.Struct({m: Schema.Struct({value: Schema.Unknown})}),
+			});
+			savedMetadata(Schema.decodeUnknownSync(Value)(left.log[0]).body.m.value, {
+				note,
+				base: 0,
+				body: c.body,
+				...details,
+			});
+			savedMetadata(left.history, [
+				{
+					note,
+					version: 1,
+					body: c.body,
+					...details,
+					by: writer.key,
+					arrivedAt: c.arrivedAt,
+					sentAt,
+				},
+			]);
+			savedMetadata(right.history, [
+				{
+					note,
+					version: 1,
+					body: c.body,
+					...details,
+					by: writer.key,
+					arrivedAt: c.arrivedAt,
+					sentAt: new Date(281474976710655 - c.clock).toISOString(),
+				},
+			]);
 		}),
 	opts,
 );
@@ -591,9 +829,10 @@ it.effect.prop(
 const BaseCases = Arbitrary.schema(
 	Schema.Struct({
 		version: number(0, 64),
+		base: number(0, 64),
 		numerator: number(-64, 64),
 		denominator: number(2, 8),
-		future: number(2, 64),
+		future: number(1, 64),
 		body: text(4096),
 	}),
 );
@@ -603,24 +842,26 @@ it.effect.prop(
 	({c}, ctx) =>
 		Effect.gen(function* () {
 			const d = yield* notes(ctx);
-			accepted(yield* d.save(saveInput(1, c.body, 0)));
+			for (let v = 0; v < c.version; v++) accepted(yield* d.save(saveInput(v + 1, c.body, v)));
 			const before = yield* d.snapshot;
-			for (const base of [0, -1, -64, c.future, c.numerator / c.denominator, c.version]) {
-				if (base === 1) continue;
-				expect(yield* d.save(saveInput(2, c.body, base))).toMatchObject({_tag: "refused"});
+			const fraction = c.numerator + 1 / c.denominator;
+			for (const base of [0, -1, -64, c.version + c.future, fraction, c.base]) {
+				if (base === c.version) continue;
+				staleAnswer(yield* d.save(saveInput(c.version + 1, c.body, base)), c.version);
 				unchangedNotes(before, yield* d.snapshot);
 			}
+			accepted(yield* d.save(saveInput(c.version + 2, c.body, c.version)));
 		}),
 	opts,
 );
 it.effect.prop(
 	"not built: P13 / p54 concurrent same-base saves accept exactly one",
-	{c: RefusalCases},
-	({c}, ctx) =>
+	{body: Arbitrary.schema(Body)},
+	({body}, ctx) =>
 		Effect.gen(function* () {
 			const d = yield* notes(ctx);
 			const answers = yield* Effect.all(
-				[d.save(saveInput(1, c.body, 0)), d.save(saveInput(2, `${c.body}!`, 0))],
+				[d.save(saveInput(1, body, 0)), d.save(saveInput(2, `${body}!`, 0))],
 				{concurrency: 2},
 			);
 			expect(answers.filter((a) => a._tag === "accepted")).toHaveLength(1);
@@ -633,26 +874,36 @@ it.effect.prop(
 );
 it.effect.prop(
 	"not built: P13 / p54 bodies on both sides of notes' actual MOST",
-	{c: BaseCases},
-	(_c, ctx) =>
+	{
+		piece: Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128))),
+		offset: Arbitrary.schema(number(1, 64)),
+	},
+	({piece, offset}, ctx) =>
 		Effect.gen(function* () {
 			const first = yield* notes(ctx);
 			expect(first.most).toBeGreaterThan(0);
-			for (const length of [first.most - 1, first.most, first.most + 1]) {
+			for (const length of [0, first.most - 1, first.most, first.most + 1, first.most + offset]) {
 				const d = requireNotes(),
 					before = yield* d.snapshot;
-				const a = yield* d.save(saveInput(1, "a".repeat(length), 0));
-				if (length <= d.most) accepted(a);
-				else {
-					expect(a).toMatchObject({_tag: "refused", most: d.most});
-					unchangedNotes(before, yield* d.snapshot);
+				for (const chunk of [piece, "界", "🧪", "مرحبا", "א!\\\n"]) {
+					const isolated = requireNotes(),
+						prior = yield* isolated.snapshot;
+					// MOST is the program's string-length limit. Unicode bytes are never flattened to ASCII.
+					const body = chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
+					const a = yield* isolated.save(saveInput(1, body, 0));
+					if (length <= isolated.most) accepted(a);
+					else {
+						tooLong(a, isolated.most);
+						unchangedNotes(prior, yield* isolated.snapshot);
+					}
 				}
+				unchangedNotes(before, yield* d.snapshot);
 			}
 		}),
 	opts,
 );
 it.effect(
-	"not built: P13 / format: frozen A3 replay/retry/stale and independent per-note history",
+	"format: not built: P13 / frozen A3 replay/retry/stale and independent per-note history",
 	(ctx) =>
 		Effect.gen(function* () {
 			const d = yield* notes(ctx),
@@ -673,6 +924,63 @@ it.effect(
 				"A final  \n",
 				"B final 🧪\nשלום",
 			]);
+			for (const [i, h] of actual.history.entries()) {
+				savedMetadata(
+					{
+						by: h.by,
+						arrivedAt: h.arrivedAt,
+						sentAt: h.sentAt,
+						...(h.how === undefined ? {} : {how: h.how}),
+						...(h.from === undefined ? {} : {from: h.from}),
+					},
+					[
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1000,
+							sentAt: "2030-01-01T00:00:00Z",
+							how: "pause",
+						},
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1001,
+							sentAt: "2020-01-01T00:00:00Z",
+							how: "leave",
+						},
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1002,
+							sentAt: "2040-01-01T00:00:00Z",
+							how: "done",
+						},
+						{by: "SHA256:fixture-agent", arrivedAt: 1003, sentAt: "2010-01-01T00:00:00Z"},
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1004,
+							sentAt: "2050-01-01T00:00:00Z",
+							how: "pause",
+						},
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1005,
+							sentAt: "2000-01-01T00:00:00Z",
+							how: "kept",
+							from: {note, version: 3},
+						},
+						{
+							by: "SHA256:fixture-person",
+							arrivedAt: 1006,
+							sentAt: "2060-01-01T00:00:00Z",
+							how: "done",
+						},
+						{
+							by: "SHA256:fixture-agent",
+							arrivedAt: 1007,
+							sentAt: "1990-01-01T00:00:00Z",
+							how: "leave",
+						},
+					][i],
+				);
+			}
 			expect(actual.final).toEqual([
 				{note: "note_0000000000e008000000000002", version: 4, body: "B final 🧪\nשלום"},
 				{note, version: 4, body: "A final  \n"},
@@ -682,16 +990,17 @@ it.effect(
 
 it.prop(
 	"P13 checker controls/plants: replace row, duplicate-by-body, base-before-ID and less-than guard fail",
-	{c: BaseCases},
-	({c}) => {
-		const first = {id: id("letter", 1), body: c.body},
-			second = {id: id("letter", 2), body: c.body};
+	{body: Arbitrary.schema(Body)},
+	({body}) => {
+		const first = {id: id("letter", 1), body},
+			second = {id: id("letter", 2), body};
 		const before: NotesSnapshot = {
 			log: [first, second],
 			model: {version: 2},
 			view: {version: 2},
 			patches: [],
 			cmds: [],
+			history: [],
 		};
 		unchangedNotes(before, structuredClone(before));
 		for (const bad of [
@@ -703,6 +1012,36 @@ it.prop(
 			expect(() => unchangedNotes(before, bad)).toThrow();
 		const original: SavedAnswer = {_tag: "accepted", rev: 3, pos: 1};
 		expect(() => expect({_tag: "refused", why: "changed_elsewhere"}).toEqual(original)).toThrow();
+	},
+	opts,
+);
+it.prop(
+	"P13 checker controls/plants: lost save metadata, wrong stale fields and too_long fail",
+	{c: SaveCases, now: Arbitrary.schema(number(0, 64))},
+	({c, now}) => {
+		const expected = {
+			body: c.body,
+			by: writer.key,
+			arrivedAt: c.arrivedAt,
+			sentAt: new Date(c.clock).toISOString(),
+			how: c.how ?? "kept",
+			from: c.from ?? {note, version: now},
+		};
+		savedMetadata(structuredClone(expected), expected);
+		for (const field of ["how", "from", "by", "arrivedAt", "sentAt"] as const) {
+			const missing: Record<string, unknown> = {...expected};
+			delete missing[field];
+			expect(() => savedMetadata(missing, expected)).toThrow();
+		}
+		staleAnswer({_tag: "refused", why: "changed_elsewhere", now}, now);
+		tooLong({_tag: "refused", why: "too_long", most: now}, now);
+		for (const bad of [
+			{_tag: "refused", why: "bad_msg", now},
+			{_tag: "refused", why: "changed_elsewhere"},
+			{_tag: "refused", why: "changed_elsewhere", now: now + 1},
+		] as const)
+			expect(() => staleAnswer(bad, now)).toThrow();
+		expect(() => tooLong({_tag: "refused", why: "bad_msg", most: now}, now)).toThrow();
 	},
 	opts,
 );

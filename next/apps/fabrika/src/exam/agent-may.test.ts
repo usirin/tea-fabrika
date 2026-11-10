@@ -31,9 +31,7 @@ const bounded = (min: number, max: number) =>
 const DoorCalls = Arbitrary.schema(
 	Schema.Struct({
 		name: bounded(1, 96),
-		unknown: bounded(1, 88),
 		body: bounded(0, 4096),
-		clock: Schema.Int.check(Schema.isBetween({minimum: 0, maximum: 281474976710655})),
 	}),
 );
 // WebCrypto owns ephemeral test key generation and signing. No machine key is read or printed.
@@ -323,41 +321,116 @@ const METHODS = [
 	"door.watch",
 	"door.deny",
 ] as const;
-const allowed = new Set(["view.open", "ledger.read", "ledger.wait", "process.send:notes"]);
+const allowed = new Set([
+	"view.open",
+	"ledger.read",
+	"process.send:notes:save",
+	"process.send:notes:list",
+]);
 const methodAnswer = (method: string, actual: {_tag: string; why?: string}) => {
 	expect(actual._tag).toBeTypeOf("string");
-	if (allowed.has(method)) expect(["ok", "parked"]).toContain(actual._tag);
+	if (method === "ledger.wait:parked") expect(actual).toMatchObject({_tag: "parked"});
+	else if (method === "ledger.wait") expect(actual._tag).toBe("ok");
+	else if (allowed.has(method)) expect(actual._tag).toBe("ok");
 	else expect(actual).toEqual({_tag: "refused", why: "not_for_agents"});
 };
+type Answer = {_tag: string; why?: string; result?: unknown};
 type PolicyDoor = {
-	readonly call: (method: string, target?: string) => Effect.Effect<{_tag: string; why?: string}>;
-	readonly knock: Effect.Effect<unknown>;
+	readonly call: (
+		method: string,
+		target?: string,
+		input?: string,
+		body?: string,
+	) => Effect.Effect<Answer>;
+	// This installs into the real dispatch table, before its agent policy check.
+	readonly install: (
+		method: string,
+		handler: () => Effect.Effect<Schema.Json>,
+	) => Effect.Effect<void>;
+	readonly personCall: (method: string) => Effect.Effect<Answer>;
+	readonly notesInputs: (
+		inputs: ReadonlyArray<{name: string; readOnly: boolean; personOnly: boolean}>,
+	) => Effect.Effect<void>;
+	readonly parkedWait: Effect.Effect<Answer>;
+	readonly knock: (as: "window" | "agent") => Effect.Effect<{
+		readonly answer: Answer;
+		readonly row: {readonly as: string};
+		readonly admitted: boolean;
+		readonly writes: ReadonlyArray<unknown>;
+	}>;
 };
 const bindPolicy = (_w: World): PolicyDoor => {
 	throw new Error(
 		"P25 agent policy started: bind trusted process records and declared notes inputs before its build",
 	);
 };
+const paths = [
+	"../../../../packages/libfabrika/src/mcp",
+	"../../../../packages/libfabrika/src/mcp.ts",
+	"../../mcp.ts",
+	"../mcp.ts",
+	"../mcp",
+];
+const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoor | null => {
+	if (!paths.some((p) => files.has(p))) return null;
+	const p = load();
+	for (const name of ["call", "install", "personCall", "notesInputs", "knock"] as const)
+		if (typeof p[name] !== "function") throw new Error(`missing policy binding: ${name}`);
+	if (!Effect.isEffect(p.parkedWait)) throw new Error("missing parked wait");
+	return p;
+};
+const knockAnswer = (actual: Effect.Success<ReturnType<PolicyDoor["knock"]>>, as: string) => {
+	expect(actual.answer).toMatchObject({
+		_tag: "ok",
+		result: {code: expect.any(String), until: expect.any(Number)},
+	});
+	expect(actual.row.as).toBe(as);
+	expect(actual.admitted).toBe(false);
+	expect(actual.writes).toEqual([]);
+};
+const installedRefusal = Effect.fnUntraced(function* (
+	policy: PolicyDoor,
+	method: string,
+	body: string,
+) {
+	let calls = 0;
+	yield* policy.install(method, () =>
+		Effect.sync(() => {
+			calls++;
+			return {body};
+		}),
+	);
+	// A person actually reaches the new handler: an unknown method is not this plant.
+	expect(yield* policy.personCall(method)).toEqual({_tag: "ok", result: {body}});
+	expect(calls).toBe(1);
+	methodAnswer(method, yield* policy.call(method));
+	expect(calls).toBe(1);
+});
 it.effect.prop(
 	"not built: P25 agent policy / every current method, unknown method and process target follows the closed table",
-	{c: DoorCalls},
+	{
+		c: Arbitrary.schema(
+			Schema.Struct({name: bounded(1, 96), body: bounded(0, 4096), unknown: bounded(1, 88)}),
+		),
+	},
 	({c}, ctx) =>
 		Effect.gen(function* () {
 			const fs = yield* FileSystem.FileSystem;
-			const paths = [
-				"../../../../packages/libfabrika/src/mcp",
-				"../../../../packages/libfabrika/src/mcp.ts",
-				"../mcp.ts",
-				"../mcp",
-			];
-			let present = false;
+			const found = new Set<string>();
 			for (const p of paths)
-				if (yield* fs.exists(new URL(p, import.meta.url).pathname)) present = true;
-			if (!present) ctx.skip("not built: P25 agent policy");
+				if (yield* fs.exists(new URL(p, import.meta.url).pathname)) found.add(p);
+			if (!paths.some((p) => found.has(p))) ctx.skip("not built: P25 agent policy");
 			const w = yield* world(),
-				policy = bindPolicy(w);
-			yield* policy.knock;
-			for (const method of [...METHODS, `unknown.${c.unknown}`, "planted.newHandler"]) {
+				policy = presence(found, () => bindPolicy(w));
+			if (policy === null) return yield* Effect.die("present policy was skipped");
+			for (const as of ["window", "agent"] as const) knockAnswer(yield* policy.knock(as), as);
+			yield* policy.notesInputs([
+				{name: "save", readOnly: false, personOnly: false},
+				{name: "list", readOnly: true, personOnly: false},
+				{name: "person", readOnly: false, personOnly: true},
+			]);
+			yield* installedRefusal(policy, `planted.${c.unknown}`, c.body);
+			for (const method of [...METHODS, `unknown.${c.unknown}`]) {
 				if (method === "process.send")
 					for (const target of [
 						"notes",
@@ -367,43 +440,137 @@ it.effect.prop(
 						"unknown",
 						`notes-looking-${c.name}`,
 					])
-						methodAnswer(`${method}:${target}`, yield* policy.call(method, target));
+						for (const input of ["save", "list", "person", "undeclared"])
+							methodAnswer(
+								`${method}:${target}:${input}`,
+								yield* policy.call(method, target, input, c.body),
+							);
 				else methodAnswer(method, yield* policy.call(method));
 			}
+			methodAnswer("ledger.wait:parked", yield* policy.parkedWait);
 		}).pipe(Effect.provide(NodeFileSystem.layer)),
 	options,
 );
 
 it.prop(
 	"checker clean controls: closed agent method table",
-	{c: DoorCalls},
-	({c}) => {
-		for (const method of [...METHODS, c.unknown, "planted.newHandler"])
+	{unknown: Arbitrary.schema(bounded(1, 88))},
+	({unknown}) => {
+		for (const method of [...METHODS, `unknown.${unknown}`, "planted.newHandler"])
 			methodAnswer(
 				method,
-				allowed.has(method) ? {_tag: "ok"} : {_tag: "refused", why: "not_for_agents"},
+				allowed.has(method) || method === "ledger.wait"
+					? {_tag: "ok"}
+					: {_tag: "refused", why: "not_for_agents"},
 			);
-		methodAnswer("process.send:notes", {_tag: "ok"});
-		methodAnswer("ledger.wait", {_tag: "parked"});
+		for (const input of ["save", "list"]) methodAnswer(`process.send:notes:${input}`, {_tag: "ok"});
+		methodAnswer("ledger.wait:parked", {_tag: "parked"});
+		for (const as of ["window", "agent"])
+			knockAnswer(
+				{
+					answer: {_tag: "ok", result: {code: "123456", until: 1}},
+					row: {as},
+					admitted: false,
+					writes: [],
+				},
+				as,
+			);
 	},
 	options,
 );
 it.prop(
 	"checker plants: default allow, unlisted handler, trusted label and cached admission fail",
-	{c: DoorCalls},
-	({c}) => {
+	{unknown: Arbitrary.schema(bounded(1, 88))},
+	({unknown}) => {
 		for (const method of [
 			"spans.read",
 			"door.watch",
 			"planted.newHandler",
-			`unknown.${c.unknown}`,
+			`unknown.${unknown}`,
 			"process.send:counter",
 			"process.send:notes-looking-label",
+			"process.send:notes:person",
+			"process.send:notes:undeclared",
 		])
 			expect(() => methodAnswer(method, {_tag: "ok"})).toThrow();
 		for (const why of ["person_only", "not_allowed", "unknown_method"])
 			expect(() => methodAnswer("spans.read", {_tag: "refused", why})).toThrow();
 		expect(() => failure(Exit.succeed({_tag: "accepted"}))).toThrow();
+		expect(() => methodAnswer("ledger.wait:parked", {_tag: "ok"})).toThrow();
+		const knock = {
+			answer: {_tag: "ok", result: {code: "123456", until: 1}},
+			row: {as: "window"},
+			admitted: false,
+			writes: [],
+		};
+		for (const bad of [
+			{...knock, answer: {_tag: "refused"}},
+			{...knock, admitted: true},
+			{...knock, writes: [unknown]},
+			{...knock, row: {as: "agent"}},
+		])
+			expect(() => knockAnswer(bad, "window")).toThrow();
+	},
+	options,
+);
+it.effect.prop(
+	"checker controls/plants: installed recognized handler still requires the closed agent list",
+	{body: Arbitrary.schema(bounded(0, 4096)), name: Arbitrary.schema(bounded(1, 88))},
+	({body, name}) =>
+		Effect.gen(function* () {
+			const handler = new Map<string, () => Effect.Effect<Schema.Json>>();
+			const dispatch = Effect.fnUntraced(function* (method: string) {
+				const h = handler.get(method);
+				return h ? {_tag: "ok", result: yield* h()} : {_tag: "refused", why: "unknown_method"};
+			});
+			const clean: PolicyDoor = {
+				install: (m, h) =>
+					Effect.sync(() => {
+						handler.set(m, h);
+					}),
+				personCall: dispatch,
+				call: () => Effect.succeed({_tag: "refused", why: "not_for_agents"}),
+				notesInputs: () => Effect.void,
+				parkedWait: Effect.succeed({_tag: "parked"}),
+				knock: () => Effect.die("control only"),
+			};
+			yield* installedRefusal(clean, `planted.${name}`, body);
+			expect(
+				Exit.isFailure(
+					yield* Effect.exit(installedRefusal({...clean, call: dispatch}, `planted.${name}`, body)),
+				),
+			).toBe(true);
+		}),
+	options,
+);
+it.prop(
+	"presence controls: every P25 path calls the actual binding helper",
+	{message: Arbitrary.schema(bounded(0, 128))},
+	({message}) => {
+		const failed = (): PolicyDoor => {
+			throw new Error(`failed import: ${message}`);
+		};
+		expect(presence(new Set(), failed)).toBeNull();
+		for (const p of [
+			"../../mcp.ts",
+			"../mcp.ts",
+			"../mcp",
+			"../../../../packages/libfabrika/src/mcp",
+			"../../../../packages/libfabrika/src/mcp.ts",
+		])
+			expect(() => presence(new Set([p]), failed)).toThrow("failed import");
+		const clean: PolicyDoor = {
+			install: () => Effect.void,
+			personCall: () => Effect.succeed({_tag: "ok"}),
+			call: () => Effect.succeed({_tag: "ok"}),
+			notesInputs: () => Effect.void,
+			parkedWait: Effect.succeed({_tag: "parked"}),
+			knock: () => Effect.die("control only"),
+		};
+		expect(presence(new Set(paths), () => clean)).toBe(clean);
+		expect(() => presence(new Set(paths), () => ({...clean, install: undefined!}))).toThrow(
+			"missing policy binding",
+		);
 	},
 	options,
 );
