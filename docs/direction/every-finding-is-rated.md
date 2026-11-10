@@ -3,6 +3,10 @@
 Decided 2026-10-24: **a finding the user never rated counts as noise once its
 change ships.** The rest of this note is **proposed**. Walked when Tier 6 starts (owner, 2026-11-08): shared findings and ratings for pipeline checks.
 
+Until then, an agent's find outside its task is a row in `field/findings.jsonl`, in the shape below
+([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md)). That file names the place
+`location`, not `at`: AGENTS.md keeps `at` for a time.
+
 ```ts
 // A sketch. A user rates a finding with one of two buttons, as a fact of its own.
 // Who rated is the writer of its ledger row, not a field (new-combos.md, "Rate").
