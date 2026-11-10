@@ -1,5 +1,6 @@
-// P12, next/. Real Project and Process classes, RPC adapters, Door and runner on SQLite.
+// P12, next/. The real Project and Process services, Door and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
+// No class from brain.ts and no cloudflare:workers: the services are what the classes hand off to.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -7,23 +8,66 @@ import { counter } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
 import { revokeText, Start } from "@kampus/libfabrika/coordination";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import {
+  commitReply,
+  configureProcess,
+  processDescriptor,
+  processRuntime,
+  ProcessService,
+  ProjectService,
+  signingReply,
+} from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Process, Project } from "./brain.ts";
-import type { Env } from "./runtime.ts";
+import { projectRuntime, type Env } from "./runtime.ts";
+import { programs } from "./table.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 
-vi.mock("cloudflare:workers", () => ({
-  DurableObject: class {
-    constructor(
-      readonly ctx: DurableObjectState,
-      readonly env: Env,
-    ) {}
-  },
-  WorkerEntrypoint: class {},
-}));
+type ProjectCalls = (typeof ProjectService)["Service"];
+type ProcessCalls = (typeof ProcessService)["Service"];
+
+// What the Project class hands off: each call runs one service method on the object's runtime.
+const projectObject = (ctx: DurableObjectState, env: Env) => {
+  const runtime = projectRuntime(ctx, env);
+  const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
+  return {
+    runtime,
+    info: () => run((p) => p.info),
+    clientConnect: () => run((p) => p.connect()),
+    challenge: (client: Parameters<ProjectCalls["challenge"]>[0]) => run((p) => p.challenge(client)),
+    initialize: (...args: Parameters<ProjectCalls["initialize"]>) => run((p) => p.initialize(...args)),
+    route: (...args: Parameters<ProjectCalls["route"]>) => run((p) => p.route(...args)),
+    grant: (input: unknown) => run((p) => p.grant(input)),
+    start: (...args: Parameters<ProjectCalls["start"]>) => run((p) => p.start(...args)),
+    read: (...args: Parameters<ProjectCalls["read"]>) => run((p) => p.read(...args)),
+    wait: (...args: Parameters<ProjectCalls["wait"]>) => run((p) => p.wait(...args)),
+    append: (...args: Parameters<ProjectCalls["append"]>) => run((p) => p.append(...args)),
+    inbox: (...args: Parameters<ProjectCalls["inbox"]>) => run((p) => p.inbox(...args)),
+    own: (...args: Parameters<ProjectCalls["own"]>) => run((p) => p.own(...args)),
+    publish: (...args: Parameters<ProjectCalls["publish"]>) => run((p) => p.publish(...args)),
+    sign: (...args: Parameters<ProjectCalls["sign"]>) => run((p) => signingReply(p.sign(...args))),
+    commit: (...args: Parameters<ProjectCalls["commit"]>) => run((p) => commitReply(p.commit(...args))),
+  };
+};
+
+type ProjectObject = ReturnType<typeof projectObject>;
+
+// What the Process class hands off, with the same descriptor reads and writes on its handles.
+const processObject = (ctx: DurableObjectState, env: Env) => {
+  const runtime = processRuntime(ctx, env, programs);
+  const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
+  return {
+    runtime,
+    configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor)),
+    descriptor: () => Effect.runPromise(processDescriptor(ctx)),
+    open: (client: string) => run((p) => p.open(client)),
+    msg: (input: unknown) => run((p) => p.msg(input)),
+  };
+};
+
+type ProcessObject = ReturnType<typeof processObject>;
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -161,18 +205,18 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   const key = identity(),
     db = new DatabaseSync(":memory:");
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project class
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = { id: { name: "project-test" }, storage: storage(db) } as unknown as DurableObjectState;
-  const processes = new Map<string, { object: Process; db: DatabaseSync }>(),
+  const processes = new Map<string, { object: ProcessObject; db: DatabaseSync }>(),
     attempts: Descriptor[] = [],
     received: Incoming[] = [],
     entered = gate(),
     interrupted = gate();
-  let project: Project;
+  let project: ProjectObject;
   let beforeCommit = async () => {};
   let signs = 0,
     commits = 0;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real classes but do not have workerd's nominal brands
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     STAGE: JSON.stringify({
       name: "project-test",
@@ -190,11 +234,11 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
         inbox: project.inbox.bind(project),
         own: project.own.bind(project),
         publish: project.publish.bind(project),
-        sign: (...args: Parameters<Project["sign"]>) => {
+        sign: (...args: Parameters<ProjectObject["sign"]>) => {
           signs++;
           return project.sign(...args);
         },
-        commit: async (...args: Parameters<Project["commit"]>) => {
+        commit: async (...args: Parameters<ProjectObject["commit"]>) => {
           commits++;
           await beforeCommit();
           return project.commit(...args);
@@ -208,12 +252,12 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
 
         if (saved === undefined) {
           const processDb = new DatabaseSync(":memory:");
-          // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
+          // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process service reads
           const processCtx = {
             id: { name },
             storage: storage(processDb),
           } as unknown as DurableObjectState;
-          saved = { object: new Process(processCtx, env), db: processDb };
+          saved = { object: processObject(processCtx, env), db: processDb };
           processes.set(pid, saved);
         }
 
@@ -283,7 +327,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
       }),
     },
   } as unknown as Env;
-  project = new Project(ctx, env);
+  project = projectObject(ctx, env);
   closers.push(async () => {
     interrupted.resolve();
 
@@ -311,7 +355,7 @@ const world = (fault: "failed" | "interrupted" | "healthy" = "healthy") => {
     reopen: async () => {
       await project.runtime.dispose();
       table.programs.counter = { hash: "counter-b", source: "changed counter" };
-      project = new Project(ctx, env);
+      project = projectObject(ctx, env);
       return project.info();
     },
     admit: async () => {
