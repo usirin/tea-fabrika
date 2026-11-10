@@ -43,6 +43,7 @@ import {
   mutationDraft,
   mutboxAnswer,
   mutboxTail,
+  mutationTail,
   relatedIn,
   commitsSaid,
   decide,
@@ -536,6 +537,41 @@ describe("T566 a mutation step while another Docker box runs is refused before i
   it("scenario: layout-mutation3 on 2026-11-10, pid 97351 alive, is refused:docker_busy", () => {
     expect(dockerHolder("97351", () => true)).toBe(97351);
     expect(endName({ kind: "refused", check: "docker_busy" })).toBe("refused:docker_busy");
+  });
+});
+
+describe("T569 a review reads the lane's newest mutation report in its prompt, today's tooling", () => {
+  const stepName = fc.constantFrom("plan", "tests", "build", "mutation", "review");
+  const path = fc.stringMatching(/^\/b\/[a-z0-9]{1,6}\.md$/);
+  const row = fc.record({ step: stepName, report: fc.option(path, { nil: null }) });
+
+  // Plants: give it to every step; take the oldest mutation; drop the text; say nothing when none.
+  it("property: only a review gets it, the newest mutation row's report whole, else a plain note", () => {
+    fc.assert(
+      fc.property(stepName, fc.array(row, { maxLength: 8 }), fc.boolean(), (step, steps, readable) => {
+        const text = (p: string) => `report of ${p}`;
+        const tail = mutationTail(step, steps, (p) => (readable ? text(p) : null));
+        const newest = steps.filter((s) => s.step === "mutation" && s.report !== null).at(-1);
+
+        const whole = step === "review" && newest?.report !== undefined && newest.report !== null && readable;
+        expect(tail === "").toBe(step !== "review");
+        expect(tail.includes(text(newest?.report ?? "none"))).toBe(whole);
+        expect(tail.includes("cannot read outside itself")).toBe(whole);
+        expect(tail.includes("no mutation report")).toBe(step === "review" && !whole);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: p34w-review1 on 2026-11-10 gets ../p34w-mutation3.md's text, not mutation2's", () => {
+    const steps = [
+      { step: "mutation", report: "/b/p34w-mutation2.md" },
+      { step: "mutation", report: "/b/p34w-mutation3.md" },
+      { step: "tests", report: "/b/p34w-tests10.md" },
+    ];
+    const tail = mutationTail("review", steps, (p) => `text of ${p}`);
+    expect(tail).toContain("text of /b/p34w-mutation3.md");
+    expect(tail).not.toContain("mutation2");
   });
 });
 

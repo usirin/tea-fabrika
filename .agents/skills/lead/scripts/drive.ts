@@ -1312,6 +1312,24 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 
+/**
+ * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
+ * "anything the brief names"), and its box reads nothing outside itself. Briefs named
+ * `../<lane>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
+ * review said done without it (p34w-review1 and 2, layout-review2, 2026-11-10; ticket 569).
+ */
+export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: string) => string | null): string => {
+  if (step !== "review") {
+    return "";
+  }
+
+  const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
+  const text = last?.report ? read(last.report) : null;
+  return text === null || !last?.report
+    ? "\n\n---\nThis lane has no mutation report drive can read; say so in your review, and do not look for one outside your box.\n"
+    : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+};
+
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
 type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
 
@@ -1485,7 +1503,7 @@ type Lane = {
   readonly branch?: string;
   readonly root?: string;
   readonly head?: string;
-  readonly steps: readonly { readonly step: string }[];
+  readonly steps: readonly { readonly step: string; readonly report?: string | null }[];
 };
 
 // ---------------------------------------------------------------- the command
@@ -1821,6 +1839,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     ask.prompt,
     readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
+      mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
       TAIL +
       verdict,
