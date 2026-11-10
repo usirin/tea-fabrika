@@ -102,6 +102,11 @@ jobs:
       # gone; this step fails when that pruned ledger was not committed.
       - name: dead exports ledger committed
         run: git diff --exit-code -- unreachable-ledger.json
+      # `.agents/` is held to next/'s rules (0033). `pnpm lint` waives only the findings
+      # agents-ledger.json names and prunes the ones that are gone; this step fails when that
+      # pruned ledger was not committed, so the ledger only shrinks.
+      - name: agents ledger committed
+        run: git diff --exit-code -- agents-ledger.json
       # Experiment 117: each formal check is tied to the code it covers (promises/).
       # It fails when covered code changed and its record was not confirmed again, when
       # a check is red at this head, or when a planted break is not caught. A change to a

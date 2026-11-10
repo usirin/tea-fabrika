@@ -9,7 +9,12 @@
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
-	"ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json"],
+	"ignorePatterns": [
+		"**/fixtures/**",
+		"**/experiments/results/**",
+		"unreachable-ledger.json",
+		"agents-ledger.json"
+	],
 	"rules": {
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
@@ -340,7 +345,10 @@
 			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
 			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
 			// edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
-			"files": ["next/**"],
+			// Lead tooling under `.agents/` is held to the same rules, since agents read it and copy its
+			// habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
+			// shrinks.
+			"files": ["next/**", ".agents/**/*.ts", ".agents/**/*.mjs"],
 			"rules": {
 				"fabrika/no-promises": "error",
 				"fabrika/no-ledger-sql": "error",
@@ -372,7 +380,7 @@
 			// Tests are left out: they await vitest, feed raw frames and may plant a broken view.
 			// `no-of` stays on, since a test names its helpers too.
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
-			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
+			"files": ["next/**/*.test.ts", "next/**/*.test.tsx", ".agents/**/*.test.ts"],
 			"rules": {
 				"fabrika/prefer-schema-arbitrary": "warn",
 				"fabrika/no-promises": "off",
