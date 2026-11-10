@@ -2,6 +2,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import {Effect, Layer} from "effect";
 import {HttpServerRequest, HttpServerResponse} from "effect/http";
+import {Probe, ProbeLive} from "./ledger-probe.ts";
 import {Ping, PingLive, Pong, PongLive, Sock, SockLive, Store, StoreLive} from "./objects.ts";
 
 export class Spike extends Cloudflare.Worker<Spike, {}>()("Spike") {}
@@ -10,17 +11,23 @@ export const impl = Effect.gen(function* () {
 	const stores = yield* Store,
 		socks = yield* Sock,
 		pings = yield* Ping,
-		pongs = yield* Pong;
+		pongs = yield* Pong,
+		probes = yield* Probe;
 	const spaces: Record<string, {getByName: (name: string) => unknown}> = {
 		store: stores,
 		sock: socks,
 		ping: pings,
 		pong: pongs,
+		probe: probes,
 	};
 	return {
 		fetch: Effect.gen(function* () {
 			const request = yield* HttpServerRequest.HttpServerRequest;
 			const url = new URL(request.url, "http://spike");
+
+			if (url.pathname === "/plain") {
+				return yield* HttpServerResponse.json({plain: true});
+			}
 
 			if (url.pathname === "/ws") {
 				return yield* socks.getByName("room").fetch(request);
@@ -44,7 +51,7 @@ export const impl = Effect.gen(function* () {
 	};
 });
 
-export const Objects = Layer.mergeAll(StoreLive, SockLive, PingLive, PongLive);
+export const Objects = Layer.mergeAll(StoreLive, SockLive, PingLive, PongLive, ProbeLive);
 
 export default Spike.make(
 	{

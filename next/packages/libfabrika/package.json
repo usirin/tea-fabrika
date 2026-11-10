@@ -41,6 +41,8 @@
 	"devDependencies": {
 		"@cloudflare/workers-types": "5.20261027.1",
 		"@effect/platform-node": "catalog:",
+		"@effect/sql-sqlite-do": "4.1.2",
+		"@effect/sql-sqlite-node": "4.1.2",
 		"@effect/vitest": "catalog:",
 		"@types/node": "catalog:",
 		"fast-check": "catalog:",

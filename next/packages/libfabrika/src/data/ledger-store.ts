@@ -17,7 +17,7 @@ import {errorClass, short} from "./trace.ts";
 /** Cloudflare's row limit, so node:sqlite answers what workerd would (flag 13). */
 const MOST_BYTES = 2_000_000;
 
-const TABLES = [
+export const TABLES = [
 	`CREATE TABLE IF NOT EXISTS entries (
 		rev INTEGER PRIMARY KEY, stream TEXT NOT NULL, pos INTEGER NOT NULL, id TEXT NOT NULL,
 		"arrivedAt" INTEGER NOT NULL, "by" TEXT NOT NULL, "for" TEXT NOT NULL, "sentAt" TEXT NOT NULL,
@@ -31,27 +31,27 @@ const TABLES = [
 
 /** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.ledger.*` for the rest. */
 export const STREAM = "messaging.destination.name";
-const ID = "messaging.message.id";
-const OPERATION = "messaging.operation.type";
-const ERROR = "error.type";
+export const ID = "messaging.message.id";
+export const OPERATION = "messaging.operation.type";
+export const ERROR = "error.type";
 export const tag = (name: string): string => `fab.ledger.${name}`;
 
 /** A waiter to ring, as the rings table holds it. */
-const Ring = Schema.Struct({to: Schema.String, after: Rev});
-type Ring = typeof Ring.Type;
+export const Ring = Schema.Struct({to: Schema.String, after: Rev});
+export type Ring = typeof Ring.Type;
 
 /** What one append step did. Only `placed` wrote, and only it rings. */
-const Placing = Schema.TaggedUnion({
+export const Placing = Schema.TaggedUnion({
 	placed: {rev: Rev, pos: Rev, rings: Schema.Array(Ring)},
 	resent: {rev: Rev, pos: Rev},
 	refused: Appended.cases.refused.fields,
 });
-type Placing = typeof Placing.Type;
+export type Placing = typeof Placing.Type;
 
-const Head = Schema.Struct({rev: Rev, arrivedAt: Schema.Int});
-const Last = Schema.Struct({pos: Rev});
+export const Head = Schema.Struct({rev: Rev, arrivedAt: Schema.Int});
+export const Last = Schema.Struct({pos: Rev});
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
-const Lag = Schema.Struct({head: Rev, lag: Rev});
+export const Lag = Schema.Struct({head: Rev, lag: Rev});
 
 /** Checks types before telling a bad parent or trace id apart from a bad line. */
 const Loose = Schema.Struct({
@@ -80,10 +80,10 @@ const encoder = new TextEncoder();
 const bytes = (texts: ReadonlyArray<string | null>): number =>
 	texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
 
-type Why = (typeof Appended.cases.refused.Type)["why"];
+export type Why = (typeof Appended.cases.refused.Type)["why"];
 
 /** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
-const check = (stream: string, id: string, input: unknown): Result.Result<Line, Why> => {
+export const check = (stream: string, id: string, input: unknown): Result.Result<Line, Why> => {
 	if (Result.isFailure(decodeId({stream, id}))) {
 		return Result.fail("bad_line");
 	}
@@ -132,7 +132,7 @@ const same = (line: Decides, first: Decides): boolean =>
 	Equal.equals(line.body, first.body);
 
 /** The answer when the line is not written, or none when it is new and in range. */
-const decide = (
+export const decide = (
 	line: Decides,
 	first: Option.Option<Decides & Pick<Entry, "rev" | "pos">>,
 	head: Rev,
@@ -151,10 +151,10 @@ const decide = (
 	});
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
-class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}) {}
+export class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}) {}
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
-const errorCode = (error: unknown): Option.Option<string | number> => {
+export const errorCode = (error: unknown): Option.Option<string | number> => {
 	if (typeof error !== "object" || error === null) {
 		return Option.none();
 	}
@@ -163,9 +163,14 @@ const errorCode = (error: unknown): Option.Option<string | number> => {
 	return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
 };
 
+/** S10 spike: how one synchronous step runs as a turn. Default: `Sql.transaction`, as on main. */
+export type RunTurn = <A>(step: () => A) => Effect.Effect<A, Threw>;
+
 export const ledgerStore = (
 	sql: Sql,
 	doorbell: (typeof Doorbell)["Service"],
+	run: RunTurn = (step) =>
+		Effect.try({try: () => sql.transaction(step), catch: (error) => new Threw({error})}),
 ): (typeof Referee)["Service"] & {
 	readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
 } => {
@@ -176,21 +181,21 @@ export const ledgerStore = (
 	/** Runs `work` as one atomic step, reading the referee's clock inside it. A throw is typed. */
 	const atomic = Effect.fnUntraced(function* <A>(work: (now: () => number) => A) {
 		return yield* Effect.clockWith((clock) =>
-			Effect.try({
-				try: () => {
-					if (!ready) {
-						sql.transaction(() => {
+			Effect.suspend(() =>
+				ready
+					? Effect.void
+					: run(() => {
 							for (const query of TABLES) {
 								sql.exec(query);
 							}
-						});
-						ready = true;
-					}
-
-					return sql.transaction(() => work(() => clock.currentTimeMillisUnsafe()));
-				},
-				catch: (error) => new Threw({error}),
-			}),
+						}).pipe(
+							Effect.tap(() =>
+								Effect.sync(() => {
+									ready = true;
+								}),
+							),
+						),
+			).pipe(Effect.andThen(run(() => work(() => clock.currentTimeMillisUnsafe())))),
 		).pipe(
 			Effect.catch(({error}) => {
 				if (error instanceof LedgerError) {
