@@ -218,18 +218,23 @@ export const lintWorkflow = (text: string): string[] => {
 	require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
 		Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
 	require(strategy["fail-fast"] === false, "next lets every shard finish");
-	// Count occurrences across whole scripts, including shell prefixes and chained commands.
-	const occurrences = (pattern: RegExp) =>
-		nextSteps.reduce(
-			(total, step) =>
-				total + (typeof step["run"] === "string" ? [...step["run"].matchAll(pattern)].length : 0),
-			0,
-		);
+	// Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
+	const allowed = [
+		"pnpm install --frozen-lockfile",
+		'pnpm exec vitest run next/ --shard "$SHARD"',
+		"pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+		"node next/apps/fabrika/e2e.ts",
+		'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
+	];
+	const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
+	require(nextRuns.length === allowed.length &&
+		allowed.every(
+			(command) => nextRuns.filter((run) => run === command).length === 1,
+		), "next runs exactly its install and four approved commands once each");
 	const testStep = nextSteps.find(
 		(s) => s["run"] === 'pnpm exec vitest run next/ --shard "$SHARD"',
 	);
-	require(occurrences(/\bvitest\b/g) === 1 &&
-		testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
+	require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
 	const shard = map(testStep?.["env"])["SHARD"];
 	require(testStep !== undefined &&
 		!("if" in testStep) &&
@@ -238,22 +243,19 @@ export const lintWorkflow = (text: string): string[] => {
 			shard,
 		), "next passes its six-shard expression without an extra test guard");
 
-	for (const [command, condition, pattern] of [
+	for (const [command, condition] of [
 		[
 			"pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
 			"matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-			/\bplaywright\s+install\b/g,
 		],
-		["node next/apps/fabrika/e2e.ts", "matrix.shard == 1", /\bnext\/apps\/fabrika\/e2e\.ts\b/g],
+		["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
 		[
 			'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
 			"matrix.shard == 1 && github.event_name == 'pull_request'",
-			/\bnext\/apps\/fabrika\/src\/exam\/edges\.ts\b/g,
 		],
 	] as const) {
 		const matches = nextSteps.filter((s) => s["run"] === command);
-		require(occurrences(pattern) === 1 &&
-			matches.length === 1 &&
+		require(matches.length === 1 &&
 			compact(matches[0]?.["if"]) ===
 				compact(condition), `next runs ${command} once on shard 1 with its original condition`);
 	}

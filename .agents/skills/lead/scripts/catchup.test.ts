@@ -748,52 +748,52 @@ describe("catchup, today's tooling", () => {
 			{seed: 119120, numRuns: 12},
 		);
 	});
-	it("T376 every missing, pending, failed or canceled shard blocks even beside a bare next", () => {
-		fc.assert(
-			fc.property(
-				fc.record({
-					order: fc.shuffledSubarray(matrixChecks, {
-						minLength: matrixChecks.length,
-						maxLength: matrixChecks.length,
+	it.each(
+		nextNames.flatMap((name) =>
+			(["missing", "in_progress", "failure", "cancelled", "prefix"] as const).map((fault) => ({
+				name,
+				fault,
+			})),
+		),
+	)(
+		"T376 every missing, pending, failed or canceled shard blocks even beside a bare next: $name $fault",
+		({name, fault}) => {
+			fc.assert(
+				fc.property(
+					fc.record({
+						order: fc.shuffledSubarray(matrixChecks, {
+							minLength: matrixChecks.length,
+							maxLength: matrixChecks.length,
+						}),
+						bare: fc.constantFrom("success", "skipped"),
 					}),
-					bare: fc.constantFrom("success", "skipped"),
-				}),
-				({order, bare}) => {
-					for (const name of nextNames) {
-						for (const fault of [
-							"missing",
-							"in_progress",
-							"failure",
-							"cancelled",
-							"prefix",
-						] as const) {
-							const checks = order.flatMap((check): Check[] =>
-								check.name !== name
-									? [check]
-									: fault === "missing"
-										? []
-										: [
-												{
-													...check,
-													name: fault === "prefix" ? `${name} extra` : name,
-													status: fault === "in_progress" ? "in_progress" : "completed",
-													conclusion:
-														fault === "failure" || fault === "cancelled" ? fault : "success",
-												},
-											],
-							);
-							checks.push({name: "next", status: "completed", conclusion: bare});
-							const got = run({...green, checks, clock: [0, 1, 3601]});
-							expect(got.code, `${name}: ${fault}\n${got.text}`).toBe(1);
-							expect(merges(got.calls)).toHaveLength(0);
-							assertHead(got.calls);
-						}
-					}
-				},
-			),
-			{seed: 119120, numRuns: 2},
-		);
-	});
+					({order, bare}) => {
+						const checks = order.flatMap((check): Check[] =>
+							check.name !== name
+								? [check]
+								: fault === "missing"
+									? []
+									: [
+											{
+												...check,
+												name: fault === "prefix" ? `${name} extra` : name,
+												status: fault === "in_progress" ? "in_progress" : "completed",
+												conclusion:
+													fault === "failure" || fault === "cancelled" ? fault : "success",
+											},
+										],
+						);
+						checks.push({name: "next", status: "completed", conclusion: bare});
+						const got = run({...green, checks, clock: [0, 1, 3601]});
+						expect(got.code, `${name}: ${fault}\n${got.text}`).toBe(1);
+						expect(merges(got.calls)).toHaveLength(0);
+						assertHead(got.calls);
+					},
+				),
+				{seed: 119120, numRuns: 2},
+			);
+		},
+	);
 	it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
 		fc.assert(
 			fc.property(

@@ -1,6 +1,7 @@
 import {readFileSync} from "node:fs";
 import * as fc from "fast-check";
 import {expect, it} from "vitest";
+import {parse} from "yaml";
 import {lintWorkflow as lint} from "./workflow-lint.ts";
 
 // Today's CI for both versions. Covers workflow-lint.ts. Each generated valid workflow
@@ -91,6 +92,7 @@ const valid = (label: string, extra: string) => ({
 					env: {BASE: `\${{ github.event.pull_request.base.sha }}`},
 					run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
 				},
+				{run: "pnpm install --frozen-lockfile"},
 			],
 		},
 		e2e: {
@@ -126,7 +128,7 @@ const wiring = fc
 		if (whitespace) {
 			clean.jobs.next.steps[0]!.env!.SHARD = `\${{${gap}matrix.shard${gap}}}/6`;
 
-			for (const step of clean.jobs.next.steps.slice(1)) {
+			for (const step of clean.jobs.next.steps.slice(1, 4)) {
 				step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
 			}
 		}
@@ -134,7 +136,44 @@ const wiring = fc
 		return clean;
 	});
 
+// Pinned T376 second-review bypasses, also applied to every generated valid workflow.
+const extraCommands = [
+	{run: "pnpm test next/"},
+	{run: "pnpm run test"},
+	{run: 'pnpm exec vi""test run next/'},
+	{run: "cd next/apps/fabrika && node e2e.ts"},
+	{run: "node e2e.ts", "working-directory": "next/apps/fabrika"},
+	{run: "pnpm --filter @kampus/fabrika exec node e2e.ts"},
+	{run: 'node next/apps/fabrika/src/exam/../exam/edges.ts --base "$BASE"'},
+	{run: 'cd next/apps/fabrika/src/exam && node edges.ts --base "$BASE"'},
+	{run: "npx playwright@latest install chromium"},
+	{run: "pnpm --filter @kampus/fabrika exec playwright -- install chromium"},
+];
+
+it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run", (step) => {
+	const workflow = parse(readFileSync(new URL("../workflows/check.yaml", import.meta.url), "utf8"));
+	expect(lint(JSON.stringify(workflow))).toEqual([]);
+	workflow.jobs.next.steps.push(step);
+	expect(lint(JSON.stringify(workflow))).not.toEqual([]);
+});
+
 const plants: [string, (workflow: Workflow) => void][] = [
+	...extraCommands.map((step): [string, (w: Workflow) => void] => [
+		`review2 extra command: ${step.run}`,
+		(w) => {
+			w.jobs.next.steps.push(step);
+		},
+	]),
+	...["missing", "duplicate"].map((fault): [string, (w: Workflow) => void] => [
+		`next ${fault} install`,
+		(w) => {
+			if (fault === "missing") {
+				w.jobs.next.steps.pop();
+			} else {
+				w.jobs.next.steps.push({...w.jobs.next.steps[4]!});
+			}
+		},
+	]),
 	[
 		"review: extra exec Vitest invocation",
 		(w) => {

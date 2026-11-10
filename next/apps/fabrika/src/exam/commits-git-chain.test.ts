@@ -9,7 +9,7 @@ import {
 	KEYS,
 	stepKeys,
 	GOOD_KEYS,
-	count,
+	repoCount,
 	Repo,
 	DONE,
 	runs,
@@ -193,7 +193,7 @@ describe("judged at the event's head (hole 3)", () => {
 
 	// scenario: a bare remote, a later push and an independent CI clone exercise fetching.
 	it("scenario: with --fetch, CI's own clone of main fetches the event's shas and notes, and nothing newer", () => {
-		const origin = join(TOP, `origin${count}.git`);
+		const origin = join(TOP, `origin${repoCount()}.git`);
 		sh(TOP, "git", ["init", "-q", "--bare", "-b", "main", origin]);
 		const r = new Repo();
 		r.git("remote", "add", "origin", origin);
@@ -208,7 +208,7 @@ describe("judged at the event's head (hole 3)", () => {
 		const event = r.head();
 		r.change("late.ts");
 		r.git("push", "-q", "origin", "pr");
-		const ci = join(TOP, `ci${count}`);
+		const ci = join(TOP, `ci${repoCount()}`);
 		sh(TOP, "git", ["clone", "-q", "--branch", "main", origin, ci]);
 		const args = [
 			"check",

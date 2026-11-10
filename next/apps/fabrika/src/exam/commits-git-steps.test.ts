@@ -15,7 +15,7 @@ import {
 	GOOD_KEYS,
 	personLine,
 	PERSON_KEYS,
-	count,
+	repoCount,
 	Repo,
 	DONE,
 	runs,
@@ -328,7 +328,7 @@ describe("person commits between step links (p86b)", () => {
 		const person = r.gitSigned();
 		const {squash, rows} = squashed(r, [{note: personLink(r, person), commit: person}]);
 		log(r, rows);
-		const ci = join(TOP, `person-ci${count}`);
+		const ci = join(TOP, `person-ci${repoCount()}`);
 		sh(TOP, "git", ["clone", "-q", "--no-local", "--single-branch", "--branch", "main", r.dir, ci]);
 		const missing = spawnSync("git", ["cat-file", "-e", `${person}^{commit}`], {cwd: ci, env: ENV});
 		expect(missing.error).toBeUndefined();

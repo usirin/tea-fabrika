@@ -71,6 +71,7 @@ const personLine = (id: string, who = "person") => `person:${id} namespaces="git
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
+const repoCount = () => count;
 
 /** A planted repo: `main` with one commit, and the branch `pr` checked out off it. */
 class Repo {
@@ -327,7 +328,7 @@ export {
 	GOOD_KEYS,
 	personLine,
 	PERSON_KEYS,
-	count,
+	repoCount,
 	Repo,
 	DONE,
 	runs,
