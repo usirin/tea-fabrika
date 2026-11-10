@@ -1,9 +1,0 @@
-{
-	"name": "fabrika-spike-214",
-	"productName": "fabrika-spike-214",
-	"version": "0.0.0",
-	"private": true,
-	"description": "Experiment 214's throwaway Electron app. Its name is the Keychain item's name: fabrika-spike-214 Safe Storage.",
-	"type": "module",
-	"main": "main.mjs"
-}

@@ -44,7 +44,7 @@ export interface HostStart {
 }
 
 /** The host could not be started at all, and why in words. */
-export class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
+class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
 	why: Schema.String,
 }) {}
 

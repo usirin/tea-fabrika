@@ -36,7 +36,7 @@ import type {Read} from "./messages.ts";
 // ends, so a broken peer cannot make the other side hold its memory without end.
 
 /** The longest line either side reads, in bytes. */
-export const MAX_LINE = 4 * 1024 * 1024;
+const MAX_LINE = 4 * 1024 * 1024;
 
 /** Why a link did not come up: the other side speaks another version, or it ended first. */
 export class Unattached extends Schema.TaggedError<Unattached>()("Unattached", {

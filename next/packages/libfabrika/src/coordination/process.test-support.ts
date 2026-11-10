@@ -120,7 +120,7 @@ export const storage = () => {
 	};
 };
 export type Storage = ReturnType<typeof storage>;
-export const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
+const quiet = Layer.succeed(Doorbell, {ring: () => Effect.void});
 export const data = (sql: Sql, bell = quiet) =>
 	Layer.mergeAll(Ledger.sql(sql, {reader: "gateway:test"}), LedgerTransaction.layer(sql)).pipe(
 		Layer.provide(bell),

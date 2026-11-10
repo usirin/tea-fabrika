@@ -20,11 +20,11 @@ import {isDesk} from "./files.ts";
 // It names no platform: main.ts gives `Browser` Electron's `shell.openExternal`, and a test a list.
 
 /** A URL the person's own browser may open: http or https, as the URL parser writes it. */
-export type Outside = string & Brand.Brand<"Outside">;
+type Outside = string & Brand.Brand<"Outside">;
 const Outside = Brand.nominal<Outside>();
 
 /** What becomes of a URL a page asks to open: it opens outside, or it is refused, and why. */
-export type Outward =
+type Outward =
 	| {readonly kind: "open"; readonly url: Outside}
 	| {readonly kind: "refused"; readonly why: string};
 

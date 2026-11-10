@@ -39,7 +39,7 @@ const FILES = {
 } as const satisfies Record<string, {type: string; csp: string; page: boolean}>;
 
 /** A file the protocol serves, by its path. */
-export type Served = keyof typeof FILES;
+type Served = keyof typeof FILES;
 
 /** Where the window starts: the desk, the one page. */
 export const DESK = `${SCHEME}://${HOST}/desk.html`;

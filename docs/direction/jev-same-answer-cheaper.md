@@ -34,8 +34,7 @@ accuracy against an ideal answer.
 ## How a Jev question is built
 
 Decided 2026-10-04 and 2026-10-05, in the first two nights. The story is in
-blog posts [02](../../blog/02-meeting-jev.md), [03](../../blog/03-a-judge-that-cannot-add.md)
-and [07](../../blog/07-cheap-enough-to-read-everything.md).
+blog posts 02, 03 and 07 (deleted from main 2026-11-09; they stay at the tag `archive/2026-11-09`).
 
 - **Jev reads; code works out the facts.** Never use Jev for sums, for running
   a rule on an input, for judging whether code is correct, or for a house rule

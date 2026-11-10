@@ -13,10 +13,8 @@
 //
 // The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
 // change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
-import {globSync, readFileSync} from "node:fs";
-import {join, relative} from "node:path";
-import {NodeRuntime} from "@effect/platform-node";
-import {Console, Effect, Schema} from "effect";
+import {NodeRuntime, NodeServices} from "@effect/platform-node";
+import {Console, Effect, FileSystem, Path, Schema} from "effect";
 import {parseSync} from "oxc-parser";
 import {type OxcError, transformSync} from "oxc-transform-react";
 
@@ -26,7 +24,7 @@ export type Row = typeof Row.Type;
 const Ledger = Schema.Array(Row);
 
 /** One thing the check refuses, at a function in a file. */
-export interface Finding {
+interface Finding {
 	readonly file: string;
 	readonly fn: string;
 	readonly line: number;
@@ -209,25 +207,21 @@ export const check = (
 		})),
 ];
 
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
-
 class Unread extends Schema.TaggedError<Unread>()("Unread", {path: Schema.String}) {}
 class Refused extends Schema.TaggedError<Refused>()("Refused", {findings: Schema.Number}) {}
 
-const read = Effect.fnUntraced(function* (path: string) {
-	return yield* Effect.try({
-		try: () => readFileSync(join(ROOT, path), "utf8"),
-		catch: () => new Unread({path}),
-	});
-});
-
 /** `pnpm lint:compiler`: every `.tsx` file in `next/`, tests left out, against the ledger. */
 const lint = Effect.gen(function* () {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const root = path.resolve(import.meta.dirname, "../../../../..");
+	const read = (file: string) =>
+		fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => new Unread({path: file})));
 	const ledger = yield* read("compiler-ledger.json").pipe(
 		Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ledger))),
 	);
-	const paths = globSync("next/**/*.tsx", {cwd: ROOT})
-		.map((p) => relative(ROOT, join(ROOT, p)))
+	const paths = (yield* fs.glob("next/**/*.tsx", {root, exclude: ["**/node_modules/**"]}))
+		.map((p) => path.relative(root, path.join(root, p)))
 		.filter((p) => !p.includes("node_modules") && !p.includes(".test."))
 		.sort();
 	const files = new Map<string, string>();
@@ -240,4 +234,4 @@ const lint = Effect.gen(function* () {
 	if (findings.length > 0) return yield* new Refused({findings: findings.length});
 });
 
-if (import.meta.main) NodeRuntime.runMain(lint);
+if (import.meta.main) NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));

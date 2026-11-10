@@ -16,15 +16,14 @@
 // `check`, `chain`), and a thin edge that runs `git` and `ssh-keygen`, the reference verifier. It
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
-import {join} from "node:path";
 import {NodeRuntime, NodeServices} from "@effect/platform-node";
-import {Config, Console, Effect, Exit, FileSystem, Option, Schema, Stream} from "effect";
+import {Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream} from "effect";
 import {ChildProcess} from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
 export const Role = Schema.Literals(ROLES);
 export type Role = typeof Role.Type;
-export const NAMESPACE = "fabrika-step";
+const NAMESPACE = "fabrika-step";
 
 const Sha = Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/));
 const Ticket = Schema.String.check(Schema.isPattern(/^[0-9]+$/));
@@ -40,7 +39,7 @@ export const Note = Schema.TaggedStruct("attested", {
 export type Note = typeof Note.Type;
 
 /** The same link as a `field/runs.jsonl` row holds it, with what a later reader needs to walk it. */
-export const Link = Schema.TaggedStruct("attested", {
+const Link = Schema.TaggedStruct("attested", {
 	...Note.fields,
 	by: Schema.String,
 	arrivedAt: Schema.String,
@@ -52,7 +51,7 @@ export const Link = Schema.TaggedStruct("attested", {
 	squash: Sha,
 	keys: Sha,
 });
-export type Link = typeof Link.Type;
+type Link = typeof Link.Type;
 
 const PersonLink = Schema.TaggedStruct("attested", {
 	...Link.fields,
@@ -62,13 +61,13 @@ type PersonLink = typeof PersonLink.Type;
 const ChainLink = Schema.Union([Link, PersonLink]);
 type ChainLink = typeof ChainLink.Type;
 
-export const Why = Schema.Literals([
+const Why = Schema.Literals([
 	"unsigned_commit",
 	"build_touched_exam",
 	"broken_chain",
 	"stale_link",
 ]);
-export type Why = typeof Why.Type;
+type Why = typeof Why.Type;
 
 export const Answer = Schema.TaggedUnion({
 	done: {},
@@ -141,10 +140,10 @@ export const keysProblem = (text: string | null): string | null => {
 };
 
 /** One row of `exam-paths.json`: a glob and why it is the exam's. */
-export const ExamList = Schema.Array(
+const ExamList = Schema.Array(
 	Schema.Struct({glob: Schema.String.check(Schema.isNonEmpty()), why: Schema.String}),
 );
-export type ExamList = typeof ExamList.Type;
+type ExamList = typeof ExamList.Type;
 export const decodeExam = Schema.decodeUnknownOption(Schema.fromJsonString(ExamList));
 
 /** A glob as the list writes it: `**` crosses folders, `*` stays inside one, dots match like letters. */
@@ -176,7 +175,7 @@ export const inScope = (changed: ReadonlyArray<string>, isExam: (path: string) =
 	changed.some((p) => p.startsWith("next/") || isExam(p));
 
 /** A note as CI saw it: decoded, and the role whose key verified its text, or null. */
-export interface Signed {
+interface Signed {
 	readonly note: Note;
 	readonly signer: Role | null;
 }
@@ -270,7 +269,7 @@ export interface Logged<L extends ChainLink = Link> {
 }
 
 /** What git says about one squash: whether it is on main, and which commits came before it there. */
-export interface Placed {
+interface Placed {
 	/** The squash is on the checked-out main. */
 	readonly onMain: boolean;
 	/** Commits on main before the squash (ancestors of its first parent), among the links' bases. */
@@ -377,13 +376,14 @@ const fileAt = Effect.fnUntraced(function* (rev: string, path: string) {
  */
 const verifier = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
 	const dir = yield* fs.makeTempDirectoryScoped();
 	let n = 0;
 	return Effect.fnUntraced(function* (keys: string, note: Note) {
 		return yield* Effect.gen(function* () {
 			n += 1;
-			const allowed = join(dir, `allowed-${n}`);
-			const sig = join(dir, `sig-${n}`);
+			const allowed = path.join(dir, `allowed-${n}`);
+			const sig = path.join(dir, `sig-${n}`);
 			yield* fs.writeFileString(allowed, keys);
 			yield* fs.writeFileString(sig, note.sig);
 			const found = yield* run("ssh-keygen", ["-Y", "find-principals", "-s", sig, "-f", allowed]);
@@ -518,7 +518,7 @@ const endpoints = Effect.gen(function* () {
 export const annotate = (s: string) =>
 	s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
 /** A path in a printed line: JSON-quoted, and safe inside markdown code and a table. */
-export const quote = (path: string) =>
+const quote = (path: string) =>
 	JSON.stringify(path)
 		.replaceAll("`", "\\u0060")
 		.replaceAll("<", "\\u003c")

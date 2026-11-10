@@ -1,6 +1,6 @@
 # 123. How long does each check layer take on real tickets, and which repeat runs can be cheap?
 
-The question: [Promises in the pipeline](../docs/direction/promises-in-the-pipeline.md)
+The question: Promises in the pipeline
 has six steps: Plan, Tool, Verify writer, Build, Mutation test, Ship. Each
 needs the right layer of checks, and mutation testing must not run on every
 commit. This experiment times each layer on experiment 122's three

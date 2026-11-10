@@ -283,7 +283,7 @@ export const matchPress = (press: Press, keys: readonly Key[], mac: boolean): Ke
 };
 
 /** Who a key belongs to: the system and its menu, the app (the desk or a tile), or nobody at all. */
-export type KeyOwner = "system" | "app" | "nobody";
+type KeyOwner = "system" | "app" | "nobody";
 
 /**
  * The Mac's own keys, which no file can take: Cmd-Q quits, Cmd-H hides, Cmd-Tab and Cmd-Space

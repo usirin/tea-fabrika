@@ -11,7 +11,7 @@ Gathered from the notes in `docs/direction/` (the desktop layer, tile guidelines
 name, popovers, modes, keybindings, the ask desk, fold not tabs, tracker views), from
 [experiment 196](../../experiments/196-ask-desk.md), from
 program guidelines (pull request 332, proposed, `docs/direction/program-guidelines.md` on its own
-branch), from [the naming sweep's app rows](../naming-sweep/app.md) (proposed), from
+branch), from the naming sweep's app rows (proposed), from
 [the glossary](../../.glossary/TERMS.md), and from today's
 app on main (`apps/fabrika/src/window/frame.tsx`, `frame.ts`, `desk.tsx`, `pop.tsx`,
 `apps/fabrika/src/desk/`, `apps/fabrika/README.md`).

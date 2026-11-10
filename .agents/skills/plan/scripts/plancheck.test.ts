@@ -1,5 +1,34 @@
+import "./plancheck.sh?raw";
+import "../../lead/scripts/leakgrep.sh?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+import "../../lead/scripts/box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/drive.ts?raw";
+import "../../lead/scripts/fieldrow.py?raw";
+import "../../lead/scripts/runplan.sh?raw";
+import "../../lead/scripts/env.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/gc.ts?raw";
+import "../../lead/scripts/redact.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/botpush.mjs?raw";
+import "../../lead/scripts/clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../../exam-paths.json?raw";
 import {spawnSync} from "node:child_process";
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import fc from "fast-check";
@@ -16,7 +45,13 @@ const check = (body: string, marker = "Plancheck-Version: 2") => {
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, `Approved by the lead agent, builds ticket 520.\n\n${marker}\n\n${body}\n`);
-		const ran = spawnSync("sh", [script, plan], {encoding: "utf8", timeout: 5_000});
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
+		const ran = spawnSync("sh", [script, plan], {
+			encoding: "utf8",
+			timeout: 5_000,
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
 		return {code: ran.status, text: ran.stdout + ran.stderr};
@@ -30,10 +65,12 @@ const handoff = (text: string, draft = false) => {
 	try {
 		const plan = join(folder, "plan.md");
 		writeFileSync(plan, text);
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
 		const ran = spawnSync("sh", [script, ...(draft ? ["--draft"] : []), plan], {
 			encoding: "utf8",
 			timeout: 5_000,
-			env: {...process.env, TYPESAFE_API_KEY: undefined},
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
 		});
 		expect(ran.error).toBeUndefined();
 		expect(ran.signal).toBeNull();
@@ -118,7 +155,9 @@ describe("plancheck, today's tooling", () => {
 					const lines = [first, "", "", ""];
 					lines[position] = "Plancheck-Version: 2";
 					const example = "Approved by the lead agent, builds a different plan.";
-					const body = `${laws("fc.record: plan handoffs")}\n${approval ? (fenced ? `${fence}\n${example}\n${fence.slice(0, 3)}` : example) : ""}\n`;
+					const body = complete(
+						`${approval ? (fenced ? `${fence}\n${example}\n${fence.slice(0, 3)}` : example) : ""}\n`,
+					);
 					const got = handoff(`${lines.join("\n")}\n${body}`, true);
 					const pass = first === "" && position === 1 && (!approval || fenced);
 					expect(got.code, got.text).toBe(pass ? 0 : 1);
@@ -847,6 +886,297 @@ describe("plancheck, today's tooling", () => {
 				},
 			),
 			options,
+		);
+	});
+});
+
+// T321 keeps normal saved-plan reads above. New structure checks run at the approval boundary.
+const digest = (body: string) => createHash("sha256").update(Buffer.from(body)).digest("hex");
+const complete = (extra = "") =>
+	[
+		"# Today's tooling",
+		"",
+		"```text",
+		"plan -> check -> approve",
+		"```",
+		"",
+		"## Laws",
+		laws("fc.record: generated inputs"),
+		"",
+		"## Files",
+		table(["File", "Owner step"], [["src/plain.ts", "build"]]),
+		"",
+		"## Size",
+		"Size: 1 agent hour, 80 lines. Confidence: 85%.",
+		"",
+		"## What it records",
+		"Approval digests and run IDs.",
+		"",
+		"## What it cannot tell us",
+		"No live run was tried.",
+		"",
+		"## Open questions",
+		"None.",
+		extra,
+	].join("\n");
+const approved = (body: string, note = "the decided note") =>
+	`Approved by the lead agent, builds ${note}; body ${digest(body).slice(0, 12)}\nPlancheck-Version: 2\n${body}`;
+const modeCheck = (text: string, mode: "--draft" | "--approved") => {
+	const folder = mkdtempSync(join(tmpdir(), "pc-321-"));
+	try {
+		const path = join(folder, "plan.md");
+		writeFileSync(path, Buffer.from(text));
+		const words = join(folder, "words");
+		writeFileSync(words, "private_generated\n");
+		const ran = spawnSync("sh", [script, mode, path], {
+			encoding: "utf8",
+			timeout: 5_000,
+			env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+		});
+		expect(ran.error).toBeUndefined();
+		expect(ran.signal).toBeNull();
+		return {code: ran.status, text: ran.stdout + ran.stderr};
+	} finally {
+		rmSync(folder, {recursive: true, force: true});
+	}
+};
+
+describe("T321 K11 sections and K2 approval, today's tooling", () => {
+	// Plant: count required content inside fences. Each deletion is tried alone.
+	it("K11 requires each section outside fences and a whole opening code block", () => {
+		fc.assert(
+			fc.property(word, fc.constantFrom("```", "~~~"), (title, fence) => {
+				const body = complete(`\n${title}\n`);
+				const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+				expect(good.code, good.text).toBe(0);
+				for (const part of [
+					"```text\nplan -> check -> approve\n```\n",
+					`## Laws\n${laws("fc.record: generated inputs")}\n`,
+					`## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n`,
+					"Size: 1 agent hour, 80 lines. Confidence: 85%.",
+					"## What it records\nApproval digests and run IDs.\n",
+					"## What it cannot tell us\nNo live run was tried.\n",
+					"## Open questions\nNone.",
+				]) {
+					const without = body.replace(part, "");
+					expect(without).not.toBe(body);
+					const decoy = part.startsWith("```")
+						? "## Example\n```text\nlate opening block\n```"
+						: `${fence}md\n${part}\n${fence}`;
+					const bad = modeCheck(`\nPlancheck-Version: 2\n${without}\n${decoy}\n`, "--draft");
+					expect(bad.code, `${part}\n${bad.text}`).toBe(1);
+					expect(bad.text).not.toMatch(/usage:|Traceback|cannot read installed/);
+				}
+			}),
+			{seed: 321, numRuns: 3},
+		);
+	});
+
+	// Plant: accept one lean for several open questions, or a size with no percent.
+	it("K11 checks each question's lean and percent, and the size confidence", () => {
+		fc.assert(
+			fc.property(fc.integer({min: 1, max: 99}), word, (percent, text) => {
+				for (const questions of [
+					"None.",
+					`1. ${text}? Lean yes, ${percent}%.`,
+					`1. ${text}? Lean yes, ${percent}%.\n2. Another? Lean no, ${percent}%.`,
+				]) {
+					const body = complete().replace("None.", questions);
+					const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+					expect(good.code, good.text).toBe(0);
+				}
+				for (const body of [
+					complete().replace("85%", "sure"),
+					complete().replace("None.", `1. ${text}? Lean yes, ${percent}%.\n2. Another?`),
+					complete().replace("None.", `1. ${text}? ${percent}%.`),
+					// Review round 1, finding 9: "None." followed by unnumbered questions.
+					complete().replace("None.", `None.\n- ${text}?`),
+					complete().replace("None.", `None.\n* ${text}?`),
+					complete().replace("None.", `None.\n+ ${text}?`),
+					complete().replace("None.", `None.\n${text}, and is it ready?`),
+				]) {
+					const bad = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+					expect(bad.code, bad.text).toBe(1);
+				}
+			}),
+			{seed: 321, numRuns: 3},
+		);
+	});
+
+	// Plant: scan only table rows. These qualified exam paths appear in prose, lists and fences.
+	it("K11 every exam path outside tables needs its own tests-owned files row", () => {
+		fc.assert(
+			fc.property(
+				fc.constantFrom(
+					".github/workflows/check.yaml",
+					"oxlint-plugins/laws.ts",
+					".agents/skills/lead/scripts/box.test.ts",
+				),
+				fc.constantFrom("prose", "list", "code"),
+				(path, place) => {
+					const mention =
+						place === "code"
+							? `\n\`\`\`text\n${path}\n\`\`\``
+							: place === "list"
+								? `\n- \`${path}\``
+								: `\nChange \`${path}\` here.`;
+					const body = complete(mention);
+					const bad = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+					expect(bad.code, bad.text).toBe(1);
+					expect(bad.text).toContain(path);
+					const withRow = body.replace(
+						"| src/plain.ts | build |",
+						`| src/plain.ts | build |\n| ${path} | tests |`,
+					);
+					const good = modeCheck(`\nPlancheck-Version: 2\n${withRow}`, "--draft");
+					expect(good.code, good.text).toBe(0);
+				},
+			),
+			{seed: 321, numRuns: 6},
+		);
+	});
+
+	// Plants: hash line one; omit appended amendments; normalize CRLF, UTF-8 or the final LF.
+	it("K2/K11 binds approval to exact bytes after the second LF, including amendments", () => {
+		fc.assert(
+			fc.property(
+				fc.record({
+					text: word,
+					ending: fc.constantFrom("", "\n", "\r\n"),
+					unicode: fc.constantFrom("é", "e\u0301", "猫", "🫖"),
+				}),
+				({text, ending, unicode}) => {
+					const body = complete(`\n## Amendment 1\n${unicode} ${text}${ending}`);
+					const draft = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+					expect(draft.code, draft.text).toBe(0);
+					expect(draft.text).toContain(digest(body));
+					const good = modeCheck(approved(body), "--approved");
+					expect(good.code, good.text).toBe(0);
+					for (const edited of [
+						`${body}\n`,
+						body.replace(text, `${text}x`),
+						body.replaceAll("\n", "\r\n"),
+						`${body}\n## Amendment 2\nChanged.\n`,
+					]) {
+						const stale = `${approved(body).split("\n").slice(0, 2).join("\n")}\n${edited}`;
+						const bad = modeCheck(stale, "--approved");
+						expect(bad.code, bad.text).toBe(1);
+						expect(bad.text).toMatch(/hash|digest|body|approval/);
+						const renewed = modeCheck(approved(edited), "--approved");
+						expect(renewed.code, renewed.text).toBe(0);
+					}
+				},
+			),
+			{seed: 321, numRuns: 3},
+		);
+	});
+
+	// Plant: read line one with splitlines(), so a CRLF approval passes here and fails in box.sh
+	// and stepcommit.sh. Review round 1, finding 7.
+	it("K2 approved mode refuses a CRLF approval line, as the byte readers do", () => {
+		fc.assert(
+			fc.property(word, (text) => {
+				const body = complete(`\n## Amendment 1\n${text}\n`);
+				const crlf = approved(body).replace("\n", "\r\n");
+				const bad = modeCheck(crlf, "--approved");
+				expect(bad.code, bad.text).toBe(1);
+				expect(bad.text).toMatch(/approval/);
+			}),
+			{seed: 321, numRuns: 3},
+		);
+	});
+
+	// Plant: accept any approval-looking line or a duplicate lower in the body.
+	it("K2 approved mode requires the exact lead approval grammar on line one", () => {
+		fc.assert(
+			fc.property(word, (note) => {
+				const body = complete();
+				const first = approved(body, note).split("\n")[0]!;
+				const good = modeCheck(approved(body, note), "--approved");
+				expect(good.code, good.text).toBe(0);
+				for (const line of [
+					"",
+					first.replace("lead agent", "driver"),
+					first.replace(`builds ${note};`, "builds ;"),
+					first.replace("; body", "; digest"),
+					first.replace(digest(body).slice(0, 12), digest(body).slice(0, 11)),
+					`${first} extra`,
+				]) {
+					const bad = modeCheck(`${line}\nPlancheck-Version: 2\n${body}`, "--approved");
+					expect(bad.code, bad.text).toBe(1);
+				}
+				const duplicate = `${body}\n${first}\n`;
+				expect(modeCheck(approved(duplicate), "--approved").code).toBe(1);
+			}),
+			{seed: 321, numRuns: 3},
+		);
+	});
+});
+
+describe("T325 K6 plancheck, today's tooling", () => {
+	// No domain Schema for draft text. Plant: skip the shared checker or ignore its refusal.
+	it("checks every draft addition with leakgrep and preserves clean plans", () => {
+		fc.assert(
+			fc.property(
+				fc.record({suffix: word, leak: fc.boolean(), draft: fc.boolean()}),
+				({suffix, leak, draft}) => {
+					const dir = mkdtempSync(join(tmpdir(), "pc-leak-"));
+					try {
+						const root = join(dir, "repo"),
+							scripts = join(root, ".agents/skills");
+						for (const part of ["plan", "lead", "step-commit"])
+							mkdirSync(join(scripts, part, "scripts"), {recursive: true});
+						for (const file of [
+							"plan/scripts/plancheck.sh",
+							"lead/scripts/leakgrep.sh",
+							"step-commit/scripts/exam.py",
+						])
+							cpSync(join(import.meta.dirname, "../..", file), join(scripts, file));
+						cpSync(
+							join(import.meta.dirname, "../../../../exam-paths.json"),
+							join(root, "exam-paths.json"),
+						);
+						symlinkSync(
+							join(import.meta.dirname, "../../../../node_modules"),
+							join(root, "node_modules"),
+						);
+						expect(spawnSync("git", ["init", "-q", root]).status).toBe(0);
+						const privateWord = `private_${suffix}`;
+						const words = join(dir, "words");
+						writeFileSync(
+							words,
+							`${privateWord}\n${"https://github.com/usirin/tea-fabrika".split("/").slice(-2).join("\n")}\n`,
+						);
+						const plan = join(root, "plan.md");
+						writeFileSync(
+							plan,
+							`${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 2\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
+						);
+						const run = () =>
+							spawnSync(
+								"sh",
+								[join(scripts, "plan/scripts/plancheck.sh"), ...(draft ? ["--draft"] : []), plan],
+								{
+									cwd: root,
+									encoding: "utf8",
+									timeout: 5_000,
+									env: {...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined},
+								},
+							);
+						const out = run();
+						expect(out.error).toBeUndefined();
+						expect(out.status, out.stdout + out.stderr).toBe(leak ? 1 : 0);
+						writeFileSync(
+							join(scripts, "lead/scripts/leakgrep.sh"),
+							"#!/bin/sh\necho 'leakgrep: planted refusal' >&2\nexit 1\n",
+						);
+						expect(run().status).toBe(1);
+					} finally {
+						rmSync(dir, {recursive: true, force: true});
+					}
+				},
+			),
+			{seed: 325, numRuns: 6},
 		);
 	});
 });

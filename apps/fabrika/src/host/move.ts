@@ -35,10 +35,10 @@ import {alive} from "./lock.ts";
 import {pathsOf, reach} from "./socket.ts";
 
 /** The streams that move: the tracker's, every one under these. */
-export const MOVED: readonly string[] = [ROOT];
+const MOVED: readonly string[] = [ROOT];
 
 /** How many events a chunk carries, unless the caller says. */
-export const CHUNK = 200;
+const CHUNK = 200;
 
 /** The move stopped before it was done, and why, in words. Run it again once that is fixed. */
 export class MoveStopped extends Schema.TaggedError<MoveStopped>()("MoveStopped", {
@@ -81,7 +81,7 @@ export const readLaptop = (file: string) =>
 	});
 
 /** Why the home's host is running, or none: a live socket, or a start lock a live pid holds. */
-export const hostRunning = (home: string) =>
+const hostRunning = (home: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const paths = yield* pathsOf(home);
@@ -147,7 +147,7 @@ const stopOf = (d: DoorRefused) =>
 const fromDoor = <A, R>(e: Effect.Effect<A, DoorRefused, R>) => e.pipe(Effect.mapError(stopOf));
 
 /** The ledger at `c`, logged in to with its key: only its founder, as a person, may move into it. */
-export const layerMoveTarget = (c: Connection) =>
+const layerMoveTarget = (c: Connection) =>
 	Layer.effect(
 		MoveTarget,
 		Effect.gen(function* () {

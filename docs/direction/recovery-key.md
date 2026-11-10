@@ -1,6 +1,7 @@
 # Account recovery: a sheet of 12 words, and email for the cloud
 
-**Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.**
+**Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.
+The read call (call 13) and the key's derivation decided 2026-11-09, built by P28.**
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
@@ -530,6 +531,32 @@ Each says what the attacker gets in Tier 1.
 - **Malware on the new Mac while the sheet is typed.** It gets the words. Nothing in this design
   stops that. A clean Mac is the only answer, as for every product above.
 
+### 13. A new device sees what it will drop, first (decided 2026-11-09, built by P28)
+
+Before a sheet recovery, the new device makes one read-only call at the door. It is signed by the
+recovery key and tied to a fresh challenge. It answers the ledger's name, the ledger position it
+saw, and which devices would drop. It spends nothing and lets nothing in.
+
+```ts
+// A sketch. The call's and fields' names are P28's to pick.
+// read (signed by the recovery key, over a fresh challenge)
+//   -> {name: "home", seen: 4182, drops: ["mbp-2024", "tab-7f3a"]}
+// added (signed, with seen inside the signed text) -> the door checks membership again,
+//   and refuses if the person's keys changed since seen
+```
+
+- **Every refusal answers the same,** so a wrong, spent or replaced sheet tells an attacker
+  nothing. The screen still shows one plain line for a spent, replaced or other-fabrika sheet.
+- **The challenge is one-time and short-lived.**
+- **The read returns the ledger position it saw.** The `added` carries it back as `seen`, inside
+  its signed text, so the check does not rest on TLS alone. The door refuses the `added` if the
+  person's keys changed since `seen`: the race where a thief adds a key between the read and the
+  join.
+- **`added` still checks membership again,** whatever the read said.
+- **The 12 words become the key by HKDF-SHA256 over the entropy,** with an empty salt and the label
+  `fabrika-recovery-v1`, as in [the sketch above](#how-the-words-become-a-key).
+- The owner approved P28's exam on 2026-11-09: 28 laws, the read call's conditions included.
+
 ## Email recovery (decided, two unknowns open)
 
 **Decided by the owner, 2026-11-05 and 2026-11-06,** after walking experiment 217
@@ -719,6 +746,16 @@ Decided by the owner, 2026-11-08, for a few friends on one Cloudflare account
     wait. An admin's invite is already trust, so recovery has no barrier
     ([principles](./principles.md)). The ledger records who re-invited whom.
 
+Decided by the owner, 2026-11-09, built by P28 (call 13):
+
+18. One read-only door call shows a new device what it will drop, signed by the recovery key over
+    a fresh one-time, short-lived challenge. It spends nothing and lets nothing in.
+19. Every refusal answers the same. The read returns the ledger position it saw, the `added`
+    carries it back as `seen` inside its signed text, and the door refuses the `added` if the
+    person's keys changed since.
+20. The words become the key by HKDF-SHA256 over the entropy, empty salt, label
+    `fabrika-recovery-v1`.
+
 Inside the decided part, still a lean:
 
 - **A browser tab cannot approve others.** 70% (call 7).
@@ -753,7 +790,6 @@ These are proposals, not settled words or numbers:
   `email`, the fact name `checked`, and the function `mayAdd`.
 - The fields inside `verified`, `requested` and `canceled` (the three names are decided).
 - The `why` words `used`, `replaced` and `not_allowed`.
-- The HKDF label and the choice of HKDF over BIP39's own seed.
 - The label's shape, `r1-7f3a`.
 - Every screen's words, the sheet's layout, and the file names.
 - The size and hours.

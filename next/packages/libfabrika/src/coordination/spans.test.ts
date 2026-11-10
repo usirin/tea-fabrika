@@ -15,16 +15,17 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {afterAll, describe, expect, it} from "@effect/vitest";
-import {Effect, Layer, Option, Stream, Tracer} from "effect";
+import {Effect, Layer, Option, Schema, Stream, Tracer} from "effect";
 import {LedgerTransaction} from "../data/ledger-transaction.ts";
 import {Doorbell, Ledger, LedgerError} from "../data/ledger.ts";
 import type {Sql} from "../data/referee.ts";
 import {nodeSql} from "../data/sqlite.ts";
 import {ClientManager} from "./client-manager.ts";
 import {type From, Mailbox} from "./mailbox.ts";
-import type {MemberFact} from "./members.ts";
+import {foldMembers, MemberFact} from "./members.ts";
 import {ProcessManager} from "./process-manager.ts";
 import {A, brain, first as firstStart, ids} from "./process.test-support.ts";
+import {Start} from "./process.ts";
 
 const READER = "gateway:t1";
 const PARENT = `in-${A}-41`;
@@ -40,6 +41,27 @@ const FOUNDER = {
 	build: "b-5e9c2a0",
 } as const;
 const MOST = 128; // the longest text a span tag may hold (P37's law, as P6's p95)
+const nameArb = Start.cases.first.fields.name.check(
+	Schema.isPattern(/^notes:[a-z][a-z0-9._-]{0,30}$/),
+);
+const idArb = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/));
+const keyArb = MemberFact.cases.denied.fields.key.check(
+	Schema.isPattern(/^key-[a-z][a-z0-9_-]{0,30}$/),
+);
+// Include complete prefixed patterns: notes: plus 1..31, key- plus 1..31.
+// Bare ids, programs and hashes retain 1..31 characters too.
+const options = {arbitrary: {seed: 119120, runs: 20, size: 40}};
+// The installed runner uses runs/seed; old examples stay in these callbacks.
+const examples =
+	<A extends ReadonlyArray<unknown>, E, R>(
+		cases: ReadonlyArray<A>,
+		law: (...args: A) => Effect.Effect<unknown, E, R>,
+	) =>
+	(args: A) =>
+		Effect.forEach([...cases, args], (input) => Effect.suspend(() => law(...input)), {
+			discard: true,
+			concurrency: 1,
+		});
 
 // Markers no tag may hold: the letter's m, every saw text, and the signature's two texts.
 const M_MARK = "m-marker-51c0";
@@ -206,23 +228,24 @@ const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
 };
 
 describe("p97, mailbox spans", () => {
-	it.effect(
+	it.effect.prop(
 		"plant, m in a tag: each send ends one mailbox.send span with to, id and answer, ledger inside",
-		() => {
+		[nameArb, idArb],
+		examples([["notes:1", "letter_a"]], (name: string, id: string) => {
 			const {tracer, ended, spans} = capture();
 			return Effect.gen(function* () {
 				const mailbox = yield* Mailbox;
 				const m = {type: "save", value: M_MARK};
-				yield* mailbox.send("notes:1", "letter_a", m, from());
-				yield* mailbox.send("notes:1", "letter_a", {type: "delete", value: M_MARK}, from());
+				yield* mailbox.send(name, id, m, from());
+				yield* mailbox.send(name, id, {type: "delete", value: M_MARK}, from());
 				const sends = ended("mailbox.send");
 				expect(sends.length).toBe(2);
 				const [placed, refused] = sends;
 				if (placed === undefined || refused === undefined) return expect.unreachable();
-				expect(tagged(placed, "to")).toBe("notes:1");
-				expect(tagged(refused, "to")).toBe("notes:1");
-				expect(holds(placed, "notes:1") || holds(placed, "notes:1/inbox")).toBe(true);
-				expect(holds(placed, "letter_a")).toBe(true);
+				expect(tagged(placed, "to")).toBe(name);
+				expect(tagged(refused, "to")).toBe(name);
+				expect(holds(placed, name) || holds(placed, `${name}/inbox`)).toBe(true);
+				expect(holds(placed, id)).toBe(true);
 				expect(tagged(placed, "answer")).toBe("placed");
 				expect(tagged(placed, "rev")).toBe(1);
 				expect(tagged(placed, "pos")).toBe(1);
@@ -234,25 +257,32 @@ describe("p97, mailbox spans", () => {
 				expect(appends.every((append, i) => within(append, sends[i] ?? placed))).toBe(true);
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-		},
+		}),
+		options,
 	);
 
-	it.effect(
+	it.effect.prop(
 		"each receive run ends one mailbox.receive span with name, after, letters and skipped",
-		() => {
+		[nameArb],
+		examples([["notes:1"]], (name: string) => {
 			const {tracer, ended, spans} = capture();
 			return Effect.gen(function* () {
 				const mailbox = yield* Mailbox;
 				const ledger = yield* Ledger;
-				yield* mailbox.send("notes:1", "letter_a", M_MARK, from());
-				yield* ledger.append("notes:1/inbox", "x-1", {...from(), _tag: "exit", body: {m: M_MARK}});
-				yield* mailbox.send("notes:1", "letter_b", M_MARK, from());
-				const letters = yield* Stream.runCollect(mailbox.receive("notes:1", 0));
+				yield* mailbox.send(name, "letter_a", M_MARK, from());
+				yield* ledger.append(`${name}/inbox`, "x-1", {
+					...from(),
+					_tag: "exit",
+					body: {m: M_MARK},
+				});
+				yield* mailbox.send(name, "letter_b", M_MARK, from());
+				const letters = yield* Stream.runCollect(mailbox.receive(name, 0));
 				expect(letters.length).toBe(2);
 				const [receive, ...more] = ended("mailbox.receive");
 				expect(more).toEqual([]);
 				if (receive === undefined) return expect.unreachable();
-				expect(holds(receive, "notes:1") || holds(receive, "notes:1/inbox")).toBe(true);
+				expect(holds(receive, name) || holds(receive, `${name}/inbox`)).toBe(true);
+				expect(tags(receive)["fab.mailbox.name"]).toBe(name);
 				expect(tagged(receive, "after")).toBe(0);
 				expect(tagged(receive, "letters")).toBe(2);
 				expect(tagged(receive, "skipped")).toBe(1);
@@ -262,93 +292,111 @@ describe("p97, mailbox spans", () => {
 				expect(reads.every((read) => within(read, receive))).toBe(true);
 				clean(spans);
 			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-		},
+		}),
+		options,
 	);
 });
 
 describe("p97, process spans", () => {
-	it.effect(
+	it.effect.prop(
 		"each start ends one process.start span with process ID, program, hash and answer",
-		() => {
-			const {tracer, ended, spans} = capture();
-			return Effect.gen(function* () {
-				const manager = yield* ProcessManager;
-				const request = firstStart("start:notes:1", "notes:1", {
-					program: "notes",
-					hash: "sha256-7c1d073e",
-				});
-				yield* manager.start(request, from());
-				expect((yield* Effect.flip(manager.start(request, from({parent: null})))).why).toBe(
-					"id_reused",
-				);
-				const [first, second, ...more] = ended("process.start");
-				expect(more).toEqual([]);
-				if (first === undefined || second === undefined) return expect.unreachable();
-				expect(holds(first, "notes:1")).toBe(true);
-				expect(tags(first)["fab.process"]).toBe(A);
-				expect(tagged(first, "program")).toBe("notes");
-				expect(tagged(first, "hash")).toBe("sha256-7c1d073e");
-				expect(tagged(first, "answer")).toBe("placed");
-				expect(tagged(second, "answer")).toBe("refused");
-				expect(tagged(second, "why")).toBe("id_reused");
-				// P33 writes a group atomically; it no longer requires separate ledger.append calls.
-				clean(spans);
-			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-		},
+		[
+			nameArb,
+			Start.cases.first.fields.code.fields.program.check(
+				Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/),
+			),
+			Start.cases.first.fields.code.fields.hash.check(Schema.isPattern(/^[a-z][a-z0-9_-]{0,30}$/)),
+		],
+		examples(
+			[["notes:1", "notes", "sha256-7c1d073e"]],
+			(name: string, program: string, hash: string) => {
+				const {tracer, ended, spans} = capture();
+				return Effect.gen(function* () {
+					const manager = yield* ProcessManager;
+					const request = firstStart("start:notes:1", name, {
+						program,
+						hash,
+					});
+					yield* manager.start(request, from());
+					expect((yield* Effect.flip(manager.start(request, from({parent: null})))).why).toBe(
+						"id_reused",
+					);
+					const [first, second, ...more] = ended("process.start");
+					expect(more).toEqual([]);
+					if (first === undefined || second === undefined) return expect.unreachable();
+					expect(holds(first, name)).toBe(true);
+					expect(tags(first)["fab.process"]).toBe(A);
+					expect(tagged(first, "program")).toBe(program);
+					expect(tagged(first, "hash")).toBe(hash);
+					expect(tagged(first, "answer")).toBe("placed");
+					expect(tagged(second, "answer")).toBe("refused");
+					expect(tagged(second, "why")).toBe("id_reused");
+					// P33 writes a group atomically; it no longer requires separate ledger.append calls.
+					clean(spans);
+				}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+			},
+		),
+		options,
 	);
 });
 
 describe("p97, member spans", () => {
-	it.effect("plant, a refused write with no span: every write ends one members.write span", () => {
-		const {tracer, ended, spans} = capture();
-		return Effect.gen(function* () {
-			const clients = yield* ClientManager;
-			yield* write(granted("pA", "t1"));
-			yield* write(granted("wA", "t2"));
-			yield* write(denied("t3"));
-			yield* write(revoked("pA", "t1"));
-			const writes = ended("members.write");
-			expect(writes.length).toBe(4);
-			const [grant, refused, deny, revoke] = writes;
-			if (
-				grant === undefined ||
-				refused === undefined ||
-				deny === undefined ||
-				revoke === undefined
-			)
-				return expect.unreachable();
-			expect(tagged(grant, "tag")).toBe("granted");
-			expect(tagged(grant, "answer")).toBe("applied");
-			expect(tagged(grant, "rev")).toBe(2);
-			expect(holds(grant, "pA")).toBe(true); // the signer's key
-			expect(tagged(refused, "answer")).toBe("refused");
-			expect(tagged(refused, "why")).toBe("not_allowed");
-			expect(holds(refused, "wA")).toBe(true);
-			expect(tagged(deny, "tag")).toBe("denied");
-			expect(tagged(revoke, "tag")).toBe("revoked");
-			const before = ended("members.read").length;
-			yield* clients.members;
-			const reads = ended("members.read");
-			expect(reads.length).toBe(before + 1);
-			const read = reads.at(-1);
-			if (read === undefined) return expect.unreachable();
-			const facts = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
-			expect(tagged(read, "facts")).toBe(facts.length);
-			expect(typeof tagged(read, "keys")).toBe("number");
-			expect(typeof tagged(read, "live")).toBe("number");
-			expect(tagged(read, "ignored")).toBe(0);
-			clean(spans);
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"plant, a refused write with no span: every write ends one members.write span",
+		[keyArb],
+		examples([["t1"]], (key: string) => {
+			const {tracer, ended, spans} = capture();
+			return Effect.gen(function* () {
+				const clients = yield* ClientManager;
+				yield* write(granted("pA", key));
+				yield* write(granted("wA", "t2"));
+				yield* write(denied("t3"));
+				yield* write(revoked("pA", key));
+				const writes = ended("members.write");
+				expect(writes.length).toBe(4);
+				const [grant, refused, deny, revoke] = writes;
+				if (
+					grant === undefined ||
+					refused === undefined ||
+					deny === undefined ||
+					revoke === undefined
+				)
+					return expect.unreachable();
+				expect(tagged(grant, "tag")).toBe("granted");
+				expect(tagged(grant, "answer")).toBe("applied");
+				expect(tagged(grant, "rev")).toBe(2);
+				expect(holds(grant, "pA")).toBe(true); // the signer's key
+				expect(tagged(refused, "answer")).toBe("refused");
+				expect(tagged(refused, "why")).toBe("not_allowed");
+				expect(holds(refused, "wA")).toBe(true);
+				expect(tagged(deny, "tag")).toBe("denied");
+				expect(tagged(revoke, "tag")).toBe("revoked");
+				const before = ended("members.read").length;
+				yield* clients.members;
+				const reads = ended("members.read");
+				expect(reads.length).toBe(before + 1);
+				const read = reads.at(-1);
+				if (read === undefined) return expect.unreachable();
+				const facts = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
+				expect(tagged(read, "facts")).toBe(facts.length);
+				expect(typeof tagged(read, "keys")).toBe("number");
+				expect(typeof tagged(read, "live")).toBe("number");
+				expect(tagged(read, "ignored")).toBe(0);
+				clean(spans);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		}),
+		options,
+	);
 
-	it.effect(
+	it.effect.prop(
 		"plant, ignored reported as applied: the Mac that lost the sheet race has an ignored span",
-		() => {
+		[keyArb],
+		examples([["r1"]], (key: string) => {
 			const {tracer, ended, spans} = capture();
 			const sql = fresh();
-			const sheet = addedSheet("pA", "r1");
-			const macC = addedDevice("r1", "pC", "wC", ["pA"]);
-			const macX = addedDevice("r1", "pX", "wX");
+			const sheet = addedSheet("pA", key);
+			const macC = addedDevice(key, "pC", "wC", ["pA"]);
+			const macX = addedDevice(key, "pX", "wX");
 			const hook: {before: Effect.Effect<void, LedgerError> | null} = {
 				before: write(macX).pipe(
 					Effect.asVoid,
@@ -391,130 +439,218 @@ describe("p97, member spans", () => {
 				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
 				Effect.withTracer(tracer),
 			);
-		},
+		}),
+		options,
 	);
 });
 
 describe("p97, names and numbers only", () => {
-	it.effect("a name, an id and a key far over 128 characters are cut in every tag", () => {
-		const {tracer, spans, ended} = capture();
-		const long = (letter: string) => letter.repeat(300);
-		// Process texts stay under their 256-character cap and still pass the 128 tag cut.
-		const capped = (letter: string) => letter.repeat(200);
-		return Effect.gen(function* () {
-			const mailbox = yield* Mailbox;
-			const manager = yield* ProcessManager;
-			yield* mailbox.send(long("n"), long("i"), {value: M_MARK}, from({by: long("b")}));
-			yield* Stream.runCollect(mailbox.receive(long("n"), 0));
-			yield* manager.start(
-				firstStart("start:long", capped("p"), {program: capped("g"), hash: capped("h")}),
-				from({seen: 1}),
-			);
-			yield* write(granted(long("k"), "t1"));
-			for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"])
-				expect(ended(name).length, name).toBe(1);
-			clean(spans);
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"a name, an id and a key far over 128 characters are cut in every tag",
+		[
+			Schema.Int.check(Schema.isBetween({minimum: 129, maximum: 1000})),
+			Schema.Int.check(Schema.isBetween({minimum: 129, maximum: 256})),
+		],
+		examples([[300, 200]], (length: number, cap: number) => {
+			const {tracer, spans, ended} = capture();
+			const long = (letter: string) => letter.repeat(length);
+			// Process texts stay under their 256-character cap and still pass the 128 tag cut.
+			const capped = (letter: string) => letter.repeat(cap);
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				const manager = yield* ProcessManager;
+				yield* mailbox.send(long("n"), long("i"), {value: M_MARK}, from({by: long("b")}));
+				yield* Stream.runCollect(mailbox.receive(long("n"), 0));
+				yield* manager.start(
+					firstStart("start:long", capped("p"), {program: capped("g"), hash: capped("h")}),
+					from({seen: 1}),
+				);
+				yield* write(granted(long("k"), "t1"));
+				for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"])
+					expect(ended(name).length, name).toBe(1);
+				clean(spans);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		}),
+		options,
+	);
 });
 
 // Gaps the mutation step found on the build (ticket 236): tag names and numbers held loose above.
 describe("p97, the tags hold the right names and numbers", () => {
-	it.effect("members.read counts only live keys as live, and members.write names its key", () => {
-		const {tracer, ended} = capture();
-		return Effect.gen(function* () {
-			const clients = yield* ClientManager;
-			yield* write(granted("pA", "t1"));
-			yield* write(revoked("pA", "t1"));
-			const [grant] = ended("members.write");
-			if (grant === undefined) return expect.unreachable();
-			expect(tagged(grant, "key")).toBe("t1");
-			expect(tagged(grant, "signer")).toBe("pA");
-			yield* clients.members;
-			const read = ended("members.read").at(-1);
-			if (read === undefined) return expect.unreachable();
-			// pA, wA and t1 are known; t1 is revoked, so two are live.
-			expect(tagged(read, "keys")).toBe(3);
-			expect(tagged(read, "live")).toBe(2);
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"members.read counts only live keys as live, and members.write names its key",
+		[keyArb],
+		examples([["t1"]], (key: string) => {
+			const {tracer, ended} = capture();
+			return Effect.gen(function* () {
+				const clients = yield* ClientManager;
+				const fact = granted("pA", key);
+				yield* write(fact);
+				yield* write(revoked("pA", key));
+				const [grant] = ended("members.write");
+				if (grant === undefined) return expect.unreachable();
+				expect(tagged(grant, "key")).toBe(key);
+				expect(tagged(grant, "signer")).toBe("pA");
+				expect(tagged(grant, "id")).toBe(
+					fact._tag === "granted" ? fact.grant.id : expect.unreachable(),
+				);
+				yield* clients.members;
+				const read = ended("members.read").at(-1);
+				if (read === undefined) return expect.unreachable();
+				// pA, wA and t1 are known; t1 is revoked, so two are live.
+				expect(tagged(read, "keys")).toBe(3);
+				expect(tagged(read, "live")).toBe(2);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		}),
+		options,
+	);
 
-	it.effect("a members call on a founded ledger appends nothing: no ledger.append span", () => {
-		const {tracer, ended} = capture();
-		return Effect.gen(function* () {
-			const clients = yield* ClientManager;
-			yield* clients.members;
-			expect(ended("ledger.append").length).toBe(1); // the founding
-			yield* clients.members;
-			yield* clients.members;
-			expect(ended("ledger.append").length).toBe(1);
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"a members call on a founded ledger appends nothing: no ledger.append span",
+		[Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 20}))],
+		examples([[2]], (count: number) => {
+			const {tracer, ended} = capture();
+			return Effect.gen(function* () {
+				const clients = yield* ClientManager;
+				yield* clients.members;
+				expect(ended("ledger.append").length).toBe(1); // the founding
+				yield* clients.members;
+				yield* clients.members;
+				for (let n = 2; n < count; n++) yield* clients.members;
+				expect(ended("ledger.append").length).toBe(1);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		}),
+		options,
+	);
 
-	it.effect("an ignored write's span holds the rev it was placed at", () => {
-		const {tracer, ended} = capture();
-		const sql = fresh();
-		const sheet = addedSheet("pA", "r1");
-		const macC = addedDevice("r1", "pC", "wC", ["pA"]);
-		const macX = addedDevice("r1", "pX", "wX");
-		const target = macC._tag === "added" ? macC.add.id : "";
-		let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
-			Effect.asVoid,
-			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
-		);
-		// Mac X's whole write runs just before Mac C's append, as in the race above.
-		const racing = Layer.effect(
-			Ledger,
-			Effect.map(Ledger, (real) => ({
-				read: real.read,
-				wait: real.wait,
-				append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
-					Effect.suspend(() => {
-						const first = id === target ? before : null;
-						if (first === null) return real.append(stream, id, line);
-						before = null;
-						return Effect.andThen(first, real.append(stream, id, line));
-					}),
-			})),
-		).pipe(Layer.provide(onSql(sql)));
-		return Effect.gen(function* () {
-			yield* write(sheet);
-			expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
-			const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
-			if (ignored === undefined) return expect.unreachable();
-			expect(tagged(ignored, "rev")).toBe(4);
-			expect(tagged(ignored, "why")).toBe("used");
-		}).pipe(
-			Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
-			Effect.withTracer(tracer),
-		);
-	});
+	it.effect.prop(
+		"an ignored write's span holds the rev it was placed at",
+		[keyArb],
+		examples([["r1"]], (key: string) => {
+			const {tracer, ended} = capture();
+			const sql = fresh();
+			const sheet = addedSheet("pA", key);
+			const macC = addedDevice(key, "pC", "wC", ["pA"]);
+			const macX = addedDevice(key, "pX", "wX");
+			const target = macC._tag === "added" ? macC.add.id : "";
+			let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
+				Effect.asVoid,
+				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+			);
+			// Mac X's whole write runs just before Mac C's append, as in the race above.
+			const racing = Layer.effect(
+				Ledger,
+				Effect.map(Ledger, (real) => ({
+					read: real.read,
+					wait: real.wait,
+					append: (stream: string, id: string, line: Parameters<typeof real.append>[2]) =>
+						Effect.suspend(() => {
+							const first = id === target ? before : null;
+							if (first === null) return real.append(stream, id, line);
+							before = null;
+							return Effect.andThen(first, real.append(stream, id, line));
+						}),
+				})),
+			).pipe(Layer.provide(onSql(sql)));
+			return Effect.gen(function* () {
+				yield* write(sheet);
+				expect(yield* write(macC)).toEqual({_tag: "ignored", rev: 4, why: "used"});
+				const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
+				if (ignored === undefined) return expect.unreachable();
+				expect(tagged(ignored, "rev")).toBe(4);
+				expect(tagged(ignored, "why")).toBe("used");
+			}).pipe(
+				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))),
+				Effect.withTracer(tracer),
+			);
+		}),
+		options,
+	);
 
-	it.effect("mailbox.send keeps the letter's id under OpenTelemetry's message id key", () => {
-		const {tracer, ended} = capture();
-		return Effect.gen(function* () {
-			const mailbox = yield* Mailbox;
-			yield* mailbox.send("notes:1", "letter_a", {value: M_MARK}, from());
-			const [send] = ended("mailbox.send");
-			if (send === undefined) return expect.unreachable();
-			expect(tags(send)["messaging.message.id"]).toBe("letter_a");
-		}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"mailbox.send keeps the letter's id under OpenTelemetry's message id key",
+		[idArb],
+		examples([["letter_a"]], (id: string) => {
+			const {tracer, ended} = capture();
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				yield* mailbox.send("notes:1", id, {value: M_MARK}, from());
+				const [send] = ended("mailbox.send");
+				if (send === undefined) return expect.unreachable();
+				expect(tags(send)["messaging.message.id"]).toBe(id);
+			}).pipe(Effect.provide(all()), Effect.withTracer(tracer));
+		}),
+		options,
+	);
 
-	it.effect("a send the ledger fails ends its span with the ledger's why", () => {
-		const {tracer, ended} = capture();
-		const broken = Layer.succeed(Ledger, {
-			append: () => Effect.fail(new LedgerError({why: "storage"})),
-			read: () => Stream.fail(new LedgerError({why: "storage"})),
-			wait: () => Effect.fail(new LedgerError({why: "storage"})),
-		});
-		return Effect.gen(function* () {
-			const mailbox = yield* Mailbox;
-			const failed = yield* Effect.flip(mailbox.send("notes:1", "letter_a", {}, from()));
-			expect(failed.why).toBe("storage");
-			const [send] = ended("mailbox.send");
-			if (send === undefined) return expect.unreachable();
-			expect(tagged(send, "why")).toBe("storage");
-		}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
-	});
+	it.effect.prop(
+		"a send the ledger fails ends its span with the ledger's why",
+		[nameArb, idArb],
+		examples([["notes:1", "letter_a"]], (name: string, id: string) => {
+			const {tracer, ended} = capture();
+			const broken = Layer.succeed(Ledger, {
+				append: () => Effect.fail(new LedgerError({why: "storage"})),
+				read: () => Stream.fail(new LedgerError({why: "storage"})),
+				wait: () => Effect.fail(new LedgerError({why: "storage"})),
+			});
+			return Effect.gen(function* () {
+				const mailbox = yield* Mailbox;
+				const failed = yield* Effect.flip(mailbox.send(name, id, {}, from()));
+				expect(failed.why).toBe("storage");
+				const [send] = ended("mailbox.send");
+				if (send === undefined) return expect.unreachable();
+				expect(tagged(send, "why")).toBe("storage");
+			}).pipe(Effect.provide(Mailbox.layer.pipe(Layer.provide(broken))), Effect.withTracer(tracer));
+		}),
+		options,
+	);
+	it.effect.prop(
+		"a failed members read ends its span with the ledger's why",
+		[Schema.Literals(["storage", "bad_row"])],
+		([why]) => {
+			const {tracer, ended} = capture();
+			const broken = Layer.succeed(Ledger, {
+				append: () => Effect.fail(new LedgerError({why})),
+				read: () => Stream.fail(new LedgerError({why})),
+				wait: () => Effect.fail(new LedgerError({why})),
+			});
+			return Effect.gen(function* () {
+				expect((yield* Effect.flip((yield* ClientManager).members)).why).toBe(why);
+				const reads = ended("members.read");
+				expect(reads).toHaveLength(1);
+				expect(tagged(reads[0]!, "why")).toBe(why);
+			}).pipe(
+				Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))),
+				Effect.withTracer(tracer),
+			);
+		},
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.effect.prop(
+		"a live key cannot join again under another rank",
+		[keyArb],
+		([key]) =>
+			Effect.gen(function* () {
+				const clients = yield* ClientManager;
+				expect((yield* write(granted("pA", key)))._tag).toBe("applied");
+				const before = yield* clients.members;
+				const fact = granted("pA", key);
+				if (fact._tag !== "granted") return expect.unreachable();
+				expect(yield* write({...fact, grant: {...fact.grant, as: "agent"}})).toEqual({
+					_tag: "refused",
+					why: "not_allowed",
+				});
+				expect(yield* clients.members).toEqual(before);
+			}).pipe(Effect.provide(all())),
+		{arbitrary: {seed: 119120, runs: 20}},
+	);
+	it.prop(
+		"founding twice with different person ids preserves the first membership",
+		[MemberFact.cases.founded, MemberFact.cases.founded],
+		([first, input]) => {
+			const second = {...input, id: `${first.id}${input.id}-second`};
+			expect(foldMembers([first, second])).toEqual(foldMembers([first]));
+		},
+		{arbitrary: {seed: 119120, runs: 100}},
+	);
 });

@@ -5,6 +5,14 @@
 			"paths": ["next/apps"]
 		},
 		{
+			"name": "next-node",
+			"paths": ["next/packages/libfabrika/src/node"]
+		},
+		{
+			"name": "next-workers",
+			"paths": ["next/packages/libfabrika/src/workers"]
+		},
+		{
 			"name": "next-programs",
 			"paths": ["next/programs"]
 		},
@@ -74,18 +82,6 @@
 				"packages/pipeline/src/laws/explore.ts",
 				"packages/pipeline/src/laws/world/search.ts"
 			]
-		},
-		{
-			"name": "packs",
-			"paths": ["packs"]
-		},
-		{
-			"name": "legacy",
-			"paths": ["legacy"]
-		},
-		{
-			"name": "wip",
-			"paths": ["wip"]
 		},
 		{
 			"name": "programs",

@@ -54,5 +54,5 @@ skill that was never a table.
   is written before the real one. A whole lane can run with no model and no
   network.
 
-The first draft of the services, written from run logs, is in
-[`docs/fabrika-sdk.md`](../fabrika-sdk.md).
+The first draft of the services, written from run logs, was `docs/fabrika-sdk.md`; it is on the
+archive branch `fabrikalfa/archive-2026-11-09`.

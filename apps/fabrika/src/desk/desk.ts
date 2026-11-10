@@ -151,9 +151,7 @@ export interface Workspace {
 }
 
 /** The prefix. Armed with `until: null`, it waits as long as it takes; with a number, until then. */
-export type Prefix =
-	| {readonly armed: false}
-	| {readonly armed: true; readonly until: number | null};
+type Prefix = {readonly armed: false} | {readonly armed: true; readonly until: number | null};
 
 /** The desk while it has tiles. */
 export interface Open {
@@ -188,7 +186,7 @@ export interface Open {
 }
 
 /** Which way a line's windows run, for now always: left to right, as a pipe reads. */
-export const LINE: Orientation = "horizontal";
+const LINE: Orientation = "horizontal";
 
 /** The desk: open, or over once its last tile closed. */
 export type Desk = Open | {readonly at: "over"};
@@ -756,7 +754,7 @@ const typed = (s: Open, tile: TileId, does: Does): Step => {
  * there. The desk's names the command the key ran and the key it ran on, as the table holds it, or
  * `null`: the key armed the prefix, answered a question, or was swallowed. The host logs it.
  */
-export type Routed =
+type Routed =
 	| {
 			readonly kind: "desk";
 			readonly step: Step;
@@ -806,7 +804,7 @@ const boundOn = (keys: Keys, key: Key) => {
 };
 
 /** The tile whose tsh runs what this tile shows: its own, or the one its line was typed in. */
-export const tshOf = (tile: TileNode): TileId =>
+const tshOf = (tile: TileNode): TileId =>
 	tile.shows.kind === "window" ? tile.shows.line.from : tile.id;
 
 /**

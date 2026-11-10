@@ -34,7 +34,7 @@ import {stopHost} from "./stop.ts";
 export const CONNECTION_FILE = "ledger.json";
 
 /** The one person at a home that is connected to no server. */
-export const OWNER = {kind: "user", id: "owner"} as const;
+const OWNER = {kind: "user", id: "owner"} as const;
 
 /** A server's base URL: `http(s)://host[:port]`, no path. */
 const Base = Schema.String.check(Schema.isPattern(/^https?:\/\/[^/\s?#]+$/));

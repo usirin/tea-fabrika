@@ -20,7 +20,7 @@ import {reader} from "../messages.ts";
 // never handed to the window.
 
 /** A program's window as the app holds it: its data read, then drawn, with the way to send. */
-export interface Known {
+interface Known {
 	readonly draw: (data: unknown, send: (msg: unknown) => void) => ReactNode;
 }
 

@@ -1,13 +1,17 @@
+import {spawnSync} from "node:child_process";
+import {createRequire} from "node:module";
+import {availableParallelism} from "node:os";
+import {basename, isAbsolute, relative} from "node:path";
 import {configDefaults, defineConfig} from "vitest/config";
+import {parseCLI} from "vitest/node";
+import packageJson from "./package.json" with {type: "json"};
 import {Shards} from "./vitest.shards.ts";
 
-// One run over every package. `fixtures/` holds toy repos with their own
-// `node --test` files. They are the lane's subject, not this repo's tests.
-export default defineConfig({
+// Shared by local Vitest and Stryker's config. Importing this object never runs the local CLI guard.
+export const testConfig = {
 	test: {
-		// A pull request's check runs only the tests that import what it changed (`--changed`,
-		// .github/workflows/check.yaml). A change to one of these files runs every test instead:
-		// tests read them without importing them, so an import walk cannot see who depends on them.
+		setupFiles: ["./scripts/vitest.setup.ts"],
+		// A changed trigger selects every test in CI. Tests read these files without importing them.
 		forceRerunTriggers: [
 			...configDefaults.forceRerunTriggers,
 			"**/pnpm-lock.yaml",
@@ -19,21 +23,21 @@ export default defineConfig({
 			"**/layer-rules.json",
 			"**/fixtures/**",
 			"**/.github/**",
-			"**/.agents/skills/**",
 			"**/.gitattributes",
-			"**/.claude/skills/**",
 		],
+		// One run over every package. `fixtures/` holds toy repos with their own
+		// `node --test` files. They are the lane's subject, not this repo's tests.
 		include: [
 			"apps/*/src/**/*.test.ts",
 			"packages/*/src/**/*.test.ts",
 			"programs/*/src/**/*.test.ts",
-			"packs/*/src/**/*.test.ts",
-			"wip/src/**/*.test.ts",
-			"legacy/src/**/*.test.ts",
 			"oxlint-plugins/*.test.ts",
 			"vitest.shards.test.ts",
+			".github/ci/*.test.ts",
+			"scripts/*.test.ts",
 			".agents/skills/*/scripts/*.test.ts",
-			// next/, the new version. Its end-to-end tests sit outside `src/`, in
+			// Keep next/ for its own job and local runs. Today's CI excludes it on the CLI.
+			// Its end-to-end tests sit outside `src/`, in
 			// `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
 			"next/packages/*/src/**/*.test.{ts,tsx}",
 			"next/programs/*/src/**/*.test.{ts,tsx}",
@@ -55,4 +59,72 @@ export default defineConfig({
 		// of files (vitest.shards.ts).
 		sequence: {sequencer: Shards},
 	},
+};
+
+// Use Vitest's installed matcher, including its dot-path behavior.
+const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
+const workers = Number(process.env.FABRIKA_MAX_WORKERS ?? 3);
+if (!Number.isInteger(workers) || workers < 1)
+	throw new Error("FABRIKA_MAX_WORKERS must be a positive integer");
+
+const localLimits = () => {
+	if (!/^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""))) return;
+	const pinned = packageJson.engines.node;
+	if (!process.env.CI && process.versions.node !== pinned)
+		throw new Error(
+			`Local test run refused. Running Node ${process.version}; pinned Node v${pinned}. Use: volta run --node ${pinned} pnpm exec vitest run --maxWorkers=1 <narrow path>`,
+		);
+	const cli = parseCLI(["vitest", ...process.argv.slice(2)], {allowUnknownOptions: true});
+	const narrow = (filter: string) => {
+		const path = isAbsolute(filter) ? relative(process.cwd(), filter) : filter.replace(/^\.\//, "");
+		return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
+	};
+	if (!process.env.CI && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
+		const changed = cli.options.changed;
+		// The same three sets as Vitest 5.0.5's GitVCSProvider. A net diff loses staged
+		// changes canceled in the worktree; two endpoints lose divergent branch changes.
+		const commands = [
+			...(typeof changed === "string" ? [["diff", "--name-only", "-z", `${changed}...HEAD`]] : []),
+			["diff", "--cached", "--name-only", "-z"],
+			["ls-files", "-z", "--other", "--modified", "--exclude-standard"],
+		];
+		const diffs =
+			changed === undefined
+				? []
+				: commands.map((args) => spawnSync("git", args, {encoding: "utf8"}));
+		const forced = diffs.some((diff) =>
+			diff.stdout
+				.split("\0")
+				.some(
+					(path) => path && match.isMatch(path, testConfig.test.forceRerunTriggers, {dot: true}),
+				),
+		);
+		if (changed === undefined || diffs.some((diff) => diff.status !== 0) || forced) {
+			throw new Error(
+				"Local broad test run refused. Use: pnpm exec vitest run --maxWorkers=1 <narrow path>",
+			);
+		}
+	}
+	const value = cli.options.maxWorkers ?? workers;
+	// Vitest resolves percentages against availableParallelism, rounded and clamped.
+	const requested =
+		typeof value === "string" && value.trim().endsWith("%")
+			? Math.max(
+					1,
+					Math.min(
+						availableParallelism(),
+						Math.round((Number.parseInt(value, 10) / 100) * availableParallelism()),
+					),
+				)
+			: Number(value);
+	if (!Number.isInteger(requested) || requested < 1 || requested > workers)
+		throw new Error("--maxWorkers exceeds FABRIKA_MAX_WORKERS or is invalid");
+	return {test: {maxWorkers: requested}};
+};
+
+export default defineConfig({
+	...testConfig,
+	test: {...testConfig.test, maxWorkers: workers},
+	// Vite runs this hook only while resolving a run. Importers can merge or spread the object.
+	plugins: [{name: "fabrika-local-test-limits", enforce: "post", config: localLimits}],
 });

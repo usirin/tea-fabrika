@@ -38,7 +38,7 @@ export type Command =
 	/** Ctrl-D. On an empty line, the end of input; else `delete-char`, as readline treats it. */
 	| "end-of-file";
 
-export type Key =
+type Key =
 	| {readonly kind: "text"; readonly text: string}
 	| {readonly kind: "command"; readonly command: Command}
 	| {readonly kind: "unknown"};

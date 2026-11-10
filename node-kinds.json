@@ -1,0 +1,8 @@
+{
+	"entryExportConventions": {
+		"saved-builder-output": {
+			"files": "experiments/results/178-lane-rehearsal/**/*.ts",
+			"exports": ["slugify"]
+		}
+	}
+}

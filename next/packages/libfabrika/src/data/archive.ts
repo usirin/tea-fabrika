@@ -18,11 +18,11 @@ const hex = (bytes: Uint8Array): string =>
 
 /** The body's SHA-256, as lowercase hex. An unnamed `Effect.fn`: the sink's own work ends no span. */
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
+	const bytes = new Uint8Array(body);
+	const fail = () => new SinkError({why: "storage", held: 0});
 	// oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
-	const digest = yield* Effect.tryPromise({
-		try: () => crypto.subtle.digest("SHA-256", new Uint8Array(body)),
-		catch: () => new SinkError({why: "storage", held: 0}),
-	});
+	const work = Effect.tryPromise({try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail});
+	const digest = yield* work;
 	return hex(new Uint8Array(digest));
 });
 
@@ -55,14 +55,19 @@ export class Archive extends Context.Service<
 	/** An R2 bucket: `put` with the body's hash, then `head`. A call that rejects is `unreachable`,
 	 *  a `head` that does not decode is `bad_row`, and one that finds nothing answers null. */
 	static readonly bucket = (calls: BucketCalls): Layer.Layer<Archive> => {
-		const call = <A>(send: () => Promise<A>): Effect.Effect<A, SinkError> =>
+		const call = <M extends keyof BucketCalls>(
+			method: M,
+			...args: Parameters<BucketCalls[M]>
+		): Effect.Effect<Awaited<ReturnType<BucketCalls[M]>>, SinkError> => {
+			const fail = () => new SinkError({why: "unreachable", held: 0});
 			// oxlint-disable-next-line fabrika/no-promises -- edge: an R2 binding answers with a Promise
-			Effect.tryPromise({try: send, catch: () => new SinkError({why: "unreachable", held: 0})});
+			return Effect.tryPromise({try: () => Reflect.apply(calls[method], calls, args), catch: fail});
+		};
 		return Layer.succeed(Archive, {
 			put: Effect.fnUntraced(function* (key: string, body: Uint8Array) {
 				const hash = yield* sha256(body);
-				yield* call(() => calls.put(key, body, hash));
-				const raw = yield* call(() => calls.head(key));
+				yield* call("put", key, body, hash);
+				const raw = yield* call("head", key);
 				const stored = yield* decodeHead(raw).pipe(
 					Effect.mapError(() => new SinkError({why: "bad_row", held: 0})),
 				);

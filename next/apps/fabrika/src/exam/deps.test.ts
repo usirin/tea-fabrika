@@ -17,7 +17,7 @@ import {builtinModules} from "node:module";
 import {tmpdir} from "node:os";
 import {dirname, join, relative, resolve, sep} from "node:path";
 import {Schema} from "effect";
-import {build, type Plugin} from "esbuild";
+import {rolldown, type Plugin} from "rolldown";
 import {afterAll, describe, expect, it} from "vitest";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -277,27 +277,28 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
 	const hits: Array<string> = [];
 	const watch: Plugin = {
 		name: "forbidden",
-		setup(b) {
-			b.onResolve({filter: /.*/}, (args) => {
-				const rule = FORBIDDEN.find((f) => f.test(args.path));
-				if (rule === undefined) return undefined;
-				hits.push(
-					`${label} reaches ${rule.name}: "${args.path}" from ${shown(next, args.importer)}`,
-				);
-				return {path: args.path, external: true};
-			});
+		resolveId(source, importer) {
+			const rule = FORBIDDEN.find((f) => f.test(source));
+			if (rule === undefined) return undefined;
+			hits.push(`${label} reaches ${rule.name}: "${source}" from ${shown(next, importer ?? file)}`);
+			return {id: source, external: true};
 		},
 	};
-	const result = await build({
-		entryPoints: [file],
-		bundle: true,
-		platform: "browser",
-		format: "esm",
-		write: false,
-		logLevel: "silent",
-		plugins: [watch],
-	}).catch((error: unknown) => ({errors: [{text: String(error)}]}));
-	return [...hits, ...result.errors.map((e) => `${label} does not bundle: ${e.text}`)];
+	let bundle: Awaited<ReturnType<typeof rolldown>> | undefined;
+	try {
+		bundle = await rolldown({
+			input: file,
+			platform: "browser",
+			logLevel: "silent",
+			plugins: [watch],
+		});
+		await bundle.generate({format: "esm"});
+		return hits;
+	} catch (error) {
+		return [...hits, `${label} does not bundle: ${String(error)}`];
+	} finally {
+		await bundle?.close();
+	}
 };
 
 const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
@@ -478,7 +479,7 @@ describe("planted breaks", () => {
 				'import {app} from "electron";',
 				"export const a = app;",
 			),
-			"programs/chaos/src/window.ts": lines('export {app} from "./index.ts";'),
+			"programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
 		});
 		expect([...(await bundleFaults(bundles))].sort()).toEqual(
 			[

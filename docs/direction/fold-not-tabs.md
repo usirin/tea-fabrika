@@ -3,7 +3,7 @@
 **Decided 2026-10-28.** The desk has no tabs. A container in the layout tree
 runs one of two ways, horizontal or vertical, as in AeroSpace. Any tile can
 fold into a thin strip that keeps its place. This replaces
-[tabbed is an orientation](./tabbed-is-an-orientation.md).
+tabbed is an orientation.
 
 ```ts
 // apps/fabrika/src/desk/layout/node.ts

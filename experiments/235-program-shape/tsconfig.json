@@ -1,5 +1,0 @@
-{
-	// Experiment 235 only: the three shapes and their libraries must type-check as written.
-	"extends": "../../tsconfig.base.json",
-	"include": ["."]
-}

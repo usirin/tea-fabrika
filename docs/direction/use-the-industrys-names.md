@@ -4,7 +4,7 @@
 
 - The rule: decided 2026-10-18, below.
 - The glossary: it exists, [`.glossary/TERMS.md`](../../.glossary/TERMS.md).
-- The sweep's picks: made 2026-10-24 and 2026-10-28 ([the naming sweep](../naming-sweep/README.md)).
+- The sweep's picks: made 2026-10-24 and 2026-10-28 (the naming sweep).
 - The two-domains rule: replaced 2026-11-03 by [we follow DDD](./we-follow-ddd.md).
 
 Decided 2026-10-18.
@@ -41,7 +41,7 @@ Decided 2026-10-18.
   two things, and propose a change. The owner picks, then one rename pass and
   a short glossary page.
   Drafted for the pipeline stages on 2026-10-24 and widened to every new
-  package on 2026-10-28 (proposed): [the naming sweep](../naming-sweep/README.md).
+  package on 2026-10-28 (proposed): the naming sweep.
 - `kind` in tea-program stays for now. It is the first name the sweep checks:
   it means "how a program keeps and runs instances of one machine", which
   Cloudflare calls a Durable Object namespace and Akka an entity type.

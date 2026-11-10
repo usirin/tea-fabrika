@@ -110,8 +110,8 @@ const unary = [
 	"export const Type = () => { typeof useRuntime(run); return null; };",
 ].join("\n");
 
-describe("one-store-hook", () => {
-	const all = plant({
+describe("one-store-hook", async () => {
+	const all = await plant({
 		[HOOK]: forbidden,
 		[FIRES]: forbidden,
 		[PASSES]: passes,

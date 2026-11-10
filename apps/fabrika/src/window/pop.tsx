@@ -490,7 +490,7 @@ function MenuRow(props: {
  * A row as a menu's is: the name its title, the word its muted line (typed, so in mono), the keys
  * at its right.
  */
-export interface Option {
+interface Option {
 	readonly id: string;
 	readonly name: string;
 	readonly word: string;
@@ -671,7 +671,7 @@ export function Panel(props: {
  * What a tooltip says: a name, typed (a program's name, in mono) or not, its keys, and the tsh
  * word that does the same, typed so in mono too. `null`: no word does it (Try again).
  */
-export interface Tip {
+interface Tip {
 	readonly name: string;
 	readonly typed: boolean;
 	readonly caps: readonly Cap[];

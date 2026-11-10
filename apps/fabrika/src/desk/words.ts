@@ -22,7 +22,7 @@ import {type Does, SHOWS, type Show, wordOf} from "./keys.ts";
 // so no agent moves the desk you look at.
 
 /** What a word tells the desk: the command, from this tile. The answer is why nothing was done, or `null`. */
-export class DeskWords extends Context.Service<
+class DeskWords extends Context.Service<
 	DeskWords,
 	{readonly said: (does: Does) => string | null}
 >()("@kampus/fabrika-app-old/DeskWords") {}

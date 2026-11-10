@@ -164,7 +164,7 @@ mutants.
   The saved-state hole and the duplicate criterion id go on the new ship
   stage's list.
 - **The next work is the pipeline's own checks:** the verify step of
-  [Promises in the pipeline](./promises-in-the-pipeline.md), with the same
+  Promises in the pipeline, with the same
   tools. Fabrika is tested later the same way, as one more repo the
   pipeline works on.
 - **Why:** checks in the pipeline are the product. The tool question is

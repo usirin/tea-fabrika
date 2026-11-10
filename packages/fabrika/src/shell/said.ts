@@ -16,7 +16,7 @@ import {refusalLines, type SaidStatement} from "./grammar.ts";
 //   @ hi           to the one agent summoned, when there is exactly one
 
 /** The program a said line runs as. */
-export const TURN = "turn";
+const TURN = "turn";
 
 /** Run one said line as a turn job, or refuse it in words with status 2. */
 export const runSaid = (shell: Shell, st: SaidStatement): Effect.Effect<Said> =>

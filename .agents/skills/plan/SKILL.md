@@ -5,14 +5,9 @@ description: Write the plan for one tea-fabrika pull request, read-only, as the 
 
 # The plan step
 
-You write one plan and nothing else: no code, no tests, no commits, no pull requests. Your final
-message is the whole plan, in Markdown. The lead saves it and approves it, or sends it back.
+Your final message is the whole plan, in Markdown. The lead saves it and approves it, or sends it back.
 Return it unsigned, including when reviewing or revising a plan. Only the lead session may fill
-the blank approval line. Every agent may file tracker tickets, even during read-only repo work.
-Filing a ticket does not claim it or start its build.
-
-A brief names only the ticket: what it builds, which version (`next/` or today's), the notes and
-rows to read, and an older plan to copy the shape of. This skill holds the rest.
+the blank approval line.
 
 ## Steps
 
@@ -26,45 +21,23 @@ rows to read, and an older plan to copy the shape of. This skill holds the rest.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch.
 5. **Write the plan** in the shape below.
-6. **Check your own files table** against the exam list, so the lead's check finds nothing new:
-   `python3 .agents/skills/step-commit/scripts/exam.py exam-paths.json <path>...`
 
 ## The shape
 
-- A first line left blank, for the approval.
-- Write `Plancheck-Version: 2` immediately after that blank line. Approval fills only the first
-  line. Do not add a marker to a saved legacy plan.
-- The whole idea in one code block.
+- `plancheck.sh --draft` checks the plan's format.
 - How others do it, with sources.
 - The shape: types in code blocks, Effect Schema, `_tag` unions, names from settled notes.
 - One value traced through, step by step.
-- A table of properties a test checks, each with its plant (the break that must make it fail) and
-  a `Generator` column: what its inputs are drawn from (fast-check, `@demlik/tea/pbt` or Effect's
-  `Arbitrary`). Every law uses generated inputs unless it has one of these reason labels:
-  `vector:` names fixed inputs from a specification; `format:` names the exact bytes of a fixed
-  format; `pinned:` names a past bug's exact input, beside the property covering it; `scenario:`
-  names one scripted outside run. Its internal logic still gets properties
-  ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
+- Laws use [generated inputs or a reason label](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property).
   Ask of each law: lint, type or test? A shape check's cell says `lint` or `type`.
-  Other cells say `fc.<name>` for a function exported by installed fast-check,
-  `@demlik/tea/pbt.arbMsg`, `.arbRecordMsg`, `.arbMsgSequence` or `.arbGuidedSequence`, optionally
-  followed by `: description`; or `Effect Arbitrary: Schema.name`. A label needs a reason with a
-  letter or digit. Put arguments and custom-generator details after the colon.
-- When secrets must stay out of records, URLs or spans, mark the Law cell with `[secrets]`.
-  Require a property over generated flows. Generate made-up words, keys and passes, operation
-  orders, refusals and failures. Inspect every named output, including encoded URL forms. Plant
-  a leak into each named output. The marked row needs an `fc`, tea or Effect generated-input
-  family. A separate scenario row may supplement it, but a fixed label, `lint` or `type` cannot
-  replace the property. Ordinary keyboard laws keep the normal grammar.
-- **The files table, with lines, and an owner step for every file:** `tests`, `build` or `lead`.
-  Every path that matches a glob in `exam-paths.json` belongs to `tests`. A builder is never handed
-  one. If the build needs an exam file changed, that change goes in the tests commit.
+- When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
+  Inspect every named output, including encoded URLs, and plant a leak into each.
+- `plancheck.sh` checks file owners and keeps exam paths with `tests`.
+- When the plan changes a skill (owner, 2026-11-08), a rule code checks or could check becomes a
+  check and leaves the prose. Only judgment stays in prose.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
-- Size in agent hours, with how sure.
-- What it records, and what fact is lost if it is not recorded now.
-- What it cannot tell us.
-- Open questions, each with a lean and how sure. A big plan splits into pull requests that each
-  land whole, ordered by what the owner sees first.
+- Say what fact is lost if it is not recorded now.
+- Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
 
 ## The open questions test
 
@@ -75,13 +48,19 @@ without contradicting a decision already made? If not, it is not a question.
 
 ## Never
 
-- Write a file. Run in a read-only sandbox, or act as if you were.
-- Quote anything private: no names, no machine paths, no chat quotes. Cite only repo files.
-- Leave a file without an owner step, or give `build` an exam path.
+- Quote anything private. Cite only repo files.
 
-Plain short sentences, American English, no em dashes.
+Plain short sentences, American English.
 
 ## Scripts
+
+plancheck.sh checks the draft; only the lead session reads and approves the whole plan and amendments.
+leakgrep.sh checks added text; private words stay outside the repo.
+
+Draft and approved checks cover sections, questions, exam paths and the exact body bytes after
+line two. The draft prints the digest. `--approved` checks the approval line against it.
+The draft check checks the handoff format. It cannot prove session identity, because the step agents
+and the lead share shell access. Do not add a marker, key or readable file as proof.
 
 `scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
 line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it

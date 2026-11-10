@@ -1,9 +1,76 @@
 import {readdirSync, statSync} from "node:fs";
 import {dirname, join, relative} from "node:path";
 import {fileURLToPath} from "node:url";
+import * as fc from "fast-check";
 import {describe, expect, it} from "vitest";
 import {BaseSequencer, createVitest} from "vitest/node";
 import {assign, measured, Shards} from "./vitest.shards.ts";
+
+// T342, today's sharding. Covers assign and the measured table. Plants: drop a file,
+// restore equal-count assignment, or discard measured script times.
+// T342: all three plants failed their laws. Equal-count placement initially survived
+// the final load bound; checking the least measured load at each placement caught it.
+it("generated sharding assigns once, ignores input order and balances measured seconds", () => {
+	fc.assert(
+		fc.property(
+			fc.uniqueArray(
+				fc.record({path: fc.string({minLength: 1}), seconds: fc.integer({min: 1, max: 500})}),
+				{selector: (f) => f.path, minLength: 1, maxLength: 40},
+			),
+			fc.integer({min: 1, max: 12}),
+			(files, count) => {
+				const machines = assign(files, count);
+				expect(machines).toHaveLength(files.length);
+				const running = Array.from({length: count}, () => 0);
+				for (const {file, index} of files
+					.map((file, index) => ({file, index}))
+					.toSorted(
+						(a, b) =>
+							b.file.seconds - a.file.seconds ||
+							(a.file.path < b.file.path ? -1 : a.file.path > b.file.path ? 1 : 0),
+					)) {
+					const machine = machines[index]!;
+					expect(running[machine]).toBe(Math.min(...running));
+					running[machine] = running[machine]! + file.seconds;
+				}
+				expect(machines.every((m) => m >= 0 && m < count && Number.isInteger(m))).toBe(true);
+				const first = Object.fromEntries(files.map((f, i) => [f.path, machines[i]]));
+				const reversed = files.toReversed();
+				expect(
+					Object.fromEntries(reversed.map((f, i) => [f.path, assign(reversed, count)[i]])),
+				).toEqual(first);
+				const load = Array.from({length: count}, (_, m) =>
+					files.reduce((sum, f, i) => sum + (machines[i] === m ? f.seconds : 0), 0),
+				);
+				expect(Math.max(...load) - Math.min(...load)).toBeLessThanOrEqual(
+					Math.max(...files.map((f) => f.seconds)),
+				);
+			},
+		),
+		{seed: 119120, numRuns: 100},
+	);
+});
+
+it("vector: real CI medians include the previously unweighted scripts", () => {
+	// Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
+	expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(59.1);
+	expect(measured[".agents/skills/lead/scripts/catchup.test.ts"]).toBe(47.2);
+	expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
+	expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
+});
+
+it("vector: lead test medians match the three green main CI runs", () => {
+	// T375 Amendment 1: fixed CI medians from 42631962689, 42631256491 and 42630840277.
+	// Plant: discard these rows, leaving the scripts to count as 1 s.
+	for (const [path, seconds] of [
+		[".agents/skills/lead/scripts/box.test.ts", 485.3],
+		[".agents/skills/step-commit/scripts/stepcommit.test.ts", 18.2],
+		[".agents/skills/lead/scripts/redact.test.ts", 7.2],
+		[".agents/skills/lead/scripts/gc.test.ts", 0.1],
+	] as const) {
+		expect.soft(measured[path], path).toBe(seconds);
+	}
+});
 
 // How the check's test machines split the test files: each gets about the same seconds, not the
 // same count of files.

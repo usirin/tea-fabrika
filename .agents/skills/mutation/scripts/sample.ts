@@ -85,8 +85,15 @@ export const sample = ({
 		for (const other of added) selected.add(other);
 		return true;
 	};
-	const lines = [...new Map(changed.map((line) => [JSON.stringify(line), line])).values()];
-	lines.sort((a, b) => compare(a.file, b.file) || a.line - b.line);
+	// First picks go round-robin across changed files, in line order within each file, so a cap
+	// smaller than the changed lines still reaches every file.
+	const unique = [...new Map(changed.map((line) => [JSON.stringify(line), line])).values()];
+	const queues = [...new Set(unique.map((line) => line.file))]
+		.sort(compare)
+		.map((file) => unique.filter((line) => line.file === file).sort((a, b) => a.line - b.line));
+	const lines = Array.from({length: Math.max(0, ...queues.map((q) => q.length))}, (_, turn) =>
+		queues.flatMap((queue) => (turn < queue.length ? [queue[turn]] : [])),
+	).flat();
 	for (const line of lines) {
 		if (![...selected].some((candidate) => touches(candidate, line))) {
 			ordered.find((candidate) => touches(candidate, line) && take(candidate));

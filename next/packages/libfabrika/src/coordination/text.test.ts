@@ -44,22 +44,22 @@ const add = {
 	sentAt: SENT,
 };
 describe("P10 signed text", () => {
-	it("grantText: tag, target, every saw field and one newline are signed", () => {
+	it("format: grantText: tag, target, every saw field and one newline are signed", () => {
 		expect(C.grantText(grant)).toBe(
 			`{"_tag":"granted","grant":{"id":"g1","key":"window","for":"${PERSON}","to":"project-a","as":"window","saw":{"code":"1234","label":"Browser","where":"test","how":"compare","check":"touch","has":["verify","seal"]},"sentAt":"${SENT}"}}\n`,
 		);
 	});
-	it("revokeText: removal has its own tag and complete saw", () => {
+	it("format: revokeText: removal has its own tag and complete saw", () => {
 		expect(C.revokeText(revoke)).toBe(
 			`{"_tag":"revoked","revoke":{"id":"r1","key":"window","for":"${PERSON}","to":"project-a","saw":{"label":"Browser","where":"test","how":"panel","check":"touch"},"sentAt":"${SENT}"}}\n`,
 		);
 	});
-	it("addText: the new root, window and complete recovery observation are signed", () => {
+	it("format: addText: the new root, window and complete recovery observation are signed", () => {
 		expect(C.addText(add)).toBe(
 			`{"_tag":"added","add":{"id":"a1","for":"${PERSON}","to":"project-a","adds":{"_tag":"person","key":"person-key","window":"window"},"drops":[],"saw":{"how":"device","check":"touch","where":"test","has":["verify"],"typed":false,"kept":null,"old":null},"sentAt":"${SENT}"}}\n`,
 		);
 	});
-	it("enrollmentText: proof binds both keys, person, ledger, add id and nonce", () => {
+	it("format: enrollmentText: proof binds both keys, person, ledger, add id and nonce", () => {
 		const value = {
 			id: "a1",
 			to: "project-a",

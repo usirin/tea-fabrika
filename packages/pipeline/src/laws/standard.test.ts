@@ -13,8 +13,8 @@ import {afterAll, describe, expect, it} from "vitest";
 import {SPECS} from "./specs.ts";
 
 // The laws check is standard: every tea machine in the workspace has laws. A machine is found
-// by how it is made, a call to `defineMachine(`, in every part of `apps`, `packages`, `programs`
-// and `packs`. So a machine added anywhere fails this test until it has laws.
+// by how it is made, a call to `defineMachine(`, in every part of `apps`, `packages` and
+// `programs`. So a machine added anywhere fails this test until it has laws.
 //
 // A machine has laws in one of two ways:
 //
@@ -35,7 +35,7 @@ import {SPECS} from "./specs.ts";
 // as files to find machines in, never as code it imports.
 
 /** The workspace groups searched, each a folder of parts. */
-const GROUPS = ["apps", "packages", "programs", "packs"] as const;
+const GROUPS = ["apps", "packages", "programs"] as const;
 /** Folders in a part that hold no source of its own. */
 const SKIPPED = new Set(["node_modules", "dist"]);
 /**
@@ -211,14 +211,14 @@ describe("the laws check, on a planted workspace", () => {
 
 	it("fails a machine made under no name, and one outside src", () => {
 		const root = workspace({
-			"packs/k/src/m.ts": "export default defineMachine({});\n",
-			"packs/k/src/m.laws.test.ts": LAWS,
-			"packs/k/m.ts": MACHINE,
-			"packs/k/m.laws.test.ts": LAWS,
+			"programs/k/src/m.ts": "export default defineMachine({});\n",
+			"programs/k/src/m.laws.test.ts": LAWS,
+			"programs/k/m.ts": MACHINE,
+			"programs/k/m.laws.test.ts": LAWS,
 		});
 		expect(withoutLaws(root, none)).toEqual([
-			"packs/k/m.laws.test.ts is outside packs/k/src, where the test run does not look",
-			"packs/k/src/m.ts makes a machine under no name, so its laws cannot name it",
+			"programs/k/m.laws.test.ts is outside programs/k/src, where the test run does not look",
+			"programs/k/src/m.ts makes a machine under no name, so its laws cannot name it",
 		]);
 	});
 

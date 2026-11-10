@@ -5,10 +5,34 @@
 // FABRIKA_APP_ID names the GitHub App; GH_REPO (owner/name) defaults to the worktree's origin.
 import {execFileSync} from "node:child_process";
 import {createSign} from "node:crypto";
+import {fileURLToPath} from "node:url";
 
 const [dir, branch, src = "HEAD"] = process.argv.slice(2);
 if (!dir || !(branch === "-" || branch?.startsWith("fabrikalfa/")))
 	throw new Error("usage: botpush.mjs <worktree> fabrikalfa/<name>");
+// Check only committed additions, before reading credentials or making any network request.
+// A lane's diff can pass execFileSync's 1 MB default (a minified CSS patch did), so the buffer is
+// wide, and a failure says which part failed instead of exiting with no word.
+let diff;
+try {
+	diff = execFileSync(
+		"git",
+		["-C", dir, "diff", "--no-ext-diff", "--no-textconv", "--unified=0", `origin/main...${src}`],
+		{maxBuffer: 256 * 1024 * 1024},
+	);
+} catch {
+	console.error("botpush: cannot read the diff from origin/main");
+	process.exit(1);
+}
+try {
+	execFileSync("sh", [fileURLToPath(new URL("./leakgrep.sh", import.meta.url))], {
+		cwd: dir,
+		input: diff,
+		stdio: ["pipe", "inherit", "inherit"],
+	});
+} catch {
+	process.exit(1);
+}
 const APP = process.env.FABRIKA_APP_ID ?? "5640348";
 const REPO =
 	process.env.GH_REPO ??
@@ -79,9 +103,10 @@ const url = `https://github.com/${REPO}.git`;
 // One atomic push: the notes and the branch land together or not at all, so CI finds the signatures.
 const refs = ["refs/notes/fabrika:refs/notes/fabrika"];
 if (branch !== "-") refs.push(`${src}:refs/heads/${branch}`);
-try {
-	// Take the remote's notes first and merge them in, as the signer's own push does, so the push is
-	// a fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
+
+// Take the remote's notes first and merge them in, as the signer's own push does, so the push is a
+// fast-forward. A conflict (two notes on one commit) stops here, before anything is pushed.
+const takeNotes = () => {
 	if (git("ls-remote", url, "refs/notes/fabrika").trim()) {
 		git("fetch", "--no-tags", "-q", url, "+refs/notes/fabrika:refs/notes/fabrika-origin");
 		git(
@@ -96,9 +121,38 @@ try {
 			"refs/notes/fabrika-origin",
 		);
 	}
-	git("push", "--atomic", url, ...refs);
+};
+
+/**
+ * Whether the push was refused only because the remote's notes moved after we took them: another
+ * session pushed refs/notes/fabrika in between (ci375 build, 2026-11-09, ticket 388). GitHub says
+ * "cannot lock ref" for that race and plain git says "fetch first"; with --atomic every other ref
+ * then reads "(failed)" or "(atomic push failed)". Any other refusal is real and is not retried.
+ */
+const staleNotesOnly = (stderr) => {
+	const refused = stderr.split("\n").filter((l) => /^\s*!\s/.test(l));
+	const notes = refused.filter((l) => /->\s+refs\/notes\/fabrika\b/.test(l));
+	return (
+		notes.length > 0 &&
+		notes.every((l) => /cannot lock ref|fetch first|non-fast-forward/.test(l)) &&
+		refused.every((l) => notes.includes(l) || /\((atomic push )?failed\)\s*$/.test(l))
+	);
+};
+
+try {
+	takeNotes();
+	let retried = false;
+	try {
+		git("push", "--atomic", url, ...refs);
+	} catch (e) {
+		if (!staleNotesOnly(String(e.stderr ?? ""))) throw e;
+		// One retry, never a force: take the newer notes, merge them, push again.
+		retried = true;
+		takeNotes();
+		git("push", "--atomic", url, ...refs);
+	}
 	console.log(
-		`pushed ${branch} as fabrikalfa[bot]; installation ${inst.id}; token expires ${tok.expires_at}`,
+		`pushed ${branch} as fabrikalfa[bot]${retried ? " after one notes retry" : ""}; installation ${inst.id}; token expires ${tok.expires_at}`,
 	);
 } catch (e) {
 	console.log(

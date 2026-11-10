@@ -1,5 +1,5 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
-// diagnostic but the two advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
+// diagnostic but the advice rules. docs/direction/oxlint-and-oxfmt.md says what each choice costs.
 {
 	"$schema": "./node_modules/oxlint/configuration_schema.json",
 	"plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest"],
@@ -9,13 +9,7 @@
 	// Each rule is named here, so a new oxlint release adds none on its own.
 	"categories": { "correctness": "off" },
 	"options": { "reportUnusedDisableDirectives": "error" },
-	"ignorePatterns": [
-		"**/fixtures/**",
-		"**/experiments/results/**",
-		"blog/**",
-		"video/**",
-		"unreachable-ledger.json"
-	],
+	"ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json"],
 	"rules": {
 		// "warn" here only advises: lint.ts prints these two and does not fail on them. They were
 		// wrong too often to block (experiment 125). Any other warning fails.
@@ -338,11 +332,6 @@
 			"rules": { "fabrika/no-redacted-value": "off" }
 		},
 		{
-			// Jev's authorization header (the old factory).
-			"files": ["legacy/src/local.ts"],
-			"rules": { "fabrika/no-redacted-value": "off" }
-		},
-		{
 			// The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
 			// 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
 			// comment, which `edge-comment` holds to its shape (P35). No override below turns the two
@@ -350,6 +339,9 @@
 			"files": ["next/**"],
 			"rules": {
 				"fabrika/no-promises": "error",
+				"fabrika/no-ledger-sql": "error",
+				"fabrika/no-node-filesystem": "error",
+				"fabrika/no-node-imports": "error",
 				"fabrika/no-effect-run-outside-edge": "error",
 				"fabrika/edge-comment": "error",
 				"fabrika/effect-functions": "error",
@@ -378,6 +370,7 @@
 			// Tests also manufacture spans as input for the sink. Tracing plants use product paths.
 			"files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
 			"rules": {
+				"fabrika/prefer-schema-arbitrary": "warn",
 				"fabrika/no-promises": "off",
 				"fabrika/no-effect-run-outside-edge": "off",
 				"fabrika/effect-functions": "off",

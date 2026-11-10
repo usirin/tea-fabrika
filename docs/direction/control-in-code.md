@@ -34,7 +34,7 @@ Three kinds of part, each with its own job:
 
 ## Why
 
-- **Cost was there from the first day.** [Post 1](../../blog/01-v4.md) names three itches,
+- **Cost was there from the first day.** Blog post 1 (deleted from main; see the tag `archive/2026-11-09`) names three itches,
   the mistakes, the cost and not seeing inside, and says the operator's 2,500 lines teach a model
   to be a loop around a ledger the CLI already reads. On 2026-11-07 the owner named where the cost
   came from: today's operator agents wake up to check state that code can check for free, and

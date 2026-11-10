@@ -16,34 +16,52 @@ was decided are all kept here on purpose, so they can be analysed later.
 
 | You want to | Read | Write |
 |---|---|---|
-| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. |
-| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), one note per decision | A note there, the same day a direction is set or changed, plus its row in that folder's README. Mark it **proposed** until it is settled. |
+| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) there | That README, in the same pull request or the same day, when the plan or its state changes. A pull request that builds or finishes a Tier 1 row or a tracked plan item updates that row in `tier-1.md` and "Where we are now" in the README in the same pull request; if the step's owner list does not allow it, the lead updates them the same day ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)). |
+| Know what the owner decided | [`.decisions/`](./.decisions/), one short file per decision; see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md). |
+| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it. |
+| Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md), one table per model, one row per behavior | The row, in the same pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)). |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
+| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up and `experiments/NN-name.ts` for its script, with the next free number, plus one row in the index. Shared helpers go in `experiments/lib/`, saved answers in `experiments/results/`. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. Saved answers go in `experiments/results/`. A script is not kept on main: keep it on its own branch and name that branch in the write-up. Raw samples, such as every timing of a run, are still recorded but kept privately, not in git (owner, 2026-11-09): the script writes them under `runs/` or to a path a flag names, and `results/` keeps a small summary of the numbers the write-up quotes. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
-| Check a change against old tickets | [`replay/README.md`](./replay/README.md) | New replay cases under `replay/`, as that README describes. |
-| Understand a design that is still a draft | `docs/` (for example [`docs/fabrika-sdk.md`](./docs/fabrika-sdk.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
+| Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
-| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`, `packs/*`, `wip`, `legacy`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. `wip` and `legacy` only shrink. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
+| Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial: its README and its finished files | A folder there with a `package.json` whose `typecheck` covers the files, so a change to the package that breaks the tutorial fails `pnpm typecheck`. Run every step on a fresh clone before it lands. |
-| Show one finding or idea to someone outside the project | [`singles/README.md`](./singles/README.md) | `singles/NN-short-title.md` with its one picture beside it, in the shape that README gives, plus its row in the table. It points back at the experiment it was cut from. |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed. |
 
-`blog/` and `video/` are finished pieces about earlier stages. Leave them unless
-asked.
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos
+([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
 
-**Rule of thumb:** a decision goes in `docs/direction/`. A measurement goes in
-`experiments/`. Something that happened on a real ticket goes in `field/`. If a
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives
+its `id`, `title` and `status`. Read applicable records when changing the choice they
+govern or resolving conflicting guidance. Record new decisions with `/adr`
+([the adr skill](./.agents/skills/adr/SKILL.md)).
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
+[phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md)).
+
+**Rule of thumb:** a decision goes in `.decisions/`, and its long reasoning in
+`docs/direction/`. A measurement goes in `experiments/`. Something that happened on a real ticket goes in `field/`. If a
 piece of knowledge about this project lives only in a chat or in an agent's
-private memory, it is in the wrong place: write it here.
+private memory, it is in the wrong place: write it here. A decision lands as soon
+as it is made: the lead writes `.decisions/NNNN-slug.md` and starts its docs pull request in the
+same turn, and never waits for a code pull request or the end of the day (owner, 2026-11-09,
+[0001](./.decisions/0001-decisions-live-in-the-repo.md)).
 
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). So far `next/` is on
-[PR 223](https://github.com/usirin/tea-fabrika/pull/223), and nothing is on main yet. Everything
-else (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`) is today's
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
+`next/` is on main, and 18 of Tier 1's 37 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now)). Everything
+else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
 
@@ -76,9 +94,14 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   holds the colors, the Manti mapping and the text roles, and today's app and `next/` both
   import it. Its contents come from settled notes, not today's shapes, and moving a file into it
   means rethinking it against them ([one design package](./docs/direction/fabrika-design-package.md)).
+- **In `next/`, use Effect's platform modules, not `node:` imports,** where they cover the job:
+  `effect/process`'s `ChildProcess` to spawn, `effect/cli` for flags, `FileSystem` and `Path` for
+  files. A `node:` import stays only where Effect has nothing, marked as an edge with its reason
+  (owner, 2026-11-09). The lint rule `fabrika/no-node-imports` comes with
+  [PR 530](https://github.com/usirin/tea-fabrika/pull/530).
 - **In `next/`, nothing is built on Promises.** It is Effect all the way. A Promise
   appears only in a one-line edge the platform demands, marked where it stands with
-  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the owner reads
+  `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
@@ -89,17 +112,44 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
-  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a
-  decided note is approved by the agent leading the session, which writes "Approved by the lead
-  agent, builds <note>" in it; a plan that raises a new design call goes to the owner (owner,
-  2026-11-03). A scheduled walk or approval that a decided note already answers is decided in
+  ([the steps](./docs/direction/next-is-a-pipeline-pre-run.md)). A plan that only builds a decided
+  note is approved by the lead session after its own read and draft check. It writes
+  `Approved by the lead agent, builds <note>; body <sha256-12>` on line 1 and replaces that line
+  after any body edit, including an appended amendment. A plan that raises a new design call
+  goes to the owner. A scheduled walk or approval that a decided note already answers is decided in
   the plan, and the lead approves it in one line; a question to the owner must be one they could
   answer no to without contradicting a decision (owner, 2026-11-08). In `next/`'s planner step
   this becomes code: a check on the plan's open questions. No merged pull request
   has been built this way yet ([where we are](./docs/plan/README.md#where-we-are-now)).
+  A docs-only pull request that writes down a decision is opened the turn it is decided and
+  merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
+  Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
+  (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
+  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  agent changes them directly, keeps each change small, and merges on green CI with a clean leak
+  grep. Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
-  part is small, never absent.
+  part is small, never absent. A rule that code already checks leaves a skill's prose; a rule
+  that code could check becomes a check, then leaves the prose; only judgment stays in prose
+  (owner, 2026-11-08).
+  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
+  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
+  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with the hit list in the PR. Only real loosening waits on the owner.
+  The lead merges any pull request, product code and exam changes included, with `catchup.sh`
+  once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
+  loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
+  owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
+- **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
+  file, does its one step and writes the state file back for the next; no long driver carries a
+  ticket. A drive script will chain the mechanical steps and start an agent only for judgment
+  (tracker ticket 341). The lead skill says how.
+- **An exam change that is all proper property tests merges without the owner's read** (owner,
+  2026-11-08). Proper means every new or changed law is a property, or an example labeled
+  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and mutation shows no law got
+  narrower. A change that loosens or removes a law still waits on the owner
+  ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
@@ -120,10 +170,29 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - `next/` is the lab until a person opens it for real work, so it may be rough. "No
   rough first versions" (below) applies from then on.
 
+## Decision discovery
+
+List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+`title` and `status`. Read applicable records when changing the choice they govern or resolving
+conflicting guidance. Record new decisions with `/adr`
+([skill](./.agents/skills/adr/SKILL.md)). Before you ask the owner or write a plan, also search
+`.glossary/` and `docs/direction/`.
+
+There is no committed decision index and no startup hook. Filenames plus frontmatter are the
+discovery contract
+([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
+
+Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
+when called: `drive.ts` runs `box.sh gc` itself on start.
+
+Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
+GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
+
 ## Before you design anything
 
-- **Check what is settled first.** Before any design question or recommendation,
-  search `docs/direction/`, `experiments/` and the plan for the topic. That holds for
+- **Check what is settled first.** Before any question to the owner, design question,
+  recommendation or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/`
+  and the plan for the topic. That holds for
   a question an agent's plan raises and for a pull request you walk: compare its shape
   with the note it says it builds, and name any place it walks a decision back. A
   claim about how a piece runs comes from reading that piece's note now, never from a
@@ -325,13 +394,19 @@ brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
-  Never the full suite locally (owner, 2026-11-08). On a pull request, CI runs only the tests that
-  reach a changed file; the full suite runs after the merge, on main. `next/` has its own CI job that
-  runs all of its tests on every pull request. A run that
+  Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
+  the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
+  `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
+  and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
+  Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
+  `e2e`: its one reader, `skillscheck.sh`, runs in `changes`. Skill scripts run `check` and `test`, and vitest
+  picks only the tests that `?raw`-import them (`script-reads` in `pnpm lint` keeps those imports whole).
+  Other Markdown that a program or skill reads counts as code.
+  Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
   `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at the very end. `tsgo` takes
   about 8 cores, so small jobs add up.
-- "Under load" means at most 8 code agents, one `pnpm typecheck` at a time across all of
+- "Under load" means at most 12 code agents, one `pnpm typecheck` at a time across all of
   them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
   the wait, so that loop never ends), one Electron test app at a time, and one Docker
   box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
@@ -339,7 +414,9 @@ brief carries these caps. Each one came from a laptop that became unusable.
   same day, the owner asking again, with 4 running and the load near 9. Two type checks at
   once, not the agent count, is what froze it before. Raised to 8 on 2026-11-08 (owner): Codex
   step runs are light on the laptop. Still one type check at a time. If it feels slow, drop back
-  to 5.
+  to 5. Raised to 12 on 2026-11-09 (owner,
+  [0012](./.decisions/0012-twelve-agents-at-once.md)): most lane agents wait on Codex steps, and
+  two type checks at once, not the agent count, is what froze it. If it feels slow, drop back to 8.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u`
   in a subshell first.
@@ -351,6 +428,9 @@ brief carries these caps. Each one came from a laptop that became unusable.
   scale up.
 - A test window always sets its own `FABRIKA_HOME`, with a short path, since a socket
   path has a 103-byte limit. It never sets `FABRIKA_FOREGROUND=1`.
+- A test window stays out of the way of the person at the laptop. Right after launch, each
+  `BrowserWindow` gets `setOpacity(0)`, `setIgnoreMouseEvents(true)` and a position in the work
+  area's corner. Never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
 
 ### Tool facts that cost us time

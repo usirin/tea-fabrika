@@ -4,11 +4,11 @@ import {tmpdir} from "node:os";
 import {query} from "@anthropic-ai/claude-agent-sdk";
 import {Effect, Schema} from "effect";
 
-export class AgentFailed extends Schema.TaggedError<AgentFailed>()("AgentFailed", {
+class AgentFailed extends Schema.TaggedError<AgentFailed>()("AgentFailed", {
 	why: Schema.String,
 }) {}
 
-export interface Written {
+interface Written {
 	readonly line: string;
 	readonly usd: number;
 }
