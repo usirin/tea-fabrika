@@ -1,5 +1,6 @@
 // Declare script reads for Vitest's affected walk, including transitive calls.
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";

@@ -4,6 +4,7 @@ import "./leakgrep.sh?raw";
 import "./botpush.mjs?raw";
 import "./env.sh?raw";
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 import "./fieldrow.py?raw";
