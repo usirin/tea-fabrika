@@ -332,7 +332,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         // limit: one dead row on the failing process's stream, with its checked fields.
         const two = await c.call("process.send", poison);
         // 4. The sender is refused with dead.
-        expect(two).toMatchObject({ error: { data: { why: "dead" } } });
+        expect(two).toMatchObject({ error: { data: { reason: "dead" } } });
         const dead = await until(
           "one dead row on the failing process's stream",
           () => facts(stage, `${second}/dead`),
@@ -356,7 +356,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(await facts(stage, `${first}/dead`)).toEqual([]);
         // A further resend gives the same answer without another step or dead row.
         expect(await c.call("process.send", poison)).toMatchObject({
-          error: { data: { why: "dead" } },
+          error: { data: { reason: "dead" } },
         });
         expect(await facts(stage, `${second}/dead`)).toHaveLength(1);
 
@@ -384,7 +384,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           .abort()
           .catch(() => undefined);
         expect(await c.call("process.send", poison)).toMatchObject({
-          error: { data: { why: "dead" } },
+          error: { data: { reason: "dead" } },
         });
         expect(await c.call("process.send", send(third, "healthy", "inc"))).toMatchObject({
           result: { _tag: "accepted", rev: accepted.rev },

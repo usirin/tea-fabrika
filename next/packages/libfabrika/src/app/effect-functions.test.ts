@@ -1182,7 +1182,7 @@ describe("T285, runner tracing keep-laws", () => {
           const w = runnerWorld(a, signer);
           // Still a property, on a test clock. P34 (ticket 402): a step_throw ends the process and its
           // successor starts only after the backoff (defaultPolicy: 100 ms doubling to 800 ms), so
-          // time moves TICK ms per op. Ops inside the wait answer ProgramDown{why: "saved_letter"};
+          // time moves TICK ms per op. Ops inside the wait answer ProgramDown{reason: "saved_letter"};
           // the first op after it runs on the successor under a new process ID.
           const TICK = 50;
           let now = 1_000_000;
@@ -1261,7 +1261,9 @@ describe("T285, runner tracing keep-laws", () => {
 
                   if (waiting) {
                     expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null, call.op).toMatchObject(
-                      malformed ? { _tag: "RunnerError", why: call.op } : { _tag: "ProgramDown", why: "saved_letter" },
+                      malformed
+                        ? { _tag: "RunnerError", reason: call.op }
+                        : { _tag: "ProgramDown", reason: "saved_letter" },
                     );
                   }
 

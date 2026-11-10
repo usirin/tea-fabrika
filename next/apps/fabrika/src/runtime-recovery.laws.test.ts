@@ -17,6 +17,7 @@ import {
   processRuntime,
   ProcessService,
   ProjectService,
+  savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema } from "effect";
@@ -51,6 +52,28 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
     publish: (...args: Parameters<ProjectCalls["publish"]>) => run((p) => p.publish(...args)),
     sign: (...args: Parameters<ProjectCalls["sign"]>) => run((p) => signingReply(p.sign(...args))),
     commit: (...args: Parameters<ProjectCalls["commit"]>) => run((p) => commitReply(p.commit(...args))),
+    target: (...args: Parameters<ProjectCalls["target"]>) => run((p) => p.target(...args)),
+    knock: (...args: Parameters<ProjectCalls["knock"]>) => run((p) => p.knock(...args)),
+    disconnect: (...args: Parameters<ProjectCalls["disconnect"]>) => run((p) => p.disconnect(...args)),
+    register: (...args: Parameters<ProjectCalls["register"]>) => run((p) => p.register(...args)),
+    join: (...args: Parameters<ProjectCalls["join"]>) => run((p) => p.join(...args)),
+    leave: (...args: Parameters<ProjectCalls["leave"]>) => run((p) => p.leave(...args)),
+    online: (...args: Parameters<ProjectCalls["online"]>) => run((p) => p.online(...args)),
+    exit: (...args: Parameters<ProjectCalls["exit"]>) => run((p) => p.exit(...args)),
+    brain: (...args: Parameters<ProjectCalls["brain"]>) => run((p) => p.brain(...args)),
+    // The lane's Project process calls, each the one service call the class makes.
+    processObject: (...args: Parameters<ProjectCalls["processObject"]>) => run((p) => p.processObject(...args)),
+    processStart: (...args: Parameters<ProjectCalls["processStart"]>) => run((p) => p.processStart(...args)),
+    processExit: (...args: Parameters<ProjectCalls["processExit"]>) => run((p) => p.processExit(...args)),
+    processStatus: (...args: Parameters<ProjectCalls["processStatus"]>) => run((p) => p.processStatus(...args)),
+    processResolve: (...args: Parameters<ProjectCalls["processResolve"]>) => run((p) => p.processResolve(...args)),
+    processDead: (...args: Parameters<ProjectCalls["processDead"]>) => run((p) => p.processDead(...args)),
+    processIsLive: (...args: Parameters<ProjectCalls["processIsLive"]>) => run((p) => p.processIsLive(...args)),
+    processMonitor: (...args: Parameters<ProjectCalls["processMonitor"]>) => run((p) => p.processMonitor(...args)),
+    processDemonitor: (...args: Parameters<ProjectCalls["processDemonitor"]>) =>
+      run((p) => p.processDemonitor(...args)),
+    processDown: (...args: Parameters<ProjectCalls["processDown"]>) => run((p) => p.processDown(...args)),
+    processReceive: (...args: Parameters<ProjectCalls["processReceive"]>) => run((p) => p.processReceive(...args)),
   };
 };
 
@@ -66,6 +89,13 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     open: (client: string) => run((p) => p.open(client)),
     msg: (input: unknown) => run((p) => p.msg(input)),
+    due: (at: number) => run((p) => p.due(at)),
+    restart: (request: { id: string; build: string }) => run((p) => p.restart(request)),
+    alarm: () => run((p) => p.alarm()),
+    activity: (...args: Parameters<ProcessCalls["activity"]>) => run((p) => p.activity(...args)),
+    recover: () => run((p) => p.recover()),
+    savedAlarm: () => Effect.runPromise(savedAlarm(ctx)),
+    abort: () => ctx.abort("storage wake"),
   };
 };
 
@@ -246,7 +276,7 @@ const gate = () => {
 };
 
 type Entry = {
-  object: Process;
+  object: ProcessObject;
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
   readonly values: Map<string, unknown>;
@@ -327,7 +357,7 @@ const world = (
     await work();
     throw new Error("transport lost the Project's answer");
   };
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real classes but do not have workerd's nominal brands
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     STAGE: JSON.stringify({
       name: "project-test",
@@ -337,7 +367,7 @@ const world = (
       port: 18787,
       build: "brain-test",
     }),
-    // Every Project RPC the real class has, so new Project calls reach the real object too.
+    // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
       getByName: () =>
         new Proxy(
@@ -349,14 +379,14 @@ const world = (
               }
 
               if (method === "sign") {
-                return (...args: Parameters<Project["sign"]>) => {
+                return (...args: Parameters<ProjectObject["sign"]>) => {
                   signs++;
                   return project.sign(...args);
                 };
               }
 
               if (method === "commit") {
-                return async (...args: Parameters<Project["commit"]>) => {
+                return async (...args: Parameters<ProjectObject["commit"]>) => {
                   commits++;
                   await beforeCommit();
                   return project.commit(...args);
@@ -400,14 +430,14 @@ const world = (
             values: handles.values,
             timer: undefined,
             alarm: null,
-            object: new Process(processCtx, env),
+            object: processObject(processCtx, env),
           };
           entry = created;
           processes.set(storageKey, created);
           return created;
         };
         const current: Entry = processes.get(storageKey) ?? made();
-        // Every Process RPC the real class has; reopen swaps the object behind the same stub.
+        // Every Process RPC the real class hands off; reopen swaps the object behind the same stub.
         return new Proxy(
           {},
           {
@@ -589,10 +619,10 @@ const world = (
       }
 
       await project.runtime.dispose();
-      project = new Project(ctx, env);
+      project = projectObject(ctx, env);
 
       for (const entry of processes.values()) {
-        entry.object = new Process(entry.ctx, env);
+        entry.object = processObject(entry.ctx, env);
         schedule(entry);
       }
 
@@ -778,7 +808,7 @@ describe("P12 Process RPC refusal answers", () => {
   }
 });
 
-// Ticket 402: P34's recovery on the Worker path, with the real Project and Process classes.
+// Ticket 402: P34's recovery on the Worker path, with the real Project and Process services.
 const Word = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9]{0,11}$/));
 
 /** One generated recovery flow. Limits run 1 to 32; null is the Worker's default policy. */
@@ -864,7 +894,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     const answer = await send(original, letter, "throw");
 
     if (n === limit) {
-      expect(answer).toMatchObject({ answer: { _tag: "refused", why: "dead" } });
+      expect(answer).toMatchObject({ answer: { _tag: "refused", reason: "dead" } });
     } else {
       expect(answer).not.toMatchObject({ answer: { _tag: "ok" } });
     }
@@ -892,8 +922,8 @@ const runFlow = async (flow: RecoveryFlow) => {
   }
 
   const dead = k === limit ? [chain.at(-2)!] : [];
-  const deadFacts = () => deadRows(chain).then((rows) => rows.map((row) => ({ ...Object(row.body), _tag: row._tag })));
-  expect(await deadFacts()).toEqual(
+  const deadEvents = () => deadRows(chain).then((rows) => rows.map((row) => ({ ...Object(row.body), _tag: row._tag })));
+  expect(await deadEvents()).toEqual(
     dead.map((process) => ({
       _tag: "dead",
       process,
@@ -912,7 +942,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   if (k === limit) {
     for (let n = 0; n < flow.resends; n++) {
       expect(await send(original, letter, "throw")).toMatchObject({
-        answer: { _tag: "refused", why: "dead" },
+        answer: { _tag: "refused", reason: "dead" },
       });
     }
   }
@@ -941,7 +971,7 @@ const runFlow = async (flow: RecoveryFlow) => {
 
   if (k === limit) {
     expect(await send(original, letter, "throw")).toMatchObject({
-      answer: { _tag: "refused", why: "dead" },
+      answer: { _tag: "refused", reason: "dead" },
     });
   }
 
@@ -950,7 +980,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   });
   expect(await w.project.read(`${NAME}/inbox`, 0, "audit")).toHaveLength(inbox);
   expect(await restarts()).toHaveLength(k);
-  expect(await deadFacts()).toHaveLength(dead.length);
+  expect(await deadEvents()).toHaveLength(dead.length);
 
   if (k > 0 || flow.fault !== "none") {
     expect(w.receipts(letter)).toMatchObject([{ tries: k }]);
