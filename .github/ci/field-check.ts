@@ -49,7 +49,7 @@ const annotation = (finding: Finding) =>
 export const checkFile = (file: string, base: string, head: string) => {
 	const added = selectAdded(base, head);
 	const counts = new Map<string, number>();
-	const id = file === "field/notes.jsonl" ? "id" : "run";
+	const id = file === "field/notes.jsonl" || file === "field/findings.jsonl" ? "id" : "run";
 
 	for (const text of lines(head)) {
 		const value = parse(text);

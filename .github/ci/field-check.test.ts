@@ -459,6 +459,158 @@ it("advice warns with exit zero; errors identify head lines without row content"
 	);
 });
 
+// Ticket 517, decision 0035: a finding row's core blocks. Independent contract schemas, as above.
+// Plants caught: no schema for findings.jsonl (every bad row passed with a warning), an open
+// `rule`, `at` let through beside `location`, and an empty proof.
+const Words = Schema.String.check(Schema.isPattern(/\S/));
+
+const rules = [
+	"bug",
+	"dead_code",
+	"duplicate",
+	"missing_test",
+	"flaky_test",
+	"doc_drift",
+	"rule_break",
+];
+
+const Found = Schema.Struct({
+	_tag: Schema.Literal("finding"),
+	id: Schema.String,
+	date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
+	by: Words,
+	model: Text,
+	rule: Schema.Literals(rules),
+	location: Schema.Struct({
+		path: Words,
+		line: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 100_000})),
+	}),
+	says: Words,
+	proof: Words,
+	cost: Words,
+	head: Schema.String,
+	ticket: Text,
+	pr: Text,
+});
+
+const Rated = Schema.Struct({
+	_tag: Schema.Literal("rated"),
+	finding: Schema.String,
+	says: Schema.Literals(["fix", "noise"]),
+	by: Words,
+	date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
+	ticket: Text,
+});
+
+const findings = "field/findings.jsonl";
+
+const errorsOf = (row: unknown) => {
+	const report = checker.checkFile(findings, "", `${JSON.stringify(row)}\n`);
+	return {
+		exitCode: report.exitCode,
+		fields: report.findings.filter((f) => f._tag === "error").map((f) => f.field),
+	};
+};
+
+const without = (row: object, field: string) =>
+	Object.fromEntries(Object.entries(row).filter(([key]) => key !== field));
+
+it("a finding or rated row passes whole, and each core field blocks when wrong or missing", () => {
+	for (const schema of [Found, Rated]) {
+		const result = Effect.runSync(
+			Arbitrary.checkEffect(
+				Arbitrary.schema(schema),
+				(row) => {
+					const good = errorsOf({...row, extra: {future: true}});
+					const each = Object.keys(schema.fields).every((field) => {
+						const bad = errorsOf({...row, [field]: {bad: true}});
+						const gone = errorsOf(without(row, field));
+						// A row with no readable `_tag` is refused as a whole.
+						const named = field === "_tag" ? "_tag" : field;
+						return (
+							bad.exitCode !== 0 &&
+							bad.fields.includes(named) &&
+							gone.exitCode !== 0 &&
+							gone.fields.includes(named)
+						);
+					});
+					return good.exitCode === 0 && good.fields.length === 0 && each;
+				},
+				schemaOptions,
+			),
+		);
+		expect(result._tag).toBe("Passed");
+	}
+});
+
+it("a finding blocks on a rule outside the closed list, on `at`, and on empty proof", () => {
+	const blank = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[ \t\n]*$/)));
+	const result = Effect.runSync(
+		Arbitrary.checkEffect(
+			Arbitrary.all([Arbitrary.schema(Found), Arbitrary.schema(Schema.String), blank]),
+			([row, word, empty]) => {
+				const open = rules.includes(word) ? `${word}_` : word;
+				const place = errorsOf({...without(row, "location"), at: row.location});
+				return (
+					errorsOf({...row, rule: open}).fields.includes("rule") &&
+					errorsOf({...row, at: row.location}).fields.includes("at") &&
+					place.fields.includes("at") &&
+					place.fields.includes("location") &&
+					["says", "proof", "cost", "by"].every((field) =>
+						errorsOf({...row, [field]: empty}).fields.includes(field),
+					) &&
+					[0, -1, 1.5, "3", null].every((line) =>
+						errorsOf({...row, location: {...row.location, line}}).fields.includes("location"),
+					) &&
+					errorsOf({...row, location: {line: row.location.line, path: empty}}).fields.includes(
+						"location",
+					) &&
+					errorsOf({...row, _tag: word}).fields.includes("_tag") &&
+					errorsOf({...row, says: "fix", _tag: "rated"}).exitCode !== 0
+				);
+			},
+			schemaOptions,
+		),
+	);
+	expect(result._tag).toBe("Passed");
+});
+
+it("a finding's unusual id, sha, references and path only warn, without row content", () => {
+	const result = Effect.runSync(
+		Arbitrary.checkEffect(
+			Arbitrary.all([Arbitrary.schema(Found), Arbitrary.schema(Rated)]),
+			([row, rated]) => {
+				const marker = `private-${JSON.stringify(row.proof)}-end`;
+				const odd = {
+					...row,
+					says: marker,
+					proof: marker,
+					cost: marker,
+					id: `id ${row.id}`,
+					head: `${row.head}z`,
+					ticket: "497",
+					pr: "pull 703",
+					location: {...row.location, path: `/${row.location.path}`},
+				};
+				const text = `${JSON.stringify(odd)}\n${JSON.stringify({...rated, finding: odd.id})}\n`;
+				const report = checker.checkFile(findings, "", text);
+				const warned = (line: number) =>
+					report.findings.filter((f) => f.line === line).map((f) => f.field);
+				return (
+					report.exitCode === 0 &&
+					report.added === 2 &&
+					report.findings.every((f) => f._tag === "warning") &&
+					["id", "head", "ticket", "pr", "location"].every((field) => warned(1).includes(field)) &&
+					warned(2).includes("finding") &&
+					report.annotations.every((a) => !a.includes(marker))
+				);
+			},
+			schemaOptions,
+		),
+	);
+	expect(result._tag).toBe("Passed");
+});
+
 // scenario: lead's real-PR proof, deliberately not a network-dependent local test.
 // Open a field-only PR on this branch. Record both PR URLs/SHAs and the Actions URL.
 // Show changes + skills + tracked-file scans pass; check/next/e2e/all six shards skip

@@ -134,6 +134,14 @@ it, does not file a ticket, and does not only mention it in its report.**
   how the same finding is matched when two agents write it, and how many ratings a rule needs
   before its count is trusted. The note lists the last two as open.
 
+## Amendments
+
+- 2026-11-10, tracker ticket 517: the review skill, the lead skill's standing review brief and the
+  step skills now say this rule, and `skillscheck.sh` holds the clause. CI's `field` job now checks
+  a row's core: its keys, the closed `rule` list, `location` and never `at`, and `says`, `proof`
+  and `cost` not empty ([field/README.md](../field/README.md#what-ci-checks)). The two lines under
+  Consequences that say otherwise describe the day this was decided.
+
 ## Records
 
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md): the `finding` row now also names an agent's find
