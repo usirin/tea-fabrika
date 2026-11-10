@@ -37,9 +37,11 @@ export const APP = resolve(import.meta.dirname, "..");
 const ROOT = resolve(APP, "../../..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const pause = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
 
 /** Polls `read` until it answers something other than undefined, or throws with `what`. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const until = async <T>(
 	what: string,
 	read: () => Promise<T | undefined> | T | undefined,
@@ -47,14 +49,17 @@ export const until = async <T>(
 ): Promise<T> => {
 	const stop = Date.now() + ms;
 	for (;;) {
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		const got = await Promise.resolve(read()).catch(() => undefined);
 		if (got !== undefined) return got;
 		if (Date.now() > stop) throw new Error(`timed out after ${ms} ms waiting for ${what}`);
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await pause(50);
 	}
 };
 
 const freePort = (): Promise<number> =>
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	new Promise((done, fail) => {
 		const server = createServer();
 		server.once("error", fail);
@@ -80,11 +85,13 @@ export interface Stage {
 }
 
 /** The real `dev.ts` on a short private home. `home` keeps a stage's files across `start` calls. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const startStage = async (
 	name: string,
 	shared?: {home: string; port: number},
 ): Promise<Stage> => {
 	const home = shared?.home ?? mkdtempSync(join(tmpdir(), "p14-"));
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const port = shared?.port ?? (await freePort());
 	const key = join(home, "person");
 	if (shared === undefined)
@@ -96,6 +103,7 @@ export const startStage = async (
 		delete env[secret];
 	let child: ChildProcess | undefined;
 	let output = "";
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const start = async (): Promise<void> => {
 		child = spawn(
 			process.execPath,
@@ -115,10 +123,13 @@ export const startStage = async (
 		child.stdout?.on("data", (b: Buffer) => (output += b.toString()));
 		child.stderr?.on("data", (b: Buffer) => (output += b.toString()));
 		const mine = child;
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await until(
 			"the stage to answer",
+			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			async () => {
 				if (mine.exitCode !== null) throw new Error(`dev.ts exited: ${output}`);
+				// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 				return (await fetch(url)).ok ? true : undefined;
 			},
 			90_000,
@@ -143,6 +154,7 @@ export const startStage = async (
 				}
 				return mine.has(p.pid);
 			});
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	await start();
 	return {
 		url,
@@ -153,10 +165,12 @@ export const startStage = async (
 		parent: () => child?.pid ?? -1,
 		start,
 		kill: (pid, signal) => process.kill(pid, signal),
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		stop: async () => {
 			const mine = child;
 			if (mine === undefined || mine.exitCode !== null) return;
 			mine.kill("SIGTERM");
+			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			await until(
 				"the stage to stop",
 				() => (mine.exitCode !== null || mine.signalCode !== null ? true : undefined),
@@ -172,6 +186,7 @@ export interface Tab {
 	readonly urls: ReadonlyArray<string>;
 }
 /** A browser, its context (a persistent profile when `dir` is given) and a way to open tabs on it. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const openProfile = async (
 	dir?: string,
 ): Promise<{
@@ -180,13 +195,19 @@ export const openProfile = async (
 	readonly tab: (url: string, size?: {width: number; height: number}) => Promise<Tab>;
 	readonly close: () => Promise<void>;
 }> => {
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const browser = dir === undefined ? await chromium.launch({headless: true}) : undefined;
 	const context =
 		browser === undefined
-			? await chromium.launchPersistentContext(dir ?? "", {headless: true})
-			: await browser.newContext();
+			? // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
+				await chromium.launchPersistentContext(dir ?? "", {headless: true})
+			: // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
+				await browser.newContext();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const tab = async (url: string, size = {width: 1280, height: 800}): Promise<Tab> => {
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		const page = await context.newPage();
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await page.setViewportSize(size);
 		const log: Array<string> = [];
 		const urls: Array<string> = [];
@@ -194,6 +215,7 @@ export const openProfile = async (
 		page.on("pageerror", (e) => log.push(`pageerror: ${e.message}`));
 		page.on("request", (r) => urls.push(r.url()));
 		page.on("websocket", (w) => urls.push(w.url()));
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		await page.goto(url);
 		return {page, console: log, urls};
 	};
@@ -201,8 +223,11 @@ export const openProfile = async (
 		browser,
 		context,
 		tab,
+		// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 		close: async () => {
+			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			await context.close();
+			// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 			await browser?.close();
 		},
 	};
@@ -223,6 +248,7 @@ export const otherKey = (home: string, name: string): string => {
 	return file;
 };
 /** Reads the waiting screen's code and fingerprint, then runs the real grant command with `key`. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const readWaiting = async (
 	stage: Stage,
 	tab: Tab,
@@ -230,14 +256,18 @@ export const readWaiting = async (
 	Omit<Granted, "key" | "to"> & {readonly target: {readonly key: string; readonly to: string}}
 > => {
 	const read = (id: string) => tab.page.getByTestId(id).first();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const code = (await read("grant-code").innerText({timeout: 30_000})).trim();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const fingerprint = (await read("fingerprint").innerText()).trim();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const command = (await read("grant-command").innerText()).trim();
-	const target = (await (
-		await fetch(
-			`${stage.url}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
-		)
-	).json()) as {key: string; to: string};
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
+	const response = await fetch(
+		`${stage.url}/grant/client/${encodeURIComponent(fingerprint)}?code=${encodeURIComponent(code)}`,
+	);
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
+	const target = (await response.json()) as {key: string; to: string};
 	return {code, fingerprint, command, target: {key: target.key, to: target.to}};
 };
 export const runGrant = (stage: Stage, fingerprint: string, code: string, key: string) =>
@@ -247,9 +277,13 @@ export const runGrant = (stage: Stage, fingerprint: string, code: string, key: s
 		{cwd: APP, env: {...process.env, FABRIKA_HOME: stage.home}},
 	);
 /** Grants a waiting tab with the real command and waits for its counters. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const grant = async (stage: Stage, tab: Tab): Promise<Granted> => {
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const w = await readWaiting(stage, tab);
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	await runGrant(stage, w.fingerprint, w.code, stage.key);
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	await tab.page
 		.getByRole("region", {name: /^counter/i})
 		.first()
@@ -263,6 +297,7 @@ export const grant = async (stage: Stage, tab: Tab): Promise<Granted> => {
 	};
 };
 /** Removes a granted window key: the person's key signs the removal, as the door's tests do. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
 	const text = revokeText({
 		id: `revoke-${Date.now()}`,
@@ -277,6 +312,7 @@ export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
 		["-Y", "sign", "-n", "fabrika-client", "-f", stage.key],
 		{input: text, encoding: "utf8"},
 	);
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const response = await fetch(`${stage.url}/grant`, {
 		method: "POST",
 		headers: {"content-type": "application/json"},
@@ -285,7 +321,9 @@ export const revoke = async (stage: Stage, granted: Granted): Promise<void> => {
 	if (!response.ok) throw new Error(`revoke refused: ${response.status}`);
 };
 
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const counts = async (page: Page): Promise<ReadonlyArray<number>> =>
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	(await page.getByTestId("count").allInnerTexts()).map((t) => Number(t.replace(/[^\d-]/g, "")));
 export const press = (page: Page, action: "Add one" | "Take one away" | "Back to zero", tile = 0) =>
 	page
@@ -298,8 +336,10 @@ export const connection = (page: Page): Promise<string> =>
 
 /** Times `work` in ms and keeps the sample under `runs/p14/<label>.jsonl`, which is private (ignored by git). */
 export const samples: Record<string, Array<number>> = {};
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const timed = async <T>(label: string, work: () => Promise<T>): Promise<T> => {
 	const t0 = performance.now();
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	const out = await work();
 	(samples[label] ??= []).push(Math.round(performance.now() - t0));
 	return out;
@@ -316,6 +356,7 @@ export const summary = (): string => {
 };
 
 /** Saves a screenshot of the built page where the plan names: `<dir>/<state>-<layout>.png`. */
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 export const shot = async (
 	page: Page,
 	where: "frame" | "counter",
@@ -325,6 +366,7 @@ export const shot = async (
 	const dir =
 		where === "frame" ? join(APP, "docs/p14") : join(ROOT, "next/programs/counter/docs/p14");
 	mkdirSync(dir, {recursive: true});
+	// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright, fetch, child processes and timers hand back Promises; the browser files await them
 	await page.screenshot({path: join(dir, `${state}-${layout}.png`)});
 };
 
