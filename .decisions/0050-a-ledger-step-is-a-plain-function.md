@@ -121,6 +121,6 @@ It is never an Effect that could wait.**
 - **Not decided here: moving all of `data/` to `effect/sql` on the synchronous turn.** Experiment
   249 leans to it at about 65%. The doubts: the span sink would write about its own writes (1 span
   per append today, 9 on `SqlClient`), about 17 caller files would take `LedgerTurn` as an Effect
-  API, and two of the modules are marked unstable. It is its own tracker ticket.
+  API, and two of the modules are marked unstable. It is its own ticket, tracker ticket 563.
 - **Not known:** the full 42 laws have not run on this route in workerd, only 8 and the interleave
   law, and nothing ran on Cloudflare itself. PR 8 runs the rest.
