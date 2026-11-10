@@ -1,11 +1,11 @@
 import {execFileSync} from "node:child_process";
 import {mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
-import {createRequire} from "node:module";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {Client} from "@modelcontextprotocol/client";
 import {StdioClientTransport} from "@modelcontextprotocol/client/stdio";
-import {_electron, type ElectronApplication, type Page} from "playwright";
+import type {ElectronApplication, Page} from "playwright";
+import {launchElectron, runE2e} from "./src/testing/electron-launch.ts";
 
 // An agent summoned and talked to, in the real built app, on a temp home and a temp git
 // repository, with the fake ACP agent: no model, no key, nothing real touched. Today's version.
@@ -20,7 +20,6 @@ import {_electron, type ElectronApplication, type Page} from "playwright";
 // including the refusal of ultra. An MCP client called observer attaches without running a model.
 
 const here = import.meta.dirname;
-const electronPath: string = createRequire(import.meta.url)("electron");
 const shots = process.env.SHOTS ?? mkdtempSync(join(tmpdir(), "summon-shots-"));
 mkdirSync(shots, {recursive: true});
 
@@ -319,95 +318,95 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
 	);
 };
 
-const app = await _electron.launch({executablePath: electronPath, args: [here], env});
-const observer = new Client({name: "summon-shots", version: "0.0.0"});
-let failed = false;
-try {
-	const page = await app.firstWindow();
-	const bounds = await app.evaluate(({BrowserWindow}) => {
-		const [window] = BrowserWindow.getAllWindows();
-		if (window === undefined) throw new Error("no app window");
-		window.setBounds({x: 0, y: 0, width: 1200, height: 640});
-		return window.getBounds();
-	});
-	check(
-		"the native window fits the CI screen",
-		bounds.width <= 1440 && bounds.height <= 674,
-		bounds,
-	);
-	await prompted(page, "t1");
-	await lookIs(app, page, "dark");
-	await settleTerminals(page);
-	await observer.connect(
-		new StdioClientTransport({
-			command: process.execPath,
-			args: [join(here, "src", "cli.ts"), "mcp", "--as", "observer"],
-			env,
-			stderr: "inherit",
-		}),
-	);
+await runE2e(async () => {
+	const app = await launchElectron({home, env});
+	const observer = new Client({name: "summon-shots", version: "0.0.0"});
+	try {
+		const page = await app.firstWindow();
+		const bounds = await app.evaluate(({BrowserWindow}) => {
+			const [window] = BrowserWindow.getAllWindows();
+			if (window === undefined) throw new Error("no app window");
+			window.setBounds({width: 1200, height: 640});
+			return window.getBounds();
+		});
+		check(
+			"the native window fits the CI screen",
+			bounds.width <= 1440 && bounds.height <= 674,
+			bounds,
+		);
+		await prompted(page, "t1");
+		await lookIs(app, page, "dark");
+		await settleTerminals(page);
+		await observer.connect(
+			new StdioClientTransport({
+				command: process.execPath,
+				args: [join(here, "src", "cli.ts"), "mcp", "--as", "observer"],
+				env,
+				stderr: "inherit",
+			}),
+		);
 
-	for (const layout of ["one", "side", "stacked", "2x2", "small"]) {
-		const first = layout === "one" ? "t1" : await workspace(page);
-		if (layout === "side" || layout === "2x2") await split(page, "|");
-		if (layout === "stacked" || layout === "2x2") await split(page, "-");
-		if (layout === "2x2") {
-			await prefixed(page, "h");
-			await until(
-				`focus on ${first}`,
-				() => focused(page),
-				(f) => f === first,
-			);
-			await focusIs(page, first);
-			await split(page, "-");
-		}
-		if (layout === "small") {
-			const cdp = await page.context().newCDPSession(page);
-			await cdp.send("Emulation.setDeviceMetricsOverride", {
-				width: 1024,
-				height: 700,
-				deviceScaleFactor: 0,
-				mobile: false,
-			});
-			await until(
-				"the page at 1024 by 700",
-				() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
-				(size) => size === "1024x700",
-			);
-		}
-		await states(app, page, layout);
-	}
-
-	const log = readFileSync(join(home, "host", "log"), "utf8");
-	for (const message of ["summoned", "turn_began", "turn_ended", "ask_answered"])
-		check(`the host log has ${message}`, log.includes(message));
-} catch (cause) {
-	failed = true;
-	console.error(cause);
-	const [page] = app.windows();
-	if (page !== undefined) {
-		await page.screenshot({path: join(shots, "failed.png")}).catch(() => {});
-		const ids = await tiles(page).catch(() => [] as readonly (string | null)[]);
-		for (const id of ids) if (id !== null) console.error(`--- ${id}\n${await screen(page, id)}`);
-	}
-} finally {
-	const pid = Number.parseInt(
-		(() => {
-			try {
-				return readFileSync(join(home, "host", "pid"), "utf8");
-			} catch {
-				return "";
+		for (const layout of ["one", "side", "stacked", "2x2", "small"]) {
+			const first = layout === "one" ? "t1" : await workspace(page);
+			if (layout === "side" || layout === "2x2") await split(page, "|");
+			if (layout === "stacked" || layout === "2x2") await split(page, "-");
+			if (layout === "2x2") {
+				await prefixed(page, "h");
+				await until(
+					`focus on ${first}`,
+					() => focused(page),
+					(f) => f === first,
+				);
+				await focusIs(page, first);
+				await split(page, "-");
 			}
-		})(),
-		10,
-	);
-	await observer.close().catch(() => {});
-	await app.close().catch(() => {});
-	// This run started that host, on its own temp home, and only this run stops it.
-	if (!Number.isNaN(pid))
-		try {
-			process.kill(pid, "SIGTERM");
-		} catch {}
-	console.log(`shots: ${shots}\nhome: ${home}\nrepo: ${repo}`);
-}
-if (failed) process.exit(1);
+			if (layout === "small") {
+				const cdp = await page.context().newCDPSession(page);
+				await cdp.send("Emulation.setDeviceMetricsOverride", {
+					width: 1024,
+					height: 700,
+					deviceScaleFactor: 0,
+					mobile: false,
+				});
+				await until(
+					"the page at 1024 by 700",
+					() => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
+					(size) => size === "1024x700",
+				);
+			}
+			await states(app, page, layout);
+		}
+
+		const log = readFileSync(join(home, "host", "log"), "utf8");
+		for (const message of ["summoned", "turn_began", "turn_ended", "ask_answered"])
+			check(`the host log has ${message}`, log.includes(message));
+	} catch (cause) {
+		console.error(cause);
+		const [page] = app.windows();
+		if (page !== undefined) {
+			await page.screenshot({path: join(shots, "failed.png")}).catch(() => {});
+			const ids = await tiles(page).catch(() => [] as readonly (string | null)[]);
+			for (const id of ids) if (id !== null) console.error(`--- ${id}\n${await screen(page, id)}`);
+		}
+		throw cause;
+	} finally {
+		const pid = Number.parseInt(
+			(() => {
+				try {
+					return readFileSync(join(home, "host", "pid"), "utf8");
+				} catch {
+					return "";
+				}
+			})(),
+			10,
+		);
+		await observer.close().catch(() => {});
+		await app.close().catch(() => {});
+		// This run started that host, on its own temp home, and only this run stops it.
+		if (!Number.isNaN(pid))
+			try {
+				process.kill(pid, "SIGTERM");
+			} catch {}
+		console.log(`shots: ${shots}\nhome: ${home}\nrepo: ${repo}`);
+	}
+});
