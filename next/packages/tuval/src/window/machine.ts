@@ -19,8 +19,11 @@
 //
 // The person's key settings read is explicit per dial (A15): going online reads them, `reading`. A
 // failed read on the online dial is `failed` with the call's own reason, shown in the frame, and
-// ends the dial as a lost socket does, so the next dial reads again; a `keys` or `keys_failed` while
-// a newer dial's socket is open clears it. A failed read on any other dial does nothing.
+// leaves the link as it is, so the socket's own close still reaches it with its code (A16). The
+// resend timer runs while it is failed, and its tick for that dial asks the read again once, the
+// `read_settings` Cmd, and sets `reading`. A dial that goes online reads again too; a `keys` or
+// `keys_failed` while a newer dial's socket is open clears a failure. A failed read on any other
+// dial, or while the link is not online, does nothing.
 //
 // What it records (plan A8), each through the `record` Cmd: the key a dial found, one `connect` row
 // per link outcome with the `ms` its Msg carries, a press before its letter goes, a `reply` row when
@@ -226,6 +229,14 @@ export const persist = Cmd.make("persist", {
   err: ["unsupported", "failed"],
 });
 
+/** Start the person's key settings read again on the dial's socket. It settles once the socket loop
+ *  has it; a dial that is gone does nothing. */
+export const read_settings = Cmd.make("read_settings", {
+  input: Schema.Struct({ dial: Schema.Int }),
+  ok: Schema.Null,
+  err: [],
+});
+
 /** Keep one checked observation until the door acknowledges it (`client.record`). The handler gives
  *  it its row id, tab, build and time. */
 export const record = Cmd.make("record", {
@@ -238,6 +249,7 @@ type Out = ReadonlyArray<
   | ReturnType<typeof now>
   | ReturnType<typeof write>
   | ReturnType<typeof persist>
+  | ReturnType<typeof read_settings>
   | ReturnType<typeof record>
   | ReturnType<typeof ping>
 >;
@@ -521,9 +533,6 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   return [written, [...linkCmds, ...connected, ...writes, ...asked]];
 };
 
-/** A lost socket's close code: the dial ends and the link retries. */
-const LOST = 1006;
-
 /** The settings read once a `keys` or `keys_failed` arrives: a failure of an older dial clears to
  *  reading on the dial whose socket is open now; anything else stays. */
 const read = (s: WindowModel): WindowModel["settings"] => {
@@ -602,7 +611,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
   return Machine.make({
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
-    cmds: [now, write, persist, record, ping],
+    cmds: [now, write, persist, read_settings, record, ping],
     types: { sub: {} as SocketSub, ctx: {} as WindowCtx },
     init: (loaded, ctx) => [loaded ?? fresh(ctx, clientMachine.init(null, {})[0]), []],
     update: {
@@ -773,8 +782,12 @@ export const windowMachineFor = (checks: WindowChecks) => {
           return [cleared, redated];
         }
 
-        const [after, out] = flush(cleared);
-        return [after, [...redated, ...out]];
+        // The online dial's failed settings read goes again on its tick, once (A16).
+        const again = s.settings._tag === "failed" && s.settings.dial === m.dial;
+        const [after, out] = flush(
+          again ? { ...cleared, settings: Settings.cases.reading.make({ dial: m.dial }) } : cleared,
+        );
+        return [after, [...redated, ...out, ...(again ? [read_settings({ dial: m.dial })] : [])]];
       },
       resized: (s, m) => (s.size?.w === m.w && s.size.h === m.h ? [s, []] : [{ ...s, size: { w: m.w, h: m.h } }, []]),
       focus: (s, m) => [{ ...s, focus: findTile(s, m.tile) === null ? null : m.tile, armed: null }, []],
@@ -803,19 +816,15 @@ export const windowMachineFor = (checks: WindowChecks) => {
         [],
       ],
       keys_failed: (s, m) => [{ ...s, keyError: m.error, armed: null, settings: read(s) }, []],
-      // A failed read on the online dial ends it by a lost socket's own path, keeping its reason. It
-      // is no socket outcome, so it keeps no connect row: no handler timed it.
-      settings_failed: (s, m) => {
-        if (s.link._tag !== "online" || s.link.dial !== m.dial) {
-          return [s, []];
-        }
-
-        const [next, cmds] = linked(s, { type: "closed", dial: m.dial, code: LOST, fingerprint: "", ms: 0 });
-        return [
-          { ...next, settings: Settings.cases.failed.make({ dial: m.dial, reason: m.reason }) },
-          cmds.filter((c) => c.type !== "record" || c.record._tag !== "connect"),
-        ];
-      },
+      // A failed read on the online dial keeps its reason and leaves the link as it is: the read
+      // restarts on its resend tick, never the dial, so the socket's own close keeps its code (A16).
+      settings_failed: (s, m) =>
+        s.link._tag !== "online" || s.link.dial !== m.dial
+          ? [s, []]
+          : [{ ...s, settings: Settings.cases.failed.make({ dial: m.dial, reason: m.reason }) }, []],
+      // The runner has the read again, or its dial is gone: either way nothing more to do.
+      read_settings_ok: (s) => [s, []],
+      read_settings_err: (s) => [s, []],
       seen: (s, m) => {
         const [client] = step(s.client, { type: "read", rev: m.rev });
         return [{ ...s, client }, []];
@@ -827,7 +836,8 @@ export const windowMachineFor = (checks: WindowChecks) => {
         type: "timer",
         deps: (s) => {
           const dial = socketDial(s.link) ?? 0;
-          const waiting = s.redate.length > 0 || (s.link._tag === "online" && sends(s).length > 0);
+          const failed = s.settings._tag === "failed" && s.settings.dial === dial;
+          const waiting = s.redate.length > 0 || (s.link._tag === "online" && (sends(s).length > 0 || failed));
           return waiting ? { ms: RETRY, msg: { type: "resend" as const, dial } } : null;
         },
       },

@@ -421,6 +421,8 @@ type Connection = {
   /** Hands one write's frame to the socket, or fails at once; its answer comes on the socket Sub. */
   readonly write: (cmd: Write) => Effect.Effect<void, typeof F.unreachable.Type>;
   readonly text: (text: string) => boolean;
+  /** Starts the person's key settings read again on this dial, once it is online (A16). */
+  readonly reread: () => void;
 };
 
 const osName = (): "macos" | "windows" | "linux" | "android" | "ios" | "unknown" => {
@@ -647,8 +649,6 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         return yield* Effect.fail(unreachable);
       }
     });
-    connections.set(dial, { write: writeFrame, text: ws.send });
-
     /** The person's key settings: every page, then a wait past the cursor, for as long as the dial. */
     const settings = Effect.fnUntraced(function* (person: string) {
       const stream = `person/${person}/settings`;
@@ -681,6 +681,25 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         yield* call("ledger.wait", { stream, after: cursor });
       }
     });
+    /** The admitted person, whose settings this dial reads. */
+    let person: string | null = null;
+    // A failed read or wait is the Model's to decide (A15): it is reported with the call's own
+    // reason, and reading stops until the Model asks it again with `read_settings` (A16). It is
+    // never retried here.
+    const reading = (who: string) =>
+      settings(who).pipe(
+        Effect.catch((e: CallError) =>
+          Effect.sync(() =>
+            emit({ type: "settings_failed", dial, reason: e._tag === "unknown" ? e.reason : "unreachable" }),
+          ),
+        ),
+      );
+    const reread = (): void => {
+      if (isOpen && person !== null) {
+        Queue.offerUnsafe(work, reading(person));
+      }
+    };
+    connections.set(dial, { write: writeFrame, text: ws.send, reread });
 
     const hello = Effect.fnUntraced(function* (nonce: string) {
       const text = helloText({ url: origin, tab, nonce });
@@ -721,16 +740,8 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         );
         emit({ type: "admitted", dial, ping: admitted.ping, ms: took(yield* Clock.currentTimeMillis) });
         // Online: the person's key settings, and the rows this tab kept, for as long as the dial.
-        // A failed read or wait is the Model's to decide (A15): it is reported with the call's own
-        // reason, and reading stops on this dial. It is never retried here.
-        const reported = settings(admitted.who.person).pipe(
-          Effect.catch((e: CallError) =>
-            Effect.sync(() =>
-              emit({ type: "settings_failed", dial, reason: e._tag === "unknown" ? e.reason : "unreachable" }),
-            ),
-          ),
-        );
-        return yield* Effect.all([reported, deliver(call)], {
+        person = admitted.who.person;
+        return yield* Effect.all([reading(person), deliver(call)], {
           concurrency: 2,
           discard: true,
         });
@@ -910,6 +921,13 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
           Effect.as(null),
           Effect.mapError(() => unreachable),
         ),
+      // The settings read starts again on that dial's socket loop; it settles at once, and a dial
+      // that is gone does nothing (A16).
+      read_settings: (cmd) =>
+        Effect.sync(() => {
+          connections.get(cmd.dial)?.reread();
+          return null;
+        }),
       persist: Effect.fn("client.persist")(function* () {
         const claimed = yield* keys.claimPersist.pipe(Effect.mapError(() => F.failed.make({})));
 
