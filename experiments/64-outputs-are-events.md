@@ -146,7 +146,7 @@ Read only, never `--write`. Old `run.ts` (`main`, in a temporary worktree)
 and the new one, back to back on each pull request, with `--own` set to the
 repo's two owner accounts. Stdout, stderr and the exit code compared byte for
 byte. Saved in
-[`results/64-outputs-are-events-old-vs-new.json`](./results/64-outputs-are-events-old-vs-new.json).
+[`results/64-outputs-are-events-old-vs-new.json`](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/64-outputs-are-events-old-vs-new.json).
 
 | Pull request | Name | Old vs new |
 |---|---|---|

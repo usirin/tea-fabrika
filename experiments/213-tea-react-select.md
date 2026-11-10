@@ -26,8 +26,8 @@ Headless Chromium **153.0.8010.12**, React and React DOM **19.3.1**, Effect **4.
 `babel-plugin-react-compiler` **1.0.0** at 202's settings, and `@demlik/tea` **0.23.0** from
 npm ([demlik PR 863](https://github.com/kamp-us/demlik/pull/863)). Every row ran **20 times**:
 400 of 400 trials gave the wanted answer. The
-scripts and exact dependencies are in [`213-tea-react-select/`](./213-tea-react-select/); the
-saved run is in [`results/213-tea-react-select/`](./results/213-tea-react-select/).
+scripts and exact dependencies are in [`213-tea-react-select/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/213-tea-react-select/); the
+saved run is in [`results/213-tea-react-select/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/213-tea-react-select/).
 `compile.mjs` fails the run if the Compiler skips any component: it compiled all six.
 
 Each component counts its own commits in an effect with no dependency list, so nothing is

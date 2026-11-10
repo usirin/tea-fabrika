@@ -173,7 +173,7 @@ env -u TYPESAFE_API_KEY node experiments/232-stylelint-fire-counts.ts
 ```
 
 The [script](./232-stylelint-fire-counts.ts) writes
-[the counts and fire locations](./results/232-stylelint-fire-counts.json).
+[the counts and fire locations](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/232-stylelint-fire-counts.json).
 It does not classify its own output. The judgments above were made by hand.
 The main revision is fixed in the script; the tree and installed packages come
 from the checkout where it runs.

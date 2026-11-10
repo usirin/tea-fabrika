@@ -15,11 +15,19 @@ trusting any line that says an agent could not see a file.
   the experiments were done, 01 first.
 - Scripts are not kept on main. On 2026-11-09 every experiment script, its `lib/` helpers and
   the five harness packages were removed. They are all on the branch
-  `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy. Data
-  that a write-up reads (`results/`, specs, patches, inputs) stays.
-- `results/` holds the answers the scripts saved. Raw samples are kept privately, not here: a script
-  writes them under `runs/`, which git ignores, or to a path a flag names, and
-  `results/` keeps only a small summary of the numbers its write-up quotes.
+  `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy.
+- Results and assets are not kept on main either
+  ([0025](../.decisions/0025-experiment-results-live-in-a-private-archive.md)). On 2026-11-09
+  every file here that was not a top-level write-up (`results/`, the `NN-name/` folders,
+  `failures/`, shots, JSON and patches: 610 files, about 40 MB) moved to the owner's private
+  archive, at the same paths. Git history holds every one too: a path a write-up names under
+  `results/` or an `NN-name/` folder is at commit `423fb9cf`, as in
+  `git show 423fb9cf:experiments/results/<file>`. Two files stay because code reads them:
+  `results/86b-plans.json` and `177-themes/schemes/radix-colors-3.0.0.json`.
+- A new write-up quotes the numbers it uses inline. Raw results and assets go to the private
+  archive; a script writes raw samples under `runs/`, which git ignores, or to a path a flag names.
+- The write-ups left here shrink over time: a write-up nothing cites goes once its lesson is in
+  `.decisions/`, `.patterns/` or `docs/direction/`.
 - [open-questions.md](./open-questions.md) is the list of open questions the
   log kept up to experiment 20.
 
