@@ -6,12 +6,14 @@ import {NodeServices} from "@effect/platform-node";
 import {afterEach, expect, it} from "@effect/vitest";
 import type {BrainEvent} from "@kampus/libfabrika/brain-event";
 import {ProcessIdGenerator} from "@kampus/libfabrika/coordination";
-import {Context, Deferred, Effect, Fiber} from "effect";
+import {Context, Deferred, Effect, Fiber, FileSystem, Layer} from "effect";
 import {SecureRandom} from "effect/crypto";
 import * as fc from "fast-check";
 import {vi} from "vitest";
 
-// P12, next/. Exercise startStage twice with one durable home. Only deployment and HTTP are fake.
+// P12, next/. Exercise startStage twice with one real home. Deployment and HTTP are fake.
+// The link law skips only the flush-to-disk waits. The outbox's own law in
+// next/packages/libfabrika/src/node/local-stage.test.ts pins the sync calls and their order.
 vi.mock("../alchemy.run.ts", () => ({
 	stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
 }));
@@ -32,6 +34,29 @@ vi.mock("alchemy/Deploy", () => ({
 			yield* Effect.yieldNow;
 		}),
 }));
+
+const fileWithoutSync = (file: FileSystem.File): FileSystem.File => ({
+	[FileSystem.FileTypeId]: file[FileSystem.FileTypeId],
+	get stat() {
+		return file.stat;
+	},
+	sync: Effect.void,
+	seek: (offset, from) => file.seek(offset, from),
+	read: (buffer, options) => file.read(buffer, options),
+	readAlloc: (size, options) => file.readAlloc(size, options),
+	truncate: (length) => file.truncate(length),
+	write: (buffer) => file.write(buffer),
+	writeAll: (buffer) => file.writeAll(buffer),
+});
+const filesWithoutSync = Layer.effect(
+	FileSystem.FileSystem,
+	Effect.map(FileSystem.FileSystem, (fs) =>
+		FileSystem.make({
+			...fs,
+			open: (...args) => Effect.map(fs.open(...args), fileWithoutSync),
+		}),
+	),
+).pipe(Layer.provideMerge(NodeServices.layer));
 
 const homes: Array<string> = [];
 const home = () => {
@@ -75,7 +100,7 @@ it("a later dev command links its first start to the last runtime in that home",
 						Effect.scoped(startStage({build, brain: "unused.mjs", programs: {}}, config)).pipe(
 							Effect.provide(ProcessIdGenerator.layer),
 							Effect.provide(SecureRandom.layerWebCrypto),
-							Effect.provide(NodeServices.layer),
+							Effect.provide(filesWithoutSync),
 						),
 					);
 				}
