@@ -1,6 +1,10 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { sample } from "./sample.ts";
+import { diffRange, sample } from "./sample.ts";
 
 // Today's tooling. This is the selector's contract; the CLI gathers candidates with the real
 // Instrumenter and changed lines with git. Stryker's CLI proof belongs to the mutation step.
@@ -335,4 +339,72 @@ describe("mutation sampling across lines, today's tooling", () => {
       options,
     );
   });
+});
+
+describe("T568 the sample reads the lane's own lines from its base, today's tooling", () => {
+  const ref = fc.stringMatching(/^[0-9a-f]{7,40}$/);
+
+  // Plants: ignore --since; diff since against its own parent; drop the build side.
+  it("property: with a since the diff is since..build, else build's first parent..build", () => {
+    fc.assert(
+      fc.property(ref, fc.option(ref, { nil: undefined }), (build, since) => {
+        expect(diffRange(build, since)).toEqual([since ?? `${build}^`, build]);
+      }),
+      options,
+    );
+  });
+
+  // p14-mutation-r1, 2026-11-10: the lane's tip was "Merge main into fabrikalfa/p14", and the
+  // sample took main's lines. The real CLI, with Stryker's real Instrumenter, on a merge tip.
+  it("scenario: a tip that merged main samples the lane's file from its base, and main's file without one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sample568-"));
+    const git = (...args: string[]) => {
+      const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], { encoding: "utf8" });
+      expect(ran.status, ran.stderr).toBe(0);
+      return ran.stdout.trim();
+    };
+    const put = (path: string, text: string) => {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    };
+
+    try {
+      mkdirSync(join(dir, "packages"));
+      symlinkSync(resolve("packages/pipeline"), join(dir, "packages/pipeline"));
+      git("init", "-q", "-b", "main");
+      git("config", "user.name", "Fixture");
+      git("config", "user.email", "fixture@example.test");
+      put(".gitignore", "packages/\n");
+      put("src/ours.ts", "export const lane = (a: number) => a;\n");
+      put("src/theirs.ts", "export const main = (a: number) => a;\n");
+      git("add", "--all");
+      git("commit", "-qm", "root");
+      const base = git("rev-parse", "HEAD");
+      git("checkout", "-q", "-b", "lane");
+      put("src/ours.ts", "export const lane = (a: number) => (a > 1 ? a + 1 : a - 1);\n");
+      git("commit", "-qam", "build");
+      git("checkout", "-q", "main");
+      put("src/theirs.ts", "export const main = (a: number) => (a > 2 ? a * 2 : a / 2);\n");
+      git("commit", "-qam", "main moves on");
+      const merged = git("rev-parse", "HEAD");
+      git("checkout", "-q", "lane");
+      git("merge", "-q", "--no-edit", "main");
+      const tip = git("rev-parse", "HEAD");
+      const files = (since: string[]) => {
+        const ran = spawnSync(
+          process.execPath,
+          [join(import.meta.dirname, "sample.ts"), "--build", tip, ...since, "--report", join(dir, "s.json")],
+          { cwd: dir, encoding: "utf8" },
+        );
+        expect(ran.status, ran.stderr).toBe(0);
+        return new Set((JSON.parse(`[${ran.stdout.trim()}]`) as string[]).map((r) => r.split(":")[0]));
+      };
+      // The lane's base after the catch-up is the main it merged, so only the lane's file is left.
+      expect(files(["--since", merged])).toEqual(new Set(["src/ours.ts"]));
+      expect(files(["--since", base])).toEqual(new Set(["src/ours.ts", "src/theirs.ts"]));
+      expect(files([])).toEqual(new Set(["src/theirs.ts"]));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

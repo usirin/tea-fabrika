@@ -327,7 +327,11 @@ def call(argv, **kw):
 def git(*argv, **kw):
     return call(["git", "-C", str(main), "-c", "core.hooksPath=/dev/null", *argv], **kw)
 def must(result, why):
-    if result.returncode: refuse(why)
+    # git's own last line rides in the refusal: "base commit walk failed" alone hid why, twice on
+    # 2026-11-10 (layout-tests3, layout-tests6; ticket 567).
+    if result.returncode:
+        said = " | ".join(l.strip() for l in (result.stderr or b"").decode(errors="replace").splitlines() if l.strip())[-300:]
+        refuse(why + (": " + said if said else ""))
     return result.stdout.decode().strip()
 def rev(ref): return must(git("rev-parse", "--verify", ref), "unknown ref " + ref)
 def ancestor(a, b): return git("merge-base", "--is-ancestor", a, b).returncode == 0
@@ -442,12 +446,16 @@ def new_box():
     def rows_only(other):
         changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
         return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
-    for other in must(git("for-each-ref", "--format=%(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
+    # Each branch is walked by the commit the listing printed, never by its name again: the scan
+    # takes a minute or more on the main checkout, and a branch deleted meanwhile (a lead's
+    # `git branch -D`) would make a walk by name fail the whole start (ticket 567).
+    for line in must(git("for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
+        tip, other = line.split(" ", 1)
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
         # Only links this lane's base lacks: an older branch of the same lane, already merged into
         # the base, is history, not another lane holding the ticket.
-        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, other))) and not rows_only(other) and live(other):
+        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, tip))) and not rows_only(tip) and live(other):
             refuse_check("shared_ticket", ticket + " on " + other)
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]

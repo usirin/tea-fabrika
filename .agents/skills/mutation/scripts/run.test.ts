@@ -208,6 +208,24 @@ console.log(JSON.stringify(resolved.test));
     }
   });
 
+  // Plants: drop SINCE; pass it as the build; pass --since when SINCE is empty (ticket 568).
+  it("T568 the sampler starts its diff at SINCE when set, and at the build's parent when not", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-f0-9]{7,12}$/), fc.constantFrom("", "refs/heads/base"), (build, since) => {
+        const got = run(defaults, { T: "568", BUILD: build, RELATED: "math.test.ts", SINCE: since });
+        expect(got.code, got.text).toBe(0);
+        const args = got.samples[0] ?? [];
+        expect(args.slice(1, 3)).toEqual(["--build", build]);
+        expect(args.includes("--since")).toBe(since !== "");
+
+        if (since !== "") {
+          expect(args[args.indexOf("--since") + 1]).toBe(since);
+        }
+      }),
+      { seed: 568, numRuns: 8 },
+    );
+  });
+
   // Plants: related true; inherit all tests; accept an empty list or missing build/ranges.
   it("T300 emits related false and restricts Vitest to explicit tests", () => {
     fc.assert(
