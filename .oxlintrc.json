@@ -527,6 +527,25 @@
       "rules": { "fabrika/no-redacted-value": "off" }
     },
     {
+      // Our own source exports by name, never by default (0058). A default the platform loads, a
+      // Cloudflare Worker's, is an inline edge on its one line, never an override here.
+      "files": ["next/**", "packages/**", "programs/**", "apps/**"],
+      "rules": { "import/no-default-export": "error" }
+    },
+    {
+      // Tooling and config a tool loads by its default stay out of 0058. Only these: a platform
+      // edge in our source is never listed here. `fixtures/` is in `ignorePatterns`, and
+      // `oxlint-plugins/` and the top level's configs sit outside the globs above.
+      "files": [
+        "**/vitest.config.ts",
+        "**/rslib.config.ts",
+        "**/stylelint.config.ts",
+        "**/alchemy.run.ts",
+        "**/scripts/**"
+      ],
+      "rules": { "import/no-default-export": "off" }
+    },
+    {
       // The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
       // 223's tree were read by hand (oxlint-plugins/README.md). An edge is one line under an edge
       // comment, which `edge-comment` holds to its shape (P35). No override below turns the two
