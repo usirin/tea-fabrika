@@ -84,6 +84,17 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
 
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+A survivor is this step's own answer and stays in its report, never a finding row. Outside
+means anything else you meet that is wrong.
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+
 ## Go easy on the machine
 
 The test config and typecheck.sh hold worker, home and typecheck limits.

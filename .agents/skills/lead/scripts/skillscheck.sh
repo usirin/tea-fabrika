@@ -16,6 +16,7 @@ bad = []
 # required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
 caps = "The test config and typecheck.sh hold worker, home and typecheck limits."
+outside = "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole."
 effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [
     ("lead", "Scripts", "K19", "box.sh run and runplan.sh strip secret settings and redact saved output."),
@@ -32,6 +33,12 @@ clauses = [
     ("build", "Go easy on the machine", "K9", caps),
     ("mutation", "Go easy on the machine", "K9", caps),
     ("tests", "Steps", "K20", effect),
+    # Decision 0035. The fields and the closed rule list are field/README.md's; field-schema.ts
+    # checks a row's shape, so the skills keep only this clause and their own judgment.
+    *(
+        (skill, "Outside your task", "K21", outside)
+        for skill in ("plan", "tests", "build", "mutation", "lead")
+    ),
 ]
 def normalized(text):
     return " ".join(text.replace("`", "").replace("**", "").split())
@@ -105,12 +112,12 @@ review = (
     "Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law. Each blocker cites that source and shows the missed case.",
 )
 answer = (
-    "Start with merge-ready; tickets: <m> or changes: <n>; tickets: <m>.",
-    "n counts blocking classes. Each class lists every affected case. m counts distinct confirmed tracker tickets linked in this answer.",
+    "Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.",
+    "n counts blocking classes. Each class lists every affected case. m counts the finding rows in this answer.",
     "Give every finding in that answer, grouped by class, most serious first.",
     "Name each checked decided note and say where the change follows or breaks it.",
-    "Use tracker_query to find an existing ticket, or tracker_file with value: {title, body, from: {_tag: \"pr\", url, step: \"review\"}}. Record the returned ID.",
-    "If filing fails, include the exact pending payload for lead to retry. Do not count it as filed or start another review round for it.",
+    "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
+    "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
 )
 cleanup = (
     "After a successful merge, retain the checked head under refs/keep/pr/<pr> in MAIN.",
