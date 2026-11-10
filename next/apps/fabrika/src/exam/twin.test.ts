@@ -209,9 +209,9 @@ describe("P12 local twin lint", () => {
   // T502: the installed scanner is extended, not a second parser. Cases: aliases, quoted keys,
   // wrong target, omitted key, and a matching key in another Worker. Plant: remove RecordPart:.
   law("every hosted object has its own class-name binding in the same Worker", ({ alias }) => {
-    const source = (bindings: string, other = "") =>
+    const source = (bindings: string | undefined, other = "") =>
       `import * as ${alias} from "@alchemy.run/cloudflare";
-       ${alias}.Workers.Worker("Brain", {main:"brain.mjs", env:{${bindings}}}); ${other}`;
+       ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${bindings === undefined ? "" : `env:{${bindings}}`}}); ${other}`;
     const binding = `${alias}.DurableObject("RecordPart")`;
     expect(scan("binding.ts", source(`PROJECT:${alias}.DurableObject("Project"), RecordPart:${binding}`))).toEqual([]);
 
@@ -228,6 +228,8 @@ describe("P12 local twin lint", () => {
     }
 
     for (const [bindings, other] of [
+      [undefined, ""],
+      ["", ""],
       [`RECORD:${binding}`, ""],
       [`RECORD:${binding}, RecordPart:${alias}.DurableObject("Other")`, ""],
       [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],

@@ -402,11 +402,11 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
         const env = props?.properties?.find((p: Tree) => key(p) === "env");
 
-        if (env !== undefined) {
-          const bindings = unwrap(env.value);
+        {
+          const bindings = env === undefined ? { type: "ObjectExpression", properties: [] } : unwrap(env.value);
 
           if (bindings?.type !== "ObjectExpression") {
-            report(env, "unsupported-case: class-name bindings are not a literal object");
+            report(env ?? node, "unsupported-case: class-name bindings are not a literal object");
           } else {
             const objects = new Map<string, string>();
 
@@ -464,12 +464,12 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
                 return type.typeName.name;
               });
             } catch {
-              report(env, "unsupported-case: cannot read host contract");
+              report(env ?? node, "unsupported-case: cannot read host contract");
             }
 
             for (const hosted of hostedNames) {
               if (objects.get(hosted) !== hosted) {
-                report(env, `unsupported-case: missing class-name binding ${hosted}`);
+                report(env ?? node, `unsupported-case: missing class-name binding ${hosted}`);
               }
             }
           }

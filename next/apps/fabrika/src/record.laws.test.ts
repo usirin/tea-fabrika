@@ -90,6 +90,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   return Schema.decodeUnknownSync(Input)(repair(input));
 };
 
+const cap = 64 * 1024;
 const options = { arbitrary: { seed: 119120, runs: 30 } };
 let sequence = 0;
 
@@ -110,7 +111,7 @@ for (const kind of ["node", "wire"] as const) {
 
       const scope = Effect.runSync(Scope.make());
       scopes.push(scope);
-      const stage = await Effect.runPromise(recordWire(1_000_000_000).pipe(Scope.provide(scope)));
+      const stage = await Effect.runPromise(recordWire(cap).pipe(Scope.provide(scope)));
 
       driver = (name) => {
         const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
@@ -152,11 +153,13 @@ for (const kind of ["node", "wire"] as const) {
             ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
             : Chain.cases.spans.make({});
           const name = JSON.stringify([`law-${sequence++}`, partName(chain, input.at)]);
-          const actual = driver(name, 1_000_000_000),
-            oracle = node(name, 1_000_000_000);
+          const actual = driver(name, cap),
+            oracle = node(name, cap);
           const rows = input.rows.map((r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
           const exercise = (part: Part) =>
             Effect.gen(function* () {
+              // The cap is checked before a batch: this first batch lands whole,
+              // even if it crosses the cap. Its identical retry has no fresh rows.
               const write = yield* part.write(chain, input.at, rows);
               const retry = yield* part.write(chain, input.at, rows);
               const read = yield* part.read(chain, input.at, input.after);
@@ -184,11 +187,49 @@ for (const kind of ["node", "wire"] as const) {
     );
 
     it.effect.prop(
+      "a full part rolls with the same next and held IDs on both drivers",
+      { input: Input },
+      ({ input: generated }) =>
+        Effect.gen(function* () {
+          const input = wellFormed(generated);
+          const chain = Chain.cases.spans.make({});
+          const name = JSON.stringify([`full-${sequence++}`, partName(chain, input.at)]);
+          const rows = input.rows.map((row, index) => ({
+            ...row,
+            span: { ...row.span, spanId: String(index) },
+            content: "x".repeat(cap) + (row.content ?? ""),
+          }));
+          const fresh = { ...rows[0]!, span: { ...rows[0]!.span, spanId: "fresh" } };
+          const exercise = (part: Part) =>
+            Effect.gen(function* () {
+              // One batch lands whole; the next mixed batch must see the crossed cap.
+              expect(yield* part.write(chain, input.at, rows)).toEqual({ _tag: "written" });
+              const written = yield* part.write(chain, input.at, [...rows, fresh]);
+              const page = yield* part.read(chain, input.at, 0);
+              return { written, page };
+            });
+          const actual = yield* exercise(driver(name, cap));
+          expect(actual).toEqual(yield* exercise(node(name, cap)));
+          expect(actual.written).toEqual({
+            _tag: "rolled",
+            next: partName(chain, input.at + 1),
+            had: rows.map((row) => row.span.spanId),
+          });
+          expect(actual.page).toMatchObject({
+            spans: rows.map((row) => ({ spanId: row.span.spanId })),
+            after: rows.length,
+            rolled: true,
+          });
+        }),
+      options,
+    );
+
+    it.effect.prop(
       "a name that cannot decode fails as SinkError bad_row over either driver",
       { text: Schema.String },
       ({ text }) =>
         Effect.gen(function* () {
-          const part = driver(`not-json:${text}`, 1_000_000_000);
+          const part = driver(`not-json:${text}`, cap);
           const chain = Chain.cases.spans.make({});
 
           const calls: ReadonlyArray<Effect.Effect<unknown, SinkError>> = [
