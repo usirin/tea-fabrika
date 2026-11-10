@@ -1,5 +1,5 @@
-import {Schema} from "effect";
-import {Id, make, read} from "./entity.ts";
+import { Schema } from "effect";
+import { Id, make, read } from "./entity.ts";
 
 // Every kind of id the ledger gives or takes, in one place: each a brand of
 // its own (./entity.ts), so one kind's id is never taken for another's.
@@ -24,19 +24,19 @@ const readTicket = read(TicketId);
 
 /** A ticket's id from `owner/name#N` or its issue's url. `null`: it is neither. */
 export function readTicketId(text: string): TicketId | null {
-	const url = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)\/?$/.exec(text.trim());
-	return readTicket(url === null ? text.trim() : `${url[1]}/${url[2]}#${url[3]}`);
+  const url = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)\/?$/.exec(text.trim());
+  return readTicket(url === null ? text.trim() : `${url[1]}/${url[2]}#${url[3]}`);
 }
 
 /** A ticket's id from `owner/name#N` or its issue's url. Throws on anything else. */
 export function ticketId(text: string): TicketId {
-	const id = readTicketId(text);
+  const id = readTicketId(text);
 
-	if (id === null) {
-		throw new Error(`not a ticket: ${JSON.stringify(text)}`);
-	}
+  if (id === null) {
+    throw new Error(`not a ticket: ${JSON.stringify(text)}`);
+  }
 
-	return id;
+  return id;
 }
 
 /** A plan, named by the first ticket it covers. Only `planOf` makes one. */

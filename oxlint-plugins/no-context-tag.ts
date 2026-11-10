@@ -15,16 +15,16 @@
 //
 // A genuine exception is a per-line
 // `// oxlint-disable-next-line fabrika/no-context-tag -- <reason>`.
-import type {CreateRule} from "@oxlint/plugins";
-import {banNames} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { banNames } from "./match.ts";
 
 const fix =
-	"Fix: define the service as `class S extends Context.Service<S, Shape>()('id') {}`: copy `packages/fate-effect/src/CurrentUser.ts` (or `apps/web/worker/db/Drizzle.ts`). Exception: // oxlint-disable-next-line fabrika/no-context-tag -- <reason>.";
+  "Fix: define the service as `class S extends Context.Service<S, Shape>()('id') {}`: copy `packages/fate-effect/src/CurrentUser.ts` (or `apps/web/worker/db/Drizzle.ts`). Exception: // oxlint-disable-next-line fabrika/no-context-tag -- <reason>.";
 
 export const noContextTag: CreateRule = {
-	create: banNames({
-		"Context.Tag": `\`Context.Tag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
-		"Context.GenericTag": `\`Context.GenericTag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
-		"Effect.Service": `\`Effect.Service(...)\` is not used here: v4 uses \`Context.Service\` only (.patterns/effect-context-service.md; #2736). ${fix}`,
-	}),
+  create: banNames({
+    "Context.Tag": `\`Context.Tag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
+    "Context.GenericTag": `\`Context.GenericTag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
+    "Effect.Service": `\`Effect.Service(...)\` is not used here: v4 uses \`Context.Service\` only (.patterns/effect-context-service.md; #2736). ${fix}`,
+  }),
 };

@@ -1,4 +1,4 @@
-import {accessSync, constants, readdirSync, type Stats, statSync} from "node:fs";
+import { accessSync, constants, readdirSync, type Stats, statSync } from "node:fs";
 
 // How a Claude run reads the rule files of the folder it works in: the way
 // Claude Code ships it, and nothing else of the project (experiment 155,
@@ -43,7 +43,7 @@ export const MAKE_EMPTY_FOLDER = `mkdir -p -m 0555 ${NO_PROJECT_CONFIG}`;
 
 /** The built-in plugin option that loads AGENTS.md files beside CLAUDE.md. */
 export const AGENTS_MD = {
-	"cc-plugin-agents-md@builtin": {options: {instructionFiles: "claude-md-and-agents-md"}},
+  "cc-plugin-agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
 } as const;
 
 /**
@@ -53,15 +53,15 @@ export const AGENTS_MD = {
  * `settingSources` or a `settings` of its own.
  */
 export const ownRules = <S extends Readonly<Record<string, unknown>>>(settings: S) => ({
-	settingSources: ["project" as const],
-	projectConfigRoot: NO_PROJECT_CONFIG,
-	settings: {...settings, pluginConfigs: AGENTS_MD},
+  settingSources: ["project" as const],
+  projectConfigRoot: NO_PROJECT_CONFIG,
+  settings: { ...settings, pluginConfigs: AGENTS_MD },
 });
 
 /** The part of a run's Agent SDK options that says where its settings come from. */
 export interface SettingsFrom {
-	readonly settingSources?: readonly string[] | undefined;
-	readonly projectConfigRoot?: string | undefined;
+  readonly settingSources?: readonly string[] | undefined;
+  readonly projectConfigRoot?: string | undefined;
 }
 
 const USE = `Load them with ownRules (@kampus/fabrika-old/agents/sandbox), or none with settingSources: [].`;
@@ -73,54 +73,54 @@ const USE = `Load them with ownRules (@kampus/fabrika-old/agents/sandbox), or no
  * `settingSources` is left out, so that is refused too.
  */
 export const settingsRefusal = (options: SettingsFrom): string | null => {
-	const sources = options.settingSources;
+  const sources = options.settingSources;
 
-	if (sources === undefined) {
-		return `settingSources is not set, and the Agent SDK then loads every settings file: the user's, the project's and the local one. ${USE}`;
-	}
+  if (sources === undefined) {
+    return `settingSources is not set, and the Agent SDK then loads every settings file: the user's, the project's and the local one. ${USE}`;
+  }
 
-	if (sources.length === 0) {
-		return null;
-	}
+  if (sources.length === 0) {
+    return null;
+  }
 
-	const others = sources.filter((source) => source !== "project");
+  const others = sources.filter((source) => source !== "project");
 
-	if (others.length > 0) {
-		return `settingSources names ${others.join(" and ")}, so the user's own or the local settings would load. ${USE}`;
-	}
+  if (others.length > 0) {
+    return `settingSources names ${others.join(" and ")}, so the user's own or the local settings would load. ${USE}`;
+  }
 
-	if (options.projectConfigRoot !== NO_PROJECT_CONFIG) {
-		return `settingSources names project, and projectConfigRoot is ${options.projectConfigRoot === undefined ? "not set" : `${options.projectConfigRoot}, not ${NO_PROJECT_CONFIG}`}, so the project's hooks, env and apiKeyHelper would load with its rules (experiment 155). ${USE}`;
-	}
+  if (options.projectConfigRoot !== NO_PROJECT_CONFIG) {
+    return `settingSources names project, and projectConfigRoot is ${options.projectConfigRoot === undefined ? "not set" : `${options.projectConfigRoot}, not ${NO_PROJECT_CONFIG}`}, so the project's hooks, env and apiKeyHelper would load with its rules (experiment 155). ${USE}`;
+  }
 
-	return null;
+  return null;
 };
 
 /** The folder's entries, or `null` when this process cannot list it. */
 const entriesOf = (folder: string): readonly string[] | null => {
-	try {
-		return readdirSync(folder);
-	} catch {
-		return null;
-	}
+  try {
+    return readdirSync(folder);
+  } catch {
+    return null;
+  }
 };
 
 /** Whether this process may write in the folder. Root may write anywhere but on a read-only mount. */
 const writable = (folder: string): boolean => {
-	try {
-		accessSync(folder, constants.W_OK);
-		return true;
-	} catch {
-		return false;
-	}
+  try {
+    accessSync(folder, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const statOf = (path: string): Stats | undefined => {
-	try {
-		return statSync(path, {throwIfNoEntry: false});
-	} catch {
-		return undefined;
-	}
+  try {
+    return statSync(path, { throwIfNoEntry: false });
+  } catch {
+    return undefined;
+  }
 };
 
 const FIX = `On a machine: sudo ${MAKE_EMPTY_FOLDER}. In a box image, as root before USER: RUN ${MAKE_EMPTY_FOLDER}.`;
@@ -131,31 +131,31 @@ const FIX = `On a machine: sudo ${MAKE_EMPTY_FOLDER}. In a box image, as root be
  * write in it, so neither can an agent it starts. Each answer names the fix.
  */
 export const emptyFolderRefusal = (folder: string = NO_PROJECT_CONFIG): string | null => {
-	const stat = statOf(folder);
+  const stat = statOf(folder);
 
-	if (stat === undefined) {
-		return `${folder} is not on this machine, and Claude Code does not start without it: a run reads the project's settings from that empty folder (experiment 155). Debian and Ubuntu do not ship it. ${FIX}`;
-	}
+  if (stat === undefined) {
+    return `${folder} is not on this machine, and Claude Code does not start without it: a run reads the project's settings from that empty folder (experiment 155). Debian and Ubuntu do not ship it. ${FIX}`;
+  }
 
-	if (!stat.isDirectory()) {
-		return `${folder} is not a folder, and Claude Code does not start without one: a run reads the project's settings from it. Remove it, then make the folder. ${FIX}`;
-	}
+  if (!stat.isDirectory()) {
+    return `${folder} is not a folder, and Claude Code does not start without one: a run reads the project's settings from it. Remove it, then make the folder. ${FIX}`;
+  }
 
-	const held = entriesOf(folder);
+  const held = entriesOf(folder);
 
-	if (held === null) {
-		return `${folder} cannot be listed by this process, and Claude Code does not start then. Make it readable: sudo chmod 0555 ${folder}.`;
-	}
+  if (held === null) {
+    return `${folder} cannot be listed by this process, and Claude Code does not start then. Make it readable: sudo chmod 0555 ${folder}.`;
+  }
 
-	if (held.length > 0) {
-		return `${folder} is not empty (it holds ${held.join(", ")}), and Claude Code reads a project's settings from it. Remove what it holds.`;
-	}
+  if (held.length > 0) {
+    return `${folder} is not empty (it holds ${held.join(", ")}), and Claude Code reads a project's settings from it. Remove what it holds.`;
+  }
 
-	if (writable(folder)) {
-		return `${folder} can be written by this process, so an agent it starts could put settings there for the next run. Make it root's and read-only: sudo chown root ${folder} && sudo chmod 0555 ${folder}. Root writes anywhere: run the agent as another user, or mount the folder read-only.`;
-	}
+  if (writable(folder)) {
+    return `${folder} can be written by this process, so an agent it starts could put settings there for the next run. Make it root's and read-only: sudo chown root ${folder} && sudo chmod 0555 ${folder}. Root writes anywhere: run the agent as another user, or mount the folder read-only.`;
+  }
 
-	return null;
+  return null;
 };
 
 /**
@@ -164,5 +164,4 @@ export const emptyFolderRefusal = (folder: string = NO_PROJECT_CONFIG): string |
  * this machine's is not ready (`emptyFolderRefusal`).
  */
 export const startRefusal = (options: SettingsFrom): string | null =>
-	settingsRefusal(options) ??
-	(options.projectConfigRoot === NO_PROJECT_CONFIG ? emptyFolderRefusal() : null);
+  settingsRefusal(options) ?? (options.projectConfigRoot === NO_PROJECT_CONFIG ? emptyFolderRefusal() : null);

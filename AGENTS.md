@@ -166,7 +166,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
   subject, with front files and an `internal/` no other room imports, and it re-exports no other
   room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
-  never from its own. A new file goes in its room now, before the move lands
+  never from its own. A room offers Effect services in its own types and errors, plus the shared
+  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
+  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
   ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
@@ -180,8 +182,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **In `next/`, every state machine is a tea machine, and a file exports at most one.** No plain
   union with a transition function. The machine's Model, Msg and update live in that file, with no
   input or output code, and nothing outside it edits the Model by hand: it sends a Msg. A small
-  private helper machine may share its parent's file
-  ([0045](./.decisions/0045-one-tea-machine-per-file.md)).
+  private helper machine may share its parent's file. An `update` handler picks the next state with
+  a plain conditional on `_tag`, not `Match` or `.match`. A file may export one machine factory, a
+  function that takes a config and returns one machine, in place of the machine, never both
+  ([0046](./.decisions/0046-one-tea-machine-per-file.md)).
 - **In `next/`, no bare `of` and no `xOf` names.** `of` read through its module is fine, as
   Effect does it: `Lease.of(...)` under `import * as Lease`
   ([0029](./.decisions/0029-format-and-names-follow-effect.md)). Today's `nameOf` and `outcomesOf`
@@ -424,9 +428,9 @@ pnpm format     # oxfmt and oxlint: format, sort imports and apply safe fixes, i
 ```
 
 Run `pnpm format` first, so a diff holds only what was meant. The format settings
-are in `.oxfmtrc.json`, from ticket 466's sweep: 2 spaces, 120 columns and spaces inside braces,
-as Effect has them ([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons
-and trailing commas, function parameters and call arguments included
+are in `.oxfmtrc.json`: 2 spaces, 120 columns and spaces inside braces, as Effect has them
+([0029](./.decisions/0029-format-and-names-follow-effect.md)), with semicolons and trailing
+commas, function parameters and call arguments included
 ([0039](./.decisions/0039-keep-semicolons-and-es5-commas.md)). The lint rules are in `.oxlintrc.json`:
 the rules of the pipeline this repo rebuilds, with its custom rules in
 `oxlint-plugins/`. Why these two tools:

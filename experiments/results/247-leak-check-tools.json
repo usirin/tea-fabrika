@@ -1,0 +1,134 @@
+{
+  "experiment": 247,
+  "date": "2026-11-09",
+  "about": "today's lead tooling: leakgrep.sh as botpush.mjs feeds it, beside gitleaks 8.30.1 (darwin arm64 release file, sha256 checked against the release's own checksum file)",
+  "head": "8936c7e15b4c794dfed5748a28cd8592ceb47763",
+  "main_last_200": {
+    "commits": 200,
+    "leakgrep_built_in_shapes_empty_word_list": {
+      "hits": 2,
+      "commits_with_a_hit": 1,
+      "true_hits": 0,
+      "by_kind": {
+        "key": 2
+      },
+      "where": [
+        ".agents/skills/lead/scripts/redact.test.ts"
+      ]
+    }
+  },
+  "main_whole_history": {
+    "gitleaks_default_rules": {
+      "commits_scanned": 1423,
+      "megabytes": 72.35,
+      "seconds": 4.34,
+      "hits": 13,
+      "commits_with_a_hit": 5,
+      "true_hits": 0,
+      "by_rule": {
+        "generic-api-key": 10,
+        "private-key": 3
+      },
+      "where": [
+        "experiments/results/230-checks.json:28,73,88,388,403,418,433,448",
+        "experiments/150-browser-desk.ts:871",
+        "packages/fabrika/src/agents/acp/harness.env.laws.test.ts:19",
+        ".agents/skills/lead/scripts/redact.test.ts:77",
+        "packages/fabrika/src/host/sshsig.test.ts:113",
+        "packages/fabrika/src/host/sshsig.ts:194"
+      ]
+    }
+  },
+  "network_denied_run": {
+    "tool": "gitleaks git, last 200",
+    "hits": 1,
+    "same_as_with_network": true
+  },
+  "toy_repo": {
+    "made_up_word": "zorblatt-quux",
+    "re_indent_only_3_lines": {
+      "gitleaks": 3,
+      "gitleaks_with_git_b": 0,
+      "gitleaks_with_baseline_from_first_commit": 3,
+      "leakgrep": 3,
+      "leakgrep_with_git_b": 0
+    },
+    "first_time_indent_1_line": {
+      "gitleaks": 1,
+      "gitleaks_with_git_b": 1,
+      "leakgrep": 1,
+      "leakgrep_with_git_b": 1
+    },
+    "word_made_by_deleting_a_space_real_leak": {
+      "gitleaks": 1,
+      "gitleaks_with_git_b": 1,
+      "leakgrep": 1,
+      "leakgrep_with_git_b": 1
+    },
+    "only_removes_a_line_with_the_word": {
+      "gitleaks": 0,
+      "leakgrep": 0
+    },
+    "one_sample_per_kind": {
+      "home_folder_path": {
+        "gitleaks": false,
+        "leakgrep": true
+      },
+      "tmp_path_ending_in_a_user_id": {
+        "gitleaks": false,
+        "leakgrep": true
+      },
+      "em_dash": {
+        "gitleaks": false,
+        "leakgrep": true
+      },
+      "design_canvas_link": {
+        "gitleaks": false,
+        "leakgrep": true
+      },
+      "word_in_upper_case": {
+        "gitleaks": true,
+        "leakgrep": true
+      },
+      "npm_token": {
+        "gitleaks": true,
+        "leakgrep": true
+      },
+      "github_classic_token": {
+        "gitleaks": true,
+        "leakgrep": true
+      },
+      "github_fine_grained_token": {
+        "gitleaks": true,
+        "leakgrep": true
+      },
+      "pem_private_key_block": {
+        "gitleaks": true,
+        "leakgrep": true
+      },
+      "this_repos_own_url": {
+        "gitleaks": false,
+        "leakgrep": false
+      },
+      "word_on_a_line_that_starts_with_a_plus": {
+        "gitleaks": true,
+        "leakgrep": true
+      }
+    },
+    "note": "the leakgrep numbers in this block are from before pull request 709; leakgrep_rerun holds the numbers on main now"
+  },
+  "not_run": [
+    "trufflehog",
+    "detect-secrets",
+    "betterleaks 1.10.0 (downloaded and checksum checked, the run was refused by the session's permission check)",
+    "GitHub push protection"
+  ],
+  "leakgrep_rerun": {
+    "date": "2026-11-10",
+    "leakgrep_at": "169b24bb, after pull request 709",
+    "re_indent_only_3_lines": 0,
+    "first_time_indent_1_line": 0,
+    "word_made_by_deleting_a_space_real_leak": 1,
+    "only_removes_a_line_with_the_word": 0
+  }
+}

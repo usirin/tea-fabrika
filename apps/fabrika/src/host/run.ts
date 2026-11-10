@@ -1,24 +1,24 @@
-import {monitorEventLoopDelay} from "node:perf_hooks";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
-import {keepJobs, layerRecordTraces, openJobs, stepsInto, writerText} from "@kampus/fabrika-old";
-import {summonManager} from "@kampus/fabrika-old/agents/summon";
-import {RestartRefused} from "@kampus/fabrika-old/mcp";
-import {recordTracing} from "@kampus/fabrika-old/otel";
-import {sqliteRecords} from "@kampus/fabrika-old/records";
-import {fileStorage} from "@kampus/fabrika-old/storage/node";
-import {Author} from "@tea-fabrika/tracker";
-import {Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope} from "effect";
-import {SocketServer} from "effect/socket";
-import {BUILD} from "../build-id.ts";
-import {fileHistory, sharedHistory} from "../editor/history.ts";
-import {agentSessions} from "./agent-session.ts";
-import {connectionOf, hostLedger} from "./connection.ts";
-import {KeybindingManager} from "./keybindings.ts";
-import {holdLock} from "./lock.ts";
-import {logSteps, sampleLag} from "./log.ts";
-import {leaveNote, takeNote} from "./restart.ts";
-import {serve} from "./serve.ts";
-import {pathsOf, reach} from "./socket.ts";
+import { keepJobs, layerRecordTraces, openJobs, stepsInto, writerText } from "@kampus/fabrika-old";
+import { summonManager } from "@kampus/fabrika-old/agents/summon";
+import { RestartRefused } from "@kampus/fabrika-old/mcp";
+import { recordTracing } from "@kampus/fabrika-old/otel";
+import { sqliteRecords } from "@kampus/fabrika-old/records";
+import { fileStorage } from "@kampus/fabrika-old/storage/node";
+import { Author } from "@tea-fabrika/tracker";
+import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
+import { SocketServer } from "effect/socket";
+import { BUILD } from "../build-id.ts";
+import { fileHistory, sharedHistory } from "../editor/history.ts";
+import { agentSessions } from "./agent-session.ts";
+import { connectionOf, hostLedger } from "./connection.ts";
+import { KeybindingManager } from "./keybindings.ts";
+import { holdLock } from "./lock.ts";
+import { logSteps, sampleLag } from "./log.ts";
+import { leaveNote, takeNote } from "./restart.ts";
+import { serve } from "./serve.ts";
+import { pathsOf, reach } from "./socket.ts";
 
 // The host on a home: its socket, its files and its services, around the server (serve.ts).
 // host/main.ts runs it as a process of its own; a test runs it in its own process, on a home of
@@ -68,216 +68,193 @@ import {pathsOf, reach} from "./socket.ts";
 
 /** Another host answers on this home's socket already. */
 export class HostAnswers extends Schema.TaggedError<HostAnswers>()("HostAnswers", {
-	sock: Schema.String,
+  sock: Schema.String,
 }) {}
 
 export const runHost = (options: {
-	readonly home: string;
-	/** The host's pid, written for a test to stop its own host by. */
-	readonly pid: number;
-	/** The link's version this host speaks, for a test of an old host. */
-	readonly ours?: number | undefined;
-	/** The build this host's hello names, for a test of an older host; `null` names none. */
-	readonly build?: string | null | undefined;
-	/**
-	 * The person's settings folder, which holds keybindings.toml (host/settings.ts,
-	 * `settingsFolder`): `~/.fabrika` for the owner's start. The home itself when not said, as for
-	 * a test's or an agent's start, so none reads the person's real file.
-	 */
-	readonly settings?: string | undefined;
-	/** The host runs on a Mac: `mod` in the keys file is Cmd there, and Ctrl elsewhere. */
-	readonly mac?: boolean | undefined;
-	/**
-	 * The person's git repository, where the agents they summon work (`FABRIKA_REPO`). Not said:
-	 * the host keeps no summoned agents, and tsh's `summon` says how to give it one.
-	 */
-	readonly repo?: string | undefined;
+  readonly home: string;
+  /** The host's pid, written for a test to stop its own host by. */
+  readonly pid: number;
+  /** The link's version this host speaks, for a test of an old host. */
+  readonly ours?: number | undefined;
+  /** The build this host's hello names, for a test of an older host; `null` names none. */
+  readonly build?: string | null | undefined;
+  /**
+   * The person's settings folder, which holds keybindings.toml (host/settings.ts,
+   * `settingsFolder`): `~/.fabrika` for the owner's start. The home itself when not said, as for
+   * a test's or an agent's start, so none reads the person's real file.
+   */
+  readonly settings?: string | undefined;
+  /** The host runs on a Mac: `mod` in the keys file is Cmd there, and Ctrl elsewhere. */
+  readonly mac?: boolean | undefined;
+  /**
+   * The person's git repository, where the agents they summon work (`FABRIKA_REPO`). Not said:
+   * the host keeps no summoned agents, and tsh's `summon` says how to give it one.
+   */
+  readonly repo?: string | undefined;
 }) =>
-	Effect.gen(function* () {
-		const {home, pid, ours, build, settings = home, mac = false, repo} = options;
-		/** The build this host names: `BUILD`, but in a test of an older host. */
-		const named = build === undefined ? BUILD : build;
-		const fs = yield* FileSystem.FileSystem;
-		const path = yield* Path.Path;
-		const paths = yield* pathsOf(home);
-		const outer = yield* Effect.scope;
-		yield* fs.makeDirectory(paths.dir, {recursive: true, mode: 0o700});
-		// A folder made before, by hand or by an older build, gets the narrow mode too.
-		yield* fs.chmod(paths.dir, 0o700);
-		// Under the start lock (host/lock.ts), from the look at the socket until this host listens
-		// on it: a host started at the same moment waits, then finds this one answering.
-		const connection = yield* connectionOf(home);
-		const {server, agents} = yield* Effect.scoped(
-			Effect.gen(function* () {
-				yield* holdLock(paths.lock, paths.dir);
-				const found = yield* reach(paths.sock);
+  Effect.gen(function* () {
+    const { home, pid, ours, build, settings = home, mac = false, repo } = options;
+    /** The build this host names: `BUILD`, but in a test of an older host. */
+    const named = build === undefined ? BUILD : build;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const paths = yield* pathsOf(home);
+    const outer = yield* Effect.scope;
+    yield* fs.makeDirectory(paths.dir, { recursive: true, mode: 0o700 });
+    // A folder made before, by hand or by an older build, gets the narrow mode too.
+    yield* fs.chmod(paths.dir, 0o700);
+    // Under the start lock (host/lock.ts), from the look at the socket until this host listens
+    // on it: a host started at the same moment waits, then finds this one answering.
+    const connection = yield* connectionOf(home);
+    const { server, agents } = yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* holdLock(paths.lock, paths.dir);
+        const found = yield* reach(paths.sock);
 
-				if (found === "live") {
-					return yield* new HostAnswers({sock: paths.sock});
-				}
+        if (found === "live") {
+          return yield* new HostAnswers({ sock: paths.sock });
+        }
 
-				if (found === "stale") {
-					yield* fs.remove(paths.sock);
-				}
+        if (found === "stale") {
+          yield* fs.remove(paths.sock);
+        }
 
-				// No host answers, and this one holds the lock: an agents' socket here was left by one that is gone.
-				if (yield* fs.exists(paths.mcp)) {
-					yield* fs.remove(paths.mcp);
-				}
+        // No host answers, and this one holds the lock: an agents' socket here was left by one that is gone.
+        if (yield* fs.exists(paths.mcp)) {
+          yield* fs.remove(paths.mcp);
+        }
 
-				const made = yield* NodeSocketServer.make({path: paths.sock}).pipe(Scope.provide(outer));
-				yield* fs.chmod(paths.sock, 0o600);
-				// Every home's agents' socket (host/agents.ts).
-				const forAgents = yield* NodeSocketServer.make({path: paths.mcp}).pipe(
-					Scope.provide(outer),
-				);
-				yield* fs.chmod(paths.mcp, 0o600);
-				yield* fs.writeFileString(paths.pid, `${pid}\n`);
-				return {server: made, agents: forAgents};
-			}),
-		);
-		// The pid goes while this host still listens, so it never removes the pid of a host
-		// started after it. The socket's own file goes as the server closes: Node removes it
-		// before it lets go of the socket (libuv's `uv__pipe_close`), so this host never removes
-		// a socket another host listens on.
-		yield* Effect.addFinalizer(() => fs.remove(paths.pid).pipe(Effect.ignore));
+        const made = yield* NodeSocketServer.make({ path: paths.sock }).pipe(Scope.provide(outer));
+        yield* fs.chmod(paths.sock, 0o600);
+        // Every home's agents' socket (host/agents.ts).
+        const forAgents = yield* NodeSocketServer.make({ path: paths.mcp }).pipe(Scope.provide(outer));
+        yield* fs.chmod(paths.mcp, 0o600);
+        yield* fs.writeFileString(paths.pid, `${pid}\n`);
+        return { server: made, agents: forAgents };
+      }),
+    );
+    // The pid goes while this host still listens, so it never removes the pid of a host
+    // started after it. The socket's own file goes as the server closes: Node removes it
+    // before it lets go of the socket (libuv's `uv__pipe_close`), so this host never removes
+    // a socket another host listens on.
+    yield* Effect.addFinalizer(() => fs.remove(paths.pid).pipe(Effect.ignore));
 
-		const at = (...names: string[]) => path.join(home, ...names);
-		const ledger = yield* Layer.build(hostLedger(home));
-		const history = yield* sharedHistory(yield* fileHistory(at("history")));
-		const kept = yield* fs.readFileString(at("desk.json")).pipe(
-			Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
-			Effect.orElseSucceed((): unknown => null),
-		);
-		// The asks' marks, as written; serve.ts reads them, and says so when they do not read.
-		const marks = yield* fs.readFileString(at("asks.json")).pipe(
-			Effect.catchIf(
-				(e) => e.reason._tag === "NotFound",
-				() => Effect.succeed(null),
-			),
-			Effect.catch((e) =>
-				Effect.as(
-					Effect.logWarning(`fabrika host: could not read the asks' later and seen: ${e.message}`),
-					null,
-				),
-			),
-		);
-		// Each job's record, kept as the person who runs the host: the table writes its start and
-		// end, the runs' storage its steps, the tracer its spans. `trace` reads them.
-		const records = yield* sqliteRecords({
-			dir: at("records"),
-			by: writerText(Context.get(ledger, Author)),
-		});
-		// The note a restart left (host/restart.ts), taken now that this host is the one that
-		// listens: a host that stepped aside above never reads it.
-		const before = yield* takeNote(paths);
-		// One job table for the host process, for every tile's tsh, open until the host stops. After
-		// a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
-		// The agents the person summons, in their repository, kept in the home for the next start.
-		const summons =
-			repo === undefined
-				? Context.empty()
-				: yield* Layer.build(
-						summonManager({storage: fileStorage(at("storage", "summon")), folder: repo}),
-					);
-		const jobs = {
-			...keepJobs(
-				yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))),
-				records,
-				"laptop",
-			),
-			...(before === null ? {} : {restarted: {by: before.by}}),
-		};
-		// The keys file, read now and again on each save, by the one reader of the settings folder.
-		const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-		const keybindings = yield* KeybindingManager.make({
-			folder: settings,
-			mac,
-			by: writerText(Context.get(ledger, Author)),
-		});
-		yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
-		// Every start's line: its build, and after a restart who restarted the host before it, and why.
-		yield* Effect.logInfo("host_began").pipe(
-			Effect.annotateLogs({
-				build: named ?? "none",
-				...(before === null
-					? {}
-					: {
-							after: "restart",
-							by: before.by,
-							...(before.why === null ? {} : {why: before.why}),
-						}),
-			}),
-		);
-		// The thread's lag, one second at a time: a lag line in the log when it is starved (log.ts).
-		const delay = monitorEventLoopDelay({resolution: 10});
-		delay.enable();
-		yield* Effect.addFinalizer(() => Effect.sync(() => delay.disable()));
-		yield* Effect.sleep("1 second").pipe(
-			Effect.andThen(sampleLag(delay)),
-			Effect.forever,
-			Effect.forkScoped,
-		);
-		return yield* serve({
-			history,
-			keybindings,
-			ours,
-			build: named,
-			agents: {server: agents},
-			restarts: {
-				before,
-				leave: (note) =>
-					leaveNote(paths, note).pipe(
-						Effect.provideContext(platform),
-						Effect.mapError(
-							(e) =>
-								new RestartRefused({
-									why: `the host could not leave its note for the next host: ${e.message}`,
-								}),
-						),
-					),
-			},
-			jobs,
-			pid,
-			ledger: Option.isNone(connection)
-				? ({kind: "own"} as const)
-				: ({
-						kind: "server",
-						address: `${connection.value.url}/${connection.value.ledger}`,
-						login: connection.value.login,
-						sessionFor: yield* agentSessions(home),
-					} as const),
-			desk: {
-				kept,
-				save: (saved) =>
-					fs
-						.writeFileString(at("desk.json"), JSON.stringify(saved))
-						.pipe(
-							Effect.catch((e) =>
-								Effect.logError(`fabrika host: could not keep the desk: ${e.message}`),
-							),
-						),
-				forget: fs.remove(at("desk.json")).pipe(Effect.ignore),
-			},
-			asks: {
-				kept: marks,
-				// Written beside, then moved over: a host stopped mid-write leaves the last whole file.
-				save: (saved) =>
-					fs.writeFileString(at("asks.json.new"), JSON.stringify(saved)).pipe(
-						Effect.andThen(fs.rename(at("asks.json.new"), at("asks.json"))),
-						Effect.catch((e) =>
-							Effect.logError(
-								`fabrika host: could not keep the asks' later and seen: ${e.message}`,
-							),
-						),
-					),
-			},
-		}).pipe(
-			Effect.provideService(SocketServer.SocketServer, server),
-			Effect.provideContext(ledger),
-			Effect.provideContext(summons),
-			// Each lane step's begin and end in the log, read off the spans the records keep.
-			Effect.provide(logSteps),
-			Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),
-		);
-	});
+    const at = (...names: string[]) => path.join(home, ...names);
+    const ledger = yield* Layer.build(hostLedger(home));
+    const history = yield* sharedHistory(yield* fileHistory(at("history")));
+    const kept = yield* fs.readFileString(at("desk.json")).pipe(
+      Effect.flatMap((text) => Effect.try(() => JSON.parse(text))),
+      Effect.orElseSucceed((): unknown => null),
+    );
+    // The asks' marks, as written; serve.ts reads them, and says so when they do not read.
+    const marks = yield* fs.readFileString(at("asks.json")).pipe(
+      Effect.catchIf(
+        (e) => e.reason._tag === "NotFound",
+        () => Effect.succeed(null),
+      ),
+      Effect.catch((e) =>
+        Effect.as(Effect.logWarning(`fabrika host: could not read the asks' later and seen: ${e.message}`), null),
+      ),
+    );
+    // Each job's record, kept as the person who runs the host: the table writes its start and
+    // end, the runs' storage its steps, the tracer its spans. `trace` reads them.
+    const records = yield* sqliteRecords({
+      dir: at("records"),
+      by: writerText(Context.get(ledger, Author)),
+    });
+    // The note a restart left (host/restart.ts), taken now that this host is the one that
+    // listens: a host that stepped aside above never reads it.
+    const before = yield* takeNote(paths);
+    // One job table for the host process, for every tile's tsh, open until the host stops. After
+    // a restart, each tile's tsh names who restarted it beside its jobs from an earlier tsh.
+    // The agents the person summons, in their repository, kept in the home for the next start.
+    const summons =
+      repo === undefined
+        ? Context.empty()
+        : yield* Layer.build(summonManager({ storage: fileStorage(at("storage", "summon")), folder: repo }));
+    const jobs = {
+      ...keepJobs(yield* openJobs(fileStorage(at("storage", "jobs"), stepsInto(records))), records, "laptop"),
+      ...(before === null ? {} : { restarted: { by: before.by } }),
+    };
+    // The keys file, read now and again on each save, by the one reader of the settings folder.
+    const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
+    const keybindings = yield* KeybindingManager.make({
+      folder: settings,
+      mac,
+      by: writerText(Context.get(ledger, Author)),
+    });
+    yield* Effect.logInfo(`fabrika host: listening, pid ${pid}`);
+    // Every start's line: its build, and after a restart who restarted the host before it, and why.
+    yield* Effect.logInfo("host_began").pipe(
+      Effect.annotateLogs({
+        build: named ?? "none",
+        ...(before === null
+          ? {}
+          : {
+              after: "restart",
+              by: before.by,
+              ...(before.why === null ? {} : { why: before.why }),
+            }),
+      }),
+    );
+    // The thread's lag, one second at a time: a lag line in the log when it is starved (log.ts).
+    const delay = monitorEventLoopDelay({ resolution: 10 });
+    delay.enable();
+    yield* Effect.addFinalizer(() => Effect.sync(() => delay.disable()));
+    yield* Effect.sleep("1 second").pipe(Effect.andThen(sampleLag(delay)), Effect.forever, Effect.forkScoped);
+    return yield* serve({
+      history,
+      keybindings,
+      ours,
+      build: named,
+      agents: { server: agents },
+      restarts: {
+        before,
+        leave: (note) =>
+          leaveNote(paths, note).pipe(
+            Effect.provideContext(platform),
+            Effect.mapError(
+              (e) =>
+                new RestartRefused({
+                  why: `the host could not leave its note for the next host: ${e.message}`,
+                }),
+            ),
+          ),
+      },
+      jobs,
+      pid,
+      ledger: Option.isNone(connection)
+        ? ({ kind: "own" } as const)
+        : ({
+            kind: "server",
+            address: `${connection.value.url}/${connection.value.ledger}`,
+            login: connection.value.login,
+            sessionFor: yield* agentSessions(home),
+          } as const),
+      desk: {
+        kept,
+        save: (saved) =>
+          fs
+            .writeFileString(at("desk.json"), JSON.stringify(saved))
+            .pipe(Effect.catch((e) => Effect.logError(`fabrika host: could not keep the desk: ${e.message}`))),
+        forget: fs.remove(at("desk.json")).pipe(Effect.ignore),
+      },
+      asks: {
+        kept: marks,
+        // Written beside, then moved over: a host stopped mid-write leaves the last whole file.
+        save: (saved) =>
+          fs.writeFileString(at("asks.json.new"), JSON.stringify(saved)).pipe(
+            Effect.andThen(fs.rename(at("asks.json.new"), at("asks.json"))),
+            Effect.catch((e) => Effect.logError(`fabrika host: could not keep the asks' later and seen: ${e.message}`)),
+          ),
+      },
+    }).pipe(
+      Effect.provideService(SocketServer.SocketServer, server),
+      Effect.provideContext(ledger),
+      Effect.provideContext(summons),
+      // Each lane step's begin and end in the log, read off the spans the records keep.
+      Effect.provide(logSteps),
+      Effect.provide(Layer.merge(layerRecordTraces(records), recordTracing(records))),
+    );
+  });
