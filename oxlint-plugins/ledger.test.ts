@@ -91,13 +91,16 @@ describe("`.agents/` code is held to next/'s rules, 0033", () => {
 		"export const fooOf = 1;",
 	].join("\n");
 
-	it("scenario: the rules fire in a script and the test rules stay off in its test", async () => {
+	// scenario: one script and its test, since the config is what is under test. Only next/'s tests
+	// may turn an edge rule off (edge-comment.test.ts), so `no-promises` fires in an `.agents/` test.
+	it("scenario: the rules fire in a script, and its test keeps the edge rules on", async () => {
 		const fires = await plant({[script]: body, [test]: body});
 		expect(fires("fabrika(no-node-imports)", script)).toEqual([1]);
 		expect(fires("fabrika(no-node-filesystem)", script)).toEqual([1]);
 		expect(fires("fabrika(no-promises)", script).length).toBeGreaterThan(0);
 		expect(fires("fabrika(no-of)", script)).toEqual([3]);
-		expect(fires("fabrika(no-promises)", test)).toEqual([]);
+		expect(fires("fabrika(no-promises)", test).length).toBeGreaterThan(0);
+		expect(fires("fabrika(no-node-imports)", test)).toEqual([]);
 		expect(fires("fabrika(no-of)", test)).toEqual([3]);
 	});
 });

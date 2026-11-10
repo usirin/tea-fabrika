@@ -559,6 +559,216 @@
 			"file": ".agents/skills/mutation/scripts/sample.ts",
 			"rule": "fabrika(no-promises)",
 			"code": "const result = await new Instrumenter(logger).instrument(files, {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<{code: number | null; signal: NodeJS.Signals | null; text: string}>("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"K1 overlapping fetches preserve both branches' independently verified links\", async () => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.boolean(), async (reverse) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<{code: number | null; text: string}>((resolve, reject) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "for (const got of await Promise.all("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "for (const got of await Promise.all("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"K3 SIGTERM releases the slot and records the interrupted run without usage\", async () => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.boolean(), async (usage) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const got = await signalRun(b);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "async (runner) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(word, async (value) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const got = await signalRun(b, runner);"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 stops a worker the child leaves behind when it exits on its own\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.integer({min: 0, max: 5}), async (exit) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 signals remove the temporary config and stop the whole child group\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.constantFrom(\"SIGTERM\", \"SIGINT\"), async (signal) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const done = new Promise<number | null>((resolve) => child.once(\"exit\", resolve));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const code = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const code = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<string>((r) => setTimeout(() => r(\"still running\"), 3_000)),"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await done;"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 package imports reach a discovered test and a real tested mutant\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const done = new Promise<number | null>((resolve, reject) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "status = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "status = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<\"deadline\">((resolve) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 100));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 100));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await done;"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 10));"
 		}
 	]
 }
