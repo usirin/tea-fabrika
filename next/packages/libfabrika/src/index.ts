@@ -1,7 +1,7 @@
 // The new fabrika's library, its app layer (Tier 1, P11): programs, their saved state, view
 // patches and the runner that steps a process. Browser-safe: it reaches no platform.
-export * as Id from "./id.ts";
-export { IdError, type IdSchema, type IdValue } from "./id.ts";
+export * as Id from "./Id.ts";
+export { IdError, type IdSchema, type IdValue } from "./Id.ts";
 export {
   Alarm,
   CheckedWriter,
@@ -13,8 +13,8 @@ export {
   type Update,
   type View,
   WatcherManager,
-} from "./app/entry.ts";
-export { diff, type Patch } from "./app/patch.ts";
+} from "./runtime/Entry.ts";
+export { diff, type Patch } from "./runtime/Patch.ts";
 export {
   EventPolicy,
   Input,
@@ -26,8 +26,14 @@ export {
   type Stepper,
   stepper,
   Write,
-} from "./app/program.ts";
-export { type Descriptor, type Opened, ProgramRunner, RunnerError, Sent } from "./app/runner.ts";
-export { Saved } from "./app/state.ts";
-export { Declaration, type Execution, type ExecutionCalls, nodeExecution, workerExecution } from "./app/execution.ts";
-export { Door, type ConnectionId } from "./door/index.ts";
+} from "./runtime/Program.ts";
+export { type Descriptor, type Opened, ProgramRunner, RunnerError, Sent } from "./runtime/Runner.ts";
+export { Saved } from "./runtime/State.ts";
+export {
+  Declaration,
+  type Execution,
+  type ExecutionCalls,
+  nodeExecution,
+  workerExecution,
+} from "./runtime/Execution.ts";
+export { Door, type ConnectionId } from "./gateway/index.ts";

@@ -33,7 +33,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 
 1. **A window's name is `<fingerprint>/<tab>`, and the key belongs to the browser profile.** Why: two tabs in one browser share one IndexedDB key. With one name per key, the second tab would close the first (gateway's code 4000). The code is per key too, so two tabs share one row. Cost: `tab` joins the signed hello. Sure: 85%.
 2. **A new window comes in from the menu bar, and the door reads one signature shape.** Settled by the owner. The person key writes SSHSIG, the same shape `ssh-keygen -Y sign` makes. Why: the door keeps one check, and anyone can re-check a grant with `ssh-keygen -Y verify` later. PR A keeps the terminal command `grant.ts` as the way in until PR B brings Approve. After B it stays only as a developer path. Cost: about 30 lines to write SSHSIG, and one more test vector. Sure: 85%.
-3. **One built file with programs and window scripts inside it, not env values.** Why: Cloudflare caps each env var at 5 KB ([limits](https://developers.cloudflare.com/workers/platform/limits/)), and the slice passes 664 KB of `WINDOW_JS`. It cannot deploy as is. Cost: carrying each built script as text in `build.ts`, about 40 lines. *Changed 2026-11-05:* this said esbuild's text loader; `next/` builds with Rolldown only (owner), and Rolldown's way to carry a script as text was not tried here (see [Packages](#packages)). Sure: 90% on the shape, less on the how until P16 tries it. *As built, 2026-11-09 (P16, [PR 687](https://github.com/usirin/tea-fabrika/pull/687)):* libfabrika's `build.ts` builds each program and its window scripts first, then hands them to the brain's build as text through a Rolldown plugin whose `load` hook answers `moduleType: "text"`, behind the generated module `virtual:fabrika-built`. The output is one `brain.mjs`. The code is in `next/packages/libfabrika/src/` (`build.ts`, `compiler.ts`, `app/built.ts`, `node/build.ts`, `node/css.ts`), and the app's `build.ts` only picks the programs. The local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)); on this base no program exports `./window`, so the window scripts measure 0 bytes.
+3. **One built file with programs and window scripts inside it, not env values.** Why: Cloudflare caps each env var at 5 KB ([limits](https://developers.cloudflare.com/workers/platform/limits/)), and the slice passes 664 KB of `WINDOW_JS`. It cannot deploy as is. Cost: carrying each built script as text in `build.ts`, about 40 lines. *Changed 2026-11-05:* this said esbuild's text loader; `next/` builds with Rolldown only (owner), and Rolldown's way to carry a script as text was not tried here (see [Packages](#packages)). Sure: 90% on the shape, less on the how until P16 tries it. *As built, 2026-11-09 (P16, [PR 687](https://github.com/usirin/tea-fabrika/pull/687)):* libfabrika's `build.ts` builds each program and its window scripts first, then hands them to the brain's build as text through a Rolldown plugin whose `load` hook answers `moduleType: "text"`, behind the generated module `virtual:fabrika-built`. The output is one `brain.mjs`. The code is in `next/packages/libfabrika/src/` (`build.ts`, `compiler.ts`, `runtime/Built.ts`, `node/build/bundle.ts`, `node/build/css.ts`), and the app's `build.ts` only picks the programs. The local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)); on this base no program exports `./window`, so the window scripts measure 0 bytes.
 4. **A program never gets a stub for its power.** Elm's answer: Cmds are data, the runtime does them. Why: `globalOutbound: null` and an empty env stay true for every program, so nothing new has to be checked in the box. Cost: `Program` gets a Cmd type, and `step` answers `{model, view, cmds, wake}`. Sure: 85%.
 5. **Fault replay can never fire a fault.** A fold ignores `cmds`; only a fresh letter fires them, and the letter is saved first. Why: otherwise every wake re-kills everything. Cost: two paths in the runner. Sure: 90%.
 6. **Laptop-only kills stay outside the program for now.** `kill -9` needs hands and C3's routing. The drill (`next/apps/fabrika/chaos-drill.ts`) does them and posts the result as a letter, so history stays in one stream. Why: no dead button in the window. Cost: one more script. Sure: 75%. The doubt is whether a button is wanted sooner. It waits with the items in [what can wait](#dropped-from-plan-115-and-what-can-wait), and nothing is lost: the facts have the same shape.
@@ -76,7 +76,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 
 **Two sets of T numbers.** "The note's T5" is that note's decision. A bare T5 is this plan's task.
 
-**The gap in PR 223:** the hello in `next/packages/libfabrika/src/transport/wire.ts` is unsigned (its comment says "`key` and `signed` wait for T5"), and the door checks only the origin.
+**The gap in PR 223:** the hello in `next/packages/libfabrika/src/transport/Wire.ts` is unsigned (its comment says "`key` and `signed` wait for T5"), and the door checks only the origin.
 
 **A first browser tab, step by step, and an Electron window goes the same way:**
 
@@ -478,7 +478,7 @@ Tools are listed at once, from the program table, so adding the line never fails
 **What an agent can do, in one table in the door.**
 
 ```ts
-// next/packages/libfabrika/src/transport/answer.ts, a sketch. A grant's `as` picks the list. Anything else answers {why: "not_for_agents"}.
+// next/packages/libfabrika/src/transport/Answer.ts, a sketch. A grant's `as` picks the list. Anything else answers {why: "not_for_agents"}.
 const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", "ledger.wait"];
 ```
 
@@ -922,7 +922,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 - **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `door.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `door.knock` itself stays.
 
 ```ts
-// A sketch. transport/answer.ts: Tier 1's Attached, grown. `Row` (waiting.ts) becomes a Schema.Struct, same fields.
+// A sketch. transport/Answer.ts: Tier 1's Attached, grown. `Row` (waiting.ts) becomes a Schema.Struct, same fields.
 export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
 export const Attached = Schema.TaggedUnion({
 	new: {client: Schema.String, nonce: Schema.String},
@@ -932,11 +932,11 @@ export const Attached = Schema.TaggedUnion({
 
 // data/project.ts: rings, in the object's own SQLite beside the log. Never a fact, never folded.
 //   ring {gateway, stream, after}   from ledger.wait; kept until `stream` passes `after`
-//                                   (P6 built it in data/referee.ts as {to, stream, after}: the data layer knows no gateway)
+//                                   (P6 built it in ledger/Referee.ts as {to, stream, after}: the data layer knows no gateway)
 //   ring {gateway, rows: true}      from door.watch; rung whenever the waiting rows or the let-in list change
 // append(stream) -> rev: read the rings on `stream` with after < rev, call rung(stream, rev) on each gateway, drop them.
 
-// transport/gateway.ts: answer the waits now met, keep the rest. No fiber, no timer.
+// transport/Connection.ts: answer the waits now met, keep the rest. No fiber, no timer.
 const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) => {
 	for (const ws of sockets) {
 		const a = attachmentFor(ws);
@@ -1004,7 +1004,7 @@ const Down = Schema.TaggedStruct("down", {
 	why: Schema.String, crashes: Schema.Number,
 	until: Schema.Number, // when it tries again, on the referee's clock
 });
-// Settled by P37, as built in next/packages/libfabrika/src/data/trace.ts.
+// Settled by P37, as built in next/packages/libfabrika/src/telemetry/Trace.ts.
 // One row per piece per hour, kept forever, in the object that wrote it. Not a ledger entry.
 const Summary = Schema.TaggedStruct("summary", {
 	piece: Schema.String,  // the span's name: "runner.step", "ledger.append", "sink.archive"
@@ -1110,7 +1110,7 @@ class KeyDown extends Schema.TaggedError<KeyDown>()("KeyDown", {why: Schema.Stri
 - **A line holds both words when it holds a Msg.** `{_tag: "send", body: {m: {type: "plus"}}}`: the line is ours and the Msg is tea's.
 
 ```ts
-// next/packages/libfabrika/src/data/log.ts, a sketch. The log stores any fact and knows no cases, so `Line` holds `_tag` as an open string.
+// next/packages/libfabrika/src/ledger/Log.ts, a sketch. The log stores any fact and knows no cases, so `Line` holds `_tag` as an open string.
 export const toLine = (fact: {readonly _tag: string}, from: {readonly by: string; readonly sentAt: string}): Line => {
 	const {_tag, ...body} = fact;
 	return {...from, _tag, body};
@@ -1127,7 +1127,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). The coordination half of the block below, `client-manager.ts` and `mailbox.ts`, is as planned: P9 built it anew, with `From`, `Revoke`, `Written` and `Members` beside it ([coordination, as built](#coordination-as-p9-built-it), 2026-11-07). These are the changes and additions.
 
 ```ts
-// next/packages/libfabrika/src/transport/wire.ts
+// next/packages/libfabrika/src/transport/Wire.ts
 export const Hello = Schema.Struct({
 	versions: Schema.Array(Schema.Number),
 	has: Schema.Array(Schema.String), // the Host Layer's list. Says can, never may. Nothing reads it yet.
@@ -1158,14 +1158,14 @@ export const Link = Schema.TaggedUnion({
 	online: {...Common, ping: Schema.Number, beat: Schema.Number, pongDue: Schema.Boolean},
 });
 
-// next/packages/libfabrika/src/transport/hello.ts (new). Pure but for WebCrypto.
+// next/packages/libfabrika/src/transport/Hello.ts (new). Pure but for WebCrypto.
 export type HelloBytes = {readonly nonce: string; readonly url: string; readonly tab: string};
 export const helloText: (h: HelloBytes) => string; // "fabrika-hello\n<url>\n<tab>\n<nonce>"
 export const fingerprint: (key: string) => Effect.Effect<string>; // "SHA256:<base64url>"
 export const checkHello: (hello: Hello, at: {readonly nonce: string; readonly url: string; readonly name: string}) =>
 	Effect.Effect<{readonly key: string} | {readonly why: "bad_signature" | "wrong_name"}>;
 
-// next/packages/libfabrika/src/transport/sshsig.ts (new). Written fresh, on the SSHSIG format; Ed25519 keys only.
+// next/packages/libfabrika/src/transport/Sshsig.ts (new). Written fresh, on the SSHSIG format; Ed25519 keys only.
 export const checkSshsig: (a: {
 	readonly text: string;
 	readonly armored: string;
@@ -1180,7 +1180,7 @@ export const writeSshsig: <E>(a: {
 	readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, E>;
 }) => Effect.Effect<string, E>;
 
-// next/packages/libfabrika/src/transport/waiting.ts (new). Pure. Kept in the project object's own storage, never in the log.
+// next/packages/libfabrika/src/gateway/internal/waiting.ts (new). Pure. Kept in the project object's own storage, never in the log.
 export type Row = {
 	readonly key: string; readonly label: string; readonly where: string; readonly code: string;
 	readonly until: number; readonly tabs: number; readonly pass: string | null; readonly has: ReadonlyArray<string>;
@@ -1194,7 +1194,7 @@ export const knock: (w: Waiting, k: {
 }) => Waiting;
 export const leave: (w: Waiting, key: string) => Waiting;
 
-// next/packages/libfabrika/src/transport/answer.ts (new): plan-115's, with the door's states.
+// next/packages/libfabrika/src/transport/Answer.ts (new): plan-115's, with the door's states.
 export const Who = Schema.Struct({key: Schema.String, person: Schema.String, as: Schema.Literals(["window", "agent"])});
 export type Who = typeof Who.Type;
 export const Wait = Schema.Struct({id: Schema.String, stream: Schema.String, after: Schema.Int}); // a ledger.wait not met yet
@@ -1213,7 +1213,7 @@ export const answerFrame: <E>(
 	route: (method: string, params: unknown, who: Who, client: string) => Effect.Effect<Answer, E>,
 ) => Effect.Effect<{readonly send: string | null; readonly attached: Attached}>;
 
-// next/packages/libfabrika/src/coordination/client-manager.ts (new)
+// next/packages/libfabrika/src/access/ClientManager.ts (new)
 export const Saw = Schema.Struct({
 	code: Schema.String,
 	label: Schema.String, // what the tab claims; recorded, never trusted
@@ -1261,13 +1261,13 @@ export class ClientManager extends Context.Service<ClientManager, {
 	static readonly layer: (founder: Founder) => Layer.Layer<ClientManager, never, Ledger>;
 }
 
-// next/packages/libfabrika/src/coordination/mailbox.ts: as plan-115, and receive yields a Letter
+// next/packages/libfabrika/src/processes/Mailbox.ts: as plan-115, and receive yields a Letter
 export type Letter = {
 	readonly id: string; readonly m: unknown; readonly by: string; readonly for: string; readonly sentAt: string;
 	readonly parent: string | null; readonly traceId: string; readonly rev: number; readonly pos: number;
 };
 
-// next/packages/libfabrika/src/app/program.ts
+// next/packages/libfabrika/src/runtime/Program.ts
 /** Elm's ports, as data. A value on input `x` reaches the machine as the Msg {type: "x", value}. MCP tools are made from them, from PR D. */
 export type Input<V> =
 	| {readonly schema: Schema.Top; readonly description: string; readonly writes: true; readonly personOnly: boolean}
@@ -1297,7 +1297,7 @@ export const stepper: <S, M extends {readonly type: string}, V, C>(program: Prog
 	readonly fold: (model: unknown, m: unknown) => Stepped<C>; // PR D: update only, for what the log already holds
 };
 
-// next/packages/libfabrika/src/app/runner.ts: plan-115's, with Cmds, the alarm and a failure that is not a refusal
+// next/packages/libfabrika/src/runtime/Runner.ts: plan-115's, with Cmds, the alarm and a failure that is not a refusal
 export class ProgramRunner extends Context.Service<ProgramRunner, {
 	readonly open: (client: string) => Effect.Effect<{readonly opened: string} | {readonly why: "no_program"}, LedgerError | ProgramDown>;
 	readonly msg: (letter: Omit<Letter, "rev" | "pos">) => Effect.Effect<Sent, LedgerError | ProgramDown>;
@@ -1419,7 +1419,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 // No brain method and no bridge call makes a one-time link.
 ```
 
-**Changes to code plan-115 left alone:** `transport/wire.ts` takes the new `Hello`, `transport/link.ts` gains two states (`challenged`, `waiting_grant`), and `window/machine.ts` gains Cmds `sign` and `knock` and `Model.link.{fingerprint, code}`. So p5 and `link.test.ts` change with the exam. `programs/counter/program.ts` declares its ports, and in PR D its `refuse`. **The slice's tags move too:** `Message` in `transport/wire.ts` and `Link` in `transport/link.ts` go from `is` to `_tag`, with their readers in `transport/gateway.ts`, `window/machine.ts` and `window/main.tsx`. `Line` in `data/log.ts` and its SQL column go from `kind` to `_tag`, and `coordination/mailbox.ts` and `coordination/process-manager.ts` make their lines with `toLine`. So `log.test.ts`, `wire.test.ts`, `machine.test.ts` and the line read in `e2e.ts` change with the exam too. Everything else in plan-115's "no edits" list holds, except `window/page.ts`, which takes the new style.
+**Changes to code plan-115 left alone:** `transport/Wire.ts` takes the new `Hello`, `transport/link.ts` gains two states (`challenged`, `waiting_grant`), and `window/machine.ts` gains Cmds `sign` and `knock` and `Model.link.{fingerprint, code}`. So p5 and `link.test.ts` change with the exam. `programs/counter/program.ts` declares its ports, and in PR D its `refuse`. **The slice's tags move too:** `Message` in `transport/Wire.ts` and `Link` in `transport/link.ts` go from `is` to `_tag`, with their readers in `transport/Connection.ts`, `window/machine.ts` and `window/main.tsx`. `Line` in `ledger/Log.ts` and its SQL column go from `kind` to `_tag`, and `processes/Mailbox.ts` and `processes/ProcessManager.ts` make their lines with `toLine`. So `log.test.ts`, `wire.test.ts`, `machine.test.ts` and the line read in `e2e.ts` change with the exam too. Everything else in plan-115's "no edits" list holds, except `window/page.ts`, which takes the new style.
 
 **Choices inside that block:** plan-115's stand. `append` answers `Rev`, numbers and checks share one sync block, one `ManagedRuntime` per object with no finalizers, no Layer fails at build, refusals are plain data. *Changed 2026-11-07 by P6, approved by the lead agent: `append` answers a tagged `placed {rev, pos}` or `refused {why}`, the ledger's answers only ([as built](#the-data-layer-as-p6-built-it)).* **Q1 and Q2 of plan-115 are now my decisions:** a failed `step` is not `bad_msg`, with no answer and no line, so the letter resends (p25). The skip list is below. **Q3:** speed caps block only on the laptop. Why each: as plan-115 argued. Sure: 85%, 80%, 80%.
 
@@ -1428,7 +1428,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 Built 2026-11-07, from [P6's row](./tier-1.md#the-pull-requests-one-at-a-time). The exported names, with their bodies left out; the code in `next/packages/libfabrika/src/data/` is the source.
 
 ```ts
-// data/log.ts
+// ledger/Log.ts
 export const Rev: Schema.Int;                         // 0 means before the first entry
 export const CauseText: Schema.String;                // matches /^in-[0-9a-f]{8}-[1-9][0-9]*$/
 export type InputId = Brand.Branded<string, "InputId">; // a type only: P10's door makes one
@@ -1443,7 +1443,7 @@ export const Appended = Schema.TaggedUnion({
 });
 export const Waited = Schema.TaggedUnion({ready: {rev: Rev}, parked: {}});
 
-// data/ledger.ts
+// ledger/Ledger.ts
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
 	why: Schema.Literals(["unreachable", "bad_row", "storage", "refused"]), // refused: P9, a line the caller needed written
 	message: Schema.optional(Schema.String),            // in the span's failure, never in a tag
@@ -1465,7 +1465,7 @@ export type LedgerCalls = {                            // answers are decoded by
 	wait(stream: string, after: number, reader: string): Promise<unknown>;
 };
 
-// data/referee.ts: the referee's logic, plain code, the same on workerd and Node
+// ledger/Referee.ts: the referee's logic, plain code, the same on workerd and Node
 export interface Sql {
 	readonly exec: (query: string, ...params: ReadonlyArray<SqlValue>) => ReadonlyArray<Record<string, SqlValue>>;
 	readonly transaction: <A>(step: () => A) => A;      // workerd: ctx.storage.transactionSync
@@ -1476,7 +1476,7 @@ export class Referee extends Context.Service<Referee, {/* append, read (one page
 	static readonly layer: (sql: Sql) => Layer.Layer<Referee, never, Doorbell>;
 }
 
-// data/sqlite.ts, the ./sqlite subpath, Node only: node:sqlite as an Sql, for tests
+// ledger/NodeSqlite.ts, the ./sqlite subpath, Node only: node:sqlite as an Sql, for tests
 export const nodeSql: (db: DatabaseSync) => Sql;
 ```
 
@@ -1543,7 +1543,7 @@ export class ClientManager extends Context.Service<ClientManager, {
 
 ### Processes, as P33 built it
 
-Built 2026-11-08, from [P33's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 252, on its way to main. It replaces P9's `ProcessManager` above. The exported names, bodies left out; the code in `next/packages/libfabrika/src/coordination/` and `data/ledger-transaction.ts` is the source.
+Built 2026-11-08, from [P33's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 252, on its way to main. It replaces P9's `ProcessManager` above. The exported names, bodies left out; the code in `next/packages/libfabrika/src/coordination/` and `ledger/LedgerTransaction.ts` is the source.
 
 ```ts
 // The whole idea, as built. Values are test values.
@@ -1557,7 +1557,7 @@ const second = yield* processes.start(
 ```
 
 ```ts
-// data/ledger-transaction.ts: several appends in one SQLite transaction, shared with Referee
+// ledger/LedgerTransaction.ts: several appends in one SQLite transaction, shared with Referee
 export interface LedgerTurn {
 	readonly read: (stream: string, after: Rev) => Iterable<Entry>;
 	readonly append: (stream: string, id: string, line: Line) => {readonly rev: Rev; readonly pos: Rev};
@@ -1648,7 +1648,7 @@ export class GatewayManager extends Context.Service<GatewayManager, {
 
 ### Programs, as P11 built it
 
-Built 2026-11-08, from [P11's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 255, its pull request to come. It builds detail T3, p14, p22, p25's half, p35 and p69, and saved state's S2 and S3. The code is in `next/packages/libfabrika/src/app/` (`program.ts`, `state.ts`, `entry.ts`, `runner.ts`, `patch.ts`), `coordination/process-store.ts`, `src/testing.ts` and `next/programs/counter/`. These are the exported names, bodies left out; the code is the source. About 5,380 lines in 34 files, 3,640 of them tests.
+Built 2026-11-08, from [P11's row](./tier-1.md#the-pull-requests-one-at-a-time), tracker ticket 255, its pull request to come. It builds detail T3, p14, p22, p25's half, p35 and p69, and saved state's S2 and S3. The code is in `next/packages/libfabrika/src/app/` (`program.ts`, `state.ts`, `entry.ts`, `runner.ts`, `patch.ts`), `runtime/ProcessStore.ts`, `src/testing.ts` and `next/programs/counter/`. These are the exported names, bodies left out; the code is the source. About 5,380 lines in 34 files, 3,640 of them tests.
 
 ```ts
 // The whole idea, as built. Values are test values.
@@ -1662,7 +1662,7 @@ yield* runner.due(Date.parse("2026-11-08T10:05:00Z")); // the object's alarm fir
 **The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../direction/program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
 
 ```ts
-// app/program.ts
+// runtime/Program.ts
 export const Program = Schema.Struct({
 	name: Schema.NonEmptyString,
 	machine: /* a tea machine: update table, cmds, init */,
@@ -1698,7 +1698,7 @@ export type Stepper = {
 };
 export const stepper: (declared: unknown) => Stepper;   // runs no Cmd, ever
 
-// app/state.ts: saved state, S3
+// runtime/State.ts: saved state, S3
 export class Saved extends Schema.Opaque<Saved>()(Schema.Struct({v, build, model: Schema.Json, after: Rev})) {
 	static upgrade(raw: unknown, state: State, build: string): {saved: Saved; ran: ReadonlyArray<string>};
 	// one named upgrade per number, on a copy; a gap, a repeated `from`, a future v, a throw or a bad model is ProgramDown saved_state
@@ -1708,7 +1708,7 @@ export class Saved extends Schema.Opaque<Saved>()(Schema.Struct({v, build, model
 **What the runner is given.** Every outside piece is a service, so P12 wires the real ones and Node tests wire the same shapes.
 
 ```ts
-// app/entry.ts
+// runtime/Entry.ts
 export const Incoming = Schema.Struct({
 	id: Schema.NonEmptyString,                          // P10's stable letter id
 	envelope: Schema.Struct({id: InputId, by: Writer, arrivedAt: Schema.Number, input: Schema.Unknown}),
@@ -1731,7 +1731,7 @@ export class WatcherManager /* publish: (client, update: Update) => Effect<void>
 export class Alarm /* set: (at: number | null) => Effect<void> */ {}
 export class Recording /* flush */ { static layer: Layer<Recording, never, SpanSink | RecordManager | Archive> }
 
-// app/runner.ts
+// runtime/Runner.ts
 export type Descriptor = {id: string; name: string; program: string; build: string; owner: Writer};
 export const Sent = Schema.TaggedUnion({accepted: {rev, pos}, refused: Refusal.fields});
 export class ProgramRunner extends Context.Service<ProgramRunner, {
@@ -1745,7 +1745,7 @@ export class ProgramRunner extends Context.Service<ProgramRunner, {
 export class RunnerError /* why: "bad_input" | "bad_client" */ {}
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError;
 
-// coordination/process-store.ts: the process object's own storage
+// runtime/ProcessStore.ts: the process object's own storage
 export const Checkpoint = Schema.Struct({saved: {v, build, model, after}, turn: Schema.NullOr(Schema.Json), cmds: Schema.Array(Schema.Json)});
 export const RuntimeRecord = Schema.TaggedUnion({
 	stepped: {input, pos, build},                       // on the process's own stream, id `step:<letter>`
@@ -1755,7 +1755,7 @@ export class ProcessStore /* activity, load, save(checkpoint, placed), placed(id
 	static layer(sql, {process, storage?: {put, sync}}): Layer<ProcessStore, never, Ledger>;
 }
 
-// coordination/mailbox.ts: P9's `receive` is unchanged; `read` adds what the runner needs
+// processes/Mailbox.ts: P9's `receive` is unchanged; `read` adds what the runner needs
 export type History = Letter & {build: string; seen: Rev; arrivedAt: number};
 // Mailbox.read: (name, after) => Stream<History, LedgerError>
 
@@ -1828,18 +1828,18 @@ The prepared step in 6 is a check: what is installed is the fold of the landed l
 Built 2026-11-10, tracker ticket 402, [PR 760](https://github.com/usirin/tea-fabrika/pull/760). This is `next/`. [PR 535](https://github.com/usirin/tea-fabrika/pull/535) built P34's supervision in the runner and proved it on Node. The Worker never passed the runner its recovery options, so on the local stage a throw had no saved count and no supervised restart ([experiment 239](../../experiments/239-supervision-vs-otp.md) found the same gap). This pull request wires it.
 
 ```ts
-// The whole idea, as built, in next/packages/libfabrika/src/workers/runtime.ts.
+// The whole idea, as built, in next/packages/libfabrika/src/cloudflare/runtime.ts.
 ProgramRunner.withLoader(saved, loader, {
   policy: defaultPolicy, // 3 deliveries, 5 restarts in 5,000 ms, backoff 100 to 800 ms
   recovery: { sql, name: saved.name, capacity: 1024 ** 3 }, // the Process object's own SQLite
 });
 // Its Layer now needs ProcessManager. On the Worker that is the Project's, over RPC:
-remoteProcessManager(manager); // coordination/process-manager.ts, from a plain ProcessCalls value
+remoteProcessManager(manager); // processes/ProcessManager.ts, from a plain ProcessCalls value
 ```
 
-- **Recovery is required.** `RunnerOptions` is exported and no longer optional in `ProgramRunner.layer` and `withLoader`, and both Layers require `ProcessManager`. The path that set recovery to null is gone; `policy` and `fault` stay optional. The type law is `app/runner-options.test.ts`.
+- **Recovery is required.** `RunnerOptions` is exported and no longer optional in `ProgramRunner.layer` and `withLoader`, and both Layers require `ProcessManager`. The path that set recovery to null is gone; `policy` and `fault` stay optional. The type law is `runtime/RunnerOptions.test.ts`.
 - **One name, one storage owner.** A Process object is keyed by `[project, name]`, never by a process ID, so a successor reads the receipts, counts and checkpoints its name already has. The Project's `processObject(pid)` finds the name from history and refuses an unknown ID. Delivery, view opening and the private stage calls all route through it. The checked writer signs with the name's current process ID.
-- **The Project owns the one process table.** Eleven trusted Project calls carry `ProcessManager` to the Process object: `processObject`, `processStart`, `processExit`, `processStatus`, `processResolve`, `processDead`, `processIsLive`, `processMonitor`, `processDemonitor`, `processDown` and `processReceive`. A `ProcessError` crosses the RPC as reply data (`ProcessReplies` in `workers/bindings.ts`); a transport failure stays a `LedgerError`. `processReceive` collects its letters and the Stream is rebuilt on the other side. The public JSON-RPC method set did not change.
+- **The Project owns the one process table.** Eleven trusted Project calls carry `ProcessManager` to the Process object: `processObject`, `processStart`, `processExit`, `processStatus`, `processResolve`, `processDead`, `processIsLive`, `processMonitor`, `processDemonitor`, `processDown` and `processReceive`. A `ProcessError` crosses the RPC as reply data (`ProcessReplies` in `cloudflare/bindings.ts`); a transport failure stays a `LedgerError`. `processReceive` collects its letters and the Stream is rebuilt on the other side. The public JSON-RPC method set did not change.
 - **Trusted restart.** `stage.process(pid).restart({id, build})` goes through the private control allowlist, `ProcessClient.restart`, `Process.restart`, `ProcessService.restart` and `ProgramRunner.restart`, then the Project's exit and start. A repeated request ID makes one replacement.
 - **These twelve handoffs are methods on the plain classes** in `next/apps/fabrika/src/brain.ts`, each one line into its service. They move to Effect objects with ticket 502's port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)).
 - **Records.** No new event or recovery state. The Worker now writes the existing `dead`, `exited`, `started`, `restarted` and `down` events, and the existing `runner.throw`, `runner.dead`, `runner.restart` and `runner.recover` spans, with the real process ID on each.
@@ -1851,7 +1851,7 @@ remoteProcessManager(manager); // coordination/process-manager.ts, from a plain 
 Built 2026-11-07, from [P37's row](./tier-1.md#the-pull-requests-one-at-a-time), beside the ledger in `next/packages/libfabrika/src/data/`. The exported names, with their bodies left out; the code is the source.
 
 ```ts
-// data/trace.ts: the rows
+// telemetry/Trace.ts: the rows
 export const ProcessId: Schema.NonEmptyString;            // P33's, proposed process_<26 chars>
 export const Chain = Schema.TaggedUnion({job: {process: ProcessId}, spans: {}}); // job/<process>/<part>, spans/<part>
 export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]); // a string cut at 128
@@ -1875,7 +1875,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
 	held: Schema.Int,                                       // spans in memory that met a full disk
 }) {}
 
-// data/sink.ts
+// telemetry/Sink.ts
 export class SpanSink extends Context.Service<SpanSink, {
 	readonly flush: Effect.Effect<{sent: number}, SinkError, RecordManager | Archive>; // fails with storage while spans are held
 	readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<Summary>, SinkError>; // rolls up closed hours first
@@ -1883,7 +1883,7 @@ export class SpanSink extends Context.Service<SpanSink, {
 	static readonly layer: (sql: Sql, who: {readonly object: string}) => Layer.Layer<SpanSink>; // also provides Tracer.Tracer
 }
 
-// data/records.ts: one record part's logic, the same for job/<process>/<part> and spans/<part>
+// telemetry/Records.ts: one record part's logic, the same for job/<process>/<part> and spans/<part>
 export const Written = Schema.TaggedUnion({written: {}, rolled: {next, had}}); // had: the batch's ids this part holds
 export class RecordManager extends Context.Service<RecordManager, {
 	readonly write: (chain: Chain, part: number, rows: ReadonlyArray<{span: SpanRow; content: string | null}>) => Effect.Effect<Written, SinkError>;
@@ -1897,7 +1897,7 @@ export class RecordManager extends Context.Service<RecordManager, {
 }
 export type RecordCalls = {write, read, content, deleteContent};       // a part object's calls; answers decoded here
 
-// data/archive.ts: where old raw health rows go, our own interface, no Cloudflare import
+// telemetry/Archive.ts: where old raw health rows go, our own interface, no Cloudflare import
 export interface BucketCalls {
 	readonly put: (key: string, body: Uint8Array, sha256: string) => Promise<void>; // R2 fails a mismatch
 	readonly head: (key: string) => Promise<{sha256: string} | null>;
@@ -1947,27 +1947,27 @@ import "./window/style.css";                 // only what the package lacks, cop
 | Task | PR | Files |
 |---|---|---|
 | T0 the move | A | `git mv`s as [Packages](#packages) lists, six `package.json` and `tsconfig.json`, `index.ts` per public name set, `build.ts`'s generated entry; code-graph and the bundler (Rolldown, since 2026-11-05) tried on the new shape. Second commit: the desk leaves, `desktop/layout.ts`, `entry/views.ts`, `window/machine.ts`. The owner's rows stay in the exam PR |
-| T1 the names | A | new `data/ledger.ts`, `app/runner.ts`, `app/nemesis.ts`, `transport/answer.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `transport/waiting.ts`, `coordination/client-manager.ts`; added names in `coordination/*`, `app/program.ts`. Bodies are `Effect.die("not built: tN")` |
-| T2 data and coordination | A | `data/log.ts`, `data/ledger.ts`, `data/project.ts`, `coordination/*`; the smallest bridge in `app/process.ts`, gone in T3 |
-| T3 the process | A | `app/program.ts`, `app/runner.ts`, `app/entry.ts`, `app/process.ts`, `app/nemesis.ts`, `programs/counter/program.ts` for its ports |
+| T1 the names | A | new `ledger/Ledger.ts`, `runtime/Runner.ts`, `app/nemesis.ts`, `transport/Answer.ts`, `transport/Hello.ts`, `transport/Sshsig.ts`, `gateway/internal/waiting.ts`, `access/ClientManager.ts`; added names in `coordination/*`, `runtime/Program.ts`. Bodies are `Effect.die("not built: tN")` |
+| T2 data and coordination | A | `ledger/Log.ts`, `ledger/Ledger.ts`, `data/project.ts`, `coordination/*`; the smallest bridge in `app/process.ts`, gone in T3 |
+| T3 the process | A | `runtime/Program.ts`, `runtime/Runner.ts`, `runtime/Entry.ts`, `app/process.ts`, `app/nemesis.ts`, `programs/counter/program.ts` for its ports |
 | T4 the door | A | `transport/*`, `brain.ts`, `window/machine.ts` |
 | T5 grant | A | `grant.ts`, `tuval/browser` only for its key, the waiting view in `window/main.tsx` |
 | T6 the stage | A | new `alchemy.run.ts`, `dev.ts`, `build.ts`, delete `brain-host.ts`, change `e2e.ts`; `README.md`; style; `docs/*.png` |
 | T7 platforms | B | `desktop/services.ts`, `tuval/dom/*`, `tuval/browser/*`, `tuval/headless/*`, `entry/browser.tsx`, `entry/views.ts`, `window/main.tsx`. A catalog change comes from an exam PR, since `pnpm-workspace.yaml` is an exam file |
 | T8 the app, its keys and the brain | B | `entry/electron-main.ts`, `entry/electron.tsx`, `launchd.ts`, `tuval/electron/{preload,index,key,person-key,founding}.*`, signing setup in `README.md` |
-| T15 the menu bar, with Remove (done before T9) | B | `desktop/menu.ts`, `tuval/electron/{tray,panel,panel-preload,person-check,menu-cmds}.*`, `tuval/headless/*`, `entry/electron-main.ts`, `coordination/client-manager.ts` for `Took` and `saw.has`, the waiting words in `window/main.tsx` |
+| T15 the menu bar, with Remove (done before T9) | B | `desktop/menu.ts`, `tuval/electron/{tray,panel,panel-preload,person-check,menu-cmds}.*`, `tuval/headless/*`, `entry/electron-main.ts`, `access/ClientManager.ts` for `Took` and `saw.has`, the waiting words in `window/main.tsx` |
 | T9 the demo | B | `brain.ts` routes, `README.md`, `docs/*.png` |
 | T10 one file | C | `build.ts`, `brain.ts`, `table.ts` (the program table), `workers.d.ts` |
 | T11 cloud | C | `alchemy.run.ts`, the menu bar's second link in `entry/electron-main.ts` and `desktop/menu.ts`, `README.md`; the run in `field/` |
-| T16 notes' names | D | new package `next/programs/notes`, with `programs/notes/{program,tile}.ts`; `refuse`, `Refusal` and `fold` in `app/program.ts`; the counter's `refuse`. Bodies are `Effect.die("not built: tN")` |
-| T17 the program and the log | D | `programs/notes/program.ts`, `app/program.ts`, `app/runner.ts`, `table.ts` (the program table), `brain.ts` (the wire's answer) |
+| T16 notes' names | D | new package `next/programs/notes`, with `programs/notes/{program,tile}.ts`; `refuse`, `Refusal` and `fold` in `runtime/Program.ts`; the counter's `refuse`. Bodies are `Effect.die("not built: tN")` |
+| T17 the program and the log | D | `programs/notes/program.ts`, `runtime/Program.ts`, `runtime/Runner.ts`, `table.ts` (the program table), `brain.ts` (the wire's answer) |
 | T18 the tile | D | `programs/notes/{tile.ts,view.tsx}`, `entry/views.ts` for the view table |
 | T20 drawing a note | D | new `programs/notes/{root.ts,drawn.tsx,highlight.ts,highlighter.ts}`, `programs/notes/{tile.ts,view.tsx}`, `window/style.css`, `window/page.ts`, `brain.ts` for the policy and `/highlight.js`, `build.ts`, `entry/electron-main.ts` for links, `next/programs/notes/package.json` |
-| T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `app/program.ts` `Input`, `transport/answer.ts`, `transport/waiting.ts`, `desktop/menu.ts`, `coordination/mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
+| T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `runtime/Program.ts` `Input`, `transport/Answer.ts`, `gateway/internal/waiting.ts`, `desktop/menu.ts`, `processes/Mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
 | T19 where notes live, and the demo | D | `entry/electron-main.ts`, `launchd.ts`, `desktop/menu.ts` for the status words, `alchemy.run.ts`, `README.md`, `docs/*.png`; the run in `field/` |
 | T22 backup and recovery | D2 | designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided for the sheet 2026-11-06. Its fold and door parts move to P9 and P10 (`MemberFact`, `foldMembers`, p28, `added`); T22 keeps the sheet's screens, the words and the menu bar row |
 | T12 program | E | new package `next/programs/chaos`, `app/nemesis.ts`, the layout in `entry/views.ts` |
-| T13 live faults | E | `brain.ts`, `transport/gateway.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
+| T13 live faults | E | `brain.ts`, `transport/Connection.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
 | T14 drill and run | E | `chaos-drill.ts` on `mcp/client.ts`, `README.md`, `docs/*.png`, `field/` |
 
 Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything compiles, and each `new` test fails on "not built". Quick checks per task: typecheck, oxlint on that task's files, that task's tests. Whole `pnpm lint` at each PR's last task. Wire tests stay green at every commit.
@@ -2034,11 +2034,11 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p24** runs oxlint on `next/`, with an edge only on a line under an edge comment, `-- edge: <why>` (owner, 2026-11-05; it said: only in files the exam PR lists).
 - **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; at its delivery limit it moves to dead (p80). The limit is per program: the program's own `maxDeliveries`, else the policy's, 3 by default, from 1 to 32 (as P34 built it, 2026-11-09; it said "on the third throw"). A wake that fails on a saved letter is a crash like any other: inside the restart budget the process restarts after its backoff, only the brake writes `down`, and every letter is kept, never skipped or moved (owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)). *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): the restart is at once, and past the brake the name is `failed` until a person restarts it (p80).* A thrown fresh step is never a program refusal, and `bad_msg` is for a malformed or disallowed fresh message, not every program refusal (P8, 2026-11-10; it said: a real refusal still gets `bad_msg`). From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
 
-**p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/hello.ts`, `answer.ts`.
+**p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/Hello.ts`, `answer.ts`.
 - A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `door.knock` gets `no_hello`. Nothing is written before online. `door.watch` and `door.deny` answer only an online client.
 - Why: this is the whole door. Plants: nonce not checked; name not checked; a method served while `waiting`; `door.watch` open to a key not let in.
 
-**p27, the grant (scenario of T5).** `new`, node. s4. `transport/sshsig.ts`, door.
+**p27, the grant (scenario of T5).** `new`, node. s4. `transport/Sshsig.ts`, door.
 - Real `ssh-keygen` vectors: good signature passes. A wrong namespace, other signer, changed text, and non-Ed25519 are refused with the same answer. A grant for another ledger is refused. A signer who is not a key of the person named is refused, and that includes a window key named at founding. Any key in `founded.keys` passes the same way, whatever made the signature. The same grant id twice gives one fact and the same answer.
 - Why: this is what makes a person's say real. Plants: namespace ignored; `to` ignored; `for` ignored; verify always true; window key accepted as a signer.
 
@@ -2101,7 +2101,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - A `granted` fact holds text and signature that re-verify alone, and its text holds `as` and all of `saw`, `check` and `has` included. A `denied` fact holds `saw`, and `by` from the checked key. A hello fact holds `platform`, `has`, code hash, `sentAt`. `by` is never from params. A saved fact holds `_tag` and folds back through `MemberFact`; a line with a tag the fold does not know is skipped and kept.
 - Plants: `by` from params; signature dropped; `saw` or its `has` left out of the signed text; a fact saved with `kind` in place of `_tag`.
 
-**p43, waiting (pbt).** `new`, node. s4. `transport/waiting.ts`.
+**p43, waiting (pbt).** `new`, node. s4. `gateway/internal/waiting.ts`.
 - Over any list of knocks: one row per key, and two tabs of one key share its code. A key's code holds until `until`, then a new one is picked. There are never more than `most` rows, and the oldest goes first. A knock never touches the ledger, and a test with `door/members` watched sees no write. The code never appears in the door's check: an approve with any code lets the key in, and `saw` records it.
 - Plants: a code per tab; no cap; a knock that writes; the door reading the code.
 
@@ -2139,7 +2139,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Live: a let-in tab is in the panel's list. Remove with the check at yes: one `revoked` fact, its signed text holding `saw`, and the tab closes with 4003, then shows "This window was removed". It is gone from the list. With the check at no: no fact. A `revoked` signed by a window key is refused. An approve and a remove in flight for two keys do not cross.
 - Why: a mix-up here removes the wrong window. Plants: remove without the check; `own` shown with Remove; a revoke signed by a window key accepted; the act not kept, so a remove signs a grant.
 
-**p52, a save is one fact (pbt, scenario of T17).** `new`, node, tea's pbt, real `ProgramRunner`. s9. `programs/notes/program.ts`, `app/runner.ts`.
+**p52, a save is one fact (pbt, scenario of T17).** `new`, node, tea's pbt, real `ProgramRunner`. s9. `programs/notes/program.ts`, `runtime/Runner.ts`.
 - Over any list of good saves: each is exactly one line in `notes:1/inbox`, with `base`, `body`, `how`, `from`, and `by`, `for`, `arrivedAt`, `sentAt` on the letter. No line is ever changed or removed. A note's version is one more than its `base`. `by` is the checked key, whatever the params say. `update` never sees `sentAt`.
 - A good thing happens: a save on the current version always lands.
 - Why: this is what "never overwritten" means. Plants: a save that replaces a line; version counted across notes; `by` read from params.
@@ -2191,7 +2191,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Before Approve, the list answers, and each call answers in words with the code. No letter is written. After one Approve, the same name needs none again, across restarts of the bridge. A second name gets its own row. A stale `base` is refused in the same words as a window's `why`, and writes nothing. The same call twice is one row. `ps` lists processes and drives none. *Changed 2026-11-07 (owner): it said `runs`.* `by` is the agent's key and `for` is the person, on every letter.
 - Plants: a tool for a `personOnly` input; `by` taken from `--as`; a name used without a grant; a retry with a new id.
 
-**p64, an agent stays an agent.** `new`, node. s11, s4. `transport/answer.ts`, door.
+**p64, an agent stays an agent.** `new`, node. s11, s4. `transport/Answer.ts`, door.
 - A client granted `as: "agent"` gets `not_for_agents` on `door.watch`, `door.deny`, a Msg to anything but `notes:*`, and any window Msg. A grant, a `revoked` or an Approve signed by an agent's key is refused. A letter's `by` never equals a person key from any agent's call. `as` in a grant cannot be changed by the client after signing, and a knock's claim of `window` shows as such, and only the person's signature makes it true. Remove on an agent ends it at once. `@modelcontextprotocol` is not in the brain's bytes.
 - Why: the laws the owner named: no person-only tool, an agent never writes as the person. Plants: `agentMay` left open; `as` read from the hello; a signature by an agent's key accepted.
 
@@ -2201,30 +2201,30 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Every `next/` package is private at 0.0.0, and each has `sideEffects: false` and a `typecheck` script.
 - Why: `package.json` alone stops neither a walk up to the root nor a Node import at a top level. Plants: an import of `@kampus/fabrika-old`, which the root would resolve; `node:fs` in a top level; a program importing `@kampus/libfabrika/transport`; `@kampus/tuval` imported from the library; a deep path into another package's `src/`.
 
-**p66, a host says what it can do.** `new`, node and real Chromium, real Electron for its half. s5, s2. `desktop/services.ts`, `tuval/*`, `transport/wire.ts`, `transport/waiting.ts`.
+**p66, a host says what it can do.** `new`, node and real Chromium, real Electron for its half. s5, s2. `desktop/services.ts`, `tuval/*`, `transport/Wire.ts`, `gateway/internal/waiting.ts`.
 - On each Layer, the hello that goes out holds exactly that Layer's `Host.has`, and its `door/hellos` fact records the same list. Over any list from a test Layer, the same list reaches the waiting row and the signed text of the grant a click makes.
 - Every word in a Layer's list has a service or a platform call behind it in that Layer. With `canPromptTouchID` false, `verify` is not listed. With `safeStorage` unable to seal, `seal` is not listed.
 - Nothing reads it yet: any list gets the same answers from the door, and a hello from an unknown key that claims `verify` still gets `not_granted`.
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
 
-**p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
+**p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/Answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
 - *Changed 2026-11-08 (owner, [question 20](./tier-1.md#open-questions)): `id` is a TypeID, `input_<26 chars>`, and the door's process and count are their own fields on the entry. Below is the law as first written; a build pull request moves p67 and p68 to the new shape.*
 - Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
 - A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
 - Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 
-**p68, an entry keeps its parent (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
+**p68, an entry keeps its parent (scenario of P6).** `new`, node. s7, s1. `ledger/Log.ts`, `Ledger`. *Added 2026-11-05 (owner).*
 - *Renamed 2026-11-07 (owner): `cause` is now `parent`, and `traceId` joins it ([question 15](./tier-1.md#open-questions)). The code rename is its own ticket.*
 - Every entry has `parent`: a `CauseText` matching `/^in-[0-9a-f]{8}-[1-9][0-9]*$/`, or null for an `own` write. A text that does not match is refused and nothing is written. Read back, it is the same text, and no public function turns a `CauseText` into an `InputId`.
 - Why: an entry written without it never gets it back. Plants: `parent` or `traceId` dropped on append; a decode that brands the text as an `InputId`; a bad pattern accepted.
 
-**p69, every write is signed by its cause's sender (scenario of P11).** `new`, node, through the program test kit. s11, s2. `app/runner.ts`, the signer. *Added 2026-11-05 (owner); the walk is [open question 17](./tier-1.md#open-questions).*
+**p69, every write is signed by its cause's sender (scenario of P11).** `new`, node, through the program test kit. s11, s2. `runtime/Runner.ts`, the signer. *Added 2026-11-05 (owner); the walk is [open question 17](./tier-1.md#open-questions).*
 - For any list of inputs, each told by a person or by an agent for that person, interleaved, across queued writes: every write an input causes is signed as that input's sender. An `own` write is signed as the process owner.
 - The signer refuses, in words, and writes nothing, when: the cause was never told to this process; the cause is spent for this tag; the tag is person-only and the cause's input is not a person-only input sent by a person; the process has ended.
 - Why: the runner never sees a program's `update`, so pairing a Cmd with the Msg that made it gives the wrong signer once a write is queued. Plants: the runner pairs a Cmd with the last Msg (the note's `save_ok` case); a queued write that drops its cause; a cause borrowed from another process; a second `answered` from one press.
 
-**p70 to p78, hot reload (scenario of P15).** `new`, node against the program runner, fast-check with fixed seeds. s3, s7. `app/runner.ts`, `app/loader.ts`. *Added 2026-11-06, from [hot reload's nine laws](../direction/hot-reload.md#how-it-is-tested), written there first.*
+**p70 to p78, hot reload (scenario of P15).** `new`, node against the program runner, fast-check with fixed seeds. s3, s7. `runtime/Runner.ts`, `app/loader.ts`. *Added 2026-11-06, from [hot reload's nine laws](../direction/hot-reload.md#how-it-is-tested), written there first.*
 - p70: no acked fact is lost by a reload, and they read back in order.
 - p71: each Msg is stepped exactly once across a reload.
 - p72: a reload to the same hash changes nothing a reader can see.
@@ -2236,7 +2236,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - p78: a pinned lane never changes build. It waits for lanes, which Tier 1 has none of; it is written now so the number holds.
 - Plants: a reload that drops the queued Msg; a migrate that skips S3's chain; `[Restart]` that keeps the old `init`.
 
-**p79, processes (scenario of P33).** `new`, node. s3, s7. `coordination/process-manager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
+**p79, processes (scenario of P33).** `new`, node. s3, s7. `processes/ProcessManager.ts`. *Added 2026-11-06 (owner: Tier 1 builds this slice of C4 and C5).*
 - `exit` writes `exited {why}`; `info` lists every live process with its id and name; each start is a new process with its own id, `process_<26 chars>`, and each start after a crash writes `restarted {process, after, name, why, build}`, where `after` is the id of the process it replaced. No process id is ever used twice, and `ps` counts restarts from `restarted` facts. *Proposed by the lead 2026-11-07, 75%: a start is a new process (OTP); the `run` field goes. Doubt: whether `after` is a link rather than a field; P33's plan settles it.* *Built 2026-11-08 by P33: `after` is a field, since `parent` already names the input that caused the write ([as built](#processes-as-p33-built-it)).*
 - A monitor gets one `DOWN {process, why, to}` when its process ends, `noproc` at once if it was already gone, and none after `demonitor`, which also flushes a `DOWN` already in the inbox. A `DOWN` from an earlier process never lands in a later one.
 - The restart window counts a restart on its edge. A name is never freed. Only the parent sends an exit signal.
@@ -2244,7 +2244,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107. *Done 2026-11-09: [experiment 239](../../experiments/239-supervision-vs-otp.md).*
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
-**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `app/runner.ts`. *Added 2026-11-06 (owner).*
+**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `runtime/Runner.ts`. *Added 2026-11-06 (owner).*
 - A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. At its delivery limit, 3 by default, it moves to `<pid>/dead` with `dead {process, program, name, tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
 - Owner decided 2026-11-08, ticket 319: one dead-letter stream per process start. The runner supplies `DeadInput`; `ProcessManager.dead` decodes it and fills `process`, `program` and `name` from the parent-checked historical life inside the write transaction. Caller identity is dropped. After replacement or storage reopen, a repeat keeps the same entry. Both schemas require one error class per try.
 - A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
@@ -2257,7 +2257,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Under launchd: the brain killed with `kill -9` comes back, and both windows come back to it. A clean Quit does not restart it.
 - Plants: a restart with no backoff; a restart after a clean exit; no start fact.
 
-**p82, version agreement (scenario of P10).** `new`, node. s5. `transport/hello.ts`, door.
+**p82, version agreement (scenario of P10).** `new`, node. s5. `transport/Hello.ts`, door.
 - The brain picks the highest version both sides list. No shared version is refused in words, and nothing is written. A field the brain does not know is ignored, never refused.
 - Plants: the lowest shared version picked; a mismatch let through; an unknown field refused.
 
@@ -2285,7 +2285,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 **p92 to p95 are P6's** (*new 2026-11-07, from P6's plan, approved by the lead agent*). Each is `new`, node, in `next/packages/libfabrika/src/data/`, beside p18 to p20 and p68.
 
-**p92, every entry has every field (scenario of P6).** `new`, node. s7, s1. `data/log.ts`, `Referee.append`.
+**p92, every entry has every field (scenario of P6).** `new`, node. s7, s1. `ledger/Log.ts`, `Referee.append`.
 - In the type: a `Line` with any one of `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`, `_tag` or `body` left out does not compile (one `@ts-expect-error` each, so a key made optional fails the typecheck). `parent` is a required key whose value may be null.
 - At the referee, for lines that come in as JSON: a line missing any key, or with an empty `by`, `for` or `build`, is `refused bad_line`, and nothing is written. A line that names `arrivedAt`, `rev`, `pos` or any key `Line` does not have is `refused bad_line` too.
 - Every entry read back has all 13 fields, and `arrivedAt`, `rev` and `pos` are the referee's.
@@ -2375,7 +2375,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 - **Decided 2026-11-01 in [fast and daily mutation](../direction/fast-and-daily-mutation.md):** the check on each pull request takes changed lines first, stops at 5 minutes, and only advises; a long run never blocks a pull request, and `next/`'s mutation queue comes in Tier 6. Tier 1's pull requests run that check ([Rules that bind](./tier-1.md#rules-that-bind)). What follows is the older shape: its tool, covers and skip list still hold, and its sample and its time do not. *This bullet said "new direction, not yet in a note on main", which was wrong from 2026-11-01.*
 - **Tool:** as plan-115. Stryker 10.1.1 through today's `MutationRunner`, from outside; `next/` imports none of it. Fixed sample per PR: seed 115, at most 150 (AGENTS.md's shared seed is 119120; either is fixed, so the choice is free). `nice -n 15`, `--maxWorkers=3`, concurrency 2. Typecheck on. Survivors go back to the test writer.
-- **Covers:** plan-115's list plus `transport/hello.ts`, `transport/sshsig.ts`, `transport/waiting.ts`, `coordination/client-manager.ts`, `desktop/menu.ts`, `programs/chaos/program.ts`, `app/nemesis.ts#check`, `app/nemesis.ts#chaosFrom`, `app/runner.ts`'s Cmd path, and for PR D `programs/notes/program.ts`, `programs/notes/tile.ts`, `programs/notes/root.ts`, `programs/notes/drawn.tsx`, `programs/notes/highlight.ts#colors`, `mcp/tools.ts`, `transport/answer.ts`'s `agentMay`, and `app/runner.ts`'s id, refuse and fold steps. Copied code gets no pass, since it runs here.
+- **Covers:** plan-115's list plus `transport/Hello.ts`, `transport/Sshsig.ts`, `gateway/internal/waiting.ts`, `access/ClientManager.ts`, `desktop/menu.ts`, `programs/chaos/program.ts`, `app/nemesis.ts#check`, `app/nemesis.ts#chaosFrom`, `runtime/Runner.ts`'s Cmd path, and for PR D `programs/notes/program.ts`, `programs/notes/tile.ts`, `programs/notes/root.ts`, `programs/notes/drawn.tsx`, `programs/notes/highlight.ts#colors`, `mcp/tools.ts`, `transport/Answer.ts`'s `agentMay`, and `runtime/Runner.ts`'s id, refuse and fold steps. Copied code gets no pass, since it runs here.
 - **Skip list by file, my decision:** plan-115's Q2 list, without `brain-host.ts`, plus `alchemy.run.ts`, `grant.ts`, `chaos-drill.ts`, `tuval/browser/*`, `tuval/electron/*`, `tuval/dom/*`, `launchd.ts`, `entry/*`, `programs/chaos/view.tsx`, `programs/notes/view.tsx`, `next/apps/fabrika/mcp.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`, and the live Nemesis in `brain.ts`. Why: none can be mutated in the test's process. p15, p17, p29, p31, p37, p39, p46, p47, p48, p51, p58, p59, p62 and p63 cover them. Cost: a wrong line in `brain.ts`'s door is only caught if a wire test sees it. That is why the logic lives in `answer.ts` and `client-manager.ts`. Sure: 80%.
 - **Cost, a guess:** 10 to 25 machine minutes per PR. That is not "very fast", so this shape does not meet the note; the note's 5-minute cap replaces it.
 
@@ -2384,10 +2384,10 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 An agent that is not the builder writes it. The owner reads it. It lands first, on current main, and holds:
 
 1. An oxlint JS plugin rule, `no-promises`, blocking in `next/**` leaving out tests. It refuses `async`, `await`, `new Promise`, `Promise.<anything>(...)`, `.then(...)`, `Effect.promise(...)`, and `.catch(...)` unless the object is an imported Effect module. JS plugins are alpha and not type-aware, so that check goes by import name: report any miss.
-2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `data/ledger.ts`, `app/process.ts`, `transport/gateway.ts`, `transport/hello.ts`, `transport/sshsig.ts`, `brain.ts`, `build.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none. *Changed 2026-11-05: `window/use-model.ts` left this list; tea's `send` runs the Effect, so the window has no edge.* *Built 2026-11-05 in P2, as whole paths, with `window/use-model.ts` still on it. The owner made this list the meaning of "edge" that day, and later that day replaced it with edge comments at the line, which P35 builds ([question 13](./tier-1.md#open-questions)).*
+2. An oxlint rule, `no-effect-run-outside-edge`, with edges, written as full paths in the rule: `data/project.ts`, `ledger/Ledger.ts`, `app/process.ts`, `transport/Connection.ts`, `transport/Hello.ts`, `transport/Sshsig.ts`, `brain.ts`, `build.ts`, `tuval/browser/key.ts`, `tuval/electron/preload.ts`, `tuval/electron/panel-preload.ts`, `tuval/electron/key.ts`, `tuval/electron/person-key.ts`, `tuval/electron/person-check.ts`, `launchd.ts`, `entry/electron-main.ts`, `alchemy.run.ts`. `dev.ts`, `grant.ts` and `chaos-drill.ts` use `NodeRuntime.runMain` and should need none. *Changed 2026-11-05: `window/use-model.ts` left this list; tea's `send` runs the Effect, so the window has no edge.* *Built 2026-11-05 in P2, as whole paths, with `window/use-model.ts` still on it. The owner made this list the meaning of "edge" that day, and later that day replaced it with edge comments at the line, which P35 builds ([question 13](./tier-1.md#open-questions)).*
 3. *Dropped 2026-11-02:* an oxlint rule, `no-tea-react`, blocking tea's `useMachine` and `useRuntime` in `next/**`. Its reason, the Strict Mode bug, was fixed in tea 0.22.0 ([demlik PR 774](https://github.com/kamp-us/demlik/pull/774)), and `next/` moves to tea's hook once it takes the Effect engine ([demlik 852](https://github.com/kamp-us/demlik/issues/852)). `useRuntime`'s Promise dispatch is still caught by `no-promises`. *Changed 2026-11-03:* tea 0.23.0's `useRuntime` returns a `send` that returns nothing ([demlik PR 856](https://github.com/kamp-us/demlik/pull/856)), so `no-promises` has nothing of tea's hook left to catch.
 4. **An oxlint rule, `no-of`, blocking in `next/**`: no bare `of` and no `xOf` names.** It fires on a name this code declares: a variable, function, type, class, parameter or object key named `of`, or ending in `Of` after a lowercase letter or capital word (`colorsOf`, `IconOf`). It does not fire on a use, so `indexOf` and `for...of` pass. Why: it's a real rule that no check holds, and copies would bring about 55 such names. `next/` at `7c1d073` has none, so its false alarms should be about zero, and the fire count in the PR body measures that. Cost: about 30 lines. Sure: 90%.
-5. **An oxlint rule, `no-hand-tag`, blocking in `next/**` leaving out tests: no hand-written `_tag`.** It fires on any object key or type member named `_tag`, `Schema.Struct({_tag: ...})` included. It does not fire on a read, so `x._tag === "a"` and `const {_tag} = x` pass. One edge, by full path in the rule: `data/log.ts`, since the log stores any fact and knows no cases. Tests are left out because a test feeds raw frames. Why: the owner's pick asks for it, and a written rule alone holds nothing. `next/` at `7c1d073` holds no `_tag`, so the fire count there starts with nothing to misfire on. That is no measure of false alarms, and this plan claims no number. Cost: about 30 lines. Sure: 85%. The doubt is an edge beyond the log; a second one comes back to the owner.
+5. **An oxlint rule, `no-hand-tag`, blocking in `next/**` leaving out tests: no hand-written `_tag`.** It fires on any object key or type member named `_tag`, `Schema.Struct({_tag: ...})` included. It does not fire on a read, so `x._tag === "a"` and `const {_tag} = x` pass. One edge, by full path in the rule: `ledger/Log.ts`, since the log stores any fact and knows no cases. Tests are left out because a test feeds raw frames. Why: the owner's pick asks for it, and a written rule alone holds nothing. `next/` at `7c1d073` holds no `_tag`, so the fire count there starts with nothing to misfire on. That is no measure of false alarms, and this plan claims no number. Cost: about 30 lines. Sure: 85%. The doubt is an edge beyond the log; a second one comes back to the owner.
 6. `next/apps/fabrika/src/exam/no-promises.test.ts`: planted lines, including `Effect.catch(...)`, which must not fire. `exam/no-of.test.ts`: planted `colorsOf`, `IconOf` and `{of: ...}`, which must fire, and `indexOf`, which must not. `exam/no-hand-tag.test.ts`: planted `{_tag: "x"}`, `type X = {readonly _tag: "x"}` and `Schema.Struct({_tag: Schema.Literal("x")})`, which must fire, and `Schema.TaggedUnion({x: {}})`, `Fault.cases.abort.make(...)`, `value._tag === "x"` and `{type: "plus"}`, which must not.
 7. `next/apps/fabrika/src/exam/laws-scan.test.ts`, as plan-115, scanning `next/`, since `next/src` goes away.
 8. `next/` layers in `layer-rules.json`, for `pnpm lint:layers`, and `exam/layers.test.ts` for skipped layers until demlik issue 763 lands. Both as in the section above. Package rows in `boundary-rules.json`, with new library types, since tuval imports the library and programs import both. *Changed 2026-11-05:* each package's row lands in the test writer's commit of its first pull request (P6, P11, P13, P14, P17), with the package's bare `package.json`, since code-graph 0.12.0 refuses a row for a folder that is not a package yet ([demlik 868](https://github.com/kamp-us/demlik/issues/868)).
