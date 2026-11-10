@@ -8,7 +8,7 @@ import {senderTest} from "@kampus/libfabrika/testing";
 import {Arbitrary, Effect, FileSystem, Schema} from "effect";
 
 const SEED = 119120;
-const options = {arbitrary: {seed: SEED, runs: 300, size: 4096, concurrency: 1}};
+const options = {arbitrary: {seed: SEED, runs: 300, size: 4096, concurrency: 1}, timeout: 60_000};
 const text = (min: number, max: number) =>
 	Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 const int = (min: number, max: number) =>

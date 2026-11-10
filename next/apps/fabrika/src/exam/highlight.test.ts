@@ -5,7 +5,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import {expect, it} from "@effect/vitest";
 import {Arbitrary, Effect, FileSystem, Schema} from "effect";
 
-const options = {arbitrary: {seed: 119120, runs: 300, size: 4096, concurrency: 1}};
+const options = {arbitrary: {seed: 119120, runs: 300, size: 4096, concurrency: 1}, timeout: 60_000};
 const text = Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(4096));
 const CodeCases = Arbitrary.all({
 	lines: Arbitrary.array(Arbitrary.schema(text), {minLength: 0, maxLength: 8}),

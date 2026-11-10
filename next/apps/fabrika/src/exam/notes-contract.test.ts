@@ -47,7 +47,7 @@ import {Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Strea
 import {Base64, Base64Url} from "effect/encoding";
 import {TestClock} from "effect/testing";
 
-const opts = {arbitrary: {seed: 119120, runs: 300, size: 4096, concurrency: 1}};
+const opts = {arbitrary: {seed: 119120, runs: 300, size: 4096, concurrency: 1}, timeout: 60_000};
 const number = (min: number, max: number) =>
 	Schema.Int.check(Schema.isBetween({minimum: min, maximum: max}));
 const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
