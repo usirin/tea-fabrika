@@ -71,21 +71,25 @@ export const RecordPartLive = RecordPart.make(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     const env = yield* Cloudflare.WorkerEnvironment;
-    const config = yield* Schema.decodeUnknownEffect(
+    const cap = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(
         Schema.Struct({
           limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
         }),
       ),
-    )(env.STAGE).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));
+    )(env.STAGE).pipe(
+      Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
+      Effect.map((config) => config.limits?.recordBytes),
+      Effect.cached,
+    );
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw storage until PR 8; not reported, 0042 amendment 2026-11-09
     const raw = state.raw as unknown as DurableObjectState;
-    const cap = config.limits?.recordBytes;
     return Effect.succeed({
-      write: (chain, at, rows) => recordWrite(raw, cap, chain, at, rows),
-      read: (chain, at, after) => recordRead(raw, cap, chain, at, after),
-      content: (chain, at, id) => recordContent(raw, cap, chain, at, id),
-      deleteContent: (chain, at, id, by) => recordDelete(raw, cap, chain, at, id, by),
+      write: (chain, at, rows) => cap.pipe(Effect.flatMap((bytes) => recordWrite(raw, bytes, chain, at, rows))),
+      read: (chain, at, after) => cap.pipe(Effect.flatMap((bytes) => recordRead(raw, bytes, chain, at, after))),
+      content: (chain, at, id) => cap.pipe(Effect.flatMap((bytes) => recordContent(raw, bytes, chain, at, id))),
+      deleteContent: (chain, at, id, by) =>
+        cap.pipe(Effect.flatMap((bytes) => recordDelete(raw, bytes, chain, at, id, by))),
     } satisfies RecordShape);
   }),
 );
