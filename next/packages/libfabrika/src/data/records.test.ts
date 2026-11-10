@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
+import { RpcCallError } from "alchemy/Rpc";
 import type { Layer } from "effect";
 import { Effect, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -531,6 +532,57 @@ describe("RecordManager.remote, the record object's stub", () => {
         { concurrency: 1, discard: true },
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
+  );
+
+  // Callee SinkError: preserve the same instance, reason and held (plant: always wrap).
+  // Other failures, including RpcCallError: unreachable, held 0, same cause (plant: drop cause).
+  // stub(name) throws: unreachable with the thrown cause (plant: drop lookup cause).
+  it.effect.prop(
+    "every remote call preserves typed failures and retains other failure causes",
+    { reason: SinkError.fields.reason, held: SinkError.fields.held, generated: Schema.Unknown },
+    ({ reason, held, generated }) =>
+      Effect.gen(function* () {
+        const typed = new SinkError({ reason, held });
+        const calls = [
+          RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])),
+          read(job),
+          RecordManager.use((records) => records.content(job, id(0))),
+          RecordManager.use((records) => records.deleteContent(job, id(0), { by: "owner", reason: "erase" })),
+        ];
+
+        for (const operation of calls) {
+          const call: Effect.Effect<unknown, SinkError, RecordManager> = operation;
+          const same = yield* Effect.flip(
+            call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(typed)).make))),
+          );
+          expect(same).toBe(typed);
+
+          for (const cause of [generated, new RpcCallError({ method: "record", cause: generated })]) {
+            const failed = yield* Effect.flip(
+              call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(cause)).make))),
+            );
+            expect(failed).toBeInstanceOf(SinkError);
+            expect(failed.reason).toBe("unreachable");
+            expect(failed.held).toBe(0);
+            expect(failed.cause).toBe(cause);
+          }
+
+          const thrown = yield* Effect.flip(
+            call.pipe(
+              Effect.provide(
+                RecordManager.remote(() => {
+                  // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- edge: fixture models a synchronous throw from stub(name)
+                  throw generated;
+                }),
+              ),
+            ),
+          );
+          expect(thrown).toBeInstanceOf(SinkError);
+          expect(thrown.reason).toBe("unreachable");
+          expect(thrown.cause).toBe(generated);
+        }
+      }),
+    { arbitrary: { seed: 119120, runs: 100 } },
   );
 
   it.effect.prop(
