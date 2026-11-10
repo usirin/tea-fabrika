@@ -239,6 +239,50 @@ export const askDesk = async (tools: Tools) => {
 	let failedTicket = 130;
 	const shot = async (page: Page, state: string, layout: string, look: string) => {
 		const file = `${state}-${layout}-${look}.png`;
+		// Manti fades the buttons' colors, so a shot straight after a state change catches them
+		// mid-fade. Wait (at most ~2 s) until the ask box's buttons show equal computed colors on
+		// two reads and none has a running finite animation or transition. Only the box's buttons
+		// are watched, never the whole document, and infinite animations are ignored.
+		const region = box(page);
+		if ((await region.count()) > 0) {
+			const settled = await region
+				.first()
+				.evaluate(async (element) => {
+					const buttons = () => [...element.querySelectorAll("button")];
+					const colors = () =>
+						buttons()
+							.map((b) => {
+								const style = getComputedStyle(b);
+								const label = b.querySelector("span") ?? b;
+								return [
+									style.backgroundColor,
+									style.color,
+									style.borderColor,
+									getComputedStyle(label).color,
+								].join("|");
+							})
+							.join("/");
+					const running = () =>
+						buttons().some((b) =>
+							b
+								.getAnimations({subtree: true})
+								.some((a) => a.effect?.getComputedTiming().iterations !== Infinity),
+						);
+					const frame = () => new Promise((done) => requestAnimationFrame(() => done(null)));
+					const until = performance.now() + 2000;
+					let last = "";
+					while (performance.now() < until) {
+						await frame();
+						const now = colors();
+						if (now === last && !running()) return true;
+						last = now;
+					}
+					return false;
+				})
+				.catch(() => false);
+			if (!settled)
+				console.log(`note ask desk ${file}: the ask box's buttons were still changing after 2 s`);
+		}
 		await page.screenshot({path: join(dir, file)});
 		captured.push(file);
 	};
