@@ -1,17 +1,18 @@
 import { join } from "node:path";
 import {
+  Clock,
   Data,
   Duration,
   Effect,
   Equal,
   Exit,
   FileSystem,
+  Option,
   Path,
   type PlatformError,
+  Queue,
   Ref,
   Result,
-  Schedule,
-  Sink,
   Stream,
 } from "effect";
 import type { Launch } from "../launch.ts";
@@ -28,8 +29,8 @@ import type { Launch } from "../launch.ts";
 //
 // The folder is watched, not the file: an editor saves by writing a new file and renaming it
 // over the old one, and a watch on the old file would end there. A one second poll also reads
-// the file, so a save is heard even without an OS event. The first hint starts a fixed 50 ms
-// settle; later hints do not delay the read, and any watch hint makes its source "watch".
+// the file, so a save is heard even without an OS event. Both wait for the text to stay still
+// for 50 ms; hints with unchanged text do not delay it. Any watch hint keeps its source "watch".
 // Each file is read apart, so a bad fabrika.toml never touches the keys, and the other way round.
 // An answer is said once: a
 // save that leaves the text as it was says nothing. A page never reads a file; the host sends
@@ -78,7 +79,7 @@ const Setting = Data.taggedEnum<SettingOf>();
 export const settingsFolder = (launch: Launch, userHome: string): string =>
   launch.kind === "owner" ? join(userHome, ".fabrika") : launch.home;
 
-/** How long to collect hints from the first one, in ms: an editor's write and rename are one save. */
+/** How long the observed text must stay unchanged, in ms, including the closing read. */
 const SETTLE_MS = 50;
 
 /** How often the file itself is looked at, so a save is heard when the OS sends no event. */
@@ -87,16 +88,45 @@ const POLL = Duration.seconds(1);
 /** How a save was heard: the OS watch told us, or the poll found it. */
 type Heard = "watch" | "poll";
 
-/** Collect one fixed window of hints, keeping whether the watch heard the save. */
-const settle = (duration: Duration.Input) =>
-  Stream.aggregateWithin(
-    Sink.fold<Heard, Heard>(
-      () => "poll",
-      () => true,
-      (by, hint) => Effect.succeed(by === "watch" || hint === "watch" ? "watch" : "poll"),
-    ),
-    Schedule.spaced(duration),
-  );
+/** Wait for unchanged text, moving the end only on a change and keeping any watch hint. */
+const settle =
+  <A>(text: Effect.Effect<A>) =>
+  (hints: Stream.Stream<{ readonly said: A; readonly by: Heard }>) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const queue = yield* Stream.toQueue(
+          hints.pipe(Stream.mapEffect((hint) => Effect.map(Clock.currentTimeMillis, (at) => ({ ...hint, at })))),
+          { capacity: "unbounded" },
+        );
+        return Stream.fromEffectRepeat(
+          Effect.gen(function* () {
+            const first = yield* Queue.take(queue);
+            let window = { said: first.said, by: first.by, end: first.at + SETTLE_MS };
+
+            while (true) {
+              const now = yield* Clock.currentTimeMillis;
+              const hint = yield* Queue.take(queue).pipe(Effect.timeoutOption(Math.max(0, window.end - now)));
+
+              if (Option.isSome(hint)) {
+                window = {
+                  said: hint.value.said,
+                  by: window.by === "watch" || hint.value.by === "watch" ? "watch" : "poll",
+                  end: Equal.equals(window.said, hint.value.said) ? window.end : hint.value.at + SETTLE_MS,
+                };
+              } else {
+                const said = yield* text;
+
+                if (Equal.equals(window.said, said)) {
+                  return { said, by: window.by };
+                }
+
+                window = { said, by: window.by, end: (yield* Clock.currentTimeMillis) + SETTLE_MS };
+              }
+            }
+          }),
+        );
+      }),
+    );
 
 /**
  * Every answer for the file `name` in `folder`: one at once, then one each time a save
@@ -153,7 +183,7 @@ export const settingsFile = <A>(
         );
       const heard = fs.watch(folder).pipe(
         Stream.filter((event) => path.basename(event.path) === name),
-        Stream.as("watch" as const),
+        Stream.mapEffect(() => Effect.map(text, (said) => ({ said, by: "watch" as const }))),
         Stream.concat(
           Stream.fromEffect(Effect.logWarning(`fabrika host: the watch on ${folder} ended`)).pipe(Stream.drain),
         ),
@@ -164,12 +194,9 @@ export const settingsFile = <A>(
       const polled = Stream.tick(POLL).pipe(
         Stream.mapEffect(() => text),
         Stream.filterEffect((now) => Effect.map(Ref.get(seen), (was) => !Equal.equals(now, was))),
-        Stream.as("poll" as const),
+        Stream.map((said) => ({ said, by: "poll" as const })),
       );
-      const saves = Stream.merge(heard, polled).pipe(
-        settle(`${SETTLE_MS} millis`),
-        Stream.mapEffect((by) => Effect.map(text, (said) => ({ by, said }))),
-      );
+      const saves = Stream.merge(heard, polled).pipe(settle(text));
       const first = Stream.fromEffect(Effect.map(text, (said) => ({ by: "start" as const, said })));
       return Stream.concat(first, saves).pipe(
         Stream.changesWith((a, b) => Equal.equals(a.said, b.said)),
