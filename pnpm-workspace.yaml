@@ -24,7 +24,6 @@ catalog:
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.15.0
-  '@demlik/structure-sweep': 0.3.9
   '@demlik/tea': 0.25.0
   '@effect/opentelemetry': 4.1.2
   '@effect/platform-node': 4.1.2
