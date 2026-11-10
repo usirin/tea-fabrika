@@ -1,4 +1,5 @@
 import "./box.sh?raw";
+import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -1054,6 +1055,31 @@ describe("box rm, today's tooling", () => {
 			{seed: 3186, numRuns: 4},
 		);
 	});
+
+	// Plant: drop the keepruns.sh call; the box's runs/ goes with the folder (field note 2026-11-09:
+	// experiment 244's raw answers were lost that way).
+	it.each(["direct", "catchup"] as const)(
+		"T475 %s rm moves the box's runs/ into MAIN's runs/<box>/ before the box goes",
+		(entry) => {
+			fc.assert(
+				fc.property(input, (v) =>
+					fixture({...v, space: true}, (f) => {
+						mkdirSync(join(f.work, "runs", v.value), {recursive: true});
+						writeFileSync(join(f.work, "runs", v.value, "answers.jsonl"), v.value);
+						const got = f.run(f.name, {}, entry);
+						expect(got.code, got.text).toBe(0);
+						expect(got.text).toContain(`kept runs of ${f.name} at runs/${f.name}`);
+						expect(got.text).toContain(`removed box ${f.name}`);
+						expect(existsSync(f.work)).toBe(false);
+						expect(
+							readFileSync(join(f.main, "runs", f.name, v.value, "answers.jsonl"), "utf8"),
+						).toBe(v.value);
+					}),
+				),
+				{seed: 3186, numRuns: 3},
+			);
+		},
+	);
 
 	// Plants: inspect only unstaged changes; treat an unsuccessful status as empty output.
 	it("T318 every tracked change and failed status keep both paths", () => {
