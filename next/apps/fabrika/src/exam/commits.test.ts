@@ -830,6 +830,10 @@ describe("trusted config files", () => {
 				{ "glob": "next/**/*.test.ts", "why": "next/'s tests" },
 				{ "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
 				{ "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+				{
+					"glob": "next/apps/fabrika/src/port.test-support.ts",
+					"why": "the port a stage test hands to dev.ts"
+				},
 				{ "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
 				{ "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
 				{ "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },

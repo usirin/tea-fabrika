@@ -5,7 +5,6 @@ import {execFileSync} from "node:child_process";
 import {createHash, generateKeyPairSync, sign} from "node:crypto";
 import {mkdtempSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createServer as httpServer} from "node:http";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {DatabaseSync} from "node:sqlite";
@@ -19,6 +18,7 @@ import {Effect, Layer, Schema, Stream} from "effect";
 import {SecureRandom} from "effect/crypto";
 import {rolldown} from "rolldown";
 import {describe, expect, it} from "vitest";
+import {heldPort} from "./port.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -106,6 +106,7 @@ const world = async (
 	const previousHome = process.env.FABRIKA_HOME;
 	process.env.FABRIKA_HOME = home;
 	let hits = 0;
+	let release: Effect.Effect<void> = Effect.void;
 	const outbound = httpServer((_request, reply) => {
 		hits++;
 		reply.end("reachable");
@@ -122,18 +123,8 @@ const world = async (
 			throw new Error("no probe address");
 		}
 
-		const listener = createServer();
-		await new Promise<void>((done, fail) => {
-			listener.once("error", fail);
-			listener.listen(0, "127.0.0.1", done);
-		});
-		const at = listener.address();
-
-		if (at === null || typeof at === "string") {
-			throw new Error("no TCP port");
-		}
-
-		await new Promise<void>((done) => listener.close(() => done()));
+		const at = await Effect.runPromise(heldPort());
+		release = at.release;
 		symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
 		const writer = join(home, "writer.ts"),
 			timer = join(home, "timer.ts"),
@@ -231,6 +222,8 @@ const world = async (
 		await new Promise<void>((done) => outbound.close(() => done()));
 		// localStage must close before removing its durable files.
 		rmSync(home, {recursive: true, force: true});
+		// Last, so the pair stays held until the stage that used its port is gone.
+		await Effect.runPromise(release);
 
 		if (previousHome === undefined) {
 			delete process.env.FABRIKA_HOME;

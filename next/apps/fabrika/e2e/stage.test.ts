@@ -2,11 +2,12 @@
 // The key is nonextractable and lives in real IndexedDB. grant.ts alone signs with a key path.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {mkdtempSync, readFileSync, rmSync} from "node:fs";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
+import {Effect} from "effect";
 import {chromium, type Browser, type Page} from "playwright";
 import {afterEach, describe, expect, it} from "vitest";
+import {heldPort} from "../src/port.test-support.ts";
 
 interface BrowserDriver {
 	readonly frames: Array<any>;
@@ -24,6 +25,7 @@ const APP = resolve(import.meta.dirname, "..");
 
 const children: Array<ChildProcess> = [],
 	homes: Array<string> = [],
+	ports: Array<Effect.Effect<void>> = [],
 	browsers: Array<Browser> = [];
 
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
@@ -43,6 +45,11 @@ afterEach(async () => {
 	for (const h of homes.splice(0)) {
 		rmSync(h, {recursive: true, force: true});
 	}
+
+	// Last, so the pair stays held until the stage that used its port is gone.
+	for (const release of ports.splice(0)) {
+		await Effect.runPromise(release);
+	}
 });
 
 const start = async () => {
@@ -53,18 +60,8 @@ const start = async () => {
 	const key = join(home, "person");
 	execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
 	const publicKey = readFileSync(`${key}.pub`, "utf8").trim();
-	const server = createServer();
-	await new Promise<void>((done, fail) => {
-		server.once("error", fail);
-		server.listen(0, "127.0.0.1", done);
-	});
-	const at = server.address();
-
-	if (at === null || typeof at === "string") {
-		throw new Error("no TCP port");
-	}
-
-	await new Promise<void>((done) => server.close(() => done()));
+	const at = await Effect.runPromise(heldPort());
+	ports.push(at.release);
 	const url = `http://127.0.0.1:${at.port}`;
 	const env = {...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
