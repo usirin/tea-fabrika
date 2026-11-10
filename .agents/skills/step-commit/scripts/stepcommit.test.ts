@@ -322,6 +322,49 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 		);
 	});
 
+	// Plant: exact-only lookup (refuses a shot under the docs/ row), a plain string prefix
+	// (docs/shots/ also owning docs/shotsx/), or a '..' part escaping the row.
+	it("K4 a row ending in / owns every file under it, and nothing beside it", () => {
+		fc.assert(
+			fc.property(
+				word,
+				fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner),
+				(name, step) => {
+					each(["under", "deeper", "beside", "escape"], (kind) =>
+						withRepo(
+							[
+								["docs/shots/", step],
+								["src/foreign.ts", step === "tests" ? "build" : "tests"],
+							],
+							(r) => {
+								const path =
+									kind === "under"
+										? `docs/shots/${name}.png`
+										: kind === "deeper"
+											? `docs/shots/${name}/one.png`
+											: kind === "beside"
+												? `docs/shotsx/${name}.png`
+												: "docs/shots/../src/foreign.ts";
+								r.changed(kind === "escape" ? "src/foreign.ts" : path);
+								const got = r.commit(step, [path]);
+								expect(got.code).not.toBeNull();
+								if (kind === "under" || kind === "deeper") {
+									expect(got.code, got.text).toBe(0);
+									expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
+								} else {
+									expect(got.code, got.text).not.toBe(0);
+									expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+									expect(r.signs()).toEqual([]);
+								}
+							},
+						),
+					);
+				},
+			),
+			options,
+		);
+	});
+
 	// Plant: accept folders or '.', silently include an unrelated edit, or let -A become an option.
 	it("K4 refuses dot, -A and folders before staging anything", () => {
 		fc.assert(
