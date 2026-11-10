@@ -1,4 +1,0 @@
-A: plain runFork after stop ->
-   fiber ended: Failure, error tag: Stopped
-B: runFork with Stopped caught, the rest reported ->
-   fiber ended: Success

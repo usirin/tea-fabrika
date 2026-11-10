@@ -79,14 +79,18 @@ describe("P16 checked built tables", () => {
 				};
 				expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
 				expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
-				for (const program of Object.values(raw.programs))
+
+				for (const program of Object.values(raw.programs)) {
 					expect(
 						await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program)),
 					).toEqual(program);
-				for (const asset of Object.values(raw.assets))
+				}
+
+				for (const asset of Object.values(raw.assets)) {
 					expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(
 						asset,
 					);
+				}
 			}),
 			runs,
 		);
@@ -109,6 +113,7 @@ describe("P16 checked built tables", () => {
 						assets: {[asset.route]: {hash: sha(asset.body), type: asset.type, body: asset.body}},
 					};
 					await expect(Effect.runPromise(api.decodeBuilt(good))).resolves.toEqual(good);
+
 					for (const raw of [
 						null,
 						junk,
@@ -136,7 +141,10 @@ describe("P16 checked built tables", () => {
 							assets: {[asset.route]: {hash: sha(String(other)), type: asset.type, body: other}},
 						},
 					]) {
-						if (raw === junk && typeof junk === "object" && junk !== null) continue;
+						if (raw === junk && typeof junk === "object" && junk !== null) {
+							continue;
+						}
+
 						await failed(api, raw);
 					}
 				},

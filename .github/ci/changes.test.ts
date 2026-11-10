@@ -212,8 +212,11 @@ it("shared paths run everything; adding paths never disables a job", () => {
 				expect(ci.classify([...paths, unknown], "pull_request")).toMatchObject(heavy);
 				const before = ci.classify(paths, "pull_request");
 				const after = ci.classify([...paths, ...more], "pull_request");
-				for (const key of ["check", "test", "next", "e2e", "field"] as const)
+
+				for (const key of ["check", "test", "next", "e2e", "field"] as const) {
 					expect(!before[key] || after[key]).toBe(true);
+				}
+
 				expect(ci.classify([], "pull_request")).toMatchObject(heavy);
 				expect(ci.classify(null, "pull_request")).toMatchObject(heavy);
 			},
@@ -348,6 +351,7 @@ it("shared tracked-file check agrees with Git, including command errors", () => 
 	fc.assert(
 		fc.property(word, fc.boolean(), (name, ignored) => {
 			const root = mkdtempSync(join(tmpdir(), "ci-ignore-"));
+
 			try {
 				const data = join(root, "data");
 				// These disposable Git fixtures never touch this checkout's index or history.
@@ -379,7 +383,8 @@ it("skill script and prose rules apply only at the repo root", () => {
 				e2e: false,
 				field: false,
 			});
-			for (const root of ["next", "docs"])
+
+			for (const root of ["next", "docs"]) {
 				expect(
 					ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request"),
 				).toEqual({
@@ -388,6 +393,7 @@ it("skill script and prose rules apply only at the repo root", () => {
 					e2e: root !== "next",
 					field: false,
 				});
+			}
 		}),
 		options,
 	);

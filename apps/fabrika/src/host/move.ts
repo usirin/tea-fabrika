@@ -58,18 +58,24 @@ const UNDER = "(stream = ?1 OR (stream >= ?1 || '/' AND stream < ?1 || '0'))";
 export const readLaptop = (file: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
-		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false))))
+
+		if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
 			return yield* new MoveStopped({why: `there is no ledger file at ${file}`});
+		}
+
 		// The file is read as one nobody changes (`readOnlyRows`), which leaves out a `-wal`. A host
 		// that quit cleanly leaves none; one with writes in it means a host runs or crashed.
 		const wal = yield* fs.stat(`${file}-wal`).pipe(
 			Effect.map((s) => Number(s.size)),
 			Effect.orElseSucceed(() => 0),
 		);
-		if (wal > 0)
+
+		if (wal > 0) {
 			return yield* new MoveStopped({
 				why: `${file}-wal holds writes not yet in the file: a host runs, or did not quit cleanly. Start the app and quit it, then move`,
 			});
+		}
+
 		const rows = yield* Effect.try({
 			try: () =>
 				MOVED.flatMap((p) =>
@@ -85,12 +91,18 @@ const hostRunning = (home: string) =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem.FileSystem;
 		const paths = yield* pathsOf(home);
-		if ((yield* reach(paths.sock)) === "live")
+
+		if ((yield* reach(paths.sock)) === "live") {
 			return Option.some(`a host answers on ${paths.sock}`);
+		}
+
 		const text = yield* fs.readFileString(paths.lock).pipe(Effect.orElseSucceed(() => ""));
 		const pid = Number.parseInt(text, 10);
-		if (Number.isInteger(pid) && (yield* alive(pid)))
+
+		if (Number.isInteger(pid) && (yield* alive(pid))) {
 			return Option.some(`a host is starting, pid ${pid}`);
+		}
+
 		return Option.none<string>();
 	});
 
@@ -157,8 +169,11 @@ const layerMoveTarget = (c: Connection) =>
 					DoorRefused: (d) => Effect.fail(stopOf(d)),
 				}),
 			);
-			if (session.who.kind !== "user")
+
+			if (session.who.kind !== "user") {
 				return yield* new MoveStopped({why: "a move is the founder's, as a person"});
+			}
+
 			const door = doorOf({url: c.url, ledger: c.ledger});
 			const {token} = session;
 			return MoveTarget.of({
@@ -191,25 +206,39 @@ export const copyInto = (
 			);
 		const target = yield* MoveTarget;
 		const plan = planOf(rows, target.founder);
-		if (plan.unmappable.length > 0)
+
+		if (plan.unmappable.length > 0) {
 			return yield* new MoveStopped({
 				why: `the move cannot map these writers, and does not guess: ${plan.unmappable.join(", ")}`,
 			});
-		if (plan.refused.length > 0)
+		}
+
+		if (plan.refused.length > 0) {
 			return yield* new MoveStopped({why: `the door would refuse: ${plan.refused.join("; ")}`});
+		}
+
 		const hash = yield* hashOf(plan);
 		const seal = {count: plan.events.length, hash};
 		const at = yield* again(target.progress);
+
 		if (at.state.kind === "open") {
 			// A seal whose answer was lost: the same hash sealed it, so the move is done.
-			if (at.state.by === "seal" && at.state.hash === hash) return {plan, hash, progress: at};
+			if (at.state.by === "seal" && at.state.hash === hash) {
+				return {plan, hash, progress: at};
+			}
+
 			return yield* new MoveStopped({
 				why: `the ledger is open already, by ${at.state.by}: a move goes into a new ledger`,
 			});
 		}
+
 		const size = Math.max(1, o.chunk ?? CHUNK);
 		const rest = plan.events.filter((e) => e.from > at.last);
-		for (let i = 0; i < rest.length; i += size) yield* again(target.send(rest.slice(i, i + size)));
+
+		for (let i = 0; i < rest.length; i += size) {
+			yield* again(target.send(rest.slice(i, i + size)));
+		}
+
 		const progress = yield* again(target.seal(seal));
 		return {plan, hash, progress};
 	});
@@ -228,15 +257,21 @@ export const move = (o: {
 }) =>
 	Effect.gen(function* () {
 		const running = yield* hostRunning(o.home);
-		if (Option.isSome(running))
+
+		if (Option.isSome(running)) {
 			return yield* new MoveStopped({why: `${running.value}: stop it first, then move`});
+		}
+
 		const {url, ledger} = yield* addressOf(o.to);
 		const c: Connection = {url, ledger, login: o.login, key: o.key};
 		const kept = yield* connectionOf(o.home);
-		if (Option.isSome(kept) && (kept.value.url !== url || kept.value.ledger !== ledger))
+
+		if (Option.isSome(kept) && (kept.value.url !== url || kept.value.ledger !== ledger)) {
 			return yield* new MoveStopped({
 				why: `this home is connected to ${kept.value.url}/${kept.value.ledger} already`,
 			});
+		}
+
 		const rows = yield* readLaptop(o.from);
 		const done = yield* copyInto(rows, o.chunk === undefined ? {} : {chunk: o.chunk}).pipe(
 			Effect.provide(layerMoveTarget(c)),

@@ -247,11 +247,18 @@ const MODIFIERS = new Set([
  * before the `|` it makes, and must not disarm the prefix.
  */
 export const keyName = (press: Press): string | null => {
-	if (press.composing || MODIFIERS.has(press.key) || press.key === "") return null;
+	if (press.composing || MODIFIERS.has(press.key) || press.key === "") {
+		return null;
+	}
+
 	const char = [...press.key].length === 1;
 	const modified = press.ctrl || press.alt || press.meta;
 	const shift = press.shift && (!char || modified);
-	if (!modified && !shift) return char ? press.key : `<${press.key.toLowerCase()}>`;
+
+	if (!modified && !shift) {
+		return char ? press.key : `<${press.key.toLowerCase()}>`;
+	}
+
 	const bare = char ? press.key.replace(/[A-Z]/g, (c) => c.toLowerCase()) : press.key.toLowerCase();
 	const mods = `${press.ctrl ? "c-" : ""}${press.alt ? "a-" : ""}${shift ? "s-" : ""}${press.meta ? "m-" : ""}`;
 	return `<${mods}${bare}>`;
@@ -260,25 +267,39 @@ export const keyName = (press: Press): string | null => {
 /** Character matching comes before a Ctrl/Cmd fallback to a Latin key position. */
 export const matchPress = (press: Press, keys: readonly Key[], mac: boolean): Key | null => {
 	const name = keyName(press);
-	if (name === null) return null;
+
+	if (name === null) {
+		return null;
+	}
+
 	const exact = keys.find((key) => key.key === name);
-	if (exact !== undefined) return exact;
+
+	if (exact !== undefined) {
+		return exact;
+	}
+
 	if (((press.alt && mac) || press.altGraph) && [...press.key].length === 1) {
 		const typed = keyName({...press, alt: false, ctrl: press.altGraph ? false : press.ctrl});
 		const folded = keys.find((key) => key.key === typed);
-		if (folded !== undefined) return folded;
+
+		if (folded !== undefined) {
+			return folded;
+		}
 	}
+
 	if (
 		(press.ctrl || press.meta) &&
 		!press.altGraph &&
 		[...press.key].some((char) => (char.codePointAt(0) ?? 0) > 127)
 	) {
 		const latin = /^Key([A-Z])$/.exec(press.code ?? "")?.[1];
+
 		if (latin !== undefined) {
 			const position = keyName({...press, key: latin.toLowerCase()});
 			return keys.find((key) => key.key === position) ?? null;
 		}
 	}
+
 	return null;
 };
 
@@ -313,9 +334,16 @@ export const THE_MACS: ReadonlySet<string> = new Set([
  *   keyOwner({key: "w", ctrl: false, alt: false, meta: true}, false, defaults)   "app": not a Mac
  */
 export const keyOwner = (press: Press, mac: boolean, keys: Keys): KeyOwner => {
-	if (!mac || !press.meta) return "app";
+	if (!mac || !press.meta) {
+		return "app";
+	}
+
 	const name = keyName(press);
-	if (name === null || THE_MACS.has(name)) return "system";
+
+	if (name === null || THE_MACS.has(name)) {
+		return "system";
+	}
+
 	const bound =
 		matchPress(
 			press,
@@ -325,6 +353,10 @@ export const keyOwner = (press: Press, mac: boolean, keys: Keys): KeyOwner => {
 			],
 			mac,
 		) !== null;
-	if (bound) return "app";
+
+	if (bound) {
+		return "app";
+	}
+
 	return keys.ignore.includes(name) ? "nobody" : "system";
 };

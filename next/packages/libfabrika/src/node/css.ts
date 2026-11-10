@@ -19,11 +19,19 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const refusal = (error: unknown) => {
 	const message = error instanceof Error ? error.message : String(error);
 	const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
-	if (known !== undefined) return new BuildError({reason: "bundle", message: known});
-	if (message.includes("BadString"))
+
+	if (known !== undefined) {
+		return new BuildError({reason: "bundle", message: known});
+	}
+
+	if (message.includes("BadString")) {
 		return new BuildError({reason: "bundle", message: "stylesheet has a broken string"});
-	if (message.includes("BadUrl"))
+	}
+
+	if (message.includes("BadUrl")) {
 		return new BuildError({reason: "bundle", message: "stylesheet has a broken url()"});
+	}
+
 	return new BuildError({reason: "bundle", message: `stylesheet has a broken @import: ${message}`});
 };
 
@@ -31,7 +39,11 @@ const refusal = (error: unknown) => {
 // LF, CRLF, CR and form feed as one line break each, as CSS input preprocessing does.
 const offsets = (text: string) => {
 	const starts = [0];
-	for (const m of text.matchAll(/\r\n|[\n\r\f]/g)) starts.push(m.index + m[0].length);
+
+	for (const m of text.matchAll(/\r\n|[\n\r\f]/g)) {
+		starts.push(m.index + m[0].length);
+	}
+
 	return ({line, column}: {readonly line: number; readonly column: number}) =>
 		(starts[line] ?? text.length) + column - 1;
 };
@@ -57,13 +69,22 @@ const parse = (file: string, text: string) => {
 		visitor: {
 			Rule(rule) {
 				// Neither has a place in the source to start from.
-				if (rule.type === "ignored" || rule.type === "custom") return;
+				if (rule.type === "ignored" || rule.type === "custom") {
+					return;
+				}
+
 				const start = at(rule.value.loc);
 				starts.push(start);
-				if (rule.type !== "import") return;
+
+				if (rule.type !== "import") {
+					return;
+				}
+
 				// `layer` and `supports()` would need their own wrapper; a media query is not one.
-				if ((rule.value.layer ?? rule.value.supports ?? null) !== null)
+				if ((rule.value.layer ?? rule.value.supports ?? null) !== null) {
 					throw new Error(unsupported);
+				}
+
 				imports.push(start);
 			},
 		},
@@ -78,14 +99,21 @@ const check = Effect.fn("build.css.check")(function* (file: string, text: string
 		try: () => parse(file, text),
 		catch: refusal,
 	});
+
 	for (const start of imports) {
 		const end = Math.min(text.length, ...starts.filter((next) => next > start));
 		const bare = yield* Effect.try({try: () => bareLayer(text.slice(start, end)), catch: refusal});
-		if (bare) return yield* new BuildError({reason: "bundle", message: unsupported});
+
+		if (bare) {
+			return yield* new BuildError({reason: "bundle", message: unsupported});
+		}
 	}
-	for (const dependency of dependencies)
-		if (dependency.type === "url" && !remote(dependency.url))
+
+	for (const dependency of dependencies) {
+		if (dependency.type === "url" && !remote(dependency.url)) {
 			return yield* new BuildError({reason: "bundle", message: "stylesheet references a file"});
+		}
+	}
 });
 
 // The bundler drops an import it has already entered, so a cycle is found from the edges it resolved.
@@ -93,8 +121,14 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
 	const done = new Set<string>(),
 		open = new Set<string>();
 	const visit = (file: string): boolean => {
-		if (open.has(file)) return true;
-		if (done.has(file)) return false;
+		if (open.has(file)) {
+			return true;
+		}
+
+		if (done.has(file)) {
+			return false;
+		}
+
 		open.add(file);
 		const found = [...(edges.get(file) ?? [])].some(visit);
 		open.delete(file);
@@ -144,7 +178,10 @@ export const inlineStylesheet = Effect.fn("build.css")(function* (file: string) 
 	};
 	// oxlint-disable-next-line fabrika/no-promises -- edge: lightningcss takes a resolver only in bundleAsync
 	const result = yield* Effect.tryPromise({try: () => bundleAsync(bundling), catch: refusal});
-	if (cyclic(edges))
+
+	if (cyclic(edges)) {
 		return yield* new BuildError({reason: "bundle", message: "stylesheet imports itself"});
+	}
+
 	return decode(result.code);
 });

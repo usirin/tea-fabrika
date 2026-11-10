@@ -84,7 +84,11 @@ export const pushToTheEnd = (
 	Effect.gen(function* () {
 		const runtime = yield* refs.get(id).start({type: "start", ask}, {conflict: "use_existing"});
 		const end = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the push stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the push stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 

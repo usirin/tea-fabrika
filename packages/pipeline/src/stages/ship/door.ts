@@ -37,6 +37,7 @@ export type MergeDoor =
  */
 export function atTheDoor(asked: ReadyToMerge, fresh: ShipFacts): Door {
 	const gate = shipGate(asked.pr, fresh);
+
 	switch (gate.answer) {
 		case "stop":
 			return {stale: nameOf(gate.outcome)};
@@ -57,7 +58,11 @@ export function atTheDoor(asked: ReadyToMerge, fresh: ShipFacts): Door {
  */
 export function atTheMergeDoor(asked: ReadyToMerge, fresh: ShipFacts): MergeDoor {
 	const door = atTheDoor(asked, fresh);
-	if ("stale" in door) return door;
+
+	if ("stale" in door) {
+		return door;
+	}
+
 	const onMain = ReadyToMerge.onMain(door.write, fresh.main.tip);
 	return onMain === null ? {behind: fresh.main} : {write: onMain};
 }

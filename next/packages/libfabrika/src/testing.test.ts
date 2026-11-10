@@ -87,6 +87,7 @@ describe("S2 syncTest catches its plants", () => {
 	});
 	it("plant, skip the first or last cut: boot and final saves are checked even for an empty list", async () => {
 		const {syncTest} = await import("./testing.ts");
+
 		for (const list of [[], msgs] as const) {
 			let saves = 0;
 			const cuts: number[] = [];
@@ -160,7 +161,8 @@ describe("p69 senderTest catches its plants", () => {
 		const wrong = [writes[0]!, {...writes[1]!, parent: null, by: owner}, writes[2]!];
 		expect(() => senderTest({inputs, expected, writes: wrong, owner, seed: SEED})).toThrow();
 	});
-	for (const fault of ["missing", "duplicate", "extra"] as const)
+
+	for (const fault of ["missing", "duplicate", "extra"] as const) {
 		it(`plant, ${fault} write: every expected write matches exactly once`, async () => {
 			const {senderTest} = await import("./testing.ts");
 			const wrong =
@@ -171,4 +173,5 @@ describe("p69 senderTest catches its plants", () => {
 						: [...writes, {...writes[0]!, id: "unexpected"}];
 			expect(() => senderTest({inputs, expected, writes: wrong, owner, seed: SEED})).toThrow();
 		});
+	}
 });

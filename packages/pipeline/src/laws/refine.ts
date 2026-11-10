@@ -76,7 +76,10 @@ const isAnswer = (m: Msg): m is Exclude<Msg, RefineMsg<string>> => "cmd" in m;
 export function refineLaws<S extends Refine>(): readonly Law<S, Msg, RefineCmd>[] {
 	return [
 		law<S, Msg, RefineCmd>("an answer counts only for the Cmd in flight", ({prev, msg, next}) => {
-			if (!isAnswer(msg) || !moved(prev, next)) return null;
+			if (!isAnswer(msg) || !moved(prev, next)) {
+				return null;
+			}
+
 			const asked = waitingOn(prev);
 			return structuralHash(msg.cmd) === structuralHash(asked)
 				? null
@@ -85,11 +88,16 @@ export function refineLaws<S extends Refine>(): readonly Law<S, Msg, RefineCmd>[
 		law<S, Msg, RefineCmd>(
 			"done with a verdict only when it found no problem, and without one only when the parent accepted",
 			({prev, msg, next}) => {
-				if (next.phase !== "done" || prev.phase === "done") return null;
-				if (next.verdict === null)
+				if (next.phase !== "done" || prev.phase === "done") {
+					return null;
+				}
+
+				if (next.verdict === null) {
 					return msg.type === "answer" && msg.answer.kind === "accept"
 						? null
 						: `done unchecked after ${msg.type}`;
+				}
+
 				const problems = drafts.problemsOf(next.draft, next.verdict, "b");
 				return problems.length === 0 ? null : `done with ${problems.join("; ")}`;
 			},

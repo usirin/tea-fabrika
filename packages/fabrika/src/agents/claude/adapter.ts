@@ -69,6 +69,7 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 			),
 		];
 	}
+
 	if (m.type === "user" && m.parent_tool_use_id === null && Array.isArray(m.message.content)) {
 		return m.message.content.flatMap((b) =>
 			typeof b === "object" && b.type === "tool_result"
@@ -83,7 +84,11 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 				: [],
 		);
 	}
-	if (m.type !== "result") return [];
+
+	if (m.type !== "result") {
+		return [];
+	}
+
 	const spent = {usd: m.total_cost_usd, requests: m.num_turns};
 	const total: Raw = {_tag: "tokens", tokens: tokensOf(m.usage), whole: true};
 	const ended = (
@@ -95,10 +100,19 @@ export const rawOf = (m: SDKMessage): Raw[] | {readonly broke: string} => {
 		structured,
 		...spent,
 	});
-	if (m.subtype === "success" && !m.is_error)
+
+	if (m.subtype === "success" && !m.is_error) {
 		return [total, ended("end_turn", m.structured_output)];
-	if (m.subtype === "error_max_budget_usd") return [total, ended("over_budget", undefined)];
-	if (m.subtype === "error_max_turns") return [total, ended("max_turn_requests", undefined)];
+	}
+
+	if (m.subtype === "error_max_budget_usd") {
+		return [total, ended("over_budget", undefined)];
+	}
+
+	if (m.subtype === "error_max_turns") {
+		return [total, ended("max_turn_requests", undefined)];
+	}
+
 	return {broke: `${m.subtype}${m.is_error ? " (error)" : ""}`};
 };
 
@@ -137,13 +151,16 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 		Effect.gen(function* () {
 			const more = config.more?.(turn.folder) ?? {};
 			const outside = outsideExtra(more);
-			if (outside !== null)
+
+			if (outside !== null) {
 				return yield* Effect.fail(
 					failed(
 						"contain",
 						`a stage's options may not name ${outside}; only ${EXTRA_OPTIONS.join(", ")}`,
 					),
 				);
+			}
+
 			const own = turn.resume ?? randomUUID();
 			let pid: number | null = null;
 			const {settingSources: _none, settings, ...base} = claudeOptions(turn.folder, turn.usd);
@@ -180,7 +197,11 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 			};
 			// Where settings come from, said by `ownRules` alone, checked on the whole before any process.
 			const refused = settingsRefusal(options);
-			if (refused !== null) return yield* Effect.fail(failed("contain", refused));
+
+			if (refused !== null) {
+				return yield* Effect.fail(failed("contain", refused));
+			}
+
 			const q = (config.open ?? openLive)({prompt: turn.prompt, options});
 			const closed = {done: false};
 			yield* Effect.addFinalizer(() =>
@@ -199,6 +220,7 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 							? Effect.fail(failed("contain", `the SDK listed ${extra} tools the run did not name`))
 							: Effect.succeed<Raw[]>([]);
 					}
+
 					const raws = rawOf(m);
 					return Array.isArray(raws)
 						? Effect.succeed(raws)
@@ -213,7 +235,10 @@ export const claudeAdapter = (config: ClaudeAdapterConfig = {}): Adapter => ({
 				},
 				// The maker's own stop: interrupt the turn, then end the process.
 				stop: Effect.promise(async () => {
-					if (closed.done) return;
+					if (closed.done) {
+						return;
+					}
+
 					await Promise.race([
 						q.interrupt().catch(() => undefined),
 						new Promise((r) => setTimeout(r, 3_000)),

@@ -169,7 +169,10 @@ export const idOf = (r: Read): string | null => {
 
 /** The record a job view follows: the one it reads or shows. None while waiting, once lost, or in the ticket view. */
 export const followed = (s: Model): {readonly id: string} | null => {
-	if (s.shows.kind !== "job") return null;
+	if (s.shows.kind !== "job") {
+		return null;
+	}
+
 	const read = s.shows.read;
 	return read.at === "reading" ? {id: read.id} : read.at === "read" ? {id: read.trace.trace} : null;
 };
@@ -179,7 +182,10 @@ export const isRunning = (trace: Kept): boolean => trace.job !== null && trace.j
 
 /** The clock's Sub in the job view: on while the record shown says its job has not ended. */
 export const ticking = (s: Model): {readonly id: string} | null => {
-	if (s.shows.kind !== "job") return null;
+	if (s.shows.kind !== "job") {
+		return null;
+	}
+
 	const read = s.shows.read;
 	return read.at === "read" && isRunning(read.trace) ? {id: read.trace.trace} : null;
 };
@@ -201,7 +207,11 @@ const anyOpen = (timeline: readonly Entry[]): boolean =>
 /** The ticket view's records to follow: one per lane its facts name. */
 export const lanesFollowed = (s: Model): {readonly ids: readonly string[]} | null => {
 	const timeline = timelineOf(s);
-	if (timeline === null) return null;
+
+	if (timeline === null) {
+		return null;
+	}
+
 	const ids = lanesIn(timeline);
 	return ids.length === 0 ? null : {ids};
 };
@@ -269,6 +279,7 @@ const ticketRowIn = (shows: TicketShows, key: string, opens: boolean): boolean =
 	const timeline = shows.facts.at === "read" ? shows.facts.timeline : [];
 	const [kind, ...rest] = key.split(":");
 	const id = rest.join(":");
+
 	switch (kind) {
 		case "lane":
 			return lanesIn(timeline).includes(id);
@@ -288,8 +299,15 @@ const ticketRowIn = (shows: TicketShows, key: string, opens: boolean): boolean =
 /** The playhead after a `step`: the stop after or before it, or live past the last. */
 const stepped = (timeline: readonly Entry[], at: number | null, by: -1 | 1): number | null => {
 	const stops = stopsOf(timeline);
-	if (at === null) return by === 1 ? null : (stops.at(-1) ?? null);
-	if (by === 1) return stops.find((t) => t > at) ?? null;
+
+	if (at === null) {
+		return by === 1 ? null : (stops.at(-1) ?? null);
+	}
+
+	if (by === 1) {
+		return stops.find((t) => t > at) ?? null;
+	}
+
 	return stops.findLast((t) => t < at) ?? at;
 };
 
@@ -308,14 +326,22 @@ export const trace = defineMachine({
 		look: (s, m): Step => {
 			if (s.shows.kind === "job") {
 				const read = s.shows.read;
-				if (idOf(read) === m.id && read.at !== "unread") return [s, []];
+
+				if (idOf(read) === m.id && read.at !== "unread") {
+					return [s, []];
+				}
 			}
+
 			return [{shows: {kind: "job", read: {at: "reading", id: m.id}}, open: [], chosen: null}, []];
 		},
 		got: (s, m): Step => {
 			if (s.shows.kind === "ticket") {
 				const shows = s.shows;
-				if (!lanesIn(timelineOf(s) ?? []).includes(m.trace.trace)) return [s, []];
+
+				if (!lanesIn(timelineOf(s) ?? []).includes(m.trace.trace)) {
+					return [s, []];
+				}
+
 				const held = shows.records.find((r) => r.id === m.trace.trace);
 				const trace = held?.read.at === "read" ? keepingEnd(held.read.trace, m.trace) : m.trace;
 				const read: Read = {at: "read", trace, now: null};
@@ -325,9 +351,14 @@ export const trace = defineMachine({
 						: shows.records.map((r) => (r.id === m.trace.trace ? {id: r.id, read} : r));
 				return [inTicket(s, {...shows, records}), []];
 			}
+
 			const read = s.shows.read;
-			if (idOf(read) !== m.trace.trace) return [s, []];
-			if (read.at === "reading")
+
+			if (idOf(read) !== m.trace.trace) {
+				return [s, []];
+			}
+
+			if (read.at === "reading") {
 				return [
 					{
 						shows: {kind: "job", read: {at: "read", trace: m.trace, now: null}},
@@ -336,17 +367,27 @@ export const trace = defineMachine({
 					},
 					[],
 				];
+			}
+
 			return read.at === "read" ? [again(s, read, keepingEnd(read.trace, m.trace)), []] : [s, []];
 		},
 		lost: (s, m): Step => {
 			if (s.shows.kind === "ticket") {
 				const shows = s.shows;
-				if (!lanesIn(timelineOf(s) ?? []).includes(m.id)) return [s, []];
-				if (shows.records.some((r) => r.id === m.id && r.read.at === "read")) return [s, []];
+
+				if (!lanesIn(timelineOf(s) ?? []).includes(m.id)) {
+					return [s, []];
+				}
+
+				if (shows.records.some((r) => r.id === m.id && r.read.at === "read")) {
+					return [s, []];
+				}
+
 				const read: Read = {at: "unread", id: m.id, why: m.why};
 				const records = [...shows.records.filter((r) => r.id !== m.id), {id: m.id, read}];
 				return [inTicket(s, {...shows, records}), []];
 			}
+
 			const read = s.shows.read;
 			return read.at === "reading" && read.id === m.id
 				? [showing(s, {at: "unread", id: m.id, why: m.why}), []]
@@ -357,12 +398,19 @@ export const trace = defineMachine({
 				s.shows.kind === "ticket"
 					? ticketRowIn(s.shows, m.row, true)
 					: s.shows.read.at === "read" && groupsOf(treeOf(s.shows.read.trace)).has(m.row);
-			if (!holds) return [s, []];
+
+			if (!holds) {
+				return [s, []];
+			}
+
 			const open = s.open.includes(m.row) ? s.open.filter((k) => k !== m.row) : [...s.open, m.row];
 			return [{...s, open}, []];
 		},
 		choose: (s, m): Step => {
-			if (m.row === null) return [{...s, chosen: null}, []];
+			if (m.row === null) {
+				return [{...s, chosen: null}, []];
+			}
+
 			const holds =
 				s.shows.kind === "ticket"
 					? !m.row.startsWith("lane:") && ticketRowIn(s.shows, m.row, false)
@@ -372,10 +420,12 @@ export const trace = defineMachine({
 		// A tick that was on its way when the job's end was read, or a newer id, is let go. In the
 		// ticket view it lands on the view itself, while a lane is open and the playhead is live.
 		tick: (s, m): Step => {
-			if (s.shows.kind === "ticket")
+			if (s.shows.kind === "ticket") {
 				return ticketTicking(s) === null
 					? [s, []]
 					: [inTicket(s, {...s.shows, now: Math.max(s.shows.now ?? m.now, m.now)}), []];
+			}
+
 			const read = s.shows.read;
 			return read.at === "read" && isRunning(read.trace)
 				? [showing(s, {...read, now: Math.max(read.now ?? m.now, m.now)}), []]
@@ -400,7 +450,10 @@ export const trace = defineMachine({
 					],
 		// The first read opens the newest lane alone; a lane begun since the last read opens too.
 		facts: (s, m): Step => {
-			if (s.shows.kind !== "ticket" || s.shows.facts.number !== m.number) return [s, []];
+			if (s.shows.kind !== "ticket" || s.shows.facts.number !== m.number) {
+				return [s, []];
+			}
+
 			const before = lanesIn(timelineOf(s) ?? []).at(-1);
 			const newest = lanesIn(m.timeline).at(-1);
 			const key = newest === undefined ? null : `lane:${newest}`;
@@ -422,14 +475,22 @@ export const trace = defineMachine({
 		// Past the last fact is live: there is nothing later to replay up to.
 		seek: (s, m): Step => {
 			const timeline = timelineOf(s);
-			if (s.shows.kind !== "ticket" || timeline === null) return [s, []];
+
+			if (s.shows.kind !== "ticket" || timeline === null) {
+				return [s, []];
+			}
+
 			const last = timeline.at(-1)?.at ?? -Infinity;
 			const at = m.at === null || m.at > last ? null : m.at;
 			return at === s.shows.at ? [s, []] : [inTicket(s, {...s.shows, at}), []];
 		},
 		step: (s, m): Step => {
 			const timeline = timelineOf(s);
-			if (s.shows.kind !== "ticket" || timeline === null) return [s, []];
+
+			if (s.shows.kind !== "ticket" || timeline === null) {
+				return [s, []];
+			}
+
 			const at = stepped(timeline, s.shows.at, m.by);
 			return at === s.shows.at ? [s, []] : [inTicket(s, {...s.shows, at}), []];
 		},
@@ -447,6 +508,7 @@ export const trace = defineMachine({
 export const statusOf = (s: Model): string => {
 	if (s.shows.kind === "ticket") {
 		const {facts} = s.shows;
+
 		switch (facts.at) {
 			case "reading":
 				return `reading ticket ${facts.number}`;
@@ -459,7 +521,9 @@ export const statusOf = (s: Model): string => {
 			}
 		}
 	}
+
 	const read = s.shows.read;
+
 	switch (read.at) {
 		case "waiting":
 			return "waiting for a run to be picked";

@@ -34,10 +34,20 @@ const split = (id: string): readonly [string, string] => {
 
 const valid = (id: string): boolean => {
 	const [prefix, suffix] = split(id);
-	if (!validPrefix(prefix)) return false;
-	if (suffix.length !== 26 || /[^0-9a-hjkmnp-tv-z]/.test(suffix)) return false;
+
+	if (!validPrefix(prefix)) {
+		return false;
+	}
+
+	if (suffix.length !== 26 || /[^0-9a-hjkmnp-tv-z]/.test(suffix)) {
+		return false;
+	}
+
 	// The first character has only three bits: the UUID must fit in 128 bits.
-	if (alphabet.indexOf(suffix.charAt(0)) > 7) return false;
+	if (alphabet.indexOf(suffix.charAt(0)) > 7) {
+		return false;
+	}
+
 	const uuid = [...suffix].reduce(
 		(bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)),
 		0n,
@@ -68,13 +78,19 @@ type Specific<P extends string> = ReturnType<typeof specific<P>>;
 
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */
 export const make = <const P extends string>(prefix: P): Specific<P> => {
-	if (!validPrefix(prefix)) throw new IdError({why: "prefix"});
+	if (!validPrefix(prefix)) {
+		throw new IdError({why: "prefix"});
+	}
+
 	return specific(prefix);
 };
 
 /** The factory for a supplied prefix: invalid prefixes fail with a typed IdError. */
 export const makeEffect = Effect.fn("id.makeEffect")(function* <const P extends string>(prefix: P) {
-	if (!validPrefix(prefix)) return yield* new IdError({why: "prefix"});
+	if (!validPrefix(prefix)) {
+		return yield* new IdError({why: "prefix"});
+	}
+
 	return specific(prefix);
 });
 
@@ -132,10 +148,12 @@ const encode = (at: number, random: bigint): string => {
 	let uuid =
 		(BigInt(at) << 80n) | (7n << 76n) | ((random >> 62n) << 64n) | (2n << 62n) | (random & low62);
 	let suffix = "";
+
 	for (let i = 0; i < 26; i++) {
 		suffix = alphabet.charAt(Number(uuid & 31n)) + suffix;
 		uuid >>= 5n;
 	}
+
 	return suffix;
 };
 
@@ -153,18 +171,27 @@ export class Generator extends Context.Service<
 				random = 0n;
 			// Keep allocation and validation synchronous so fibers observe IDs in allocation order.
 			const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
-				if (!Number.isSafeInteger(now) || now < 0 || now > maxTime)
+				if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
 					throw new IdError({why: "clock"});
+				}
+
 				let nextAt = at,
 					nextRandom = random;
+
 				if (now > at) {
 					nextAt = now;
 					nextRandom = entropy();
 				} else if (random === maxRandom) {
-					if (at === maxTime) throw new IdError({why: "exhausted"});
+					if (at === maxTime) {
+						throw new IdError({why: "exhausted"});
+					}
+
 					nextAt++;
 					nextRandom = 0n;
-				} else nextRandom++;
+				} else {
+					nextRandom++;
+				}
+
 				at = nextAt;
 				random = nextRandom;
 				return Result.getOrThrowWith(
@@ -175,7 +202,11 @@ export class Generator extends Context.Service<
 			return {
 				next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
 					const prefix = prefixes.get(schema);
-					if (prefix === undefined) return yield* new IdError({why: "prefix"});
+
+					if (prefix === undefined) {
+						return yield* new IdError({why: "prefix"});
+					}
+
 					yield* Effect.annotateCurrentSpan({type: prefix});
 					const now = yield* Clock.currentTimeMillis;
 					return yield* Effect.try({

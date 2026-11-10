@@ -62,7 +62,11 @@ export const reportServer = (): Effect.Effect<Report, never, Scope.Scope> =>
 				Effect.sync(() => {
 					calls += 1;
 					const fits = Schema.decodeUnknownOption(HeldBuilt)(given);
-					if (Option.isNone(fits)) return "Refused: that form does not fit its shape.";
+
+					if (Option.isNone(fits)) {
+						return "Refused: that form does not fit its shape.";
+					}
+
 					form = fits.value;
 					return "Taken. End your turn now.";
 				}),
@@ -84,7 +88,11 @@ export const reportServer = (): Effect.Effect<Report, never, Scope.Scope> =>
 		// No spans: a builder's trace is its turn, not this server's HTTP and MCP calls.
 		const context = yield* Layer.build(served).pipe(Effect.withTracerEnabled(false), Effect.orDie);
 		const address = Context.get(context, HttpServer.HttpServer).address;
-		if (address._tag !== "InetAddressV4") return yield* Effect.die("the report server has no port");
+
+		if (address._tag !== "InetAddressV4") {
+			return yield* Effect.die("the report server has no port");
+		}
+
 		return {
 			server: {
 				type: "http",

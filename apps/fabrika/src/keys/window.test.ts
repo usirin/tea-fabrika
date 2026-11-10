@@ -12,7 +12,11 @@ const step = (model: Editor, msg: EditorMsg) =>
 
 const table = (text: string): Keys => {
 	const read = decodeKeys(text, true);
-	if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+	if (Result.isFailure(read)) {
+		throw new Error(read.failure.why);
+	}
+
 	return read.success;
 };
 
@@ -28,7 +32,11 @@ describe("today's keyboard shortcuts view", () => {
 			'prefix = "ctrl+a"\ntezgah.zoom = "cmd+shift+w"\ntezgah.fold = []',
 			true,
 		);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
 		let model = editorMachine.init(read.success, undefined)[0];
 		model = applyCell<Editor, EditorMsg, EditorCmd>(editorMachine, model, {
 			type: "select",
@@ -46,7 +54,11 @@ describe("today's keyboard shortcuts view", () => {
 		expect(html).not.toContain('aria-keyshortcuts="Control+A ');
 		expect(html).toContain("Not ours");
 		expect(html).toMatch(/system|macOS/i);
-		for (const action of ["Change", "Add", "Unbind", "Reset"]) expect(html).toContain(action);
+
+		for (const action of ["Change", "Add", "Unbind", "Reset"]) {
+			expect(html).toContain(action);
+		}
+
 		expect(html).not.toMatch(/mapping mode/i);
 		expect(html).toContain("<h3>zoom</h3>");
 		expect(html).toContain("tsh: <code>zoom</code>");
@@ -75,14 +87,17 @@ describe("today's keyboard shortcuts view", () => {
 		const moved = table('tezgah.fold = "<prefix>z"');
 		expect(draw(selected(moved, "tezgah.zoom"))).toContain("ctrl+b then z moved to tezgah.fold");
 		let editor = step(selected(defaults, "tezgah.zoom"), {type: "change"});
+
 		for (const [key, ctrl] of [
 			["b", true],
 			["f", false],
-		] as const)
+		] as const) {
 			editor = step(editor, {
 				type: "press",
 				press: {key, ctrl, alt: false, meta: false},
 			});
+		}
+
 		const candidate = draw(editor);
 		expect(candidate).toContain("New key");
 		expect(candidate.match(/Saving moves this key from/g)).toHaveLength(1);
@@ -94,11 +109,21 @@ describe("today's keyboard shortcuts view", () => {
 		const inputs: Record<string, unknown>[] = [];
 		const walk = (node: unknown): void => {
 			if (Array.isArray(node)) {
-				for (const child of node) walk(child);
+				for (const child of node) {
+					walk(child);
+				}
+
 				return;
 			}
-			if (!isValidElement<Record<string, unknown>>(node)) return;
-			if (node.props.label === "Search commands or keys") inputs.push(node.props);
+
+			if (!isValidElement<Record<string, unknown>>(node)) {
+				return;
+			}
+
+			if (node.props.label === "Search commands or keys") {
+				inputs.push(node.props);
+			}
+
 			walk(node.props.children);
 		};
 		function Read(): ReactNode {
@@ -113,7 +138,11 @@ describe("today's keyboard shortcuts view", () => {
 		renderToStaticMarkup(createElement(Read));
 		expect(inputs).toHaveLength(1);
 		const change = inputs[0]?.onChange;
-		if (typeof change !== "function") throw new Error("search has no change handler");
+
+		if (typeof change !== "function") {
+			throw new Error("search has no change handler");
+		}
+
 		change({currentTarget: {value: "fold"}});
 		expect(sent).toEqual([{type: "query", query: "fold"}]);
 	});
@@ -122,9 +151,12 @@ describe("today's keyboard shortcuts view", () => {
 		expect(focusAfter("idle", "waiting")).toBe("box");
 		expect(focusAfter("waiting", "candidate")).toBeNull();
 		expect(focusAfter("candidate", "saving")).toBe("result");
+
 		// Save answered, Cancel pressed, or Undo done: the editor is idle and Change takes focus.
-		for (const from of ["saving", "waiting", "candidate"] as const)
+		for (const from of ["saving", "waiting", "candidate"] as const) {
 			expect(focusAfter(from, "idle")).toBe("change");
+		}
+
 		expect(focusAfter("idle", "idle")).toBeNull();
 	});
 

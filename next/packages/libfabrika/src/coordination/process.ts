@@ -127,9 +127,16 @@ const Recovered = Schema.TaggedUnion({
 export const recoverActivity = (
 	raw: unknown,
 ): Result.Result<typeof Recovered.Type, LedgerError> => {
-	if (raw === undefined) return Result.succeed(Recovered.cases.idle.make({}));
+	if (raw === undefined) {
+		return Result.succeed(Recovered.cases.idle.make({}));
+	}
+
 	const saved = Schema.decodeUnknownResult(Activity)(raw);
-	if (Result.isFailure(saved)) return Result.fail(new LedgerError({why: "bad_row"}));
+
+	if (Result.isFailure(saved)) {
+		return Result.fail(new LedgerError({why: "bad_row"}));
+	}
+
 	const value = saved.success;
 	return Result.succeed(
 		value._tag === "idle"
@@ -237,9 +244,14 @@ export class ProcessTable {
 
 	constructor(entries: Iterable<Entry>, by: string) {
 		this.#by = by;
+
 		for (const entry of entries) {
-			if (!Object.hasOwn(ProcessFact.cases, entry._tag) || entry.by !== by) continue;
+			if (!Object.hasOwn(ProcessFact.cases, entry._tag) || entry.by !== by) {
+				continue;
+			}
+
 			const fact = decodeFact(valueFor(entry));
+
 			switch (fact._tag) {
 				case "registered":
 					this.#names.set(fact.name, fact);
@@ -303,7 +315,11 @@ export class ProcessTable {
 				case "demonitored": {
 					const key = watchKey(fact.to, fact.ref);
 					const watch = this.#watches.get(key);
-					if (watch !== undefined) this.#watches.set(key, {...watch, canceled: true});
+
+					if (watch !== undefined) {
+						this.#watches.set(key, {...watch, canceled: true});
+					}
+
 					break;
 				}
 			}
@@ -312,7 +328,11 @@ export class ProcessTable {
 
 	private require(process: string): Life {
 		const life = this.#lives.get(process);
-		if (life === undefined) throw new LedgerError({why: "bad_row"});
+
+		if (life === undefined) {
+			throw new LedgerError({why: "bad_row"});
+		}
+
 		return life;
 	}
 
@@ -334,28 +354,53 @@ export class ProcessTable {
 		caller: Caller,
 		from: From,
 	): Result.Result<Option.Option<StartAnswer>, ProcessError> {
-		if (!Schema.is(ProcessName)(request.name)) return denied("bad_name");
-		if (!Schema.is(Start)(request)) return denied("bad_text");
+		if (!Schema.is(ProcessName)(request.name)) {
+			return denied("bad_name");
+		}
+
+		if (!Schema.is(Start)(request)) {
+			return denied("bad_text");
+		}
+
 		const saved = [...this.#lives.values()].find((life) => life.request.id === request.id);
+
 		if (saved !== undefined) {
 			if (
 				!Equal.equals(saved.request, request) ||
 				saved.from.for !== from.for ||
 				saved.from.parent !== from.parent
-			)
+			) {
 				return denied("id_reused");
+			}
+
 			const parent = this.parent(saved.state.process, caller.owner);
 			return Result.isFailure(parent)
 				? Result.fail(parent.failure)
 				: Result.succeed(Option.some({process: saved.state.process, rev: saved.rev}));
 		}
+
 		const name = this.#names.get(request.name);
-		if (request._tag === "first")
+
+		if (request._tag === "first") {
 			return name === undefined ? Result.succeed(Option.none()) : denied("name_taken");
-		if (name === undefined || !Equal.equals(name.owner, caller.owner)) return denied("not_parent");
-		if (name.program !== request.code.program) return denied("name_taken");
-		if (this.#current.get(request.name) !== request.after) return denied("stale");
-		if (this.isLive(request.after)) return denied("alive");
+		}
+
+		if (name === undefined || !Equal.equals(name.owner, caller.owner)) {
+			return denied("not_parent");
+		}
+
+		if (name.program !== request.code.program) {
+			return denied("name_taken");
+		}
+
+		if (this.#current.get(request.name) !== request.after) {
+			return denied("stale");
+		}
+
+		if (this.isLive(request.after)) {
+			return denied("alive");
+		}
+
 		return Result.succeed(Option.none());
 	}
 
@@ -379,7 +424,11 @@ export class ProcessTable {
 		ProcessError
 	> {
 		const process = this.#current.get(name);
-		if (process === undefined) return denied("ended");
+
+		if (process === undefined) {
+			return denied("ended");
+		}
+
 		const life = this.parent(process, owner);
 		return Result.isFailure(life)
 			? Result.fail(life.failure)
@@ -392,25 +441,43 @@ export class ProcessTable {
 
 	parent(process: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
 		const life = this.#lives.get(process);
-		if (life === undefined) return denied("ended");
+
+		if (life === undefined) {
+			return denied("ended");
+		}
+
 		return Equal.equals(this.#names.get(life.name)?.owner, owner)
 			? Result.succeed(life)
 			: denied("not_parent");
 	}
 
 	exit(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-		if (!isText(why)) return denied("bad_text");
+		if (!isText(why)) {
+			return denied("bad_text");
+		}
+
 		const parent = this.parent(process, owner);
-		if (Result.isFailure(parent)) return parent;
+
+		if (Result.isFailure(parent)) {
+			return parent;
+		}
+
 		const state = parent.success.state;
 		return state._tag !== "live" && state.why !== why ? denied("ended") : parent;
 	}
 
 	/** The life a supervisor gives up on; refused while that process still lives. */
 	down(process: string, why: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-		if (!isText(why)) return denied("bad_text");
+		if (!isText(why)) {
+			return denied("bad_text");
+		}
+
 		const parent = this.parent(process, owner);
-		if (Result.isFailure(parent)) return parent;
+
+		if (Result.isFailure(parent)) {
+			return parent;
+		}
+
 		return parent.success.state._tag === "live" ? denied("alive") : parent;
 	}
 
@@ -420,12 +487,28 @@ export class ProcessTable {
 		process: string,
 		to: typeof Recipient.Type,
 	): Result.Result<Option.Option<number>, ProcessError> {
-		if (!isText(ref)) return denied("bad_text");
-		if (to._tag === "client" && !Schema.is(ClientId)(to.client)) return denied("bad_name");
+		if (!isText(ref)) {
+			return denied("bad_text");
+		}
+
+		if (to._tag === "client" && !Schema.is(ClientId)(to.client)) {
+			return denied("bad_name");
+		}
+
 		const watch = this.#watches.get(watchKey(to, ref));
-		if (watch !== undefined && watch.process !== process) return denied("bad_ref");
-		if (watch !== undefined && !watch.canceled) return Result.succeed(Option.none());
-		if (to._tag === "process" && !this.isLive(to.process)) return denied("ended");
+
+		if (watch !== undefined && watch.process !== process) {
+			return denied("bad_ref");
+		}
+
+		if (watch !== undefined && !watch.canceled) {
+			return Result.succeed(Option.none());
+		}
+
+		if (to._tag === "process" && !this.isLive(to.process)) {
+			return denied("ended");
+		}
+
 		return Result.succeed(Option.some((watch?.round ?? 0) + 1));
 	}
 
@@ -455,17 +538,31 @@ export class ProcessTable {
 	 * its own recipient, and only while its watch is live. Anything else is plain mail.
 	 */
 	deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
-		if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") return "mail";
+		if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
+			return "mail";
+		}
+
 		const down = decodeDown(m);
-		if (Option.isNone(down)) return "mail";
+
+		if (Option.isNone(down)) {
+			return "mail";
+		}
+
 		const {to, ref} = down.value;
 		const watch = this.#watches.get(watchKey(to, ref));
-		if (entry.by !== this.#by || watch === undefined || watch.process !== down.value.process)
+
+		if (entry.by !== this.#by || watch === undefined || watch.process !== down.value.process) {
 			return "mail";
+		}
+
 		const round = Array.from({length: watch.round}, (_, n) => n + 1).find(
 			(n) => entry.id === signalId(to, ref, n),
 		);
-		if (round === undefined) return "mail";
+
+		if (round === undefined) {
+			return "mail";
+		}
+
 		// An earlier round's signal belongs to a watch already canceled.
 		const current = round === watch.round && !watch.canceled;
 		return current && to._tag === "process" && to.process === process ? "signal" : "drop";

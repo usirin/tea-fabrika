@@ -26,15 +26,20 @@ import type {Context, CreateRule} from "@oxlint/plugins";
 import {ancestors, grouped, type Node} from "./match.ts";
 
 const isTell = (node: Node): boolean => {
-	if (node.type !== "CallExpression" || node.optional || node.typeArguments != null) return false;
+	if (node.type !== "CallExpression" || node.optional || node.typeArguments != null) {
+		return false;
+	}
+
 	if (node.callee.type === "Identifier") {
 		return (
 			(node.callee.name === "tell" || node.callee.name === "offer") && node.arguments.length === 3
 		);
 	}
+
 	if (node.callee.type !== "MemberExpression" || node.callee.computed || node.callee.optional) {
 		return false;
 	}
+
 	const {property} = node.callee;
 	return (
 		property.type === "Identifier" &&
@@ -45,9 +50,18 @@ const isTell = (node: Node): boolean => {
 
 /** `Effect.x`, `Stream.x`, `Layer.x`, or any `x.pipe`, each written plainly. */
 const keepsIt = (source: Context["sourceCode"], callee: Node): boolean => {
-	if (callee.type !== "MemberExpression" || callee.computed || callee.optional) return false;
-	if (grouped(source, callee) > 0) return false;
-	if (callee.property.type === "Identifier" && callee.property.name === "pipe") return true;
+	if (callee.type !== "MemberExpression" || callee.computed || callee.optional) {
+		return false;
+	}
+
+	if (grouped(source, callee) > 0) {
+		return false;
+	}
+
+	if (callee.property.type === "Identifier" && callee.property.name === "pipe") {
+		return true;
+	}
+
 	return (
 		callee.object.type === "Identifier" &&
 		grouped(source, callee.object) === 0 &&
@@ -71,15 +85,26 @@ export const noBareTell: CreateRule = {
 				}
 			},
 			ArrowFunctionExpression(node) {
-				if (node.returnType != null || grouped(source, node.body) > 0 || !isTell(node.body)) return;
+				if (node.returnType != null || grouped(source, node.body) > 0 || !isTell(node.body)) {
+					return;
+				}
+
 				const text = source.getText(node);
+
 				for (const up of ancestors(node)) {
-					if (up.type !== "CallExpression" || !keepsIt(source, up.callee)) continue;
+					if (up.type !== "CallExpression" || !keepsIt(source, up.callee)) {
+						continue;
+					}
+
 					const same = up.arguments.some(
 						(arg) => grouped(source, arg) === 0 && source.getText(arg) === text,
 					);
-					if (same) return;
+
+					if (same) {
+						return;
+					}
 				}
+
 				context.report({
 					node,
 					message:

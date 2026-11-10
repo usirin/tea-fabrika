@@ -74,11 +74,17 @@ export function transcriptLaws<S extends Transcript>(): readonly Law<S, Msg, Cmd
 	return [
 		law<S, Msg, Cmd>("a finished tool call never runs again", ({prev, next}) => {
 			for (const tool of prev.tools) {
-				if (running(tool.status)) continue;
+				if (running(tool.status)) {
+					continue;
+				}
+
 				const now = next.tools.find((t) => t.id === tool.id);
-				if (now !== undefined && running(now.status))
+
+				if (now !== undefined && running(now.status)) {
 					return `${tool.id} was ${tool.status}, and is ${now.status} again`;
+				}
 			}
+
 			return null;
 		}),
 		watched<S, Msg, Cmd, number>(

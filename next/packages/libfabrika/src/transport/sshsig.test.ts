@@ -751,9 +751,11 @@ afterAll(() => rmSync(home, {recursive: true, force: true}));
 const keygen = (args: ReadonlyArray<string>, input?: string) =>
 	Effect.sync(() => {
 		const run = spawnSync("ssh-keygen", args, {input, encoding: "utf8"});
+
 		if (run.error !== undefined) {
 			throw new Error(`p44 needs ssh-keygen and it did not run: ${run.error.message}`);
 		}
+
 		return run;
 	});
 
@@ -837,6 +839,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
 			expect(keys.status, keys.stderr).toBe(0);
 			const line = readFileSync(`${made}.pub`, "utf8").trim();
 			const body = "made by ssh-keygen\nä ü ş\n";
+
 			for (const options of [[], ["-O", "hashalg=sha256"]]) {
 				const msg = file("made.msg", body);
 				const run = yield* keygen(["-Y", "sign", "-f", made, "-n", SPACE, ...options, msg]);

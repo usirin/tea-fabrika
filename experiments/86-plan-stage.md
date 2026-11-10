@@ -21,7 +21,7 @@ criteria text, and it lost two things today's criteria had: the realistic
 end-to-end fixture, and the names a user types. $4.39 in all, 28 to 105
 seconds a plan. Confidence 70%.**
 
-The plans, as views to mark up, are in [`86-plans/`](./86-plans/).
+The plans, as views to mark up, are in [`86-plans/`](https://github.com/usirin/tea-fabrika/tree/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/86-plans/).
 
 ## Who did what
 

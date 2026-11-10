@@ -10,8 +10,15 @@ const homes: string[] = [];
 const fixture = () => {
 	const home = mkdtempSync("/tmp/fh.");
 	homes.push(home);
-	for (const file of ["package.json", "build.ts"]) copyFileSync(join(APP, file), join(home, file));
-	for (const dir of ["src", "node_modules"]) symlinkSync(join(APP, dir), join(home, dir), "dir");
+
+	for (const file of ["package.json", "build.ts"]) {
+		copyFileSync(join(APP, file), join(home, file));
+	}
+
+	for (const dir of ["src", "node_modules"]) {
+		symlinkSync(join(APP, dir), join(home, dir), "dir");
+	}
+
 	return home;
 };
 
@@ -35,7 +42,9 @@ const verify = (home: string, result: ReturnType<typeof command>) => {
 };
 
 afterEach(() => {
-	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
+	for (const home of homes.splice(0)) {
+		rmSync(home, {recursive: true, force: true});
+	}
 });
 
 describe("P16 app build command", () => {

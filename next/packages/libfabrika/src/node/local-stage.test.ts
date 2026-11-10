@@ -63,7 +63,9 @@ describe("P12 local brain life", () => {
 		return h;
 	};
 	afterEach(() => {
-		for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+		for (const h of homes.splice(0)) {
+			rmSync(h, {recursive: true, force: true});
+		}
 	});
 	it("p81 plant: sample workerd RSS, replace at 500000000, never measure the Node parent", async () => {
 		const child = fc.integer({min: 1}).filter((pid) => pid !== process.pid);
@@ -147,9 +149,12 @@ describe("P12 durable brain outbox", () => {
 		return folder;
 	};
 	afterEach(() => {
-		for (const folder of homes.splice(0)) rmSync(folder, {recursive: true, force: true});
+		for (const folder of homes.splice(0)) {
+			rmSync(folder, {recursive: true, force: true});
+		}
 	});
-	for (const reader of ["pending", "last"] as const)
+
+	for (const reader of ["pending", "last"] as const) {
 		it(`malformed saved ${reader} returns BrainError without a defect`, async () => {
 			const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
 			await fc.assert(
@@ -180,6 +185,8 @@ describe("P12 durable brain outbox", () => {
 				{seed: SEED, numRuns: 20, examples: [[null], [{}], [17]]},
 			);
 		});
+	}
+
 	it("FileSystem writes each pending and last file in durable order, including acknowledgement", async () => {
 		await fc.assert(
 			fc.asyncProperty(
@@ -254,13 +261,18 @@ describe("P12 durable brain outbox", () => {
 							Effect.gen(function* () {
 								const outbox = yield* brainOutbox(folder);
 								const expected: Array<unknown> = [];
+
 								for (const [index, row] of rows.entries()) {
 									yield* outbox.add(row);
 									expected.push(...durable(file, encoded(rows.slice(0, index + 1))));
-									if (row._tag === "started")
+
+									if (row._tag === "started") {
 										expected.push(...durable(last, JSON.stringify(row.start)));
+									}
+
 									expect(calls).toEqual(expected);
 								}
+
 								const latest = rows.filter((row) => row._tag === "started").at(-1);
 								const sent: Array<typeof BrainEvent.Type> = [];
 								yield* outbox.flush((row) =>
@@ -268,10 +280,15 @@ describe("P12 durable brain outbox", () => {
 										sent.push(row);
 									}),
 								);
-								if (latest !== undefined)
+
+								if (latest !== undefined) {
 									expected.push(...durable(last, JSON.stringify(latest.start)));
-								for (let n = 1; n <= rows.length; n++)
+								}
+
+								for (let n = 1; n <= rows.length; n++) {
 									expected.push(...durable(file, encoded(rows.slice(n))));
+								}
+
 								expect(calls).toEqual(expected);
 								expect(sent).toEqual(rows);
 								expect(yield* outbox.pending).toEqual([]);
@@ -328,6 +345,7 @@ describe("P12 durable brain outbox", () => {
 						yield* outbox.add(event);
 						yield* outbox.add(event);
 						expect(yield* outbox.pending).toEqual([event]);
+
 						if (event._tag === "started") {
 							const build = event.build === "build-b" ? "build-c" : "build-b";
 							expect(yield* Effect.flip(outbox.add({...event, build}))).toMatchObject({
@@ -335,6 +353,7 @@ describe("P12 durable brain outbox", () => {
 								reason: "id_reused",
 							});
 						}
+
 						expect(
 							yield* Effect.flip(outbox.add({...event, start: `${event.start}-changed`})),
 						).toMatchObject({

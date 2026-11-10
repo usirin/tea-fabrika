@@ -91,6 +91,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 	const path = yield* Path.Path;
 	const generated = path.join(options.root, "program.generated.ts");
 	const programs: Record<string, ProgramSource> = {};
+
 	for (const [name, entry] of Object.entries(options.programs)) {
 		const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
 		const output = yield* bundle(
@@ -100,10 +101,14 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 				{
 					name: "fabrika-program",
 					resolveId(id) {
-						if (id === "fabrika:program") return generated;
+						if (id === "fabrika:program") {
+							return generated;
+						}
 					},
 					load(id) {
-						if (id === generated) return code;
+						if (id === generated) {
+							return code;
+						}
 					},
 				},
 			],
@@ -115,5 +120,6 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 			.join("\n");
 		programs[name] = {hash: yield* hash(source), source};
 	}
+
 	return programs;
 });

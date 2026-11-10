@@ -68,12 +68,16 @@ describe("P16 real browser from a copied one-file build", () => {
 					delete process.env.TYPESAFE_API_KEY;
 					const scope = Effect.runSync(Scope.make());
 					let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+
 					try {
 						// Try the real browser even when P16's library build has not been written yet.
 						browser = await chromium.launch({headless: true});
 						mkdirSync(join(home, "node_modules/@p16"), {recursive: true});
-						for (const name of ["@kampus", "@demlik", "effect"])
+
+						for (const name of ["@kampus", "@demlik", "effect"]) {
 							symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
+						}
+
 						writeFileSync(join(home, "package.json"), '{"type":"module"}');
 						const pkg = join(home, "programs/browser");
 						mkdirSync(pkg, {recursive: true});
@@ -160,15 +164,19 @@ describe("P16 real browser from a copied one-file build", () => {
 						expect(scripts.length).toBeGreaterThan(1);
 						const page = await browser.newPage();
 						await page.goto(stage.url);
+
 						for (const [route, asset] of Object.entries(built.assets)) {
 							const response = await page.request.get(stage.url + route);
 							expect(response.status()).toBe(200);
 							expect(response.headers()["content-type"]).toBe(asset.type);
 							expect(await response.text()).toBe(asset.body);
 							expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
-							if (asset.type.startsWith("text/css"))
+
+							if (asset.type.startsWith("text/css")) {
 								await page.addStyleTag({url: stage.url + route});
+							}
 						}
+
 						await page.addScriptTag({url: stage.url + entry[0], type: "module"});
 						await page.waitForSelector("#p16");
 						expect(await page.locator("#p16").textContent()).toBe(text);
@@ -190,8 +198,12 @@ describe("P16 real browser from a copied one-file build", () => {
 						await browser?.close();
 						await Effect.runPromise(Scope.close(scope, Exit.void));
 						rmSync(home, {recursive: true, force: true});
-						if (oldHome === undefined) delete process.env.FABRIKA_HOME;
-						else process.env.FABRIKA_HOME = oldHome;
+
+						if (oldHome === undefined) {
+							delete process.env.FABRIKA_HOME;
+						} else {
+							process.env.FABRIKA_HOME = oldHome;
+						}
 					}
 				},
 			),

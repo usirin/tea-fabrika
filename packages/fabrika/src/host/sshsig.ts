@@ -36,10 +36,12 @@ const bytes = (n: number): Bytes => new Uint8Array(new ArrayBuffer(n));
 const concat = (parts: readonly Uint8Array[]): Bytes => {
 	const out = bytes(parts.reduce((n, p) => n + p.length, 0));
 	let at = 0;
+
 	for (const p of parts) {
 		out.set(p, at);
 		at += p.length;
 	}
+
 	return out;
 };
 
@@ -59,7 +61,11 @@ const fromBase64 = (text: string): Bytes | null => {
 	try {
 		const bin = atob(text);
 		const out = bytes(bin.length);
-		for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+
+		for (let i = 0; i < bin.length; i++) {
+			out[i] = bin.charCodeAt(i);
+		}
+
 		return out;
 	} catch {
 		return null;
@@ -68,7 +74,11 @@ const fromBase64 = (text: string): Bytes | null => {
 
 const toBase64 = (b: Uint8Array): string => {
 	let bin = "";
-	for (const x of b) bin += String.fromCharCode(x);
+
+	for (const x of b) {
+		bin += String.fromCharCode(x);
+	}
+
 	return btoa(bin);
 };
 
@@ -79,7 +89,10 @@ const same = (a: Uint8Array, b: Uint8Array): boolean =>
 const reader = (b: Bytes) => {
 	let at = 0;
 	const take = (n: number): Bytes | null => {
-		if (n < 0 || at + n > b.length) return null;
+		if (n < 0 || at + n > b.length) {
+			return null;
+		}
+
 		const out = b.slice(at, at + n);
 		at += n;
 		return out;
@@ -101,14 +114,25 @@ const reader = (b: Bytes) => {
 /** The key blob of an Ed25519 key line (`ssh-ed25519 AAAA... comment`), or null: not one. */
 export const keyBlobOf = (line: string): Bytes | null => {
 	const [type, b64] = line.trim().split(/\s+/);
-	if (type !== ED25519 || b64 === undefined) return null;
+
+	if (type !== ED25519 || b64 === undefined) {
+		return null;
+	}
+
 	const blob = fromBase64(b64);
-	if (blob === null) return null;
+
+	if (blob === null) {
+		return null;
+	}
+
 	const r = reader(blob);
 	const t = r.string();
 	const pk = r.string();
-	if (t === null || dec.decode(t) !== ED25519 || pk === null || pk.length !== 32 || !r.done())
+
+	if (t === null || dec.decode(t) !== ED25519 || pk === null || pk.length !== 32 || !r.done()) {
 		return null;
+	}
+
 	return blob;
 };
 
@@ -130,7 +154,11 @@ const HASHES: ReadonlyMap<string, string> = new Map([
 
 const signedData = async (message: string, namespace: string, hash: string): Promise<Bytes> => {
 	const algo = HASHES.get(hash);
-	if (algo === undefined) throw new Error(`no such hash: ${hash}`);
+
+	if (algo === undefined) {
+		throw new Error(`no such hash: ${hash}`);
+	}
+
 	const digest = new Uint8Array(await crypto.subtle.digest(algo, enc.encode(message)));
 	return concat([enc.encode(MAGIC), str(namespace), str(""), str(hash), str(digest)]);
 };
@@ -140,27 +168,54 @@ type Parsed = {key: Bytes; namespace: string; hash: string; signature: Bytes};
 /** An armored SSHSIG, read; null: not one, or not an Ed25519 one. */
 export const parse = (armored: string): Parsed | null => {
 	const t = armored.trim();
-	if (!t.startsWith(BEGIN) || !t.endsWith(END)) return null;
+
+	if (!t.startsWith(BEGIN) || !t.endsWith(END)) {
+		return null;
+	}
+
 	const blob = fromBase64(t.slice(BEGIN.length, -END.length).replace(/\s+/g, ""));
-	if (blob === null) return null;
+
+	if (blob === null) {
+		return null;
+	}
+
 	const r = reader(blob);
 	const magic = r.take(MAGIC.length);
-	if (magic === null || dec.decode(magic) !== MAGIC || r.u32() !== 1) return null;
+
+	if (magic === null || dec.decode(magic) !== MAGIC || r.u32() !== 1) {
+		return null;
+	}
+
 	const key = r.string();
 	const namespace = r.string();
 	const reserved = r.string();
 	const hash = r.string();
 	const sig = r.string();
-	if (key === null || namespace === null || reserved === null || hash === null || sig === null)
+
+	if (key === null || namespace === null || reserved === null || hash === null || sig === null) {
 		return null;
-	if (!r.done()) return null;
+	}
+
+	if (!r.done()) {
+		return null;
+	}
+
 	const s = reader(sig);
 	const type = s.string();
 	const raw = s.string();
-	if (type === null || dec.decode(type) !== ED25519 || raw === null || raw.length !== 64)
+
+	if (type === null || dec.decode(type) !== ED25519 || raw === null || raw.length !== 64) {
 		return null;
-	if (!s.done()) return null;
-	if (keyBlobOf(`${ED25519} ${toBase64(key)}`) === null) return null;
+	}
+
+	if (!s.done()) {
+		return null;
+	}
+
+	if (keyBlobOf(`${ED25519} ${toBase64(key)}`) === null) {
+		return null;
+	}
+
 	return {key, namespace: dec.decode(namespace), hash: dec.decode(hash), signature: raw};
 };
 
@@ -175,12 +230,20 @@ export const verify = async (
 	keys: readonly string[],
 ): Promise<string | null> => {
 	const p = parse(armored);
-	if (p === null || p.namespace !== namespace || !HASHES.has(p.hash)) return null;
+
+	if (p === null || p.namespace !== namespace || !HASHES.has(p.hash)) {
+		return null;
+	}
+
 	const line = keys.find((k) => {
 		const blob = keyBlobOf(k);
 		return blob !== null && same(blob, p.key);
 	});
-	if (line === undefined) return null;
+
+	if (line === undefined) {
+		return null;
+	}
+
 	// The 32 raw bytes sit after the type's string: 4 + 11 + 4.
 	const raw = p.key.slice(p.key.length - 32);
 	const pub = await crypto.subtle.importKey("raw", raw, {name: "Ed25519"}, false, ["verify"]);
@@ -235,33 +298,70 @@ export type KeyFile =
 export const keyFileOf = async (text: string): Promise<KeyFile> => {
 	const no = (why: string): KeyFile => ({ok: false, why});
 	const t = text.trim();
-	if (!t.startsWith(KEY_BEGIN) || !t.endsWith(KEY_END)) return no("not an OpenSSH private key");
+
+	if (!t.startsWith(KEY_BEGIN) || !t.endsWith(KEY_END)) {
+		return no("not an OpenSSH private key");
+	}
+
 	const blob = fromBase64(t.slice(KEY_BEGIN.length, -KEY_END.length).replace(/\s+/g, ""));
-	if (blob === null) return no("not an OpenSSH private key");
+
+	if (blob === null) {
+		return no("not an OpenSSH private key");
+	}
+
 	const r = reader(blob);
 	const magic = r.take(KEY_MAGIC.length);
-	if (magic === null || dec.decode(magic) !== KEY_MAGIC) return no("not an OpenSSH private key");
+
+	if (magic === null || dec.decode(magic) !== KEY_MAGIC) {
+		return no("not an OpenSSH private key");
+	}
+
 	const cipher = r.string();
 	const kdf = r.string();
 	r.string();
-	if (cipher === null || kdf === null) return no("not an OpenSSH private key");
-	if (dec.decode(cipher) !== "none" || dec.decode(kdf) !== "none")
+
+	if (cipher === null || kdf === null) {
+		return no("not an OpenSSH private key");
+	}
+
+	if (dec.decode(cipher) !== "none" || dec.decode(kdf) !== "none") {
 		return no("the key has a passphrase, and fabrika cannot ask for one yet");
-	if (r.u32() !== 1) return no("a key file with more than one key");
+	}
+
+	if (r.u32() !== 1) {
+		return no("a key file with more than one key");
+	}
+
 	r.string();
 	const part = r.string();
-	if (part === null) return no("not an OpenSSH private key");
+
+	if (part === null) {
+		return no("not an OpenSSH private key");
+	}
+
 	const p = reader(part);
 	const c1 = p.u32();
 	const c2 = p.u32();
 	const type = p.string();
 	const pub = p.string();
 	const secret = p.string();
-	if (c1 === null || c1 !== c2) return no("the key file is damaged");
-	if (type === null || dec.decode(type) !== ED25519) return no("only an Ed25519 key reads yet");
-	if (pub === null || pub.length !== 32 || secret === null || secret.length !== 64)
+
+	if (c1 === null || c1 !== c2) {
 		return no("the key file is damaged");
-	if (!same(secret.slice(32), pub)) return no("the key file is damaged");
+	}
+
+	if (type === null || dec.decode(type) !== ED25519) {
+		return no("only an Ed25519 key reads yet");
+	}
+
+	if (pub === null || pub.length !== 32 || secret === null || secret.length !== 64) {
+		return no("the key file is damaged");
+	}
+
+	if (!same(secret.slice(32), pub)) {
+		return no("the key file is damaged");
+	}
+
 	const privateKey = await crypto.subtle.importKey(
 		"pkcs8",
 		concat([PKCS8_ED25519, secret.slice(0, 32)]),

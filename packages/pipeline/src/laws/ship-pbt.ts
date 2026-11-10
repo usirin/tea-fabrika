@@ -135,8 +135,15 @@ type Hop = NonNullable<ShipFacts["carried"]>[number];
  */
 const hopsFor = (head: string, kind: ProofKind, miss: 0 | 1 | 2): readonly Hop[] => {
 	const before = `${head}-before`;
-	if (kind === "carried") return [{from: before, to: head}];
-	if (kind !== "other_head" || miss === 0) return [];
+
+	if (kind === "carried") {
+		return [{from: before, to: head}];
+	}
+
+	if (kind !== "other_head" || miss === 0) {
+		return [];
+	}
+
 	return miss === 1 ? [{from: before, to: `${head}-after`}] : [{from: head, to: before}];
 };
 
@@ -292,19 +299,31 @@ export function reach(numRuns: number, seed: number): Reach {
 		to[key] = (to[key] ?? 0) + 1;
 	};
 	let steps = 0;
+
 	for (const list of fc.sample(msgs, {numRuns, seed})) {
 		const run = foldEvents(ship, undefined, null, list);
 		const seen = new Set<string>(["idle"]);
+
 		for (const s of run.steps) {
 			steps++;
 			add(sent, s.msg.type);
-			if (s.cmds.length > 0 || JSON.stringify(s.prev) !== JSON.stringify(s.next))
+
+			if (s.cmds.length > 0 || JSON.stringify(s.prev) !== JSON.stringify(s.next)) {
 				add(acted, s.msg.type);
+			}
+
 			seen.add(s.next.phase);
 		}
-		for (const p of seen) add(phases, p);
-		if (run.finalState.phase === "over") add(outcomes, nameOf(run.finalState.outcome));
+
+		for (const p of seen) {
+			add(phases, p);
+		}
+
+		if (run.finalState.phase === "over") {
+			add(outcomes, nameOf(run.finalState.outcome));
+		}
 	}
+
 	return {runs: numRuns, steps, sent, acted, phases, outcomes};
 }
 
@@ -343,11 +362,17 @@ function along<W>(name: string, start: W, step: (memory: W, step: ShipStep) => W
 		name,
 		along: (steps) => {
 			let memory = start;
+
 			for (const [at, s] of steps.entries()) {
 				const after = step(memory, s);
-				if (after instanceof Broke) return {at, why: after.why};
+
+				if (after instanceof Broke) {
+					return {at, why: after.why};
+				}
+
 				memory = after;
 			}
+
 			return null;
 		},
 	};
@@ -390,7 +415,10 @@ const standsHere = (f: ShipFacts, judged: string): boolean =>
 
 /** Each criterion with no passing row on its current version at its head, in words. */
 function unproven(f: ShipFacts): readonly string[] {
-	if (f.criteria === null) return ["the criteria are unread"];
+	if (f.criteria === null) {
+		return ["the criteria are unread"];
+	}
+
 	const rows = latest(f, f.criteria);
 	return f.criteria.flatMap((c, i) =>
 		rows[i]?.grade === "pass" ? [] : [`${c.id} v${c.version} is not met at ${f.head}`],
@@ -400,15 +428,41 @@ function unproven(f: ShipFacts): readonly string[] {
 /** What keeps facts from being ready to merge, in words. Empty: ready. */
 export function notReady(f: ShipFacts): readonly string[] {
 	const why: string[] = [];
-	if (f.state !== "open") why.push(`it is ${f.state}`);
-	if (!f.ours) why.push("it is not ours");
-	if (f.reviews === null) why.push("the reviews owed are unread");
-	for (const k of f.reviews ?? [])
-		if (k.verdict !== "passed") why.push(`${k.kind} is ${k.verdict}`);
-	if (f.checks !== "green") why.push(`checks are ${f.checks}`);
-	if (f.mergeable !== "clean") why.push(`mergeable is ${f.mergeable}`);
-	if (f.comments.length > 0) why.push("a comment is open");
-	if (f.approval === "missing" || f.approval === "unknown") why.push(`approval is ${f.approval}`);
+
+	if (f.state !== "open") {
+		why.push(`it is ${f.state}`);
+	}
+
+	if (!f.ours) {
+		why.push("it is not ours");
+	}
+
+	if (f.reviews === null) {
+		why.push("the reviews owed are unread");
+	}
+
+	for (const k of f.reviews ?? []) {
+		if (k.verdict !== "passed") {
+			why.push(`${k.kind} is ${k.verdict}`);
+		}
+	}
+
+	if (f.checks !== "green") {
+		why.push(`checks are ${f.checks}`);
+	}
+
+	if (f.mergeable !== "clean") {
+		why.push(`mergeable is ${f.mergeable}`);
+	}
+
+	if (f.comments.length > 0) {
+		why.push("a comment is open");
+	}
+
+	if (f.approval === "missing" || f.approval === "unknown") {
+		why.push(`approval is ${f.approval}`);
+	}
+
 	why.push(...unproven(f));
 	return why;
 }
@@ -430,24 +484,45 @@ const wantedOf = (f: ShipFacts): Wanted => ({
 
 /** Why a write's proof is not the last read's, in words. `null`: it is. */
 function proofNotOf(ready: ReadyToMerge, read: Wanted): string | null {
-	if (ReadyToMerge.revive(ready) === null) return "its proof does not prove its own criteria";
-	if (read.criteria === null) return "the last read held no criteria";
-	if (ready.head !== read.head)
+	if (ReadyToMerge.revive(ready) === null) {
+		return "its proof does not prove its own criteria";
+	}
+
+	if (read.criteria === null) {
+		return "the last read held no criteria";
+	}
+
+	if (ready.head !== read.head) {
 		return `its proof is at ${ready.head}, the last read at ${read.head}`;
-	if (read.checks !== "green") return `the checks at ${read.head} are ${read.checks}`;
-	if (ready.criteria.length !== read.criteria.length)
+	}
+
+	if (read.checks !== "green") {
+		return `the checks at ${read.head} are ${read.checks}`;
+	}
+
+	if (ready.criteria.length !== read.criteria.length) {
 		return `its proof holds ${ready.criteria.length} criteria, the last read ${read.criteria.length}`;
+	}
+
 	for (const [i, c] of read.criteria.entries()) {
 		const held = ready.criteria.find((k) => k.id === c.id);
-		if (held === undefined || held.version !== c.version || held.text !== c.text)
+
+		if (held === undefined || held.version !== c.version || held.text !== c.text) {
 			return `its proof does not hold ${c.id} as v${c.version}`;
+		}
+
 		const carried = ready.rows.find((r) => r.criterion === c.id);
 		const found = read.rows[i] ?? null;
-		if (carried === undefined || found === null || found.grade !== "pass")
+
+		if (carried === undefined || found === null || found.grade !== "pass") {
 			return `${c.id} v${c.version} has no passing row at ${read.head}`;
-		if (JSON.stringify(carried) !== JSON.stringify(found))
+		}
+
+		if (JSON.stringify(carried) !== JSON.stringify(found)) {
 			return `its row for ${c.id} is not the one the last read found`;
+		}
 	}
+
 	return null;
 }
 
@@ -474,14 +549,24 @@ const landedHead = ({msg}: ShipStep): string | null =>
 /** "Only the head that was sent to the queue lands", from the heads already sent. */
 const onlySentLands = (sent: readonly string[], step: ShipStep): readonly string[] | Broke => {
 	const now = [...new Set([...sent, ...writes(step.cmds).map((c) => c.ready.head)])].sort();
-	if (!landsOn(step)) return now;
+
+	if (!landsOn(step)) {
+		return now;
+	}
+
 	// A pull request found already merged by a read is not this run's landing.
-	if (step.msg.type === "ship_facts_ok") return now;
+	if (step.msg.type === "ship_facts_ok") {
+		return now;
+	}
+
 	const head = landedHead(step);
-	if (head === null || !sent.includes(head))
+
+	if (head === null || !sent.includes(head)) {
 		return broke(
 			`landed ${head ?? "on a Msg that names no head"}, and the heads sent were ${sent.join(", ") || "none"}`,
 		);
+	}
+
 	return now;
 };
 
@@ -498,14 +583,23 @@ export const TODAY: readonly Law[] = [
 		(memory, step) => {
 			const facts = readIn(step);
 			const read = facts === null ? memory : {head: facts.head, why: notReady(facts)};
+
 			for (const cmd of writes(step.cmds)) {
-				if (read === null) return broke(`${cmd.type} with no read before it`);
+				if (read === null) {
+					return broke(`${cmd.type} with no read before it`);
+				}
+
 				const head = cmd.ready.head;
-				if (read.why.length > 0)
+
+				if (read.why.length > 0) {
 					return broke(`${cmd.type} of ${head}, and the last read says ${read.why.join(", ")}`);
-				if (head !== read.head)
+				}
+
+				if (head !== read.head) {
 					return broke(`${cmd.type} of ${head}, and the last read was at ${read.head}`);
+				}
 			}
+
 			return read;
 		},
 	),
@@ -515,11 +609,19 @@ export const TODAY: readonly Law[] = [
 		(memory, step) => {
 			const facts = readIn(step);
 			const read = facts === null ? memory : wantedOf(facts);
+
 			for (const cmd of writes(step.cmds)) {
-				if (read === null) return broke(`${cmd.type} with no read before it`);
+				if (read === null) {
+					return broke(`${cmd.type} with no read before it`);
+				}
+
 				const why = proofNotOf(cmd.ready, read);
-				if (why !== null) return broke(`${cmd.type}: ${why}`);
+
+				if (why !== null) {
+					return broke(`${cmd.type}: ${why}`);
+				}
 			}
+
 			return read;
 		},
 	),
@@ -529,11 +631,15 @@ export const TODAY: readonly Law[] = [
 		(memory, step) => {
 			const facts = readIn(step);
 			const read = facts === null ? memory : {head: facts.head, passed: allPassed(facts.reviews)};
-			for (const cmd of writes(step.cmds))
-				if (read === null || read.head !== cmd.ready.head || !read.passed)
+
+			for (const cmd of writes(step.cmds)) {
+				if (read === null || read.head !== cmd.ready.head || !read.passed) {
 					return broke(
 						`${cmd.type} of ${cmd.ready.head}, and the last read ${read === null ? "never happened" : `said reviews ${read.passed ? "passed" : "not passed"} at ${read.head}`}`,
 					);
+				}
+			}
+
 			return read;
 		},
 	),
@@ -579,27 +685,80 @@ function readCalls(
 	s: Extract<Ship, {phase: "reading"}>,
 	f: ShipFacts,
 ): ShipOutcome | {readonly go: Landing} | "on" {
-	if (f.state === "merged") return done(landingOf(f), f.head, "not_run");
-	if (f.state !== "open") return {kind: "skip", why: f.state};
-	if (!f.ours) return {kind: "skip", why: "not_ours"};
-	if (f.mergeable === "conflicts") return send("conflicts");
-	if (f.reviews === null) return stuck("reviews_unknown");
-	if (f.reviews.some((k) => k.verdict === "failed")) return send("review_failed");
-	if (f.reviews.some((k) => k.verdict === "missing"))
+	if (f.state === "merged") {
+		return done(landingOf(f), f.head, "not_run");
+	}
+
+	if (f.state !== "open") {
+		return {kind: "skip", why: f.state};
+	}
+
+	if (!f.ours) {
+		return {kind: "skip", why: "not_ours"};
+	}
+
+	if (f.mergeable === "conflicts") {
+		return send("conflicts");
+	}
+
+	if (f.reviews === null) {
+		return stuck("reviews_unknown");
+	}
+
+	if (f.reviews.some((k) => k.verdict === "failed")) {
+		return send("review_failed");
+	}
+
+	if (f.reviews.some((k) => k.verdict === "missing")) {
 		return {kind: "send", to: "reviewer", why: "no_review"};
-	if (f.criteria === null) return stuck("criteria_unknown");
+	}
+
+	if (f.criteria === null) {
+		return stuck("criteria_unknown");
+	}
+
 	const rows = latest(f, f.criteria);
-	if (rows.some((r) => r?.grade === "fail")) return send("review_failed");
-	if (rows.some((r) => r === null)) return {kind: "send", to: "reviewer", why: "no_review"};
-	if (f.checks === "red") return s.rerunFor === f.head ? send("checks_red") : "on";
-	if (f.comments.some((c) => c.by === "person"))
+
+	if (rows.some((r) => r?.grade === "fail")) {
+		return send("review_failed");
+	}
+
+	if (rows.some((r) => r === null)) {
+		return {kind: "send", to: "reviewer", why: "no_review"};
+	}
+
+	if (f.checks === "red") {
+		return s.rerunFor === f.head ? send("checks_red") : "on";
+	}
+
+	if (f.comments.some((c) => c.by === "person")) {
 		return {kind: "ask", who: "commenter", for: "comment"};
-	if (f.comments.length > 0) return send("bot_comment");
-	if (f.approval === "missing") return {kind: "ask", who: "owner", for: "approval"};
-	if (f.approval === "unknown") return stuck("approval_unknown");
-	if (f.checks === "pending") return s.waited >= MAX_WAITS ? stuck("checks_stuck") : "on";
-	if (f.checks === "stuck") return stuck("checks_stuck");
-	if (f.mergeable === "unknown") return stuck("merge_unknown");
+	}
+
+	if (f.comments.length > 0) {
+		return send("bot_comment");
+	}
+
+	if (f.approval === "missing") {
+		return {kind: "ask", who: "owner", for: "approval"};
+	}
+
+	if (f.approval === "unknown") {
+		return stuck("approval_unknown");
+	}
+
+	if (f.checks === "pending") {
+		return s.waited >= MAX_WAITS ? stuck("checks_stuck") : "on";
+	}
+
+	if (f.checks === "stuck") {
+		return stuck("checks_stuck");
+	}
+
+	if (f.mergeable === "unknown") {
+		return stuck("merge_unknown");
+	}
+
 	return {go: landingOf(f)};
 }
 
@@ -617,16 +776,26 @@ function calls(prev: Ship, msg: Msg, memory: Expect): ShipOutcome | null {
 		case "over":
 			return null;
 		case "reading": {
-			if (msg.type === "ship_facts_err") return stuck("read_failed");
-			if (msg.type !== "ship_facts_ok") return null;
+			if (msg.type === "ship_facts_err") {
+				return stuck("read_failed");
+			}
+
+			if (msg.type !== "ship_facts_ok") {
+				return null;
+			}
+
 			const called = readCalls(prev, msg.value);
 			return called === "on" || "go" in called ? null : called;
 		}
 		case "rerunning":
-			if (msg.type === "ship_rerun_checks_ok" && msg.cmd.intent === prev.asked.intent)
+			if (msg.type === "ship_rerun_checks_ok" && msg.cmd.intent === prev.asked.intent) {
 				return prev.waited >= MAX_WAITS ? stuck("checks_stuck") : null;
-			if (msg.type === "ship_rerun_checks_err" && msg.cmd.intent === prev.asked.intent)
+			}
+
+			if (msg.type === "ship_rerun_checks_err" && msg.cmd.intent === prev.asked.intent) {
 				return send("checks_red");
+			}
+
 			return null;
 		case "waiting":
 			return msg.type === "ship_checks_overdue" &&
@@ -636,15 +805,28 @@ function calls(prev: Ship, msg: Msg, memory: Expect): ShipOutcome | null {
 				? stuck("checks_stuck")
 				: null;
 		case "enqueueing":
-			if (msg.type === "ship_enqueue_err" && msg.cmd.intent === prev.asked.intent)
+			if (msg.type === "ship_enqueue_err" && msg.cmd.intent === prev.asked.intent) {
 				return stuck("enqueue_failed");
-			if (msg.type !== "ship_enqueue_ok" || msg.cmd.intent !== prev.asked.intent) return null;
-			if (msg.value === "conflicts") return send("conflicts");
+			}
+
+			if (msg.type !== "ship_enqueue_ok" || msg.cmd.intent !== prev.asked.intent) {
+				return null;
+			}
+
+			if (msg.value === "conflicts") {
+				return send("conflicts");
+			}
+
 			return msg.value === "head_moved" || msg.value === "stale" ? movedCalls(prev) : null;
 		case "merging":
-			if (msg.type === "ship_merge_err" && msg.cmd.intent === prev.asked.intent)
+			if (msg.type === "ship_merge_err" && msg.cmd.intent === prev.asked.intent) {
 				return stuck("merge_failed");
-			if (msg.type !== "ship_merge_ok" || msg.cmd.intent !== prev.asked.intent) return null;
+			}
+
+			if (msg.type !== "ship_merge_ok" || msg.cmd.intent !== prev.asked.intent) {
+				return null;
+			}
+
 			switch (msg.value.reading) {
 				case "merged":
 					return null;
@@ -656,18 +838,35 @@ function calls(prev: Ship, msg: Msg, memory: Expect): ShipOutcome | null {
 				case "stale":
 					return movedCalls(prev);
 			}
+
 			break;
 		case "queued": {
 			const here =
 				"pr" in msg && msg.pr === prev.pr && "head" in msg && msg.head === prev.ready.head;
-			if (!here) return null;
-			if (msg.type === "ship_queue_overdue") return stuck("queue_silent");
+
+			if (!here) {
+				return null;
+			}
+
+			if (msg.type === "ship_queue_overdue") {
+				return stuck("queue_silent");
+			}
+
 			return msg.type === "ship_queue" && msg.reading === "ejected" ? send("ejected") : null;
 		}
 		case "finishing":
-			if (memory.commit === null) return null;
-			if (msg.type === "ship_finish_ok") return done(memory.landing, memory.commit, "done");
-			if (msg.type === "ship_finish_err") return done(memory.landing, memory.commit, "failed");
+			if (memory.commit === null) {
+				return null;
+			}
+
+			if (msg.type === "ship_finish_ok") {
+				return done(memory.landing, memory.commit, "done");
+			}
+
+			if (msg.type === "ship_finish_err") {
+				return done(memory.landing, memory.commit, "failed");
+			}
+
 			return null;
 	}
 }
@@ -680,17 +879,22 @@ function remember(memory: Expect, {prev, msg}: ShipStep): Expect {
 			? {landing: called.go, commit: null}
 			: memory;
 	}
-	if (prev.phase === "queued" && msg.type === "ship_queue" && msg.reading === "landed")
+
+	if (prev.phase === "queued" && msg.type === "ship_queue" && msg.reading === "landed") {
 		return msg.pr === prev.pr && msg.head === prev.ready.head
 			? {...memory, commit: msg.commit}
 			: memory;
+	}
+
 	if (
 		prev.phase === "merging" &&
 		msg.type === "ship_merge_ok" &&
 		msg.cmd.intent === prev.asked.intent &&
 		msg.value.reading === "merged"
-	)
+	) {
 		return {...memory, commit: msg.value.commit};
+	}
+
 	return memory;
 }
 
@@ -704,22 +908,33 @@ const givesItsOutcome = along<Expect>(
 	{landing: "whole", commit: null},
 	(memory, step) => {
 		const {prev, msg, next} = step;
-		if (prev.phase === "over")
+
+		if (prev.phase === "over") {
 			return next.phase === "over" && said(next.outcome) === said(prev.outcome)
 				? memory
 				: broke(`an ended run changed: ${said(prev.outcome)}, then ${next.phase}`);
+		}
+
 		const wanted = calls(prev, msg, memory);
 		const got = next.phase === "over" ? said(next.outcome) : null;
-		if (wanted === null && got !== null)
+
+		if (wanted === null && got !== null) {
 			return broke(`${msg.type} in ${prev.phase} ended it ${got}; it should not end it`);
-		if (wanted !== null && got !== said(wanted))
+		}
+
+		if (wanted !== null && got !== said(wanted)) {
 			return broke(
 				`${msg.type} in ${prev.phase} should end it ${said(wanted)}; it ${got === null ? `went to ${next.phase}` : `ended ${got}`}`,
 			);
+		}
+
 		const after = remember(memory, step);
+
 		// The tidy-up's outcome names the commit it landed as: a run tidying up after no landing has none.
-		if (next.phase === "finishing" && prev.phase !== "finishing" && after.commit === null)
+		if (next.phase === "finishing" && prev.phase !== "finishing" && after.commit === null) {
 			return broke(`${msg.type} in ${prev.phase} went on to the tidy-up, and nothing landed`);
+		}
+
 		return after;
 	},
 );
@@ -742,6 +957,7 @@ type Noise = (typeof NOISE)[number];
 
 const noiseOf = (kind: Noise, head: string): Msg => {
 	const other = head === "A" ? "B" : "A";
+
 	switch (kind) {
 		case "start":
 			return {type: "start", pr: PR};
@@ -825,16 +1041,26 @@ export function landsWhenReady<S extends Ship, U extends Sub>(
 		sent.push(...cmds);
 	};
 	const noise = (i: number) => {
-		for (const kind of run.noise[i] ?? []) step(noiseOf(kind, head));
+		for (const kind of run.noise[i] ?? []) {
+			step(noiseOf(kind, head));
+		}
 	};
 	step({type: "start", pr: PR});
 	noise(0);
 	const read = sent.findLast((c) => c.type === "ship_facts");
-	if (read?.type !== "ship_facts") return "it never read";
+
+	if (read?.type !== "ship_facts") {
+		return "it never read";
+	}
+
 	step(readShipFacts.ok(read, run.facts, 0));
 	noise(1);
 	const queued = sent.findLast((c) => c.type === "ship_enqueue");
-	if (queued?.type !== "ship_enqueue") return `a ready read at ${head} sent no enqueue`;
+
+	if (queued?.type !== "ship_enqueue") {
+		return `a ready read at ${head} sent no enqueue`;
+	}
+
 	if (run.queue) {
 		step(enqueue.ok(queued, "queued", 0));
 		noise(2);
@@ -843,12 +1069,21 @@ export function landsWhenReady<S extends Ship, U extends Sub>(
 		step(enqueue.ok(queued, "no_queue", 0));
 		noise(2);
 		const merged = sent.findLast((c) => c.type === "ship_merge");
-		if (merged?.type !== "ship_merge") return "no merge queue, and it sent no merge";
+
+		if (merged?.type !== "ship_merge") {
+			return "no merge queue, and it sent no merge";
+		}
+
 		step(merge.ok(merged, {reading: "merged", commit: `main-${head}`}, 0));
 	}
+
 	noise(3);
 	const tidy = sent.findLast((c) => c.type === "ship_finish");
-	if (tidy?.type !== "ship_finish") return "it landed and sent no tidy-up";
+
+	if (tidy?.type !== "ship_finish") {
+		return "it landed and sent no tidy-up";
+	}
+
 	step(run.tidy ? finish.ok(tidy, null, 0) : finish.err(tidy, UNKNOWN, 0));
 	noise(4);
 	const wanted = said(done(landingOf(run.facts), `main-${head}`, run.tidy ? "done" : "failed"));
@@ -863,8 +1098,15 @@ const TAMPER = ["none", "moved", "short"] as const;
 /** A kept proof, as it was or edited in storage: moved to another head, or a row dropped. */
 const proofOf = (head: string, tamper: (typeof TAMPER)[number]): ReadyToMerge => {
 	const r = readyAt(PR, head);
-	if (tamper === "moved") return {...r, head: head === "A" ? "B" : "A"};
-	if (tamper === "short") return {...r, rows: [r.rows[0]]};
+
+	if (tamper === "moved") {
+		return {...r, head: head === "A" ? "B" : "A"};
+	}
+
+	if (tamper === "short") {
+		return {...r, rows: [r.rows[0]]};
+	}
+
 	return r;
 };
 
@@ -951,8 +1193,11 @@ export function fromSaved(kept: Ship, list: readonly Msg[]): string | null {
 	const run = foldEvents(ship, undefined, kept, list);
 	const first = run.states[0];
 	const refused = proofsIn(kept).some((p) => ReadyToMerge.revive(p) === null);
-	if (refused && (first?.phase !== "over" || nameOf(first.outcome) !== "stuck:proof_refused"))
+
+	if (refused && (first?.phase !== "over" || nameOf(first.outcome) !== "stuck:proof_refused")) {
 		return `a kept proof that does not prove its criteria was read back as ${first?.phase}`;
+	}
+
 	// The heads this run sent before it was saved: the write in flight, or the head in the queue.
 	let sent: readonly string[] =
 		kept.phase === "enqueueing" || kept.phase === "merging"
@@ -960,16 +1205,29 @@ export function fromSaved(kept: Ship, list: readonly Msg[]): string | null {
 			: kept.phase === "queued"
 				? [kept.ready.head]
 				: [];
+
 	for (const step of run.steps) {
-		for (const cmd of writes(step.cmds))
-			if (ReadyToMerge.revive(cmd.ready) === null)
+		for (const cmd of writes(step.cmds)) {
+			if (ReadyToMerge.revive(cmd.ready) === null) {
 				return `${cmd.type} of ${cmd.ready.head} with a proof that does not prove its criteria`;
+			}
+		}
+
 		const ended = endedSendsNothing(step);
-		if (ended !== null) return ended;
+
+		if (ended !== null) {
+			return ended;
+		}
+
 		const after = onlySentLands(sent, step);
-		if (after instanceof Broke) return `${after.why}, after ${step.msg.type}`;
+
+		if (after instanceof Broke) {
+			return `${after.why}, after ${step.msg.type}`;
+		}
+
 		sent = after;
 	}
+
 	return null;
 }
 
@@ -987,31 +1245,39 @@ export function holds<S extends Ship, U extends Sub>(
 	opts: Opts,
 	list: fc.Arbitrary<readonly Msg[]> = msgs,
 ): void {
-	if ("each" in law)
+	if ("each" in law) {
 		propertyInvariant(
 			machine,
 			undefined,
 			list,
 			(step) => {
 				const why = law.each(step);
-				if (why !== null) throw new LawBroken(law.name, why, [step]);
+
+				if (why !== null) {
+					throw new LawBroken(law.name, why, [step]);
+				}
+
 				return true;
 			},
 			opts,
 		);
-	else
+	} else {
 		propertyTrace(
 			machine,
 			undefined,
 			list,
 			(steps) => {
 				const broken = law.along(steps);
-				if (broken !== null)
+
+				if (broken !== null) {
 					throw new LawBroken(law.name, broken.why, steps.slice(0, broken.at + 1));
+				}
+
 				return true;
 			},
 			opts,
 		);
+	}
 }
 
 const LANDS = "a ready pull request lands";
@@ -1021,7 +1287,10 @@ export function lands<S extends Ship, U extends Sub>(machine: ShipLike<S, U>, op
 	fc.assert(
 		fc.property(readyRuns, (run) => {
 			const why = landsWhenReady(machine, run);
-			if (why !== null) throw new LawBroken(LANDS, why, []);
+
+			if (why !== null) {
+				throw new LawBroken(LANDS, why, []);
+			}
 		}),
 		opts,
 	);
@@ -1037,7 +1306,10 @@ export function fromSavedState(opts: Opts, agree = false): void {
 	fc.assert(
 		fc.property(savedState(agree), msgs, (kept, list) => {
 			const why = fromSaved(kept, list);
-			if (why !== null) throw new LawBroken(SAVED, why, []);
+
+			if (why !== null) {
+				throw new LawBroken(SAVED, why, []);
+			}
 		}),
 		opts,
 	);

@@ -47,9 +47,11 @@ interface Said {
 const SCALES: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(
 	Object.entries(radix).flatMap(([name, steps]) => {
 		const scale = name.replace(/(Dark)?(P3)?A?$/, "");
+
 		if (!/^[a-z]+(Dark)?(P3)?A?$/.test(name) || typeof steps !== "object" || steps === null) {
 			return [];
 		}
+
 		const entries = Object.entries(steps).filter(
 			(entry): entry is [string, string] =>
 				entry[0].startsWith(scale) && typeof entry[1] === "string",
@@ -61,7 +63,11 @@ const SCALES: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(
 /** `rgba(0, 0, 0, 0.4)`, as Radix writes black and white alpha, as `#00000066`. */
 const hexOf = (color: string): string => {
 	const rgba = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/.exec(color);
-	if (rgba === null) return color.toLowerCase();
+
+	if (rgba === null) {
+		return color.toLowerCase();
+	}
+
 	const [, r = "", g = "", b = "", a = ""] = rgba;
 	const two = (n: number) => n.toString(16).padStart(2, "0");
 	return `#${[r, g, b].map((c) => two(Number(c))).join("")}${two(Math.round(Number(a) * 255))}`;
@@ -106,14 +112,20 @@ const readToml = <A>(
 	said: Said,
 ): A | undefined => {
 	let input: unknown;
+
 	try {
 		input = parse(readFileSync(path, "utf8"));
 	} catch (error) {
 		said.errors.push(`${file}: toml: ${error instanceof Error ? error.message : String(error)}`);
 		return undefined;
 	}
+
 	const decoded = decode(input);
-	if (decoded._tag === "ok") return decoded.value;
+
+	if (decoded._tag === "ok") {
+		return decoded.value;
+	}
+
 	said.errors.push(...decoded.errors);
 	return undefined;
 };
@@ -121,18 +133,28 @@ const readToml = <A>(
 const read = (root: string, said: Said): Sources | undefined => {
 	const dir = join(root, "tokens", "color");
 	const tokens = new Map<string, TokenFile>();
+
 	for (const file of readdirSync(dir).sort()) {
 		if (!file.endsWith(".toml")) {
 			said.errors.push(`${file}: name: a token file is <token>.toml`);
 			continue;
 		}
+
 		const token = readToml(join(dir, file), file, (input) => decodeToken(file, input), said);
-		if (token !== undefined) tokens.set(file.replace(/\.toml$/, ""), token);
+
+		if (token !== undefined) {
+			tokens.set(file.replace(/\.toml$/, ""), token);
+		}
 	}
+
 	const manti = readToml(join(root, "tokens", "manti.toml"), "manti.toml", decodeManti, said);
 	const parts = readToml(join(root, "tokens", "parts.toml"), "parts.toml", decodeParts, said);
 	const css = readFileSync(join(root, "src", "tokens.css"), "utf8");
-	if (manti === undefined || parts === undefined) return undefined;
+
+	if (manti === undefined || parts === undefined) {
+		return undefined;
+	}
+
 	return {tokens, manti, parts, css};
 };
 
@@ -146,11 +168,17 @@ const regionIn = (css: string, name: Region): {from: number; to: number} | strin
 	const closes = [...css.matchAll(new RegExp(`/\\*\\s*@end generated ${name}\\s*\\*/`, "g"))];
 	const [open] = opens;
 	const [close] = closes;
+
 	if (opens.length !== 1 || closes.length !== 1 || open === undefined || close === undefined) {
 		return `tokens.css: @generated ${name}: needs one opening comment and one closing comment`;
 	}
+
 	const from = open.index + open[0].length;
-	if (close.index < from) return `tokens.css: @generated ${name}: closes before it opens`;
+
+	if (close.index < from) {
+		return `tokens.css: @generated ${name}: closes before it opens`;
+	}
+
 	return {from, to: close.index};
 };
 
@@ -172,10 +200,17 @@ const declarationsIn = (css: string): ReadonlyMap<string, string> =>
 const handOf = (css: string, said: Said): string | undefined => {
 	const colors = regionIn(css, "colors");
 	const manti = regionIn(css, "manti");
+
 	if (typeof colors === "string" || typeof manti === "string") {
-		for (const e of [colors, manti]) if (typeof e === "string") said.errors.push(e);
+		for (const e of [colors, manti]) {
+			if (typeof e === "string") {
+				said.errors.push(e);
+			}
+		}
+
 		return undefined;
 	}
+
 	const [first, second] = colors.from < manti.from ? [colors, manti] : [manti, colors];
 	return css.slice(0, first.from) + css.slice(first.to, second.from) + css.slice(second.to);
 };
@@ -184,14 +219,21 @@ const handOf = (css: string, said: Said): string | undefined => {
 
 /** A value in a look, as hex. */
 const valueIn = (value: Value, look: Look): string | undefined => {
-	if (typeof value === "string") return stepIn(value, look);
+	if (typeof value === "string") {
+		return stepIn(value, look);
+	}
+
 	return "step" in value ? stepIn(value.step, look) : value.hex;
 };
 
 /** The token a name ends at once `extends` is followed. checkAcross has ruled out a cycle. */
 const ownOf = (tokens: ReadonlyMap<string, TokenFile>, name: string): Own | undefined => {
 	const token = tokens.get(name);
-	if (token === undefined) return undefined;
+
+	if (token === undefined) {
+		return undefined;
+	}
+
 	return isOwn(token) ? token : ownOf(tokens, token.colors.extends);
 };
 
@@ -199,16 +241,24 @@ type Resolved = ReadonlyMap<string, Readonly<Record<Look, string>>>;
 
 const resolveAll = (tokens: ReadonlyMap<string, TokenFile>, said: Said): Resolved => {
 	const out = new Map<string, Record<Look, string>>();
+
 	for (const name of tokens.keys()) {
 		const own = ownOf(tokens, name);
-		if (own === undefined) continue;
+
+		if (own === undefined) {
+			continue;
+		}
+
 		const [dark, light] = LOOKS.map((look) => valueIn(own.colors[look], look));
+
 		if (dark === undefined || light === undefined) {
 			said.errors.push(`${name}.toml: colors: a step Radix 3.0.0 does not have`);
 			continue;
 		}
+
 		out.set(name, {dark, light});
 	}
+
 	return out;
 };
 
@@ -216,29 +266,47 @@ const resolveAll = (tokens: ReadonlyMap<string, TokenFile>, said: Said): Resolve
 const backdropIn = (resolved: Resolved, backdrop: string, look: Look): string | {why: string} => {
 	const layers = backdrop.split("/").map((name) => resolved.get(name)?.[look]);
 	const bottom = layers.at(-1);
-	if (layers.some((l) => l === undefined) || bottom === undefined) return {why: "not resolved"};
-	if (bottom.length !== 7) return {why: `"${backdrop}" ends on a translucent token`};
+
+	if (layers.some((l) => l === undefined) || bottom === undefined) {
+		return {why: "not resolved"};
+	}
+
+	if (bottom.length !== 7) {
+		return {why: `"${backdrop}" ends on a translucent token`};
+	}
+
 	return layers.slice(0, -1).reduceRight<string>((under, top) => over(top ?? under, under), bottom);
 };
 
 /** Each floor and aim, judged on each backdrop in both looks. */
 const judge = (tokens: ReadonlyMap<string, TokenFile>, resolved: Resolved, said: Said) => {
 	for (const [name, token] of tokens) {
-		if (!isOwn(token) || (token.floor === undefined && token.aim === undefined)) continue;
+		if (!isOwn(token) || (token.floor === undefined && token.aim === undefined)) {
+			continue;
+		}
+
 		const {on = [], floor, aim, except = []} = token;
+
 		for (const look of LOOKS) {
 			const fg = resolved.get(name)?.[look];
-			if (fg === undefined) continue;
+
+			if (fg === undefined) {
+				continue;
+			}
+
 			for (const backdrop of on) {
 				const bg = backdropIn(resolved, backdrop, look);
+
 				if (typeof bg !== "string") {
 					said.errors.push(`${name}.toml: on: ${bg.why}; name what it is drawn over`);
 					continue;
 				}
+
 				const r = ratio(fg, bg);
 				const reads = r.toFixed(2);
 				const i = except.findIndex((e) => e.on === backdrop && e.look === look);
 				const e = except[i];
+
 				if (floor !== undefined && r < floor) {
 					if (e === undefined) {
 						said.errors.push(
@@ -254,6 +322,7 @@ const judge = (tokens: ReadonlyMap<string, TokenFile>, resolved: Resolved, said:
 						`${name}.toml: except.${i}: ${look} on ${backdrop} reads ${reads}, over its floor; take it out`,
 					);
 				}
+
 				if (aim !== undefined && r < aim) {
 					said.notes.push(`${name}.toml: aim: ${look} on ${backdrop} reads ${reads}, under ${aim}`);
 				}
@@ -276,7 +345,11 @@ const PLURAL: Record<(typeof TYPES)[number], string> = {
 /** A value as its file says it, for a comment: `slate a9`, `slate a9, a bend`, `a bend`. */
 const spoken = (value: Value): string => {
 	const step = (s: string) => s.replace(".", " ");
-	if (typeof value === "string") return step(value);
+
+	if (typeof value === "string") {
+		return step(value);
+	}
+
 	return "step" in value ? `${step(value.step)}, a bend` : "a bend";
 };
 
@@ -286,13 +359,20 @@ const colorsRegion = (sources: Sources, resolved: Resolved): string => {
 		a < b ? -1 : 1;
 	const groups: string[] = [];
 	const group = (title: string, lines: readonly string[]) => {
-		if (lines.length > 0) groups.push([`\t/* ${title} */`, ...lines].join("\n"));
+		if (lines.length > 0) {
+			groups.push([`\t/* ${title} */`, ...lines].join("\n"));
+		}
 	};
+
 	for (const owner of Object.keys(parts)) {
 		const owned = [...tokens].filter(([, t]) => t.owner === owner).sort(byName);
+
 		for (const type of TYPES) {
 			const lines = owned.flatMap(([name, t]) => {
-				if (!isOwn(t) || t.type !== type) return [];
+				if (!isOwn(t) || t.type !== type) {
+					return [];
+				}
+
 				const {dark = "", light = ""} = resolved.get(name) ?? {};
 				const value = dark === light ? dark : `light-dark(${light}, ${dark})`;
 				const [d, l] = [spoken(t.colors.dark), spoken(t.colors.light)];
@@ -300,11 +380,13 @@ const colorsRegion = (sources: Sources, resolved: Resolved): string => {
 			});
 			group(`The ${owner}'s ${PLURAL[type]}.`, lines);
 		}
+
 		const named = owned.flatMap(([name, t]) =>
 			isOwn(t) ? [] : [`\t--${name}: var(--${t.colors.extends});`],
 		);
 		group(`The ${owner}'s names for other tokens.`, named);
 	}
+
 	return `\n${groups.join("\n\n")}\n\t`;
 };
 
@@ -350,7 +432,11 @@ const themeColors = (tokens: ReadonlyMap<string, TokenFile>, resolved: Resolved)
 
 const tokenNames = ({tokens, parts}: Sources, css: string): string => {
 	const owners = new Map(declared(css).map((name) => [name, "design"]));
-	for (const [name, t] of tokens) owners.set(`--${name}`, t.owner);
+
+	for (const [name, t] of tokens) {
+		owners.set(`--${name}`, t.owner);
+	}
+
 	const listed = [...owners].sort(([a], [b]) => (a < b ? -1 : 1));
 	const stylesheets = Object.entries(parts).flatMap(([part, p]) =>
 		"stylesheets" in p
@@ -379,14 +465,30 @@ const tokenNames = ({tokens, parts}: Sources, css: string): string => {
 /** What the build makes from the sources, by file, or undefined when a check failed. */
 const build = (root: string, said: Said): ReadonlyMap<string, string> | undefined => {
 	const sources = read(root, said);
-	if (sources === undefined) return undefined;
+
+	if (sources === undefined) {
+		return undefined;
+	}
+
 	const hand = handOf(sources.css, said);
-	if (hand === undefined || said.errors.length > 0) return undefined;
+
+	if (hand === undefined || said.errors.length > 0) {
+		return undefined;
+	}
+
 	said.errors.push(...checkAcross({...sources, hand: declared(hand)}));
-	if (said.errors.length > 0) return undefined;
+
+	if (said.errors.length > 0) {
+		return undefined;
+	}
+
 	const resolved = resolveAll(sources.tokens, said);
 	judge(sources.tokens, resolved, said);
-	if (said.errors.length > 0) return undefined;
+
+	if (said.errors.length > 0) {
+		return undefined;
+	}
+
 	const css = writeCss(sources.css, {
 		colors: colorsRegion(sources, resolved),
 		manti: mantiRegion(sources),
@@ -400,8 +502,14 @@ const build = (root: string, said: Said): ReadonlyMap<string, string> | undefine
 
 /** Each way a file on disk differs from what the build makes. */
 const drift = (file: string, now: string, made: string): readonly string[] => {
-	if (now === made) return [];
-	if (file !== "tokens.css") return [`${file}: differs from what the TOML gives; run pnpm tokens`];
+	if (now === made) {
+		return [];
+	}
+
+	if (file !== "tokens.css") {
+		return [`${file}: differs from what the TOML gives; run pnpm tokens`];
+	}
+
 	const names = (["colors", "manti"] as const).flatMap((region) => {
 		const [a, b] = [now, made].map((css) => {
 			const at = regionIn(css, region);
@@ -425,18 +533,34 @@ const main = (argv: readonly string[]) => {
 	const checking = argv.includes("--check");
 	const said: Said = {errors: [], notes: []};
 	const made = build(root, said);
-	for (const note of said.notes) console.log(note);
+
+	for (const note of said.notes) {
+		console.log(note);
+	}
+
 	if (made === undefined) {
-		for (const error of said.errors) console.error(error);
+		for (const error of said.errors) {
+			console.error(error);
+		}
+
 		return 1;
 	}
+
 	for (const [file, text] of made) {
 		const path = join(root, "src", file);
 		const now = existsSync(path) ? readFileSync(path, "utf8") : "";
-		if (checking) said.errors.push(...drift(file, now, text));
-		else if (now !== text) writeFileSync(path, text);
+
+		if (checking) {
+			said.errors.push(...drift(file, now, text));
+		} else if (now !== text) {
+			writeFileSync(path, text);
+		}
 	}
-	for (const error of said.errors) console.error(error);
+
+	for (const error of said.errors) {
+		console.error(error);
+	}
+
 	return said.errors.length > 0 ? 1 : 0;
 };
 

@@ -117,7 +117,11 @@ export const keysRequest = (open: () => string | null) =>
 			Effect.gen(function* () {
 				yield* machines.session.get("session").start();
 				const why = open();
-				if (why !== null) return yield* Effect.fail({message: why});
+
+				if (why !== null) {
+					return yield* Effect.fail({message: why});
+				}
+
 				yield* serve({close: () => end});
 			}).pipe(Effect.scoped),
 	});

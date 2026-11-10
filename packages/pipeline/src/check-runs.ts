@@ -70,8 +70,11 @@ export const lastAt = (r: Runs, head: string): Ran | null =>
  */
 export function checksAt(r: Runs, head: string, names: readonly string[]): Checks {
 	const run = lastAt(r, head);
-	if (run === null)
+
+	if (run === null) {
 		return {state: "pending", required: names.map((name) => ({name, state: "pending" as const}))};
+	}
+
 	return {
 		state: run.results.some((result) => result.state === "red") ? "red" : "green",
 		required: run.results,

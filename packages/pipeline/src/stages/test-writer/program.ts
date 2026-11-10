@@ -215,7 +215,11 @@ export const testsToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, key: id}, {conflict: "use_existing"});
 		const end: TestWriter = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the test writer stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the test writer stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 
@@ -230,7 +234,11 @@ export const answersToTheEnd = (
 			.get(id)
 			.start({type: "start", ask, key: id}, {conflict: "use_existing"});
 		const end: Answers = yield* runtime.done();
-		if (end.phase !== "over") return yield* Effect.die(`the mutants job stopped in ${end.phase}`);
+
+		if (end.phase !== "over") {
+			return yield* Effect.die(`the mutants job stopped in ${end.phase}`);
+		}
+
 		return end;
 	}).pipe(Effect.scoped);
 

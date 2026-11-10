@@ -55,6 +55,7 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
 		return child;
 	});
 	syncBuiltinESMExports();
+
 	try {
 		return await task();
 	} finally {
@@ -69,10 +70,14 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
 	const ranges: Array<{start: number; end: number}> = [];
 	const visit = (node: any): void => {
-		if (node === null || typeof node !== "object") return;
+		if (node === null || typeof node !== "object") {
+			return;
+		}
+
 		if (node.type === "ObjectExpression") {
 			const prop = (key: string) =>
 				node.properties.find((p: any) => p.key?.name === key || p.key?.value === key);
+
 			if (
 				prop("mainModule")?.value?.value === "program.js" &&
 				prop("env") &&
@@ -82,7 +87,10 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
 				ranges.push({start: target.start, end: target.end});
 			}
 		}
-		for (const child of Object.values(node)) visit(child);
+
+		for (const child of Object.values(node)) {
+			visit(child);
+		}
 	};
 	visit(parseSync("brain.mjs", source).program);
 	assert.equal(ranges.length, 1, "plant must reach exactly one real loader policy");
@@ -128,7 +136,10 @@ afterEach(() => {
 	vi.doUnmock("@alchemy.run/cloudflare");
 	vi.resetModules();
 	vi.unstubAllEnvs();
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
 });
 
 const field = (value: string | Buffer) => {
@@ -197,14 +208,22 @@ const readings = (s: typeof Sample.Type) => ({
 // files libfabrika's build reads: node_modules/<package> from `from` upward. A path has none.
 const findManifest = (from: string, name: string): string | undefined => {
 	const file = join(from, "node_modules", name, "package.json");
-	if (existsSync(file)) return file;
+
+	if (existsSync(file)) {
+		return file;
+	}
+
 	return dirname(from) === from ? undefined : findManifest(dirname(from), name);
 };
 
 const exportsWindow = (from: string, selected: ReadonlyArray<{readonly package: string}>) =>
 	selected.some(({package: name}) => {
 		const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
-		if (file === undefined) return false;
+
+		if (file === undefined) {
+			return false;
+		}
+
 		const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
 		return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
 	});
@@ -214,27 +233,45 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
 	assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
 	assert.equal(bar.base.length, 4);
 	assert.equal(bar.head.length, 5);
+
 	for (const sample of [...bar.base, ...bar.head]) {
 		assert.equal(sample.error, undefined, "failed run");
 		assert.deepEqual(sample.missing, {}, "missing reading");
-		for (const key of ["session", "settings", "chaos"] as const)
+
+		for (const key of ["session", "settings", "chaos"] as const) {
 			assert.equal(sample[key], bar.base[0]![key], "different sitting or settings");
+		}
+
 		assert(sample.load.length > 0, "load missing");
-		for (const value of Object.values(readings(sample)))
+
+		for (const value of Object.values(readings(sample))) {
 			assert(Number.isFinite(value) && value >= 0, "invalid reading");
+		}
 	}
-	for (const sample of bar.head) assert.equal(sample.brain, digest, "wrong built bytes");
-	for (const key of ["brain", "programs"] as const)
+
+	for (const sample of bar.head) {
+		assert.equal(sample.brain, digest, "wrong built bytes");
+	}
+
+	for (const key of ["brain", "programs"] as const) {
 		assert(Number.isFinite(bar.sizes[key]) && bar.sizes[key] > 0, `${key} bytes missing`);
+	}
+
 	assert(Number.isFinite(bar.sizes.window) && bar.sizes.window >= 0, "window bytes invalid");
-	if (windowed) assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
+
+	if (windowed) {
+		assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
+	}
+
 	for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
 		assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
-		if (enforce)
+
+		if (enforce) {
 			assert(
 				median(bar.head.map((s) => readings(s)[key])) <= bar.caps[key],
 				`local bar regressed: ${key}`,
 			);
+		}
 	}
 };
 
@@ -305,6 +342,7 @@ describe("P16 stack and sealed loader", () => {
 						programs: {counter: {hash: hash("program-marker"), source: "program-marker"}},
 					};
 					let accepted = 0;
+
 					for (const name of ["local", "cloud"]) {
 						const settings = {
 							name,
@@ -316,31 +354,43 @@ describe("P16 stack and sealed loader", () => {
 						};
 						const result = await Effect.runPromise(Effect.result(stack(built, settings)));
 						const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
+
 						if (expectedBytes >= 5 * 1024) {
 							expect(result._tag, "oversized serialized setting must be refused").toBe("Failure");
 							continue;
 						}
+
 						expect(result._tag).toBe("Success");
 						accepted++;
 					}
+
 					const verify = (call: (typeof calls)[number]) => {
 						expect(call.main, "the stage runs the completed file").toBe(built.brain);
 						expect(call.bundle, "no second bundle pass").toBe(false);
+
 						for (const [name, value] of Object.entries(call.env)) {
 							expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
 							expect(JSON.stringify(value)).not.toContain("program-marker");
-							if (typeof value === "string")
+
+							if (typeof value === "string") {
 								expect(Buffer.byteLength(value), "setting under 5 KB encoded").toBeLessThan(
 									5 * 1024,
 								);
-							else expect(value).toHaveProperty("type");
+							} else {
+								expect(value).toHaveProperty("type");
+							}
 						}
 					};
-					for (const call of calls) verify(call);
+
+					for (const call of calls) {
+						verify(call);
+					}
+
 					// Plants on a real declaration: code back in env, a source entry, a rebundle, and a
 					// multibyte setting that passes a character count.
 					const real = calls[0];
-					if (real)
+
+					if (real) {
 						for (const plant of [
 							{...real, env: {...real.env, WINDOW_JS: "export const x = 1;"}},
 							{...real, env: {...real.env, CODE: "program-marker"}},
@@ -351,6 +401,8 @@ describe("P16 stack and sealed loader", () => {
 							expect("雪".repeat(1800).length).toBeLessThan(5 * 1024);
 							expect(() => verify(plant)).toThrow();
 						}
+					}
+
 					expect(calls.length, "each accepted stage declared one Worker").toBe(accepted);
 					vi.doUnmock("alchemy");
 					vi.doUnmock("@alchemy.run/cloudflare");
@@ -414,12 +466,14 @@ describe("P16 stack and sealed loader", () => {
 					expect(calls).toHaveLength(1);
 					const config = calls[0]!.config;
 					const sealed = (value: unknown) => assert.deepEqual(value, config);
+
 					for (const plant of [
 						{...Object(config), env: {PLANTED: source}},
 						{...Object(config), globalOutbound: undefined},
 						{...Object(config), modules: {"program.js": "host fallback"}},
-					])
+					]) {
 						expect(() => sealed(plant)).toThrow();
+					}
 				},
 			),
 			{...runs, numRuns: 12},
@@ -451,8 +505,15 @@ class Client {
 	async next(match: (x: any) => boolean): Promise<any> {
 		for (;;) {
 			const at = this.frames.findIndex(match);
-			if (at >= 0) return this.frames.splice(at, 1)[0];
-			if (this.frames.some((x) => x.closed)) throw Error("wire closed");
+
+			if (at >= 0) {
+				return this.frames.splice(at, 1)[0];
+			}
+
+			if (this.frames.some((x) => x.closed)) {
+				throw Error("wire closed");
+			}
+
 			await new Promise((done) => setTimeout(done, 10));
 		}
 	}
@@ -497,11 +558,20 @@ describe("P16 copied-file real stage, serial", () => {
 						child.once("error", reject);
 					});
 					child.kill("SIGKILL");
-					if (fail) throw new Error(`planted stage failure ${value}`);
+
+					if (fail) {
+						throw new Error(`planted stage failure ${value}`);
+					}
+
 					return value;
 				});
-				if (fail) await expect(task).rejects.toThrow(`planted stage failure ${value}`);
-				else expect(await task).toBe(value);
+
+				if (fail) {
+					await expect(task).rejects.toThrow(`planted stage failure ${value}`);
+				} else {
+					expect(await task).toBe(value);
+				}
+
 				expect(closed, "next stage must wait for the real child close event").toBe(true);
 			}),
 			{...runs, numRuns: 8},
@@ -518,8 +588,10 @@ describe("P16 copied-file real stage, serial", () => {
 					),
 				);
 				const source = readFileSync(built.brain, "utf8");
-				for (const mode of ["binding", "outbound"] as const)
+
+				for (const mode of ["binding", "outbound"] as const) {
 					expect(plantPolicy(source, mode, `P16_${n}`, String(n))).not.toBe(source);
+				}
 			}),
 			{...runs, numRuns: 2},
 		);
@@ -534,6 +606,7 @@ describe("P16 copied-file real stage, serial", () => {
 					hits++;
 					response.end("reachable");
 				});
+
 				try {
 					const port = await new Promise<number>((done, fail) => {
 						probe.once("error", fail);
@@ -583,6 +656,7 @@ describe("P16 copied-file real stage, serial", () => {
 					const bytes = readFileSync(join(alone, "brain.mjs"), "utf8");
 					rmSync(join(h, "dist"), {recursive: true});
 					rmSync(file);
+
 					for (const mode of ["sealed", "binding", "outbound"] as const) {
 						writeFileSync(
 							join(alone, "brain.mjs"),
@@ -607,17 +681,21 @@ describe("P16 copied-file real stage, serial", () => {
 										yield* Effect.tryPromise({
 											try: async () => {
 												expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+
 												for (const name of Object.keys(built.programs)) {
 													const program: Loaded = await stage.loader.load(
 														name,
 														`probe-${n}-${mode}-${name}`,
 													);
+
 													if (name === "counter") {
 														const counted = await turn(CounterTurn, program, "init", [null]);
 														expect(counted.model).toEqual({count: 0});
 														continue;
 													}
+
 													let model = (await turn(SealedTurn, program, "init", [null])).model;
+
 													// Read until the program's own fetch settles. The test time limit bounds the wait.
 													while (model.outbound === "pending") {
 														await new Promise((done) => setTimeout(done, 10));
@@ -625,13 +703,18 @@ describe("P16 copied-file real stage, serial", () => {
 															await turn(SealedTurn, program, "step", [model, {type: "read"}])
 														).model;
 													}
+
 													const closed = (model: unknown) =>
 														assert.deepEqual(model, {keys: [], outbound: "denied"});
+
 													if (mode === "sealed") {
 														closed(model);
 														expect(hits).toBe(0);
 													} else {
-														if (mode === "outbound") expect(hits).toBeGreaterThan(0);
+														if (mode === "outbound") {
+															expect(hits).toBeGreaterThan(0);
+														}
+
 														expect(() => closed(model)).toThrow();
 														expect(model).toEqual(
 															mode === "binding"
@@ -653,7 +736,9 @@ describe("P16 copied-file real stage, serial", () => {
 						);
 					}
 				} finally {
-					if (probe.listening) await new Promise<void>((done) => probe.close(() => done()));
+					if (probe.listening) {
+						await new Promise<void>((done) => probe.close(() => done()));
+					}
 				}
 			}),
 			{...runs, numRuns: 2},
@@ -709,6 +794,7 @@ describe("P16 copied-file real stage, serial", () => {
 											try: async () => {
 												const a = new Client(runtime.url, key, "a"),
 													b = new Client(runtime.url, key, "b");
+
 												try {
 													expect((await a.hello()).error).toBeUndefined();
 													expect((await b.hello()).error).toBeUndefined();
@@ -717,9 +803,15 @@ describe("P16 copied-file real stage, serial", () => {
 													).result.entries;
 													const current = rows.findLast((r: any) => r._tag === "started").body
 														.process;
-													if (again) expect(current).toBe(pid);
-													else pid = current;
+
+													if (again) {
+														expect(current).toBe(pid);
+													} else {
+														pid = current;
+													}
+
 													await b.call("view.open", {pid});
+
 													for (const [n, type] of messages.entries()) {
 														const answer = await a.call("process.send", {
 															pid,
@@ -729,13 +821,20 @@ describe("P16 copied-file real stage, serial", () => {
 															seen: 0,
 														});
 														expect(answer.result).toMatchObject({_tag: "accepted"});
+
 														if (n === 0) {
-															if (again) expect(answer.result).toEqual(first);
-															else first = answer.result;
+															if (again) {
+																expect(answer.result).toEqual(first);
+															} else {
+																first = answer.result;
+															}
 														}
-														if (!again)
+
+														if (!again) {
 															total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
+														}
 													}
+
 													const inbox = (
 														await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
 													).result.entries;
@@ -751,8 +850,13 @@ describe("P16 copied-file real stage, serial", () => {
 													const minted = Schema.is(Id.InputId);
 													expect(minted(input), 'stamped input uses Id.make("input")').toBe(true);
 													expect(minted(inbox[0].id), "the letter ID stays its own").toBe(false);
-													if (again) expect(input).toBe(stamped);
-													else stamped = input;
+
+													if (again) {
+														expect(input).toBe(stamped);
+													} else {
+														stamped = input;
+													}
+
 													if (again) {
 														const retried = await a.call("process.send", {
 															pid,
@@ -766,15 +870,19 @@ describe("P16 copied-file real stage, serial", () => {
 															await a.call("ledger.read", {stream: "counter:1/inbox", after: 0})
 														).result.entries;
 														expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
-														for (const c of [a, b])
+
+														for (const c of [a, b]) {
 															expect((await c.call("view.open", {pid})).result.view).toEqual({
 																count: total + 1,
 															});
+														}
 													} else {
-														for (const c of [a, b])
+														for (const c of [a, b]) {
 															expect((await c.call("view.open", {pid})).result.view).toEqual({
 																count: total,
 															});
+														}
+
 														a.ws.send(
 															JSON.stringify({
 																jsonrpc: "2.0",
@@ -791,6 +899,7 @@ describe("P16 copied-file real stage, serial", () => {
 														);
 														a.ws.close();
 													}
+
 													// Every embedded route must answer from this one file. P14 is absent on this base.
 													const missing = await fetch(`${runtime.url}/p16-missing.js`);
 													expect(missing.status).toBe(404);
@@ -819,12 +928,14 @@ describe("P16 copied-file real stage, serial", () => {
 	// scenario: a fixed base/head benchmark, because it measures real laptop performance.
 	it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
 		const path = process.env.P16_LOCAL_BAR;
+
 		if (!path) {
 			console.log(
 				"T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
 			);
 			return;
 		}
+
 		const bar = Schema.decodeUnknownSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
 		const brain = process.env.P16_BRAIN;
 		assert(brain, "final brain path missing");
@@ -866,10 +977,13 @@ describe("P16 copied-file real stage, serial", () => {
 		expect(() =>
 			localBar({...bar, capsFrom: "ticket-115's rule (a guess)"}, digest, false, windowed),
 		).toThrow("experiment 241");
-		for (const key of ["brain", "programs"] as const)
+
+		for (const key of ["brain", "programs"] as const) {
 			expect(() =>
 				localBar({...bar, sizes: {...bar.sizes, [key]: 0}}, digest, false, windowed),
 			).toThrow(`${key} bytes missing`);
+		}
+
 		// A program whose package.json exports "./window", read the way the build reads it.
 		const planted = home();
 		mkdirSync(join(planted, "src"));

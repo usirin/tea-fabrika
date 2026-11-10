@@ -41,7 +41,11 @@ const num = (v: unknown, key: string) => (isRecord(v) && typeof v[key] === "numb
 /** The SDK result Claude's adapter forwards, as raw tokens and its numbers; `null` for anything else. */
 export const claudeResultOf = (params: unknown) => {
 	const m = isRecord(params) ? params.message : null;
-	if (!isRecord(m) || m.type !== "result") return null;
+
+	if (!isRecord(m) || m.type !== "result") {
+		return null;
+	}
+
 	const u = m.usage;
 	return {
 		tokens: {
@@ -112,15 +116,21 @@ export const acpAdapter = (
 						turn.folder,
 						parent,
 					);
-					if (harness.prepare !== undefined)
+
+					if (harness.prepare !== undefined) {
 						yield* harness.prepare.pipe(Effect.mapError((why) => failed("contain", why)));
+					}
+
 					// The connection's own scope: the gentle stop closes it, and with it the process.
 					const scope = yield* Scope.make();
 					yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
 					const queue = yield* Queue.unbounded<Raw, AgentFailed | Cause.Done>();
 					const said = {text: ""};
 					const flush = () => {
-						if (said.text !== "") Queue.offerUnsafe(queue, {_tag: "said", text: said.text});
+						if (said.text !== "") {
+							Queue.offerUnsafe(queue, {_tag: "said", text: said.text});
+						}
+
 						said.text = "";
 					};
 					const claude = {result: null as ReturnType<typeof claudeResultOf>};
@@ -141,14 +151,26 @@ export const acpAdapter = (
 							});
 							return;
 						}
+
 						const u = h.update;
+
 						if (u.sessionUpdate === "agent_message_chunk") {
-							if (u.content.type === "text") said.text += u.content.text;
+							if (u.content.type === "text") {
+								said.text += u.content.text;
+							}
+
 							return;
 						}
+
 						const raws = rawOfUpdate(u);
-						if (raws.length > 0) flush();
-						for (const r of raws) Queue.offerUnsafe(queue, r);
+
+						if (raws.length > 0) {
+							flush();
+						}
+
+						for (const r of raws) {
+							Queue.offerUnsafe(queue, r);
+						}
 					};
 					const c = yield* connect(harness, turn.folder, heard, {
 						methods: name === "claude" ? ["_claude/sdkMessage"] : [],
@@ -173,9 +195,13 @@ export const acpAdapter = (
 									.pipe(Effect.mapError((e) => failed("start", e.message)));
 					opened = yield* set("model", turn.model);
 					opened = yield* set("thought_level", turn.effort, true);
+
 					// Claude: never the owner's own default. ACP offers no `dontAsk`; `acceptEdits` runs edits,
 					// the sandbox lets the shell run, and any other ask comes here and is refused.
-					if (name === "claude") opened = yield* set("mode", "acceptEdits");
+					if (name === "claude") {
+						opened = yield* set("mode", "acceptEdits");
+					}
+
 					// A load replays the old turns: what came before this prompt is not this turn's.
 					said.text = "";
 					Queue.offerUnsafe(queue, {_tag: "opened", own: opened.id});
@@ -206,7 +232,10 @@ export const acpAdapter = (
 						Effect.matchEffect({
 							onSuccess: (raws) =>
 								Effect.sync(() => {
-									for (const r of raws) Queue.offerUnsafe(queue, r);
+									for (const r of raws) {
+										Queue.offerUnsafe(queue, r);
+									}
+
 									Queue.endUnsafe(queue);
 								}),
 							// Claude's adapter answers a spent cap with an RPC error, not a stop reason; the SDK
@@ -216,8 +245,11 @@ export const acpAdapter = (
 									? Effect.sync(() => {
 											flush();
 											const r2 = claude.result;
-											if (r2 !== null)
+
+											if (r2 !== null) {
 												Queue.offerUnsafe(queue, {_tag: "tokens", tokens: r2.tokens, whole: true});
+											}
+
 											Queue.offerUnsafe(queue, {
 												_tag: "ended",
 												stop: "over_budget",

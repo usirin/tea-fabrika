@@ -15,11 +15,19 @@ trusting any line that says an agent could not see a file.
   the experiments were done, 01 first.
 - Scripts are not kept on main. On 2026-11-09 every experiment script, its `lib/` helpers and
   the five harness packages were removed. They are all on the branch
-  `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy. Data
-  that a write-up reads (`results/`, specs, patches, inputs) stays.
-- `results/` holds the answers the scripts saved. Raw samples are kept privately, not here: a script
-  writes them under `runs/`, which git ignores, or to a path a flag names, and
-  `results/` keeps only a small summary of the numbers its write-up quotes.
+  `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy.
+- Results and assets are not kept on main either
+  ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). On 2026-11-09
+  every file here that was not a top-level write-up (`results/`, the `NN-name/` folders,
+  `failures/`, shots, JSON and patches: 610 files, about 40 MB) moved to the owner's private
+  archive, at the same paths. Git history holds every one too: a path a write-up names under
+  `results/` or an `NN-name/` folder is at commit `423fb9cf`, as in
+  `git show 423fb9cf:experiments/results/<file>`. Two files stay because code reads them:
+  `results/86b-plans.json` and `177-themes/schemes/radix-colors-3.0.0.json`.
+- A new write-up quotes the numbers it uses inline. Raw results and assets go to the private
+  archive; a script writes raw samples under `runs/`, which git ignores, or to a path a flag names.
+- The write-ups left here shrink over time: a write-up nothing cites goes once its lesson is in
+  `.decisions/`, `.patterns/` or `docs/direction/`.
 - [open-questions.md](./open-questions.md) is the list of open questions the
   log kept up to experiment 20.
 
@@ -280,6 +288,8 @@ them by number.
 | 241 | [The local bar on one built file](./241-one-file-build.md) | `238-local-stage-speed-bar.ts` (branch `fabrikalfa/exp241-script`), `results/241-one-file-build.json` | 2026-11-09 | `next/`, P16 (ticket 282); 238's bar rerun on main after P12 (`a1327577`) and on P16's one built file (`6c6b24c3`), four base and five head runs in one sitting. Medians, base then head: accepted send 13.2 and 11.8 ms, publication 8.9 and 7.3 ms, lost link noticed 4.5 and 4.5 ms (new reading: one client kept open across the workerd kill), replacement 412 and 402 ms, reconnect 236 and 67 ms, workerd RSS 136 and 129 MB, start 4.79 and 1.80 s. Every head median is under its cap. The caps are a guess: ticket-115's rule on the base runs (3 times for the small readings, 1.3 times for the fixed waits). The first two base runs at load 12 to 14 make the start and reconnect caps loose. Brain 1,503,580 to 1,504,648 bytes, programs 467,455, window 0 (no program exports one yet). No model, $0. |
 | 243 | [What clanka teaches `next/`'s pipeline](./243-what-clanka-teaches-the-pipeline.md) | none | 2026-11-09 | `next/`, reading [clanka](https://github.com/Effectful-Tech/clanka) v0.24.4, not a measurement. clanka is one agent, not a factory: no plan, tests, review, ledger, asks or signing. It shows the inside of one Draft. Top leans: keep the loop and the model call outside the box and only the hands inside, over Effect RPC (65%, walks back part of programs run in a box); drive Claude Code one model step at a time with its tool parked (55%, walks back the Tier 5 resume law); transcripts leave as history events (70%); limits as `Context.Reference` and one named `Schedule` (75%); executor state as a value the caller holds (80%). Not taken: loop state outside tea, history outside the ledger, free-text done, 20 retries, `bash` and `gh` from the agent, tokens with no dollars. Two owner questions for the Tier 5 walk, both answered no ([0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)); borrows 3 to 5 decided ([0030](../.decisions/0030-copy-clankas-shapes-where-better.md)). |
 | 244 | [What does structure-sweep find in `next/`?](./244-structure-sweep-on-next.md) | none | 2026-11-09 | `next/`, structure-sweep 0.3.9 and Jev, every verdict checked by hand, $0.012. Three real finds, now tickets 472 to 474: the pre-hello method rule decided twice and differently (`transport/gateway.ts`, `transport/answer.ts`), the execution call-to-reason map written twice, the brain's stopping guard three times. Pairwise verdicts 13 of 20 right, with the two highest scores wrong; anchor mode found none. Features 83 of 91 right. `move plan` would undo the five layers' folders, and `move apply` still strips `.ts` (ts-morph `move`), so it was not run. |
+| 245 | [Are libfabrika's layers the right abstractions?](./245-are-libfabrikas-layers-right.md) | `results/245-are-libfabrikas-layers-right.json` | 2026-11-09 | `next/`, `next/packages/libfabrika/src` only. Reading plus counts (imports, exports, 121 commits over four days), code-graph, `structure-sweep score` and one redacted sweep, $0.007. The order of the layers holds; three walls do not. `coordination/` holds four subjects, and three of its files (`process-store.ts`, `recovery.ts`, `recovery-store.ts`) are read only by the app layer. `data/` is two halves, the ledger and the span records. "The app layer never imports data" holds only because `coordination/index.ts` re-exports 11 of data's names. 0034's three context folders would put about 3,100 of 9,800 lines in a context the glossary does not give them. Lean, 60%: keep the ladder and move the walls to where the subjects end (ticket 488). Nothing moved. |
+| 246 | [Which state machines in `next/` are implicit?](./246-implicit-state-machines-in-next.md) | none | 2026-11-09 | `next/`, reading plus counts and one probe script, no model, $0. One test: a machine stores a value that changes (T1) and that value decides what is legal next (T2), which is control state (Harel 1987). 13 implicit machines, 12 already explicit, 5 step-by-step functions already right, 22 not machines. One reproduced bug: the span sink's "tables made" latch turns on before its transaction commits, so one failed first write leaves the sink without tables (`data/sink.ts:268-278`; `data/records.ts` has the same lines). Top three: the table latch (4 copies, 3 rules), the supervision record (24 state pairs allowed, 8 real, best fixed inside P34c), the connection handshake (two writers). The brain stage keeps a tea machine nobody reads. Made explicit, the 13 would gain about 15 properties over about 65 example tests (a rough read of titles), with 23 invariants to write. Only the latch and three schema decodes were run; the rest is read. |
 
 ## Running them
 

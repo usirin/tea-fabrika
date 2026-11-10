@@ -36,7 +36,10 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 	const rows: Cell[][] = [[]];
 	let y = 0;
 	const rowAt = (r: number): Cell[] => {
-		while (rows.length <= r) rows.push([]);
+		while (rows.length <= r) {
+			rows.push([]);
+		}
+
 		return rows[r] ?? [];
 	};
 	// A character written in the last column leaves the cursor there, a wrap waiting: the next one
@@ -55,11 +58,15 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 	};
 	const put = (c: string) => print(pen, c.codePointAt(0) ?? 0, cols, next);
 	const chars = [...bytes];
+
 	for (let i = 0; i < chars.length; i += 1) {
 		const c = chars[i] ?? "";
-		if (c === "\r") moveTo(y, 0);
-		else if (c === "\n") moveTo(y + 1, pen.x);
-		else if (c === "\x07") {
+
+		if (c === "\r") {
+			moveTo(y, 0);
+		} else if (c === "\n") {
+			moveTo(y + 1, pen.x);
+		} else if (c === "\x07") {
 			// The bell: nothing on the screen.
 		} else if (c === "\x1b" && chars[i + 1] === "c") {
 			// A full reset: every row gone, scrollback too, the cursor home.
@@ -68,33 +75,52 @@ export function gridOf(bytes: string, cols: number, height = 24): Grid {
 			i += 1;
 		} else if (c === "\x1b" && chars[i + 1] === "[") {
 			let end = i + 2;
-			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) end += 1;
+
+			while (end < chars.length && /[0-9;]/.test(chars[end] ?? "")) {
+				end += 1;
+			}
+
 			const n = Number(chars.slice(i + 2, end).join("") || "0");
 			const final = chars[end];
 			const known =
 				["A", "C", "H", "K", "J", "m"].includes(final ?? "") && (final !== "K" || n === 0);
+
 			if (!known) {
-				for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) put(d);
+				for (const d of ["^", "[", "[", ...chars.slice(i + 2, end + 1)]) {
+					put(d);
+				}
+
 				i = end;
 				continue;
 			}
+
 			i = end;
-			if (final === "A") moveTo(Math.max(top(), y - Math.max(1, n)), pen.x);
-			else if (final === "C") moveTo(y, Math.min(cols - 1, pen.x + Math.max(1, n)));
-			else if (final === "H") moveTo(top(), 0);
-			else if (final === "K") {
+
+			if (final === "A") {
+				moveTo(Math.max(top(), y - Math.max(1, n)), pen.x);
+			} else if (final === "C") {
+				moveTo(y, Math.min(cols - 1, pen.x + Math.max(1, n)));
+			} else if (final === "H") {
+				moveTo(top(), 0);
+			} else if (final === "K") {
 				// To the end of the row, the cursor where it was.
 				pen.row.length = Math.min(pen.row.length, pen.x);
 				pen.pending = false;
 			} else if (final === "J" && n === 2) {
-				for (let r = top(); r < rows.length; r += 1) rowAt(r).length = 0;
+				for (let r = top(); r < rows.length; r += 1) {
+					rowAt(r).length = 0;
+				}
+
 				pen.pending = false;
 			} else if (final === "J") {
 				pen.row.length = Math.min(pen.row.length, pen.x);
 				rows.length = y + 1;
 				pen.pending = false;
 			}
-		} else put(c);
+		} else {
+			put(c);
+		}
 	}
+
 	return {rows: rows.map(textOf), cursor: {row: y, col: pen.x}};
 }

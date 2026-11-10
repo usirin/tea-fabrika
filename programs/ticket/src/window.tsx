@@ -205,6 +205,7 @@ function TurnCard(props: {
 }) {
 	const {head, page, now, send} = props;
 	const line = lineOf(head, (at) => whenOf(at, now));
+
 	switch (head._tag) {
 		case "asks":
 			return <AskCard ask={head.asks[0]} page={page} now={now} send={send} />;
@@ -288,22 +289,33 @@ function Meter({steps}: {readonly steps: readonly StepNow[]}) {
 
 function Status({head, now}: {readonly head: Head; readonly now: number}) {
 	const line = lineOf(head, (at) => whenOf(at, now));
-	if (head._tag === "asks") return <span className="w-you trunc">waits on you</span>;
-	if (head._tag === "running")
+
+	if (head._tag === "asks") {
+		return <span className="w-you trunc">waits on you</span>;
+	}
+
+	if (head._tag === "running") {
 		return (
 			<>
 				<span className="dot run live" />
 				<span className="trunc">{line}</span>
 			</>
 		);
-	if (head._tag === "done")
+	}
+
+	if (head._tag === "done") {
 		return (
 			<>
 				<span className="w-done">✓</span>
 				<span className="trunc">{line}</span>
 			</>
 		);
-	if (head._tag === "stuck") return <span className="w-stuck trunc">{line}</span>;
+	}
+
+	if (head._tag === "stuck") {
+		return <span className="w-stuck trunc">{line}</span>;
+	}
+
 	return <span className="trunc">{line}</span>;
 }
 
@@ -387,7 +399,11 @@ function Props(props: {readonly page: Page; readonly number: number; readonly no
  */
 function From(props: {readonly page: Page}) {
 	const {page} = props;
-	if (page.from === null) return null;
+
+	if (page.from === null) {
+		return null;
+	}
+
 	const run = runTicketOf(page.opened.ticket);
 	return (
 		<>
@@ -413,21 +429,34 @@ function From(props: {readonly page: Page}) {
 export const paragraphsOf = (body: string): readonly {at: number; text: string}[] => {
 	const out: {at: number; text: string}[] = [];
 	let from = 0;
+
 	for (const text of body.split(/\n\s*\n/)) {
 		const at = body.indexOf(text, from);
 		from = at + text.length;
-		if (text.trim() !== "") out.push({at, text});
+
+		if (text.trim() !== "") {
+			out.push({at, text});
+		}
 	}
+
 	return out;
 };
 
 /** A value of a fact, in a few words: text as it is, a list joined, an outcome by its name. */
 const wordsOf = (key: string, value: unknown): ReactNode => {
-	if (value === null) return <span className="faint">null</span>;
-	if (key === "outcome" && typeof value === "object")
+	if (value === null) {
+		return <span className="faint">null</span>;
+	}
+
+	if (key === "outcome" && typeof value === "object") {
 		return <span className="mono">{nameOf(value as Parameters<typeof nameOf>[0])}</span>;
-	if (key === "usd" && typeof value === "number") return <span className="mono">{usd(value)}</span>;
-	if (Array.isArray(value))
+	}
+
+	if (key === "usd" && typeof value === "number") {
+		return <span className="mono">{usd(value)}</span>;
+	}
+
+	if (Array.isArray(value)) {
 		return value.length === 0 ? (
 			<span className="faint">none</span>
 		) : (
@@ -435,8 +464,16 @@ const wordsOf = (key: string, value: unknown): ReactNode => {
 				{value.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ")}
 			</span>
 		);
-	if (typeof value === "object") return <span className="mono">{JSON.stringify(value)}</span>;
-	if (key === "body" || key === "note") return <span className="muted">{String(value)}</span>;
+	}
+
+	if (typeof value === "object") {
+		return <span className="mono">{JSON.stringify(value)}</span>;
+	}
+
+	if (key === "body" || key === "note") {
+		return <span className="muted">{String(value)}</span>;
+	}
+
 	return <span className="mono">{String(value)}</span>;
 };
 
@@ -472,13 +509,21 @@ function Activity(props: {
 	const flip = (pos: number) =>
 		setOpen((was) => {
 			const next = new Set(was);
-			if (next.has(pos)) next.delete(pos);
-			else next.add(pos);
+
+			if (next.has(pos)) {
+				next.delete(pos);
+			} else {
+				next.add(pos);
+			}
+
 			return next;
 		});
 	// J and K move between rows, as Linear's lists do; Enter or Space opens one, as a button does.
 	const walk = (e: KeyboardEvent<HTMLOListElement>) => {
-		if (e.key !== "j" && e.key !== "k") return;
+		if (e.key !== "j" && e.key !== "k") {
+			return;
+		}
+
 		const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>(".act-r")];
 		const at = all.indexOf(document.activeElement as HTMLButtonElement);
 		const next = all[Math.max(0, Math.min(all.length - 1, at + (e.key === "j" ? 1 : -1)))];
@@ -538,7 +583,10 @@ function Composer(props: {readonly ticket: number; readonly send: Send; readonly
 	const [text, setText] = useState("");
 	const body = text.trim();
 	const post = (changes: boolean) => {
-		if (body === "") return;
+		if (body === "") {
+			return;
+		}
+
 		send({
 			type: "comment",
 			value: changes ? {ticket, body, asks: "changes"} : {ticket, body},
@@ -601,13 +649,16 @@ export function TicketWindow(props: WindowProps<typeof ticket>) {
 
 function OneTicket({view, send}: WindowProps<typeof ticket>) {
 	const {number, page, now} = view;
-	if (!view.ready)
+
+	if (!view.ready) {
 		return (
 			<div className="view ticket-view">
 				<p className="view-empty">Reading the ledger</p>
 			</div>
 		);
-	if (number === null)
+	}
+
+	if (number === null) {
 		return (
 			<div className="view ticket-view">
 				<p className="view-empty">
@@ -615,12 +666,16 @@ function OneTicket({view, send}: WindowProps<typeof ticket>) {
 				</p>
 			</div>
 		);
-	if (page === null)
+	}
+
+	if (page === null) {
 		return (
 			<div className="view ticket-view">
 				<p className="view-empty">No ticket #{number} on this ledger.</p>
 			</div>
 		);
+	}
+
 	const {opened} = page;
 	const paragraphs = paragraphsOf(page.body);
 	return (

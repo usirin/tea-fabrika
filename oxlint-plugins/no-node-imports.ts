@@ -1,7 +1,7 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import {builtinModules} from "node:module";
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn, type Node} from "./match.ts";
+import {heldToNext, pathIn, type Node} from "./match.ts";
 
 const builtins = new Set(builtinModules);
 
@@ -42,12 +42,11 @@ const replacement = (module: string): string => {
 export const noNodeImports: CreateRule = {
 	create(context) {
 		const file = pathIn(context);
-		if (
-			!file.startsWith("next/") ||
-			/\/e2e\//.test(file) ||
-			/\.(?:test|test-support)\.tsx?$/.test(file)
-		)
+
+		if (!heldToNext(file) || /\/e2e\//.test(file) || /\.(?:test|test-support)\.tsx?$/.test(file)) {
 			return {};
+		}
+
 		const comments = context.sourceCode.getAllComments();
 		const check = (source: Node | null | undefined) => {
 			const value =
@@ -56,9 +55,17 @@ export const noNodeImports: CreateRule = {
 					: source?.type === "TemplateLiteral" && source.expressions.length === 0
 						? source.quasis[0]?.value.cooked
 						: null;
-			if (typeof value !== "string" || source == null) return;
+
+			if (typeof value !== "string" || source == null) {
+				return;
+			}
+
 			const module = value.replace(/^node:/, "");
-			if (!value.startsWith("node:") && !builtins.has(module)) return;
+
+			if (!value.startsWith("node:") && !builtins.has(module)) {
+				return;
+			}
+
 			// Only a real line comment on the module string's line counts. A nearby comment,
 			// a string containing // edge:, or an empty reason must not bless another import.
 			if (
@@ -68,8 +75,10 @@ export const noNodeImports: CreateRule = {
 						comment.loc.start.line === source.loc.start.line &&
 						/^\s*edge:\s*\S/.test(comment.value),
 				)
-			)
+			) {
 				return;
+			}
+
 			context.report({
 				node: source,
 				message: `Use ${replacement(module)}. Native imports in next/ need // edge: <reason> on this line (docs/direction/build-on-effect.md).`,
@@ -84,6 +93,7 @@ export const noNodeImports: CreateRule = {
 			TSImportType: (node) => check(node.source),
 			CallExpression(node) {
 				const callee = node.callee;
+
 				if (
 					(callee.type === "Identifier" && callee.name === "require") ||
 					(callee.type === "MemberExpression" &&
@@ -92,12 +102,14 @@ export const noNodeImports: CreateRule = {
 						callee.property.name === "require" &&
 						callee.object.type === "Identifier" &&
 						["module", "globalThis"].includes(callee.object.name))
-				)
+				) {
 					check(node.arguments[0]);
+				}
 			},
 			TSImportEqualsDeclaration(node) {
-				if (node.moduleReference.type === "TSExternalModuleReference")
+				if (node.moduleReference.type === "TSExternalModuleReference") {
 					check(node.moduleReference.expression);
+				}
 			},
 		};
 	},

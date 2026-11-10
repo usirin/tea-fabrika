@@ -113,7 +113,11 @@ const cssImport = (
 	const ref = [...path]
 		.map((char) => {
 			const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
-			if (!required && (escape === "literal" || !/[\s'"()]/.test(char))) return char;
+
+			if (!required && (escape === "literal" || !/[\s'"()]/.test(char))) {
+				return char;
+			}
+
 			return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
 		})
 		.join("");
@@ -153,12 +157,15 @@ const fixture = (name: string, value: string) => {
 	const home = mkdtempSync("/tmp/fh.");
 	homes.push(home);
 	mkdirSync(join(home, "node_modules/@p16"), {recursive: true});
-	for (const pkg of ["effect", "@demlik", "@kampus"])
+
+	for (const pkg of ["effect", "@demlik", "@kampus"]) {
 		symlinkSync(
 			join(ROOT, "next/apps/fabrika/node_modules", pkg),
 			join(home, "node_modules", pkg),
 			"dir",
 		);
+	}
+
 	symlinkSync(join(import.meta.dirname, "../node_modules/react"), join(home, "node_modules/react"));
 	const pkg = join(home, "programs/compiler"),
 		file = join(pkg, "window.tsx");
@@ -212,7 +219,10 @@ afterEach(() => {
 	vi.doUnmock("rolldown");
 	vi.resetModules();
 	vi.unstubAllEnvs();
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
 });
 
 describe("P16 assets and Compiler", () => {
@@ -260,6 +270,7 @@ describe("P16 assets and Compiler", () => {
 					expect(
 						Object.values(built.assets).some((a) => a.type === "text/css; charset=utf-8"),
 					).toBe(true);
+
 					for (const [route, asset] of Object.entries(built.assets)) {
 						expect(route.startsWith("/")).toBe(true);
 						expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
@@ -278,6 +289,7 @@ describe("P16 assets and Compiler", () => {
 							).status,
 						).toBe(404);
 					}
+
 					expect(
 						(
 							await Effect.runPromise(
@@ -314,7 +326,10 @@ describe("P16 assets and Compiler", () => {
 									return {
 										...output,
 										output: output.output.map((item) => {
-											if (item.type !== "asset" || typeof item.source !== "string") return item;
+											if (item.type !== "asset" || typeof item.source !== "string") {
+												return item;
+											}
+
 											expected.set(`/${item.fileName}`, item.source);
 											return {...item, source: new TextEncoder().encode(item.source)};
 										}),
@@ -325,9 +340,11 @@ describe("P16 assets and Compiler", () => {
 						},
 					}));
 					vi.resetModules();
+
 					try {
 						const built = await run(f.options);
 						expect(expected.size).toBeGreaterThan(0);
+
 						for (const [route, body] of expected) {
 							expect(built.assets[route]?.body).toBe(body);
 							expect(built.assets[route]?.hash).toBe(
@@ -343,7 +360,8 @@ describe("P16 assets and Compiler", () => {
 			);
 		},
 	);
-	for (const form of cssForms)
+
+	for (const form of cssForms) {
 		it(
 			`CSS graph plant: ${form} with spaces, escapes and media lists includes every imported rule`,
 			{timeout: buildTimeout(runs.numRuns + 1)},
@@ -374,11 +392,16 @@ describe("P16 assets and Compiler", () => {
 									expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
 									continue;
 								}
+
 								const refs = [
 									...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g),
 								].map((m) => m[1]!);
+
 								for (const ref of refs) {
-									if (/^(?:data:|https?:|#)/.test(ref)) continue;
+									if (/^(?:data:|https?:|#)/.test(ref)) {
+										continue;
+									}
+
 									const request = new Request(new URL(ref, `https://test.invalid${route}`));
 									const response = await Effect.runPromise(serveAsset(assets, request));
 									expect(response.status, `${route} references ${request.url}`).toBe(200);
@@ -403,7 +426,10 @@ describe("P16 assets and Compiler", () => {
 							.join("\n");
 						expect(styles).toContain(`--theme: ${id}`);
 						expect(styles).toContain(`--tokens: ${id}`);
-						if (css.media) expect(styles).toContain(`@media ${css.media}`);
+
+						if (css.media) {
+							expect(styles).toContain(`@media ${css.media}`);
+						}
 					}),
 					// Pinned round-2 bug: a quoted url containing a space leaves its target out.
 					{
@@ -426,6 +452,8 @@ describe("P16 assets and Compiler", () => {
 				);
 			},
 		);
+	}
+
 	it(
 		"CSS imports keep remote rules and wrap local rules only when a media condition exists",
 		{timeout: buildTimeout(runs.numRuns + 2)},
@@ -466,13 +494,18 @@ describe("P16 assets and Compiler", () => {
 							[rules[0]!, child, ...rules.slice(1)], // Repeated child.
 							[rules[0]!, ...rules.slice(1).reverse()], // Wrong cascade order.
 						];
-						if (child.type === "media")
+
+						if (child.type === "media") {
 							plants.push([rules[0]!, ...child.value.rules, ...rules.slice(2)]);
-						else
-							// Adding a condition is wrong when the import had none.
+						} else
+						// Adding a condition is wrong when the import had none.
+						{
 							plants.push(cssRules(`${remote}\n@media print {${body}}\n${last}`));
-						for (const plant of plants)
+						}
+
+						for (const plant of plants) {
 							expect(() => verify(plant)).toThrow("remote and local rules");
+						}
 					},
 				),
 				{
@@ -531,12 +564,15 @@ describe("P16 assets and Compiler", () => {
 			fc.property(names, values, (name, value) => {
 				const clean = `export const ${name}=(p:{text:string})=><b>{p.text+${JSON.stringify(value)}}</b>`;
 				expect(check(new Map([["next/view.tsx", clean]]), [])).toEqual([]);
+
 				for (const source of [
 					`export const ${name}=()=> <b>{Date.now()}</b>`,
 					`export const ${name}=()=>{'use no memo';return <b>x</b>}`,
 					`import {useRef} from 'react';export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`,
-				])
+				]) {
 					expect(check(new Map([["next/view.tsx", source]]), []).length).toBeGreaterThan(0);
+				}
+
 				expect(
 					check(new Map([["next/view.tsx", clean]]), [
 						{file: "next/view.tsx", fn: name, why: "plant"},
@@ -581,6 +617,7 @@ describe("P16 cleanup and recording", () => {
 						},
 					}));
 					vi.resetModules();
+
 					try {
 						const failing = await import("./node/build.ts");
 						expect(await Effect.runPromise(Effect.result(failing.bundle(entry, [])))).toMatchObject(
@@ -598,8 +635,9 @@ describe("P16 cleanup and recording", () => {
 			);
 		},
 	);
-	for (const point of ["after backup", "before final", "after final"] as const)
-		for (const interrupt of [false, true])
+
+	for (const point of ["after backup", "before final", "after final"] as const) {
+		for (const interrupt of [false, true]) {
 			it(
 				`publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`,
 				{timeout: buildTimeout(2)},
@@ -617,8 +655,10 @@ describe("P16 cleanup and recording", () => {
 								const stop = Effect.gen(function* () {
 									fired = true;
 									yield* Deferred.succeed(entered, undefined);
-									if (interrupt) yield* Deferred.await(release);
-									else
+
+									if (interrupt) {
+										yield* Deferred.await(release);
+									} else {
 										return yield* Effect.fail(
 											PlatformError.systemError({
 												_tag: "PermissionDenied",
@@ -627,25 +667,34 @@ describe("P16 cleanup and recording", () => {
 												description: "planted publication failure",
 											}),
 										);
+									}
 								});
 								const rename: typeof fs.rename = (from, to) =>
 									Effect.gen(function* () {
 										const backup = from === f.options.out && to.endsWith(".old");
 										const final = to === f.options.out && !from.endsWith(".old");
-										if (!fired && point === "before final" && final) yield* stop;
+
+										if (!fired && point === "before final" && final) {
+											yield* stop;
+										}
+
 										yield* fs.rename(from, to);
+
 										if (
 											!fired &&
 											((point === "after backup" && backup) || (point === "after final" && final))
-										)
+										) {
 											yield* stop;
+										}
 									});
 								return yield* builder
 									.build(f.options)
 									.pipe(Effect.provideService(FileSystem.FileSystem, {...fs, rename}));
 							}).pipe(Effect.provide(NodeServices.layer));
+
 							if (interrupt) {
 								const fiber = Effect.runFork(task);
+
 								try {
 									await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
 									fiber.interruptUnsafe();
@@ -656,11 +705,13 @@ describe("P16 cleanup and recording", () => {
 									await Effect.runPromise(Deferred.succeed(release, undefined));
 									await Effect.runPromise(Fiber.interrupt(fiber));
 								}
-							} else
+							} else {
 								expect(await Effect.runPromise(Effect.result(task))).toMatchObject({
 									_tag: "Failure",
 									failure: {_tag: "BuildError", reason: "publish"},
 								});
+							}
+
 							expect(fired, "plant reached the real publication rename").toBe(true);
 							expect(
 								existsSync(join(f.options.out, "brain.mjs")),
@@ -672,7 +723,10 @@ describe("P16 cleanup and recording", () => {
 					);
 				},
 			);
-	for (const point of ["backup", "final"] as const)
+		}
+	}
+
+	for (const point of ["backup", "final"] as const) {
 		it(
 			`publication plant: interruption during an in-flight ${point} rename keeps a complete brain after delayed I/O settles`,
 			{timeout: buildTimeout()},
@@ -699,7 +753,10 @@ describe("P16 cleanup and recording", () => {
 								Effect.callback<A, E>((resume) => {
 									const io = Effect.runFork(
 										Effect.gen(function* () {
-											if (signal) yield* Deferred.succeed(entered, undefined);
+											if (signal) {
+												yield* Deferred.succeed(entered, undefined);
+											}
+
 											yield* Effect.sleep(ms);
 											return yield* work;
 										}),
@@ -715,6 +772,7 @@ describe("P16 cleanup and recording", () => {
 										const backup = from === f.options.out && to.endsWith(".old"),
 											final = to === f.options.out && !from.endsWith(".old"),
 											selected = !fired && (point === "backup" ? backup : final);
+
 										if (selected) {
 											fired = true;
 											complete = readFileSync(
@@ -722,6 +780,7 @@ describe("P16 cleanup and recording", () => {
 												"utf8",
 											);
 										}
+
 										return delayed(fs.rename(from, to), selected ? delays.rename : 0, selected);
 									});
 								return yield* builder.build(f.options).pipe(
@@ -736,6 +795,7 @@ describe("P16 cleanup and recording", () => {
 								);
 							}).pipe(Effect.provide(NodeServices.layer));
 							const fiber = Effect.runFork(task);
+
 							try {
 								await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
 								await Effect.runPromise(Fiber.interrupt(fiber));
@@ -743,6 +803,7 @@ describe("P16 cleanup and recording", () => {
 								await Effect.runPromise(Fiber.interrupt(fiber));
 								await Effect.runPromise(Fiber.awaitAll(pending));
 							}
+
 							expect(fired, "plant interrupted a real publication rename already in flight").toBe(
 								true,
 							);
@@ -758,6 +819,8 @@ describe("P16 cleanup and recording", () => {
 				);
 			},
 		);
+	}
+
 	it(
 		"cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles",
 		{timeout: buildTimeout(2)},
@@ -794,18 +857,22 @@ describe("P16 cleanup and recording", () => {
 						}));
 						vi.resetModules();
 						const {bundle} = await import("./node/build.ts");
+
 						if (interrupt) {
 							const fiber = Effect.runFork(bundle(entry, []));
+
 							try {
 								await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
 							} finally {
 								await Effect.runPromise(Fiber.interrupt(fiber));
 							}
-						} else
+						} else {
 							expect(await Effect.runPromise(Effect.result(bundle(entry, [])))).toMatchObject({
 								_tag: "Failure",
 								failure: {_tag: "BuildError"},
 							});
+						}
+
 						expect(opened).toBe(true);
 						expect(closed).toBe(true);
 						const cleaned = (value: boolean) => assert(value, "Rolldown handle left open");
@@ -842,7 +909,10 @@ describe("P16 cleanup and recording", () => {
 								return {
 									...handle,
 									generate: (o: OutputOptions) => {
-										if (index !== phase) return handle.generate(o);
+										if (index !== phase) {
+											return handle.generate(o);
+										}
+
 										fired = true;
 										Effect.runSync(Deferred.succeed(entered, undefined));
 										return interrupt
@@ -858,18 +928,22 @@ describe("P16 cleanup and recording", () => {
 						}));
 						vi.resetModules();
 						const task = (await load()).build(f.options).pipe(Effect.provide(NodeServices.layer));
+
 						if (interrupt) {
 							const fiber = Effect.runFork(task);
+
 							try {
 								await Effect.runPromise(Effect.race(Deferred.await(entered), Fiber.join(fiber)));
 							} finally {
 								await Effect.runPromise(Fiber.interrupt(fiber));
 							}
-						} else
+						} else {
 							expect(await Effect.runPromise(Effect.result(task))).toMatchObject({
 								_tag: "Failure",
 								failure: {_tag: "BuildError"},
 							});
+						}
+
 						expect(fired, "plant must reach selected real build phase").toBe(true);
 						expect(closed.length).toBeGreaterThan(0);
 						expect(closed.every(Boolean)).toBe(true);
@@ -904,7 +978,11 @@ describe("P16 cleanup and recording", () => {
 								generate: async (o: OutputOptions) => {
 									const out = await handle.generate(o);
 									const css = out.output.find((f) => f.fileName.endsWith(".css"));
-									if (!css) return out;
+
+									if (!css) {
+										return out;
+									}
+
 									fired = true;
 									return {...out, output: [...out.output, css]};
 								},
@@ -937,7 +1015,8 @@ describe("P16 cleanup and recording", () => {
 						const f = fixture("View", value),
 							spans: Tracer.Span[] = [];
 						const fail = phase !== "success";
-						if (fail)
+
+						if (fail) {
 							writeFileSync(
 								phase === "brain"
 									? f.options.entry
@@ -946,6 +1025,8 @@ describe("P16 cleanup and recording", () => {
 										: join(dirname(f.file), "program.ts"),
 								"import './missing.ts';",
 							);
+						}
+
 						const tracer = Tracer.make({
 							span: (o) => {
 								const span = new Tracer.NativeSpan(o);
@@ -975,6 +1056,7 @@ describe("P16 cleanup and recording", () => {
 								bundles.map((r) => r.attributes.phase),
 								"every attempted bundle keeps its phase",
 							).toEqual(expected);
+
 							for (const row of bundles) {
 								expect(row.attributes.outcome).toBe(
 									fail && row.attributes.phase === phase ? "failure" : "success",
@@ -986,11 +1068,15 @@ describe("P16 cleanup and recording", () => {
 									versions.effect,
 								);
 							}
-							if (fail) expect(bundles.at(-1)?.attributes["error.type"]).toBe("BuildError");
+
+							if (fail) {
+								expect(bundles.at(-1)?.attributes["error.type"]).toBe("BuildError");
+							}
 						};
 						verifyPhases(data);
+
 						// Plant: a typed version that is not the installed one.
-						for (const key of ["rolldown.version", "effect.version"])
+						for (const key of ["rolldown.version", "effect.version"]) {
 							expect(() =>
 								verifyPhases(
 									data.map((row) => ({
@@ -999,9 +1085,14 @@ describe("P16 cleanup and recording", () => {
 									})),
 								),
 							).toThrow("is installed");
+						}
+
 						// Run both review plants on actual recorded output, not invented span rows.
 						for (const omit of ["all", "failed"] as const) {
-							if (omit === "failed" && !fail) continue;
+							if (omit === "failed" && !fail) {
+								continue;
+							}
+
 							const planted = data.map((row) => ({
 								...row,
 								attributes: Object.fromEntries(
@@ -1016,32 +1107,43 @@ describe("P16 cleanup and recording", () => {
 								"keeps its phase",
 							);
 						}
-						if (fail)
+
+						if (fail) {
 							expect(() =>
 								verifyPhases(data.filter((row) => row.attributes.outcome !== "failure")),
 							).toThrow("keeps its phase");
+						}
+
 						for (const row of data) {
 							expect(row.status._tag).toBe("Ended");
-							if (row.status._tag === "Ended")
+
+							if (row.status._tag === "Ended") {
 								expect(row.status.endTime >= row.status.startTime).toBe(true);
+							}
+
 							expect(
 								Object.values(row.attributes).some((v) => v === "failure" || v === "success"),
 							).toBe(true);
 						}
+
 						expect(
 							data.some((row) =>
 								Object.values(row.attributes).includes(fail ? "failure" : "success"),
 							),
 						).toBe(true);
 						const recorded = JSON.stringify(data.map(({name, attributes}) => ({name, attributes})));
+
 						for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
 							expect(recorded).not.toContain(marker);
 							expect(recorded).not.toContain(JSON.stringify(marker).slice(1, -1));
 						}
+
 						expect(recorded).toContain(JSON.stringify(versions.rolldown));
 						expect(recorded).toContain(JSON.stringify(versions.effect));
-						if (fail) expect(recorded).toContain("error.type");
-						else {
+
+						if (fail) {
+							expect(recorded).toContain("error.type");
+						} else {
 							expect(data.some((s) => s.name === "build.emit")).toBe(true);
 							expect(recorded).toMatch(/[a-f0-9]{64}/);
 							expect(

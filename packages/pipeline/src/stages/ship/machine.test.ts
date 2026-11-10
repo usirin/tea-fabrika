@@ -93,7 +93,11 @@ const broke = Effect.fail({_tag: "unknown" as const});
 /** The next answer of a script. A Cmd or a wait no script names fails the test. */
 function next<A>(answers: A[], what: string): A {
 	const answer = answers.shift();
-	if (answer === undefined) throw new Error(`${what} came, and no script names it`);
+
+	if (answer === undefined) {
+		throw new Error(`${what} came, and no script names it`);
+	}
+
 	return answer;
 }
 
@@ -147,8 +151,11 @@ async function drive(script: Script, machine = patient) {
 				ship_finish: (cmd: ReturnType<typeof finish>) =>
 					Effect.suspend(() => {
 						sent.push(cmd);
-						if (script.finish === undefined)
+
+						if (script.finish === undefined) {
 							return Effect.die(new Error("a finish was sent, and no script names it"));
+						}
+
 						return script.finish === "fails" ? broke : Effect.succeed(null);
 					}),
 			},
@@ -163,7 +170,11 @@ async function drive(script: Script, machine = patient) {
 				},
 				ship_queue: (sub: QueueSub): Stream.Stream<ShipMsg> => {
 					listened.push(sub.deps);
-					if (script.queue === undefined) return Stream.never;
+
+					if (script.queue === undefined) {
+						return Stream.never;
+					}
+
 					// Landed: the queue names the commit it made on the base branch, which is not the head.
 					const left: ShipMsg =
 						script.queue === "landed"
@@ -179,7 +190,11 @@ async function drive(script: Script, machine = patient) {
 		return yield* runtime.done();
 	});
 	const end = await Effect.runPromise(program.pipe(Effect.scoped));
-	if (end.phase !== "over") throw new Error(`the run did not end: ${end.phase}`);
+
+	if (end.phase !== "over") {
+		throw new Error(`the run did not end: ${end.phase}`);
+	}
+
 	const left = {reads, reruns, settles, enqueues, merges};
 	return {outcome: end.outcome, sent, types: sent.map((cmd) => cmd.type), waitedOn, listened, left};
 }
@@ -802,13 +817,16 @@ const MSGS: readonly {readonly msg: AnyMsg; readonly heardIn: Ship["phase"]}[] =
 describe("a Msg that arrives in the wrong phase", () => {
 	it("changes nothing and sends nothing, in every phase but its own", () => {
 		let checked = 0;
+
 		for (const {msg, heardIn} of MSGS) {
 			for (const state of Object.values(STATES)) {
 				const [after, cmds] = step(state, msg);
+
 				if (state.phase === heardIn) {
 					expect(after, `${msg.type} in ${state.phase}`).not.toBe(state);
 					continue;
 				}
+
 				expect(after, `${msg.type} in ${state.phase}`).toBe(state);
 				expect(cmds).toEqual([]);
 				checked += 1;
@@ -1018,6 +1036,7 @@ describe("after a restart", () => {
 			const [back] = patient.init(kept, undefined);
 			expect(back).toEqual(state);
 		}
+
 		const [back] = patient.init(JSON.parse(JSON.stringify(STATES.enqueueing)), undefined);
 		expect(step(back, {type: "resume"})).toEqual([STATES.enqueueing, [enqueueCmd]]);
 	});

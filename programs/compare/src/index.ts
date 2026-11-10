@@ -58,11 +58,14 @@ export const compare = defineProgram({
 				name === undefined ? runs.at(-back) : runs.find((r) => r.run === name || r.label === name);
 			const a = pick(flags.a, 2);
 			const b = pick(flags.b, 1);
-			if (a === undefined || b === undefined)
+
+			if (a === undefined || b === undefined) {
 				return yield* new ExperimentsFailed({
 					why: "no_run",
 					says: `compare needs two runs of ${flags.n}, and ${flags.n} has ${runs.length}`,
 				});
+			}
+
 			const comparison = Comparison.fromRuns(
 				a,
 				b,

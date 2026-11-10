@@ -63,9 +63,14 @@ const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 const findWindow = Effect.fn("build.manifest")(function* (from: string, selected: string) {
 	const fs = yield* FileSystem.FileSystem,
 		path = yield* Path.Path;
-	if (selected.startsWith(".") || path.isAbsolute(selected)) return Option.none<string>();
+
+	if (selected.startsWith(".") || path.isAbsolute(selected)) {
+		return Option.none<string>();
+	}
+
 	for (let dir = from; ; dir = path.dirname(dir)) {
 		const file = path.join(dir, "node_modules", selected, "package.json");
+
 		if (yield* fs.exists(file).pipe(Effect.mapError(fail("table")))) {
 			const manifest = yield* fs
 				.readFileString(file)
@@ -78,7 +83,10 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 				? Option.some(`${selected}/window`)
 				: Option.none<string>();
 		}
-		if (path.dirname(dir) === dir) return Option.none<string>();
+
+		if (path.dirname(dir) === dir) {
+			return Option.none<string>();
+		}
 	}
 });
 
@@ -94,11 +102,15 @@ const collect = Effect.fn("build.collect")(function* (
 	output: ReadonlyArray<OutputChunk | OutputAsset>,
 ) {
 	const assets: Record<string, Asset> = {};
+
 	for (const item of output) {
 		const route = `/${item.fileName}`,
 			type = contentType(item.fileName);
-		if (type === undefined || Object.hasOwn(assets, route))
+
+		if (type === undefined || Object.hasOwn(assets, route)) {
 			return yield* new BuildError({reason: "bundle", message: "two window files on one route"});
+		}
+
 		const body =
 			item.type === "chunk"
 				? item.code
@@ -109,6 +121,7 @@ const collect = Effect.fn("build.collect")(function* (
 			Effect.mapError(fail("bundle")),
 		);
 	}
+
 	return assets;
 });
 
@@ -120,7 +133,10 @@ const stylesheets = (
 ): Plugin => ({
 	name: "fabrika-css",
 	load(id) {
-		if (!id.endsWith(".css")) return;
+		if (!id.endsWith(".css")) {
+			return;
+		}
+
 		const emit = inlineStylesheet(id).pipe(
 			Effect.map((source) => {
 				this.emitFile({type: "asset", name: path.basename(id), source});
@@ -153,13 +169,22 @@ const embed = (tables: Tables): Plugin => {
 	return {
 		name: "fabrika-built",
 		resolveId(id) {
-			if (id === BUILT_MODULE) return `\0${BUILT_MODULE}`;
-			if (id.startsWith(TEXT)) return id;
+			if (id === BUILT_MODULE) {
+				return `\0${BUILT_MODULE}`;
+			}
+
+			if (id.startsWith(TEXT)) {
+				return id;
+			}
 		},
 		load(id) {
-			if (id === `\0${BUILT_MODULE}`) return code;
-			if (id.startsWith(TEXT))
+			if (id === `\0${BUILT_MODULE}`) {
+				return code;
+			}
+
+			if (id.startsWith(TEXT)) {
 				return {code: texts[Number(id.slice(TEXT.length))] ?? "", moduleType: "text"};
+			}
 		},
 	};
 };
@@ -192,13 +217,20 @@ const publish = Effect.fn("build.emit")(function* (
 	});
 	const swap = Effect.gen(function* () {
 		const directory = path.dirname(out);
-		if (!(yield* fs.exists(directory))) yield* fs.makeDirectory(directory, {recursive: true});
+
+		if (!(yield* fs.exists(directory))) {
+			yield* fs.makeDirectory(directory, {recursive: true});
+		}
+
 		const pending = yield* fs.makeTempDirectory({directory, prefix: ".fabrika-build-"});
 		const backup = `${pending}.old`;
 		// Once the last good file is moved aside, a failure or an interruption at any later point
 		// (the final rename included, even one that landed) puts it back. The disk says how far it got.
 		const restore = Effect.gen(function* () {
-			if (!(yield* fs.exists(backup))) return;
+			if (!(yield* fs.exists(backup))) {
+				return;
+			}
+
 			yield* fs.remove(out, {recursive: true, force: true});
 			yield* fs.rename(backup, out);
 		}).pipe(Effect.ignore);
@@ -206,7 +238,11 @@ const publish = Effect.fn("build.emit")(function* (
 		// and restore never race a write or a rename the disk is still doing.
 		yield* Effect.gen(function* () {
 			yield* Effect.uninterruptible(fs.writeFileString(path.join(pending, "brain.mjs"), brain));
-			if (yield* fs.exists(out)) yield* Effect.uninterruptible(fs.rename(out, backup));
+
+			if (yield* fs.exists(out)) {
+				yield* Effect.uninterruptible(fs.rename(out, backup));
+			}
+
 			yield* Effect.uninterruptible(fs.rename(pending, out));
 		}).pipe(
 			Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : restore)),
@@ -231,11 +267,14 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 	yield* Effect.annotateCurrentSpan({chaos: options.chaos, programs: options.programs.length});
 	const names = options.programs.map((p) => p.name);
+
 	if (
 		new Set(names).size !== names.length ||
 		!options.programs.every((p) => NAME.test(p.name) && IDENTIFIER.test(p.export))
-	)
+	) {
 		return yield* new BuildError({reason: "table"});
+	}
+
 	// Rolldown names modules by their real paths, so the ledger's relative paths start from the real
 	// root. A path the disk cannot resolve is used as given: reading through it fails on its own.
 	const real = (file: string) => fs.realPath(file).pipe(Effect.orElseSucceed(() => file));
@@ -244,11 +283,13 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	// Listed files and every file a bundle reaches go through the one Compiler check.
 	// A listed file keeps the path it was listed by, as the ledger's rows name it.
 	const files = new Map<string, string>();
+
 	for (const listed of options.files ?? []) {
 		const file = path.resolve(options.root, listed);
 		const text = yield* fs.readFileString(file).pipe(Effect.mapError(fail("read")));
 		files.set(path.relative(options.root, file), text);
 	}
+
 	const ledger =
 		options.ledger ??
 		(yield* fs
@@ -260,16 +301,24 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const compiler: Plugin = {
 		name: "fabrika-compiler",
 		transform(code, id) {
-			if (!id.endsWith(".tsx")) return;
+			if (!id.endsWith(".tsx")) {
+				return;
+			}
+
 			files.set(path.relative(root, id), code);
 			return {code: compile(id, code).code};
 		},
 	};
 	const windows: Record<string, string> = {};
+
 	for (const p of options.programs) {
 		const found = yield* findWindow(from, p.package);
-		if (Option.isSome(found)) windows[p.name] = found.value;
+
+		if (Option.isSome(found)) {
+			windows[p.name] = found.value;
+		}
 	}
+
 	const programs = yield* bundlePrograms({
 		root: from,
 		cwd: root,
@@ -282,11 +331,16 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 	const entries: Plugin = {
 		name: "fabrika-window",
 		resolveId(id) {
-			if (id.startsWith(WINDOW)) return generated(id.slice(WINDOW.length));
+			if (id.startsWith(WINDOW)) {
+				return generated(id.slice(WINDOW.length));
+			}
 		},
 		load(id) {
-			for (const [name, module] of Object.entries(windows))
-				if (id === generated(name)) return `export * from ${JSON.stringify(module)};`;
+			for (const [name, module] of Object.entries(windows)) {
+				if (id === generated(name)) {
+					return `export * from ${JSON.stringify(module)};`;
+				}
+			}
 		},
 	};
 	const assets = Object.keys(windows).length
@@ -310,8 +364,12 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 		.filter((o) => o.type === "chunk")
 		.map((o) => o.code)
 		.join("\n");
+
 	// Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
-	if (check(files, ledger).length) return yield* new BuildError({reason: "compiler"});
+	if (check(files, ledger).length) {
+		return yield* new BuildError({reason: "compiler"});
+	}
+
 	const size = (bodies: ReadonlyArray<string>) =>
 		bodies.reduce((total, body) => total + bytes(body), 0);
 	const digest = yield* publish(options.out, brain, {

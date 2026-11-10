@@ -24,6 +24,7 @@ export const inside = (folder: string, path: string) => {
 /** A path with its links followed, as far as it is there: `/copy/out/x` where `out` links elsewhere is that elsewhere's `x`. */
 const realOf = (path: string): string => {
 	const parent = dirname(path);
+
 	try {
 		return realpathSync(path);
 	} catch {
@@ -120,7 +121,11 @@ export const toolchain = (
 	);
 	const roots = programs.flatMap((program) => {
 		const holder = dirname(program);
-		if (!inside(home, holder) || holder === home) return [];
+
+		if (!inside(home, holder) || holder === home) {
+			return [];
+		}
+
 		return [toolRoot(program, home)];
 	});
 	return [...new Set([...roots, pnpmHome(env)])].filter(
@@ -134,8 +139,15 @@ export const toolchain = (
  */
 const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => {
 	const home = homedir();
-	if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") return env.PNPM_HOME;
-	if (process.platform === "darwin") return join(home, "Library", "pnpm");
+
+	if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") {
+		return env.PNPM_HOME;
+	}
+
+	if (process.platform === "darwin") {
+		return join(home, "Library", "pnpm");
+	}
+
 	return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "pnpm");
 };
 
@@ -151,7 +163,11 @@ const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => 
 export const gitOf = (tree: string): readonly string[] => {
 	try {
 		const line = readFileSync(join(tree, ".git"), "utf8").match(/^gitdir:\s*(.+)$/m);
-		if (line?.[1] === undefined) return [];
+
+		if (line?.[1] === undefined) {
+			return [];
+		}
+
 		const own = resolve(tree, line[1].trim());
 		const common = resolve(own, readFileSync(join(own, "commondir"), "utf8").trim());
 		const back = resolve(own, readFileSync(join(own, "gitdir"), "utf8").trim());

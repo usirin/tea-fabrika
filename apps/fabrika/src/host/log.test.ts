@@ -36,10 +36,12 @@ const logged = <A, E>(effect: Effect.Effect<A, E>) =>
 
 const fieldsOf = (line: string): Record<string, string> => {
 	const out: Record<string, string> = {};
+
 	for (const m of line.matchAll(/([A-Za-z_][\w.]*)=("(?:[^"\\]|\\.)*"|\S*)/g)) {
 		const [, key = "", raw = ""] = m;
 		out[key] = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
 	}
+
 	return out;
 };
 

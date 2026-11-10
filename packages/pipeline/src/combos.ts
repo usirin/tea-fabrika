@@ -90,7 +90,11 @@ export function nextTry(
 	feedback: (problems: readonly [string, ...string[]]) => string = sentBack,
 ): Tried {
 	const [first, ...rest] = problems;
-	if (first === undefined) return {go: "done"};
+
+	if (first === undefined) {
+		return {go: "done"};
+	}
+
 	const all: readonly [string, ...string[]] = [first, ...rest];
 	return tries >= limit
 		? {go: "out_of_tries", problems: all}
@@ -192,14 +196,28 @@ export function createRefineLoop<const N extends string, B, O>(config: {
 		drafting(key, brief, 1, Math.max(1, limit), null);
 
 	function update(s: State, m: Msg): State {
-		if (s.phase !== "drafting" || m.id !== s.run.id) return s;
+		if (s.phase !== "drafting" || m.id !== s.run.id) {
+			return s;
+		}
+
 		const {is} = config.draft;
-		if (is.failed(m)) return {phase: "failed", error: m.error, tries: s.tries};
-		if (!is.finished(m)) return s;
+
+		if (is.failed(m)) {
+			return {phase: "failed", error: m.error, tries: s.tries};
+		}
+
+		if (!is.finished(m)) {
+			return s;
+		}
+
 		const finished = m;
-		if (finished.output === null)
+
+		if (finished.output === null) {
 			return {phase: "failed", error: "the answer did not fit the schema", tries: s.tries};
+		}
+
 		const tried = nextTry(config.check(finished.output, s.brief), s.tries, s.limit);
+
 		switch (tried.go) {
 			case "done":
 				return {phase: "done", output: finished.output, tries: s.tries, session: finished.session};
@@ -389,14 +407,24 @@ export function createAsk<const N extends string, const C extends string>(config
 	const failed = (s: State): State => (s.phase === "posting" ? {...s, phase: "post_failed"} : s);
 
 	function replied(s: State, reply: Reply): readonly [State, readonly Read[]] {
-		if (s.phase !== "waiting" || reply.at <= s.after) return [s, []];
+		if (s.phase !== "waiting" || reply.at <= s.after) {
+			return [s, []];
+		}
+
 		const seen = {...s, after: reply.at};
 		// A login is the same in any case: `Owner` on the list is `owner` on the reply.
 		const author = reply.author.toLowerCase();
-		if (!s.question.who.some((w) => w.toLowerCase() === author)) return [seen, []];
+
+		if (!s.question.who.some((w) => w.toLowerCase() === author)) {
+			return [seen, []];
+		}
+
 		const choice = named(reply.body);
-		if (choice !== null)
+
+		if (choice !== null) {
 			return [{phase: "answered", key: s.key, choice, reply, by: "code", saw: s.saw}, []];
+		}
+
 		const asked = judge.ask({key: s.key, texts: {question: s.question.text, reply: reply.body}});
 		return [{...seen, phase: "reading", reply, asked}, [asked]];
 	}
@@ -412,8 +440,11 @@ export function createAsk<const N extends string, const C extends string>(config
 	});
 
 	function read(s: State, ruled: Ruled<C>): State {
-		if (s.phase !== "reading") return s;
-		if (ruled.sure)
+		if (s.phase !== "reading") {
+			return s;
+		}
+
+		if (ruled.sure) {
 			return {
 				phase: "answered",
 				key: s.key,
@@ -422,6 +453,8 @@ export function createAsk<const N extends string, const C extends string>(config
 				by: "jev",
 				saw: s.saw,
 			};
+		}
+
 		return aside(s);
 	}
 
@@ -482,7 +515,10 @@ export function spawn<S>(
 	state: S,
 	slots: number,
 ): Children<S> | null {
-	if (childOf(children, key) !== undefined) return children;
+	if (childOf(children, key) !== undefined) {
+		return children;
+	}
+
 	const taken = new Set(Object.values(children).map((c) => c.slot));
 	const slot = Array.from({length: slots}, (_, i) => i).find((i) => !taken.has(i));
 	return slot === undefined ? null : {...children, [key]: {slot, state}};
@@ -495,7 +531,11 @@ export function stepChild<S, C>(
 	step: (state: S) => readonly [S, readonly C[]],
 ): readonly [Children<S>, readonly C[]] {
 	const child = childOf(children, key);
-	if (child === undefined) return [children, []];
+
+	if (child === undefined) {
+		return [children, []];
+	}
+
 	const [state, cmds] = step(child.state);
 	return [{...children, [key]: {slot: child.slot, state}}, cmds];
 }

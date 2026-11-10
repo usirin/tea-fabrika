@@ -10,7 +10,11 @@ import {keyName, keyOwner, matchPress, type Press} from "./keys.ts";
 /** The keybindings file's table; a refusal fails the test. */
 const table = (text: string): Keys => {
 	const answer = decodeKeys(text, true);
-	if (Result.isFailure(answer)) throw new Error(`refused: ${answer.failure.why}`);
+
+	if (Result.isFailure(answer)) {
+		throw new Error(`refused: ${answer.failure.why}`);
+	}
+
 	return answer.success;
 };
 
@@ -104,7 +108,11 @@ describe("today's complete presses", () => {
 		expect(matchPress(full("|", {code: "Digit7", alt: true, shift: true}), [bar], true)).toEqual(
 			bar,
 		);
-		for (const key of ["İ", "ı", "Ж", "é", "🦊"]) expect(keyName(full(key))).toBe(key);
+
+		for (const key of ["İ", "ı", "Ж", "é", "🦊"]) {
+			expect(keyName(full(key))).toBe(key);
+		}
+
 		expect(keyName(full("İ", {ctrl: true}))).toBe("<c-İ>");
 		expect(keyName(full("Ж", {meta: true}))).toBe("<m-Ж>");
 		const character = {_tag: "alone", key: "<m-ж>"} as const;
@@ -130,8 +138,11 @@ describe("today's complete presses", () => {
 			};
 			expect(keyOwner(p, true, impossible)).toBe("system");
 		}
-		for (const text of ['tezgah.zoom = "ctrl+c"', 'ignore = ["ctrl+c"]', 'prefix = "ctrl+c"'])
+
+		for (const text of ['tezgah.zoom = "ctrl+c"', 'ignore = ["ctrl+c"]', 'prefix = "ctrl+c"']) {
 			expect(Result.isFailure(decodeKeys(text, true))).toBe(true);
+		}
+
 		expect(keyName(full("c", {ctrl: true}))).toBe("<c-c>");
 	});
 });

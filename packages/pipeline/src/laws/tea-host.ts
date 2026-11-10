@@ -181,7 +181,10 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 			},
 		),
 		law<Host, HostMsg, HostCmd>("losing the lease stops the program", ({prev, msg, next}) => {
-			if (prev.phase !== "owning" || !losesLease(prev.fence, prev.until, msg)) return null;
+			if (prev.phase !== "owning" || !losesLease(prev.fence, prev.until, msg)) {
+				return null;
+			}
+
 			return view.program(next) === null
 				? null
 				: `after ${msg.type} ${fenceOf(msg)} the program still runs under fence ${prev.fence}`;
@@ -190,7 +193,10 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 		// end plus the grace, no word (a renew with no answer, the ledger's own `lease_expired`, the
 		// clock at the bare end) does not stop the program. At the end plus the grace, it stops.
 		law<Host, HostMsg, HostCmd>(LEASE_LAW, ({prev, msg, next}) => {
-			if (prev.phase !== "owning" || view.program(prev) === null) return null;
+			if (prev.phase !== "owning" || view.program(prev) === null) {
+				return null;
+			}
+
 			const own = fenceOf(msg) === prev.fence;
 			const end = prev.until + GRACE_MS;
 			const runs = view.program(next)?.fence === prev.fence;
@@ -203,16 +209,25 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 				(msg.type === "renew_unknown" ||
 					msg.type === "seen_expiry" ||
 					(msg.type === "lease_due" && msg.until < end));
-			if (stops && runs)
+
+			if (stops && runs) {
 				return `after ${showHostMsg(msg)} the program still runs under fence ${prev.fence}`;
-			if (keeps && !runs)
+			}
+
+			if (keeps && !runs) {
 				return `${showHostMsg(msg)} stopped the program under fence ${prev.fence}, before its lease's end plus the grace (${end})`;
+			}
+
 			return null;
 		}),
 		law<Host, HostMsg, HostCmd>("the lease clock never runs backwards", ({prev, next}) => {
 			const a = view.leaseClock(prev);
 			const b = view.leaseClock(next);
-			if (a === null || b === null || a.fence !== b.fence) return null;
+
+			if (a === null || b === null || a.fence !== b.fence) {
+				return null;
+			}
+
 			return b.until >= a.until ? null : `the lease end went from ${a.until} back to ${b.until}`;
 		}),
 		law<Host, HostMsg, HostCmd>("while the program runs, its lease clock runs", ({next}) => {
@@ -242,8 +257,15 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 			"word about another fence changes nothing",
 			({prev, msg, next, cmds}) => {
 				const fence = fenceOf(msg);
-				if (prev.phase !== "owning" || fence === null || fence === prev.fence) return null;
-				if (msg.type === "seen_claim" && fence > prev.fence) return null;
+
+				if (prev.phase !== "owning" || fence === null || fence === prev.fence) {
+					return null;
+				}
+
+				if (msg.type === "seen_claim" && fence > prev.fence) {
+					return null;
+				}
+
 				return next === prev && cmds.length === 0
 					? null
 					: `${msg.type} ${fence} moved the owner of fence ${prev.fence}`;
@@ -277,7 +299,11 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 			"it exits only for its own program's end, under the fence it holds",
 			({prev, msg, cmds}) => {
 				const exit = cmds.find((c) => c.type === "exit");
-				if (exit === undefined) return null;
+
+				if (exit === undefined) {
+					return null;
+				}
+
 				return prev.phase === "owning" &&
 					msg.type === "program_ended" &&
 					msg.fence === prev.fence &&
@@ -297,7 +323,11 @@ export function hostLaws(view: HostView = VIEW): readonly Law<Host, HostMsg, Hos
 		),
 		law<Host, HostMsg, HostCmd>("a crash exits `crash`, a return exits `normal`", ({msg, cmds}) => {
 			const exit = cmds.find((c) => c.type === "exit");
-			if (exit === undefined || msg.type !== "program_ended") return null;
+
+			if (exit === undefined || msg.type !== "program_ended") {
+				return null;
+			}
+
 			const want = msg.how === "crashed" ? "crash" : msg.how === "ended" ? "normal" : null;
 			return exit.reason === want ? null : `ended ${msg.how}, exits ${exit.reason}`;
 		}),
@@ -547,6 +577,7 @@ export const callerStep: Update<Caller, CallerMsg, CallerCmd> = (s, m) => {
 		const r = call(s.calls, m.id, m.req);
 		return [{calls: r.calls, last: null, called: [...s.called, m.id]}, r.cmds];
 	}
+
 	const r = calls<number, string>(s.calls, m);
 	return [{...s, calls: r.calls, last: r.outcome}, r.cmds];
 };
@@ -581,7 +612,10 @@ export function callerLaws(): readonly Law<Caller, CallerMsg, CallerCmd>[] {
 			"a call is answered at most once",
 			[],
 			(answered, {next}) => {
-				if (next.last?.kind !== "answered") return answered;
+				if (next.last?.kind !== "answered") {
+					return answered;
+				}
+
 				const id = next.last.id;
 				return answered.includes(id)
 					? broke(`${id} answered a second time`)
@@ -619,9 +653,16 @@ export function callerLaws(): readonly Law<Caller, CallerMsg, CallerCmd>[] {
 		law<Caller, CallerMsg, CallerCmd>(
 			"a call that timed out is sent again under its own id",
 			({prev, msg, cmds}) => {
-				if (msg.type !== "timed_out") return null;
+				if (msg.type !== "timed_out") {
+					return null;
+				}
+
 				const p = pendingOf(prev, msg.id);
-				if (p === undefined || p.tries !== msg.tries || p.due === null) return null;
+
+				if (p === undefined || p.tries !== msg.tries || p.due === null) {
+					return null;
+				}
+
 				return cmds.some((c) => c.id === p.id && c.tries === p.tries + 1)
 					? null
 					: `${p.id} timed out at try ${p.tries} and was not sent again under its id`;
@@ -630,7 +671,10 @@ export function callerLaws(): readonly Law<Caller, CallerMsg, CallerCmd>[] {
 		law<Caller, CallerMsg, CallerCmd>(
 			"resume sends every pending call again",
 			({prev, msg, cmds}) => {
-				if (msg.type !== "resume") return null;
+				if (msg.type !== "resume") {
+					return null;
+				}
+
 				const want = prev.calls.pending.map((p) => p.id).sort();
 				const got = cmds.map((c) => c.id).sort();
 				return want.join() === got.join() ? null : `resume sent ${got.join()} of ${want.join()}`;
@@ -666,7 +710,10 @@ export const CALLER_PLANTED: readonly {
 		name: "a late reply is read again",
 		law: "a reply at or behind the cursor changes nothing",
 		update: around((s, m) => {
-			if (m.type !== "reply" || m.rev > s.calls.cursor) return null;
+			if (m.type !== "reply" || m.rev > s.calls.cursor) {
+				return null;
+			}
+
 			const p = pendingOf(s, m.id);
 			return p === undefined
 				? null
@@ -700,7 +747,10 @@ export const CALLER_PLANTED: readonly {
 		name: "a retry under a new call id",
 		law: "a call that timed out is sent again under its own id",
 		update: around((s, m) => {
-			if (m.type !== "timed_out") return null;
+			if (m.type !== "timed_out") {
+				return null;
+			}
+
 			const [next, cmds] = callerStep(s, m);
 			return [next, cmds.map((c) => ({...c, id: `${c.id}'`}))];
 		}),
@@ -714,7 +764,10 @@ export const CALLER_PLANTED: readonly {
 		name: "a send carries the try before",
 		law: "every send carries a pending call's id, its request and its try",
 		update: around((s, m) => {
-			if (m.type !== "timed_out") return null;
+			if (m.type !== "timed_out") {
+				return null;
+			}
+
 			const [next, cmds] = callerStep(s, m);
 			return [next, cmds.map((c) => ({...c, tries: c.tries - 1}))];
 		}),
@@ -733,7 +786,10 @@ export const CALLER_PLANTED: readonly {
 		name: "a reply answers but the call stays pending",
 		law: "a call is answered at most once",
 		update: around((s, m) => {
-			if (m.type !== "reply" || m.rev <= s.calls.cursor) return null;
+			if (m.type !== "reply" || m.rev <= s.calls.cursor) {
+				return null;
+			}
+
 			const p = pendingOf(s, m.id);
 			return p === undefined
 				? null
@@ -793,13 +849,18 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 					? [{type: "begin" as const, incarnation: s.incarnation + 1, parent: "p"}]
 					: []),
 			];
-			if (s.incarnation === 0) return begins;
+
+			if (s.incarnation === 0) {
+				return begins;
+			}
+
 			const rev = s.cursor + 1;
 			const to = s.incarnation;
 			const exit = (from: string, incarnation: number, reason: Reason, at: number) =>
 				({type: "exit", rev, from, to, incarnation, reason, why: "x", at}) as const;
 			const exits = s.children.flatMap((c): SupervisorMsg[] => {
 				const run = c.run;
+
 				switch (run.is) {
 					case "up": {
 						const at = (d: number) => run.since + d;
@@ -834,6 +895,7 @@ export function supervisorWorld(): World<SupervisorState, SupervisorMsg, never> 
 					case "stopped":
 						return [];
 				}
+
 				return [];
 			});
 			const starts = startsOf(s).flatMap((p): SupervisorMsg[] => {
@@ -937,10 +999,16 @@ const windowOf = (spec: SupervisorSpec, s: SupervisorState, at: number) =>
 
 /** An EXIT of a running child the reducer must act on: past the cursor, for this run, not stale. */
 const freshExit = (s: SupervisorState, m: SupervisorMsg) => {
-	if (m.type !== "exit" || m.rev <= s.cursor || m.to !== s.incarnation || s.phase !== "running")
+	if (m.type !== "exit" || m.rev <= s.cursor || m.to !== s.incarnation || s.phase !== "running") {
 		return null;
+	}
+
 	const c = childOf(s, m.from);
-	if (c === undefined || c.run.is !== "up" || m.incarnation < c.incarnation) return null;
+
+	if (c === undefined || c.run.is !== "up" || m.incarnation < c.incarnation) {
+		return null;
+	}
+
 	return {c, m};
 };
 
@@ -953,16 +1021,21 @@ const freshParent = (s: SupervisorState, m: SupervisorMsg) =>
 
 /** A restart this step made: which child, the exit it answers, and how long that run lived. */
 const restartOf = (prev: SupervisorState, msg: SupervisorMsg, next: SupervisorState) => {
-	if (msg.type === "begin" || next.restarted <= prev.restarted) return null;
+	if (msg.type === "begin" || next.restarted <= prev.restarted) {
+		return null;
+	}
+
 	if (msg.type === "exit") {
 		const run = childOf(prev, msg.from)?.run;
 		return {name: msg.from, at: msg.at, lived: run?.is === "up" ? msg.at - run.since : null};
 	}
+
 	if (msg.type === "started") {
 		const run = childOf(prev, msg.name)?.run;
 		const held = run?.is === "starting" ? run.held : null;
 		return held === null ? null : {name: msg.name, at: held.at, lived: held.at - msg.at};
 	}
+
 	return null;
 };
 
@@ -989,16 +1062,29 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 	const b = SUP_BACKOFF;
 	return [
 		l("it never restarts more than its intensity within one period", ({prev, next}) => {
-			if (next.restarted <= prev.restarted) return null;
+			if (next.restarted <= prev.restarted) {
+				return null;
+			}
+
 			const n = windowOf(spec, next, next.restarts.at(-1) ?? 0).length;
 			return n <= spec.intensity ? null : `${n} restarts within ${spec.periodMs} ms`;
 		}),
 		l("it gives up only past its intensity, or when its parent exits", ({prev, msg, next}) => {
-			if (prev.phase !== "running" || next.phase === "running" || msg.type === "begin") return null;
-			if (freshParent(prev, msg)) return null;
+			if (prev.phase !== "running" || next.phase === "running" || msg.type === "begin") {
+				return null;
+			}
+
+			if (freshParent(prev, msg)) {
+				return null;
+			}
+
 			const held = msg.type === "started" ? startOf(prev, msg.name)?.held : null;
 			const at = msg.type === "exit" ? msg.at : (held?.at ?? null);
-			if (at === null) return `gave up on ${msg.type}`;
+
+			if (at === null) {
+				return `gave up on ${msg.type}`;
+			}
+
 			const n = windowOf(spec, prev, at).length + 1;
 			return n > spec.intensity ? null : `gave up at ${n} restarts, intensity ${spec.intensity}`;
 		}),
@@ -1013,12 +1099,16 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 						c.run.is === "starting" ||
 						(c.run.is === "stopping" && c.run.afterStop.do === "restart"),
 				)
-			)
+			) {
 				return "a start is still in the state after giving up";
-			if (prev.phase !== "running" && next.phase === "running")
+			}
+
+			if (prev.phase !== "running" && next.phase === "running") {
 				return msg.type === "begin" && msg.incarnation !== prev.incarnation
 					? null
 					: `woke on ${msg.type}`;
+			}
+
 			return null;
 		}),
 		l("it exits only once every child is stopped", ({next}) => {
@@ -1028,7 +1118,10 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 				: null;
 		}),
 		l("a temporary child is never started again", ({prev, msg, next}) => {
-			if (msg.type === "begin") return null;
+			if (msg.type === "begin") {
+				return null;
+			}
+
 			const again = next.children.find(
 				(c) => specRestart(c.name) === "temporary" && newStart(prev, next, c.name),
 			);
@@ -1036,56 +1129,97 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 		}),
 		l("a transient child is started again only after a crash or a kill", ({prev, msg, next}) => {
 			const f = freshExit(prev, msg);
-			if (f === null || specRestart(f.c.name) !== "transient") return null;
+
+			if (f === null || specRestart(f.c.name) !== "transient") {
+				return null;
+			}
+
 			return f.m.reason !== "crash" && f.m.reason !== "killed" && newStart(prev, next, f.c.name)
 				? `transient ${f.c.name} started again after ${f.m.reason}`
 				: null;
 		}),
 		l("a permanent child's exit starts it again, within intensity", ({prev, msg, next}) => {
 			const f = freshExit(prev, msg);
-			if (f === null || specRestart(f.c.name) !== "permanent" || next.phase !== "running")
+
+			if (f === null || specRestart(f.c.name) !== "permanent" || next.phase !== "running") {
 				return null;
-			if (isLimitReason(f.m.reason)) return null;
+			}
+
+			if (isLimitReason(f.m.reason)) {
+				return null;
+			}
+
 			return startOf(next, f.c.name)?.after === f.m.incarnation
 				? null
 				: `${f.c.name} exited at ${f.m.incarnation} and was not started again`;
 		}),
 		l("a restart takes exactly the strategy's siblings with it", ({prev, msg, next}) => {
 			const r = restartOf(prev, msg, next);
-			if (r === null) return null;
-			const group = groupOf(strategy, prev, r.name);
-			for (const x of prev.children) {
-				if (x.name === r.name) continue;
-				const after = childOf(next, x.name);
-				if (!group.includes(x.name)) {
-					if (JSON.stringify(after) !== JSON.stringify(x))
-						return `${x.name} is no ${strategy} sibling of ${r.name} and changed`;
-				} else if (x.run.is === "up" && after?.run.is !== "stopping")
-					return `${x.name} is a ${strategy} sibling of ${r.name} and was not stopped`;
+
+			if (r === null) {
+				return null;
 			}
+
+			const group = groupOf(strategy, prev, r.name);
+
+			for (const x of prev.children) {
+				if (x.name === r.name) {
+					continue;
+				}
+
+				const after = childOf(next, x.name);
+
+				if (!group.includes(x.name)) {
+					if (JSON.stringify(after) !== JSON.stringify(x)) {
+						return `${x.name} is no ${strategy} sibling of ${r.name} and changed`;
+					}
+				} else if (x.run.is === "up" && after?.run.is !== "stopping") {
+					return `${x.name} is a ${strategy} sibling of ${r.name} and was not stopped`;
+				}
+			}
+
 			return null;
 		}),
 		l("a running child is stopped before it is started again", ({prev, msg, next}) => {
-			if (msg.type === "begin") return null;
+			if (msg.type === "begin") {
+				return null;
+			}
+
 			for (const x of prev.children) {
 				const after = childOf(next, x.name);
-				if (after?.run.is !== "starting") continue;
+
+				if (after?.run.is !== "starting") {
+					continue;
+				}
+
 				const own = msg.type === "exit" && msg.from === x.name;
-				if (x.run.is === "up" && !own) return `${x.name} was up and starts again on ${msg.type}`;
+
+				if (x.run.is === "up" && !own) {
+					return `${x.name} was up and starts again on ${msg.type}`;
+				}
+
 				if (
 					x.run.is === "stopping" &&
 					!own &&
 					!(msg.type === "signalled" && msg.name === x.name && msg.how === "noproc")
-				)
+				) {
 					return `${x.name} was stopping and starts again on ${msg.type}`;
+				}
 			}
+
 			return null;
 		}),
 		l("a start sent before a group restart caught it is not kept running", ({prev, msg, next}) => {
-			if (msg.type !== "started") return null;
-			const run = childOf(prev, msg.name)?.run;
-			if (run?.is !== "starting" || msg.generation >= run.generation || prev.phase !== "running")
+			if (msg.type !== "started") {
 				return null;
+			}
+
+			const run = childOf(prev, msg.name)?.run;
+
+			if (run?.is !== "starting" || msg.generation >= run.generation || prev.phase !== "running") {
+				return null;
+			}
+
 			return childOf(next, msg.name)?.run.is === "up"
 				? `${msg.name} started in generation ${msg.generation}, caught in generation ${run.generation}, and is kept`
 				: null;
@@ -1093,7 +1227,11 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 		l("a restart waits between minMs and maxMs after the exit", ({prev, msg, next}) => {
 			const r = restartOf(prev, msg, next);
 			const s = r === null ? undefined : startOf(next, r.name);
-			if (r === null || s === undefined) return null;
+
+			if (r === null || s === undefined) {
+				return null;
+			}
+
 			const wait = s.notBefore - r.at;
 			return wait >= b.minMs && wait <= b.maxMs ? null : `${r.name} waits ${wait} ms`;
 		}),
@@ -1101,22 +1239,34 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			"a crash again soon waits twice as long, up to maxMs; a long run starts over",
 			{},
 			(last, {prev, msg, next}) => {
-				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) return {};
+				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) {
+					return {};
+				}
+
 				const r = restartOf(prev, msg, next);
 				const s = r === null ? undefined : startOf(next, r.name);
-				if (r === null || s === undefined || r.lived === null) return last;
+
+				if (r === null || s === undefined || r.lived === null) {
+					return last;
+				}
+
 				const wait = s.notBefore - r.at;
 				const before = last[r.name];
-				if (r.lived >= b.resetAfterMs && wait !== b.minMs)
+
+				if (r.lived >= b.resetAfterMs && wait !== b.minMs) {
 					return broke(`${r.name} ran ${r.lived} ms and still waits ${wait} ms`);
+				}
+
 				if (
 					r.lived < b.resetAfterMs &&
 					before !== undefined &&
 					wait < Math.min(b.maxMs, 2 * before)
-				)
+				) {
 					return broke(
 						`${r.name} crashed again after ${r.lived} ms; waits ${wait}, then ${before}`,
 					);
+				}
+
 				return {...last, [r.name]: wait};
 			},
 		),
@@ -1125,16 +1275,28 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			{},
 			(seen, {prev, next}) => {
 				const ids = next.outbox.map((o) => o.id);
-				if (new Set(ids).size !== ids.length) return broke(`two replies in flight for one id`);
+
+				if (new Set(ids).size !== ids.length) {
+					return broke(`two replies in flight for one id`);
+				}
+
 				let out = seen;
+
 				for (const o of next.outbox) {
-					if (prev.outbox.some((p) => p.id === o.id)) continue;
+					if (prev.outbox.some((p) => p.id === o.id)) {
+						continue;
+					}
+
 					const res = JSON.stringify(o.res);
 					const was = out[o.id];
-					if (was !== undefined && was !== res)
+
+					if (was !== undefined && was !== res) {
 						return broke(`call ${o.id} answered ${was}, then ${res}`);
+					}
+
 					out = {...out, [o.id]: res};
 				}
+
 				return out;
 			},
 		),
@@ -1142,7 +1304,10 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			"a terminated child stays stopped until restart_child or a group restart",
 			[],
 			(gone, {prev, msg, next}) => {
-				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) return [];
+				if (msg.type === "begin" && msg.incarnation !== prev.incarnation) {
+					return [];
+				}
+
 				let now = gone;
 				// A call sent again under an id it answered (or is working on) does nothing new.
 				const resent =
@@ -1150,17 +1315,24 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 					msg.caller !== null &&
 					[...prev.answered, ...prev.waiting].some((a) => a.id === msg.caller?.id);
 				const req = msg.type === "request" && msg.rev > prev.cursor && !resent ? msg.req : null;
+
 				if (req !== null && prev.phase === "running" && "name" in req) {
-					if (req.op === "terminate_child" && childOf(prev, req.name) && !now.includes(req.name))
+					if (req.op === "terminate_child" && childOf(prev, req.name) && !now.includes(req.name)) {
 						now = [...now, req.name];
-					if (req.op === "restart_child" || req.op === "delete_child")
+					}
+
+					if (req.op === "restart_child" || req.op === "delete_child") {
 						now = now.filter((n) => n !== req.name);
+					}
 				}
+
 				const r = restartOf(prev, msg, next);
+
 				if (r !== null) {
 					const group = groupOf(strategy, prev, r.name);
 					now = now.filter((n) => !group.includes(n));
 				}
+
 				const back = now.find((n) => {
 					const run = childOf(next, n)?.run.is;
 					return run === "up" || run === "starting";
@@ -1169,7 +1341,10 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			},
 		),
 		l("a stale EXIT changes nothing but the cursor", ({prev, msg, next}) => {
-			if (msg.type !== "exit" || msg.rev <= prev.cursor) return null;
+			if (msg.type !== "exit" || msg.rev <= prev.cursor) {
+				return null;
+			}
+
 			const c = childOf(prev, msg.from);
 			const stale =
 				msg.to !== prev.incarnation || (c !== undefined && msg.incarnation < c.incarnation);
@@ -1183,7 +1358,10 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 				: null,
 		),
 		l("a new incarnation starts every child from the spec", ({prev, msg, next}) => {
-			if (msg.type !== "begin" || msg.incarnation === prev.incarnation) return null;
+			if (msg.type !== "begin" || msg.incarnation === prev.incarnation) {
+				return null;
+			}
+
 			const want = spec.children.map((c) => `${c.name}:null`).join();
 			const got = next.children
 				.map((c) => `${c.name}:${c.run.is === "starting" ? c.run.after : c.run.is}`)
@@ -1196,9 +1374,12 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 			for (const c of next.children) {
 				const s = newStart(prev, next, c.name);
 				const want = c.incarnation === 0 ? null : c.incarnation;
-				if (s !== undefined && s.after !== want)
+
+				if (s !== undefined && s.after !== want) {
 					return `${c.name} starts after ${s.after}; its last run is ${want}`;
+				}
 			}
+
 			return null;
 		}),
 		// 102: limits.
@@ -1208,23 +1389,44 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 				const name = msg.type === "exit" ? msg.from : msg.type === "started" ? msg.name : null;
 				const ended =
 					msg.type === "exit" ? msg : msg.type === "started" ? startOf(prev, msg.name)?.held : null;
-				if (name === null || ended === null || ended === undefined || !isLimitReason(ended.reason))
+
+				if (
+					name === null ||
+					ended === null ||
+					ended === undefined ||
+					!isLimitReason(ended.reason)
+				) {
 					return null;
-				if (newStart(prev, next, name)) return `${name} ended ${ended.reason} and starts again`;
-				if (next.restarted > prev.restarted)
+				}
+
+				if (newStart(prev, next, name)) {
+					return `${name} ended ${ended.reason} and starts again`;
+				}
+
+				if (next.restarted > prev.restarted) {
 					return `${name}'s ${ended.reason} counted as a restart`;
-				if (prev.phase === "running" && next.phase !== "running" && !freshParent(prev, msg))
+				}
+
+				if (prev.phase === "running" && next.phase !== "running" && !freshParent(prev, msg)) {
 					return `gave up on ${name}'s ${ended.reason}`;
+				}
+
 				return null;
 			},
 		),
 		l(
 			"a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped",
 			({prev, msg, next}) => {
-				if (msg.type !== "start_refused" || msg.why !== "limit" || prev.phase !== "running")
+				if (msg.type !== "start_refused" || msg.why !== "limit" || prev.phase !== "running") {
 					return null;
+				}
+
 				const c = childOf(prev, msg.name);
-				if (c === undefined || c.run.is !== "starting") return null;
+
+				if (c === undefined || c.run.is !== "starting") {
+					return null;
+				}
+
 				const now = childOf(next, msg.name);
 				const fresh = c.incarnation === 0 && !spec.children.some((x) => x.name === c.name);
 				const error = msg.over.kind === "children" ? "max_children" : `limit:${msg.over.kind}`;
@@ -1234,12 +1436,17 @@ export function supervisorLaws(strategy: Strategy): readonly SupLaw[] {
 						(o) => o.id === w.id && !o.res.ok && "error" in o.res && o.res.error === error,
 					),
 				);
-				if (fresh)
+
+				if (fresh) {
 					return now === undefined && told ? null : `new ${c.name}: ${now?.run.is}, told ${told}`;
-				if (msg.over.kind === "children")
+				}
+
+				if (msg.over.kind === "children") {
 					return now?.run.is === "starting" && now.run.notBefore > msg.at
 						? null
 						: `${c.name} refused for children is ${now?.run.is ?? "gone"}`;
+				}
+
 				return now?.run.is === "stopped" && told ? null : `${c.name} is ${now?.run.is ?? "gone"}`;
 			},
 		),
@@ -1449,9 +1656,16 @@ export const SUPERVISOR_PLANTED: readonly {
 		law: "a stale EXIT changes nothing but the cursor",
 		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			if (m.type !== "exit" || m.rev <= s.cursor) return null;
+			if (m.type !== "exit" || m.rev <= s.cursor) {
+				return null;
+			}
+
 			const c = childOf(s, m.from);
-			if (c === undefined || m.incarnation >= c.incarnation || c.run.is !== "up") return null;
+
+			if (c === undefined || m.incarnation >= c.incarnation || c.run.is !== "up") {
+				return null;
+			}
+
 			return sup1(
 				mapChildren(s, (x) => (x === c ? {...c, incarnation: m.incarnation} : x)),
 				m,
@@ -1471,7 +1685,10 @@ export const SUPERVISOR_PLANTED: readonly {
 		law: "a new incarnation starts every child from the spec",
 		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			if (m.type !== "begin" || m.incarnation === s.incarnation) return null;
+			if (m.type !== "begin" || m.incarnation === s.incarnation) {
+				return null;
+			}
+
 			return {...sup1(s, m), restarts: s.restarts.length > 0 ? s.restarts : [0]};
 		}),
 	},
@@ -1480,7 +1697,10 @@ export const SUPERVISOR_PLANTED: readonly {
 		law: "every new start names the last run it replaces",
 		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			if (m.type !== "exit") return null;
+			if (m.type !== "exit") {
+				return null;
+			}
+
 			return mapChildren(sup1(s, m), (c) =>
 				c.run.is === "starting" && c.run.after === m.incarnation
 					? {...c, run: {...c.run, after: null}}
@@ -1502,7 +1722,10 @@ export const SUPERVISOR_PLANTED: readonly {
 		law: "a limit exit is never started again and never counts toward intensity",
 		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			if (freshExit(s, m) === null || m.type !== "exit" || !isLimitReason(m.reason)) return null;
+			if (freshExit(s, m) === null || m.type !== "exit" || !isLimitReason(m.reason)) {
+				return null;
+			}
+
 			const next = sup1(s, m);
 			return {...next, restarts: [...next.restarts, m.at], restarted: next.restarted + 1};
 		}),
@@ -1512,7 +1735,10 @@ export const SUPERVISOR_PLANTED: readonly {
 		law: "a start a limit refused: a new child is answered and dropped; a known one waits for room, or stays stopped",
 		strategy: "one_for_one",
 		update: aroundSup((s, m) => {
-			if (m.type !== "start_refused" || m.why !== "limit") return null;
+			if (m.type !== "start_refused" || m.why !== "limit") {
+				return null;
+			}
+
 			const next = sup1(s, m);
 			return {...next, children: next.children.filter((c) => c.name !== m.name)};
 		}),
@@ -1591,12 +1817,18 @@ const watchOf = (s: Watcher, target: string) => s.monitors.watches.find((w) => w
 const provedBy = (s: Watcher, m: MonitorMsg) => {
 	if (m.type === "monitored") {
 		const w = s.monitors.watches.find((x) => refOf(x) === m.ref);
-		if (w === undefined || w.status !== "asking" || m.how !== "on" || m.incarnation === null)
+
+		if (w === undefined || w.status !== "asking" || m.how !== "on" || m.incarnation === null) {
 			return null;
+		}
+
 		return {target: w.target, to: m.incarnation - 1, death: false};
 	}
-	if (m.type !== "down" || m.rev <= s.monitors.cursor || watchOf(s, m.target) === undefined)
+
+	if (m.type !== "down" || m.rev <= s.monitors.cursor || watchOf(s, m.target) === undefined) {
 		return null;
+	}
+
 	return {target: m.target, to: m.incarnation, death: m.reason !== "noproc"};
 };
 
@@ -1604,11 +1836,17 @@ const provedBy = (s: Watcher, m: MonitorMsg) => {
 type Proved = Readonly<Record<string, {readonly start: number; readonly to: number}>>;
 
 const prove = (proved: Proved, p: ReturnType<typeof provedBy>): Proved => {
-	if (p === null) return proved;
+	if (p === null) {
+		return proved;
+	}
+
 	const was = proved[p.target];
+
 	// The first thing seen is where watching began: a real death at j is reported, j-1 is not.
-	if (was === undefined)
+	if (was === undefined) {
 		return {...proved, [p.target]: {start: p.death ? p.to - 1 : p.to, to: p.to}};
+	}
+
 	return {...proved, [p.target]: {start: was.start, to: Math.max(was.to, p.to)}};
 };
 
@@ -1622,7 +1860,11 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 			[],
 			(seen, {next}) => {
 				const ended = endedOf(next.last);
-				if (ended === null) return seen;
+
+				if (ended === null) {
+					return seen;
+				}
+
 				const deaths = Array.from(
 					{length: ended.to - ended.from + 1},
 					(_, i) => `${ended.target}@${ended.from + i}`,
@@ -1652,16 +1894,25 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 									(_, i) => `${ended.target}@${ended.from + i}`,
 								),
 							].sort();
-				for (const [target, p] of Object.entries(proved))
-					for (let i = p.start + 1; i <= p.to; i++)
-						if (!seen.includes(`${target}@${i}`))
+
+				for (const [target, p] of Object.entries(proved)) {
+					for (let i = p.start + 1; i <= p.to; i++) {
+						if (!seen.includes(`${target}@${i}`)) {
 							return broke(`${target}@${i} ended and was never reported`);
+						}
+					}
+				}
+
 				return {proved, seen};
 			},
 		),
 		l("a report goes no further than its Msg proves", ({prev, msg, next}) => {
 			const ended = endedOf(next.last);
-			if (ended === null || watchOf(prev, ended.target) === undefined) return null;
+
+			if (ended === null || watchOf(prev, ended.target) === undefined) {
+				return null;
+			}
+
 			const p = provedBy(prev, msg);
 			return p !== null && p.target === ended.target && ended.to <= p.to
 				? null
@@ -1673,10 +1924,16 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 				: null,
 		),
 		l("after a death it monitors again, under a new ref", ({prev, msg, cmds}) => {
-			if (msg.type !== "down" || msg.rev <= prev.monitors.cursor || msg.reason === "noproc")
+			if (msg.type !== "down" || msg.rev <= prev.monitors.cursor || msg.reason === "noproc") {
 				return null;
+			}
+
 			const w = watchOf(prev, msg.target);
-			if (w === undefined || refOf(w) !== msg.ref || w.status === "waiting") return null;
+
+			if (w === undefined || refOf(w) !== msg.ref || w.status === "waiting") {
+				return null;
+			}
+
 			return cmds.some((c) => c.target === msg.target && c.ref !== msg.ref)
 				? null
 				: `${msg.target} came down and is not watched again`;
@@ -1696,7 +1953,10 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 				: null,
 		),
 		l("resume sends every asking monitor again", ({prev, msg, cmds}) => {
-			if (msg.type !== "resume") return null;
+			if (msg.type !== "resume") {
+				return null;
+			}
+
 			const want = prev.monitors.watches
 				.filter((w) => w.status === "asking")
 				.map(refOf)
@@ -1712,32 +1972,59 @@ export function watcherLaws(): readonly Law<Watcher, MonitorMsg, MonitorCmd>[] {
 			"a name that stays down is asked again later each time, up to maxRetryMs",
 			{},
 			(last, {prev, msg, next}) => {
-				if (msg.type !== "monitored") return last;
+				if (msg.type !== "monitored") {
+					return last;
+				}
+
 				const w = prev.monitors.watches.find((x) => refOf(x) === msg.ref);
-				if (w === undefined || w.status !== "asking") return last;
+
+				if (w === undefined || w.status !== "asking") {
+					return last;
+				}
+
 				if (msg.how === "on") {
 					const {[w.target]: _, ...rest} = last;
 					return rest;
 				}
+
 				const after = watchOf(next, w.target);
-				if (after?.status !== "waiting" || after.due === null) return last;
+
+				if (after?.status !== "waiting" || after.due === null) {
+					return last;
+				}
+
 				const wait = after.due - msg.at;
 				const before = last[w.target];
 				const {retryMs, maxRetryMs} = WATCH_RETRY;
-				if (wait < retryMs || wait > maxRetryMs) return broke(`${w.target} waits ${wait} ms`);
-				if (before !== undefined && wait < Math.min(maxRetryMs, 2 * before))
+
+				if (wait < retryMs || wait > maxRetryMs) {
+					return broke(`${w.target} waits ${wait} ms`);
+				}
+
+				if (before !== undefined && wait < Math.min(maxRetryMs, 2 * before)) {
 					return broke(`${w.target} missed again; waits ${wait} ms, then ${before} ms`);
+				}
+
 				return {...last, [w.target]: wait};
 			},
 		),
 		l("a waiting watch asks again only when its own retry is due", ({prev, msg, next}) => {
 			for (const w of prev.monitors.watches) {
-				if (w.status !== "waiting") continue;
+				if (w.status !== "waiting") {
+					continue;
+				}
+
 				const after = watchOf(next, w.target);
-				if (after?.status !== "asking") continue;
-				if (!(msg.type === "retry_due" && msg.ref === refOf(w)))
+
+				if (after?.status !== "asking") {
+					continue;
+				}
+
+				if (!(msg.type === "retry_due" && msg.ref === refOf(w))) {
 					return `${w.target} asked again on ${msg.type}`;
+				}
 			}
+
 			return null;
 		}),
 	];
@@ -1757,7 +2044,10 @@ export const WATCHER_PLANTED: readonly {
 		name: "reports every DOWN, so one death seen by two monitors twice",
 		law: "no death is reported twice",
 		update: aroundWatcher((s, m) => {
-			if (m.type !== "down" || m.reason === "noproc" || m.rev <= s.monitors.cursor) return null;
+			if (m.type !== "down" || m.reason === "noproc" || m.rev <= s.monitors.cursor) {
+				return null;
+			}
+
 			const [next, cmds] = watcherStep(s, m);
 			const {type: _, rev: __, ...down} = m;
 			return [{...next, last: {kind: "down", missed: 0, ...down}}, cmds];
@@ -1769,9 +2059,15 @@ export const WATCHER_PLANTED: readonly {
 		update: (s, m) => {
 			const [next, cmds] = watcherStep(s, m);
 			const last = next.last;
-			if (last?.kind === "gap") return [{...next, last: null}, cmds];
-			if (last?.kind === "down" && last.missed > 0)
+
+			if (last?.kind === "gap") {
+				return [{...next, last: null}, cmds];
+			}
+
+			if (last?.kind === "down" && last.missed > 0) {
 				return [{...next, last: {...last, missed: 0}}, cmds];
+			}
+
 			return [next, cmds];
 		},
 	},
@@ -1790,7 +2086,10 @@ export const WATCHER_PLANTED: readonly {
 		name: "a noproc counts as a death",
 		law: "a noproc is never a death",
 		update: aroundWatcher((s, m) => {
-			if (m.type !== "down" || m.reason !== "noproc" || m.rev <= s.monitors.cursor) return null;
+			if (m.type !== "down" || m.reason !== "noproc" || m.rev <= s.monitors.cursor) {
+				return null;
+			}
+
 			const [next, cmds] = watcherStep(s, m);
 			const {type: _, rev: __, ...down} = m;
 			return [{...next, last: {kind: "down", missed: 0, ...down}}, cmds];
@@ -1800,7 +2099,10 @@ export const WATCHER_PLANTED: readonly {
 		name: "stops watching after a death",
 		law: "after a death it monitors again, under a new ref",
 		update: aroundWatcher((s, m) => {
-			if (m.type !== "down" || m.reason === "noproc") return null;
+			if (m.type !== "down" || m.reason === "noproc") {
+				return null;
+			}
+
 			const [next] = watcherStep(s, m);
 			return [next, []];
 		}),
@@ -1809,7 +2111,10 @@ export const WATCHER_PLANTED: readonly {
 		name: "monitors again under the old ref",
 		law: "every monitor carries the ref of a watch that is asking",
 		update: aroundWatcher((s, m) => {
-			if (m.type !== "down" || m.reason === "noproc") return null;
+			if (m.type !== "down" || m.reason === "noproc") {
+				return null;
+			}
+
 			const [next, cmds] = watcherStep(s, m);
 			return [next, cmds.map((c) => ({...c, ref: m.ref}))];
 		}),
@@ -1843,7 +2148,10 @@ export const WATCHER_PLANTED: readonly {
 		name: "a stale retry asks again",
 		law: "a waiting watch asks again only when its own retry is due",
 		update: aroundWatcher((s, m) => {
-			if (m.type !== "retry_due") return null;
+			if (m.type !== "retry_due") {
+				return null;
+			}
+
 			const w = s.monitors.watches.find(
 				(x) => x.status === "waiting" && refOf({target: x.target, n: x.n - 1}) === m.ref,
 			);

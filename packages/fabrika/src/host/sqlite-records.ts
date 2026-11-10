@@ -53,7 +53,10 @@ export const sqliteRecords = (o: {readonly dir: string; readonly by: string}) =>
 		migrateJob(empty.db);
 		yield* Effect.addFinalizer(() =>
 			Effect.sync(() => {
-				for (const r of open.values()) r.close();
+				for (const r of open.values()) {
+					r.close();
+				}
+
 				open.clear();
 				empty.close();
 			}),
@@ -63,20 +66,27 @@ export const sqliteRecords = (o: {readonly dir: string; readonly by: string}) =>
 		/** The record of `trace`, opened if it is not: newest last, so the first is the one to close. */
 		const openRecord = (trace: string): Opened => {
 			const found = open.get(trace);
+
 			if (found !== undefined) {
 				open.delete(trace);
 				open.set(trace, found);
 				return found;
 			}
+
 			const made = connect(fileFor(trace));
 			migrateJob(made.db);
 			const record = {...made, heads: new Map() as Heads};
 			open.set(trace, record);
+
 			for (const [oldest, r] of open) {
-				if (open.size <= OPEN) break;
+				if (open.size <= OPEN) {
+					break;
+				}
+
 				r.close();
 				open.delete(oldest);
 			}
+
 			return record;
 		};
 		/** A job began `trace`: its record is open, or its file is there. */
@@ -94,16 +104,26 @@ export const sqliteRecords = (o: {readonly dir: string; readonly by: string}) =>
 			run: (r: Opened, now: number) => A,
 		): Effect.Effect<A | undefined, StorageBroken> =>
 			Effect.gen(function* () {
-				if (!TRACE.test(trace))
+				if (!TRACE.test(trace)) {
 					return yield* new StorageBroken({message: `not a trace id: ${trace}`, cause: null});
+				}
+
 				const there = how === "makes" || (yield* began(trace));
-				if (!there && how === "writes") return undefined;
+
+				if (!there && how === "writes") {
+					return undefined;
+				}
+
 				const now = yield* Clock.currentTimeMillis;
 				const answer = yield* Effect.try({
 					try: () => run(there ? openRecord(trace) : {...empty, heads: new Map() as Heads}, now),
 					catch: (cause) => new StorageBroken({message: `the record of ${trace}`, cause}),
 				});
-				if (how !== "reads") PubSub.publishUnsafe(written, trace);
+
+				if (how !== "reads") {
+					PubSub.publishUnsafe(written, trace);
+				}
+
 				return answer;
 			});
 		const records: Records = {

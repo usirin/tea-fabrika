@@ -1,6 +1,6 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type {CreateRule} from "@oxlint/plugins";
-import {pathIn, type Node} from "./match.ts";
+import {heldToNext, pathIn, type Node} from "./match.ts";
 
 const OWNERS = new Set([
 	"next/packages/libfabrika/src/data/ledger-store.ts",
@@ -17,23 +17,25 @@ const touchesLedger = (query: string) =>
 export const noLedgerSql: CreateRule = {
 	create(context) {
 		const file = pathIn(context);
-		if (
-			!file.startsWith("next/") ||
-			OWNERS.has(file) ||
-			/\.(?:test|test-support|d)\.tsx?$/.test(file)
-		)
+
+		if (!heldToNext(file) || OWNERS.has(file) || /\.(?:test|test-support|d)\.tsx?$/.test(file)) {
 			return {};
+		}
+
 		const report = (node: Node, query: string) => {
-			if (touchesLedger(query))
+			if (touchesLedger(query)) {
 				context.report({
 					node,
 					message:
 						"Read and write ledger tables through Ledger or Referee (docs/direction/ledger-behind-a-service.md).",
 				});
+			}
 		};
 		return {
 			Literal(node) {
-				if (typeof node.value === "string") report(node, node.value);
+				if (typeof node.value === "string") {
+					report(node, node.value);
+				}
 			},
 			TemplateLiteral(node) {
 				report(node, node.quasis.map((q) => q.value.cooked ?? q.value.raw).join("?"));

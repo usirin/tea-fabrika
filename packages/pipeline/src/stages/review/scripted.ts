@@ -80,10 +80,15 @@ export function recordedGh(which: Which, answers: Answers = {}) {
 	const gh: Gh = (args) => {
 		calls.push(args);
 		const query = args.find((arg) => arg.startsWith("query=")) ?? "";
-		if (query.includes("statusCheckRollup"))
+
+		if (query.includes("statusCheckRollup")) {
 			return say(answers.change ?? recorded(`change-${which}.json`));
-		if (query.includes("issue(number"))
+		}
+
+		if (query.includes("issue(number")) {
 			return say(answers.ticket ?? asTicket(recorded("tickets/625.md")));
+		}
+
 		if (query !== "") {
 			const now = answers.now ?? HEADS.final;
 			return say(
@@ -94,6 +99,7 @@ export function recordedGh(which: Which, answers: Answers = {}) {
 						}),
 			);
 		}
+
 		return args.includes("Accept: application/vnd.github.diff")
 			? say(answers.diff ?? recorded(`compare-${which}.diff`))
 			: say(answers.files ?? recorded(`compare-${which}.json`));
@@ -134,7 +140,11 @@ export const WHOLE: Pack = {
 /** The brief the gate makes of a pack. It throws on a pack the gate stops: a test that asks for a brief means one that goes. */
 export function briefOf(pack: Pack): Brief {
 	const gate = reviewGate(pack);
-	if (gate.answer !== "go") throw new Error("the gate did not let this pack through");
+
+	if (gate.answer !== "go") {
+		throw new Error("the gate did not let this pack through");
+	}
+
 	return gate.brief;
 }
 
@@ -166,7 +176,11 @@ export function scriptedReviewer(
 				Effect.gen(function* () {
 					briefs.push(brief);
 					told.push(note);
-					for (const note of script.notes?.(brief) ?? []) heard.push(yield* tools.file_note(note));
+
+					for (const note of script.notes?.(brief) ?? []) {
+						heard.push(yield* tools.file_note(note));
+					}
+
 					yield* script.hold ?? Effect.void;
 					return answer(brief, briefs.length);
 				}),

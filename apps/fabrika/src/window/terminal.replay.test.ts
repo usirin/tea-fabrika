@@ -30,7 +30,9 @@ const element = (): Record<string, unknown> => {
 		parentElement: null,
 		setAttribute: () => {},
 		append: (...kids: Record<string, unknown>[]) => {
-			for (const kid of kids) kid["parentElement"] = el;
+			for (const kid of kids) {
+				kid["parentElement"] = el;
+			}
 		},
 		remove: () => {},
 		focus: () => {},
@@ -87,7 +89,10 @@ class FakeTerminal {
 	}
 
 	dispose() {
-		if (this.wasmTerm === undefined) return;
+		if (this.wasmTerm === undefined) {
+			return;
+		}
+
 		made.splice(made.indexOf(this.wasmTerm), 1);
 		this.wasmTerm.free();
 	}
@@ -103,7 +108,10 @@ class FakeFit {
 
 	fit() {
 		const cells = this.term?.at?.parentElement.parentElement.cells;
-		if (cells !== undefined) this.term?.resize(cells.cols, cells.rows);
+
+		if (cells !== undefined) {
+			this.term?.resize(cells.cols, cells.rows);
+		}
 	}
 
 	observeResize() {}
@@ -178,12 +186,20 @@ describe("a terminal made again", () => {
 		draw("t3", "tsh$ jobs\r\n[1] running   tracker\r\ntsh$ ");
 		const ran = terminalFor(ghostty, "t2" as never);
 		ran.attach(slot(60, 10) as never);
-		for (let line = 0; line < 30; line += 1) draw("t2", `⚙ 漢字 ✓ row ${line}\r\n`);
+
+		for (let line = 0; line < 30; line += 1) {
+			draw("t2", `⚙ 漢字 ✓ row ${line}\r\n`);
+		}
+
 		draw("t2", "              tsh$ tracker");
 		ran.dispose();
 		const before = made.map(rows);
+
 		for (const look of ["light", "dark"]) {
-			for (const change of [...changes]) change();
+			for (const change of [...changes]) {
+				change();
+			}
+
 			await settled();
 			expect(made.map(rows), look).toEqual(before);
 		}

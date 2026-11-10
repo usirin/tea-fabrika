@@ -19,6 +19,7 @@ const name = fc.integer({min: 0, max: 100000}).map((n) => `program${n}`);
 
 const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>) => {
 	const home = realpathSync(mkdtempSync("/tmp/p16-lint-"));
+
 	try {
 		copyFileSync(join(ROOT, ".oxlintrc.json"), join(home, ".oxlintrc.json"));
 		symlinkSync(join(ROOT, "oxlint-plugins"), join(home, "oxlint-plugins"));
@@ -28,10 +29,12 @@ const run = (name: string, exports: unknown, sources: Readonly<Record<string, st
 			join(home, pkg, "package.json"),
 			JSON.stringify({name: `@p16/${name}`, type: "module", exports}),
 		);
+
 		for (const [path, text] of Object.entries(sources)) {
 			mkdirSync(dirname(join(home, pkg, path)), {recursive: true});
 			writeFileSync(join(home, pkg, path), text);
 		}
+
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),
 			[
@@ -64,10 +67,12 @@ describe("fabrika/program-package-layout", () => {
 				const exports: Record<string, unknown> = {
 					".": {import: "./src/program.ts", default: "./src/program.ts"},
 				};
+
 				if (window) {
 					exports["./window"] = "./src/window.tsx";
 					files["src/window.tsx"] = "export const View = () => <b>ok</b>;";
 				}
+
 				expect(run(name, exports, files)).toEqual([]);
 			}),
 			runs,
@@ -105,10 +110,14 @@ describe("fabrika/program-package-layout", () => {
 								),
 							},
 						};
-					for (const condition of conditions)
+
+					for (const condition of conditions) {
 						files[`src/${condition}.ts`] =
 							`import "./helper${extension}"; export const program = 1;`;
+					}
+
 					expect(run(name, exports, files)).toEqual([]);
+
 					// Plant the same Worker import in each runtime entry, one at a time.
 					for (const condition of conditions) {
 						const findings = run(name, exports, {
@@ -136,6 +145,7 @@ describe("fabrika/program-package-layout", () => {
 					"src/program.ts": "export const program = 1;",
 					"src/window.tsx": "export const View = () => <b>ok</b>;",
 				};
+
 				for (const exports of [
 					{
 						".": "./src/program.ts",
@@ -146,8 +156,9 @@ describe("fabrika/program-package-layout", () => {
 					{".": "./src/program.ts", "./window": "./missing.tsx"},
 					{"./window": "./src/window.tsx"},
 					{".": "./missing.ts", "./window": "./src/window.tsx"},
-				])
+				]) {
 					expect(run(name, exports, files).length).toBeGreaterThan(0);
+				}
 			}),
 			runs,
 		);
@@ -271,6 +282,7 @@ describe("fabrika/program-package-layout", () => {
 							).length,
 						).toBeGreaterThan(0);
 					}
+
 					expect(
 						run(
 							name,
@@ -300,6 +312,7 @@ describe("fabrika/program-package-layout", () => {
 							'export const load = () => import("../helper.ts"); export const pure = 1;',
 					};
 					expect(run(name, {".": "./src/program.ts"}, files)).toEqual([]);
+
 					for (const statement of [
 						`import {env} from ${JSON.stringify(source)}; export {env};`,
 						`export * from ${JSON.stringify(source)};`,
@@ -319,7 +332,8 @@ describe("fabrika/program-package-layout", () => {
 			{...runs, numRuns: 3},
 		);
 	});
-	for (const form of ["declaration", "specifier"] as const)
+
+	for (const form of ["declaration", "specifier"] as const) {
 		it(`type-only ${form} imports are erased; changing one to a value import is a finding`, () => {
 			fc.assert(
 				fc.property(name, name, (name, alias) => {
@@ -344,7 +358,9 @@ describe("fabrika/program-package-layout", () => {
 				runs,
 			);
 		});
-	for (const form of ["declaration", "specifier"] as const)
+	}
+
+	for (const form of ["declaration", "specifier"] as const) {
 		it(`type-only ${form} re-exports are erased; changing one to a value re-export is a finding`, () => {
 			fc.assert(
 				fc.property(name, name, (name, alias) => {
@@ -378,13 +394,15 @@ describe("fabrika/program-package-layout", () => {
 				runs,
 			);
 		});
+	}
+
 	for (const edge of [
 		'import type {X} from "./helper.ts"; export type {X};',
 		'import {type X} from "./helper.ts"; export type {X};',
 		'export type {X} from "./helper.ts";',
 		'export {type X} from "./helper.ts";',
 		'export type * from "./helper.ts";',
-	])
+	]) {
 		it(`a type-only helper link loads no Worker code: ${edge}`, () => {
 			fc.assert(
 				fc.property(name, name, (name, alias) => {
@@ -392,6 +410,7 @@ describe("fabrika/program-package-layout", () => {
 						"src/program.ts": edge,
 						"src/helper.ts": `import {env} from "cloudflare:workers"; export type X = string; export const ${alias} = env;`,
 					};
+
 					// Run the plant first, so the same helper is proved reachable by a value link.
 					for (const link of [
 						`export {${alias}} from "./helper.ts";`,
@@ -410,11 +429,14 @@ describe("fabrika/program-package-layout", () => {
 							"Pure program code cannot import Worker runtime APIs.",
 						);
 					}
+
 					expect(run(name, {".": "./src/program.ts"}, files)).toEqual([]);
 				}),
 				{...runs, numRuns: 3},
 			);
 		});
+	}
+
 	it("measures the real tree: findings are inspected, with zero false alarms required to block", () => {
 		const result = spawnSync(
 			join(ROOT, "node_modules/.bin/oxlint"),

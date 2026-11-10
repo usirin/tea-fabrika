@@ -29,7 +29,11 @@ const ed25519 = (blob: Uint8Array, n: number): Option.Option<Bytes> =>
 /** A key line's key blob, `string("ssh-ed25519") string(<32 bytes>)`, if it is an Ed25519 line. */
 const keyBlob = (line: string): Option.Option<Uint8Array> => {
 	const [type, base64] = line.split(/\s+/);
-	if (type !== ED25519 || base64 === undefined) return Option.none();
+
+	if (type !== ED25519 || base64 === undefined) {
+		return Option.none();
+	}
+
 	return Option.filter(Option.getSuccess(Base64.decode(base64)), (blob) =>
 		Option.isSome(ed25519(blob, 32)),
 	);
@@ -152,13 +156,22 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
 				Effect.gen(function* () {
 					const bytes = yield* signedBytes(a.space, sig.hash, a.text);
 					const publicKey = ed25519(sig.key, 32);
+
 					if (Option.isNone(publicKey)) {
-						if (a.policy === undefined) return bad;
+						if (a.policy === undefined) {
+							return bad;
+						}
+
 						const checked = yield* checkPasskey(sig.key, sig.signature, bytes, a.policy);
 						return checked === null ? bad : Checked.cases.passkey.make({signer, ...checked});
 					}
+
 					const signature = ed25519(sig.signature, 64);
-					if (Option.isNone(signature)) return bad;
+
+					if (Option.isNone(signature)) {
+						return bad;
+					}
+
 					const key = yield* subtle("importKey", "raw", publicKey.value, {name: "Ed25519"}, false, [
 						"verify",
 					]);

@@ -68,14 +68,18 @@ const fixture = (value: string, count = 1) => {
 	homes.push(home);
 	writeFileSync(join(home, "package.json"), '{"type":"module"}');
 	mkdirSync(join(home, "node_modules/@p16"), {recursive: true});
-	for (const name of ["effect", "@demlik", "@kampus"])
+
+	for (const name of ["effect", "@demlik", "@kampus"]) {
 		symlinkSync(
 			join(ROOT, "next/apps/fabrika/node_modules", name),
 			join(home, "node_modules", name),
 			"dir",
 		);
+	}
+
 	const programs: Selection[] = [];
 	symlinkSync(join(import.meta.dirname, "../node_modules/react"), join(home, "node_modules/react"));
+
 	for (let n = 0; n < count; n++) {
 		const name = `program${n}`,
 			pkg = join(home, "programs", name);
@@ -102,6 +106,7 @@ const fixture = (value: string, count = 1) => {
 		writeFileSync(join(pkg, "window.css"), `b { --p16: ${n}; }`);
 		programs.push({name, package: `@p16/${name}`, export: "program"});
 	}
+
 	cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
 		recursive: true,
 		filter: (p) => !p.endsWith(".test.ts"),
@@ -136,10 +141,17 @@ const strings = (source: string) => {
 	assert.equal(parsed.errors.length, 0);
 	const found: string[] = [];
 	const visit = (x: unknown): void => {
-		if (x === null || typeof x !== "object") return;
-		if ("type" in x && x.type === "Literal" && "value" in x && typeof x.value === "string")
+		if (x === null || typeof x !== "object") {
+			return;
+		}
+
+		if ("type" in x && x.type === "Literal" && "value" in x && typeof x.value === "string") {
 			found.push(x.value);
-		for (const child of Object.values(x)) visit(child);
+		}
+
+		for (const child of Object.values(x)) {
+			visit(child);
+		}
 	};
 	visit(parsed.program);
 	return found;
@@ -147,8 +159,10 @@ const strings = (source: string) => {
 
 const embedded = (brain: string, sources: readonly string[]) => {
 	assert(sources.length > 0);
-	for (const source of sources)
+
+	for (const source of sources) {
 		assert(strings(brain).includes(source), "compiled text changed or executed");
+	}
 };
 
 const inert = (file: string) =>
@@ -187,7 +201,8 @@ const observe = async () => {
 				...handle,
 				generate: async (o: OutputOptions) => {
 					const out = await handle.generate(o);
-					for (const item of out.output)
+
+					for (const item of out.output) {
 						emitted.push(
 							item.type === "chunk"
 								? item.code
@@ -195,6 +210,8 @@ const observe = async () => {
 									? item.source
 									: new TextDecoder().decode(item.source),
 						);
+					}
+
 					return out;
 				},
 				close: () => handle.close(),
@@ -210,7 +227,10 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 	vi.useRealTimers();
 	vi.resetModules();
-	for (const home of homes.splice(0)) rmSync(home, {recursive: true, force: true});
+
+	for (const home of homes.splice(0)) {
+		rmSync(home, {recursive: true, force: true});
+	}
 });
 
 describe("P16 p33 one-file build", () => {
@@ -232,7 +252,11 @@ describe("P16 p33 one-file build", () => {
 					expect(inner.length).toBeGreaterThanOrEqual(count + 3);
 					embedded(bytes, inner);
 					expect(Object.keys(built.programs)).toHaveLength(count);
-					for (const p of Object.values(built.programs)) expect(p.hash).toBe(sha(p.source));
+
+					for (const p of Object.values(built.programs)) {
+						expect(p.hash).toBe(sha(p.source));
+					}
+
 					inert(built.brain);
 					const planted = join(f.home, "executed.mjs");
 					writeFileSync(planted, `globalThis.__p16Inner = true;\n${bytes}`);
@@ -256,12 +280,17 @@ describe("P16 p33 one-file build", () => {
 					const b = fixture(text, count),
 						second = await build({...b.options, chaos});
 					expect(readFileSync(second.brain)).toEqual(readFileSync(first.brain));
-					for (const f of [a, b]) expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
+
+					for (const f of [a, b]) {
+						expect(readFileSync(first.brain, "utf8")).not.toContain(f.home);
+					}
+
 					expect(
 						readdirSync(join(a.home, "dist")).filter((p) => /\.(?:m?js|css)$/.test(p)),
 					).toEqual(["brain.mjs"]);
 					// Plants: a checkout path or a build time inside the bytes. Each clock was faked above.
 					const bytes = readFileSync(second.brain, "utf8");
+
 					for (const marker of [
 						a.home,
 						b.home,
@@ -269,8 +298,10 @@ describe("P16 p33 one-file build", () => {
 						String(new Date("2031-01-01").getTime()),
 						"2030-01-01T",
 						"2031-01-01T",
-					])
+					]) {
 						expect(bytes, "no build time or checkout location in the brain").not.toContain(marker);
+					}
+
 					expect(sha(readFileSync(second.brain))).toBe(second.build);
 				}),
 				runs,
@@ -351,13 +382,21 @@ describe("P16 p33 one-file build", () => {
 					writeFileSync(file, `export const text=${JSON.stringify(`${value}\r\n\\雪</script>`)};`);
 					const handle = await rolldown({input: file});
 					let source = "";
+
 					try {
 						const out = await handle.generate({format: "esm"});
-						for (const item of out.output) if (item.type === "chunk") source = item.code;
+
+						for (const item of out.output) {
+							if (item.type === "chunk") {
+								source = item.code;
+							}
+						}
 					} finally {
 						await handle.close();
 					}
+
 					embedded(`export const source=${JSON.stringify(source)};`, [source]);
+
 					for (const changed of [
 						source.replaceAll("\\r\\n", "\\n"),
 						source.replaceAll("\\\\", "\\"),
@@ -368,6 +407,7 @@ describe("P16 p33 one-file build", () => {
 							embedded(`export const source=${JSON.stringify(changed)}`, [source]),
 						).toThrow("compiled text changed");
 					}
+
 					expect(() => embedded(source, [source])).toThrow("compiled text changed");
 				}),
 				{...runs, numRuns: 8},

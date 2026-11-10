@@ -510,13 +510,15 @@ export interface Raw {
 const claimed =
 	(name: string) =>
 	(r: ClaimResult): Effect.Effect<Claimed, Held | Stale | Denied | UnknownName | Down> => {
-		if (r.ok)
+		if (r.ok) {
 			return Effect.succeed({
 				fence: r.fence,
 				rev: r.rev,
 				expiresAt: r.expiresAt,
 				incarnation: r.incarnation,
 			});
+		}
+
 		switch (r.why) {
 			case "down":
 				return Effect.fail(new Down({name, pos: r.pos}));

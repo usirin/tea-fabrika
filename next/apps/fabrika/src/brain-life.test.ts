@@ -1,16 +1,17 @@
 // P12, next/. Unit checks own the outbox and memory sampling. Child cleanup uses the real dev.ts.
 import {spawn, execFileSync, type ChildProcess} from "node:child_process";
 import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
-import {createServer} from "node:net";
 import {tmpdir} from "node:os";
 import {join, resolve} from "node:path";
 import {NodeServices} from "@effect/platform-node";
 import {describe, expect, it, afterEach} from "@effect/vitest";
 import {Effect} from "effect";
+import {heldPort} from "./port.test-support.ts";
 
 const homes: Array<string> = [];
 const children: Array<ChildProcess> = [];
 const groups: Array<number> = [];
+const ports: Array<Effect.Effect<void>> = [];
 
 const home = () => {
 	const h = mkdtempSync(join(tmpdir(), "p12-l-"));
@@ -31,11 +32,14 @@ const living = (pid: number) => {
 
 afterEach(async () => {
 	for (const child of children.splice(0))
-		// A child killed by a signal keeps `exitCode` null; `signalCode` says it already ended.
+	// A child killed by a signal keeps `exitCode` null; `signalCode` says it already ended.
+	{
 		if (child.exitCode === null && child.signalCode === null) {
 			child.kill("SIGTERM");
 			await new Promise<void>((done) => child.once("exit", () => done()));
 		}
+	}
+
 	for (const pid of groups.splice(0)) {
 		try {
 			process.kill(-pid, "SIGKILL");
@@ -43,7 +47,15 @@ afterEach(async () => {
 			/* Already stopped. */
 		}
 	}
-	for (const h of homes.splice(0)) rmSync(h, {recursive: true, force: true});
+
+	for (const h of homes.splice(0)) {
+		rmSync(h, {recursive: true, force: true});
+	}
+
+	// Last, so the pair stays held until the stage that used its port is gone.
+	for (const release of ports.splice(0)) {
+		await Effect.runPromise(release);
+	}
 });
 
 const tree = (parent: number) => {
@@ -54,26 +66,28 @@ const tree = (parent: number) => {
 			return m ? [{pid: Number(m[1]), parent: Number(m[2]), command: m[3]!}] : [];
 		});
 	const pids = new Set([parent]);
-	for (let n = 0; n < rows.length; n++)
-		for (const row of rows) if (pids.has(row.parent)) pids.add(row.pid);
+
+	for (let n = 0; n < rows.length; n++) {
+		for (const row of rows) {
+			if (pids.has(row.parent)) {
+				pids.add(row.pid);
+			}
+		}
+	}
+
 	return rows.filter((r) => pids.has(r.pid));
 };
 
 const launch = async (startupGate = false) => {
 	readFileSync(resolve(import.meta.dirname, "../dev.ts"), "utf8");
 	const folder = home();
-	const listener = createServer();
-	await new Promise<void>((done, fail) => {
-		listener.once("error", fail);
-		listener.listen(0, "127.0.0.1", done);
-	});
-	const at = listener.address();
-	if (at === null || typeof at === "string") throw new Error("no TCP port");
-	await new Promise<void>((done) => listener.close(() => done()));
+	const at = await Effect.runPromise(heldPort());
+	ports.push(at.release);
 	const env: NodeJS.ProcessEnv = {...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1"};
 	delete env.TYPESAFE_API_KEY;
 	delete env.FABRIKA_FOREGROUND;
 	delete env.CLOUDFLARE_API_TOKEN;
+
 	if (startupGate) {
 		const preload = join(folder, "startup.mjs");
 		// Delay only the detached child. Kill its parent before startup can finish.
@@ -84,6 +98,7 @@ const launch = async (startupGate = false) => {
 		);
 		env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --import=${preload}`;
 	}
+
 	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 	const child = spawn(
 		process.execPath,
@@ -113,23 +128,35 @@ const launch = async (startupGate = false) => {
 	});
 	const url = `http://127.0.0.1:${at.port}`;
 	const observed: Array<{at: number; pids: number[]; ready: boolean}> = [];
+
 	if (startupGate) {
 		while (!existsSync(join(folder, "starting"))) {
-			if (child.exitCode !== null || child.signalCode !== null)
+			if (child.exitCode !== null || child.signalCode !== null) {
 				throw new Error("stage ended before startup gate");
+			}
+
 			await pause();
 		}
+
 		return {child, folder, url, output: () => output, observed};
 	}
+
 	for (;;) {
-		if (child.exitCode !== null) throw new Error(`P12 dev.ts did not start: ${output}`);
+		if (child.exitCode !== null) {
+			throw new Error(`P12 dev.ts did not start: ${output}`);
+		}
+
 		try {
-			if ((await fetch(url)).ok) break;
+			if ((await fetch(url)).ok) {
+				break;
+			}
 		} catch {
 			/* Listener is not ready. */
 		}
+
 		await pause();
 	}
+
 	return {child, folder, url, output: () => output, observed};
 };
 
@@ -141,27 +168,38 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
 	const outbox = await Effect.runPromise(
 		brainOutbox(stage.folder).pipe(Effect.provide(NodeServices.layer)),
 	);
+
 	for (;;) {
 		const pending = await Effect.runPromise(
 			outbox.pending.pipe(Effect.provide(NodeServices.layer)),
 		);
 		const stopped = pending.find((event) => event._tag === "braked");
-		if (stopped !== undefined)
+
+		if (stopped !== undefined) {
 			throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
-		if (stage.child.exitCode !== null || stage.child.signalCode !== null)
+		}
+
+		if (stage.child.exitCode !== null || stage.child.signalCode !== null) {
 			throw new Error(
 				`P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}\n${details()}`,
 			);
-		if (performance.now() >= until)
+		}
+
+		if (performance.now() >= until) {
 			throw new Error(`P12 workerd did not become ready within 10 seconds\n${details()}`);
+		}
+
 		const children = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
 		const observation = {at: performance.now(), pids: children.map((row) => row.pid), ready: false};
 		stage.observed.push(observation);
+
 		if (children.length === 0 || children[0]!.pid === excluding) {
 			await pause();
 			continue;
 		}
+
 		expect(children, details()).toHaveLength(1);
+
 		// Alchemy retries SystemError spawns. A PID in ps may die before it ever listens.
 		// Accept it only after HTTP answers and a fresh ps still shows that sole PID.
 		try {
@@ -171,9 +209,13 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
 		} catch {
 			/* Spawn attempt has not reached its listener. */
 		}
+
 		const current = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
-		if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid)
+
+		if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid) {
 			return children[0]!.pid;
+		}
+
 		await pause();
 	}
 };
@@ -190,7 +232,11 @@ describe("P12 local brain life", () => {
 		await new Promise<void>((done) => s.child.once("exit", () => done()));
 		writeFileSync(join(s.folder, "startup-release"), "");
 		const until = performance.now() + 10_000;
-		while (living(leader) && performance.now() < until) await pause();
+
+		while (living(leader) && performance.now() < until) {
+			await pause();
+		}
+
 		expect(
 			living(leader),
 			"the detached child must notice its original parent died during startup",
@@ -211,7 +257,11 @@ describe("P12 local brain life", () => {
 		expect(descendants.length).toBeGreaterThan(0);
 		process.kill(leader!.pid, "SIGKILL");
 		const until = performance.now() + 5_000;
-		while (descendants.some(living) && performance.now() < until) await pause();
+
+		while (descendants.some(living) && performance.now() < until) {
+			await pause();
+		}
+
 		expect(descendants.filter(living)).toEqual([]);
 		await expect(fetch(s.url)).rejects.toThrow();
 	});
@@ -222,22 +272,28 @@ describe("P12 local brain life", () => {
 		const delays: Array<number> = [];
 		const details = () =>
 			`pids=${JSON.stringify(pids)}, delays=${JSON.stringify(delays)}, observed=${JSON.stringify(s.observed)}\nstage output:\n${s.output()}`;
+
 		try {
 			for (let n = 0; n < 4; n++) {
 				const pid = await workerd(s, prior);
 				pids.push(pid);
 				const began = performance.now();
 				process.kill(pid, "SIGKILL");
+
 				if (n < 3) {
 					prior = await workerd(s, pid);
 					delays.push(performance.now() - began);
 					prior = pid;
 				}
 			}
+
 			expect(new Set(pids).size, details()).toBe(4);
+
 			// Installed compatibility policy, not a new fabrika default.
-			for (const [n, ms] of delays.entries())
+			for (const [n, ms] of delays.entries()) {
 				expect(ms, details()).toBeGreaterThanOrEqual(250 * 2 ** n);
+			}
+
 			await pause();
 			expect(
 				tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
@@ -269,10 +325,15 @@ describe("P12 local brain life", () => {
 			await workerd(s);
 			const descendants = tree(s.child.pid!).map((r) => r.pid);
 			s.child.kill(signal);
+
 			for (;;) {
-				if (descendants.every((pid) => !living(pid))) break;
+				if (descendants.every((pid) => !living(pid))) {
+					break;
+				}
+
 				await pause();
 			}
+
 			await expect(fetch(s.url)).rejects.toThrow();
 			await new Promise<void>((done) => setTimeout(done, 1100));
 			expect(descendants.filter(living)).toEqual([]);

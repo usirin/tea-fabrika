@@ -78,9 +78,17 @@ describe("the window's frame takes the desk's color in the system's look", () =>
 					const window = fakeWindow();
 					followLook(look, window);
 					const cut = Math.min(closeAt, changes.length);
-					for (const dark of changes.slice(0, cut)) look.turn(dark);
+
+					for (const dark of changes.slice(0, cut)) {
+						look.turn(dark);
+					}
+
 					window.close();
-					for (const dark of changes.slice(cut)) look.turn(dark);
+
+					for (const dark of changes.slice(cut)) {
+						look.turn(dark);
+					}
+
 					expect({painted: window.painted, listeners: look.listeners}).toEqual({
 						painted: changes
 							.slice(0, cut)

@@ -63,14 +63,17 @@ describe("the desk's port", () => {
 			said: 100,
 		};
 		expect(readFromPage(edit)).toEqual({kind: "read", msg: edit});
+
 		for (const bad of [
 			{...edit, by: "owner"},
 			{...edit, at: 1},
 			{...edit, edit: {_tag: "reset", does: "tezgah.zom"}},
 			{...edit, said: "yesterday"},
 			{...edit, edit: {_tag: "undo"}},
-		])
+		]) {
 			expect(readFromPage(bad).kind).toBe("refused");
+		}
+
 		expect(readToPage({type: "keys", ...defaults, version: "v1", changes: []}).kind).toBe("read");
 	});
 	it("sends the page the whole desk, with the keys the desk takes now", () => {
@@ -105,7 +108,11 @@ describe("the desk's port", () => {
 
 	it("sends the page the keys file's table, and takes a palette run by its command word (ticket 174)", () => {
 		const read = decodeKeys('prefix = "ctrl+a"', true);
-		if (Result.isFailure(read)) throw new Error(read.failure.why);
+
+		if (Result.isFailure(read)) {
+			throw new Error(read.failure.why);
+		}
+
 		const sent = {type: "keys", ...read.success};
 		expect(readToPage(sent)).toEqual({kind: "read", msg: sent});
 		const refused = {

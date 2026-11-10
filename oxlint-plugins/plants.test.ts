@@ -199,6 +199,19 @@ const PLANTS: readonly Plant[] = [
 		],
 	},
 	{
+		// Braces on every body, even on one line (owner, 2026-11-09; 0021).
+		code: "eslint(curly)",
+		prelude: ["declare let x: number;", "declare const ys: number[];"],
+		lines: [
+			["if (x) x++;", true],
+			["if (x) { x++; } else x--;", true],
+			["for (const y of ys) x += y;", true],
+			["while (x) x--;", true],
+			["do x--; while (x);", true],
+			["if (x) { x++; } else { x--; }", false],
+		],
+	},
+	{
 		code: "eslint(no-sequences)",
 		prelude: [],
 		lines: [
@@ -305,6 +318,7 @@ describe("lint.ts, the first step of pnpm lint", () => {
 				'import {Effect} from "effect";',
 				"declare const f: () => void;",
 				"export const e = Effect.void;",
+				"",
 				"try { f(); } catch { f(); }",
 				"",
 			].join("\n"),
@@ -393,7 +407,11 @@ describe("a plain file cannot take a folder out of the checks", () => {
 	const inFolder = (files: Readonly<Record<string, string>>) => {
 		const folder = mkdtempSync(join(plant, "hide-"));
 		mkdirSync(join(folder, "sub"));
-		for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), text);
+
+		for (const [name, text] of Object.entries(files)) {
+			writeFileSync(join(folder, name), text);
+		}
+
 		return folder;
 	};
 	const node = (script: string, cwd: string, ...args: readonly string[]) =>
@@ -444,7 +462,9 @@ describe("rules that apply by path", () => {
 	};
 	const made: string[] = [];
 	afterAll(() => {
-		for (const at of made) rmSync(at, {recursive: true, force: true});
+		for (const at of made) {
+			rmSync(at, {recursive: true, force: true});
+		}
 	});
 
 	it.each([

@@ -103,7 +103,11 @@ const isTable = (x: unknown): x is Table =>
 
 const tableIn = (t: Table, key: string): Table => {
 	const inner = t[key];
-	if (!isTable(inner)) throw new Error(`no [${key}] table`);
+
+	if (!isTable(inner)) {
+		throw new Error(`no [${key}] table`);
+	}
+
 	return inner;
 };
 
@@ -119,7 +123,9 @@ const readToken = async (dir: string, token: string): Promise<Table> => {
 const copies: string[] = [];
 
 afterAll(() => {
-	for (const dir of copies) rmSync(dir, {recursive: true, force: true});
+	for (const dir of copies) {
+		rmSync(dir, {recursive: true, force: true});
+	}
 });
 
 /** A copy of the package's token files and generated files, to plant a bug in. */
@@ -128,9 +134,11 @@ const copy = () => {
 	copies.push(dir);
 	cpSync(join(PACKAGE, "tokens"), join(dir, "tokens"), {recursive: true});
 	mkdirSync(join(dir, "src"));
+
 	for (const file of ["tokens.css", "theme-colors.ts", "token-names.json"]) {
 		cpSync(join(PACKAGE, "src", file), join(dir, "src", file));
 	}
+
 	return dir;
 };
 
@@ -154,7 +162,11 @@ const edit = async (dir: string, token: string, change: (t: Table) => void) => {
 const writeByHand = (dir: string, line: string) => {
 	const path = join(dir, "src", "tokens.css");
 	const css = readFileSync(path, "utf8");
-	if (!css.includes("\t--fs-body:")) throw new Error("no --fs-body in tokens.css");
+
+	if (!css.includes("\t--fs-body:")) {
+		throw new Error("no --fs-body in tokens.css");
+	}
+
 	writeFileSync(path, css.replace("\t--fs-body:", `\t${line}\n\t--fs-body:`));
 };
 
@@ -269,7 +281,11 @@ const TOKENS_CSS = () => readFileSync(join(PACKAGE, "src", "tokens.css"), "utf8"
 const rootOf = (css: string) => {
 	const at = css.indexOf(":root {");
 	const end = css.indexOf("\n}", at);
-	if (at < 0 || end < 0) throw new Error("no :root in tokens.css");
+
+	if (at < 0 || end < 0) {
+		throw new Error("no :root in tokens.css");
+	}
+
 	return css.slice(at, end);
 };
 
@@ -279,9 +295,11 @@ const regionOf = (css: string, name: "colors" | "manti") => {
 	const close = new RegExp(`/\\*\\s*@end generated ${name}\\s*\\*/`, "g");
 	const opens = [...css.matchAll(open)];
 	const closes = [...css.matchAll(close)];
+
 	if (opens.length !== 1 || closes.length !== 1) {
 		throw new Error(`${name}: ${opens.length} openings and ${closes.length} closings`);
 	}
+
 	const from = (opens[0]?.index ?? 0) + (opens[0]?.[0].length ?? 0);
 	return css.slice(from, closes[0]?.index ?? 0);
 };
@@ -327,7 +345,11 @@ describe("tokens.css keeps one :root, with two marked regions the build writes",
 	it("writes each value in one form: light-dark() of two values, or one plain value", () => {
 		const loose = declarationsIn(regionOf(TOKENS_CSS(), "colors")).filter(([, value]) => {
 			const pair = /^light-dark\((#[0-9a-f]{6,8}), (#[0-9a-f]{6,8})\)$/.exec(value);
-			if (pair !== null) return pair[1] === pair[2];
+
+			if (pair !== null) {
+				return pair[1] === pair[2];
+			}
+
 			return !/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(value) && !/^var\(--[\w-]+\)$/.test(value);
 		});
 		expect(loose).toEqual([]);
@@ -372,7 +394,11 @@ describe("token-names.json lists what the stylelint rules read", () => {
 		const json: unknown = JSON.parse(
 			readFileSync(join(PACKAGE, "src", "token-names.json"), "utf8"),
 		);
-		if (!isTable(json)) throw new Error("token-names.json is no object");
+
+		if (!isTable(json)) {
+			throw new Error("token-names.json is no object");
+		}
+
 		return json;
 	};
 
@@ -449,7 +475,9 @@ const look =
 const without =
 	(...keys: readonly string[]) =>
 	(t: Table): void => {
-		for (const key of keys) delete t[key];
+		for (const key of keys) {
+			delete t[key];
+		}
 	};
 
 const with_ =
@@ -651,7 +679,11 @@ describe("the generated files equal what the TOML gives", () => {
 		const path = join(dir, "src", "tokens.css");
 		const css = readFileSync(path, "utf8");
 		const edited = css.replace(/(\t--surface: )[^;]+;/, "$1light-dark(#ffffff, #000000);");
-		if (edited === css) throw new Error("no --surface line to edit");
+
+		if (edited === css) {
+			throw new Error("no --surface line to edit");
+		}
+
 		writeFileSync(path, edited);
 	};
 
@@ -667,7 +699,11 @@ describe("the generated files equal what the TOML gives", () => {
 		const path = join(dir, "src", "theme-colors.ts");
 		const ts = readFileSync(path, "utf8");
 		const edited = ts.replace("#dfebfd6d", "#d9edff5d");
-		if (edited === ts) throw new Error("no dark focus in theme-colors.ts");
+
+		if (edited === ts) {
+			throw new Error("no dark focus in theme-colors.ts");
+		}
+
 		writeFileSync(path, edited);
 		expect(check(dir).code).toBe(1);
 	});
@@ -677,7 +713,11 @@ describe("the generated files equal what the TOML gives", () => {
 		const path = join(dir, "src", "token-names.json");
 		const json = readFileSync(path, "utf8");
 		const edited = json.replace(/"--tile-edge-on"/, '"--tile-edge-of"');
-		if (edited === json) throw new Error("no --tile-edge-on in token-names.json");
+
+		if (edited === json) {
+			throw new Error("no --tile-edge-on in token-names.json");
+		}
+
 		writeFileSync(path, edited);
 		expect(check(dir).code).toBe(1);
 	});
@@ -763,7 +803,11 @@ describe("the build's edges", () => {
 	it("fails --check on a region whose closing comment comes before its opening one", () => {
 		const dir = copy();
 		const css = readFileSync(cssOf(dir), "utf8");
-		if (!css.includes(OPEN) || !css.includes(CLOSE)) throw new Error("no colors region");
+
+		if (!css.includes(OPEN) || !css.includes(CLOSE)) {
+			throw new Error("no colors region");
+		}
+
 		writeFileSync(
 			cssOf(dir),
 			css.replace(OPEN, "@@open@@").replace(CLOSE, OPEN).replace("@@open@@", CLOSE),
@@ -782,7 +826,11 @@ describe("the build's edges", () => {
 			const from = css.indexOf(`/* @generated ${name}`);
 			const end = `/* @end generated ${name} */`;
 			const to = css.indexOf(end) + end.length;
-			if (from < 0 || to < end.length) throw new Error(`no ${name} region`);
+
+			if (from < 0 || to < end.length) {
+				throw new Error(`no ${name} region`);
+			}
+
 			return {from, to, text: css.slice(from, to)};
 		};
 		const [colors, manti] = [block("colors"), block("manti")];
@@ -800,7 +848,11 @@ describe("the build's edges", () => {
 		const dir = copy();
 		const css = readFileSync(cssOf(dir), "utf8");
 		const edited = css.replace(/\t--focus: [^;]+;/, "\t--focus:#ffffff;");
-		if (edited === css) throw new Error("no --focus line to edit");
+
+		if (edited === css) {
+			throw new Error("no --focus line to edit");
+		}
+
 		writeFileSync(cssOf(dir), edited);
 		const {code, said} = check(dir);
 		expect({code, named: said.includes("--focus is not what the TOML gives")}).toEqual({
@@ -814,7 +866,11 @@ describe("the build's edges", () => {
 		const dir = copy();
 		const css = readFileSync(cssOf(dir), "utf8");
 		const edited = css.replace(/\t--focus: /, "\t--focus:");
-		if (edited === css) throw new Error("no --focus line to edit");
+
+		if (edited === css) {
+			throw new Error("no --focus line to edit");
+		}
+
 		writeFileSync(cssOf(dir), edited);
 		const {code, said} = check(dir);
 		expect({

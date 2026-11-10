@@ -64,6 +64,7 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
 			const route = `/asset${id}.js`;
 			const asset = {hash: sha(body), type, body};
 			const table = {[route]: asset};
+
 			for (const method of ["GET", "HEAD"]) {
 				const response = await Effect.runPromise(
 					serveAsset(table, new Request(`https://test.invalid${route}?v=${id}`, {method})),
@@ -72,8 +73,12 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
 				expect(response.headers.get("content-type")).toBe(type);
 				expect(response.headers.get("etag")).toBe(`"${asset.hash}"`);
 				expect(await response.text()).toBe(method === "HEAD" ? "" : body);
-				if (method === "HEAD") expect(response.body).toBeNull();
+
+				if (method === "HEAD") {
+					expect(response.body).toBeNull();
+				}
 			}
+
 			for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
 				const response = await Effect.runPromise(
 					serveAsset(table, new Request(`https://test.invalid${route}`, {method})),
@@ -81,8 +86,10 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
 				expect(response.status).toBe(405);
 				expect(response.headers.get("allow")).toBe("GET, HEAD");
 			}
+
 			// Plant: a lookup through the prototype chain, or an empty table that falls back.
 			const inherited = Object.setPrototypeOf({}, table);
+
 			for (const empty of [{}, inherited]) {
 				const response = await Effect.runPromise(
 					serveAsset(empty, new Request(`https://test.invalid${route}`)),

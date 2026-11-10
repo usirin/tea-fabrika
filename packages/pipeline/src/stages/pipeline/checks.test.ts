@@ -54,7 +54,11 @@ const checksIn = (
 					.pipe(Effect.orElseSucceed(() => ""));
 				const left = (yield* fs.readDirectory(dir)).filter((name) => name !== "tries");
 				const checked = all.at(-1);
-				if (checked === undefined) return yield* Effect.die("checksIn ran the checks no times");
+
+				if (checked === undefined) {
+					return yield* Effect.die("checksIn ran the checks no times");
+				}
+
 				return {
 					checked,
 					all,
@@ -215,6 +219,7 @@ describe("code's checks at a head", () => {
 		async () => {
 			const outside = mkdtempSync(join(tmpdir(), "checks-late-"));
 			const late = join(outside, "late");
+
 			try {
 				const started = Date.now();
 				// The shell waits on a child of its own: a stop that ends only the shell leaves it running.
@@ -253,6 +258,7 @@ describe("code's checks at a head", () => {
 			{command: "no-such-program-for-checks", code: null, ms: expect.any(Number)},
 		]);
 		expect(checked.commands[0]?.ms).toBeGreaterThanOrEqual(300);
+
 		for (const {ms} of checked.commands) {
 			expect(Number.isInteger(ms)).toBe(true);
 			expect(ms).toBeGreaterThanOrEqual(0);

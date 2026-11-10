@@ -17,14 +17,22 @@ import type {PlanState, Ticket} from "./ticket.ts";
 export function planStateIn(state: Folded, ticket: TicketId): PlanState {
 	const plan = planFor(state, ticket);
 	const track = plan === null ? undefined : state.plans.get(plan);
-	if (track === undefined) return "none";
+
+	if (track === undefined) {
+		return "none";
+	}
+
 	return track.approved !== null && track.closed === null ? "approved" : "not_approved";
 }
 
 /** How the plan that names the ticket at `url` stands on the ledger. A ledger that breaks is `unknown`. */
 export const planStateOf = (url: string): Effect.Effect<PlanState, never, Ledger> => {
 	const ticket = readTicketId(url);
-	if (ticket === null) return Effect.succeed("unknown");
+
+	if (ticket === null) {
+		return Effect.succeed("unknown");
+	}
+
 	return readFacts.pipe(
 		Effect.map((entries) => planStateIn(foldLedger(entries), ticket)),
 		Effect.catchCause(() => Effect.succeed("unknown" as const)),

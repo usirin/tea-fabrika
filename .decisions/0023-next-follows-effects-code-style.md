@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0029](0029-format-and-names-follow-effect.md)
+status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
@@ -37,7 +37,7 @@ import * as core from "./internal/core.ts"
 export interface Deferred<in out A, in out E = never> extends Deferred.Variance<A, E>, Pipeable {
 ```
 
-*[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds.*
+*[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds. [0039](0039-keep-semicolons-and-es5-commas.md) then keeps semicolons and trailing commas.*
 
 ## Context
 
@@ -87,14 +87,15 @@ stays only with a written reason in this file.**
 |---|---|---|---|---|
 | Indent | 2 spaces (`dprint.json` `indentWidth: 2`) | tabs | [oxlint and oxfmt](../docs/direction/oxlint-and-oxfmt.md), 2026-10-31 | open: owner picks |
 | Line width | 120 | 100 | the same note | open: owner picks |
-| Semicolons | none (`semiColons: "asi"`) | always (oxfmt's default, kept from Biome) | the same note ("keeps the old settings") | open: owner picks |
-| Trailing commas | never (`trailingCommas: "never"`) | always (`trailingComma: "all"`) | the same note | open: owner picks |
+| Semicolons | none (`semiColons: "asi"`) | always (oxfmt's default, kept from Biome) | the same note ("keeps the old settings") | differs: the owner's reading taste ([0039](0039-keep-semicolons-and-es5-commas.md)) |
+| Trailing commas | never (`trailingCommas: "never"`) | always (`trailingComma: "all"`) | the same note | differs: the owner's reading taste ([0039](0039-keep-semicolons-and-es5-commas.md)) |
 | Spaces in braces | `import { dual } from` (dprint default) | `import {dual} from` (`bracketSpacing: false`) | the same note | open: owner picks |
 | Generator star | `function*() {` (dprint) | `function* () {` (oxfmt prints it, no setting) | the formatter choice, same note | open: owner picks, only by changing formatter |
 | Formatter | dprint | oxfmt | the same note | kept: the note settled oxfmt; it can print every setting above except the star |
 | Quotes, arrow parens, import sort | double, always, case-insensitive | the same | | same |
 | Blank lines | a blank line at about 93% of top-level boundaries after a multi-line statement in `packages/effect/src` (7,896 of 8,527), not enforced | enforced by a rule, with one-line groups kept ([PR 659](https://github.com/usirin/tea-fabrika/pull/659), 0021) | 0021, open as PR 659 | kept: stricter, same direction |
-| Braces on `if` | one-statement `if (x) return y` with no braces is common (2,228 lines in `packages/effect/src`), no `curly` rule | no rule yet | | follow Effect: a rule that forces braces everywhere is a difference and goes to the owner first |
+| Braces on `if` | one-statement `if (x) return y` with no braces is common (2,228 lines in `packages/effect/src`), no `curly` rule | braces on every body, `eslint/curly` `all` | owner, 2026-11-09, 0021 (ticket 439) | differs: human readability |
+| Blank lines around blocks | not enforced | a blank line before and after each `if`, loop, `switch` and `try` | owner, 2026-11-09, 0021 (ticket 439) | differs: human readability |
 | Library imports | namespace import by module path, `import * as Effect from "effect/Effect"`; `effect/no-import-from-barrel-package` bans the barrel in package code | `import {Effect} from "effect"` (170 import lines in `next/`) | | follow in libraries; apps keep the barrel |
 | Type imports | `consistent-type-imports` with `fixStyle: "inline-type-imports"` | `consistent-type-imports`, default fix style | | follow |
 | Array types | `typescript/array-type` generic: `ReadonlyArray<A>`, `Array<A>` | no rule | | follow |
@@ -120,7 +121,6 @@ stays only with a written reason in this file.**
     change gives Effect's spelling.
   - open: bare `of` in `next/`, banned or allowed where Effect uses it.
   - open: plural service names, `<Thing>Manager` or Effect's plural names.
-  - open, when proposed: a `curly` rule. Effect has none.
 - **Follow, each as its own lead-tooling or sweep ticket:** the import style, inline type imports,
   generic array types and `no-console` in libraries; PascalCase module files with `internal/`; the
   namespace barrel; doc comments on every public export.
@@ -135,4 +135,6 @@ stays only with a written reason in this file.**
   correct tree, so they stay off. Which tool blocks is the pattern ticket's call.
 - **Cost.** The follow items touch most files in `next/`. They are sweeps, not hand edits, and each
   lands as its own pull request.
+- **Decided since:** a `curly` rule and blank lines around blocks, both differences from Effect
+  ([0021](0021-a-blank-line-between-top-level-statements.md), ticket 439).
 - **Not decided here:** the open items above; `@since` values while `libfabrika` is `0.0.0`.

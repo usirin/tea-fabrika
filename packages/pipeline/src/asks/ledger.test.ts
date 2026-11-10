@@ -63,7 +63,11 @@ const send = (fact: Fact) => Effect.orDie(sendFact(fact));
 /** The defect `body` dies with, by its message. */
 const brokenBy = async <A, E>(ledger: Layer.Layer<Ledger>, body: Effect.Effect<A, E, Ledger>) => {
 	const exit = await Effect.runPromiseExit(body.pipe(Effect.provide(ledger)));
-	if (Exit.isSuccess(exit)) throw new Error("it did not fail");
+
+	if (Exit.isSuccess(exit)) {
+		throw new Error("it did not fail");
+	}
+
 	return String(Cause.squash(exit.cause));
 };
 
@@ -85,13 +89,20 @@ const started1 = (args: readonly string[]) => {
 			(error, _stdout, stderr) => {
 				// One that ended before it said ready is not waited on: `done` says why.
 				said();
-				if (error === null) resolve(out);
-				else reject(new Error(`${error.message}\n${stderr}`));
+
+				if (error === null) {
+					resolve(out);
+				} else {
+					reject(new Error(`${error.message}\n${stderr}`));
+				}
 			},
 		);
 		child.stdout?.on("data", (chunk: string) => {
 			out += chunk;
-			if (out.startsWith("ready\n")) said();
+
+			if (out.startsWith("ready\n")) {
+				said();
+			}
 		});
 	});
 	return {ready, done};
@@ -129,24 +140,32 @@ const review = (ticket: TicketId, head: string, failFirst: boolean, found: reado
 
 /** The first run: what one process writes. Answers the lanes it made. */
 const firstRun = Effect.gen(function* () {
-	for (const fact of demoFacts()) yield* send(fact);
+	for (const fact of demoFacts()) {
+		yield* send(fact);
+	}
+
 	const lanes: Record<string, LaneId> = {};
+
 	for (const ticket of [A, B, C]) {
 		const lane = yield* newLane(ticket);
 		lanes[ticket] = yield* claim(ticket, lane);
 	}
+
 	// A second lane on A is told the first holds it.
 	const late = yield* newLane(A);
 	const told = yield* claim(A, late);
 	yield* review(A, "a1", true, ["a gap no criterion covers"]);
 	yield* review(B, "b1", false, []);
 	const [ruling] = RULINGS;
-	if (ruling !== undefined)
+
+	if (ruling !== undefined) {
 		yield* send({
 			type: "answered",
 			id: rulingId(ruling.ruling.ticket),
 			answer: {kind: "rule", answer: "Keep it.", rule: "one_off", build: false},
 		});
+	}
+
 	yield* send({type: "answered", id: planAskId(planOf(B), 1), answer: {kind: "approve"}});
 	yield* send({type: "built", plan: planOf(B), task: T1, changes: ["src/a.ts"], holds: 1});
 	yield* send({type: "cleared", plan: planOf(B), task: T1, build: 1, by: "ui-check"});
@@ -166,12 +185,15 @@ const secondRun = (lanes: Record<string, LaneId>, late: LaneId) =>
 		yield* claim(C, lanes[C] as LaneId);
 		yield* release(C, lanes[C] as LaneId);
 		const ruling = RULINGS[1];
-		if (ruling !== undefined)
+
+		if (ruling !== undefined) {
 			yield* send({
 				type: "answered",
 				id: rulingId(ruling.ruling.ticket),
 				answer: {kind: "rule", answer: "Build it.", rule: "lasting", build: true},
 			});
+		}
+
 		return holder;
 	});
 
@@ -249,12 +271,14 @@ describe("the claim across processes: the ledger's lease", () => {
 		const rows = await Effect.runPromise(
 			Ledger.use((l) => l.read(0, 100_000, ROOT)).pipe(Effect.provide(onFile(file)), Effect.scoped),
 		);
+
 		for (let round = 1; round <= 40; round++) {
 			const ticket = ticketId(`o/r#${round}`);
 			const claims = rows.filter((r) => r.stream === ticketName(ticket) && r.kind === "claimed");
 			expect(claims).toHaveLength(1);
 			expect(told(round)).toEqual(lanes.map(() => claims[0]?.writer));
 		}
+
 		// The race was real: claims lost to another process.
 		expect(refused.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
 		// Claims are the ledger's own events: no pipeline fact was written.
@@ -271,6 +295,7 @@ describe("the claim across processes: the ledger's lease", () => {
 
 	it("three layers over one file in one process, claiming at once twenty times: one holds each ticket", async () => {
 		const file = scratch();
+
 		for (let run = 1; run <= 20; run++) {
 			const ticket = ticketId(`o/r#${run}`);
 			const told = await Promise.all(
@@ -292,8 +317,11 @@ describe("what the ledger can hold under pipeline/", () => {
 	 */
 	const planted = async (facts: readonly Fact[], type: string, sql: string) => {
 		const file = scratch();
-		for (const fact of facts)
+
+		for (const fact of facts) {
 			await Effect.runPromise(send(fact).pipe(Effect.provide(onFile(file))));
+		}
+
 		// The ledger's own driver, past its rules.
 		const {db, close} = openDb(file);
 		const [row] = db.all("SELECT pos FROM events WHERE kind = ?", type);
@@ -332,6 +360,7 @@ describe("what the ledger can hold under pipeline/", () => {
 				/a lane fact written as released/,
 			],
 		];
+
 		for (const [what, sql, why] of cases) {
 			const ledger = await planted([lane(1), lane(2)], "lane", sql);
 			expect(await brokenBy(ledger, readFacts), what).toMatch(why);
@@ -347,6 +376,7 @@ describe("what the ledger can hold under pipeline/", () => {
 			[reviewed, "reviewed", T1n],
 			[lane(1), "lane", P1],
 		];
+
 		for (const [fact, type, stream] of plants) {
 			const ledger = await planted(
 				[fact],

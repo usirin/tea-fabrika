@@ -104,7 +104,10 @@ const plant = (update: Partial<Machine["update"]>): Machine =>
 
 /** A plan with no rule change is written as skipped, at once. One with a rule change is not skipped. */
 const skipIsWritten = ({prev, msg, next}: ExamStep) => {
-	if (msg.type !== "start" || prev.phase !== "idle") return;
+	if (msg.type !== "start" || prev.phase !== "idle") {
+		return;
+	}
+
 	expect(next).toMatchObject(
 		msg.ask.changes.length === 0
 			? {phase: "over", outcome: {kind: "skip", why: "no_rules_change"}}
@@ -115,15 +118,24 @@ const skipIsWritten = ({prev, msg, next}: ExamStep) => {
 /** What lands is only what the plan listed: an agent cannot slip in another file. */
 const landsOnlyWhatIsListed = ({next, cmds}: ExamStep) => {
 	for (const cmd of cmds) {
-		if (next.phase === "idle") throw new Error("landed from nothing");
+		if (next.phase === "idle") {
+			throw new Error("landed from nothing");
+		}
+
 		const asked = next.ask.changes.map((c) => c.path);
-		for (const file of cmd.files) expect(asked).toContain(file.path);
+
+		for (const file of cmd.files) {
+			expect(asked).toContain(file.path);
+		}
 	}
 };
 
 /** With a rule change, the step never ends done on its own: it asks the person. */
 const asksThePerson = ({prev, msg, next}: ExamStep) => {
-	if (msg.type !== "exam_land_ok" || prev.phase !== "landing") return;
+	if (msg.type !== "exam_land_ok" || prev.phase !== "landing") {
+		return;
+	}
+
 	expect(next).toMatchObject({
 		phase: "over",
 		outcome: {kind: "ask", who: "owner", for: "check_change"},
@@ -132,7 +144,10 @@ const asksThePerson = ({prev, msg, next}: ExamStep) => {
 
 /** Over stays over. */
 const overStays = ({prev, next, cmds}: ExamStep) => {
-	if (prev.phase !== "over") return;
+	if (prev.phase !== "over") {
+		return;
+	}
+
 	expect(next).toEqual(prev);
 	expect(cmds).toEqual([]);
 };
@@ -162,7 +177,10 @@ describe("each law fails on a planted mistake", () => {
 	it("the check taken out, so an unlisted file lands", () => {
 		const planted = plant({
 			exam_write_finished: (s) => {
-				if (s.phase !== "writing") return [s, []];
+				if (s.phase !== "writing") {
+					return [s, []];
+				}
+
 				const {ticket, number, base} = s.ask;
 				const asked = landExam({
 					ticket,
@@ -248,11 +266,21 @@ const checkRedo = (machine: Machine, law: (t: ExamStep) => void) =>
 
 /** A redo's first prompt holds every finding it was sent back with. */
 const redoSaysWhy = ({prev, msg, next}: ExamStep) => {
-	if (msg.type !== "start" || prev.phase !== "idle") return;
+	if (msg.type !== "start" || prev.phase !== "idle") {
+		return;
+	}
+
 	const why = redoOf(msg.ask)?.why ?? [];
-	if (why.length === 0 || next.phase !== "writing") return;
+
+	if (why.length === 0 || next.phase !== "writing") {
+		return;
+	}
+
 	const prompt = examSub.deps(next)?.prompt ?? "";
-	for (const finding of why) expect(prompt).toContain(finding);
+
+	for (const finding of why) {
+		expect(prompt).toContain(finding);
+	}
 };
 
 describe("a redo", () => {

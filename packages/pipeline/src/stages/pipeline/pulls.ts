@@ -165,6 +165,7 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 				Effect.gen(function* () {
 					const pulls = yield* all;
 					const open = pulls.find((p) => p.branch === pull.branch && p.state === "open");
+
 					if (open !== undefined) {
 						yield* change(open.id, (p) => ({
 							...p,
@@ -175,6 +176,7 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 						}));
 						return open.id;
 					}
+
 					const {repo} = yield* work.origin;
 					const id = known ?? `local:${repo}/pull/${pulls.length + 1}`;
 					yield* save([...pulls, {...pull, id, state: "open", verdicts: []}]);
@@ -197,11 +199,15 @@ export const lanePulls: Layer.Layer<LanePulls, never, LaneWork> = Layer.effect(
 				Effect.gen(function* () {
 					const pull = (yield* all).find((p) => p.id === id);
 					const was = sameVerdicts(pull?.verdicts ?? [], verdicts) ? pull?.posted : undefined;
+
 					if (was !== undefined && was.head !== head) {
 						const now = yield* work.now(was, head).pipe(Effect.option);
-						if (Option.isSome(now) && carry(was, now.value)._tag === "kept")
+
+						if (Option.isSome(now) && carry(was, now.value)._tag === "kept") {
 							return yield* change(id, (p) => ({...p, head, verdicts}));
+						}
 					}
+
 					const given = yield* work.given(head, "main").pipe(Effect.option);
 					yield* change(id, ({posted: _was, ...p}) => ({
 						...p,
@@ -279,15 +285,22 @@ export const yesOf = (ticket: Timeline, pull: Pull): Yes => {
 						e.fact.ask === asked.ask &&
 						e.fact.pick === "merge",
 				)?.fact;
-	if (answer === undefined) return {_tag: "none"};
+
+	if (answer === undefined) {
+		return {_tag: "none"};
+	}
+
 	const {head, onto, base, diff} = answer;
+
 	if (
 		typeof head === "string" &&
 		onto !== undefined &&
 		typeof base === "string" &&
 		diff !== undefined
-	)
+	) {
 		return {_tag: "given", given: {head, onto, base, diff}};
+	}
+
 	const at = head ?? asked?.head;
 	return typeof at === "string" ? {_tag: "asked", head: at} : {_tag: "unbound"};
 };
@@ -304,7 +317,10 @@ const reviewsFrom = (pull: Pull): PrFacts["reviews"] => {
 
 /** A verdict is for what it judged. Where that does not stand, each row is `missing`. Pure. */
 const notJudged = (rows: PrFacts["reviews"]): PrFacts["reviews"] => {
-	if (rows === null) return null;
+	if (rows === null) {
+		return null;
+	}
+
 	const missing = (row: ReviewKind): ReviewKind => ({...row, verdict: "missing"});
 	const [first, ...rest] = rows;
 	return [missing(first), ...rest.map(missing)];
@@ -345,11 +361,18 @@ export const carriedAt = (
 	head: string,
 ): Effect.Effect<Carried, never, LaneWork | Tickets> =>
 	Effect.gen(function* () {
-		if (given.head === head) return {_tag: "kept", why: "same_head"} as const;
+		if (given.head === head) {
+			return {_tag: "kept", why: "same_head"} as const;
+		}
+
 		const work = yield* LaneWork;
 		const tickets = yield* Tickets;
 		const carried = carry(given, yield* work.now(given, head));
-		if (carried._tag !== "kept") return carried;
+
+		if (carried._tag !== "kept") {
+			return carried;
+		}
+
 		yield* tickets
 			.write(number, `carried/${given.head}/${head}`, {
 				type: "carried",
@@ -372,7 +395,10 @@ export const yesAt = (number: number, yes: Yes, head: string) =>
 			case "given":
 				return yield* standsAt(number, yes.given, head);
 			case "asked":
-				if (yes.head === head) return true;
+				if (yes.head === head) {
+					return true;
+				}
+
 				return yield* (yield* LaneWork).given(yes.head, "main").pipe(
 					Effect.flatMap((given) => standsAt(number, given, head)),
 					Effect.orElseSucceed(() => false),
@@ -390,10 +416,13 @@ export const judgedAt = (
 	head: string,
 ): Effect.Effect<Option.Option<readonly Hop[]>, never, LaneWork | Tickets> => {
 	const posted = pull.posted;
-	if (posted === undefined || posted.head === head)
+
+	if (posted === undefined || posted.head === head) {
 		return Effect.succeed(
 			posted !== undefined || pull.head === head ? Option.some([]) : Option.none(),
 		);
+	}
+
 	return standsAt(pull.ticket, posted, head).pipe(
 		Effect.map((kept) => (kept ? Option.some([{from: posted.head, to: head}]) : Option.none())),
 	);
@@ -494,10 +523,18 @@ export const laneLocalHost = (
 			const localFor = (tree: string) =>
 				Effect.gen(function* () {
 					const known = hosts.get(tree);
-					if (known !== undefined) return known;
+
+					if (known !== undefined) {
+						return known;
+					}
+
 					const [first, ...rest] = yield* Effect.provideService(checksOf, LaneWork, work);
+
 					// A review with no checks would pass on no check: the file has to name one.
-					if (first === undefined) return yield* Effect.fail(failed);
+					if (first === undefined) {
+						return yield* Effect.fail(failed);
+					}
+
 					const made = localCodeHost({repo: tree, base: "origin/main", checks: [first, ...rest]});
 					hosts.set(tree, made);
 					return made;
@@ -607,9 +644,17 @@ export const laneLocalHost = (
 				merge: (ready) =>
 					Effect.gen(function* () {
 						const pull = yield* pulls.find(ready.pr);
-						if (pull.head !== ready.head) return {reading: "head_moved" as const};
+
+						if (pull.head !== ready.head) {
+							return {reading: "head_moved" as const};
+						}
+
 						const landed = yield* work.land(ready.head);
-						if (landed === "moved") return {reading: "behind" as const};
+
+						if (landed === "moved") {
+							return {reading: "behind" as const};
+						}
+
 						yield* pulls.merged(ready.pr);
 						return {reading: "merged" as const, commit: ready.head};
 					}),
@@ -638,7 +683,11 @@ export const laneRecord: Layer.Layer<CriteriaRecord, never, Ledger | LanePulls |
 					const n = Number(ticket.slice(ticket.indexOf("#") + 1)) - EXAM_FROM;
 					const side = yield* work.side(`exam-${n}`).pipe(Effect.mapError(() => failed));
 					const open = yield* pulls.onBranch(side.branch);
-					if (open !== null) return yield* pulls.find(open);
+
+					if (open !== null) {
+						return yield* pulls.find(open);
+					}
+
 					const landed = (yield* pulls.landed(n)).filter((p) => p.kind === "exam").at(-1);
 					return landed ?? null;
 				});
@@ -653,7 +702,11 @@ export const laneRecord: Layer.Layer<CriteriaRecord, never, Ledger | LanePulls |
 					isExam(ticket)
 						? Effect.gen(function* () {
 								const pull = yield* examPull(ticket);
-								if (pull?.book === undefined) return;
+
+								if (pull?.book === undefined) {
+									return;
+								}
+
 								yield* pulls.judged(pull.id, keep(pull.book, judgement, PLAN));
 							})
 						: real.judged(ticket, judgement),

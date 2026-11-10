@@ -8,7 +8,7 @@ open http://localhost:16686                     # Service: tsh, Find Traces, the
 pnpm trace:down
 ```
 
-![The review | ship line in Jaeger](./68-tracing-jaeger.png)
+![The review | ship line in Jaeger](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/68-tracing-jaeger.png?raw=true)
 
 ## What we asked
 

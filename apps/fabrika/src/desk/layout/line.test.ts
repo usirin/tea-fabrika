@@ -96,6 +96,7 @@ describe("openLine", () => {
 
 	it("keeps the line's total while its windows fold and open in any order", () => {
 		let tree = openLine(row(), "b", opening());
+
 		for (const step of [
 			(t: LayoutTree) => fold(t, "t4"),
 			(t: LayoutTree) => fold(t, "b"),
@@ -178,7 +179,11 @@ const openPipe = (tree: LayoutTree, at: string, n: number): LayoutTree =>
 /** Close the pipe typed in tile `at`: its window goes, and the tile shows its tsh again. */
 const closePipe = (tree: LayoutTree, at: string): LayoutTree => {
 	const line = findTile(tree, at)?.shows;
-	if (line === undefined || line.kind !== "line") return tree;
+
+	if (line === undefined || line.kind !== "line") {
+		return tree;
+	}
+
 	const windows = [...tiles(tree.root)].filter(
 		(t) => t.shows.kind === "window" && t.shows.line.id === line.line.id,
 	);
@@ -201,7 +206,11 @@ describe("freeLetter", () => {
 
 	it("gives seven pipes in one workspace seven letters, and the seventh repeats a color", () => {
 		let tree = ten();
-		for (let n = 0; n < 7; n += 1) tree = openPipe(tree, `a${n}`, n);
+
+		for (let n = 0; n < 7; n += 1) {
+			tree = openPipe(tree, `a${n}`, n);
+		}
+
 		const lines = [...linesIn([tree]).values()];
 		expect(lines.map((l) => l.letter)).toEqual(["A", "B", "C", "D", "E", "F", "G"]);
 		expect(lines.map((l) => l.tint)).toEqual([...TINTS, TINTS[0]]);
@@ -209,7 +218,11 @@ describe("freeLetter", () => {
 
 	it("frees a closed pipe's letter, and keeps every other pipe's", () => {
 		let tree = ten();
-		for (let n = 0; n < 3; n += 1) tree = openPipe(tree, `a${n}`, n);
+
+		for (let n = 0; n < 3; n += 1) {
+			tree = openPipe(tree, `a${n}`, n);
+		}
+
 		tree = closePipe(tree, "a0");
 		expect(lettersOf(tree).sort()).toEqual(["B", "C"]);
 		expect(freeLetter([tree])).toBe("A");
@@ -225,7 +238,11 @@ describe("freeLetter", () => {
 				Array.from({length: 28}, (_, i) => createTile(`a${i}`)),
 			),
 		);
-		for (let n = 0; n < 26; n += 1) tree = openPipe(tree, `a${n}`, n);
+
+		for (let n = 0; n < 26; n += 1) {
+			tree = openPipe(tree, `a${n}`, n);
+		}
+
 		expect(lettersOf(tree)).toEqual([...ABC]);
 		expect(freeLetter([tree])).toBe("AA");
 		tree = openPipe(tree, "a26", 26);
@@ -239,18 +256,30 @@ describe("freeLetter", () => {
 		fc.assert(
 			fc.property(fc.array(step, {maxLength: 40}), (steps) => {
 				let tree = ten();
+
 				for (const [n, {open, at}] of steps.entries()) {
 					const before = new Set(lettersOf(tree));
 					const tile = findTile(tree, `a${at}`);
+
 					if (open && tile?.shows.kind === "tsh") {
 						tree = openPipe(tree, `a${at}`, n);
 						const first = [...ABC].find((l) => !before.has(l));
 						const shown = findTile(tree, `a${at}`)?.shows;
-						if (shown?.kind !== "line" || shown.line.letter !== first) return false;
-					} else if (!open) tree = closePipe(tree, `a${at}`);
+
+						if (shown?.kind !== "line" || shown.line.letter !== first) {
+							return false;
+						}
+					} else if (!open) {
+						tree = closePipe(tree, `a${at}`);
+					}
+
 					const letters = lettersOf(tree);
-					if (new Set(letters).size !== letters.length) return false;
+
+					if (new Set(letters).size !== letters.length) {
+						return false;
+					}
 				}
+
 				return checkTree(tree).length === 0;
 			}),
 			{seed: 119120, numRuns: 200},

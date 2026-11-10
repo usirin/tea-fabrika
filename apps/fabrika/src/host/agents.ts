@@ -71,7 +71,10 @@ import type {AgentSessions} from "./agent-session.ts";
 
 /** A screen's port name, `run:<id>`, as a run in a tile; a run's id starts with its program's name. */
 const inTile = (port: string): InTile | null => {
-	if (!port.startsWith("run:")) return null;
+	if (!port.startsWith("run:")) {
+		return null;
+	}
+
 	const run = port.slice("run:".length);
 	const at = run.indexOf(":");
 	return {run, program: at === -1 ? run : run.slice(0, at)};

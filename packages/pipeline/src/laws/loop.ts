@@ -180,7 +180,10 @@ export function loopWorld(options: LoopWorldOptions = {}): World<Loop, Msg, Loop
 						runBuild.err(cmd, UNKNOWN, 0),
 					];
 				case "loop_review":
-					if (cmd.round > reviews) return [];
+					if (cmd.round > reviews) {
+						return [];
+					}
+
 					return [
 						...heads.flatMap((head) => [
 							runReview.ok(cmd, reviewed({kind: "done", part: false, head}, head, 0), 0),
@@ -239,18 +242,28 @@ const NO_COUNT: Count = {round: 0, before: [], now: null};
 /** The count after one step: a review or a ship of the round asked now that sends it back sets `now`. */
 function counted(c: Count, step: Step<Loop, Msg, LoopCmd>): Count {
 	const {msg, prev} = step;
-	if (!("cmd" in msg) || !("asked" in prev) || msg.cmd.intent !== prev.asked.intent) return c;
+
+	if (!("cmd" in msg) || !("asked" in prev) || msg.cmd.intent !== prev.asked.intent) {
+		return c;
+	}
+
 	if (msg.type === "loop_review_ok") {
 		const {outcome, criteria} = msg.value;
-		if (outcome.kind !== "send") return {...c, now: null};
+
+		if (outcome.kind !== "send") {
+			return {...c, now: null};
+		}
+
 		const open =
 			outcome.why === "checks_red" ? 1 : criteria.filter((x) => x.state === "open").length;
 		return {...c, now: open};
 	}
+
 	if (msg.type === "loop_ship_ok") {
 		const {outcome} = msg.value;
 		return {...c, now: outcome?.kind === "send" && outcome.to === "builder" ? 1 : null};
 	}
+
 	return c;
 }
 
@@ -261,7 +274,11 @@ function counted(c: Count, step: Step<Loop, Msg, LoopCmd>): Count {
  */
 const asks = (c: Count): boolean => {
 	const {now, before} = c;
-	if (now === null || now === 0) return false;
+
+	if (now === null || now === 0) {
+		return false;
+	}
+
 	const [a, b] = before.slice(-2);
 	const twoStalls = a !== undefined && b !== undefined && b >= a && now >= b;
 	const earlier = before.slice(0, -2);
@@ -311,17 +328,25 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 						: msg.type === "loop_review_ok" && prev.phase === "reviewing"
 							? {...seen, review: {kind: msg.value.outcome.kind, head: msg.value.head}}
 							: seen;
+
 				for (const cmd of step.cmds) {
-					if (cmd.type !== "loop_ship") continue;
-					if (now.review === null || now.review.kind !== "done")
+					if (cmd.type !== "loop_ship") {
+						continue;
+					}
+
+					if (now.review === null || now.review.kind !== "done") {
 						return broke(
 							`ship, and the last review ${now.review === null ? "never ended" : `ended ${now.review.kind}`}`,
 						);
-					if (now.review.head !== now.built)
+					}
+
+					if (now.review.head !== now.built) {
 						return broke(
 							`ship, and the review passed ${now.review.head}, while this round built ${now.built}`,
 						);
+					}
 				}
+
 				return now;
 			},
 		),
@@ -332,29 +357,40 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 				const {msg, prev} = step;
 				const review =
 					msg.type === "loop_review_ok" && prev.phase === "reviewing" ? msg.value.criteria : last;
+
 				for (const cmd of step.cmds) {
-					if (cmd.type !== "loop_build" || cmd.round === 1) continue;
+					if (cmd.type !== "loop_build" || cmd.round === 1) {
+						continue;
+					}
+
 					const open = (review ?? []).filter((c) => c.state === "open");
 					// A criterion by its id; one the review added, which has none, by its words.
 					const keyOf = (c: Judged) => (c.from === "ticket" ? c.id : `review: ${c.text}`);
-					for (const item of cmd.open)
+
+					for (const item of cmd.open) {
 						if (
 							item.criterion !== null &&
 							!open.some((c) => keyOf(c) === item.criterion && c.text === item.text)
-						)
+						) {
 							return broke(
 								`round ${cmd.round} is told criterion ${item.criterion} is open, and no review left it open`,
 							);
+						}
+					}
+
 					const dropped = open.filter(
 						(c) =>
 							!cmd.open.some((item) => (item.criterion ?? `review: ${item.text}`) === keyOf(c)),
 					);
+
 					// A ship send-back follows a passed review, which left nothing open.
-					if (dropped.length > 0 && msg.type === "loop_post_ok")
+					if (dropped.length > 0 && msg.type === "loop_post_ok") {
 						return broke(
 							`round ${cmd.round} is not told criteria ${dropped.map(keyOf).join(", ")} are open`,
 						);
+					}
 				}
+
 				return review;
 			},
 		),
@@ -364,11 +400,17 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 			(before, step) => {
 				const c = counted(before, step);
 				const next = newBuild(c, step);
-				if (next === null) return c;
-				if (asks(c))
+
+				if (next === null) {
+					return c;
+				}
+
+				if (asks(c)) {
 					return broke(
 						`rounds left ${shown(c)} open, the owner is asked, and round ${next} was started`,
 					);
+				}
+
 				return built(c, next);
 			},
 		),
@@ -386,10 +428,13 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 					(next.phase === "releasing" || next.phase === "over") &&
 					prev.phase !== "releasing" &&
 					prev.phase !== "over";
-				if (decides && ends && c.now !== null && !asks(c))
+
+				if (decides && ends && c.now !== null && !asks(c)) {
 					return broke(
 						`rounds left ${shown(c)} open, the owner is not asked, and the loop ended at round ${c.round}`,
 					);
+				}
+
 				const round = newBuild(c, step);
 				return round === null ? c : built(c, round);
 			},
@@ -407,11 +452,15 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 						: held;
 				// Once it asks to let the ticket go, it holds it no more.
 				const now = told && !step.cmds.some((c) => c.type === "loop_release");
-				for (const cmd of step.cmds)
-					if ((cmd.type === "loop_build" || cmd.type === "loop_ship") && !now)
+
+				for (const cmd of step.cmds) {
+					if ((cmd.type === "loop_build" || cmd.type === "loop_ship") && !now) {
 						return broke(
 							`${cmd.type} in round ${cmd.round}, and the loop does not hold its ticket`,
 						);
+					}
+				}
+
 				return now;
 			},
 		),
@@ -428,17 +477,25 @@ export function loopLaws<S extends Loop>(): readonly Law<S, Msg, LoopCmd>[] {
 						? msg.type === "loop_claim_err" ||
 							(msg.type === "loop_claim_ok" && prev.phase === "claiming" && msg.value === prev.lane)
 						: owes) && !step.cmds.some((c) => c.type === "loop_release");
-				if (now && next.phase === "over" && prev.phase !== "over")
+
+				if (now && next.phase === "over" && prev.phase !== "over") {
 					return broke("the loop ended, and never let its ticket go");
+				}
+
 				return now;
 			},
 		),
 		law<S, Msg, LoopCmd>("an answer counts only for the stage asked now", (step) => {
 			const {msg, prev, next} = step;
-			if (!("cmd" in msg) || !("asked" in prev) || !msg.type.startsWith(prev.asked.type))
+
+			if (!("cmd" in msg) || !("asked" in prev) || !msg.type.startsWith(prev.asked.type)) {
 				return null;
-			if (msg.cmd.intent === prev.asked.intent || structuralHash(next) === structuralHash(prev))
+			}
+
+			if (msg.cmd.intent === prev.asked.intent || structuralHash(next) === structuralHash(prev)) {
 				return null;
+			}
+
 			return `an answer to ${msg.cmd.intent} moved the loop while it waits on ${prev.asked.intent}`;
 		}),
 		law<S, Msg, LoopCmd>("an ended loop sends nothing", (step) =>
@@ -466,6 +523,7 @@ export const loopStep: Update<Loop, Msg, LoopCmd> = loopUpdate;
 /** An answer, with the round it answers, from its Cmd's intent (`loop/<ticket>/<round>/<stage>`): a late answer from round 1 shows as round 1's. */
 export function showLoopMsg(m: Msg): string {
 	const round = "cmd" in m ? ` (round ${m.cmd.intent.split("/")[2]})` : "";
+
 	switch (m.type) {
 		case "loop_claim_ok":
 			return `claim: ${m.value === m.cmd.lane ? "taken" : `${m.value} holds it`}`;
@@ -510,15 +568,21 @@ export const stuckIsPassed: Update<Loop, Msg, LoopCmd> = (s, m) =>
 /** The next round is told nothing: what the review left open is lost. */
 export const forgetsTheOpenList: Update<Loop, Msg, LoopCmd> = (s, m) => {
 	const [next, cmds] = loopUpdate(s, m);
-	if (next.phase !== "building" || next.round === 1) return [next, cmds];
+
+	if (next.phase !== "building" || next.round === 1) {
+		return [next, cmds];
+	}
+
 	const asked = runBuild({...next.asked, open: []});
 	return [{...next, asked}, cmds.map((c) => (c.type === "loop_build" ? asked : c))];
 };
 
 /** The stall rule off by one: "no fewer" is read as "more", so an equal count builds again. */
 export const stallOffByOne: Update<Loop, Msg, LoopCmd> = (s, m) => {
-	if (m.type !== "loop_review_ok" || s.phase !== "reviewing" || s.rounds.length < 2)
+	if (m.type !== "loop_review_ok" || s.phase !== "reviewing" || s.rounds.length < 2) {
 		return loopUpdate(s, m);
+	}
+
 	const rounds = s.rounds.map((r, at) =>
 		at === s.rounds.length - 2 && r.open !== null ? {...r, open: r.open + 1} : r,
 	);
@@ -540,9 +604,16 @@ export const forgetsTheLowest: Update<Loop, Msg, LoopCmd> = (s, m) =>
  * the round before twice, so one stall reads as two.
  */
 export const asksAtTheFirstStall: Update<Loop, Msg, LoopCmd> = (s, m) => {
-	if (m.type !== "loop_review_ok" || s.phase !== "reviewing") return loopUpdate(s, m);
+	if (m.type !== "loop_review_ok" || s.phase !== "reviewing") {
+		return loopUpdate(s, m);
+	}
+
 	const before = s.rounds.at(-2);
-	if (before === undefined) return loopUpdate(s, m);
+
+	if (before === undefined) {
+		return loopUpdate(s, m);
+	}
+
 	return loopUpdate({...s, rounds: [...s.rounds.slice(0, -1), before, ...s.rounds.slice(-1)]}, m);
 };
 
@@ -552,8 +623,11 @@ export const asksAtTheFirstStall: Update<Loop, Msg, LoopCmd> = (s, m) => {
  */
 export const aCapPutBack: Update<Loop, Msg, LoopCmd> = (s, m) => {
 	const [next, cmds] = loopUpdate(s, m);
-	if (next.phase !== "building" || next.round <= 2 || !cmds.includes(next.asked))
+
+	if (next.phase !== "building" || next.round <= 2 || !cmds.includes(next.asked)) {
 		return [next, cmds];
+	}
+
 	const asked = releaseTicket({
 		ticket: next.ticket,
 		lane: next.lane,
@@ -591,7 +665,11 @@ export const takesAnyClaim: Update<Loop, Msg, LoopCmd> = (s, m) =>
 /** The loop ends without letting its ticket go: no other lane can ever take it. */
 export const keepsItsClaim: Update<Loop, Msg, LoopCmd> = (s, m) => {
 	const [next, cmds] = loopUpdate(s, m);
-	if (next.phase !== "releasing") return [next, cmds];
+
+	if (next.phase !== "releasing") {
+		return [next, cmds];
+	}
+
 	const {asked: _, ...rest} = next;
 	return [{...rest, phase: "over"}, cmds.filter((c) => c.type !== "loop_release")];
 };

@@ -41,6 +41,7 @@ const keepsEvery = (machine: Machine, loaded: Waiting | null, runs = 150) =>
 		fc.asyncProperty(lists, async (list) => {
 			const handle = await Effect.runPromise(memoryStorage().open("build:r1", null));
 			const store = handle.store("queue", "queue", queueKind.state);
+
 			for (const s of foldEvents(machine, ctx, loaded, list).states) {
 				await store.save(s);
 				expect(store.migrate(await store.load())).toEqual(s);
@@ -64,6 +65,7 @@ describe("the work queue is kept", () => {
 				const store = handle.store("queue", "queue", queueKind.state);
 				const loaded = store.migrate(await store.load());
 				expect(loaded).toEqual({items, clearing: []});
+
 				for (const s of foldEvents(queue, ctx, loaded as Waiting, list).states) {
 					await store.save(s);
 					expect(store.migrate(await store.load())).toEqual(s);

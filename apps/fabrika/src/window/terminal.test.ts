@@ -74,7 +74,11 @@ class FakeTerminal {
 	/** As 0.4.0's focus(): once open, its element now, and again after a zero timeout. */
 	focus() {
 		const at = this.element;
-		if (!this.opened || at === undefined) return;
+
+		if (!this.opened || at === undefined) {
+			return;
+		}
+
 		page.activeElement = at;
 		FakeTerminal.timers.push(
 			setTimeout(() => {
@@ -187,9 +191,14 @@ const matchMedia = (query: string) => {
 
 const switchTo = (next: "dark" | "light") => {
 	look = next;
+
 	for (const {query, heard, list} of lists) {
 		const event = {matches: matches(query), media: query};
-		for (const fn of [...(heard.get("change") ?? [])]) fn(event);
+
+		for (const fn of [...(heard.get("change") ?? [])]) {
+			fn(event);
+		}
+
 		(list as {onchange: Heard | null}).onchange?.(event);
 	}
 };
@@ -224,7 +233,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-	for (const timer of FakeTerminal.timers) clearTimeout(timer);
+	for (const timer of FakeTerminal.timers) {
+		clearTimeout(timer);
+	}
+
 	FakeTerminal.timers = [];
 	vi.unstubAllGlobals();
 	vi.useRealTimers();
@@ -238,7 +250,11 @@ const openTerminal = async (writes: readonly string[] = ["hello"]) => {
 	const {terminalFor} = await import("./terminal.ts");
 	const term = terminalFor({} as never, "t1" as never);
 	term.attach(element() as never);
-	for (const data of writes) toTile?.({type: "write", data});
+
+	for (const data of writes) {
+		toTile?.({type: "write", data});
+	}
+
 	return term;
 };
 
@@ -253,7 +269,11 @@ describe("the terminal's spoken status", () => {
 		const found = page.made.find(
 			(e) => (e["attrs"] as Record<string, string>)["role"] === "status",
 		);
-		if (found === undefined) throw new Error("no job status region");
+
+		if (found === undefined) {
+			throw new Error("no job status region");
+		}
+
 		return found;
 	};
 	const writes = () => page.writes.filter((w) => w.element === status()).map((w) => w.text);
@@ -261,7 +281,11 @@ describe("the terminal's spoken status", () => {
 	it("announces each complete reply in the log region", async () => {
 		await openTerminal([]);
 		const log = page.made.find((e) => (e["attrs"] as Record<string, string>)["role"] === "log");
-		if (log === undefined) throw new Error("no reply log region");
+
+		if (log === undefined) {
+			throw new Error("no reply log region");
+		}
+
 		expect(log["tag"]).toBe("div");
 		toTile?.({type: "said", text: "scout: The river is Kura.\nThe bridge has 7 arches."});
 		expect((log["children"] as Record<string, unknown>[]).map((e) => e["textContent"])).toEqual([
@@ -349,8 +373,15 @@ describe("an open terminal follows the system's look", () => {
 			{port: "tile:t1", msg: {type: "size", cols: 80, rows: 24}},
 		]);
 		const now = showing()[0];
-		for (const fn of now?.keys ?? []) fn("ls\r");
-		for (const fn of now?.sizes ?? []) fn({cols: 100, rows: 30});
+
+		for (const fn of now?.keys ?? []) {
+			fn("ls\r");
+		}
+
+		for (const fn of now?.sizes ?? []) {
+			fn({cols: 100, rows: 30});
+		}
+
 		expect(sent.slice(-2)).toEqual([
 			{port: "tile:t1", msg: {type: "keys", data: "ls\r"}},
 			{port: "tile:t1", msg: {type: "size", cols: 100, rows: 30}},

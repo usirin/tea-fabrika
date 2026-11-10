@@ -80,8 +80,11 @@ const ledgerTime = (l: Service): Time => {
 		const name = fresh("now");
 		yield* l.register(name, "clock");
 		const [row] = yield* l.readLast(name, 1);
-		if (row === undefined)
+
+		if (row === undefined) {
 			return yield* Effect.die(new Error(`${name}: registered, not read back`));
+		}
+
 		return row.at;
 	});
 	return {
@@ -90,7 +93,11 @@ const ledgerTime = (l: Service): Time => {
 			Effect.gen(function* () {
 				for (let i = 0; i < PROBES; i++) {
 					const n = yield* now;
-					if (n > at) return;
+
+					if (n > at) {
+						return;
+					}
+
 					// How long to wait comes from the ledger's own numbers; the probe after it decides.
 					yield* sleep(at + 1 - n);
 				}
@@ -105,9 +112,14 @@ const factOf = (l: Service, time: Time, stream: string, kind: string) =>
 	Effect.gen(function* () {
 		for (let i = 0; i <= 100; i++) {
 			const fact = (yield* l.readStream(stream)).find((e) => e.kind === kind);
-			if (fact !== undefined) return fact;
+
+			if (fact !== undefined) {
+				return fact;
+			}
+
 			yield* time.pause(50);
 		}
+
 		return null;
 	});
 
@@ -228,15 +240,21 @@ const timedSteps = (time: Time) => {
 	const inTime = (what: string, end: number) =>
 		Effect.map(time.now, (now) => {
 			const late = now - end;
-			if (late >= 0)
+
+			if (late >= 0) {
 				s.list.push({what: `${what}, back ${late} ms after it`, got: "", want: "", late: true});
+			}
 		});
 	return {...s, inTime};
 };
 
 const tally = (words: readonly string[]) => {
 	const t: Record<string, number> = {};
-	for (const w of words) t[w] = (t[w] ?? 0) + 1;
+
+	for (const w of words) {
+		t[w] = (t[w] ?? 0) + 1;
+	}
+
 	return t;
 };
 
@@ -319,14 +337,22 @@ export const law3Fencing = (l: Service, graceMs = 1000) =>
 		yield* step("append at 0", l.append(S.inbox, 0, note("w")), "ok");
 		yield* step("again at 0", l.append(S.inbox, 0, note("w")), "stale");
 		const c1 = yield* step("claim 1", l.claim(s, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("h1 with its live fence", l.append(S.state, 0, note("h1"), c1.fence), "ok");
 		yield* inTime("the step that needs the lease live", c1.expiresAt);
 		// At c1's rev, so before the alarm writes lease_expired, `graceMs` after the lease's end.
 		yield* time.past(c1.expiresAt);
 		const c2 = yield* step("claim 2, lease run out", l.claim(s, "h2", c1.rev, 30_000), "ok");
 		yield* inTime("claim 2, before the alarm", c1.expiresAt + graceMs);
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step(
 			"old fence after the reclaim",
 			l.append(S.state, 1, note("h1"), c1.fence),
@@ -392,7 +418,11 @@ export const law5Stop = (l: Service) =>
 		const {list, step} = steps();
 		const [reg] = yield* setUp(l, s);
 		const c = yield* step("claim", l.claim(s, "h1", reg?.rev ?? 1, 30_000), "ok");
-		if (c === null) return verdict(law, list);
+
+		if (c === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("renew", l.renew(s, c.fence, 30_000), "ok");
 		yield* step("renew, wrong fence", l.renew(s, c.fence + 1000, 30_000), "lost");
 		yield* step("cancel", l.cancel(s, "owner"), "ok");
@@ -471,7 +501,11 @@ export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 		const {list, step, count, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, p, `${p}0`, `${p}x`);
 		const c1 = yield* step("claim 1", l.claim(p, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		const save1 = {kind: "state", writer: "h1", id: "save-1"};
 		yield* step("under the live fence", l.append(state, 0, save1, c1.fence), "ok");
 		yield* step("deeper", l.append(`${p}/a/b`, "any", note("h1"), c1.fence), "ok");
@@ -499,7 +533,11 @@ export const law12PrefixFence = (l: Service, graceMs = 1000) =>
 		);
 		const rev = (yield* l.readLast(p, 1))[0]?.rev ?? c1.rev;
 		const c2 = yield* step("claim 2", l.claim(p, "h2", rev, 30_000), "ok");
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("old fence after the reclaim", l.append(state, 1, note("h1"), c1.fence), "fenced");
 		yield* step(
 			"old fence deeper, after the reclaim",
@@ -524,17 +562,24 @@ export const law14Reads = (l: Service) =>
 		const owners = [p, `${p}x`, `${p}0`];
 		const reg = yield* setUp(l, ...owners);
 		const fences = new Map<string, number>();
+
 		for (const [i, n] of owners.entries()) {
 			const c = yield* l.claim(n, "h", reg[i]?.rev ?? 1, 30_000);
 			fences.set(n, c.fence);
 		}
+
 		const names = [p, `${p}/x`, `${p}/y`, `${p}x`, `${p}/x`, `${p}0`, `${p}/y/z`, `${p}/x`];
 		const fenceOf = (s: string) => fences.get(s.startsWith(`${p}/`) ? p : s) ?? -1;
 		let from = -1;
+
 		for (const s of names) {
 			const r = yield* l.append(s, "any", note("w"), fenceOf(s));
-			if (from < 0) from = r.pos - 1;
+
+			if (from < 0) {
+				from = r.pos - 1;
+			}
 		}
+
 		const under = (yield* l.read(from, 100, p)).filter((r) => r.kind === "note");
 		const want = names.filter((s) => s === p || s.startsWith(`${p}/`));
 		const fromRev = yield* l.readStream(`${p}/x`, 1);
@@ -571,7 +616,11 @@ export const law16Guard = (l: Service, graceMs = 1000) =>
 		// 97's hole 1: before any claim, this landed. Registered, the name is guarded from the start.
 		yield* step("unfenced, never claimed", l.append(`${p}/notes`, "any", note("x")), "denied");
 		const c1 = yield* step("claim 1", l.claim(p, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("unfenced state, lease live", l.append(`${p}/state`, 0, note("x")), "denied");
 		yield* step("unfenced with an id", l.append(`${p}/state`, "any", note("x", "a")), "denied");
 		yield* step("unfenced to the name itself", l.append(p, "any", note("x")), "denied");
@@ -583,7 +632,11 @@ export const law16Guard = (l: Service, graceMs = 1000) =>
 		yield* step("unfenced, lease run out", l.append(`${p}/state`, 1, note("x")), "denied");
 		const c2 = yield* step("reclaim", l.claim(p, "h2", c1.rev, 30_000), "ok");
 		yield* inTime("the steps after the end, before the alarm", c1.expiresAt + graceMs);
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("unfenced after a reclaim", l.append(`${p}/state`, 1, note("x")), "denied");
 		yield* step("new fence", l.append(`${p}/state`, 1, note("h2"), c2.fence), "ok");
 		yield* step("unregistered sibling", l.append(`${p}0/state`, 0, note("x")), "unknown");
@@ -607,7 +660,11 @@ export const law17Inbox = (l: Service) =>
 		const {list, step, count, inTime} = timedSteps(time);
 		const [reg] = yield* setUp(l, p);
 		const c1 = yield* step("claim", l.claim(p, "h1", reg?.rev ?? 1, LIVE_MS), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("send, lease live", l.append(inbox, "any", note("s", "m1")), "ok");
 		yield* step("the owner, fenced", l.append(inbox, "any", note("h1", "m3"), c1.fence), "ok");
 		yield* inTime("the steps that need the lease live", c1.expiresAt);
@@ -644,7 +701,11 @@ export const law18Reply = (l: Service, graceMs = 1000) =>
 		const [ra, rb] = yield* setUp(l, a, b, `${b}x`);
 		const ca = yield* step("claim a", l.claim(a, "ha", ra?.rev ?? 1, 30_000), "ok");
 		const cb = yield* step("claim b", l.claim(b, "hb", rb?.rev ?? 1, LIVE_MS), "ok");
-		if (ca === null || cb === null) return verdict(law, list);
+
+		if (ca === null || cb === null) {
+			return verdict(law, list);
+		}
+
 		const reply = (id: string, fence: number) =>
 			l.append(streams(a).inbox, "any", {kind: "reply", writer: "hb", id}, fence);
 		yield* step("reply, lease live", reply("r1", cb.fence), "ok");
@@ -665,7 +726,11 @@ export const law18Reply = (l: Service, graceMs = 1000) =>
 		yield* step("repeat of the landed reply, lease run out", reply("r1", cb.fence), "dup");
 		const cb2 = yield* step("reclaim b", l.claim(b, "hb2", cb.rev, 30_000), "ok");
 		yield* inTime("the steps after the end, before the alarm", cb.expiresAt + graceMs);
-		if (cb2 === null) return verdict(law, list);
+
+		if (cb2 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("old fence after a reclaim", reply("r3", cb.fence), "fenced");
 		yield* step(
 			"repeat of a landed reply, old fence, after a reclaim",
@@ -757,16 +822,29 @@ export const lawTail = (l: Service, n = 100) =>
 					Stream.runForEach((r) => Effect.sync(() => got.push(r))),
 					Effect.forkScoped,
 				);
+
 				for (let i = 0; i < n; i++) {
 					yield* l.append(inbox, "any", note("w", `m${i}`));
-					if (i % 10 === 0) yield* sleep(5);
+
+					if (i % 10 === 0) {
+						yield* sleep(5);
+					}
 				}
+
 				const t0 = performance.now();
-				while (got.length < n && performance.now() - t0 < 10_000) yield* sleep(10);
+
+				while (got.length < n && performance.now() - t0 < 10_000) {
+					yield* sleep(10);
+				}
+
 				yield* sleep(300);
 				yield* l.append(inbox, "any", note("w", "late"));
 				const lateAt = performance.now();
-				while (got.length < n + 1 && performance.now() - lateAt < 3000) yield* sleep(5);
+
+				while (got.length < n + 1 && performance.now() - lateAt < 3000) {
+					yield* sleep(5);
+				}
+
 				const lateMs = Math.round(performance.now() - lateAt);
 				const inOrder = got.every((r, i) => r.rev === i + 2);
 				return {
@@ -803,7 +881,11 @@ export const law21Monitors = (l: Service) =>
 		const [rw, rt] = yield* setUp(l, w, t);
 		const cw = yield* step("claim the watcher", l.claim(w, "hw", rw?.rev ?? 1, 30_000), "ok");
 		const ct = yield* step("claim the target", l.claim(t, "h1", rt?.rev ?? 1, LIVE_MS), "ok");
-		if (cw === null || ct === null) return verdict(law, list);
+
+		if (cw === null || ct === null) {
+			return verdict(law, list);
+		}
+
 		// The monitors are set while the target's lease is live, so its running out comes after them.
 		const m = yield* step("monitor r1", l.monitor(cw.fence, "r1", t), "ok");
 		count("r1 watches incarnation", m?.incarnation ?? -1, 1);
@@ -819,7 +901,11 @@ export const law21Monitors = (l: Service) =>
 			l.claim(t, "h2", (yield* l.readLast(t, 1))[0]?.rev ?? 0, 30_000),
 			"ok",
 		);
-		if (ct2 === null) return verdict(law, list);
+
+		if (ct2 === null) {
+			return verdict(law, list);
+		}
+
 		count("incarnation after the takeover", ct2.incarnation, 1);
 		count("DOWNs after the takeover", (yield* dataOf(l, inbox, "DOWN")).length, 0);
 		yield* step(
@@ -864,8 +950,11 @@ export const law22Links = (l: Service) =>
 		const names = [a, b, c, d, e, f].flatMap((x) => (x === undefined ? [] : [x]));
 		const reg = yield* setUp(l, ...names);
 		const fences = new Map<string, number>();
-		for (const [i, n] of names.entries())
+
+		for (const [i, n] of names.entries()) {
 			fences.set(n, (yield* l.claim(n, `h-${i}`, reg[i]?.rev ?? 1, 30_000)).fence);
+		}
+
 		const fence = (n: string | undefined) => fences.get(n ?? "") ?? -1;
 		const down = (n: string | undefined) =>
 			Effect.map(l.processInfo(n ?? ""), (pi) =>
@@ -907,13 +996,21 @@ export const law23Start = (l: Service) =>
 		const [rs, ro] = yield* setUp(l, s, o);
 		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
 		const co = yield* step("claim another name", l.claim(o, "ho", ro?.rev ?? 1, 30_000), "ok");
-		if (cs === null || co === null) return verdict(law, list);
+
+		if (cs === null || co === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("the supervisor traps exits", l.trapExit(cs.fence, true), "ok");
 		yield* step("start the child", l.startChild(cs.fence, k, null), "ok");
 		yield* step("start it again", l.startChild(cs.fence, k, null), "existing");
 		yield* step("another name starts it", l.startChild(co.fence, k, null), "denied");
 		const ck = yield* step("claim the child", l.claim(k, "hk", 1, 30_000), "ok");
-		if (ck === null) return verdict(law, list);
+
+		if (ck === null) {
+			return verdict(law, list);
+		}
+
 		count("child incarnation", ck.incarnation, 1);
 		yield* step("the child crashes", l.exit(k, ck.fence, "crash", "boom", null, "hk"), "ok");
 		count("EXITs to the supervisor", (yield* dataOf(l, streams(s).inbox, "EXIT")).length, 1);
@@ -954,7 +1051,11 @@ export const law24DeadLetters = (l: Service) =>
 		const {list, step, count} = steps();
 		const [rs] = yield* setUp(l, s);
 		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
-		if (cs === null) return verdict(law, list);
+
+		if (cs === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(cs.fence, true);
 		yield* l.startChild(cs.fence, k, null);
 		/** One run of the child: claim, exit, and its parent restarts it. */
@@ -1012,13 +1113,21 @@ export const law25ExitChild = (l: Service) =>
 		const [rs, ro] = yield* setUp(l, s, o);
 		const cs = yield* step("claim the supervisor", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
 		const co = yield* step("claim another name", l.claim(o, "ho", ro?.rev ?? 1, 30_000), "ok");
-		if (cs === null || co === null) return verdict(law, list);
+
+		if (cs === null || co === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(cs.fence, true);
 		yield* l.startChild(cs.fence, a, null);
 		yield* l.startChild(cs.fence, b, null);
 		const ca = yield* step("claim a", l.claim(a, "ha", 1, 30_000), "ok");
 		const cb = yield* step("claim b", l.claim(b, "hb", 1, 30_000), "ok");
-		if (ca === null || cb === null) return verdict(law, list);
+
+		if (ca === null || cb === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("b traps exits", l.trapExit(cb.fence, true), "ok");
 		/** One exit signal: its answer word against the one wanted. */
 		const signal = (
@@ -1104,11 +1213,19 @@ export const law26Spend = (l: Service) =>
 		yield* step("ticket limits $10", l.setLimits(p, {usd: 10}, "desk"), "ok");
 		const rev0 = (yield* l.readLast(p, 1))[0]?.rev ?? 0;
 		const cp = yield* step("claim the ticket", l.claim(p, "hp", rev0, 30_000), "ok");
-		if (cp === null) return verdict(law, list);
+
+		if (cp === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(cp.fence, true);
 		yield* step("start the builder, $5", l.startChild(cp.fence, c, null, {usd: 5}), "ok");
 		const c1 = yield* step("claim the builder", l.claim(c, "hc", 1, 30_000), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("charge $3, id a", l.charge(c1.fence, "a", {usd: 3}), "ok");
 		yield* step("charge id a again", l.charge(c1.fence, "a", {usd: 3}), "dup");
 		list.push({what: "builder used", got: yield* dollars(l, c), want: "3"});
@@ -1118,7 +1235,11 @@ export const law26Spend = (l: Service) =>
 		list.push({what: "builder used after the restart", got: yield* dollars(l, c), want: "3"});
 		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
 		const c2 = yield* step("claim run 2", l.claim(c, "hc", rev, 30_000), "ok");
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		const ch = yield* step("charge $3, id b", l.charge(c2.fence, "b", {usd: 3}), "ok");
 		const at = ch?.over?.at === c ? "builder" : ch?.over?.at;
 		list.push({what: "it crossed", got: `${ch?.over?.kind} at ${at}`, want: "usd at builder"});
@@ -1150,14 +1271,26 @@ export const law27Admission = (l: Service) =>
 		const {list, step, count} = steps();
 		const [rt] = yield* setUp(l, top);
 		const ct = yield* step("claim the top", l.claim(top, "ht", rt?.rev ?? 1, 30_000), "ok");
-		if (ct === null) return verdict(law, list);
+
+		if (ct === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(ct.fence, true);
 		yield* step("start the ticket, $1", l.startChild(ct.fence, k, null, {usd: 1}), "ok");
 		const ck = yield* step("claim the ticket", l.claim(k, "hk", 1, 30_000), "ok");
-		if (ck === null) return verdict(law, list);
+
+		if (ck === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("start the builder", l.startChild(ck.fence, b, null), "ok");
 		const cb = yield* step("claim the builder", l.claim(b, "hb", 1, 30_000), "ok");
-		if (cb === null) return verdict(law, list);
+
+		if (cb === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("hold $0.6, t1", l.hold(cb.fence, "t1", {usd: 0.6}), "ok");
 		yield* step("hold t1 again", l.hold(cb.fence, "t1", {usd: 0.6}), "dup");
 		yield* step("hold $0.6, t2", l.hold(cb.fence, "t2", {usd: 0.6}), "limit");
@@ -1189,7 +1322,11 @@ export const law28LateCharge = (l: Service) =>
 		yield* step("limits $1", l.setLimits(n, {usd: 1}, "desk"), "ok");
 		const rev = (yield* l.readLast(n, 1))[0]?.rev ?? 0;
 		const c1 = yield* step("claim, a short ttl", l.claim(n, "h1", rev, LIVE_MS), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("hold $0.5, t1", l.hold(c1.fence, "t1", {usd: 0.5}), "ok");
 		yield* inTime("the hold, which needs the lease live", c1.expiresAt);
 		list.push({
@@ -1202,7 +1339,11 @@ export const law28LateCharge = (l: Service) =>
 			l.claim(n, "h2", (yield* l.readLast(n, 1))[0]?.rev ?? 0, 30_000),
 			"ok",
 		);
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("the new host charges t1 for $0", l.charge(c2.fence, "t1", {usd: 0}), "ok");
 		list.push({what: "used: the old hold stays", got: yield* dollars(l, n), want: "0.5"});
 		yield* step("hold, the old fence", l.hold(c1.fence, "t9", {usd: 0}), "fenced");
@@ -1227,11 +1368,19 @@ export const law29Children = (l: Service) =>
 		yield* step("limits: 2 children", l.setLimits(s, {children: 2}, "desk"), "ok");
 		const rev = (yield* l.readLast(s, 1))[0]?.rev ?? 0;
 		const cs = yield* step("claim", l.claim(s, "hs", rev, 30_000), "ok");
-		if (cs === null) return verdict(law, list);
+
+		if (cs === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(cs.fence, true);
 		yield* step("start a", l.startChild(cs.fence, a, null), "ok");
 		const ca = yield* step("claim a", l.claim(a, "ha", 1, 30_000), "ok");
-		if (ca === null) return verdict(law, list);
+
+		if (ca === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(ca.fence, true);
 		yield* step("a starts a1", l.startChild(ca.fence, a1, null), "ok");
 		count("running under the top", (yield* l.usage(s))?.children ?? -1, 2);
@@ -1239,7 +1388,11 @@ export const law29Children = (l: Service) =>
 		yield* step("a starts a2", l.startChild(ca.fence, a2, null), "limit");
 		list.push({what: "the top after", got: yield* endOf(l, s), want: "up"});
 		const c1 = yield* step("claim a1", l.claim(a1, "h1", 1, 30_000), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("a1 ends", l.exit(a1, c1.fence, "normal", "done", null, "h1"), "ok");
 		yield* step("start b now", l.startChild(cs.fence, b, null), "ok");
 		return verdict(law, list);
@@ -1260,7 +1413,11 @@ export const law30Wall = (l: Service) =>
 		const {list, step, inTime} = timedSteps(time);
 		const [rs] = yield* setUp(l, s);
 		const cs = yield* step("claim", l.claim(s, "hs", rs?.rev ?? 1, 30_000), "ok");
-		if (cs === null) return verdict(law, list);
+
+		if (cs === null) {
+			return verdict(law, list);
+		}
+
 		yield* l.trapExit(cs.fence, true);
 		// Before c starts: these need none of its wall time.
 		yield* step("start d, 300 ms", l.startChild(cs.fence, d, null, {wallMs: 300}), "ok");
@@ -1269,9 +1426,17 @@ export const law30Wall = (l: Service) =>
 		// The ledger starts c's wall time when it runs the start, which on a busy machine is well
 		// after this law asked. Count from the deadline it wrote, never from here.
 		const due = (yield* l.usage(c))?.deadline ?? null;
-		if (due === null) return failed(law, "c has no deadline after its start");
+
+		if (due === null) {
+			return failed(law, "c has no deadline after its start");
+		}
+
 		const c1 = yield* step("claim c", l.claim(c, "hc", 1, 30_000), "ok");
-		if (c1 === null) return verdict(law, list);
+
+		if (c1 === null) {
+			return verdict(law, list);
+		}
+
 		yield* step("c crashes", l.exit(c, c1.fence, "crash", "boom", null, "hc"), "ok");
 		// Restarted once half its wall time is gone: a deadline counted from the restart would end
 		// half a wall time after `due`, where the hold below finds it.
@@ -1280,7 +1445,11 @@ export const law30Wall = (l: Service) =>
 		const rev = (yield* l.readLast(c, 1))[0]?.rev ?? 0;
 		const c2 = yield* step("claim c, run 2", l.claim(c, "hc", rev, 30_000), "ok");
 		yield* inTime("c's steps, inside its wall time", due);
-		if (c2 === null) return verdict(law, list);
+
+		if (c2 === null) {
+			return verdict(law, list);
+		}
+
 		const moved = ((yield* l.usage(c))?.deadline ?? Number.NaN) - due;
 		list.push({what: "ms the restart moved c's deadline", got: String(moved), want: "0"});
 		yield* time.past(due);

@@ -570,16 +570,31 @@ export type Read =
 /** Read one row. A row in a ticket's inbox must hold a fact, by a user or an agent; else it is broken. */
 export function readRow(row: Row): Read {
 	const ticket = INBOX.exec(row.stream)?.[1];
-	if (ticket === undefined) return {kind: "other"};
+
+	if (ticket === undefined) {
+		return {kind: "other"};
+	}
+
 	const broken = (why: string): Read => ({
 		kind: "broken",
 		why: `row ${row.pos} on #${ticket}: ${why}`,
 	});
 	const by = writerOf(row.writer);
-	if (by === null) return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+
+	if (by === null) {
+		return broken(`its writer "${row.writer}" is neither a user nor an agent`);
+	}
+
 	const fact = Option.getOrNull(decodeFact(row.data));
-	if (fact === null) return broken(`its data is not a fact`);
-	if (kindOf(fact.type) !== row.kind) return broken(`a ${fact.type} fact kept as ${row.kind}`);
+
+	if (fact === null) {
+		return broken(`its data is not a fact`);
+	}
+
+	if (kindOf(fact.type) !== row.kind) {
+		return broken(`a ${fact.type} fact kept as ${row.kind}`);
+	}
+
 	return {kind: "entry", entry: {pos: row.pos, ticket: Number(ticket), by, at: row.at, fact}};
 }
 
@@ -590,8 +605,14 @@ export interface Folded {
 }
 
 const after = (state: State, fact: Fact): State => {
-	if (fact.type === "closed") return "closed";
-	if (fact.type === "reopened") return "open";
+	if (fact.type === "closed") {
+		return "closed";
+	}
+
+	if (fact.type === "reopened") {
+		return "open";
+	}
+
 	return state;
 };
 
@@ -612,7 +633,11 @@ export const factsOf = <T extends Fact["type"]>(
  */
 export const liveRun = (timeline: readonly Entry[]): string | null => {
 	const last = factsOf(timeline, "started").at(-1);
-	if (last === undefined) return null;
+
+	if (last === undefined) {
+		return null;
+	}
+
 	return factsOf(timeline, "ended").some((e) => e.run === last.run) ? null : last.run;
 };
 
@@ -644,16 +669,24 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 				? `run ${fact.run} started a second time`
 				: null;
 		case "session":
-			if (!factsOf(timeline, "started").some((s) => s.run === fact.run))
+			if (!factsOf(timeline, "started").some((s) => s.run === fact.run)) {
 				return `run ${fact.run} opened a session, but it never started`;
+			}
+
 			return factsOf(timeline, "session").some((s) => s.run === fact.run)
 				? `run ${fact.run} opened a session a second time`
 				: null;
 		case "ended": {
 			const started = factsOf(timeline, "started").find((s) => s.run === fact.run);
-			if (started === undefined) return `run ${fact.run} ended, but it never started`;
-			if (started.stage !== fact.stage)
+
+			if (started === undefined) {
+				return `run ${fact.run} ended, but it never started`;
+			}
+
+			if (started.stage !== fact.stage) {
 				return `run ${fact.run} started as ${started.stage} and ended as ${fact.stage}`;
+			}
+
 			return factsOf(timeline, "ended").some((e) => e.run === fact.run)
 				? `run ${fact.run} ended a second time`
 				: null;
@@ -665,15 +698,24 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 		case "answered": {
 			// A comment is never an answer, and neither is an answer that does not fit its ask.
 			const asked = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
-			if (asked === undefined) return `an answer to ask ${fact.ask}, which was never asked`;
-			if (factsOf(timeline, "answered").some((a) => a.ask === fact.ask))
+
+			if (asked === undefined) {
+				return `an answer to ask ${fact.ask}, which was never asked`;
+			}
+
+			if (factsOf(timeline, "answered").some((a) => a.ask === fact.ask)) {
 				return `ask ${fact.ask} answered a second time`;
+			}
+
 			return asked.picks.includes(fact.pick)
 				? null
 				: `"${fact.pick}" is not one of ask ${fact.ask}'s picks`;
 		}
 		case "maybe_duplicate":
-			if (timeline[0]?.ticket === fact.of) return `a ticket hinted as a duplicate of itself`;
+			if (timeline[0]?.ticket === fact.of) {
+				return `a ticket hinted as a duplicate of itself`;
+			}
+
 			return factsOf(timeline, "maybe_duplicate").some((h) => h.of === fact.of)
 				? `#${fact.of} hinted as a duplicate a second time`
 				: null;
@@ -691,16 +733,28 @@ const misfit = (timeline: readonly Entry[], fact: Fact): string | null => {
 const step = (ticket: Ticket | undefined, entry: Entry): Ticket | string => {
 	const {fact} = entry;
 	const where = `row ${entry.pos} on #${entry.ticket}`;
+
 	// Held here too, not only at the save: an agent's row on a ledger with no door still reads.
-	if (!mayWrite(entry.by, fact.type))
+	if (!mayWrite(entry.by, fact.type)) {
 		return `${where}: ${fact.type} written by an agent, but only a person writes it`;
-	if (fact.type === "filed")
+	}
+
+	if (fact.type === "filed") {
 		return ticket === undefined
 			? {number: entry.ticket, title: fact.title, state: "open", timeline: [entry]}
 			: `${where}: filed a second time`;
-	if (ticket === undefined) return `${where}: ${fact.type}, but the ticket was never filed`;
+	}
+
+	if (ticket === undefined) {
+		return `${where}: ${fact.type}, but the ticket was never filed`;
+	}
+
 	const wrong = misfit(ticket.timeline, fact);
-	if (wrong !== null) return `${where}: ${wrong}`;
+
+	if (wrong !== null) {
+		return `${where}: ${wrong}`;
+	}
+
 	return {...ticket, state: after(ticket.state, fact), timeline: [...ticket.timeline, entry]};
 };
 
@@ -708,10 +762,16 @@ const step = (ticket: Ticket | undefined, entry: Entry): Ticket | string => {
 export function fold(tickets: readonly Ticket[], entries: readonly Entry[]): Folded {
 	const byNumber = new Map(tickets.map((t) => [t.number, t]));
 	const problems: string[] = [];
+
 	for (const entry of entries) {
 		const next = step(byNumber.get(entry.ticket), entry);
-		if (typeof next === "string") problems.push(next);
-		else byNumber.set(entry.ticket, next);
+
+		if (typeof next === "string") {
+			problems.push(next);
+		} else {
+			byNumber.set(entry.ticket, next);
+		}
 	}
+
 	return {tickets: [...byNumber.values()].sort((a, b) => a.number - b.number), problems};
 }

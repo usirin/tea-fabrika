@@ -57,35 +57,49 @@ const graph = (root: string, entries: readonly string[]) => {
 	const files = new Set<string>();
 	let loadsWorker = false;
 	const visit = (file: string) => {
-		if (declaration(file) || files.has(file) || !existsSync(file)) return;
+		if (declaration(file) || files.has(file) || !existsSync(file)) {
+			return;
+		}
+
 		files.add(file);
 		const tree = parseSync(file, readFileSync(file, "utf8")).program;
 		const link = (name: string) => {
-			if (worker(name)) loadsWorker = true;
-			else if (name.startsWith(".")) visit(resolve(dirname(file), name));
+			if (worker(name)) {
+				loadsWorker = true;
+			} else if (name.startsWith(".")) {
+				visit(resolve(dirname(file), name));
+			}
 		};
 		new Visitor({
 			ImportDeclaration(node) {
-				if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string")
+				if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string") {
 					link(node.source.value);
+				}
 			},
 			ExportNamedDeclaration(node) {
-				if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string")
+				if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string") {
 					link(node.source.value);
+				}
 			},
 			ExportAllDeclaration(node) {
-				if (node.exportKind !== "type" && typeof node.source.value === "string")
+				if (node.exportKind !== "type" && typeof node.source.value === "string") {
 					link(node.source.value);
+				}
 			},
 			ImportExpression(node) {
-				if (node.source.type === "Literal" && typeof node.source.value === "string")
+				if (node.source.type === "Literal" && typeof node.source.value === "string") {
 					link(node.source.value);
+				}
 			},
 			ClassDeclaration(node) {
-				if (workerClass(node.superClass)) loadsWorker = true;
+				if (workerClass(node.superClass)) {
+					loadsWorker = true;
+				}
 			},
 			ClassExpression(node) {
-				if (workerClass(node.superClass)) loadsWorker = true;
+				if (workerClass(node.superClass)) {
+					loadsWorker = true;
+				}
 			},
 			ExportDefaultDeclaration(node) {
 				if (
@@ -93,12 +107,17 @@ const graph = (root: string, entries: readonly string[]) => {
 					node.declaration.properties.some(
 						(p) => p.type === "Property" && p.key.type === "Identifier" && handler.test(p.key.name),
 					)
-				)
+				) {
 					loadsWorker = true;
+				}
 			},
 		}).visit(tree);
 	};
-	for (const entry of entries) visit(resolve(root, entry));
+
+	for (const entry of entries) {
+		visit(resolve(root, entry));
+	}
+
 	return {files, loadsWorker};
 };
 
@@ -112,9 +131,14 @@ export const programPackageLayout: CreateRule = {
 	create(context) {
 		const file = context.filename;
 		const matched = /^(.*\/next\/programs\/[^/]+)\//.exec(file);
-		if (!matched?.[1] || /\.test\.tsx?$/.test(file)) return {};
+
+		if (!matched?.[1] || /\.test\.tsx?$/.test(file)) {
+			return {};
+		}
+
 		const root = matched[1];
 		let manifest: unknown;
+
 		try {
 			manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 		} catch {
@@ -124,45 +148,65 @@ export const programPackageLayout: CreateRule = {
 				},
 			};
 		}
+
 		const exports = map(manifest) ? manifest.exports : undefined;
 		const entries =
 			typeof exports === "string" ? targets(exports) : map(exports) ? targets(exports["."]) : [];
 		const pure = graph(root, entries).files;
 		const main = entries.some((entry) => resolve(root, entry) === file);
 		const errors: string[] = [];
-		if (entries.length === 0 || entries.some((entry) => !existsSync(resolve(root, entry))))
+
+		if (entries.length === 0 || entries.some((entry) => !existsSync(resolve(root, entry)))) {
 			errors.push("Export a real pure program at '.'.");
+		}
+
 		const subpaths = map(exports)
 			? Object.entries(exports).filter(([key]) => key.startsWith("./") && key !== "./window")
 			: [];
 		const windowEntries = map(exports) ? targets(exports["./window"]) : [];
 		// A window behind another key is reported there, so it does not count as unexported too.
 		const exported = graph(root, windowEntries).files;
+
 		// libfabrika's own entry names stay refused even on pure code: the box is never the program's.
 		for (const [key, target] of subpaths) {
 			const loaded = graph(root, targets(target));
-			for (const path of loaded.files) exported.add(path);
-			if (/\/(?:worker|workers|workerd|box|brain)(?:\/|$)/.test(key) || loaded.loadsWorker)
+
+			for (const path of loaded.files) {
+				exported.add(path);
+			}
+
+			if (/\/(?:worker|workers|workerd|box|brain)(?:\/|$)/.test(key) || loaded.loadsWorker) {
 				errors.push(
 					`A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`,
 				);
-			if ([...loaded.files].some(windowFile))
+			}
+
+			if ([...loaded.files].some(windowFile)) {
 				errors.push(`The window is exported at './window', never at '${key}'.`);
+			}
 		}
-		if (windowFiles(root).some((path) => !exported.has(path)))
+
+		if (windowFiles(root).some((path) => !exported.has(path))) {
 			errors.push(
 				"Export the real window at './window'. A program without a window needs no stub.",
 			);
-		if (windowEntries.some((path) => !existsSync(resolve(root, path))))
+		}
+
+		if (windowEntries.some((path) => !existsSync(resolve(root, path)))) {
 			errors.push("The './window' export must name a real file.");
+		}
+
 		return {
 			Program(node) {
 				if (
 					main ||
 					entries.length === 0 ||
 					entries.every((entry) => !existsSync(resolve(root, entry)))
-				)
-					for (const message of errors) context.report({node, message});
+				) {
+					for (const message of errors) {
+						context.report({node, message});
+					}
+				}
 			},
 			ImportDeclaration(node) {
 				if (
@@ -170,8 +214,9 @@ export const programPackageLayout: CreateRule = {
 					valueLink(node.importKind, node.specifiers) &&
 					typeof node.source.value === "string" &&
 					worker(node.source.value)
-				)
+				) {
 					context.report({node, message: "Pure program code cannot import Worker runtime APIs."});
+				}
 			},
 			ExportNamedDeclaration(node) {
 				if (
@@ -179,8 +224,9 @@ export const programPackageLayout: CreateRule = {
 					valueLink(node.exportKind, node.specifiers) &&
 					typeof node.source?.value === "string" &&
 					worker(node.source.value)
-				)
+				) {
 					context.report({node, message: "Pure program code cannot export Worker runtime APIs."});
+				}
 			},
 			ExportAllDeclaration(node) {
 				if (
@@ -188,8 +234,9 @@ export const programPackageLayout: CreateRule = {
 					node.exportKind !== "type" &&
 					typeof node.source.value === "string" &&
 					worker(node.source.value)
-				)
+				) {
 					context.report({node, message: "Pure program code cannot export Worker runtime APIs."});
+				}
 			},
 			ImportExpression(node) {
 				if (
@@ -197,8 +244,9 @@ export const programPackageLayout: CreateRule = {
 					node.source.type === "Literal" &&
 					typeof node.source.value === "string" &&
 					worker(node.source.value)
-				)
+				) {
 					context.report({node, message: "Pure program code cannot load Worker runtime APIs."});
+				}
 			},
 		};
 	},

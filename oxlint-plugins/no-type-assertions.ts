@@ -41,17 +41,20 @@ export const noTypeAssertions: CreateRule = {
 		return {
 			TSAsExpression(node) {
 				const inner = node.expression;
+
 				if (inner.type === "TSAsExpression" && grouped(source, inner) <= 1) {
 					const message = asKeyword(inner, "TSUnknownKeyword")
 						? "Type assertions are forbidden: `as unknown as` blinds the compiler. Decode at boundaries with Schema.decodeUnknown, or type the value properly."
 						: asKeyword(inner, "TSNeverKeyword")
 							? "Type assertions are forbidden: `as never as T` launders a value past the compiler. Construct/type the value properly instead."
 							: null;
+
 					if (message !== null) {
 						context.report({node: inner.expression, message});
 						return;
 					}
 				}
+
 				if (asKeyword(node, "TSAnyKeyword")) {
 					context.report({
 						node,

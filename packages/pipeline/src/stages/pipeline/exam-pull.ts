@@ -97,16 +97,23 @@ export const examReady = (number: number, pr: string, rules: readonly string[]) 
 		const ours = yield* work.head(side.tree);
 		// A person may push to the exam branch, as on ticket 117: the side tree goes there first.
 		const theirs = yield* work.remoteHead(side.branch);
-		if (theirs !== null && theirs !== ours && (yield* work.sideTo(name, theirs)) === "behind")
+
+		if (theirs !== null && theirs !== ours && (yield* work.sideTo(name, theirs)) === "behind") {
 			return {_tag: "moved", ours, theirs} satisfies Ready;
+		}
+
 		const merged = yield* work.sideMerge(name);
-		if (merged._tag === "conflicts")
+
+		if (merged._tag === "conflicts") {
 			return {_tag: "conflicts", head: theirs ?? ours, files: merged.files} satisfies Ready;
+		}
+
 		yield* formatAt(number, side.tree, rules, {
 			what: "the rule changes",
 			message: `format the rule changes for ticket ${number}`,
 		});
 		const head = yield* work.head(side.tree);
+
 		if (head !== theirs) {
 			yield* pushBranch({work, tickets: yield* Tickets}, number, side.tree, head, side.branch);
 			const {
@@ -118,5 +125,6 @@ export const examReady = (number: number, pr: string, rules: readonly string[]) 
 			} = yield* pulls.find(pr);
 			yield* pulls.open({...row, head});
 		}
+
 		return {_tag: "ready", head} satisfies Ready;
 	});

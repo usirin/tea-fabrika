@@ -19,8 +19,11 @@ const started = (order: readonly string[]) =>
 			const ex = yield* Experiments;
 			yield* ex.create("170", "The experiments program");
 			const answered: string[] = [];
-			for (const key of order)
+
+			for (const key of order) {
 				answered.push(yield* ex.start("170", {key, params: {}, tags: {}, job: null}));
+			}
+
 			return {answered, runs: yield* ex.runs("170")};
 		}).pipe(
 			Effect.provide(

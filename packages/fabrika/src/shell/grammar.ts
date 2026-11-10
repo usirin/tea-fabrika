@@ -145,17 +145,31 @@ export interface SaidStatement {
 /** A said line, read before any shell word, or `null`: the line is not one. */
 function saidLine(line: string): SaidStatement | Refused | null {
 	const lead = line.length - line.trimStart().length;
-	if (line.charAt(lead) !== "@") return null;
+
+	if (line.charAt(lead) !== "@") {
+		return null;
+	}
+
 	let end = lead + 1;
-	while (end < line.length && !/\s/.test(line.charAt(end))) end += 1;
+
+	while (end < line.length && !/\s/.test(line.charAt(end))) {
+		end += 1;
+	}
+
 	const name = line.slice(lead + 1, end);
-	if (name.includes("@"))
+
+	if (name.includes("@")) {
 		return refused(lead, `@${name} is one agent's name: put a space after it, then what to say`);
+	}
+
 	// One space between the mention and what is said; the rest is the agent's, spaces and all.
 	const from = /[ \t]/.test(line.charAt(end)) ? end + 1 : end;
 	const text = line.slice(from);
-	if (/^@/.test(text))
+
+	if (/^@/.test(text)) {
 		return refused(from, "a line talks to one agent: say it to each on a line of its own");
+	}
+
 	return {
 		kind: "said",
 		room: null,
@@ -180,7 +194,11 @@ export type Parsed = {readonly kind: "parsed"; readonly statements: readonly Sta
 export function refusalLines(line: string, refused: Refused): readonly string[] {
 	const guess = refused.didYouMean === undefined ? "" : `. Did you mean ${refused.didYouMean}?`;
 	const head = `tsh: ${refused.why}${guess}`;
-	if (line.includes("\n") || line.length > 160) return [head];
+
+	if (line.includes("\n") || line.length > 160) {
+		return [head];
+	}
+
 	return [head, `  ${line}`, `  ${" ".repeat(refused.at)}^`];
 }
 
@@ -203,10 +221,17 @@ class Stop {
 /** Read one line. A line with nothing but spaces, comments and `;` is no statements. */
 export function parse(line: string): Parsed {
 	const said = saidLine(line);
-	if (said !== null)
+
+	if (said !== null) {
 		return said.kind === "refused" ? said : {kind: "parsed", statements: [{...said, after: null}]};
+	}
+
 	const {tokens, open} = words(line);
-	if (open) return refused(line.length, "a quote is not closed");
+
+	if (open) {
+		return refused(line.length, "a quote is not closed");
+	}
+
 	let i = 0;
 	const peek = (): Token | undefined => tokens[i];
 	const isOp = (t: Token | undefined, op: string): boolean => t?.kind === "op" && t.op === op;
@@ -217,11 +242,16 @@ export function parse(line: string): Parsed {
 
 	const value = (flagEnd: number, name: string): Value => {
 		const t = peek();
+
 		if (t?.kind === "word") {
 			i += 1;
 			return {kind: "text", text: t.text, at: {start: t.start, end: t.end}};
 		}
-		if (isOp(t, "$(")) return sub();
+
+		if (isOp(t, "$(")) {
+			return sub();
+		}
+
 		// `map --hlep` at the end of a line is a slip for --help, not a flag missing its value.
 		return stopAt(
 			startOf(t) === line.length ? flagEnd : startOf(t),
@@ -234,23 +264,38 @@ export function parse(line: string): Parsed {
 		const open = peek();
 		const start = startOf(open);
 		i += 1;
-		if (isOp(peek(), ")")) stopAt(startOf(peek()), "$( ) is empty: put a command in it");
+
+		if (isOp(peek(), ")")) {
+			stopAt(startOf(peek()), "$( ) is empty: put a command in it");
+		}
+
 		const inner = pipeline();
 		const close = peek();
-		if (!isOp(close, ")")) return stopAt(start, "no ) closes this $(");
+
+		if (!isOp(close, ")")) {
+			return stopAt(start, "no ) closes this $(");
+		}
+
 		i += 1;
 		return {kind: "sub", pipeline: inner, at: {start, end: close?.end ?? line.length}};
 	};
 
 	const command = (): Command => {
 		const first = peek();
-		if (first?.kind !== "word") return stopAt(startOf(first), "expected a program name");
-		if (/^[-<>]/.test(first.text) || first.text.includes("="))
+
+		if (first?.kind !== "word") {
+			return stopAt(startOf(first), "expected a program name");
+		}
+
+		if (/^[-<>]/.test(first.text) || first.text.includes("=")) {
 			stopAt(first.start, `expected a program name, not ${first.text}`);
+		}
+
 		i += 1;
 		const program = {name: first.text, at: {start: first.start, end: first.end}};
 		const help = helpIn();
-		if (help !== null)
+
+		if (help !== null) {
 			return {
 				program,
 				flags: [],
@@ -261,33 +306,54 @@ export function parse(line: string): Parsed {
 				all: null,
 				at: {start: first.start, end: help.end},
 			};
+		}
+
 		const flags: Given[] = [];
 		const told: Given[] = [];
 		let out: Named | null = null;
 		let into: Named | null = null;
 		let all: At | null = null;
 		let end = first.end;
+
 		for (let t = peek(); t !== undefined; t = peek()) {
 			if (t.kind === "op") {
-				if (t.op === "$(") stopAt(t.start, "a $( ) gives a value: put it after --flag or input=");
+				if (t.op === "$(") {
+					stopAt(t.start, "a $( ) gives a value: put it after --flag or input=");
+				}
+
 				break;
 			}
+
 			i += 1;
 			const at = {start: t.start, end: t.end};
 			const text = t.text;
 			/** The value glued to `name=`: the rest of the word, or a `$( )` right after it. */
 			const glued = (rest: string, name: string): Value => {
-				if (rest === "" && isOp(peek(), "$(") && peek()?.start === t.end) return sub();
-				if (rest === "") return stopAt(t.end, `${name} needs a value after =`);
+				if (rest === "" && isOp(peek(), "$(") && peek()?.start === t.end) {
+					return sub();
+				}
+
+				if (rest === "") {
+					return stopAt(t.end, `${name} needs a value after =`);
+				}
+
 				return {kind: "text", text: rest, at: {start: t.end - rest.length, end: t.end}};
 			};
+
 			if (text === ALL_WORD) {
-				if (all !== null) stopAt(t.start, `${ALL_WORD} is given twice`);
+				if (all !== null) {
+					stopAt(t.start, `${ALL_WORD} is given twice`);
+				}
+
 				all = at;
 			} else if (text.startsWith("--")) {
 				const eq = text.indexOf("=");
 				const name = eq === -1 ? text.slice(2) : text.slice(2, eq);
-				if (name === "") stopAt(t.start, "a flag needs a name after --");
+
+				if (name === "") {
+					stopAt(t.start, "a flag needs a name after --");
+				}
+
 				const nameAt = {start: t.start, end: t.start + 2 + name.length};
 				flags.push({
 					name,
@@ -296,9 +362,16 @@ export function parse(line: string): Parsed {
 				});
 			} else if (text.startsWith(">") || text.startsWith("<")) {
 				const name = text.slice(1);
-				if (name === "") stopAt(t.start, `${text} needs a name: >output or <input, with no space`);
-				if (text.startsWith(">")) out = {name, at};
-				else into = {name, at};
+
+				if (name === "") {
+					stopAt(t.start, `${text} needs a name: >output or <input, with no space`);
+				}
+
+				if (text.startsWith(">")) {
+					out = {name, at};
+				} else {
+					into = {name, at};
+				}
 			} else if (text.includes("=") && !text.startsWith("=")) {
 				const eq = text.indexOf("=");
 				const name = text.slice(0, eq);
@@ -307,13 +380,16 @@ export function parse(line: string): Parsed {
 					at: {start: t.start, end: t.start + eq},
 					value: glued(text.slice(eq + 1), name),
 				});
-			} else
+			} else {
 				stopAt(
 					t.start,
 					`expected --flag value, input=value, >output or <input, not ${text === "" ? "an empty word" : text}`,
 				);
+			}
+
 			end = tokens[i - 1]?.end ?? end;
 		}
+
 		return {program, flags, told, out, into, help: null, all, at: {start: first.start, end}};
 	};
 
@@ -327,17 +403,29 @@ export function parse(line: string): Parsed {
 		let depth = 0;
 		let asked: number | null = null;
 		let j = i;
+
 		for (; j < tokens.length; j++) {
 			const t = tokens[j];
+
 			if (t?.kind === "op") {
-				if (t.op === "$(") depth += 1;
-				else if (t.op === ")" && depth > 0) depth -= 1;
-				else if (depth === 0) break;
-			} else if (t !== undefined && depth === 0 && asked === null && HELP_WORDS.has(t.text))
+				if (t.op === "$(") {
+					depth += 1;
+				} else if (t.op === ")" && depth > 0) {
+					depth -= 1;
+				} else if (depth === 0) {
+					break;
+				}
+			} else if (t !== undefined && depth === 0 && asked === null && HELP_WORDS.has(t.text)) {
 				asked = j;
+			}
 		}
+
 		const word = asked === null ? undefined : tokens[asked];
-		if (asked === null || word === undefined) return null;
+
+		if (asked === null || word === undefined) {
+			return null;
+		}
+
 		const next = asked + 1 < j ? tokens[asked + 1] : undefined;
 		const name =
 			next?.kind === "word" && !HELP_WORDS.has(next.text)
@@ -354,31 +442,39 @@ export function parse(line: string): Parsed {
 		const head = command();
 		const commands: [Command, ...Command[]] = [head];
 		const bars: At[] = [];
+
 		while (isOp(peek(), "|")) {
 			const bar = peek();
 			bars.push({start: startOf(bar), end: bar?.end ?? line.length});
 			i += 1;
 			commands.push(command());
 		}
+
 		const last = commands.at(-1) ?? head;
 		return {commands, bars, at: {start: head.at.start, end: last.at.end}};
 	};
 
 	const statement = (): Bare => {
 		const first = peek();
+
 		if (first?.kind === "word" && isBuiltin(first.text)) {
 			i += 1;
 			const args: Named[] = [];
+
 			for (let t = peek(); t?.kind === "word"; t = peek()) {
 				args.push({name: t.text, at: {start: t.start, end: t.end}});
 				i += 1;
 			}
+
 			const next = peek();
-			if (next !== undefined && (isOp(next, "|") || isOp(next, "$(") || isOp(next, ")")))
+
+			if (next !== undefined && (isOp(next, "|") || isOp(next, "$(") || isOp(next, ")"))) {
 				stopAt(
 					next.start,
 					`${first.text} is built in: it takes plain words, not ${next.kind === "op" ? next.op : ""}`,
 				);
+			}
+
 			const background = isOp(peek(), "&");
 			const end = args.at(-1)?.at.end ?? first.end;
 			return {
@@ -390,8 +486,13 @@ export function parse(line: string): Parsed {
 				at: {start: first.start, end},
 			};
 		}
+
 		const piped = pipeline();
-		if (isOp(peek(), ")")) stopAt(startOf(peek()), "a ) with no $( before it");
+
+		if (isOp(peek(), ")")) {
+			stopAt(startOf(peek()), "a ) with no $( before it");
+		}
+
 		return {
 			kind: "run",
 			pipeline: piped,
@@ -405,40 +506,62 @@ export function parse(line: string): Parsed {
 	const walk = (): Parsed => {
 		let after: Connector = null;
 		let connectorAt = 0;
+
 		while (i < tokens.length) {
 			if (after === null && isOp(peek(), ";")) {
 				i += 1;
 				continue;
 			}
-			if (after !== null && isOp(peek(), ";"))
+
+			if (after !== null && isOp(peek(), ";")) {
 				stopAt(connectorAt, `${after} needs a command after it`);
-			for (const op of ["&", "&&", "||"] as const)
-				if (isOp(peek(), op)) stopAt(startOf(peek()), `${op} needs a command before it`);
+			}
+
+			for (const op of ["&", "&&", "||"] as const) {
+				if (isOp(peek(), op)) {
+					stopAt(startOf(peek()), `${op} needs a command before it`);
+				}
+			}
+
 			const one = statement();
 			statements.push({...one, after});
 			const t = peek();
 			const chained = isOp(t, "&&") || isOp(t, "||");
+
 			// A chain runs here, each step on the last one's status: no part of it is a job.
-			if (one.background && (after !== null || chained))
+			if (one.background && (after !== null || chained)) {
 				stopAt(
 					startOf(t),
 					"a job (&) cannot be part of an && or || chain: tsh runs a chain here, each step on the last one's status",
 				);
-			if (t === undefined) break;
+			}
+
+			if (t === undefined) {
+				break;
+			}
+
 			if (chained) {
 				after = isOp(t, "&&") ? "&&" : "||";
 				connectorAt = t.start;
 				i += 1;
-				if (i >= tokens.length) stopAt(connectorAt, `${after} needs a command after it`);
+
+				if (i >= tokens.length) {
+					stopAt(connectorAt, `${after} needs a command after it`);
+				}
+
 				continue;
 			}
+
 			after = null;
+
 			if (isOp(t, ";") || isOp(t, "&")) {
 				i += 1;
 				continue;
 			}
+
 			stopAt(t.start, `expected ; or the end of the line, not ${t.kind === "op" ? t.op : t.text}`);
 		}
+
 		return {kind: "parsed", statements};
 	};
 	return caught(walk);
@@ -448,7 +571,10 @@ function caught(walk: () => Parsed): Parsed {
 	try {
 		return walk();
 	} catch (stop) {
-		if (stop instanceof Stop) return stop.refusal;
+		if (stop instanceof Stop) {
+			return stop.refusal;
+		}
+
 		throw stop;
 	}
 }

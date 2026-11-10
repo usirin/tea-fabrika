@@ -45,7 +45,9 @@ export const noPromises: CreateRule = {
 		const refuse = (node: Node, what: string) =>
 			context.report({node, message: `${what}: ${WHY}. Write it as an Effect.`});
 		const asyncFn = (node: ESTree.Function | ESTree.ArrowFunctionExpression) => {
-			if (node.async) refuse(node, "An `async` function makes a Promise");
+			if (node.async) {
+				refuse(node, "An `async` function makes a Promise");
+			}
 		};
 		return {
 			FunctionDeclaration: asyncFn,
@@ -55,7 +57,9 @@ export const noPromises: CreateRule = {
 				refuse(node, "`await` waits on a Promise");
 			},
 			ForOfStatement(node) {
-				if (node.await) refuse(node, "`for await` waits on Promises");
+				if (node.await) {
+					refuse(node, "`for await` waits on Promises");
+				}
 			},
 			ImportExpression(node) {
 				refuse(node, "`import()` answers a Promise");
@@ -67,14 +71,26 @@ export const noPromises: CreateRule = {
 			},
 			CallExpression(node) {
 				const callee = node.callee;
+
 				if (callee.type === "Identifier" && PROMISE_CALLS.has(callee.name)) {
-					if (effect.has(callee.name)) refuse(node, `\`${callee.name}\` takes or makes a Promise`);
+					if (effect.has(callee.name)) {
+						refuse(node, `\`${callee.name}\` takes or makes a Promise`);
+					}
+
 					return;
 				}
-				if (callee.type !== "MemberExpression" || callee.computed) return;
-				if (callee.property.type !== "Identifier") return;
+
+				if (callee.type !== "MemberExpression" || callee.computed) {
+					return;
+				}
+
+				if (callee.property.type !== "Identifier") {
+					return;
+				}
+
 				const name = callee.property.name;
 				const on = callee.object.type === "Identifier" ? callee.object.name : null;
+
 				if (on !== null && PROMISE_CALLS.has(name) && (MODULES.has(on) || effect.has(on))) {
 					refuse(node, `\`${on}.${name}\` takes or makes a Promise`);
 				} else if (on === "Promise") {
