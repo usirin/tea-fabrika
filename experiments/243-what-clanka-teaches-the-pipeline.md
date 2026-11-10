@@ -435,9 +435,19 @@ contradicting a decision: a no keeps the note as it is.
    the model call and its login outside, so no login ever goes in a box? This walks back "the box
    goes around a fabrika program, not around an agent harness" in
    [programs run in a box](../docs/direction/programs-run-in-a-box.md).
+
+   **Answered no** (owner, 2026-11-09,
+   [0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)): fabrika never owns the agent
+   loop. The harness and the user's subscription login stay in the box, and the box is the
+   protection.
 2. Should the Claude adapter drive Claude Code one model step at a time and own the history, so a
    restart sends our kept history to a new process instead of resuming the maker's session? This
    walks back the Tier 5 law "when hands restart, they resume the maker's session".
+
+   **Answered no** (owner, 2026-11-09,
+   [0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)): the adapter does not own the
+   history, and a restart resumes the harness's own session. Borrows 3 to 5 do not need our own
+   loop and stay open leads.
 
 ## What it cannot tell us
 
