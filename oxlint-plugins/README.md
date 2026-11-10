@@ -86,12 +86,15 @@ which the plan does not name. Report any miss.
 
 ### Ticket 337: reason keys in next/
 
-`no-why-key` checks object fields, shorthand, methods, getters and setters; class fields and
-methods, including abstract declarations; and type or interface property and method signatures. Effect Schema field maps use
-the same object syntax. Quoted and escaped names, computed string literals and expression-free
-templates count by their decoded value. The match is exactly `why`, including readonly members.
+`no-why-key` checks object fields, shorthand, methods, getters and setters; class fields,
+methods and accessors, including static and abstract declarations; constructor parameter
+properties with access or readonly modifiers, including defaults; and type or interface
+property and method signatures. Effect Schema field maps use the same object syntax. Quoted
+and escaped names, computed string literals and expression-free templates count by their
+decoded value. The match is exactly `why`, including readonly members.
 
-Reads, destructuring reads, local variables, comments, string values and dynamic keys pass.
+Reads, destructuring reads, local variables, plain constructor parameters without property
+modifiers, comments, string values and dynamic keys pass.
 `whyNot`, `Why` and `reason` pass. Member assignments, SQL and JSON inside strings need the
 separate sweep audit. Today's paths keep their spelling. There is no autofix, since changing
 one declaration alone can break readers and saved formats. The glossary is not parsed as policy.
@@ -107,9 +110,15 @@ under `runs/reason337/next-lint.log`. Product still uses `why`, so this is delib
 `no-why-key.test.ts` uses generated Unicode names, generated filenames and declaration forms
 through the real config, with seed 119120 and 12 runs per property. Every syntax run includes
 the exact retired key. Fixed format checks pin escaped spellings and the diagnostic.
-The final post-build scan and its exact final head are still owed. It must report zero
-remaining diagnostics before landing. A zero-hit final scan has no false-alarm percentage
-denominator; the generated positive and negative plants check both sides separately.
+The final post-build scan on 2026-11-09 used base
+`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03` and code head
+`d6f62819a3585252a3bb08a63837029c088934ad`, including review 1's class declaration fixes.
+The same wrapper scanned all 197 TypeScript files under `next/`: 0 `no-why-key`
+diagnostics, 0 useful findings, 0 false findings and 0 unresolved findings. It passed with
+0 blocking findings and 42 advice messages. Raw output is private at the same path above.
+A zero-hit scan has no false-alarm percentage denominator. The generated positive and
+negative plants check both sides separately; they cover parameter modifiers, default values,
+instance/static/abstract accessors, decoded key spellings and permitted plain parameters.
 
 ### P12 checks in lint
 
