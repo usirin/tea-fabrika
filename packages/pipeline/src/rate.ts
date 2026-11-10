@@ -1,6 +1,6 @@
-import {type Writer, writerOf} from "@kampus/fabrika-old";
-import {Schema} from "effect";
-import {type Gate, park, pass} from "./combos.ts";
+import { type Writer, writerOf } from "@kampus/fabrika-old";
+import { Schema } from "effect";
+import { type Gate, park, pass } from "./combos.ts";
 
 // Rate: count the "fix" and "noise" ratings on a rule's findings, and say
 // whether the rule may block or only advise
@@ -30,7 +30,7 @@ import {type Gate, park, pass} from "./combos.ts";
 // here is the least the count needs: its id and its rule.
 
 /** A finding, as the count sees it: which one, and which rule made it. */
-export const Finding = Schema.Struct({id: Schema.String, rule: Schema.String});
+export const Finding = Schema.Struct({ id: Schema.String, rule: Schema.String });
 export type Finding = typeof Finding.Type;
 
 /** What a rating says: the finding was worth fixing, or it was noise. */
@@ -42,34 +42,34 @@ export type Says = typeof Says.Type;
  * clicked: the writer of its row does. "Counts as noise" is worked out when
  * the count is made; nothing is ever written for it.
  */
-export const Rating = Schema.Struct({finding: Schema.String, says: Says});
+export const Rating = Schema.Struct({ finding: Schema.String, says: Says });
 export type Rating = typeof Rating.Type;
 
 /** A rating as the ledger holds it: the row's `writer` text, and the rating it holds. */
-export const RatingRow = Schema.Struct({writer: Schema.String, rating: Rating});
+export const RatingRow = Schema.Struct({ writer: Schema.String, rating: Rating });
 export type RatingRow = typeof RatingRow.Type;
 
 /** What the count reads: every rating row in the order it was written, and the findings whose change shipped. */
 export const Facts = Schema.Struct({
-	ratings: Schema.Array(RatingRow),
-	shipped: Schema.Array(Schema.String),
+  ratings: Schema.Array(RatingRow),
+  shipped: Schema.Array(Schema.String),
 });
 export type Facts = typeof Facts.Type;
 
-type User = Extract<Writer, {readonly kind: "user"}>;
+type User = Extract<Writer, { readonly kind: "user" }>;
 
 /** A rating whose row a user wrote: the only kind the count reads. */
 export interface UserRating {
-	readonly by: User;
-	readonly rating: Rating;
+  readonly by: User;
+  readonly rating: Rating;
 }
 
 /** The ratings users wrote, in order. A row an agent wrote, or one whose writer names neither, is left out. */
 export const userRatings = (facts: Facts): readonly UserRating[] =>
-	facts.ratings.flatMap(({writer, rating}) => {
-		const by = writerOf(writer);
-		return by?.kind === "user" ? [{by, rating}] : [];
-	});
+  facts.ratings.flatMap(({ writer, rating }) => {
+    const by = writerOf(writer);
+    return by?.kind === "user" ? [{ by, rating }] : [];
+  });
 
 /**
  * What a finding never rated counts as once its change ships. Each use of
@@ -85,33 +85,33 @@ export type Silence = typeof Silence.Type;
 
 /** How one finding counts, from users' ratings only. */
 function count(
-	finding: Finding,
-	rated: readonly UserRating[],
-	shipped: readonly string[],
-	silence: Silence,
+  finding: Finding,
+  rated: readonly UserRating[],
+  shipped: readonly string[],
+  silence: Silence,
 ): Says | null {
-	// A person may change their mind: the last rating holds.
-	const last = rated.findLast((r) => r.rating.finding === finding.id);
+  // A person may change their mind: the last rating holds.
+  const last = rated.findLast((r) => r.rating.finding === finding.id);
 
-	if (last !== undefined) {
-		return last.rating.says;
-	}
+  if (last !== undefined) {
+    return last.rating.says;
+  }
 
-	return silence === "noise" && shipped.includes(finding.id) ? "noise" : null;
+  return silence === "noise" && shipped.includes(finding.id) ? "noise" : null;
 }
 
 /** How one finding counts now: its user's rating, what `silence` says once shipped unrated, or `null`: not yet. */
 export const countedAs = (finding: Finding, facts: Facts, silence: Silence): Says | null =>
-	count(finding, userRatings(facts), facts.shipped, silence);
+  count(finding, userRatings(facts), facts.shipped, silence);
 
 /** One rule's count. `open`: findings not counted yet. */
 export interface Tally {
-	readonly fix: number;
-	readonly noise: number;
-	readonly open: number;
+  readonly fix: number;
+  readonly noise: number;
+  readonly open: number;
 }
 
-export const none: Tally = {fix: 0, noise: 0, open: 0};
+export const none: Tally = { fix: 0, noise: 0, open: 0 };
 
 /**
  * The count for each rule that has findings, from users' ratings only, with
@@ -122,24 +122,21 @@ export const none: Tally = {fix: 0, noise: 0, open: 0};
  * each rule as an own key, plain data a parent can keep in its state.
  */
 export function tallyOf(
-	findings: readonly Finding[],
-	facts: Facts,
-	silence: (rule: string) => Silence,
+  findings: readonly Finding[],
+  facts: Facts,
+  silence: (rule: string) => Silence,
 ): Readonly<Record<string, Tally>> {
-	const seen = new Map(findings.map((f) => [f.id, f]));
-	const rated = userRatings(facts);
-	const tally = new Map<string, Tally>();
+  const seen = new Map(findings.map((f) => [f.id, f]));
+  const rated = userRatings(facts);
+  const tally = new Map<string, Tally>();
 
-	for (const finding of seen.values()) {
-		const t = tally.get(finding.rule) ?? none;
-		const counted = count(finding, rated, facts.shipped, silence(finding.rule));
-		tally.set(
-			finding.rule,
-			counted === null ? {...t, open: t.open + 1} : {...t, [counted]: t[counted] + 1},
-		);
-	}
+  for (const finding of seen.values()) {
+    const t = tally.get(finding.rule) ?? none;
+    const counted = count(finding, rated, facts.shipped, silence(finding.rule));
+    tally.set(finding.rule, counted === null ? { ...t, open: t.open + 1 } : { ...t, [counted]: t[counted] + 1 });
+  }
 
-	return Object.fromEntries(tally);
+  return Object.fromEntries(tally);
 }
 
 /**
@@ -148,9 +145,7 @@ export function tallyOf(
  * set here: it comes from the settings, and the type asks for a whole number
  * of at least 1, since a rule nobody rated has shown nothing.
  */
-export const Enough = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
-	Schema.brand("Enough"),
-);
+export const Enough = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(Schema.brand("Enough"));
 export type Enough = typeof Enough.Type;
 
 /** A rule's mode: its findings only advise, or they stop the work. */
@@ -162,7 +157,7 @@ export type Mode = "advise" | "block";
  * positives" (Sadowski et al., CACM 2018). Not yet counted is not evidence.
  */
 export const modeOf = (tally: Tally, enough: Enough): Mode =>
-	tally.fix + tally.noise >= enough && tally.noise === 0 ? "block" : "advise";
+  tally.fix + tally.noise >= enough && tally.noise === 0 ? "block" : "advise";
 
 /**
  * Gate on Rate: the findings of a rule that blocks park the work, all of them
@@ -170,9 +165,9 @@ export const modeOf = (tally: Tally, enough: Enough): Mode =>
  * user to rate.
  */
 export function gateRate(
-	found: readonly Finding[],
-	mode: (rule: string) => Mode,
+  found: readonly Finding[],
+  mode: (rule: string) => Mode,
 ): Gate<readonly [Finding, ...Finding[]]> {
-	const [first, ...rest] = found.filter((f) => mode(f.rule) === "block");
-	return first === undefined ? pass : park([first, ...rest]);
+  const [first, ...rest] = found.filter((f) => mode(f.rule) === "block");
+  return first === undefined ? pass : park([first, ...rest]);
 }

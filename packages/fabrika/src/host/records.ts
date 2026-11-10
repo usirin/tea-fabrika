@@ -1,10 +1,10 @@
-import {Clock, Effect, Semaphore} from "effect";
-import type {StepLog, StorageBroken} from "../program/storage.ts";
-import {jobTraceId} from "../program/trace.ts";
-import type {JobsOnHost, JobTable} from "./host-jobs.ts";
-import {type Job, type JobsMsg, traceIdOf} from "./jobs.ts";
-import type {SpanRow} from "./otlp.ts";
-import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} from "./traces.ts";
+import { Clock, Effect, Semaphore } from "effect";
+import type { StepLog, StorageBroken } from "../program/storage.ts";
+import { jobTraceId } from "../program/trace.ts";
+import type { JobsOnHost, JobTable } from "./host-jobs.ts";
+import { type Job, type JobsMsg, traceIdOf } from "./jobs.ts";
+import type { SpanRow } from "./otlp.ts";
+import { type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls } from "./traces.ts";
 
 // Where a host keeps its jobs' records, and how it fills them as its jobs go
 // (docs/direction/a-job-record-holds-its-trace.md). One record per job, keyed by the job's trace
@@ -31,12 +31,12 @@ import {type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls} fro
 
 /** A host's jobs' records: one per job, by its trace id. */
 export interface Records {
-	/** One call to one record (`JobCall`), as the door would hand it on. */
-	readonly calls: RecordCalls;
-	/** Keep ended spans of one trace in its record. A span kept again is the same span. */
-	readonly keep: (trace: string, spans: readonly SpanRow[]) => Effect.Effect<void, StorageBroken>;
-	/** A change at once, then one after each write to that trace's record. */
-	readonly changes: Changes;
+  /** One call to one record (`JobCall`), as the door would hand it on. */
+  readonly calls: RecordCalls;
+  /** Keep ended spans of one trace in its record. A span kept again is the same span. */
+  readonly keep: (trace: string, spans: readonly SpanRow[]) => Effect.Effect<void, StorageBroken>;
+  /** A change at once, then one after each write to that trace's record. */
+  readonly changes: Changes;
 }
 
 /** `Traces` over a host's own records: a followed record is read again on each write to it. */
@@ -47,23 +47,22 @@ export const layerRecordTraces = (records: Records) => layerTraces(records.calls
  * no trace (a machine the host runs for itself) goes nowhere.
  */
 export const stepsInto =
-	(records: Records): StepLog =>
-	(run, machine, id, step) =>
-		Effect.flatMap(jobTraceId, (trace) =>
-			trace === null
-				? Effect.void
-				: records.calls(trace, {op: "step", run, machine, id, ...step}).pipe(Effect.asVoid),
-		);
+  (records: Records): StepLog =>
+  (run, machine, id, step) =>
+    Effect.flatMap(jobTraceId, (trace) =>
+      trace === null
+        ? Effect.void
+        : records.calls(trace, { op: "step", run, machine, id, ...step }).pipe(Effect.asVoid),
+    );
 
 /** The worse of two ends: a job with one failed run failed, and one with a stopped run stopped. */
 const worse = (a: JobEnd, b: JobEnd): JobEnd => {
-	const rank = {done: 0, stopped: 1, failed: 2} as const;
-	return rank[b] > rank[a] ? b : a;
+  const rank = { done: 0, stopped: 1, failed: 2 } as const;
+  return rank[b] > rank[a] ? b : a;
 };
 
 /** The job holding run `run`, in a table. */
-const holding = (jobs: readonly Job[], run: string) =>
-	jobs.find((job) => job.stages.some((st) => st.run === run));
+const holding = (jobs: readonly Job[], run: string) => jobs.find((job) => job.stages.some((st) => st.run === run));
 
 /**
  * The host's jobs, with each job's record written as the table moves: `began` when tsh notes a
@@ -73,73 +72,68 @@ const holding = (jobs: readonly Job[], run: string) =>
  * A write that fails is logged and let go: the table, and the job, go on without it.
  */
 export const keepJobs = (jobs: JobsOnHost, records: Records, host: string): JobsOnHost => {
-	const {table} = jobs;
-	/** How each running job's runs have ended so far, by its trace. */
-	const ends = new Map<string, JobEnd>();
-	const write = (what: string, trace: string, writing: Effect.Effect<void, StorageBroken>) =>
-		writing.pipe(
-			Effect.catch((e) =>
-				Effect.logWarning(`the record of ${trace} did not keep ${what}: ${e.message}`),
-			),
-		);
-	const after = (msg: JobsMsg, before: readonly Job[]) =>
-		Effect.gen(function* () {
-			const now = table.getState().jobs;
-			const at = yield* Clock.currentTimeMillis;
+  const { table } = jobs;
+  /** How each running job's runs have ended so far, by its trace. */
+  const ends = new Map<string, JobEnd>();
+  const write = (what: string, trace: string, writing: Effect.Effect<void, StorageBroken>) =>
+    writing.pipe(Effect.catch((e) => Effect.logWarning(`the record of ${trace} did not keep ${what}: ${e.message}`)));
+  const after = (msg: JobsMsg, before: readonly Job[]) =>
+    Effect.gen(function* () {
+      const now = table.getState().jobs;
+      const at = yield* Clock.currentTimeMillis;
 
-			if (msg.type === "began") {
-				const job = holding(now, msg.stages[0].run);
+      if (msg.type === "began") {
+        const job = holding(now, msg.stages[0].run);
 
-				if (job === undefined) {
-					return;
-				}
+        if (job === undefined) {
+          return;
+        }
 
-				const trace = traceIdOf(job);
-				// The job's own writer, not the records' one: a line an agent typed is the agent's.
-				const by = job.by === null ? {} : {by: job.by};
-				yield* write(
-					"its start",
-					trace,
-					jobWrites(records.calls, trace).began({n: job.n, text: job.text, host, at, ...by}),
-				);
-				return;
-			}
+        const trace = traceIdOf(job);
+        // The job's own writer, not the records' one: a line an agent typed is the agent's.
+        const by = job.by === null ? {} : { by: job.by };
+        yield* write(
+          "its start",
+          trace,
+          jobWrites(records.calls, trace).began({ n: job.n, text: job.text, host, at, ...by }),
+        );
+        return;
+      }
 
-			const job =
-				msg.type === "stage_ended"
-					? holding(before, msg.run)
-					: msg.type === "dropped"
-						? before.find((j) => j.n === msg.n && j.state === "detached")
-						: undefined;
+      const job =
+        msg.type === "stage_ended"
+          ? holding(before, msg.run)
+          : msg.type === "dropped"
+            ? before.find((j) => j.n === msg.n && j.state === "detached")
+            : undefined;
 
-			if (job === undefined) {
-				return;
-			}
+      if (job === undefined) {
+        return;
+      }
 
-			const trace = traceIdOf(job);
-			const how =
-				msg.type === "stage_ended" ? worse(ends.get(trace) ?? "done", msg.how) : "stopped";
+      const trace = traceIdOf(job);
+      const how = msg.type === "stage_ended" ? worse(ends.get(trace) ?? "done", msg.how) : "stopped";
 
-			if (now.some((j) => j.n === job.n)) {
-				ends.set(trace, how);
-				return;
-			}
+      if (now.some((j) => j.n === job.n)) {
+        ends.set(trace, how);
+        return;
+      }
 
-			ends.delete(trace);
-			// Who asked it to stop, and why, as the table kept it: none for a job that ended on its own.
-			yield* write("its end", trace, jobWrites(records.calls, trace).ended(how, at, job.stop));
-		});
-	// One Msg and its record write at a time, so each sees the table as its own Msg left it.
-	const one = Semaphore.makeUnsafe(1).withPermits(1);
-	const kept: JobTable = {
-		getState: () => table.getState(),
-		subscribe: (listener) => table.subscribe(listener),
-		dispatch: (msg) =>
-			Effect.gen(function* () {
-				const before = table.getState().jobs;
-				yield* table.dispatch(msg);
-				yield* after(msg, before);
-			}).pipe(one),
-	};
-	return {...jobs, table: kept};
+      ends.delete(trace);
+      // Who asked it to stop, and why, as the table kept it: none for a job that ended on its own.
+      yield* write("its end", trace, jobWrites(records.calls, trace).ended(how, at, job.stop));
+    });
+  // One Msg and its record write at a time, so each sees the table as its own Msg left it.
+  const one = Semaphore.makeUnsafe(1).withPermits(1);
+  const kept: JobTable = {
+    getState: () => table.getState(),
+    subscribe: (listener) => table.subscribe(listener),
+    dispatch: (msg) =>
+      Effect.gen(function* () {
+        const before = table.getState().jobs;
+        yield* table.dispatch(msg);
+        yield* after(msg, before);
+      }).pipe(one),
+  };
+  return { ...jobs, table: kept };
 };

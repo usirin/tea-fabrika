@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // Whether a yes given at one head still stands at another (self-fix PR 10, Part 4;
 // docs/direction/a-yes-binds-to-the-diff.md). Today's version.
@@ -22,27 +22,27 @@ import {Schema} from "effect";
 
 /** What a yes was given on: the head, the branch it goes onto, where it left that branch, and its diff's id. */
 export const Given = Schema.Struct({
-	head: Schema.String,
-	onto: Schema.String,
-	base: Schema.String,
-	/** `git diff -U0 base head | git patch-id --verbatim`, its first word. */
-	diff: Schema.String,
+  head: Schema.String,
+  onto: Schema.String,
+  base: Schema.String,
+  /** `git diff -U0 base head | git patch-id --verbatim`, its first word. */
+  diff: Schema.String,
 });
 export type Given = typeof Given.Type;
 
 /** What the pull request is now, read against a `Given`. */
 export interface Now {
-	readonly head: string;
-	/** The head's tree. */
-	readonly tree: string;
-	/** The given diff, replayed onto the base now: its tree, or `conflict`. */
-	readonly replayed: string;
-	/** The base's formatter run on the replayed tree's changed paths: its tree. `null`: not run. */
-	readonly formatted: string | null;
-	/** The id of the diff now, as `Given.diff` is made. */
-	readonly diff: string;
-	/** `git range-diff` from the given commits to the ones now: what a glance reads. */
-	readonly range: string;
+  readonly head: string;
+  /** The head's tree. */
+  readonly tree: string;
+  /** The given diff, replayed onto the base now: its tree, or `conflict`. */
+  readonly replayed: string;
+  /** The base's formatter run on the replayed tree's changed paths: its tree. `null`: not run. */
+  readonly formatted: string | null;
+  /** The id of the diff now, as `Given.diff` is made. */
+  readonly diff: string;
+  /** `git range-diff` from the given commits to the ones now: what a glance reads. */
+  readonly range: string;
 }
 
 /** Why a yes still stands. The same words the `carried` fact keeps, but a glance's. */
@@ -51,22 +51,22 @@ export type Kept = typeof Kept.Type;
 
 /** What `carry` says: kept, and why; a glance, with what it would read; or stale. */
 export const Carried = Schema.Union([
-	Schema.TaggedStruct("kept", {why: Kept}),
-	Schema.TaggedStruct("glance", {range: Schema.String}),
-	Schema.TaggedStruct("stale", {}),
+  Schema.TaggedStruct("kept", { why: Kept }),
+  Schema.TaggedStruct("glance", { range: Schema.String }),
+  Schema.TaggedStruct("stale", {}),
 ]);
 export type Carried = typeof Carried.Type;
 
-const kept = (why: Kept): Carried => ({_tag: "kept", why});
+const kept = (why: Kept): Carried => ({ _tag: "kept", why });
 
 /** Whether the yes given on `given` stands at `now`. Pure. */
 export const carry = (given: Given, now: Now): Carried =>
-	now.head === given.head
-		? kept("same_head")
-		: now.replayed === now.tree
-			? kept("replayed")
-			: now.formatted === now.tree
-				? kept("formatted")
-				: now.diff === given.diff
-					? {_tag: "glance", range: now.range}
-					: {_tag: "stale"};
+  now.head === given.head
+    ? kept("same_head")
+    : now.replayed === now.tree
+      ? kept("replayed")
+      : now.formatted === now.tree
+        ? kept("formatted")
+        : now.diff === given.diff
+          ? { _tag: "glance", range: now.range }
+          : { _tag: "stale" };

@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // One promise a formal check keeps, as data (experiment 117). A file under
 // `promises/` at the top of the repo holds one record; its name, without
@@ -23,9 +23,9 @@ import {Schema} from "effect";
  * piece.
  */
 export const Piece = Schema.String.check(
-	Schema.isPattern(/^(?!\/)(?!(?:.*\/)?\.\.(?:\/|$))[^#\s]+(?:#[A-Za-z_$][\w$]*)?$/, {
-		message: "a path inside the repository, then optionally # and a top-level name",
-	}),
+  Schema.isPattern(/^(?!\/)(?!(?:.*\/)?\.\.(?:\/|$))[^#\s]+(?:#[A-Za-z_$][\w$]*)?$/, {
+    message: "a path inside the repository, then optionally # and a top-level name",
+  }),
 );
 export type Piece = typeof Piece.Type;
 
@@ -40,31 +40,31 @@ export const Tool = Schema.Literals(["search", "tla", "property", "proof"]);
 export type Tool = typeof Tool.Type;
 
 /** The break planted to show the check can fail: the check runs again with `PROMISE_PLANT=<name>`. */
-export const Plant = Schema.Struct({name: Schema.String, what: Schema.String});
+export const Plant = Schema.Struct({ name: Schema.String, what: Schema.String });
 
 /** When someone last said the check still describes the code, and what the code was then. */
 export const Confirmed = Schema.Struct({
-	/** The commit `pnpm promises confirm` ran at. A pointer for people: a squash merge drops it. */
-	commit: Schema.String,
-	/** One print per piece, of `covers` and `exam` alike: what the gate holds the code to. */
-	prints: Schema.Record(Schema.String, Schema.String),
+  /** The commit `pnpm promises confirm` ran at. A pointer for people: a squash merge drops it. */
+  commit: Schema.String,
+  /** One print per piece, of `covers` and `exam` alike: what the gate holds the code to. */
+  prints: Schema.Record(Schema.String, Schema.String),
 });
 export type Confirmed = typeof Confirmed.Type;
 
 export const Entry = Schema.Struct({
-	/** What must always be true, in one plain sentence. */
-	promise: Schema.String,
-	/** What goes wrong for someone if it is not, in one plain sentence. */
-	harm: Schema.String,
-	tool: Tool,
-	/** The command that runs the check. Its last line on stdout is a `Verdict`. */
-	check: Schema.String,
-	plant: Plant,
-	/** The code the promise is about. */
-	covers: Schema.Array(Piece),
-	/** The check itself: the law, the plant, the world it walks, the checker. Changing it is the owner's call. */
-	exam: Schema.Array(Piece),
-	confirmed: Confirmed,
+  /** What must always be true, in one plain sentence. */
+  promise: Schema.String,
+  /** What goes wrong for someone if it is not, in one plain sentence. */
+  harm: Schema.String,
+  tool: Tool,
+  /** The command that runs the check. Its last line on stdout is a `Verdict`. */
+  check: Schema.String,
+  plant: Plant,
+  /** The code the promise is about. */
+  covers: Schema.Array(Piece),
+  /** The check itself: the law, the plant, the world it walks, the checker. Changing it is the owner's call. */
+  exam: Schema.Array(Piece),
+  confirmed: Confirmed,
 });
 export type Entry = typeof Entry.Type;
 
@@ -72,15 +72,15 @@ export const decodeEntry = Schema.decodeUnknownExit(Schema.fromJsonString(Entry)
 
 /** What a check command prints last: did the promise hold, on which plant if any. */
 export const Verdict = Schema.Struct({
-	held: Schema.Boolean,
-	/** What it checked, in its own words: a law's name. */
-	checked: Schema.String,
-	plant: Schema.NullOr(Schema.String),
-	/** How far it looked, in words. */
-	bound: Schema.String,
-	/** The shortest breaking sequence, one line per step. Empty when it held. */
-	path: Schema.Array(Schema.String),
-	why: Schema.NullOr(Schema.String),
+  held: Schema.Boolean,
+  /** What it checked, in its own words: a law's name. */
+  checked: Schema.String,
+  plant: Schema.NullOr(Schema.String),
+  /** How far it looked, in words. */
+  bound: Schema.String,
+  /** The shortest breaking sequence, one line per step. Empty when it held. */
+  path: Schema.Array(Schema.String),
+  why: Schema.NullOr(Schema.String),
 });
 export type Verdict = typeof Verdict.Type;
 

@@ -1,1 +1,1 @@
-export {recordPart} from "./records.ts";
+export { recordPart } from "./records.ts";

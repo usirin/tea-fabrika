@@ -6,26 +6,26 @@
 // the write. A wait answers at once: `ready`, or a ring row that the next append past it takes out
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
-import {Cause, Effect, Equal, Exit, Option, Result, Schema} from "effect";
-import type {LedgerTurn} from "./ledger-transaction.ts";
-import type {Doorbell} from "./ledger.ts";
-import {LedgerError} from "./ledger.ts";
-import {Appended, Entry, Line, PAGE, ParentText, Rev, Row, Waited} from "./log.ts";
-import type {Referee, Sql, SqlValue} from "./referee.ts";
-import {errorClass, short} from "./trace.ts";
+import { Cause, Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import type { LedgerTurn } from "./ledger-transaction.ts";
+import type { Doorbell } from "./ledger.ts";
+import { LedgerError } from "./ledger.ts";
+import { Appended, Entry, Line, PAGE, ParentText, Rev, Row, Waited } from "./log.ts";
+import type { Referee, Sql, SqlValue } from "./referee.ts";
+import { errorClass, short } from "./trace.ts";
 
 /** Cloudflare's row limit, so node:sqlite answers what workerd would (flag 13). */
 const MOST_BYTES = 2_000_000;
 
 const TABLES = [
-	`CREATE TABLE IF NOT EXISTS entries (
+  `CREATE TABLE IF NOT EXISTS entries (
 		rev INTEGER PRIMARY KEY, stream TEXT NOT NULL, pos INTEGER NOT NULL, id TEXT NOT NULL,
 		"arrivedAt" INTEGER NOT NULL, "by" TEXT NOT NULL, "for" TEXT NOT NULL, "sentAt" TEXT NOT NULL,
 		seen INTEGER NOT NULL, parent TEXT, "traceId" TEXT NOT NULL,
 		build TEXT NOT NULL, "_tag" TEXT NOT NULL, body TEXT NOT NULL,
 		UNIQUE (stream, pos), UNIQUE (stream, id))`,
-	`CREATE INDEX IF NOT EXISTS entries_by_stream ON entries (stream, rev)`,
-	`CREATE TABLE IF NOT EXISTS rings (
+  `CREATE INDEX IF NOT EXISTS entries_by_stream ON entries (stream, rev)`,
+  `CREATE TABLE IF NOT EXISTS rings (
 		"to" TEXT NOT NULL, stream TEXT NOT NULL, after INTEGER NOT NULL, PRIMARY KEY ("to", stream))`,
 ];
 
@@ -37,37 +37,35 @@ const ERROR = "error.type";
 export const tag = (name: string): string => `fab.ledger.${name}`;
 
 /** A waiter to ring, as the rings table holds it. */
-const Ring = Schema.Struct({to: Schema.String, after: Rev});
+const Ring = Schema.Struct({ to: Schema.String, after: Rev });
 type Ring = typeof Ring.Type;
 
 /** What one append step did. Only `placed` wrote, and only it rings. */
 const Placing = Schema.TaggedUnion({
-	placed: {rev: Rev, pos: Rev, rings: Schema.Array(Ring)},
-	resent: {rev: Rev, pos: Rev},
-	refused: Appended.cases.refused.fields,
+  placed: { rev: Rev, pos: Rev, rings: Schema.Array(Ring) },
+  resent: { rev: Rev, pos: Rev },
+  refused: Appended.cases.refused.fields,
 });
 type Placing = typeof Placing.Type;
 
-const Head = Schema.Struct({rev: Rev, arrivedAt: Schema.Int});
-const Last = Schema.Struct({pos: Rev});
+const Head = Schema.Struct({ rev: Rev, arrivedAt: Schema.Int });
+const Last = Schema.Struct({ pos: Rev });
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
-const Lag = Schema.Struct({head: Rev, lag: Rev});
+const Lag = Schema.Struct({ head: Rev, lag: Rev });
 
 /** Checks types before telling a bad parent or trace id apart from a bad line. */
 const Loose = Schema.Struct({
-	...Line.fields,
-	parent: Schema.NullOr(Schema.String),
-	traceId: Schema.String,
+  ...Line.fields,
+  parent: Schema.NullOr(Schema.String),
+  traceId: Schema.String,
 });
 
-const strict = {onExcessProperty: "error"} as const;
+const strict = { onExcessProperty: "error" } as const;
 const decodeLoose = Schema.decodeUnknownResult(Loose, strict);
 const isParent = Schema.is(Schema.NullOr(ParentText));
 const decodeLine = Schema.decodeUnknownResult(Line, strict);
 
-const decodeId = Schema.decodeUnknownResult(
-	Schema.Struct({stream: Entry.fields.stream, id: Entry.fields.id}),
-);
+const decodeId = Schema.decodeUnknownResult(Schema.Struct({ stream: Entry.fields.stream, id: Entry.fields.id }));
 
 const decodeRow = Schema.decodeUnknownSync(Row);
 const decodeRing = Schema.decodeUnknownSync(Ring);
@@ -78,46 +76,36 @@ const decodeLag = Schema.decodeUnknownSync(Lag);
 const encoder = new TextEncoder();
 
 const bytes = (texts: ReadonlyArray<string | null>): number =>
-	texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
+  texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
 
-type Why = (typeof Appended.cases.refused.Type)["why"];
+type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
 /** The line, checked: shape (p92), parent (p68), trace (p68b) and row size (flag 13). */
-const check = (stream: string, id: string, input: unknown): Result.Result<Line, Why> => {
-	if (Result.isFailure(decodeId({stream, id}))) {
-		return Result.fail("bad_line");
-	}
+const check = (stream: string, id: string, input: unknown): Result.Result<Line, Reason> => {
+  if (Result.isFailure(decodeId({ stream, id }))) {
+    return Result.fail("bad_line");
+  }
 
-	const loose = decodeLoose(input);
+  const loose = decodeLoose(input);
 
-	if (Result.isFailure(loose)) {
-		return Result.fail("bad_line");
-	}
+  if (Result.isFailure(loose)) {
+    return Result.fail("bad_line");
+  }
 
-	if (!isParent(loose.success.parent)) {
-		return Result.fail("bad_parent");
-	}
+  if (!isParent(loose.success.parent)) {
+    return Result.fail("bad_parent");
+  }
 
-	const line = decodeLine(loose.success);
+  const line = decodeLine(loose.success);
 
-	if (Result.isFailure(line)) {
-		return Result.fail("bad_trace");
-	}
+  if (Result.isFailure(line)) {
+    return Result.fail("bad_trace");
+  }
 
-	const {by, sentAt, parent, traceId, build, body} = line.success;
-	const texts = [
-		stream,
-		id,
-		by,
-		line.success.for,
-		sentAt,
-		parent,
-		traceId,
-		build,
-		line.success._tag,
-	];
-	const size = bytes([...texts, JSON.stringify(body)]);
-	return size > MOST_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
+  const { by, sentAt, parent, traceId, build, body } = line.success;
+  const texts = [stream, id, by, line.success.for, sentAt, parent, traceId, build, line.success._tag];
+  const size = bytes([...texts, JSON.stringify(body)]);
+  return size > MOST_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
 };
 
 /** What decides an append. The writer's clock and trace never decide (D3, S1). */
@@ -125,354 +113,334 @@ type Decides = Omit<Line, "sentAt" | "traceId">;
 
 /** A resend is the same `by`, `for`, `parent`, `_tag` and `body`; `seen` and `build` may differ. */
 const same = (line: Decides, first: Decides): boolean =>
-	line.by === first.by &&
-	line.for === first.for &&
-	line.parent === first.parent &&
-	line._tag === first._tag &&
-	Equal.equals(line.body, first.body);
+  line.by === first.by &&
+  line.for === first.for &&
+  line.parent === first.parent &&
+  line._tag === first._tag &&
+  Equal.equals(line.body, first.body);
 
 /** The answer when the line is not written, or none when it is new and in range. */
 const decide = (
-	line: Decides,
-	first: Option.Option<Decides & Pick<Entry, "rev" | "pos">>,
-	head: Rev,
+  line: Decides,
+  first: Option.Option<Decides & Pick<Entry, "rev" | "pos">>,
+  head: Rev,
 ): Option.Option<Placing> =>
-	Option.match(first, {
-		onSome: (entry) =>
-			Option.some(
-				same(line, entry)
-					? Placing.cases.resent.make({rev: entry.rev, pos: entry.pos})
-					: Placing.cases.refused.make({why: "id_reused"}),
-			),
-		onNone: () =>
-			line.seen > head
-				? Option.some(Placing.cases.refused.make({why: "seen_ahead"}))
-				: Option.none(),
-	});
+  Option.match(first, {
+    onSome: (entry) =>
+      Option.some(
+        same(line, entry)
+          ? Placing.cases.resent.make({ rev: entry.rev, pos: entry.pos })
+          : Placing.cases.refused.make({ reason: "id_reused" }),
+      ),
+    onNone: () =>
+      line.seen > head ? Option.some(Placing.cases.refused.make({ reason: "seen_ahead" })) : Option.none(),
+  });
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
-class Threw extends Schema.TaggedError<Threw>()("Threw", {error: Schema.Unknown}) {}
+class Threw extends Schema.TaggedError<Threw>()("Threw", { error: Schema.Unknown }) {}
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
-	if (typeof error !== "object" || error === null) {
-		return Option.none();
-	}
+  if (typeof error !== "object" || error === null) {
+    return Option.none();
+  }
 
-	const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
-	return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
+  const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
+  return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
 };
 
 export const ledgerStore = (
-	sql: Sql,
-	doorbell: (typeof Doorbell)["Service"],
+  sql: Sql,
+  doorbell: (typeof Doorbell)["Service"],
 ): (typeof Referee)["Service"] & {
-	readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
+  readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
 } => {
-	let ready = false;
-	const one = (query: string, ...params: ReadonlyArray<SqlValue>): Option.Option<unknown> =>
-		Option.fromUndefinedOr(sql.exec(query, ...params)[0]);
+  let ready = false;
+  const one = (query: string, ...params: ReadonlyArray<SqlValue>): Option.Option<unknown> =>
+    Option.fromUndefinedOr(sql.exec(query, ...params)[0]);
 
-	/** Runs `work` as one atomic step, reading the referee's clock inside it. A throw is typed. */
-	const atomic = Effect.fnUntraced(function* <A>(work: (now: () => number) => A) {
-		return yield* Effect.clockWith((clock) =>
-			Effect.try({
-				try: () => {
-					if (!ready) {
-						sql.transaction(() => {
-							for (const query of TABLES) {
-								sql.exec(query);
-							}
-						});
-						ready = true;
-					}
+  /** Runs `work` as one atomic step, reading the referee's clock inside it. A throw is typed. */
+  const atomic = Effect.fnUntraced(function* <A>(work: (now: () => number) => A) {
+    return yield* Effect.clockWith((clock) =>
+      Effect.try({
+        try: () => {
+          if (!ready) {
+            sql.transaction(() => {
+              for (const query of TABLES) {
+                sql.exec(query);
+              }
+            });
+            ready = true;
+          }
 
-					return sql.transaction(() => work(() => clock.currentTimeMillisUnsafe()));
-				},
-				catch: (error) => new Threw({error}),
-			}),
-		).pipe(
-			Effect.catch(({error}) => {
-				if (error instanceof LedgerError) {
-					return Effect.fail(error);
-				}
+          return sql.transaction(() => work(() => clock.currentTimeMillisUnsafe()));
+        },
+        catch: (error) => new Threw({ error }),
+      }),
+    ).pipe(
+      Effect.catch(({ error }) => {
+        if (error instanceof LedgerError) {
+          return Effect.fail(error);
+        }
 
-				const why = Schema.isSchemaError(error) ? "bad_row" : "storage";
-				const failure = new LedgerError({
-					why,
-					...(error instanceof Error ? {message: error.message} : {}),
-				});
-				// The class and code are tags; the message rides only in the span's failure, its content.
-				return Effect.annotateCurrentSpan({
-					[tag("why")]: why,
-					[ERROR]: errorClass(error),
-					...Option.match(errorCode(error), {
-						onNone: () => ({}),
-						onSome: (code) => ({[tag("code")]: code}),
-					}),
-				}).pipe(Effect.andThen(Effect.fail(failure)));
-			}),
-		);
-	});
+        const reason = Schema.isSchemaError(error) ? "bad_row" : "storage";
+        const failure = new LedgerError({
+          reason,
+          ...(error instanceof Error ? { message: error.message } : {}),
+        });
+        // The class and code are tags; the message rides only in the span's failure, its content.
+        return Effect.annotateCurrentSpan({
+          [tag("reason")]: reason,
+          [ERROR]: errorClass(error),
+          ...Option.match(errorCode(error), {
+            onNone: () => ({}),
+            onSome: (code) => ({ [tag("code")]: code }),
+          }),
+        }).pipe(Effect.andThen(Effect.fail(failure)));
+      }),
+    );
+  });
 
-	const behind = (stream: string, after: Rev) =>
-		decodeLag(
-			Option.getOrThrow(
-				one(
-					`SELECT coalesce(max(rev), 0) AS head, coalesce(sum(rev > ?), 0) AS lag
+  const behind = (stream: string, after: Rev) =>
+    decodeLag(
+      Option.getOrThrow(
+        one(
+          `SELECT coalesce(max(rev), 0) AS head, coalesce(sum(rev > ?), 0) AS lag
 					FROM entries WHERE stream = ?`,
-					after,
-					stream,
-				),
-			),
-		);
+          after,
+          stream,
+        ),
+      ),
+    );
 
-	const place = (stream: string, id: string, line: Line, now: () => number): Placing => {
-		const first = Option.map(
-			one(`SELECT * FROM entries WHERE stream = ? AND id = ?`, stream, id),
-			(row) => decodeRow(row),
-		);
-		const last = Option.map(
-			one(`SELECT rev, "arrivedAt" FROM entries ORDER BY rev DESC LIMIT 1`),
-			(row) => decodeHead(row),
-		);
-		const head = Option.match(last, {onNone: () => 0, onSome: (row) => row.rev});
-		const answered = decide(line, first, head);
+  const place = (stream: string, id: string, line: Line, now: () => number): Placing => {
+    const first = Option.map(one(`SELECT * FROM entries WHERE stream = ? AND id = ?`, stream, id), (row) =>
+      decodeRow(row),
+    );
+    const last = Option.map(one(`SELECT rev, "arrivedAt" FROM entries ORDER BY rev DESC LIMIT 1`), (row) =>
+      decodeHead(row),
+    );
+    const head = Option.match(last, { onNone: () => 0, onSome: (row) => row.rev });
+    const answered = decide(line, first, head);
 
-		if (Option.isSome(answered)) {
-			return answered.value;
-		}
+    if (Option.isSome(answered)) {
+      return answered.value;
+    }
 
-		const rev = head + 1;
-		const pos =
-			decodeLast(
-				Option.getOrThrow(
-					one(`SELECT coalesce(max(pos), 0) AS pos FROM entries WHERE stream = ?`, stream),
-				),
-			).pos + 1;
-		const arrivedAt = Math.max(
-			now(),
-			Option.match(last, {onNone: () => 0, onSome: (row) => row.arrivedAt}),
-		);
-		sql.exec(
-			`INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen, parent,
+    const rev = head + 1;
+    const pos =
+      decodeLast(Option.getOrThrow(one(`SELECT coalesce(max(pos), 0) AS pos FROM entries WHERE stream = ?`, stream)))
+        .pos + 1;
+    const arrivedAt = Math.max(now(), Option.match(last, { onNone: () => 0, onSome: (row) => row.arrivedAt }));
+    sql.exec(
+      `INSERT INTO entries (rev, stream, pos, id, "arrivedAt", "by", "for", "sentAt", seen, parent,
 				"traceId", build, "_tag", body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			rev,
-			stream,
-			pos,
-			id,
-			arrivedAt,
-			line.by,
-			line.for,
-			line.sentAt,
-			line.seen,
-			line.parent,
-			line.traceId,
-			line.build,
-			line._tag,
-			JSON.stringify(line.body),
-		);
-		const rings = sql
-			.exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev)
-			.map((row) => decodeRing(row));
-		return Placing.cases.placed.make({rev, pos, rings});
-	};
+      rev,
+      stream,
+      pos,
+      id,
+      arrivedAt,
+      line.by,
+      line.for,
+      line.sentAt,
+      line.seen,
+      line.parent,
+      line.traceId,
+      line.build,
+      line._tag,
+      JSON.stringify(line.body),
+    );
+    const rings = sql
+      .exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev)
+      .map((row) => decodeRing(row));
+    return Placing.cases.placed.make({ rev, pos, rings });
+  };
 
-	/** Rings one waiter, at most once: a failed ring is gone all the same, kept only in its span. A
-	 *  ring that fails or dies, even by throwing before it gives an Effect, never changes the append. */
-	const ring = Effect.fn("ledger.ring")(function* (stream: string, rev: Rev, {to, after}: Ring) {
-		yield* Effect.annotateCurrentSpan({
-			...short({[STREAM]: stream, [tag("to")]: to}),
-			[tag("after")]: after,
-			[tag("rev")]: rev,
-		});
-		return yield* Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
-			Effect.onExit((exit) =>
-				Effect.annotateCurrentSpan(
-					Exit.match(exit, {
-						onSuccess: () => ({[tag("ok")]: true}),
-						onFailure: (cause) => ({[tag("ok")]: false, [ERROR]: errorClass(Cause.squash(cause))}),
-					}),
-				),
-			),
-		);
-	});
+  /** Rings one waiter, at most once: a failed ring is gone all the same, kept only in its span. A
+   *  ring that fails or dies, even by throwing before it gives an Effect, never changes the append. */
+  const ring = Effect.fn("ledger.ring")(function* (stream: string, rev: Rev, { to, after }: Ring) {
+    yield* Effect.annotateCurrentSpan({
+      ...short({ [STREAM]: stream, [tag("to")]: to }),
+      [tag("after")]: after,
+      [tag("rev")]: rev,
+    });
+    return yield* Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
+      Effect.onExit((exit) =>
+        Effect.annotateCurrentSpan(
+          Exit.match(exit, {
+            onSuccess: () => ({ [tag("ok")]: true }),
+            onFailure: (cause) => ({ [tag("ok")]: false, [ERROR]: errorClass(Cause.squash(cause)) }),
+          }),
+        ),
+      ),
+    );
+  });
 
-	const refused = Effect.fnUntraced(function* (why: Why) {
-		return yield* Effect.as(
-			Effect.annotateCurrentSpan({[tag("answer")]: "refused", [tag("why")]: why}),
-			Appended.cases.refused.make({why}),
-		);
-	});
+  const refused = Effect.fnUntraced(function* (reason: Reason) {
+    return yield* Effect.as(
+      Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: reason }),
+      Appended.cases.refused.make({ reason }),
+    );
+  });
 
-	const append = Effect.fn("ledger.append")(function* (stream: string, id: string, input: unknown) {
-		yield* Effect.annotateCurrentSpan({
-			...short({[STREAM]: stream, [ID]: id}),
-			[OPERATION]: "send",
-		});
-		const checked = check(stream, id, input);
+  const append = Effect.fn("ledger.append")(function* (stream: string, id: string, input: unknown) {
+    yield* Effect.annotateCurrentSpan({
+      ...short({ [STREAM]: stream, [ID]: id }),
+      [OPERATION]: "send",
+    });
+    const checked = check(stream, id, input);
 
-		if (Result.isFailure(checked)) {
-			return yield* refused(checked.failure);
-		}
+    if (Result.isFailure(checked)) {
+      return yield* refused(checked.failure);
+    }
 
-		const line = checked.success;
-		yield* Effect.annotateCurrentSpan(short({[tag("tag")]: line._tag, [tag("by")]: line.by}));
-		const placing = yield* atomic((now) => place(stream, id, line, now));
-		return yield* Placing.match(placing, {
-			refused: ({why}) => refused(why),
-			resent: ({rev, pos}) =>
-				Effect.as(
-					Effect.annotateCurrentSpan({
-						[tag("answer")]: "resent",
-						[tag("rev")]: rev,
-						[tag("pos")]: pos,
-					}),
-					Appended.cases.placed.make({rev, pos}),
-				),
-			placed: ({rev, pos, rings}) =>
-				Effect.forEach(
-					rings,
-					(waiter) => ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)),
-					{
-						concurrency: "unbounded",
-						discard: true,
-					},
-				).pipe(
-					Effect.andThen(
-						Effect.annotateCurrentSpan({
-							[tag("answer")]: "placed",
-							[tag("rev")]: rev,
-							[tag("pos")]: pos,
-							[tag("rings")]: rings.length,
-						}),
-					),
-					Effect.as(Appended.cases.placed.make({rev, pos})),
-				),
-		});
-	});
+    const line = checked.success;
+    yield* Effect.annotateCurrentSpan(short({ [tag("tag")]: line._tag, [tag("by")]: line.by }));
+    const placing = yield* atomic((now) => place(stream, id, line, now));
+    return yield* Placing.match(placing, {
+      refused: ({ reason }) => refused(reason),
+      resent: ({ rev, pos }) =>
+        Effect.as(
+          Effect.annotateCurrentSpan({
+            [tag("answer")]: "resent",
+            [tag("rev")]: rev,
+            [tag("pos")]: pos,
+          }),
+          Appended.cases.placed.make({ rev, pos }),
+        ),
+      placed: ({ rev, pos, rings }) =>
+        Effect.forEach(rings, (waiter) => ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)), {
+          concurrency: "unbounded",
+          discard: true,
+        }).pipe(
+          Effect.andThen(
+            Effect.annotateCurrentSpan({
+              [tag("answer")]: "placed",
+              [tag("rev")]: rev,
+              [tag("pos")]: pos,
+              [tag("rings")]: rings.length,
+            }),
+          ),
+          Effect.as(Appended.cases.placed.make({ rev, pos })),
+        ),
+    });
+  });
 
-	const read = Effect.fn("ledger.read")(function* (stream: string, after: Rev, reader: string) {
-		yield* Effect.annotateCurrentSpan({
-			...short({[STREAM]: stream, [tag("reader")]: reader}),
-			[OPERATION]: "receive",
-			[tag("after")]: after,
-		});
-		return yield* atomic((now) => {
-			const {head, lag} = behind(stream, after);
-			const entries = sql
-				.exec(
-					`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`,
-					stream,
-					after,
-					PAGE,
-				)
-				.map((row) => decodeRow(row));
-			return {head, lag, entries, at: now()};
-		}).pipe(
-			Effect.tap(({head, lag, entries, at}) =>
-				Effect.annotateCurrentSpan({
-					[tag("head")]: head,
-					[tag("lag")]: lag,
-					[tag("rows")]: entries.length,
-					// The longest any returned entry waited to be seen, on the referee's one clock.
-					...(entries[0] === undefined ? {} : {[tag("visible_ms")]: at - entries[0].arrivedAt}),
-				}),
-			),
-			Effect.map(({entries}) => entries),
-		);
-	});
+  const read = Effect.fn("ledger.read")(function* (stream: string, after: Rev, reader: string) {
+    yield* Effect.annotateCurrentSpan({
+      ...short({ [STREAM]: stream, [tag("reader")]: reader }),
+      [OPERATION]: "receive",
+      [tag("after")]: after,
+    });
+    return yield* atomic((now) => {
+      const { head, lag } = behind(stream, after);
+      const entries = sql
+        .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`, stream, after, PAGE)
+        .map((row) => decodeRow(row));
+      return { head, lag, entries, at: now() };
+    }).pipe(
+      Effect.tap(({ head, lag, entries, at }) =>
+        Effect.annotateCurrentSpan({
+          [tag("head")]: head,
+          [tag("lag")]: lag,
+          [tag("rows")]: entries.length,
+          // The longest any returned entry waited to be seen, on the referee's one clock.
+          ...(entries[0] === undefined ? {} : { [tag("visible_ms")]: at - entries[0].arrivedAt }),
+        }),
+      ),
+      Effect.map(({ entries }) => entries),
+    );
+  });
 
-	const wait = Effect.fn("ledger.wait")(function* (stream: string, after: Rev, reader: string) {
-		yield* Effect.annotateCurrentSpan({
-			...short({[STREAM]: stream, [tag("reader")]: reader}),
-			[tag("after")]: after,
-		});
-		return yield* atomic(() => {
-			const {head, lag} = behind(stream, after);
+  const wait = Effect.fn("ledger.wait")(function* (stream: string, after: Rev, reader: string) {
+    yield* Effect.annotateCurrentSpan({
+      ...short({ [STREAM]: stream, [tag("reader")]: reader }),
+      [tag("after")]: after,
+    });
+    return yield* atomic(() => {
+      const { head, lag } = behind(stream, after);
 
-			if (head > after) {
-				return {head, lag, waited: Waited.cases.ready.make({rev: head})};
-			}
+      if (head > after) {
+        return { head, lag, waited: Waited.cases.ready.make({ rev: head }) };
+      }
 
-			sql.exec(
-				`INSERT INTO rings ("to", stream, after) VALUES (?, ?, ?)
+      sql.exec(
+        `INSERT INTO rings ("to", stream, after) VALUES (?, ?, ?)
 				ON CONFLICT ("to", stream) DO UPDATE SET after = min(after, excluded.after)`,
-				reader,
-				stream,
-				after,
-			);
-			return {head, lag, waited: Waited.cases.parked.make({})};
-		}).pipe(
-			Effect.tap(({head, lag, waited}) =>
-				Effect.annotateCurrentSpan({
-					[tag("head")]: head,
-					[tag("lag")]: lag,
-					[tag("answer")]: waited._tag,
-				}),
-			),
-			Effect.map(({waited}) => waited),
-		);
-	});
+        reader,
+        stream,
+        after,
+      );
+      return { head, lag, waited: Waited.cases.parked.make({}) };
+    }).pipe(
+      Effect.tap(({ head, lag, waited }) =>
+        Effect.annotateCurrentSpan({
+          [tag("head")]: head,
+          [tag("lag")]: lag,
+          [tag("answer")]: waited._tag,
+        }),
+      ),
+      Effect.map(({ waited }) => waited),
+    );
+  });
 
-	const inTurn = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
-		const rings: Array<{stream: string; rev: Rev; waiter: Ring}> = [];
-		let open = true;
-		const ensureOpen = () => {
-			if (!open) {
-				throw new LedgerError({why: "storage", message: "ledger turn has ended"});
-			}
-		};
-		const turn: LedgerTurn = {
-			read: (stream, after) => {
-				ensureOpen();
-				return sql
-					.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
-					.map((row) => decodeRow(row));
-			},
-			append: (stream, id, input) => {
-				ensureOpen();
-				const checked = check(stream, id, input);
+  const inTurn = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
+    const rings: Array<{ stream: string; rev: Rev; waiter: Ring }> = [];
+    let open = true;
+    const ensureOpen = () => {
+      if (!open) {
+        throw new LedgerError({ reason: "storage", message: "ledger turn has ended" });
+      }
+    };
+    const turn: LedgerTurn = {
+      read: (stream, after) => {
+        ensureOpen();
+        return sql
+          .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
+          .map((row) => decodeRow(row));
+      },
+      append: (stream, id, input) => {
+        ensureOpen();
+        const checked = check(stream, id, input);
 
-				if (Result.isFailure(checked)) {
-					throw new LedgerError({why: "refused"});
-				}
+        if (Result.isFailure(checked)) {
+          throw new LedgerError({ reason: "refused" });
+        }
 
-				const placing = place(stream, id, checked.success, now);
+        const placing = place(stream, id, checked.success, now);
 
-				if (placing._tag === "refused") {
-					throw new LedgerError({why: "refused"});
-				}
+        if (placing._tag === "refused") {
+          throw new LedgerError({ reason: "refused" });
+        }
 
-				if (placing._tag === "placed") {
-					for (const waiter of placing.rings) {
-						rings.push({stream, rev: placing.rev, waiter});
-					}
-				}
+        if (placing._tag === "placed") {
+          for (const waiter of placing.rings) {
+            rings.push({ stream, rev: placing.rev, waiter });
+          }
+        }
 
-				return {rev: placing.rev, pos: placing.pos};
-			},
-		};
+        return { rev: placing.rev, pos: placing.pos };
+      },
+    };
 
-		try {
-			return {value: step(turn), rings};
-		} finally {
-			open = false;
-		}
-	};
-	const transact = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
-		const committed = yield* atomic((now) => inTurn(step, now));
-		yield* Effect.forEach(
-			committed.rings,
-			({stream, rev, waiter}) =>
-				ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)),
-			{
-				discard: true,
-				concurrency: 1,
-			},
-		);
-		return committed.value;
-	});
+    try {
+      return { value: step(turn), rings };
+    } finally {
+      open = false;
+    }
+  };
+  const transact = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
+    const committed = yield* atomic((now) => inTurn(step, now));
+    yield* Effect.forEach(
+      committed.rings,
+      ({ stream, rev, waiter }) => ring(stream, rev, waiter).pipe(Effect.catchCause(() => Effect.void)),
+      {
+        discard: true,
+        concurrency: 1,
+      },
+    );
+    return committed.value;
+  });
 
-	return {append, read, wait, transact};
+  return { append, read, wait, transact };
 };

@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // How tsh shows an output's values to a person at a terminal, as `gh pr list` shows a list: a
 // form for people beside the value itself. A pipe, a `$( )` and `tsh --json` always get the value
@@ -31,24 +31,24 @@ export const Tone = Schema.Literals(["plain", "strong", "muted", "faint", "accen
 export type Tone = typeof Tone.Type;
 
 /** A cell: its text in its column's tone, or with a tone of its own, such as a run that failed. */
-export type TableCell = string | {readonly text: string; readonly tone: Tone};
+export type TableCell = string | { readonly text: string; readonly tone: Tone };
 
 /** One column of a table view. */
 export interface TableColumn<T, H extends string> {
-	/** As a person reads it: "Title". tsh prints it in capitals, as gh does. */
-	readonly header: H;
-	/** The cell of one row. */
-	readonly cell: (row: T) => TableCell;
-	/** Left out: left. Numbers read best on the right. */
-	readonly align?: "left" | "right";
-	/** A column a person reads second, such as a number or a day: drawn in the muted ink. */
-	readonly muted?: boolean;
+  /** As a person reads it: "Title". tsh prints it in capitals, as gh does. */
+  readonly header: H;
+  /** The cell of one row. */
+  readonly cell: (row: T) => TableCell;
+  /** Left out: left. Numbers read best on the right. */
+  readonly align?: "left" | "right";
+  /** A column a person reads second, such as a number or a day: drawn in the muted ink. */
+  readonly muted?: boolean;
 }
 
 /** A line a person may type next, and what it is for: `experiment --n 170 | markdown`, `to read one`. */
 export interface Hint {
-	readonly line: string;
-	readonly for: string;
+  readonly line: string;
+  readonly for: string;
 }
 
 /**
@@ -56,15 +56,15 @@ export interface Hint {
  * header, about one screen of rows, and what to type for the rest.
  */
 export interface TableView<T, H extends string = string> {
-	/** What the rows are: "Experiments". tsh puts the count beside it. */
-	readonly title: string;
-	/** How the rows are ordered, or anything else a reader needs first: "newest first". */
-	readonly note?: string;
-	readonly columns: readonly [TableColumn<T, H>, ...TableColumn<T, H>[]];
-	/** The one column cut, with …, to fit the terminal's width: the header of a column above. */
-	readonly cut: NoInfer<H>;
-	/** What else to type, said under a list cut short, made from its first row. */
-	readonly next?: (first: T) => readonly Hint[];
+  /** What the rows are: "Experiments". tsh puts the count beside it. */
+  readonly title: string;
+  /** How the rows are ordered, or anything else a reader needs first: "newest first". */
+  readonly note?: string;
+  readonly columns: readonly [TableColumn<T, H>, ...TableColumn<T, H>[]];
+  /** The one column cut, with …, to fit the terminal's width: the header of a column above. */
+  readonly cut: NoInfer<H>;
+  /** What else to type, said under a list cut short, made from its first row. */
+  readonly next?: (first: T) => readonly Hint[];
 }
 
 /**
@@ -72,8 +72,8 @@ export interface TableView<T, H extends string = string> {
  * names. A `null` text clears this question by id after it is answered or cancelled.
  */
 export interface Question {
-	readonly id: string;
-	readonly text: string | null;
+  readonly id: string;
+  readonly text: string | null;
 }
 
 /**
@@ -86,15 +86,15 @@ export interface Question {
  * `ends` says how the run ended, a stop included, so tsh adds no `[stopped]` of its own.
  */
 export type Person<T, H extends string = string> =
-	| {
-			readonly line: (value: T) => string;
-			readonly announce?: boolean;
-			readonly ends?: boolean;
-	  }
-	| {readonly table: TableView<T, H>}
-	| {readonly status: (value: T) => string}
-	| {readonly ask: (value: T) => Question; readonly answer: string}
-	| "none";
+  | {
+      readonly line: (value: T) => string;
+      readonly announce?: boolean;
+      readonly ends?: boolean;
+    }
+  | { readonly table: TableView<T, H> }
+  | { readonly status: (value: T) => string }
+  | { readonly ask: (value: T) => Question; readonly answer: string }
+  | "none";
 
 /**
  * `person`, if it is one a terminal can draw: a table with a title, and headers that are there
@@ -102,28 +102,28 @@ export type Person<T, H extends string = string> =
  * is. The types already hold the cut column to a header of the table.
  */
 export function personOf<T, H extends string>(person: Person<T, H>): Person<T, H> {
-	if (typeof person === "string" || !("table" in person)) {
-		return person;
-	}
+  if (typeof person === "string" || !("table" in person)) {
+    return person;
+  }
 
-	const {title, columns, cut} = person.table;
-	const headers = columns.map((c) => c.header);
+  const { title, columns, cut } = person.table;
+  const headers = columns.map((c) => c.header);
 
-	if (title.trim() === "") {
-		throw new Error("a table needs a title: what its rows are");
-	}
+  if (title.trim() === "") {
+    throw new Error("a table needs a title: what its rows are");
+  }
 
-	if (headers.some((h) => h.trim() === "")) {
-		throw new Error("a table's column needs a header");
-	}
+  if (headers.some((h) => h.trim() === "")) {
+    throw new Error("a table's column needs a header");
+  }
 
-	if (new Set(headers).size !== headers.length) {
-		throw new Error(`a table's headers are each its own, not ${headers.join(", ")}`);
-	}
+  if (new Set(headers).size !== headers.length) {
+    throw new Error(`a table's headers are each its own, not ${headers.join(", ")}`);
+  }
 
-	if (!headers.includes(cut)) {
-		throw new Error(`a table cuts one of its columns, not ${cut}`);
-	}
+  if (!headers.includes(cut)) {
+    throw new Error(`a table cuts one of its columns, not ${cut}`);
+  }
 
-	return person;
+  return person;
 }

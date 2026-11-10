@@ -89,9 +89,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
-  The mutation step is socket work: Stryker binds a port, so it always runs on Claude
-  (`drive.ts --agent claude`).
   Still one agent per step.
+- **A tool that needs ports, sockets or its own processes runs in a container with its own
+  network** (owner, 2026-11-09,
+  [0045](../../../.decisions/0045-test-steps-run-in-containers.md)), never behind a hole in a
+  sandbox row. The mutation step is the first: `drive.ts` runs Stryker through `mutbox.ts` before
+  the step's agent starts, and the agent only reads the report. Its agent is still Claude
+  (`drive.ts --agent claude`).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the lane's state file
   (`BOXES/state/<lane>.md`), does its one step, and writes the state file back for the next agent:
@@ -121,6 +125,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit; before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, mutation, review through `drive.ts`, then the PR and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
+| `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the mutation step's Stryker sample in a container: `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
@@ -153,7 +158,14 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
-- Mutation runs on `--agent claude` only, since it binds ports and starts Electron. Start any
+- A mutation step's Stryker run happens first, in a container (`mutbox.ts`, 0045): drive runs it on
+  the step's start head with the tests the brief names on one line, `RELATED=<paths>`, and with
+  the lane's root as arm a. A brief without that line is a usage error. A run that is stuck
+  (Docker not running, another Docker box, a test that fails there) ends the step
+  `stuck:step_said` with no agent, its reason starting `mutbox:`, and the box is kept. Else the
+  agent gets the text of `BOXES/<box>-mutbox/mutbox.json` in its prompt, whole, since its box
+  reads nothing outside itself. Mutation's
+  agent is `--agent claude` only, since a law it adds may start Electron. Start any
   other Claude step whose laws or shots run the app with `--electron`. The box cannot write
   `BOXES/state/electron.lock`, so drive takes it outside the box before the agent starts and holds
   it for the whole step; the next Electron step waits. The sandbox is unchanged.
@@ -220,11 +232,12 @@ nothing beside itself, so drive puts the approved plan's text in the step's prom
 box a git view to read: a hard-linked mirror of the main checkout's git data, `BOXES/<box>-view`,
 which the harness opens read-only and drive removes when the step ends (`git diff`, `log` and
 `show` work; nothing git keeps can be written). A brief names no file outside the box. The step
-answers with one JSON object (verb, to, why, laws), read by the agents package's schema.
+answers with one JSON object (verb, to, reason, laws), read by the agents package's schema.
 
 Measured on the first real lane (t411, 2026-11-09): neither row lets a command listen on a port or
-a unix socket (`EPERM`), so a step that runs Stryker or a socket law is stuck on these rows until
-the harness can open one (tracker ticket 483). On the read-only Codex row, a command that writes
+a unix socket (`EPERM`), and no row is opened for it (0045). The mutation step's Stryker run goes
+in a container first (ticket 483); a tests or build law that binds a port still cannot run on
+these rows. On the read-only Codex row, a command that writes
 is refused and that ends the turn `cancelled` with no answer (ticket 484), so drive tells a review
 to run no writing command.
 
@@ -236,7 +249,8 @@ refused ask does. The merge itself was not run: the `commits` check runs only fo
 into main, so catch-up on a scratch base waits for it until its hour is up.
 
 The mutation step has one wiring spot: `MUTATION_AGENT` and `mutationDraft` in `drive.ts`, under
-the heading `MUTATION WIRING`. The container run of ticket 483 goes there and nowhere else.
+the heading `MUTATION WIRING`. `mutationDraft` runs `mutbox.ts` (ticket 483) and then the agent's
+one turn; nothing else in `drive.ts` or `chain.ts` knows the step is different.
 
 Start it in the background and read the last line only:
 
@@ -273,8 +287,9 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
   with the note in its brief; `park` with why ends the lane for the lead.
   Its field row goes to `BOXES/<lane>-rows.jsonl` like a step's. Three stucks in a row on one
-  step park without asking. Mutation always runs on Claude; `--claude` names other steps that need
-  Claude (Electron or socket work), `--electron` the ones that run the app.
+  step park without asking. Mutation's agent always runs on Claude, after its container run, and
+  the `## mutation` section carries the `RELATED=<paths>` line; `--claude` names other steps that
+  need Claude (Electron or socket work), `--electron` the ones that run the app.
 - **Where it ends:** one JSON line, `outcome` `done` (landed, exit 0), `ask` (parked, exit 20,
   the why in `reason`) or `stuck` (exit 30). `state/<lane>.md` gets a `chain:` line for every move,
   so the status page reads the lane as before. `state/<lane>-chain.json` is the chain record, a
@@ -451,6 +466,10 @@ hand check.
 A flagged line that only respaces a line the same file's diff removes is old text, and is not a
 hit (owner, 2026-11-09, ticket 500). Spaces put inside braces and a line wrapped another way are
 still new text.
+A push reads each commit it sends on its own, beside the branch's net change (owner, 2026-11-10,
+[0048](../../../.decisions/0048-leak-check-reads-each-commit.md)): `botpush.mjs` runs
+`leakgrep.sh --commits <source> --not --remotes=origin`. A hit names its commit, and a later
+commit does not clear it.
 
 ## Go easy on the machine
 

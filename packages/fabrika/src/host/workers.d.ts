@@ -2,22 +2,22 @@
 // has no `@cloudflare/workers-types`. Only what `durable-object.ts` touches is declared.
 
 declare module "cloudflare:workers" {
-	export class DurableObject {
-		constructor(ctx: unknown, env: unknown);
-	}
+  export class DurableObject {
+    constructor(ctx: unknown, env: unknown);
+  }
 }
 
 interface WorkerSocket {
-	send(text: string): void;
-	close(code?: number, reason?: string): void;
+  send(text: string): void;
+  close(code?: number, reason?: string): void;
 }
 
 declare class WebSocketPair {
-	0: WorkerSocket;
-	1: WorkerSocket;
+  0: WorkerSocket;
+  1: WorkerSocket;
 }
 
 interface ResponseInit {
-	/** workerd: the client end of a `WebSocketPair`, on a 101 answer. */
-	webSocket?: WorkerSocket;
+  /** workerd: the client end of a `WebSocketPair`, on a 101 answer. */
+  webSocket?: WorkerSocket;
 }

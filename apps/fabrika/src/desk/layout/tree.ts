@@ -1,22 +1,22 @@
 import {
-	across,
-	type ContainerId,
-	type ContainerNode,
-	createContainer,
-	createTile,
-	type Direction,
-	type Edge,
-	freeShare,
-	isFolded,
-	type LayoutNode,
-	type LayoutTree,
-	type NodeId,
-	type Orientation,
-	resolveSizes,
-	type Shows,
-	shareLine,
-	type TileId,
-	type TileNode,
+  across,
+  type ContainerId,
+  type ContainerNode,
+  createContainer,
+  createTile,
+  type Direction,
+  type Edge,
+  freeShare,
+  isFolded,
+  type LayoutNode,
+  type LayoutTree,
+  type NodeId,
+  type Orientation,
+  resolveSizes,
+  type Shows,
+  shareLine,
+  type TileId,
+  type TileNode,
 } from "./node.ts";
 
 // The pure layout tree: split, remove, focus by direction, resize, turn, fold and zoom, each a
@@ -35,84 +35,84 @@ import {
 
 /** The ids the desk mints for one split. `container` is spent only when the split nests one. */
 export interface SplitIds {
-	readonly tile: TileId;
-	readonly container: ContainerId;
+  readonly tile: TileId;
+  readonly container: ContainerId;
 }
 
 /** Every tile under `node`, left to right, top to bottom. */
 export function* tiles(node: LayoutNode): Generator<TileNode> {
-	if (node.tag === "tile") {
-		yield node;
-		return;
-	}
+  if (node.tag === "tile") {
+    yield node;
+    return;
+  }
 
-	for (const child of node.children) {
-		yield* tiles(child);
-	}
+  for (const child of node.children) {
+    yield* tiles(child);
+  }
 }
 
 /** The first tile the predicate accepts, reading every sibling. */
 export function find(tree: LayoutTree, predicate: (tile: TileNode) => boolean): TileNode | null {
-	for (const tile of tiles(tree.root)) {
-		if (predicate(tile)) {
-			return tile;
-		}
-	}
+  for (const tile of tiles(tree.root)) {
+    if (predicate(tile)) {
+      return tile;
+    }
+  }
 
-	return null;
+  return null;
 }
 
 export function findTile(tree: LayoutTree, id: TileId): TileNode | null {
-	return find(tree, (tile) => tile.id === id);
+  return find(tree, (tile) => tile.id === id);
 }
 
 /** The node of this id, a tile or a container, or `null`. */
 export function findNode(tree: LayoutTree, id: NodeId): LayoutNode | null {
-	return findIn(tree.root, id);
+  return findIn(tree.root, id);
 }
 
 function findIn(node: LayoutNode, id: NodeId): LayoutNode | null {
-	if (node.id === id) {
-		return node;
-	}
+  if (node.id === id) {
+    return node;
+  }
 
-	if (node.tag === "tile") {
-		return null;
-	}
+  if (node.tag === "tile") {
+    return null;
+  }
 
-	for (const child of node.children) {
-		const found = findIn(child, id);
+  for (const child of node.children) {
+    const found = findIn(child, id);
 
-		if (found) {
-			return found;
-		}
-	}
+    if (found) {
+      return found;
+    }
+  }
 
-	return null;
+  return null;
 }
 
 export function findContainer(tree: LayoutTree, id: ContainerId): ContainerNode | null {
-	const node = findNode(tree, id);
-	return node?.tag === "container" ? node : null;
+  const node = findNode(tree, id);
+  return node?.tag === "container" ? node : null;
 }
 
 /** The tile at one end of a node's subtree, in reading order: a tile is its own. */
 export function findChildTile(tree: LayoutTree, id: NodeId, edge: Edge): TileNode | null {
-	const node = findNode(tree, id);
-	return node ? edgeTile(node, edge) : null;
+  const node = findNode(tree, id);
+  return node ? edgeTile(node, edge) : null;
 }
 
 function edgeTile(node: LayoutNode, edge: Edge): TileNode | null {
-	if (node.tag === "tile") {
-		return node;
-	}
+  if (node.tag === "tile") {
+    return node;
+  }
 
-	const child = edge === "start" ? node.children[0] : node.children[node.children.length - 1];
-	return child ? edgeTile(child, edge) : null;
+  const child = edge === "start" ? node.children[0] : node.children[node.children.length - 1];
+  return child ? edgeTile(child, edge) : null;
 }
 
 const orientationOf = (direction: Direction): Orientation =>
-	direction === "left" || direction === "right" ? "horizontal" : "vertical";
+  direction === "left" || direction === "right" ? "horizontal" : "vertical";
 
 const isBackward = (direction: Direction): boolean => direction === "left" || direction === "up";
 
@@ -123,64 +123,64 @@ const isBackward = (direction: Direction): boolean => direction === "left" || di
  * like any other: the desk unfolds the tile focus is on.
  */
 export function findSibling(tree: LayoutTree, id: TileId, direction: Direction): TileNode | null {
-	const ancestors = ancestorsOf(tree.root, id);
+  const ancestors = ancestorsOf(tree.root, id);
 
-	if (!ancestors) {
-		return null;
-	}
+  if (!ancestors) {
+    return null;
+  }
 
-	const orientation = orientationOf(direction);
-	const step = isBackward(direction) ? -1 : 1;
-	const entryEdge: Edge = isBackward(direction) ? "end" : "start";
+  const orientation = orientationOf(direction);
+  const step = isBackward(direction) ? -1 : 1;
+  const entryEdge: Edge = isBackward(direction) ? "end" : "start";
 
-	let childId: NodeId = id;
+  let childId: NodeId = id;
 
-	for (let i = ancestors.length - 1; i >= 0; i--) {
-		const container = ancestors[i];
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const container = ancestors[i];
 
-		if (!container) {
-			return null;
-		}
+    if (!container) {
+      return null;
+    }
 
-		const index = container.children.findIndex((child) => child.id === childId);
+    const index = container.children.findIndex((child) => child.id === childId);
 
-		if (index < 0) {
-			return null;
-		}
+    if (index < 0) {
+      return null;
+    }
 
-		if (container.orientation === orientation) {
-			const neighbour = container.children[index + step];
+    if (container.orientation === orientation) {
+      const neighbour = container.children[index + step];
 
-			if (neighbour) {
-				return edgeTile(neighbour, entryEdge);
-			}
-		}
+      if (neighbour) {
+        return edgeTile(neighbour, entryEdge);
+      }
+    }
 
-		childId = container.id;
-	}
+    childId = container.id;
+  }
 
-	return null;
+  return null;
 }
 
 /** The containers from the root down to the tile's parent, or `null` when there is no such tile. */
 function ancestorsOf(container: ContainerNode, id: TileId): ContainerNode[] | null {
-	for (const child of container.children) {
-		if (child.tag === "tile") {
-			if (child.id === id) {
-				return [container];
-			}
+  for (const child of container.children) {
+    if (child.tag === "tile") {
+      if (child.id === id) {
+        return [container];
+      }
 
-			continue;
-		}
+      continue;
+    }
 
-		const deeper = ancestorsOf(child, id);
+    const deeper = ancestorsOf(child, id);
 
-		if (deeper) {
-			return [container, ...deeper];
-		}
-	}
+    if (deeper) {
+      return [container, ...deeper];
+    }
+  }
 
-	return null;
+  return null;
 }
 
 /**
@@ -189,17 +189,17 @@ function ancestorsOf(container: ContainerNode, id: TileId): ContainerNode[] | nu
  * parent, and a child container now of its orientation joins it. Its sizes stay.
  */
 export function turn(tree: LayoutTree, id: TileId): LayoutTree {
-	const parent = ancestorsOf(tree.root, id)?.at(-1);
+  const parent = ancestorsOf(tree.root, id)?.at(-1);
 
-	if (!parent) {
-		return tree;
-	}
+  if (!parent) {
+    return tree;
+  }
 
-	const root = withContainer(tree.root, parent.id, (container) => ({
-		...container,
-		orientation: across(container.orientation),
-	}));
-	return root ? {...tree, root: settle(root)} : tree;
+  const root = withContainer(tree.root, parent.id, (container) => ({
+    ...container,
+    orientation: across(container.orientation),
+  }));
+  return root ? { ...tree, root: settle(root) } : tree;
 }
 
 /**
@@ -210,19 +210,14 @@ export function turn(tree: LayoutTree, id: TileId): LayoutTree {
  * taken, leave the tree as it is: `checkTree` is what proves a tree's ids unique. The new tile
  * shows a fresh tsh, open.
  */
-export function split(
-	tree: LayoutTree,
-	id: TileId,
-	orientation: Orientation,
-	ids: SplitIds,
-): LayoutTree {
-	const target = findTile(tree, id);
+export function split(tree: LayoutTree, id: TileId, orientation: Orientation, ids: SplitIds): LayoutTree {
+  const target = findTile(tree, id);
 
-	if (target === null) {
-		return tree;
-	}
+  if (target === null) {
+    return tree;
+  }
 
-	return spread(tree, id, orientation, [target, createTile(ids.tile)], ids.container);
+  return spread(tree, id, orientation, [target, createTile(ids.tile)], ids.container);
 }
 
 /**
@@ -234,85 +229,81 @@ export function split(
  * leaves the tree as it is.
  */
 export function spread(
-	tree: LayoutTree,
-	id: TileId,
-	orientation: Orientation,
-	tiles: readonly [TileNode, ...TileNode[]],
-	container: ContainerId,
+  tree: LayoutTree,
+  id: TileId,
+  orientation: Orientation,
+  tiles: readonly [TileNode, ...TileNode[]],
+  container: ContainerId,
 ): LayoutTree {
-	const taken = new Set<NodeId>(idsOf(tree.root));
-	taken.delete(id);
-	const made = new Set<NodeId>();
+  const taken = new Set<NodeId>(idsOf(tree.root));
+  taken.delete(id);
+  const made = new Set<NodeId>();
 
-	for (const tile of tiles) {
-		if (taken.has(tile.id) || made.has(tile.id)) {
-			return tree;
-		}
+  for (const tile of tiles) {
+    if (taken.has(tile.id) || made.has(tile.id)) {
+      return tree;
+    }
 
-		made.add(tile.id);
-	}
+    made.add(tile.id);
+  }
 
-	if (taken.has(container) || (made.has(container) && tiles.length > 1)) {
-		return tree;
-	}
+  if (taken.has(container) || (made.has(container) && tiles.length > 1)) {
+    return tree;
+  }
 
-	const root = spreadIn(tree.root, id, orientation, tiles, container);
-	return root ? {...tree, root} : tree;
+  const root = spreadIn(tree.root, id, orientation, tiles, container);
+  return root ? { ...tree, root } : tree;
 }
 
 function spreadIn(
-	container: ContainerNode,
-	id: TileId,
-	orientation: Orientation,
-	tiles: readonly [TileNode, ...TileNode[]],
-	nested: ContainerId,
+  container: ContainerNode,
+  id: TileId,
+  orientation: Orientation,
+  tiles: readonly [TileNode, ...TileNode[]],
+  nested: ContainerId,
 ): ContainerNode | null {
-	const index = container.children.findIndex((child) => child.tag === "tile" && child.id === id);
+  const index = container.children.findIndex((child) => child.tag === "tile" && child.id === id);
 
-	if (index >= 0) {
-		if (container.orientation === orientation || container.children.length === 1) {
-			const children = [
-				...container.children.slice(0, index),
-				...tiles,
-				...container.children.slice(index + 1),
-			];
-			const share = (container.sizes[id] ?? 100 / container.children.length) / tiles.length;
-			const sizes: Record<NodeId, number> = {...container.sizes};
-			delete sizes[id];
+  if (index >= 0) {
+    if (container.orientation === orientation || container.children.length === 1) {
+      const children = [...container.children.slice(0, index), ...tiles, ...container.children.slice(index + 1)];
+      const share = (container.sizes[id] ?? 100 / container.children.length) / tiles.length;
+      const sizes: Record<NodeId, number> = { ...container.sizes };
+      delete sizes[id];
 
-			for (const tile of tiles) {
-				sizes[tile.id] = share;
-			}
+      for (const tile of tiles) {
+        sizes[tile.id] = share;
+      }
 
-			return remade({...container, orientation}, children, sizes);
-		}
+      return remade({ ...container, orientation }, children, sizes);
+    }
 
-		const [only] = tiles;
-		const node = tiles.length === 1 ? only : createContainer(nested, orientation, tiles);
-		return replaceChild(container, id, node);
-	}
+    const [only] = tiles;
+    const node = tiles.length === 1 ? only : createContainer(nested, orientation, tiles);
+    return replaceChild(container, id, node);
+  }
 
-	for (const child of container.children) {
-		if (child.tag !== "container") {
-			continue;
-		}
+  for (const child of container.children) {
+    if (child.tag !== "container") {
+      continue;
+    }
 
-		const next = spreadIn(child, id, orientation, tiles, nested);
+    const next = spreadIn(child, id, orientation, tiles, nested);
 
-		if (next) {
-			return replaceChild(container, child.id, next);
-		}
-	}
+    if (next) {
+      return replaceChild(container, child.id, next);
+    }
+  }
 
-	return null;
+  return null;
 }
 
 function idsOf(node: LayoutNode): NodeId[] {
-	if (node.tag === "tile") {
-		return [node.id];
-	}
+  if (node.tag === "tile") {
+    return [node.id];
+  }
 
-	return [node.id, ...node.children.flatMap(idsOf)];
+  return [node.id, ...node.children.flatMap(idsOf)];
 }
 
 /**
@@ -322,26 +313,26 @@ function idsOf(node: LayoutNode): NodeId[] {
  * means. Removing the last open tile leaves only folded ones, so the first of them unfolds.
  */
 export function remove(tree: LayoutTree, id: TileId): LayoutTree {
-	if (findTile(tree, id) === null || [...tiles(tree.root)].length < 2) {
-		return tree;
-	}
+  if (findTile(tree, id) === null || [...tiles(tree.root)].length < 2) {
+    return tree;
+  }
 
-	const root = settle(without(inParent(tree.root, id, freeShare), id));
-	const open = isFolded(root) ? unfoldIn(root, edgeTile(root, "start")?.id ?? id) : root;
-	return {root: open ?? root, zoomed: tree.zoomed === id ? null : tree.zoomed};
+  const root = settle(without(inParent(tree.root, id, freeShare), id));
+  const open = isFolded(root) ? unfoldIn(root, edgeTile(root, "start")?.id ?? id) : root;
+  return { root: open ?? root, zoomed: tree.zoomed === id ? null : tree.zoomed };
 }
 
 /** `container` without the tile `id`, wherever it is under it. */
 function without(container: ContainerNode, id: TileId): ContainerNode {
-	if (container.children.some((child) => child.tag === "tile" && child.id === id)) {
-		return withoutChild(container, id);
-	}
+  if (container.children.some((child) => child.tag === "tile" && child.id === id)) {
+    return withoutChild(container, id);
+  }
 
-	return remade(
-		container,
-		container.children.map((child) => (child.tag === "container" ? without(child, id) : child)),
-		container.sizes,
-	);
+  return remade(
+    container,
+    container.children.map((child) => (child.tag === "container" ? without(child, id) : child)),
+    container.sizes,
+  );
 }
 
 /**
@@ -349,17 +340,17 @@ function without(container: ContainerNode, id: TileId): ContainerNode {
  * in tmux. That is also what makes `remove` the exact inverse of the `split` that made the child.
  */
 function withoutChild(container: ContainerNode, childId: NodeId): ContainerNode {
-	const index = container.children.findIndex((child) => child.id === childId);
-	const children = container.children.filter((child) => child.id !== childId);
-	const heir = children[index - 1] ?? children[0];
-	const sizes: Record<NodeId, number> = {};
+  const index = container.children.findIndex((child) => child.id === childId);
+  const children = container.children.filter((child) => child.id !== childId);
+  const heir = children[index - 1] ?? children[0];
+  const sizes: Record<NodeId, number> = {};
 
-	for (const child of children) {
-		const freed = child.id === heir?.id ? (container.sizes[childId] ?? 0) : 0;
-		sizes[child.id] = (container.sizes[child.id] ?? 0) + freed;
-	}
+  for (const child of children) {
+    const freed = child.id === heir?.id ? (container.sizes[childId] ?? 0) : 0;
+    sizes[child.id] = (container.sizes[child.id] ?? 0) + freed;
+  }
 
-	return remade(container, children, sizes);
+  return remade(container, children, sizes);
 }
 
 /**
@@ -369,95 +360,89 @@ function withoutChild(container: ContainerNode, childId: NodeId): ContainerNode 
  * root keeps its id: a lone container under it lends it its orientation and its children.
  */
 export function settle(root: ContainerNode): ContainerNode {
-	let settled = tidy(root);
-	let only = settled.children.length === 1 ? settled.children[0] : undefined;
+  let settled = tidy(root);
+  let only = settled.children.length === 1 ? settled.children[0] : undefined;
 
-	while (only?.tag === "container") {
-		settled = {...only, id: settled.id};
-		only = settled.children.length === 1 ? settled.children[0] : undefined;
-	}
+  while (only?.tag === "container") {
+    settled = { ...only, id: settled.id };
+    only = settled.children.length === 1 ? settled.children[0] : undefined;
+  }
 
-	return settled;
+  return settled;
 }
 
 function tidy(container: ContainerNode): ContainerNode {
-	const children: LayoutNode[] = [];
-	const sizes: Record<NodeId, number> = {};
+  const children: LayoutNode[] = [];
+  const sizes: Record<NodeId, number> = {};
 
-	for (const child of container.children) {
-		const share = container.sizes[child.id] ?? 0;
-		const node = child.tag === "tile" ? child : lone(tidy(child));
+  for (const child of container.children) {
+    const share = container.sizes[child.id] ?? 0;
+    const node = child.tag === "tile" ? child : lone(tidy(child));
 
-		if (node.tag === "container" && node.children.length === 0) {
-			continue;
-		}
+    if (node.tag === "container" && node.children.length === 0) {
+      continue;
+    }
 
-		if (node.tag === "container" && node.orientation === container.orientation) {
-			for (const inner of node.children) {
-				children.push(inner);
-				sizes[inner.id] = (share * (node.sizes[inner.id] ?? 0)) / 100;
-			}
+    if (node.tag === "container" && node.orientation === container.orientation) {
+      for (const inner of node.children) {
+        children.push(inner);
+        sizes[inner.id] = (share * (node.sizes[inner.id] ?? 0)) / 100;
+      }
 
-			continue;
-		}
+      continue;
+    }
 
-		children.push(node);
-		sizes[node.id] = share;
-	}
+    children.push(node);
+    sizes[node.id] = share;
+  }
 
-	return remade(container, children, sizes);
+  return remade(container, children, sizes);
 }
 
 /** A container holding a single child is that child; its share moves with it at the parent. */
 const lone = (container: ContainerNode): LayoutNode =>
-	container.children.length === 1 ? (container.children[0] ?? container) : container;
+  container.children.length === 1 ? (container.children[0] ?? container) : container;
 
 /** `container` with these children, and its sizes made total for them again. */
 const remade = (
-	container: ContainerNode,
-	children: readonly LayoutNode[],
-	sizes: Readonly<Record<NodeId, number>>,
-): ContainerNode => ({...container, children, sizes: resolveSizes(children, sizes)});
+  container: ContainerNode,
+  children: readonly LayoutNode[],
+  sizes: Readonly<Record<NodeId, number>>,
+): ContainerNode => ({ ...container, children, sizes: resolveSizes(children, sizes) });
 
 /**
  * `container` with one child replaced. The same id keeps every share exactly as it was, so a
  * change inside a child (a fold, what a tile shows) never scales its siblings' sizes again.
  */
 function replaceChild(container: ContainerNode, childId: NodeId, node: LayoutNode): ContainerNode {
-	const children = container.children.map((child) => (child.id === childId ? node : child));
+  const children = container.children.map((child) => (child.id === childId ? node : child));
 
-	if (node.id === childId) {
-		return {...container, children};
-	}
+  if (node.id === childId) {
+    return { ...container, children };
+  }
 
-	const sizes: Record<NodeId, number> = {};
+  const sizes: Record<NodeId, number> = {};
 
-	for (const [id, size] of Object.entries(container.sizes)) {
-		sizes[id === childId ? node.id : id] = size;
-	}
+  for (const [id, size] of Object.entries(container.sizes)) {
+    sizes[id === childId ? node.id : id] = size;
+  }
 
-	return remade(container, children, sizes);
+  return remade(container, children, sizes);
 }
 
 /**
  * Record a resize of one container. `sizes` is percent of that container's extent, as a dragged
  * border reports it, and is made back into a total map summing to 100.
  */
-export function resize(
-	tree: LayoutTree,
-	id: ContainerId,
-	sizes: Readonly<Record<NodeId, number>>,
-): LayoutTree {
-	const root = withContainer(tree.root, id, (container) =>
-		remade(container, container.children, sizes),
-	);
-	return root ? {...tree, root} : tree;
+export function resize(tree: LayoutTree, id: ContainerId, sizes: Readonly<Record<NodeId, number>>): LayoutTree {
+  const root = withContainer(tree.root, id, (container) => remade(container, container.children, sizes));
+  return root ? { ...tree, root } : tree;
 }
 
 /** Change what a tile shows. An unknown tile leaves the tree as it is. */
 export function setShows(tree: LayoutTree, id: TileId, shows: Shows): LayoutTree {
-	const root = mapTile(tree.root, id, (tile) => ({...tile, shows}));
-	return root ? {...tree, root} : tree;
+  const root = mapTile(tree.root, id, (tile) => ({ ...tile, shows }));
+  return root ? { ...tree, root } : tree;
 }
 
 /**
@@ -468,29 +453,29 @@ export function setShows(tree: LayoutTree, id: TileId, shows: Shows): LayoutTree
  * not drawn alone.
  */
 export function fold(tree: LayoutTree, id: TileId): LayoutTree {
-	const tile = findTile(tree, id);
+  const tile = findTile(tree, id);
 
-	if (tile === null || tile.folded) {
-		return tree;
-	}
+  if (tile === null || tile.folded) {
+    return tree;
+  }
 
-	const root = mapTile(tree.root, id, (t) => ({...t, folded: true}));
+  const root = mapTile(tree.root, id, (t) => ({ ...t, folded: true }));
 
-	if (root === null || isFolded(root)) {
-		return tree;
-	}
+  if (root === null || isFolded(root)) {
+    return tree;
+  }
 
-	return {root: inParent(root, id, shareLine), zoomed: tree.zoomed === id ? null : tree.zoomed};
+  return { root: inParent(root, id, shareLine), zoomed: tree.zoomed === id ? null : tree.zoomed };
 }
 
 /** `root` with the parent of the tile `id` changed by `f`, given that id. */
 function inParent(
-	root: ContainerNode,
-	id: TileId,
-	f: (parent: ContainerNode, id: TileId) => ContainerNode,
+  root: ContainerNode,
+  id: TileId,
+  f: (parent: ContainerNode, id: TileId) => ContainerNode,
 ): ContainerNode {
-	const parent = ancestorsOf(root, id)?.at(-1);
-	return parent === undefined ? root : (withContainer(root, parent.id, (c) => f(c, id)) ?? root);
+  const parent = ancestorsOf(root, id)?.at(-1);
+  return parent === undefined ? root : (withContainer(root, parent.id, (c) => f(c, id)) ?? root);
 }
 
 /**
@@ -498,37 +483,37 @@ function inParent(
  * tree when nothing under it is folded, or there is no such node.
  */
 export function unfold(tree: LayoutTree, id: NodeId): LayoutTree {
-	const root = unfoldIn(tree.root, id);
-	return root === null ? tree : {...tree, root};
+  const root = unfoldIn(tree.root, id);
+  return root === null ? tree : { ...tree, root };
 }
 
 /** `container` with every tile under the node `id` open, or `null` when that changes nothing. */
 function unfoldIn(container: ContainerNode, id: NodeId): ContainerNode | null {
-	const node = findIn(container, id);
+  const node = findIn(container, id);
 
-	if (node === null) {
-		return null;
-	}
+  if (node === null) {
+    return null;
+  }
 
-	const shut = [...tiles(node)].filter((tile) => tile.folded);
+  const shut = [...tiles(node)].filter((tile) => tile.folded);
 
-	if (shut.length === 0) {
-		return null;
-	}
+  if (shut.length === 0) {
+    return null;
+  }
 
-	return shut.reduce((at, tile) => {
-		const opened = mapTile(at, tile.id, (t) => ({...t, folded: false})) ?? at;
-		return inParent(opened, tile.id, shareLine);
-	}, container);
+  return shut.reduce((at, tile) => {
+    const opened = mapTile(at, tile.id, (t) => ({ ...t, folded: false })) ?? at;
+    return inParent(opened, tile.id, shareLine);
+  }, container);
 }
 
 /** Draw `id` alone. Zoom never writes `sizes`, so unzoom restores the layout exactly. */
 export function zoom(tree: LayoutTree, id: TileId): LayoutTree {
-	return findTile(tree, id) ? {...tree, zoomed: id} : tree;
+  return findTile(tree, id) ? { ...tree, zoomed: id } : tree;
 }
 
 export function unzoom(tree: LayoutTree): LayoutTree {
-	return tree.zoomed === null ? tree : {...tree, zoomed: null};
+  return tree.zoomed === null ? tree : { ...tree, zoomed: null };
 }
 
 /**
@@ -537,66 +522,62 @@ export function unzoom(tree: LayoutTree): LayoutTree {
  * orientation, sizes, what a tile shows, a fold or the zoomed tile gives another string.
  */
 export function layoutSignature(tree: LayoutTree): string {
-	return JSON.stringify([tree.zoomed, nodeShape(tree.root)]);
+  return JSON.stringify([tree.zoomed, nodeShape(tree.root)]);
 }
 
 function nodeShape(node: LayoutNode): unknown {
-	if (node.tag === "tile") {
-		return ["t", node.id, node.shows, node.folded];
-	}
+  if (node.tag === "tile") {
+    return ["t", node.id, node.shows, node.folded];
+  }
 
-	return [
-		"c",
-		node.id,
-		node.orientation,
-		node.children.map((child) => [nodeShape(child), node.sizes[child.id] ?? null]),
-	];
+  return [
+    "c",
+    node.id,
+    node.orientation,
+    node.children.map((child) => [nodeShape(child), node.sizes[child.id] ?? null]),
+  ];
 }
 
 function withContainer(
-	container: ContainerNode,
-	id: ContainerId,
-	f: (container: ContainerNode) => ContainerNode,
+  container: ContainerNode,
+  id: ContainerId,
+  f: (container: ContainerNode) => ContainerNode,
 ): ContainerNode | null {
-	if (container.id === id) {
-		return f(container);
-	}
+  if (container.id === id) {
+    return f(container);
+  }
 
-	for (const child of container.children) {
-		if (child.tag !== "container") {
-			continue;
-		}
+  for (const child of container.children) {
+    if (child.tag !== "container") {
+      continue;
+    }
 
-		const next = withContainer(child, id, f);
+    const next = withContainer(child, id, f);
 
-		if (next) {
-			return replaceChild(container, child.id, next);
-		}
-	}
+    if (next) {
+      return replaceChild(container, child.id, next);
+    }
+  }
 
-	return null;
+  return null;
 }
 
-function mapTile(
-	container: ContainerNode,
-	id: TileId,
-	f: (tile: TileNode) => TileNode,
-): ContainerNode | null {
-	for (const child of container.children) {
-		if (child.tag === "tile") {
-			if (child.id !== id) {
-				continue;
-			}
+function mapTile(container: ContainerNode, id: TileId, f: (tile: TileNode) => TileNode): ContainerNode | null {
+  for (const child of container.children) {
+    if (child.tag === "tile") {
+      if (child.id !== id) {
+        continue;
+      }
 
-			return replaceChild(container, id, f(child));
-		}
+      return replaceChild(container, id, f(child));
+    }
 
-		const next = mapTile(child, id, f);
+    const next = mapTile(child, id, f);
 
-		if (next) {
-			return replaceChild(container, child.id, next);
-		}
-	}
+    if (next) {
+      return replaceChild(container, child.id, next);
+    }
+  }
 
-	return null;
+  return null;
 }
