@@ -85,6 +85,13 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   The borders follow `next/`'s layers where today's code draws them elsewhere: today's one
   `Ledger` service mixes layers 2 to 4, and `next/` splits it.
 
+  *Changed 2026-11-09 (owner,
+  [0043](../../.decisions/0043-rooms-on-floors.md)): inside `@kampus/libfabrika` a folder is
+  not a context and not a layer. It is one subject, a room (`access/`, `processes/`, `ledger/`),
+  and the layers live only in the rule file. A room's words still have their rows in the context
+  that owns them: `access/`'s under clients, `processes/`'s under ledger. The table above stays
+  as the map from layers to contexts.*
+
 - **The package.** A package belongs to one context, or to the shared names.
 - **The glossary section.** A row sits in the section of the context that owns the word. A word
   used in two contexts has a row in each, and its context in parentheses in the key, such as

@@ -162,6 +162,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
+- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
+  subject, with front files and an `internal/` no other room imports, and it re-exports no other
+  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
+  never from its own. A new file goes in its room now, before the move lands
+  ([0043](./.decisions/0043-rooms-on-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
