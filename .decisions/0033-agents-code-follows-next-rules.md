@@ -86,3 +86,21 @@ and the lead's own agents still need to read the scripts.
 - Some scripts may need real edges (a `node:` import Effect has no module for, a Promise a platform
   demands); each is one marked line, read at merge.
 - Not decided here: when the shell scripts must all be gone, and lint rules for Python or shell.
+
+## Amendments
+
+- 2026-11-10: **the 12 `agents-ledger.json` entries that `fabrika/no-why-key` needs are allowed,
+  once, for this rule** (owner). Tracker ticket 535, for
+  [PR 664](https://github.com/usirin/tea-fabrika/pull/664) (ticket 337).
+  - **What they are.** 12 lines under `.agents/` that keep the key `why`, because they read or
+    write a shape today's version owns: outcome values in today's `@kampus/pipeline` shape and the
+    lane state file's saved key in `drive.ts`, and test fixtures for `exam-paths.json` and field
+    rows.
+  - **Why they stay.** Today's code keeps `why` until that code is deleted
+    ([AGENTS.md](../AGENTS.md#before-you-design-anything), "Data keys are short everyday words").
+    Each entry leaves with that code.
+  - **Why not an edge comment.** oxlint reads those files a second time through the skills links
+    and reports the inline disable comment as unused (finding `2026-11-10-f01`, in PR 664's field
+    rows).
+  - **What it does not change.** The ledger still only shrinks otherwise. Any other new entry
+    stays the owner's call, in a change of its own.
