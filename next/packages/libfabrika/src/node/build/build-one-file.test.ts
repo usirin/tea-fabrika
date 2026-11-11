@@ -533,6 +533,7 @@ const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.
 type Style = { readonly mark: string; readonly trap: boolean };
 /** The tab's files now: the label its view shows and its stylesheets in page order. */
 type Tab = { readonly label: string; readonly styles: ReadonlyArray<Style> };
+type TabMove = "add" | "bare" | "label" | "style" | "reorder" | "trap" | "drop" | "same";
 
 const styleText = (style: Style, n: number) =>
   `.${style.mark} { --p14-order: ${n}; }\n.${style.mark} b { color: red; }\n${
@@ -669,18 +670,18 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           for (const { move, word } of steps) {
             // The moves this state allows: a tab can be added, or a present one edited, restyled,
             // reordered, trapped, dropped or rebuilt unchanged.
-            const allowed =
+            const allowed: ReadonlyArray<TabMove> =
               tab === null
-                ? (["add", "bare"] as const)
-                : ([
+                ? ["add", "bare"]
+                : [
                     "label",
                     ...(tab.styles.length < 3 ? (["style"] as const) : []),
                     ...(tab.styles.length > 1 ? (["reorder"] as const) : []),
                     "trap",
                     "drop",
                     "same",
-                  ] as const);
-            const chosen = allowed[move % allowed.length]!;
+                  ];
+            const chosen: TabMove = allowed[move % allowed.length]!;
             reached.add(chosen);
             const before = tab;
             tab =
