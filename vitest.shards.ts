@@ -192,7 +192,6 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/ledger/Ledger.test.ts": 2.2,
   "next/packages/libfabrika/src/ledger/Log.test.ts": 1.9,
   "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.2,
-  "next/packages/libfabrika/src/telemetry/RecordPart.test.ts": 0.8,
   "next/packages/libfabrika/src/telemetry/Records.test.ts": 0.6,
   "next/packages/libfabrika/src/ledger/Rings.test.ts": 0.2,
   "next/packages/libfabrika/src/telemetry/Sink.test.ts": 1.0,

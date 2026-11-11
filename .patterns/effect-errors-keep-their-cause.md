@@ -60,21 +60,34 @@ Rules:
 
 - **Keep the cause.** `catch: (cause) => new X({..., cause})`, `Effect.mapError((cause) => new X({..., cause}))`.
   A callback with no parameter throws the reason away. The cause does not go in a span tag: it rides
-  in the span's failure, where the message goes today (`next/packages/libfabrika/src/data/ledger.ts:15`).
-- **Catch by tag.** `catchTag` / `catchTags`, never `catchIf(e instanceof X)`. The one `next/` use
-  today is `next/apps/fabrika/grant.ts:113`.
+  in the span's failure, where the message goes today (`next/packages/libfabrika/src/ledger/Ledger.ts:16-17`).
+  A real one: `Effect.mapError((cause) => new JobsError({ reason: "storage", cause }))`
+  (`next/packages/libfabrika/src/jobs/JobsLedger.ts:124`).
+- **Catch by tag.** `catchTag` / `catchTags`, never `catchIf(e instanceof X)`. The real use is
+  `Effect.catchTag("PlatformError", ...)` (`next/packages/libfabrika/src/node/settings/Load.ts:34`).
+- **Never `instanceof` on a Schema class.** In a handler, `catchTag`. In a guard, `Schema.is(X)`
+  (`effect/src/Schema.ts:1461`), as `next/packages/libfabrika/src/gateway/Gateway.ts:67` does.
+  Effect's checker names this `instanceOfSchema`.
+- **Read a typed error out of a `Cause` with `Cause.findError`,** never `Cause.squash` then
+  `instanceof`. `findError` returns a `Result` of the first typed error `E` (`effect/src/Cause.ts:971`;
+  `Cause.findErrorOption`, `:997`, gives an `Option`). `squash` picks one value, a failure, else a
+  defect, else a made-up `Error`, and Effect's own doc calls it lossy (`Cause.ts:860-889`). `squash`
+  stays only where a span needs one error's class name (`telemetry/Sink.ts:130`,
+  `ledger/internal/ledgerStore.ts:274`).
 - **Never widen to `unknown`.** A helper takes `Effect.Effect<A, E | NotGranted>`, not
   `Effect.Effect<A, unknown>`. Once the type is `unknown`, `catchTag` cannot be written, and
   `instanceof` is all that is left.
 - **Fail by yielding.** `return yield* new X(...)`, never `throw` inside `Effect.gen`
   (`fabrika/no-throw-in-effect-gen`). A throw stays only inside a sync SQLite transaction, where it
   is how the transaction rolls back, and is caught into a typed error at the Effect border.
-- **The key is `reason`.** Today's code says `why` (`ledger.ts:14`); ticket 337 renames it.
+- **The key is `reason`** (`next/packages/libfabrika/src/ledger/Ledger.ts:15`).
 - **A family of cases** can be one parent error whose `reason` is a union of tagged errors, handled
-  with `Effect.catchReason` (`ai-docs/src/01_effect/04_errors/20_reason-errors.ts`). Today every
-  family is one class with a string literal, so a handler can only `catchIf(e => e.why === ...)`
-  (`next/packages/libfabrika/src/node/stage.ts:321`). Moving to tagged reasons is a design call, not
-  part of this pattern yet.
+  with `Effect.catchReason` (`ai-docs/src/01_effect/04_errors/20_reason-errors.ts`). Effect's own
+  `PlatformError` is one: `Effect.catchReason("PlatformError", "NotFound", ...)` catches one reason,
+  where `next/packages/libfabrika/src/node/settings/Load.ts:34-35` checks
+  `cause.reason._tag === "NotFound"` by hand. Our own errors are one class with a string literal
+  `reason`, so `catchReason` cannot reach them. Moving to tagged reasons is a design call, not part
+  of this pattern yet.
 
 ## Where it applies
 
@@ -84,16 +97,19 @@ untyped value (a user's program that threw, `ProgramDown`): that value is the ca
 
 ## Today's code breaks this
 
-Ticket 440 sweeps it. On main `d48cb774`, in `next/` product code:
+Ticket 440 sweeps it. A regex count on main `4cc93a8a0`, in `next/` product code (tests and test
+support left out), so a size, not a list:
 
-- 55 `mapError(() =>` and 39 `catch: () =>` or `catch: fail`, and 0 `Schema.Defect` in all of `next/`.
-  For example `next/packages/libfabrika/src/data/ledger.ts:90-96`: a rejected stub call becomes
-  `unreachable` with no trace of why, and a bad answer becomes `bad_row` with no field named.
-- 7 `catchIf` with an `instanceof` guard, for example
-  `next/packages/libfabrika/src/workers/runtime.ts:150-157`, fed by `Effect.Effect<A, unknown>` at
-  `:145`.
-- `Cause.squash` then an `instanceof` ladder in `next/packages/libfabrika/src/app/runner.ts:677-705`.
-  `Cause.findError` or `Exit.match` with `Schema.is(ProgramDown)` reads the cause without guessing.
+- 63 `mapError(() =>` and 99 `catch: () =>`, `catch: fail` or `catch: unreachable`, against 9
+  `Schema.Defect` in all of `next/`. For example `next/packages/libfabrika/src/ledger/LedgerRemote.ts:24-29`:
+  a rejected stub call becomes `unreachable` with no trace of why, and a bad answer becomes
+  `bad_row` with no field named.
+- 8 `catchIf`, most with an `instanceof` guard, for example
+  `next/packages/libfabrika/src/cloudflare/runtime.ts:139-146`, fed by `Effect.Effect<A, unknown>` at
+  `:136`, and `next/packages/libfabrika/src/runtime/Runner.ts:1184-1186`.
+- `Cause.squash` then an `instanceof` ladder in `next/packages/libfabrika/src/runtime/Runner.ts:751-769`,
+  and `Cause.squash(cause) instanceof LedgerError` at `:1536`. `Cause.findError` or `Exit.match` with
+  `Schema.is(ProgramDown)` reads the cause without guessing.
 
 ## Why it is not obvious
 
@@ -110,8 +126,11 @@ proposed), and a dropped cause is a dropped fact.
 - Effect diagnostics, off today: `anyUnknownInErrorContext` (368 hits, a sweep of its own),
   `errorPayloadShadowsName` (6 hits, 0 false alarms, ready after a fix), `instanceOfSchema` (31 hits;
   the lint audit counted them as false alarms because `instanceof` is correct JavaScript, but under
-  this pattern they are the hits; needs a recount before it can block). Ticket 438 carries the
+  this pattern they are the hits; needs a recount before it can block). The Effect code guidelines
+  study (experiment 262, not on main yet) counted 20 product hits, every one on a Schema class, and
+  found it misses `Cause.squash` and the `catchIf` guard at `Runner.ts:1185`. Ticket 438 carries the
   diagnostic rollout.
+- No check finds `Cause.squash` used to pick an error. A lint rule for it is proposed, not built.
 - A dropped cause has no built-in check. A custom oxlint rule could flag a `catch:` or `mapError`
   callback with no parameter; not built.
 

@@ -197,6 +197,32 @@ Anything a later wake needs to act on goes in storage: the due time (`runtime.ts
 marker (experiment 231 found the constructor cannot tell sleep from crash; a saved marker can), a
 socket's attachment.
 
+## A retry that survives a sleep saves its count and reuses the supervisor's backoff
+
+```ts
+// next/packages/libfabrika/src/runtime/internal/supervisor.ts:120-124, inside the saved machine.
+      const { failure, process } = s.recovery;
+      const crashes = s.crashes ?? 1;
+      const wait = Math.min(s.policy.backoff.minMs * 2 ** Math.min(crashes - 1, 53), s.policy.backoff.maxMs);
+      const until = m.at + wait;
+      const reason = crashReason(failure);
+```
+
+A `Schedule` lives in a fiber's memory, so a sleep forgets how many times it ran and when the next
+try is due. A retry that must outlive the wake keeps both as data: the attempt count in the saved
+record (`crashes`, `runtime/internal/recovery.ts:120`), and the next time as the object's alarm. The
+wait grows from `minMs`, doubles per crash and stops at `maxMs` (`supervisor.ts:122`), with the
+policy's numbers saved beside it (`recovery.ts:18`). A new retry of this kind reuses this machine's
+backoff rather than writing its own.
+
+Inside one wake, a retry is a plain `Effect.retry`, which ends with the wake
+(`next/packages/libfabrika/src/cloudflare/runtime.ts:760-766`), or a `Schedule`
+([effect-state-and-time.md](./effect-state-and-time.md)).
+
+Not yet: the runner's retry of a failed send waits a fixed `minMs` every time and keeps its due time
+in a `let` (`next/packages/libfabrika/src/runtime/Runner.ts:1344-1348`, `mailRetry` at `:234`), so
+the wait never grows and its count is not saved.
+
 ## What keeps an object awake
 
 Each line is a thing that leaves something pending when the wake returns, its Effect form, and the
@@ -223,7 +249,7 @@ fix.
   keep it out of objects.
 - **A `waitUntil` that never settles.** Fix: bound it, or make it the next alarm.
 
-Retries and timeouts inside one call are fine (`runtime.ts:759-765` retries an RPC twice, at once):
+Retries and timeouts inside one call are fine (`runtime.ts:760-766` retries an RPC twice, at once):
 they end with the wake. What breaks the rule is anything still waiting after the wake returns.
 
 ## How to test it
