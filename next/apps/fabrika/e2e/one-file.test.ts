@@ -113,16 +113,16 @@ describe("P16 real browser from a copied one-file build", () => {
             cpSync(built.brain, join(alone, "brain.mjs"));
             rmSync(join(home, "dist"), { recursive: true });
             rmSync(pkg, { recursive: true });
-            // Held in the stage's own scope, opened before the stage, so it is given back after the
-            // stage closes (finalizers run in reverse).
+            // Held in the instance's own scope, opened before the instance, so it is given back after the
+            // instance closes (finalizers run in reverse).
             const { port } = await Effect.runPromise(
               Effect.acquireRelease(heldPort(), (held) => held.release).pipe(Effect.provideService(Scope.Scope, scope)),
             );
             const raw = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
-            const { localStage } = await import("../src/local-stage.ts");
+            const { localInstance } = await import("../src/local-instance.ts");
             const { localState } = await import("alchemy/State/LocalState");
-            const stage = await Effect.runPromise(
-              localStage(
+            const instance = await Effect.runPromise(
+              localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
                 {
                   home,
@@ -146,31 +146,31 @@ describe("P16 real browser from a copied one-file build", () => {
             const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
-            await page.goto(stage.url);
+            await page.goto(instance.url);
 
             for (const [route, asset] of Object.entries(built.assets)) {
-              const response = await page.request.get(stage.url + route);
+              const response = await page.request.get(instance.url + route);
               expect(response.status()).toBe(200);
               expect(response.headers()["content-type"]).toBe(asset.type);
               expect(await response.text()).toBe(asset.body);
               expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
 
               if (asset.type.startsWith("text/css")) {
-                await page.addStyleTag({ url: stage.url + route });
+                await page.addStyleTag({ url: instance.url + route });
               }
             }
 
-            await page.addScriptTag({ url: stage.url + entry[0], type: "module" });
+            await page.addScriptTag({ url: instance.url + entry[0], type: "module" });
             await page.waitForSelector("#p16");
             expect(await page.locator("#p16").textContent()).toBe(text);
             expect(await page.locator("#p16").evaluate((e) => getComputedStyle(e).color)).toBe("rgb(12, 34, 56)");
-            expect((await page.request.get(`${stage.url}/missing.js`)).status()).toBe(404);
+            expect((await page.request.get(`${instance.url}/missing.js`)).status()).toBe(404);
             const planted = await browser.newPage();
             await planted.route("**/*.js", (route) =>
               new URL(route.request().url()).pathname === entry[0] ? route.continue() : route.abort(),
             );
-            await planted.goto(stage.url);
-            await planted.addScriptTag({ url: stage.url + entry[0], type: "module" });
+            await planted.goto(instance.url);
+            await planted.addScriptTag({ url: instance.url + entry[0], type: "module" });
             await expect(planted.evaluate("globalThis.__p16Ready")).rejects.toThrow();
             expect(await planted.locator("#p16").count()).toBe(0);
           } finally {

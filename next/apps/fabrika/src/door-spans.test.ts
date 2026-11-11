@@ -9,6 +9,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
@@ -149,7 +150,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
       })),
     ),
   ).pipe(
-    Layer.provide(LedgerTransaction.layer(sql)),
+    Layer.provide(LedgerTransactionSql.layer(sql)),
     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
   );
   const founder = {
