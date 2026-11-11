@@ -550,7 +550,9 @@ other, and `fabrika/tracker` is the core pack's, the pack named `fabrika`.
   its packs in `fabrika.toml` and commits `fabrika.lock` beside it, with each
   pack's commit and code hash. `~/.fabrika/packs` is only a shared cache, keyed
   by commit. Personal packs sit in the home config with their own lock, and
-  the project's pin wins. Written in full in
+  the project's pin wins. *Changed 2026-11-10 by
+  [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the cache is
+  `~/.fabrika/cache/packs/`. Written in full in
   [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md#where-packs-come-from-2026-10-31).
 - **No "marketplace" (decided).** Any repo can hold packs under
   `.fabrika/packs/<name>/`. The repo address is the name, as in Go:
