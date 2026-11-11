@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "fabrika-version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "a version",
+      "description": "The oldest fabrika this repo works with. It is read before every other setting.",
+      "default": "0.0.0"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {}
+}
