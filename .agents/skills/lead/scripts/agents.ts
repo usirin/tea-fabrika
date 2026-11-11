@@ -15,17 +15,23 @@
 // The provider table: `codex` writes its folder, `codex-read` only reads it (a plan in the main
 // checkout, a review), `claude` is Claude Code through ACP. The adapter labels a Codex turn's tokens
 // the last request's (`counted: "last"`), but measured turns grow with each request, so they read
-// as the turn's total; the row says both until ticket 485 settles it.
+// as the turn's total; the row says both until ticket 485 settles it. `codex-exec` and
+// `codex-exec-read` run the installed `codex exec` plainly, on the user's own Codex config
+// (./codexexec.ts): a turn there retries on a capacity error and asks once more for a missing answer.
 
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv } from "./boxnode.ts";
+import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 
-export const PROVIDERS = ["codex", "codex-read", "claude"] as const;
+export const PROVIDERS = ["codex", "codex-read", "codex-exec", "codex-exec-read", "claude"] as const;
 export type Provider = (typeof PROVIDERS)[number];
+
+/** The rows that run plain `codex exec` (./codexexec.ts). */
+export const EXEC_PROVIDERS: ReadonlySet<Provider> = new Set(["codex-exec", "codex-exec-read"]);
 
 /**
  * One break a step planted once and undid (.decisions/0093): the law, what it broke (file:line and
@@ -50,6 +56,14 @@ export const Answer = Schema.Struct({
   plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 export type Answer = typeof Answer.Type;
+
+/** Where a step may send the lane: any step but itself. A step that needs another round of itself
+ * is not done yet, and a send to itself only loops (2026-11-11, a tests step on Codex). */
+export const sendsFrom = (step: string) => (["tests", "build", "plan"] as const).filter((to) => to !== step);
+
+/** The typed answer one step is offered: `Answer`, with `to` naming only `sendsFrom(step)`. */
+export const answerFor = (step: string) =>
+  Schema.Struct({ ...Answer.fields, to: Schema.NullOr(Schema.Literals(sendsFrom(step))) });
 
 /**
  * The judgment agent's answer: send a lane step again with a note, or park the lane for the lead.
@@ -203,6 +217,8 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
     const adapters = {
       codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
       "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
+      "codex-exec": yield* codexExecAdapter({ access: "write", env }),
+      "codex-exec-read": yield* codexExecAdapter({ access: "read", env }),
       claude: yield* acpAdapter("claude", env),
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
@@ -230,34 +246,56 @@ const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
   }
 };
 
+/** Appends one event line to the turn's `events` file, with when it arrived. */
+const appendTo = (events: string, line: object) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs
+      .writeFileString(events, `${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
+      .pipe(Effect.ignore);
+  });
+
 /**
  * One turn, run to its end: each update appended to `events` as it arrives, the last message
  * written to `report`, and the typed answer handed back. A harness that will not start or breaks
  * is a `failed` turn, never a thrown error. The clock is the interface's own (`limits.seconds`),
- * so running out ends the turn `over_time` and the agent's commands are reaped with it.
+ * so running out ends the turn `over_time` and the agent's commands are reaped with it. A
+ * `codex-exec` row adds its retries and its one ask for a missing answer (`execTurn`).
  */
 export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+
+    if (EXEC_PROVIDERS.has(ask.provider)) {
+      return yield* execTurn(agents, ask);
+    }
+
+    const { turned, said } = yield* turnOnce(agents, ask, ask.prompt, ask.minutes * 60);
+    yield* fs.writeFileString(ask.report, said).pipe(Effect.ignore);
+    return turned;
+  }).pipe(Effect.provide(nodeServices));
+
+/** One turn through the agents service, on `prompt` and `seconds`, with what its last message said. */
+const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: number) =>
+  Effect.gen(function* () {
     const state = { said: "", spent: NO_SPENT, ended: null as Agent.Ended<A> | null };
-    const append = (line: unknown) =>
-      fs.writeFileString(ask.events, `${JSON.stringify(line)}\n`, { flag: "a" }).pipe(Effect.ignore);
+    const append = (line: object) => appendTo(ask.events, line);
     const turn: Agent.Turn<A> = {
       provider: ask.provider,
       session: ask.session,
       folder: ask.folder,
-      prompt: ask.prompt,
+      prompt,
       // The append case: the harness's own coding prompt, then ours.
       system: Agent.SystemPrompt.members[0].make({ text: ask.system }),
       answer: ask.answer,
       model: ask.model,
       effort: ask.effort,
-      limits: { usd: null, tools: null, seconds: ask.minutes * 60 },
+      limits: { usd: null, tools: null, seconds },
     };
     const ran = yield* agents.run(turn).pipe(
       Stream.runForEach((heard) =>
         Effect.gen(function* () {
-          yield* append({ at: new Date().toISOString(), ...heard });
+          yield* append(heard);
 
           if (heard._tag === "said") {
             state.said = heard.text;
@@ -273,26 +311,139 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
       Effect.scoped,
       Effect.result,
     );
-    yield* fs.writeFileString(ask.report, state.said).pipe(Effect.ignore);
     const failed = (reason: string, message: string) => Failed.make({ reason, message, spent: state.spent });
+    const done = (turned: Turned<A>) => ({ turned, said: state.said });
 
     if (Result.isFailure(ran)) {
       const e = ran.failure;
-      yield* append({ at: new Date().toISOString(), ...failed(e.why, e.message) });
-      return failed(e.why, e.message);
+      yield* append(failed(e.why, e.message));
+      return done(failed(e.why, e.message));
     }
 
     const ended = state.ended;
 
     if (ended === null) {
-      return failed("broke", "the stream ended with no end");
+      return done(failed("broke", "the stream ended with no end"));
     }
 
-    return {
+    return done({
       ...Ended.make({ stop: ended.stop, spent: state.spent, said: state.said }),
       answer: ended.answer,
-    };
-  }).pipe(Effect.provide(nodeServices));
+    });
+  });
+
+// ---------------------------------------------------------------- the codex-exec turn
+
+/**
+ * How a `codex-exec` turn retries a capacity error: the shell wrapper's 6 tries, 60 seconds apart.
+ * A reference with that default, so a test sets the wait to nothing.
+ */
+export const CapacityRetry = Context.Reference<{ readonly tries: number; readonly waitSeconds: number }>(
+  "lead/agents/CapacityRetry",
+  { defaultValue: () => ({ tries: 6, waitSeconds: 60 }) },
+);
+
+/** What a `codex-exec` turn adds to its `events` file between Codex's own updates. */
+const ExecNote = Schema.TaggedUnion({
+  /** A try failed on capacity words; the next starts after the wait. */
+  capacity: { attempt: Schema.Number, waitSeconds: Schema.Number },
+  /** The report held no answer, so one more turn asks for it. */
+  answer_ask: { reason: Schema.String },
+});
+
+/** The one extra ask, when the report holds no answer: the answer object alone (the schema follows it). */
+export const ANSWER_PROMPT =
+  "Your report is written. Do no more work. Reply now with only the one JSON object your step asked for at the end of its report, nothing before or after it.";
+
+/**
+ * Two spends joined: one turn's tries and its answer ask make one field row. Tool calls add up.
+ * Tokens do not: every try after the first that spent any resumes the same Codex thread, and a
+ * resumed `codex exec` turn's `turn.completed` gave the thread's running total, not the turn's
+ * (2026-11-11, 0.167.0: a one-line resume after a 1,012-output turn said 1,062 out). So the
+ * later, larger count is the whole, and each count is the larger of the two.
+ */
+const plus = (a: Spent, b: Spent): Spent => ({
+  input: Math.max(a.input, b.input),
+  cached: Math.max(a.cached, b.cached),
+  output: Math.max(a.output, b.output),
+  counted: a.counted === "none" ? b.counted : a.counted,
+  usd: a.usd === null && b.usd === null ? null : Math.max(a.usd ?? 0, b.usd ?? 0),
+  requests: a.requests === null && b.requests === null ? null : Math.max(a.requests ?? 0, b.requests ?? 0),
+  tools: a.tools + b.tools,
+});
+
+const withSpent = <A>(t: Turned<A>, spent: Spent): Turned<A> => ({ ...t, spent });
+
+/**
+ * One prompt on a `codex-exec` row, tried again only while it failed on capacity words, up to
+ * `CapacityRetry.tries`, waiting between tries, and never past the turn's minutes. A try after the
+ * first carries on the Codex thread the first opened, when it opened one (the session map), so the
+ * work done before the error is not done again.
+ */
+const triedOnCapacity = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, until: number) =>
+  Effect.gen(function* () {
+    const retry = yield* CapacityRetry;
+    let spent = NO_SPENT;
+
+    for (let attempt = 1; ; attempt++) {
+      const left = (until - (yield* Clock.currentTimeMillis)) / 1000;
+      const { turned, said } = yield* turnOnce(agents, ask, prompt, Math.max(1, left));
+      spent = plus(spent, turned.spent);
+      const again =
+        turned._tag === "failed" &&
+        CAPACITY.test(turned.message) &&
+        attempt < retry.tries &&
+        left - retry.waitSeconds > 1;
+
+      if (!again) {
+        return { turned: withSpent(turned, spent), said };
+      }
+
+      yield* appendTo(ask.events, ExecNote.cases.capacity.make({ attempt, waitSeconds: retry.waitSeconds }));
+      yield* Effect.sleep(`${retry.waitSeconds} seconds`);
+    }
+  });
+
+/**
+ * A `codex-exec` turn: the prompt, tried on capacity; then, when Codex ended with a report that
+ * holds no answer the schema reads, ONE more turn on the same Codex thread asking for the answer
+ * alone. Still none is a failed turn, `no_answer`: an answer is never made up. The report is the
+ * step's own last message, with the answer turn's message after it when there was one.
+ */
+const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const until = (yield* Clock.currentTimeMillis) + ask.minutes * 60_000;
+    const first = yield* triedOnCapacity(agents, ask, ask.prompt, until);
+    const t = first.turned;
+    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && first.said.trim() !== "";
+
+    if (!asks) {
+      yield* fs.writeFileString(ask.report, first.said).pipe(Effect.ignore);
+      return t;
+    }
+
+    yield* appendTo(
+      ask.events,
+      ExecNote.cases.answer_ask.make({ reason: "the report holds no answer the schema reads" }),
+    );
+    const second = yield* triedOnCapacity(agents, ask, ANSWER_PROMPT, until);
+    const spent = plus(t.spent, second.turned.spent);
+    const report = second.said.trim() === "" ? first.said : `${first.said}\n\n${second.said}`;
+    yield* fs.writeFileString(ask.report, report).pipe(Effect.ignore);
+    const s = second.turned;
+
+    if (s._tag === "ended" && s.answer !== null) {
+      return { ...s, spent, said: report };
+    }
+
+    const why = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
+    return Failed.make({
+      reason: "no_answer",
+      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${why})`,
+      spent,
+    });
+  });
 
 // ---------------------------------------------------------------- the field row
 
