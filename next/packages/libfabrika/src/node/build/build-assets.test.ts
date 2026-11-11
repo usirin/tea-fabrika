@@ -7,7 +7,7 @@ import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, PlatformError, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -166,7 +166,7 @@ const fixture = (name: string, value: string) => {
     out: join(home, "dist"),
     root: home,
     entry: join(home, "src/brain.ts"),
-    programs: [{ name: "counter", package: "@p16/compiler", export: "program" }],
+    programs: [{ name: "p16/counter", package: "@p16/compiler", export: "program" }],
     files: [],
     ledger: [],
     chaos: false,
@@ -1051,6 +1051,158 @@ describe("P16 cleanup and recording", () => {
           }
         }),
         { ...runs, numRuns: 3 },
+      );
+    },
+  );
+});
+
+// P40 slice 1. Window-bearing programs with equal short names in different packs. The walk holds
+// the window modules on disk and the current selections; each step selects a module under a fresh
+// qualified name, forks a selection into another pack under the same short name with a window of
+// its own, or builds and requests every emitted file. Fixtures live in scoped temp folders.
+type WindowPick = { readonly name: string; readonly module: string };
+
+const windowRuns = { seed: 119120, numRuns: 4 };
+
+const windowHome = Effect.fn("p40.windowHome")(function* () {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "p40w-" });
+  yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
+  yield* fs.makeDirectory(path.join(home, "node_modules/@p40"), { recursive: true });
+  yield* fs.makeDirectory(path.join(home, "programs"));
+
+  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+    yield* fs.symlink(path.join(ROOT, "next/apps/fabrika/node_modules", pkg), path.join(home, "node_modules", pkg));
+  }
+
+  yield* fs.symlink(
+    path.join(import.meta.dirname, "../../../node_modules/react"),
+    path.join(home, "node_modules/react"),
+  );
+  yield* fs.copy(path.join(ROOT, "next/apps/fabrika/src"), path.join(home, "src"));
+  return home;
+});
+
+// One window-bearing package: its window script names its marker, and imports a chunk of its own.
+const windowModule = Effect.fn("p40.windowModule")(function* (home: string, id: string, marker: string) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const pkg = path.join(home, "programs", id);
+  yield* fs.makeDirectory(pkg, { recursive: true });
+  yield* fs.symlink(pkg, path.join(home, "node_modules/@p40", id));
+  yield* fs.writeFileString(
+    path.join(pkg, "package.json"),
+    JSON.stringify({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
+  );
+  yield* fs.writeFileString(path.join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
+  yield* fs.writeFileString(
+    path.join(pkg, "window.ts"),
+    `export const view = () => ${JSON.stringify(marker)}; export const more = import("./chunk.ts");`,
+  );
+  yield* fs.writeFileString(path.join(pkg, "chunk.ts"), `export const text = ${JSON.stringify(`${marker}-chunk`)};`);
+});
+
+const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<number>) {
+  const path = yield* Path.Path;
+  const { build } = yield* Effect.promise(load);
+  const serveAsset = yield* Effect.promise(serving);
+  const home = yield* windowHome();
+  const options = {
+    out: path.join(home, "dist"),
+    root: home,
+    entry: path.join(home, "src/brain.ts"),
+    files: [],
+    ledger: [],
+    chaos: false,
+  };
+  const markers = new Map<string, string>();
+  let selected: ReadonlyArray<WindowPick> = [],
+    builds = 0;
+
+  const add = Effect.fnUntraced(function* (n: number) {
+    const id = `w${markers.size}`,
+      marker = `p40-window-${id}-${n}`;
+    yield* windowModule(home, id, marker);
+    markers.set(id, marker);
+    return id;
+  });
+
+  const check = Effect.fnUntraced(function* () {
+    const built = yield* build({
+      ...options,
+      programs: selected.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
+    });
+    builds++;
+    const scripts = Object.entries(built.assets).filter(([, a]) => a.type === "text/javascript; charset=utf-8");
+    const entries = new Map<string, string>();
+
+    for (const p of selected) {
+      const marker = markers.get(p.module)!;
+      // A window's entry is the one script that names its view; its chunk names `-chunk` instead.
+      const own = scripts.filter(([, a]) => a.body.includes(`${JSON.stringify(marker)}`));
+      expect(own, `${p.name} has one window entry`).toHaveLength(1);
+      const [route] = own[0]!;
+      // Its route keeps the whole qualified name, so equal short names never meet on one route.
+      expect(route, `${p.name}'s route keeps its pack`).toContain(p.name);
+      entries.set(p.name, route);
+    }
+
+    expect(new Set(entries.values()).size).toBe(selected.length);
+
+    for (const [route, asset] of Object.entries(built.assets)) {
+      // A valid route: slash-led segments, none empty, `.` or `..`.
+      expect(route).toMatch(/^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/);
+      const response = yield* serveAsset(built.assets, new Request(`https://test.invalid${route}`));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(asset.type);
+      expect(yield* Effect.promise(() => response.text())).toBe(asset.body);
+    }
+  });
+
+  const steps: ReadonlyArray<{
+    readonly possible: () => boolean;
+    readonly run: (n: number) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>;
+  }> = [
+    {
+      possible: () => true,
+      run: Effect.fnUntraced(function* (n) {
+        selected = [...selected, { name: `pack${n % 3}/view${selected.length}`, module: yield* add(n) }];
+      }),
+    },
+    {
+      possible: () => selected.length > 0,
+      run: Effect.fnUntraced(function* (n) {
+        const short = selected[n % selected.length]!.name.split("/")[1]!;
+        selected = [...selected, { name: `fork${selected.length}/${short}`, module: yield* add(n) }];
+      }),
+    },
+    { possible: () => selected.length > 0, run: () => check() },
+  ];
+
+  for (const n of tape) {
+    const possible = steps.filter((s) => s.possible());
+    yield* possible[n % possible.length]!.run(Math.floor(n / possible.length));
+  }
+
+  // Every walk ends with a fork and a build, so the law never holds on an empty trace.
+  const last = tape.at(-1) ?? 0;
+  yield* steps[0]!.run(last);
+  yield* steps[1]!.run(last);
+  yield* check();
+  expect(builds).toBeGreaterThan(0);
+});
+
+describe("P40 qualified window routes", () => {
+  it(
+    "L6: window programs with equal short names in different packs get their own valid routes",
+    { timeout: 10 * windowRuns.numRuns * 10_000 },
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (tape) => {
+          await Effect.runPromise(Effect.scoped(windowWalk(tape)).pipe(Effect.provide(NodeServices.layer)));
+        }),
+        windowRuns,
       );
     },
   );

@@ -828,6 +828,7 @@
               "processes",
               "presence",
               "jobs",
+              "packs",
               "access",
               "runtime",
               "gateway"
