@@ -215,6 +215,9 @@ const BRIEFS: Record<Role, Brief> = {...}; // the compiler refuses a role with n
 
 When `main` moves, code merges it into the branch and signs a `lead` link from the old tree to the
 merged one, on every merge, before the pull request can land.
+*Changed 2026-11-11 by [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md):
+a branch behind `main` is no longer refused for that, so the merge is not needed before it lands; a
+merge that is made is still a signed `lead` link.*
 
 - **Already decided:** the branch catches up by merging `main` in, as a `lead` link ([a unit of work
   is a commit](./a-unit-of-work-is-a-commit.md), "When `main` moved"). Today's pipeline already
@@ -228,7 +231,9 @@ merged one, on every merge, before the pull request can land.
   `lead` merge. Whether a conflicted merge commit should be signed as `lead` before the step fixes it
   is open; one real conflict on a Tier 1 row would show it.
 - **What holds it:** P32's `broken_chain` answer, and a test that a pull request behind `main` gets
-  a `lead` link from code before it can merge.
+  a `lead` link from code before it can merge. *Changed 2026-11-11 by
+  [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md): the check no longer
+  answers `broken_chain` for a branch behind `main`, so this holds only a merge that is made.*
 
 ## Where it differs from settled notes
 
