@@ -1877,73 +1877,8 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "readonly layer: (sql: Sql, who: { name: string; capacity: number }) => Layer.Layer<Store>;"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import type { LedgerError } from \"../ledger/Ledger.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "who: { readonly name: string; readonly capacity: number },"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "const [row] = sql.exec(\"SELECT value FROM process_recovery WHERE name=?\", who.name);"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "if (saved.name !== who.name) {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "for (const row of sql.exec(\"SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid\", who.name)) {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "const [row] = sql.exec(\"SELECT value FROM process_receipts WHERE name=? AND letter=?\", who.name, letter);"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "if (saved.name !== who.name) {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "const old = sql.exec(\"SELECT value FROM process_recovery WHERE name=?\", who.name)[0];"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "who.name,"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "growth += bytes(who.name) + bytes(receipt.letter);"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "if (sql.size() + growth > who.capacity) {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "who.name,"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "who.name,"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
@@ -2017,11 +1952,6 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "layer: (sql: Sql, who: { name: string; capacity: number }) => LayerType.Layer<Store>;"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
@@ -2039,11 +1969,6 @@
 			"file": "next/packages/libfabrika/src/runtime/internal/recovery.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { lineFor, valueFor } from \"../../ledger/Log.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/internal/recovery.ts",
-			"rule": "eslint(no-restricted-imports)",
-			"code": "import { Line } from \"../../ledger/Log.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/telemetry/RecordPart.test.ts",

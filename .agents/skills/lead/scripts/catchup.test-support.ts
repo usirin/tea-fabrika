@@ -39,7 +39,8 @@ const workflow = parse(readFileSync(join(import.meta.dirname, "../../../../.gith
 
 export const nextNames: string[] = workflow.jobs.next.strategy.matrix.shard.map((index: number) => `next (${index})`);
 
-export type Check = { name: string; status: string; conclusion: string };
+// `url` is the check run's own link, its html_url, when a law gives one.
+export type Check = { name: string; status: string; conclusion: string; url?: string };
 export const success = (name: string): Check => ({ name, status: "completed", conclusion: "success" });
 export const matrixChecks = ["check", "e2e", "commits", ...nextNames].map(success);
 
@@ -121,11 +122,23 @@ export type Setup = {
   // merged, `moved` (a newer head, 409) or `refused` (GitHub's own rules, 405).
   behind?: boolean;
   rest?: "merged" | "moved" | "refused";
+  // The pull request's state, one answer per read of it (the start read, then each look inside a
+  // wait), the last one repeating. OPEN by default. UNKNOWN is gh's answer for no such PR.
+  views?: View[];
+  // The first looks inside a wait that fail as the network does, before one answers.
+  lookFailures?: number;
+  // A link GitHub gives a check run, in the default answer.
+  links?: boolean;
+  // Another run holds the catch-up lock the whole time, and `date` answers these seconds in turn.
+  lockHeld?: number[];
   // The first check read that answers (0097: catch-up's own look at a head that lacks main) finds
   // `check` red or still running, or `e2e` missing because CI never ran it; later reads are as the
   // rest of the setup says.
   before?: "red" | "running" | "missing";
 };
+
+export type View = "OPEN" | "DRAFT" | "MERGED" | "CLOSED" | "UNKNOWN";
+export const link = (name: string) => `https://github.com/fixture/repo/runs/${encodeURIComponent(name)}`;
 
 export const green: Setup = {
   failures: [0, 0, 0, 0, 0],
@@ -149,7 +162,8 @@ const cmd = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
 let key;
 if (cmd === "gh") {
-  if (args[0] === "pr" && args[1] === "view")
+  if (args[0] === "pr" && args[1] === "view" && args.includes("state,isDraft,mergeCommit")) key = "standing";
+  else if (args[0] === "pr" && args[1] === "view")
     key = args.includes("state,mergeCommit") ? "landed" : args.includes("body") ? "body" : args.includes("headRefOid") ? "oid" : "head";
   else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
@@ -172,7 +186,18 @@ if (cmd === "gh") {
     if (key === "logs") console.log("commits\tcheck\t2026-11-08T00:00:00Z commits: 3 commits, ticket 520");
     die("temporary " + key + " read failure");
   }
-  if (key === "head") console.log(setup.branch);
+  if (key === "standing" && n < (setup.lookFailures || 0)) die("temporary standing read failure");
+  if (key === "head" || key === "standing") {
+    // One answer per read of the state, in order, across the start read and the looks.
+    const views = setup.views || ["OPEN"];
+    const seen = state.views || 0;
+    state.views = seen + 1;
+    fs.writeFileSync(stateFile, JSON.stringify(state));
+    const view = views[Math.min(seen, views.length - 1)];
+    if (view === "UNKNOWN") die("GraphQL: Could not resolve to a PullRequest with the number of 900. (repository.pullRequest)");
+    const words = [view === "DRAFT" ? "OPEN" : view, String(view === "DRAFT"), view === "MERGED" ? process.env.CATCHUP_MERGED : "-"];
+    console.log((key === "head" ? [...words, setup.branch] : words).join(" "));
+  }
   if (key === "landed") console.log(setup.landed === "OPEN" ? "OPEN " : "MERGED " + process.env.CATCHUP_MERGED);
   if (key === "body") console.log(setup.body ?? "");
   if (key === "oid") console.log(setup.stack === "moved" ? "f".repeat(40) : process.env.CATCHUP_TIP);
@@ -182,14 +207,15 @@ if (cmd === "gh") {
     const pending = n - setup.failures[index] < setup.pending;
     const before = n === setup.failures[index] ? setup.before : undefined;
     if (setup.checks) {
-      for (const check of setup.checks) console.log(check.name + "\t" + check.status + "\t" + check.conclusion);
+      for (const check of setup.checks) console.log(check.name + "\t" + check.status + "\t" + check.conclusion + "\t" + (check.url ?? ""));
     } else for (const name of ["check", "e2e", "commits", ...${JSON.stringify(nextNames)}, "next"]) {
       if (before === "missing" && name === "e2e") continue;
       const red = (setup.answer === "red" || before === "red") && name === "check";
       const running = pending || (before === "running" && name === "check");
       // Existing non-waiter laws also provide a skipped bare job while the waiter changes.
       // T376's isolated laws below never add this compatibility check to a matrix answer.
-      console.log(name + "\t" + (running ? "in_progress\t" : "completed\t" + (red ? "failure" : name === "next" ? "skipped" : "success")));
+      const url = setup.links ? "https://github.com/fixture/repo/runs/" + encodeURIComponent(name) : "";
+      console.log(name + "\t" + (running ? "in_progress\t" : "completed\t" + (red ? "failure" : name === "next" ? "skipped" : "success")) + "\t" + url);
     }
   }
   if (key === "trust") {
@@ -263,6 +289,13 @@ if (cmd === "node") {
 }
 if (cmd === "pnpm" || cmd === "nice") process.exit(0);
 if (cmd === "sleep") process.exit(0);
+if (cmd === "date" && setup.lockHeld) {
+  const dates = state.dates || 0;
+  state.dates = dates + 1;
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  console.log(String(1794096000 + setup.lockHeld[Math.min(dates, setup.lockHeld.length - 1)]));
+  process.exit(0);
+}
 if (cmd === "date") {
   const clock = setup.clock || [0];
   console.log(String(1794096000 + clock[Math.min(state.checks || 0, clock.length - 1)]));
@@ -371,7 +404,13 @@ export const run = (setup: Setup, args: string[] = []) => {
     if (!setup.cleanup) {
       mkdirSync(bin);
       mkdirSync(join(dir, "home"));
-      mkdirSync(join(dir, "boxes/catchup-900/node_modules"), { recursive: true });
+
+      // A run that never gets the lock never makes its checkout, so none is planted for it.
+      if (setup.lockHeld) {
+        mkdirSync(join(dir, "boxes/catchup.lock"), { recursive: true });
+      } else {
+        mkdirSync(join(dir, "boxes/catchup-900/node_modules"), { recursive: true });
+      }
     } else {
       if (!existsSync(fixture.template)) {
         buildFixture(dir, git);
@@ -667,7 +706,8 @@ export const run = (setup: Setup, args: string[] = []) => {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(false);
+    // A run drops the lock it took and never one another run holds.
+    expect(existsSync(join(dir, "boxes/catchup.lock"))).toBe(setup.lockHeld !== undefined);
 
     // Its own checkout is gone once the run passed the usage check, success or failure, unless it
     // holds MAIN's Git storage, or MAIN cannot be read to tell: then a line says why it stayed.

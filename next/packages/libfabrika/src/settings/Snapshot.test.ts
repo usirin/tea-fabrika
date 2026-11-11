@@ -70,6 +70,7 @@ const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
           doc: "A port.",
           scope: ["person"],
           reload: "restart",
+          since: "0.0.0",
         }),
       ]),
     ),
