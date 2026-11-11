@@ -838,15 +838,25 @@ describe("P12 real dev.ts wire", () => {
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
         expect(inbox).toHaveLength(20);
         expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
-        expect((yield* Effect.promise(() => view(resumed, pid))).view.count).toBe(20);
+        // When the door answered every resend (each letter settled or held), the view is the first call
+        // into the object: it wakes a `stepping` marker and is the one refusal, so it too waits for the fact.
+        const opened = yield* Effect.promise(() => resumed.call("view.open", { pid }));
+
+        if (opened.error !== undefined) {
+          expect(refused, "at most one call meets a refusal").toEqual([]);
+          expect(opened.error.data?.reason).toBe("unreachable");
+          refused.push("view.open");
+          yield* restartedAfter(resumed, "processes/counter:1", pid);
+        }
+
+        const live = yield* Effect.promise(() => counter(resumed));
+        expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
         const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
           (row) => (row.body as { after?: string }).after === pid,
         );
         // A refusal waited for its fact above. However the kill landed, no more than one restart follows it.
         expect(restarted.length).toBeLessThanOrEqual(1);
-        expect(yield* Effect.promise(() => counter(resumed))).toBe(
-          restarted.length === 0 ? pid : (restarted[0]!.body as { process: string }).process,
-        );
+        expect(live).toBe(restarted.length === 0 ? pid : (restarted[0]!.body as { process: string }).process);
       }),
   );
 });
