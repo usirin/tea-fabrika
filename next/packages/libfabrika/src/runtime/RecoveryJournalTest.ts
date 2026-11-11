@@ -18,6 +18,7 @@ import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
 import { RecoveryStore } from "./RecoveryStore.ts";
@@ -306,7 +307,9 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       Effect.provide(ProcessStore.layer(stateSql, { process: A0 }).pipe(Layer.provide(coordination))),
     );
   const recovery = <A, E>(f: (s: RecoveryStore["Service"]) => Effect.Effect<A, E>) =>
-    RecoveryStore.use(f).pipe(Effect.provide(RecoveryStore.layer(stateSql, { name: NAME, capacity: 1024 ** 3 })));
+    RecoveryStore.use(f).pipe(
+      Effect.provide(RecoveryStore.layer(stateSql, { name: NAME, capacity: 1024 ** 3, schema: Supervision })),
+    );
   const reopen = Effect.andThen(ledger.reopen, state.reopen).pipe(
     Effect.andThen(
       Effect.sync(() => {

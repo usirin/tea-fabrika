@@ -37,6 +37,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { Refusal } from "./Program.ts";
 import { RecoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
@@ -519,7 +520,8 @@ describe("T337 down event identity, next/", () => {
         const w = world(false, false, null, {}, "bad_msg", process);
         yield* w.boot;
         yield* ProcessManager.use((p) => p.exit(process, CRASHED, from())).pipe(Effect.provide(w.manager()));
-        const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
+        const recovery = () =>
+          RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
         yield* RecoveryStore.use((s) =>
           s.save({
             v: 2,
@@ -939,7 +941,9 @@ describe("P34 runner supervision", () => {
 
                   const armed = w.alarm();
                   const recovery = yield* RecoveryStore.use((s) => s.load).pipe(
-                    Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
+                    Effect.provide(
+                      RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
+                    ),
                   );
                   // The program is live, so no recovery deadline remains. Earlier down
                   // exits above checked the other side of the same earliest-deadline law.
@@ -1238,7 +1242,9 @@ describe("P34 runner supervision", () => {
             yield* recover(w);
             const status = yield* ProcessManager.use((p) => p.status(NAME)).pipe(Effect.provide(w.manager()));
             const saved = yield* RecoveryStore.use((s) => s.load).pipe(
-              Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
+              Effect.provide(
+                RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
+              ),
             );
             expect({ records, saved, state: status.state }).toMatchObject({
               records: [{ build, body: { build, input: id } }],
@@ -1440,7 +1446,8 @@ describe("P34 runner supervision", () => {
 
             const afterFifty = yield* measure(51);
 
-            const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
+            const recovery = () =>
+              RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
             w.reopen();
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
@@ -1613,13 +1620,16 @@ describe("P34 runner supervision", () => {
                 RecoveryStore: S,
               }: {
                 RecoveryStore: Context.Service<Store, Store> & {
-                  layer: (sql: Sql, who: { name: string; capacity: number }) => LayerType.Layer<Store>;
+                  layer: (
+                    sql: Sql,
+                    who: { name: string; capacity: number; schema: typeof Supervision },
+                  ) => LayerType.Layer<Store>;
                 };
               } = yield* Effect.promise(() => import(path));
               expect(
                 yield* Effect.gen(function* () {
                   return yield* (yield* S).input(value);
-                }).pipe(Effect.provide(S.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 }))),
+                }).pipe(Effect.provide(S.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }))),
               ).toMatchObject({ id: value, envelope: { input: { type: "poison", key: value } } });
             }).pipe(Effect.provide(w.layer()));
           }),

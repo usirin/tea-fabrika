@@ -11,7 +11,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { workerExecution } from "../runtime/Execution.ts";
 import { RecoveryStore } from "../runtime/RecoveryStore.ts";
-import { ProgramRunner } from "../runtime/Runner.ts";
+import { ProgramRunner, Supervision } from "../runtime/Runner.ts";
 import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
@@ -85,7 +85,7 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
     wake: () => null,
   } as const;
   const manager = ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(data(ledger.sql)));
-  const recovery = RecoveryStore.layer(state.sql, { name: NAME, capacity: 1024 ** 3 });
+  const recovery = RecoveryStore.layer(state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   const layer = () => {
     const loader = Layer.effect(
       ProgramLoader,

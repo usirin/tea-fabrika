@@ -9,6 +9,7 @@ import * as fc from "fast-check";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
+import { Supervision } from "./internal/supervisor.ts";
 
 type Store = {
   readonly load: Effect.Effect<unknown, LedgerError>;
@@ -19,7 +20,10 @@ type Store = {
 
 type Subject = {
   readonly RecoveryStore: Context.Service<Store, Store> & {
-    readonly layer: (sql: Sql, who: { name: string; capacity: number }) => Layer.Layer<Store>;
+    readonly layer: (
+      sql: Sql,
+      who: { name: string; capacity: number; schema: typeof Supervision },
+    ) => Layer.Layer<Store>;
   };
 };
 
@@ -114,7 +118,7 @@ describe("P34 recovery storage", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         yield* S;
-      }).pipe(Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 }))),
+      }).pipe(Effect.provide(S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision }))),
     );
     expect(disk.sql.exec("SELECT name FROM sqlite_master")).toEqual(before);
   });
@@ -122,7 +126,7 @@ describe("P34 recovery storage", () => {
   it("p80 storage plant, memory-only receipt: full decision and original input survive replacement and reopen", async () => {
     const { RecoveryStore: S } = await subject();
     const disk = storage();
-    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
     await Effect.runPromise(
       Effect.gen(function* () {
         yield* (yield* S).save(snapshot);
@@ -141,7 +145,7 @@ describe("P34 recovery storage", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         expect(yield* (yield* S).receipt("poison")).toBeNull();
-      }).pipe(Effect.provide(S.layer(disk.sql, { name: "other:1", capacity: 1024 ** 3 }))),
+      }).pipe(Effect.provide(S.layer(disk.sql, { name: "other:1", capacity: 1024 ** 3, schema: Supervision }))),
     );
   });
 
@@ -155,7 +159,7 @@ describe("P34 recovery storage", () => {
           Effect.promise(async () => {
             const { RecoveryStore: S } = await subject();
             const disk = storage();
-            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 64 * 1024 });
+            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 64 * 1024, schema: Supervision });
             await Effect.runPromise(
               Effect.gen(function* () {
                 const s = yield* S;
@@ -195,7 +199,7 @@ describe("P34 recovery storage", () => {
           Effect.promise(async () => {
             const { RecoveryStore: S } = await subject();
             const disk = storage();
-            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+            const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
             await Effect.runPromise(
               Effect.gen(function* () {
                 yield* (yield* S).save(snapshot);
@@ -252,7 +256,7 @@ describe("P34 recovery storage", () => {
         return disk.sql.exec(q, ...args);
       },
     };
-    const layer = () => S.layer(sql, { name: "counter:1", capacity: 1024 ** 3 });
+    const layer = () => S.layer(sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
     await Effect.runPromise(
       Effect.gen(function* () {
         const s = yield* S;
@@ -274,7 +278,7 @@ describe("P34 recovery storage", () => {
   it("p80 plant, clamp invalid settings: refused policy cannot change an existing saved decision", async () => {
     const { RecoveryStore: S } = await subject();
     const disk = storage();
-    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
     await Effect.runPromise(
       Effect.gen(function* () {
         const s = yield* S;
@@ -297,7 +301,7 @@ describe("P34 recovery storage", () => {
   it("scenario: P34c slice 2, an old saved shape is refused before writing, and the saved journal stays", async () => {
     const { RecoveryStore: S } = await subject();
     const disk = storage();
-    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+    const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
     await Effect.runPromise(
       Effect.gen(function* () {
         const s = yield* S;
@@ -339,7 +343,7 @@ describe("P34 recovery storage", () => {
           });
           const idle = { ...snapshot, journal: { _tag: "idle", process: A } };
           const disk = storage();
-          const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3 });
+          const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
           await Effect.runPromise(
             Effect.gen(function* () {
               const s = yield* S;

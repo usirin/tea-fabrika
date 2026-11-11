@@ -17,6 +17,7 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { workerExecution } from "./Execution.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { stepper } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
@@ -173,7 +174,9 @@ describe("P12 saved mail recovery", () => {
                       ...(saved?.receipts ?? []).filter((r) => r.tries > 0 || r.errors.length > 0),
                       ...(saved?.observations ?? []),
                     ]),
-                    Effect.provide(RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3 })),
+                    Effect.provide(
+                      RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision }),
+                    ),
                   );
                   expect(yield* runner.open("before")).toMatchObject({ rev: 0, view: { count: 0 } });
 
