@@ -65,6 +65,8 @@ export const e2eWindows: CreateRule = {
     type Binding = NonNullable<ReturnType<typeof binding>>;
     interface Write {
       readonly at: number;
+      /** The declarator or assignment expression. */
+      readonly node: Node;
       readonly pattern: Node;
       readonly value: Node | null | undefined;
     }
@@ -74,7 +76,7 @@ export const e2eWindows: CreateRule = {
       const def = variable.defs[0];
 
       if (def?.node.type === "VariableDeclarator") {
-        writes.push({ at: def.node.range[0], pattern: def.node.id, value: def.node.init });
+        writes.push({ at: def.node.range[0], node: def.node, pattern: def.node.id, value: def.node.init });
       }
 
       for (const ref of variable.references) {
@@ -101,21 +103,102 @@ export const e2eWindows: CreateRule = {
           target[1] <= top.left.range[1] &&
           ["=", "||=", "??=", "&&="].includes(top.operator)
         ) {
-          writes.push({ at: top.range[0], pattern: top.left, value: top.right });
+          writes.push({ at: top.range[0], node: top, pattern: top.left, value: top.right });
         }
       }
 
       return writes.sort((a, b) => a.at - b.at);
     };
-    /** The write a use sees: the last one before it. A use ahead of every write sees any of them. */
+    /**
+     * True when the write always runs before a use in its own straight-line block: a plain `=` (or
+     * declarator) reached from a statement list that contains the use, through nothing conditional.
+     */
+    const replaces = (w: Write, use: Node): boolean => {
+      if (w.node.type === "AssignmentExpression" && w.node.operator !== "=") {
+        return false;
+      }
+
+      let at: Node | undefined = w.node;
+
+      while (at) {
+        const parent: Node | undefined = (at as Node & { parent?: Node }).parent;
+
+        if (!parent) {
+          return false;
+        }
+
+        if (parent.type === "BlockStatement" || parent.type === "Program" || parent.type === "StaticBlock") {
+          // A try block only runs in part when it throws, so it never replaces for a use outside it.
+          return parent.range[0] <= use.range[0] && use.range[1] <= parent.range[1];
+        }
+
+        if (
+          parent.type !== "ExpressionStatement" &&
+          parent.type !== "VariableDeclaration" &&
+          parent.type !== "VariableDeclarator" &&
+          parent.type !== "AssignmentExpression" &&
+          parent.type !== "SequenceExpression" &&
+          parent.type !== "AwaitExpression" &&
+          parent.type !== "TSAsExpression" &&
+          parent.type !== "TSNonNullExpression" &&
+          parent.type !== "ParenthesizedExpression"
+        ) {
+          return false;
+        }
+
+        at = parent;
+      }
+
+      return false;
+    };
+    /**
+     * The writes a use may see: the last one before it, plus every earlier write back to the nearest
+     * one that always runs. A use ahead of every write sees any of them.
+     */
     const reaching = (variable: Binding, use: Node): Write[] => {
       const writes = writesOf(variable);
       const before = writes.filter((w) => w.at < use.range[0]);
-      return before.length ? [before[before.length - 1] as Write] : writes;
+
+      if (!before.length) {
+        return writes;
+      }
+
+      const seen: Write[] = [];
+
+      for (let i = before.length - 1; i >= 0; i--) {
+        const w = before[i] as Write;
+        seen.push(w);
+
+        if (replaces(w, use)) {
+          break;
+        }
+      }
+
+      return seen;
+    };
+    /** The values an expression can take: both arms of `?:`, `??`, `||` and `&&`. */
+    const arms = (node: Node | null | undefined): Node[] => {
+      if (!node) {
+        return [];
+      }
+
+      if (node.type === "ConditionalExpression") {
+        return [...arms(node.consequent), ...arms(node.alternate)];
+      }
+
+      if (node.type === "LogicalExpression") {
+        return [...arms(node.left), ...arms(node.right)];
+      }
+
+      return [node];
     };
     const hasPosition = (node: Node | null | undefined, seen = new Set<Binding>()): boolean => {
       if (!node) {
         return false;
+      }
+
+      if (node.type === "ConditionalExpression" || node.type === "LogicalExpression") {
+        return arms(node).some((arm) => hasPosition(arm, new Set(seen)));
       }
 
       if (node.type === "ObjectExpression") {
@@ -201,6 +284,18 @@ export const e2eWindows: CreateRule = {
     };
     const infer = (node: Node | null | undefined, seen = new Set<Binding>()): Kind | undefined => {
       if (!node) {
+        return undefined;
+      }
+
+      if (node.type === "ConditionalExpression" || node.type === "LogicalExpression") {
+        for (const arm of arms(node)) {
+          const found = infer(arm, new Set(seen));
+
+          if (found) {
+            return found;
+          }
+        }
+
         return undefined;
       }
 

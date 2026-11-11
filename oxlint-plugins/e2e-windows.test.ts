@@ -141,7 +141,52 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           'import type {_electron, Page, ElectronApplication} from "playwright";';
         files["apps/fabrika/src/testing/tokens.ts"] =
           'import colors from "@radix-ui/colors"; import blue from "@radix-ui/colors/blue";';
+        // Writes that may not run keep the earlier value beside their own; a plain write in the use's own block replaces.
+        const write = [
+          `${name} ??= page;`,
+          `${name} ||= page;`,
+          `${name} &&= page;`,
+          `if (cond) ${name} = page;`,
+          `if (cond) { ${name} = page; } else { other = 1; }`,
+          `for (const item of items) { ${name} = page; }`,
+          `while (cond) ${name} = page;`,
+          `switch (kind) { case 1: ${name} = page; }`,
+          `try { ${name} = page; } catch {}`,
+          `try { risky(); } catch { ${name} = page; }`,
+          `cond ? (${name} = page) : 0;`,
+          `cond ? 0 : (${name} = page);`,
+          `cond && (${name} = page);`,
+          `cond || (${name} = page);`,
+          `cond ?? (${name} = page);`,
+        ];
+        const conditional = write.map((w) => `{ let ${name} = W.fromId(1); ${w} ${call("focus")} }`);
+        const position = write.map(
+          (w) =>
+            `{ let ${name} = W.fromId(1); let b = {x: 1}; ${w.replaceAll(name, "b").replaceAll("page", "{width: 900}")} ${name}.setBounds(b); }`,
+        );
+        const launcher = write.map(
+          (w) =>
+            `{ let ${name} = require("playwright")._electron; ${w.replaceAll("page", "other")} ${name}.launch({}); }`,
+        );
+        const replaced = [
+          `{ let ${name} = W.fromId(1); ${name} = page; ${call("focus")} }`,
+          `{ let ${name} = W.fromId(1); if (cond) ${name} = other; ${name} = page; ${call("focus")} }`,
+          `{ let ${name} = W.fromId(1); ${name} ??= other; ${name} = page; ${call("focus")} }`,
+          `{ let ${name} = W.fromId(1); if (cond) { ${name} = page; ${call("focus")} } }`,
+          `{ let ${name} = W.fromId(1); cond ? 0 : 1; ${name} = page.locator("a"); ${call("focus")} }`,
+          `{ let b = {x: 1}; b = {width: 900}; W.fromId(1).setBounds(b); }`,
+          `{ let ${name} = page; ${name} ??= page.locator("a"); ${call("focus")} }`,
+        ];
+        files["apps/fabrika/src/testing/may-not-run-window.ts"] =
+          `const {BrowserWindow: W} = require("electron");\n${conditional.join("\n")}\n${replaced.join("\n")}`;
+        files["apps/fabrika/src/testing/may-not-run-position.ts"] =
+          `const {BrowserWindow: W} = require("electron");\n${position.join("\n")}`;
+        files["apps/fabrika/lane-e2e.ts"] = `${launches[1]}\n${launcher.join("\n")}`;
         const fires = lint(files);
+
+        expect(fires(Code, "apps/fabrika/src/testing/may-not-run-window.ts")).toHaveLength(write.length);
+        expect(fires(Code, "apps/fabrika/src/testing/may-not-run-position.ts")).toHaveLength(write.length);
+        expect(fires(Code, "apps/fabrika/lane-e2e.ts")).toHaveLength(1 + write.length);
 
         for (let i = 0; i < forms.length; i++) {
           expect(fires(Code, `apps/fabrika/src/testing/case-${i}.ts`)).toHaveLength(12);
@@ -149,7 +194,6 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
 
         expect(fires(Code, "apps/fabrika/src/testing/dropped.ts")).toEqual([]);
         expect(fires(Code, "apps/fabrika/e2e.ts")).toHaveLength(1);
-        expect(fires(Code, "apps/fabrika/lane-e2e.ts")).toHaveLength(1);
         expect(fires(Code, "apps/fabrika/summon-e2e.ts")).toHaveLength(6);
 
         for (const path of [

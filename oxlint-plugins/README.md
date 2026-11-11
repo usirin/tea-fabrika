@@ -43,7 +43,15 @@ not measure false alarms.
 
 This rule has no types. Unknown helper returns, transfers through object fields,
 nonliteral computed methods, reflection and imports through another module can escape
-it. Raw executable spawning also escapes it: the rule does not inspect `execFile`
+it. Flow is tracked by source position, not by a control-flow graph. A write that may not
+run (a logical assignment, an `if`, loop, `case`, `try` or `catch` body, a `?:` arm or a
+short-circuit right side) keeps the earlier values beside its own, so a native, positioned
+or launcher binding stays one if any value that can reach the use is. A plain write in the
+use's own block replaces them. The rule cannot see a write that runs from a callback,
+a write after the use inside a loop, a write through a closure called elsewhere,
+or a branch that always runs (`if (true)`, both arms writing): those are read as maybe-run,
+so a native value written earlier still counts and an allowed form can be refused.
+Raw executable spawning also escapes it: the rule does not inspect `execFile`
 arguments. Today's `e2e.ts` single-instance check passes the launcher's exported
 `electronHookArgs` before the app path. That second copy needs no report because it
 quits on the single-instance lock before ready, without creating a window. The first
