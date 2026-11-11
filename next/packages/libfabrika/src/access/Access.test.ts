@@ -22,7 +22,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { admitted, allows, EMPTY, foldAccess, type MemberEvent, type Access, Saw, Took } from "./Access.ts";
+import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
+import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 300;
@@ -343,11 +344,11 @@ describe("p28, recorded choices and founding limits", () => {
           { nil: null },
         ),
         (keys, window) => {
-          const members = foldAccess([founded(keys, window)]);
-          expect([...members.keys.keys()]).toEqual(window !== null && keys.length > 0 ? [...keys, window] : keys);
+          const m = foldAccess([founded(keys, window)]);
+          expect([...m.keys.keys()]).toEqual(window !== null && keys.length > 0 ? [...keys, window] : keys);
 
           if (window !== null && keys.length > 0) {
-            expect(members.keys.get(window)?.under).toBe(keys[0]);
+            expect(m.keys.get(window)?.under).toBe(keys[0]);
           }
         },
       ),
@@ -365,7 +366,7 @@ describe("p28, recorded choices and founding limits", () => {
           expect(Result.isSuccess(twice), "same live sheet may join again").toBe(true);
 
           if (Result.isSuccess(twice)) {
-            expect(twice.success.members).toEqual(once.members);
+            expect(members(twice.success)).toEqual(members(once));
           }
         },
       ),
@@ -1035,7 +1036,7 @@ describe("p28, the rule's answer for a key that is out", () => {
         expect(Result.isSuccess(again)).toBe(true);
 
         if (Result.isSuccess(again)) {
-          expect(view(again.success.members)).toEqual(view(folded.members));
+          expect(view(members(again.success))).toEqual(view(members(folded)));
         }
       }),
       opts("t1"),
