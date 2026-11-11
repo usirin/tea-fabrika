@@ -17,6 +17,8 @@ Three files, one record per line, so a script can read them:
 - `findings.jsonl`: one finding each, from this repo's own work. Something an agent
   found outside its task, and later a person's rating of it.
 
+2026-11-10: once ticket 562's build lands, each new row is its own file in `field/findings/`, `field/notes/` or `field/runs/`, and these three files stay as history ([0090](../.decisions/0090-each-field-row-is-a-file.md)).
+
 ## What CI checks
 
 Today's CI checks field records for both versions. On a pull request, it checks
