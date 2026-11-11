@@ -1,4 +1,4 @@
-// P16, next/. P12's actual workerLoader, stack and localStage contracts, not saved proof JSON.
+// P16, next/. P12's actual workerLoader, stack and localInstance contracts, not saved proof JSON.
 // The door mints each stamped input ID with main's shared Id schema; this file never makes one.
 // Builder contract: the app's `build(options)` (src/build.ts) needs FileSystem and Path and
 // returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
@@ -59,8 +59,8 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
   }
 };
 
-// Runs `use` on a brain port held for the whole call, so nobody else is given it between two stages
-// on it. The scope gives the port back only after `use`, and every stage it opened, has closed.
+// Runs `use` on a brain port held for the whole call, so nobody else is given it between two instances
+// on it. The scope gives the port back only after `use`, and every instance it opened, has closed.
 const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
   Effect.runPromise(
     Effect.scoped(
@@ -72,7 +72,7 @@ const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
     ),
   );
 
-// Change the disposable completed file, then exercise that file on the real stage below.
+// Change the disposable completed file, then exercise that file on the real instance below.
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
   const ranges: Array<{ start: number; end: number }> = [];
@@ -225,6 +225,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
   });
 
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
+  // oxlint-disable-next-line fabrika/no-stage-word -- saved speed-bar results name experiment 238's driver exactly
   assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");
   assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
   assert.equal(bar.base.length, 4);
@@ -355,7 +356,7 @@ describe("P16 stack and sealed loader", () => {
         }
 
         const verify = (call: (typeof calls)[number]) => {
-          expect(call.main, "the stage runs the completed file").toBe(built.brain);
+          expect(call.main, "the instance runs the completed file").toBe(built.brain);
           expect(call.bundle, "no second bundle pass").toBe(false);
 
           for (const [name, value] of Object.entries(call.env)) {
@@ -391,7 +392,7 @@ describe("P16 stack and sealed loader", () => {
           }
         }
 
-        expect(calls.length, "each accepted stage declared one Worker").toBe(accepted);
+        expect(calls.length, "each accepted instance declared one Worker").toBe(accepted);
         vi.doUnmock("alchemy");
         vi.doUnmock("@alchemy.run/cloudflare");
         vi.resetModules();
@@ -526,8 +527,8 @@ class Client {
   }
 }
 
-describe("P16 copied-file real stage, serial", () => {
-  it("shutdown: a stopped child closes before the next stage, including when the prior stage fails", async () => {
+describe("P16 copied-file real instance, serial", () => {
+  it("shutdown: a stopped child closes before the next instance, including when the prior instance fails", async () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
         let closed = false;
@@ -543,24 +544,24 @@ describe("P16 copied-file real stage, serial", () => {
           child.kill("SIGKILL");
 
           if (fail) {
-            throw new Error(`planted stage failure ${value}`);
+            throw new Error(`planted instance failure ${value}`);
           }
 
           return value;
         });
 
         if (fail) {
-          await expect(task).rejects.toThrow(`planted stage failure ${value}`);
+          await expect(task).rejects.toThrow(`planted instance failure ${value}`);
         } else {
           expect(await task).toBe(value);
         }
 
-        expect(closed, "next stage must wait for the real child close event").toBe(true);
+        expect(closed, "next instance must wait for the real child close event").toBe(true);
       }),
       { ...runs, numRuns: 8 },
     );
   });
-  it("isolation plants reach the actual compiled loader policy before a real-stage run", async () => {
+  it("isolation plants reach the actual compiled loader policy before a real-instance run", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
         const h = home(),
@@ -610,7 +611,7 @@ describe("P16 copied-file real stage, serial", () => {
             `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
           );
           const { build } = await import("./build.ts"),
-            { localStage } = await import("./local-stage.ts"),
+            { localInstance } = await import("./local-instance.ts"),
             { localState } = await import("alchemy/State/LocalState");
           const built = await Effect.runPromise(
             build({
@@ -627,7 +628,7 @@ describe("P16 copied-file real stage, serial", () => {
           rmSync(join(h, "dist"), { recursive: true });
           rmSync(file);
 
-          // The three modes start one stage each on one brain port, held across all three.
+          // The three modes start one instance each on one brain port, held across all three.
           await onHeldPort(async (brainPort) => {
             for (const mode of ["sealed", "binding", "outbound"] as const) {
               writeFileSync(
@@ -639,7 +640,7 @@ describe("P16 copied-file real stage, serial", () => {
                 Effect.runPromise(
                   Effect.scoped(
                     Effect.gen(function* () {
-                      const stage = yield* localStage(
+                      const instance = yield* localInstance(
                         { ...built, brain: join(alone, "brain.mjs") },
                         {
                           home: h,
@@ -655,7 +656,7 @@ describe("P16 copied-file real stage, serial", () => {
                           expect(Object.keys(built.programs).length).toBeGreaterThan(0);
 
                           for (const name of Object.keys(built.programs)) {
-                            const program: Loaded = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
+                            const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
 
                             if (name === "counter") {
                               const counted = await turn(CounterTurn, program, "init", [null]);
@@ -720,7 +721,7 @@ describe("P16 copied-file real stage, serial", () => {
           const h = home(),
             key = identity();
           const { build } = await import("./build.ts"),
-            { localStage } = await import("./local-stage.ts");
+            { localInstance } = await import("./local-instance.ts");
           const built = await Effect.runPromise(
             build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
           );
@@ -730,7 +731,7 @@ describe("P16 copied-file real stage, serial", () => {
           rmSync(join(h, "dist"), { recursive: true });
           const options = (port: number) => ({
             home: h,
-            name: "p16-stage",
+            name: "p16-instance",
             person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
             founder: key.line,
             window: key.raw,
@@ -741,12 +742,12 @@ describe("P16 copied-file real stage, serial", () => {
             first: unknown,
             stamped = "",
             total = 0;
-          const stage = async (port: number, again: boolean) =>
+          const instance = async (port: number, again: boolean) =>
             afterChildrenStop(async () =>
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localStage(copied, options(port));
+                    const runtime = yield* localInstance(copied, options(port));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),
@@ -869,8 +870,8 @@ describe("P16 copied-file real stage, serial", () => {
             );
           // The restart comes back on the same port: held across both starts, never re-asked.
           await onHeldPort(async (port) => {
-            await stage(port, false);
-            await stage(port, true);
+            await instance(port, false);
+            await instance(port, true);
           });
         },
       ),

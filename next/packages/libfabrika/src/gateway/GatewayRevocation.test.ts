@@ -20,6 +20,7 @@ import { grantText, revokeText } from "../access/Text.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { ProcessError } from "../processes/Process.ts";
@@ -182,7 +183,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
           transact: <A>(step: (turn: LedgerTurn) => A) => beforeWrite.pipe(Effect.andThen(transaction.transact(step))),
         })),
       ),
-    ).pipe(Layer.provide(LedgerTransaction.layer(saved.sql)), Layer.provide(quiet));
+    ).pipe(Layer.provide(LedgerTransactionSql.layer(saved.sql)), Layer.provide(quiet));
     const env = Layer.mergeAll(
       ledger,
       transaction,
