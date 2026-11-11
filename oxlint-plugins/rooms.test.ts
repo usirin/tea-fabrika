@@ -17,9 +17,19 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const SRC = "next/packages/libfabrika/src";
 
-const ROOMS = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"] as const;
+const ROOMS = [
+  "telemetry",
+  "ledger",
+  "transport",
+  "processes",
+  "presence",
+  "jobs",
+  "access",
+  "runtime",
+  "gateway",
+] as const;
 
-/** Every room with every other room: 56 pairs, so no pair is left to a pattern nobody tried. */
+/** Every room with every other room: 72 pairs, so no pair is left to a pattern nobody tried. */
 const PAIRS = ROOMS.flatMap((room) => ROOMS.filter((other) => other !== room).map((other) => [room, other] as const));
 
 const rooms = "fabrika(rooms)";
@@ -67,7 +77,7 @@ describe("fabrika/rooms: no room file re-exports another room's names", async ()
   const linted = await plant(files);
 
   // Plant (the plan's): `processes/Mailbox.ts` holds `export {Rev} from "../ledger/Log.ts"`.
-  it("fires on every form of re-export, for each of the 56 pairs of rooms", () => {
+  it("fires on every form of re-export, for each of the 72 pairs of rooms", () => {
     for (const [room, other] of PAIRS) {
       expect(linted(rooms, pair(room, other)), `${room} from ${other}`).toEqual([2, 3, 4, 5, 7]);
     }
@@ -126,7 +136,7 @@ describe("fabrika/rooms: src/ holds only the listed rooms and top files", async 
     }
   });
 
-  it("takes the eight rooms, the platform folders, the listed top files and their tests", () => {
+  it("takes the nine rooms, the platform folders, the listed top files and their tests", () => {
     for (const path of taken) {
       expect(linted(rooms, path), path).toEqual([]);
     }
@@ -328,7 +338,7 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
 
   // Plants (the plan's): `gateway/Gateway.ts` imports `../ledger/internal/ledgerStore.ts`, and
   // `cloudflare/runtime.ts` imports `../runtime/internal/supervisor.ts`.
-  it("fires on an import and on an export-from, in either spelling, for each of the 56 pairs", () => {
+  it("fires on an import and on an export-from, in either spelling, for each of the 72 pairs", () => {
     for (const [room, other] of PAIRS) {
       expect(linted(restricted, front(room, other)), `${room} into ${other}`).toEqual([2, 3, 4, 5, 6, 7]);
       expect(linted(restricted, inner(room, other)), `${room} into ${other}`).toEqual([2, 3, 4]);
@@ -351,7 +361,7 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
 describe("unicorn/filename-case: a front file is PascalCase and an internal/ file is camelCase", async () => {
   // The rooms with no file on main. `transport/` joins in PR 2 and `door/` in PR 5, when their
   // lowercase files have moved, so the rule fires on nothing on main.
-  const FRESH = ["telemetry", "ledger", "processes", "presence", "access", "runtime"] as const;
+  const FRESH = ["telemetry", "ledger", "processes", "presence", "jobs", "access", "runtime"] as const;
   const refused = [
     `${SRC}/ledger/log.ts`, // the plan's plant
     `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
