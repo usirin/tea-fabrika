@@ -1,7 +1,7 @@
 ---
 id: 0099
 title: No number caps the size of a pull request: a plan cuts big work by what lands whole, size picks who looks, and a warning drawn from our own merged pull requests only advises
-status: accepted
+status: amended-in-part by [0100](0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md)
 date: 2026-11-11
 tags: [size, review, plan, slice, stack, cap, settings]
 ---
