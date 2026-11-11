@@ -78,3 +78,4 @@ bounded turn inside a flow and never carries one (owner, 2026-11-10).**
 - Tracker ticket 656 builds it. Ticket 652 (the landing tail) and ticket 341 (the drive script)
   become steps in it.
 - Not decided here: whether flows later run inside fabrika's app as programs a person can watch.
+  For now the runner stays a tea machine, not a `Program.make` ([0070](0070-flow-runner-stays-a-machine.md)).

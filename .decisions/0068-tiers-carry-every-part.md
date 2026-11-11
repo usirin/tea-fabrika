@@ -81,7 +81,8 @@ slice.**
   with a lease. For outside programs, the lead's sketch is that `dev` reads a program list from
   `fabrika.toml` into the build's existing `programs` option, with the lock file later. Both are
   sketches, not rulings. Programs working together and a person starting a program have no sketch.
-- Not decided here: whether the lead's flow runner becomes a program.
+- Not decided here: whether the lead's flow runner becomes a program. Decided for now in
+  [0070](0070-flow-runner-stays-a-machine.md): it stays a tea machine.
 - Open, not decided: whether the pipeline itself (Tier 6) and an agent that fabrika starts (Tier 5)
   are core ideas too.
 - Each of these needs its own plan and the owner's walk.
