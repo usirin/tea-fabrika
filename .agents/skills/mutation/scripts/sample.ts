@@ -26,7 +26,29 @@ const Sample = Schema.Struct({
   total: Count,
   selected: Count,
   left: Count,
+  /** Every changed file, in name order: its mutants on changed lines, and how many were selected. */
+  files: Schema.Array(Schema.Struct({ file: Schema.String, total: Count, selected: Count })),
 });
+
+/**
+ * The diff's product files: every extension Stryker 10.1.1's Instrumenter parses as JavaScript or
+ * TypeScript (its parsers/create-parser.js), less tests and type-only declarations, which hold no
+ * mutant. A changed `.cjs` or `.mjs` file is sampled like a `.ts` one (ticket 655).
+ */
+const PRODUCT = [
+  "*.ts",
+  "*.tsx",
+  "*.mts",
+  "*.cts",
+  "*.js",
+  "*.jsx",
+  "*.mjs",
+  "*.cjs",
+  ":!*.test.*",
+  ":!*.d.ts",
+  ":!*.d.mts",
+  ":!*.d.cts",
+] as const;
 
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
 
@@ -82,49 +104,81 @@ export const sample = ({
   const selected = new Set<Candidate>();
   const ranges: string[] = [];
   const eligibleSet = new Set(eligible);
-  const take = (candidate: Candidate) => {
-    if (selected.has(candidate)) {
-      return false;
-    }
+  const enclosing = new Map(eligible.map((c) => [c, candidates.filter((other) => encloses(c, other))]));
+  // What taking a range would add, or `null` when it pulls in a mutant on an unchanged line, is
+  // taken already, or would pass the cap.
+  const adds = (candidate: Candidate) => {
+    const enclosed = enclosing.get(candidate) ?? [];
 
-    const enclosed = candidates.filter((other) => encloses(candidate, other));
-
-    if (enclosed.some((other) => !eligibleSet.has(other))) {
-      return false;
+    if (selected.has(candidate) || enclosed.some((other) => !eligibleSet.has(other))) {
+      return null;
     }
 
     const added = enclosed.filter((other) => !selected.has(other));
-
-    if (selected.size + added.length > cap) {
-      return false;
-    }
-
+    return selected.size + added.length > cap ? null : added;
+  };
+  const take = (candidate: Candidate, added: readonly Candidate[]) => {
     ranges.push(range(candidate));
 
     for (const other of added) {
       selected.add(other);
     }
+  };
+  // First picks go round-robin across changed files, one range per file per turn, so no file gets
+  // a second range before every file that can take one has its first. A turn takes the file's
+  // cheapest range over a changed line no earlier range covers, the earlier line and then the
+  // seed breaking ties. Cheapest first: a range enclosing a whole block selects every mutant in
+  // it, so a few such picks filled the cap from the first files and left later ones none
+  // (ticket 655, lane t389).
+  const files = [...new Set(changed.map((line) => line.file))].sort(compare);
+  const open = new Map(files.map((file) => [file, new Set(changed.filter((c) => c.file === file).map((c) => c.line))]));
+  const firstOpen = (candidate: Candidate) => {
+    const lines = open.get(candidate.fileName) ?? new Set<number>();
+    const { start, end } = candidate.location;
+    return [...lines].filter((line) => line >= start.line && line <= end.line).sort((a, b) => a - b)[0];
+  };
+  const turn = (file: string) => {
+    let best: { candidate: Candidate; added: readonly Candidate[]; line: number } | null = null;
+
+    for (const candidate of ordered) {
+      const line = candidate.fileName === file ? firstOpen(candidate) : undefined;
+      const added = line === undefined ? null : adds(candidate);
+
+      if (
+        line !== undefined &&
+        added !== null &&
+        (best === null || added.length < best.added.length || (added.length === best.added.length && line < best.line))
+      ) {
+        best = { candidate, added, line };
+      }
+    }
+
+    if (best === null) {
+      return false;
+    }
+
+    take(best.candidate, best.added);
+    const lines = open.get(file);
+
+    for (const line of lines ?? []) {
+      if (line >= best.candidate.location.start.line && line <= best.candidate.location.end.line) {
+        lines?.delete(line);
+      }
+    }
 
     return true;
   };
-  // First picks go round-robin across changed files, in line order within each file, so a cap
-  // smaller than the changed lines still reaches every file.
-  const unique = [...new Map(changed.map((line) => [JSON.stringify(line), line])).values()];
-  const queues = [...new Set(unique.map((line) => line.file))]
-    .sort(compare)
-    .map((file) => unique.filter((line) => line.file === file).sort((a, b) => a.line - b.line));
-  const lines = Array.from({ length: Math.max(0, ...queues.map((q) => q.length)) }, (_, turn) =>
-    queues.flatMap((queue) => (turn < queue.length ? [queue[turn]] : [])),
-  ).flat();
 
-  for (const line of lines) {
-    if (![...selected].some((candidate) => touches(candidate, line))) {
-      ordered.find((candidate) => touches(candidate, line) && take(candidate));
-    }
+  for (let moved = true; moved;) {
+    moved = files.map(turn).some(Boolean);
   }
 
   for (const candidate of ordered) {
-    take(candidate);
+    const added = adds(candidate);
+
+    if (added !== null) {
+      take(candidate, added);
+    }
   }
 
   return Schema.decodeUnknownSync(Sample)({
@@ -133,6 +187,11 @@ export const sample = ({
     total: eligible.length,
     selected: selected.size,
     left: eligible.length - selected.size,
+    files: files.map((file) => ({
+      file,
+      total: eligible.filter((c) => c.fileName === file).length,
+      selected: [...selected].filter((c) => c.fileName === file).length,
+    })),
   });
 };
 
@@ -175,10 +234,7 @@ if (import.meta.main) {
       "-U0",
       ...diffRange(values.build, values.since),
       "--",
-      "*.ts",
-      "*.tsx",
-      ":!*.test.ts",
-      ":!*.test.tsx",
+      ...PRODUCT,
     ],
     { encoding: "utf8" },
   );
