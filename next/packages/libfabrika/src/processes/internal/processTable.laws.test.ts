@@ -4,18 +4,40 @@
 // reading of the plan's transition table, never the machine or its driver.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Option, Result } from "effect";
+import { Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../../ledger/Log.ts";
-import { A, B, BRAIN, CLIENT, CODE, from, PIDS, X } from "../Process.test-support.ts";
+import {
+  A,
+  B,
+  BRAIN,
+  CLIENT,
+  CODE,
+  CRASHED,
+  ExitReason,
+  from,
+  NORMAL,
+  PIDS,
+  SHUTDOWN,
+  X,
+} from "../Process.test-support.ts";
 import { Activity, Down, Owner, ProcessEvent, ProcessTable, Recipient, signalId, Start, State } from "../Process.ts";
 import { processTableFor } from "./processTable.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 const NAMES = ["counter:1", "counter:2", "echo:1"];
 const REFS = ["watch-a", "watch-b"];
-const REASONS = ["crashed", "normal", "shutdown"];
+const REASONS = ["crashed", "normal", "shutdown"] as const;
+
+/** Each text reason as the exit it names; restarts and downs keep the text. */
+const EXITS: Record<(typeof REASONS)[number], ExitReason> = {
+  crashed: CRASHED,
+  normal: NORMAL,
+  shutdown: SHUTDOWN,
+};
+
+const sameExit = Schema.toEquivalence(ExitReason);
 const BRAIN_OWNER = Owner.cases.brain.make({});
 const OWNERS = [BRAIN_OWNER, Owner.cases.process.make({ process: A })];
 const CLIENT_TO = Recipient.cases.client.make({ client: "window-a", session: X });
@@ -33,6 +55,7 @@ type Life = {
   readonly request: Start;
   readonly from: Entry;
   readonly rev: number;
+  readonly exited?: ExitReason;
 };
 
 type Watch = {
@@ -167,7 +190,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
               build: "build-b",
             })
           : move < 45
-            ? ProcessEvent.cases.exited.make({ process: target, reason: c.reason })
+            ? ProcessEvent.cases.exited.make({ process: target, reason: EXITS[c.reason] })
             : ProcessEvent.cases.down.make({ process: target, reason: c.reason, crashes: c.crashes, until: c.until });
       const entry = entryFor(event);
 
@@ -191,11 +214,29 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         };
       } else {
         const code = life.state.code;
-        const state =
+        s =
           event._tag === "exited"
-            ? State.cases.ended.make({ process: target, code, reason: event.reason })
-            : State.cases.down.make({ process: target, code, reason: c.reason, crashes: c.crashes, until: c.until });
-        s = { ...s, lives: put(s.lives, target, { ...life, state }) };
+            ? {
+                ...s,
+                lives: put(s.lives, target, {
+                  ...life,
+                  exited: event.reason,
+                  state: State.cases.ended.make({ process: target, code, reason: event.reason }),
+                }),
+              }
+            : {
+                ...s,
+                lives: put(s.lives, target, {
+                  ...life,
+                  state: State.cases.down.make({
+                    process: target,
+                    code,
+                    reason: c.reason,
+                    crashes: c.crashes,
+                    until: c.until,
+                  }),
+                }),
+              };
       }
 
       steps.push({ effect: "applied", entry, after: s });
@@ -225,7 +266,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
       steps.push({ effect: "applied", entry, after: s });
     } else if (move < 92) {
       // A foreign writer's process event, sometimes with a body no schema would decode.
-      const event = ProcessEvent.cases.exited.make({ process: absent, reason: c.reason });
+      const event = ProcessEvent.cases.exited.make({ process: absent, reason: EXITS[c.reason] });
       steps.push({
         effect: "ignored",
         entry: entryFor(event, CLIENT, c.other % 2 === 0 ? { process: 7 } : undefined),
@@ -243,7 +284,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
       // A known brain case whose body does not decode: the same failure as main.
       steps.push({
         effect: "malformed",
-        entry: entryFor(ProcessEvent.cases.exited.make({ process: target, reason: "x" }), BRAIN, { reason: 7 }),
+        entry: entryFor(ProcessEvent.cases.exited.make({ process: target, reason: CRASHED }), BRAIN, { reason: 7 }),
       });
     }
   }
@@ -305,7 +346,7 @@ const answers = (table: ProcessTable, s: Folded) => {
     live: table.isLive(p),
     collision: table.collision(p),
     parents: OWNERS.map((owner) => answer(table.parent(p, owner))),
-    exits: REASONS.map((reason) => answer(table.exit(p, reason, BRAIN_OWNER))),
+    exits: REASONS.map((reason) => answer(table.exit(p, EXITS[reason], BRAIN_OWNER))),
     downs: answer(table.down(p, "crashed", BRAIN_OWNER)),
     inbound: table.inbound(p),
     outbound: table.outbound(p),
@@ -361,9 +402,9 @@ const deliveries = (w: Watch) =>
             by,
             receiver,
             target: process,
-            m: Down.make({ ref: w.ref, process, reason: "crashed", to: w.to }),
+            m: Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to }),
             entry: {
-              ...lineFor(from({ by }), Down.make({ ref: w.ref, process, reason: "crashed", to: w.to })),
+              ...lineFor(from({ by }), Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to })),
               id: signalId(w.to, w.ref, n),
               stream: "watcher/inbox",
               pos: 1,
@@ -389,7 +430,7 @@ const expected = (s: Folded) => {
       exits: REASONS.map((reason) =>
         typeof owned === "string"
           ? owned
-          : owned.state._tag !== "live" && owned.state.reason !== reason
+          : owned.state._tag !== "live" && (owned.exited === undefined || !sameExit(owned.exited, EXITS[reason]))
             ? "ended"
             : owned,
       ),

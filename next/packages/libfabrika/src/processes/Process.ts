@@ -3,6 +3,7 @@ import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { ExitReason, sameReason } from "./ExitReason.ts";
 import {
   Code,
   Count,
@@ -59,10 +60,13 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
 export const inRunnerSpace = (id: string): boolean =>
   /^process_[^/]+\/(?:due\/|[0-9]+\/[0-9]+\/answer(?:$|\/))/.test(id);
 
+/** What a monitor answers for a target that was never live; a monitor result, never an exit reason. */
+export const NoProc = Schema.TaggedStruct("noproc", {});
+
 export const Down = Schema.TaggedStruct("DOWN", {
   ref: Text,
   process: ProcessId,
-  reason: Text,
+  reason: Schema.Union([ExitReason, NoProc]),
   to: Recipient,
 });
 
@@ -310,19 +314,16 @@ export class ProcessTable {
     return Equal.equals(reserved?.owner, owner) ? Result.succeed(life) : denied("not_parent");
   }
 
-  exit(process: string, reason: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-    if (!isText(reason)) {
-      return denied("bad_text");
-    }
-
+  /** The life a decoded exit ends; an ended process answers again only to the same reason. */
+  exit(process: string, reason: ExitReason, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
     const parent = this.parent(process, owner);
 
     if (Result.isFailure(parent)) {
       return parent;
     }
 
-    const state = parent.success.state;
-    return state._tag !== "live" && state.reason !== reason ? denied("ended") : parent;
+    const { state, exited } = parent.success;
+    return state._tag !== "live" && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
   }
 
   /** The life a supervisor gives up on; refused while that process still lives. */

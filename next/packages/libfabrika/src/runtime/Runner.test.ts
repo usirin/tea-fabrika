@@ -30,6 +30,7 @@ import * as fc from "fast-check";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -466,7 +467,7 @@ const world = async (
   const entered = await Effect.runPromise(Deferred.make<void>());
   const signCalls: Array<{ id: string; parent: string; process: string; kind: string }> = [];
   const data = () =>
-    Ledger.sql(ledgerDisk.sql, { reader: "p11-runner" }).pipe(
+    LedgerSql.layer(ledgerDisk.sql, { reader: "p11-runner" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
   const sessions = () =>
@@ -780,7 +781,7 @@ const world = async (
       // The manager's own ledger: its process facts never land on the streams these laws read.
       Layer.provide(
         Layer.mergeAll(
-          Ledger.sql(managerDisk.sql, { reader: "p11-manager" }),
+          LedgerSql.layer(managerDisk.sql, { reader: "p11-manager" }),
           LedgerTransaction.layer(managerDisk.sql),
         ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
@@ -2025,7 +2026,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     { generated: Down.fields.reason },
     ({ generated }) =>
       Effect.forEach(
-        ["ended", generated],
+        [{ _tag: "shutdown" } as const, generated],
         (value) =>
           Effect.promise(async () => {
             const w = await world();

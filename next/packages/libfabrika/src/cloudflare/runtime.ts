@@ -17,12 +17,14 @@ import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
-import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerRemote from "../ledger/LedgerRemote.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import { Connections } from "../presence/Connections.ts";
+import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From } from "../processes/Mailbox.ts";
 import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -49,6 +51,7 @@ import {
   type ProjectBinding,
   type RecordBinding,
 } from "./bindings.ts";
+import { cloudflareSql } from "./CloudflareSql.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
@@ -332,7 +335,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }),
   });
   const ledgerLayer = Layer.mergeAll(
-    Ledger.sql(sql, { reader: `project:${name}` }),
+    LedgerSql.layer(sql, { reader: `project:${name}` }),
     LedgerTransaction.layer(sql),
     Referee.layer(sql),
   ).pipe(Layer.provide(bell));
@@ -528,11 +531,16 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     return result;
   });
-  const exit = (pid: string, reason: string, origin: From) =>
-    Effect.gen(function* () {
+  // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
+  const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
+    const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
+      Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+    );
+    yield* Effect.gen(function* () {
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
     }).pipe(write);
+  });
   const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
     Stream.filter((entry) => entry.id === bootstrap.id),
     Stream.runHead,
@@ -633,7 +641,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     online: (key: string) => wrapped(gateways.online(key)),
     info: wrapped(processes.info),
     start: (request: Start, origin: From) => wrapped(start(request, origin)),
-    exit: (pid: string, reason: string, origin: From) => wrapped(exit(pid, reason, origin)),
+    exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
     read: referee.read,
     wait: referee.wait,
     append: referee.append,
@@ -684,7 +692,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     // ProcessManager over trusted Project RPC: refusals are reply data, mutations take the turn.
     processObject: (pid: string) => wrapped(processObject(pid)),
     processStart: (request: Start, origin: From) => wrapped(processReply(start(request, origin))),
-    processExit: (pid: string, reason: string, origin: From) => wrapped(processReply(exit(pid, reason, origin))),
+    processExit: (pid: string, reason: ExitReason, origin: From) => wrapped(processReply(exit(pid, reason, origin))),
     processStatus: (owner: string) => wrapped(processReply(processes.status(owner))),
     processResolve: (pid: string) => wrapped(processReply(processes.resolve(pid))),
     processDead: (pid: string, dead: Parameters<typeof processes.dead>[1], origin: From) =>
@@ -733,7 +741,7 @@ const processLogic = Effect.fnUntraced(function* (
     sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs);
   const saved = yield* processDescriptor(ctx);
-  const ledger = Ledger.remote(stub, { reader: saved.id });
+  const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
   const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
     Layer.provideMerge(base),

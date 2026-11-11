@@ -98,7 +98,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | Answer | What to do |
 |---|---|
 | `done` | nothing: every commit has a valid step note or person signature, and no exam path changed |
-| `ask exam_read` | send the owner one line with the paths; merge after the yes, and note it in the `MergeRow` |
+| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note ([tier 1](../plan/tier-1.md)) |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
@@ -118,7 +118,8 @@ gh run list --workflow commits.yaml --commit <head sha> --json conclusion,event
 
 There must be exactly one `pull_request_target` run, with conclusion `success`. None, two, or any
 other conclusion is red. The lead also checks that the ticket the check printed is the pull request's
-tracker ticket, and writes it in the `MergeRow`.
+tracker ticket. No row per merge records it yet: that measure is proposed
+([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), M1).
 
 ## After the merge
 

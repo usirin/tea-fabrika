@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -130,7 +131,7 @@ const replyCase = (
                 }),
             }
           : remote;
-      const ledger = Ledger.sql(sql, { reader: PID }).pipe(
+      const ledger = LedgerSql.layer(sql, { reader: PID }).pipe(
         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
       );
       const mail = Mailbox.layer.pipe(Layer.provideMerge(ledger));

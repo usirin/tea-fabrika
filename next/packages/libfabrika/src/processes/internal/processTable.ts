@@ -3,6 +3,7 @@ import { Schema } from "effect";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
 import { ProcessId } from "../../ProcessId.ts";
+import { ExitReason } from "../ExitReason.ts";
 
 /**
  * Every text a client gives that lands in a brain line: at most 256 characters, counted as
@@ -36,7 +37,7 @@ export type Start = typeof Start.Type;
 /** @internal */
 export const State = Schema.TaggedUnion({
   live: { process: ProcessId, code: Code },
-  ended: { process: ProcessId, code: Code, reason: Text },
+  ended: { process: ProcessId, code: Code, reason: ExitReason },
   down: { process: ProcessId, code: Code, reason: Text, crashes: Count, until: Schema.Int },
 });
 
@@ -44,7 +45,7 @@ export const State = Schema.TaggedUnion({
 export const ProcessEvent = Schema.TaggedUnion({
   registered: { name: Text, program: Text, owner: Owner },
   started: { process: ProcessId, name: Text, program: Text, hash: Text },
-  exited: { process: ProcessId, reason: Text },
+  exited: { process: ProcessId, reason: ExitReason },
   restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
   down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
   monitored: { ref: Text, process: ProcessId, to: Recipient },
@@ -88,6 +89,8 @@ const Life = Schema.Struct({
   request: Start,
   from: Entry,
   rev: Schema.Number,
+  /** The reason it exited with, kept when a later `down` replaces its state. */
+  exited: Schema.optionalKey(ExitReason),
 });
 /** @internal */
 export type Life = typeof Life.Type;
@@ -219,10 +222,14 @@ export const processTableFor = (by: string) =>
         }
 
         const code = life.state.code;
-        const state =
-          event._tag === "exited"
-            ? State.cases.ended.make({ process: event.process, code, reason: event.reason })
-            : State.cases.down.make({ ...event, code });
+
+        if (event._tag === "exited") {
+          const state = State.cases.ended.make({ process: event.process, code, reason: event.reason });
+          const ended = { ...life, exited: event.reason, state };
+          return [{ ...s, lives: put(s.lives, event.process, ended) }, []];
+        }
+
+        const state = State.cases.down.make({ ...event, code });
         return [{ ...s, lives: put(s.lives, event.process, { ...life, state }) }, []];
       },
     },

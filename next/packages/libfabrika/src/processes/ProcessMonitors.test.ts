@@ -14,10 +14,12 @@ import {
   again,
   brain,
   CLIENT,
+  CRASHED,
   first,
   from,
   ids,
   manager,
+  NOPROC,
   receive,
   storage,
   type Storage,
@@ -69,7 +71,7 @@ const monitor = (store: Storage, ref: string, target = A, to = W) =>
   ProcessManager.use((p) => p.monitor(ref, target, from())).pipe(Effect.provide(manager(store, watcher(to))));
 
 const exit = (store: Storage, process = A) =>
-  ProcessManager.use((p) => p.exit(process, "crashed", from())).pipe(Effect.provide(manager(store)));
+  ProcessManager.use((p) => p.exit(process, CRASHED, from())).pipe(Effect.provide(manager(store)));
 
 const cancel = (store: Storage, ref: string, to = W) =>
   ProcessManager.use((p) => p.demonitor(ref, from())).pipe(Effect.provide(manager(store, watcher(to))));
@@ -149,7 +151,7 @@ describe("P33, signal ids, ownership and delivery", () => {
         yield* monitor(store, ref);
         const table = new ProcessTable(store.rows(), from().by);
         const to = Recipient.cases.process.make({ process: W });
-        const down = Down.make({ ref, process: A, to, reason: "crashed" });
+        const down = Down.make({ ref, process: A, to, reason: CRASHED });
         const entry: Entry = {
           ...lineFor(from(), { _tag: "send", m: down }),
           id: signalId(to, ref, 1),
@@ -209,19 +211,19 @@ describe("p79, addressed and independent monitors", () => {
               Down.make({
                 ref: other!,
                 process: A,
-                reason: "crashed",
+                reason: CRASHED,
                 to: Recipient.cases.process.make({ process: X }),
               }),
               Down.make({
                 ref: one!,
                 process: A,
-                reason: "crashed",
+                reason: CRASHED,
                 to: Recipient.cases.process.make({ process: W }),
               }),
               Down.make({
                 ref: two!,
                 process: A,
-                reason: "crashed",
+                reason: CRASHED,
                 to: Recipient.cases.process.make({ process: W }),
               }),
             ].sort((a, b) => a.ref.localeCompare(b.ref)),
@@ -273,7 +275,7 @@ describe("p79, addressed and independent monitors", () => {
               Down.make({
                 ref,
                 process: target,
-                reason: "noproc",
+                reason: NOPROC,
                 to: Recipient.cases.process.make({ process: W }),
               }),
             );
@@ -345,7 +347,7 @@ describe("p79, atomic exit", () => {
             store.fault.after = after;
             expect(
               (yield* Effect.flip(
-                ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(
+                ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(
                   Effect.provide(manager(store, brain(), ids().next, bell)),
                 ),
               )).reason,
@@ -356,7 +358,7 @@ describe("p79, atomic exit", () => {
             store.fault.after = null;
             store.reopen();
             expect(yield* ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store)))).toBe(true);
-            yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(
+            yield* ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(
               Effect.provide(manager(store, brain(), ids().next, bell)),
             );
             expect(signals(store)).toHaveLength(2);
@@ -490,7 +492,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
         yield* seed(store);
         yield* monitor(store, ref);
         yield* cancel(store, ref);
-        yield* send(store, "forged", Down.make({ ref, process: A, reason: "crashed", to: toW }));
+        yield* send(store, "forged", Down.make({ ref, process: A, reason: CRASHED, to: toW }));
         expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
       });
     });
@@ -512,7 +514,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           // watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
           // take a signal id, so only another writer's raw row could, and it is plain mail.
           const id = JSON.stringify(["DOWN", toW, ref, 1]);
-          const m = Down.make({ ref, process: B, reason: "crashed", to: toW });
+          const m = Down.make({ ref, process: B, reason: CRASHED, to: toW });
           yield* Ledger.use((ledger) =>
             ledger.append("watcher:1/inbox", id, lineFor(from({ by: CLIENT }), { _tag: "send", m })),
           ).pipe(Effect.provide(manager(store)));
@@ -549,7 +551,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
         store.reopen();
         yield* exit(store);
         expect((yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
-          Down.make({ ref, process: A, reason: "crashed", to: toW }),
+          Down.make({ ref, process: A, reason: CRASHED, to: toW }),
         ]);
         expect(yield* fresh(store, X)).toEqual([]);
       });
@@ -580,7 +582,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
           Down.make({
             ref,
             process: A,
-            reason: "crashed",
+            reason: CRASHED,
             to: Recipient.cases.process.make({ process: B }),
           }),
         ]);
@@ -601,7 +603,7 @@ describe("P33, monitor again after demonitor", () => {
         store.reopen();
         yield* exit(store);
         expect((yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
-          Down.make({ ref, process: A, reason: "crashed", to: toW }),
+          Down.make({ ref, process: A, reason: CRASHED, to: toW }),
         ]);
       });
     }),

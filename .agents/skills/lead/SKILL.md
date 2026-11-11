@@ -28,6 +28,12 @@ A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not 
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
 
+An agent's own worktree gets its own install, as `catchup.sh` does: `pnpm install --offline
+--frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
+Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
+(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), so `pnpm typecheck` fails, and a pnpm run in the
+worktree rewrites the main checkout's install state through the link.
+
 For a stacked lane, put the parent and landing facts in the state file and the brief before the
 first step:
 
@@ -311,7 +317,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
+  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
+  send back with the error lines: to tests when every error is in an exam path, else to build. One
+  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
+  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
   steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
@@ -482,8 +492,10 @@ visible, and never weaken the rules to hide this message.
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
     own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
-    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
-    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close
+    gets a comment naming the PR and its merge commit (`scripts/catchup.sh:86`). No row per merge
+    is written: that measure is proposed
+    ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 

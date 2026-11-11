@@ -12,10 +12,12 @@ import {
   brain,
   CLIENT,
   again,
+  CRASHED,
   first,
   from,
   ids,
   manager,
+  NOPROC,
   receive,
   storage,
   type Storage,
@@ -80,7 +82,7 @@ const cancel = (store: Storage, ref = "watch:1", by = BRAIN) =>
   ProcessManager.use((p) => p.demonitor(ref, from({ by }))).pipe(Effect.provide(manager(store, watcher(W))));
 
 const exit = (store: Storage, process = A, by = BRAIN) =>
-  ProcessManager.use((p) => p.exit(process, "crashed", from({ by }))).pipe(Effect.provide(manager(store)));
+  ProcessManager.use((p) => p.exit(process, CRASHED, from({ by }))).pipe(Effect.provide(manager(store)));
 
 const fresh = (store: Storage, after = 0) => receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
 
@@ -158,7 +160,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
 
           yield* exit(store);
           expect(downs(yield* fresh(store))).toEqual([
-            Down.make({ ref: "watch:1", process: A, reason: "crashed", to: toW }),
+            Down.make({ ref: "watch:1", process: A, reason: CRASHED, to: toW }),
           ]);
           const next = yield* ProcessManager.use((p) =>
             Effect.gen(function* () {
@@ -264,7 +266,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         return Effect.gen(function* () {
           yield* seed(store);
           const before = store.rows();
-          const m = Down.make({ ref: "watch:1", process: A, reason: "crashed", to: toW });
+          const m = Down.make({ ref: "watch:1", process: A, reason: CRASHED, to: toW });
           const answer = yield* Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from()));
           expect(answer._tag).toBe("refused");
           expect(store.rows()).toEqual(before);
@@ -297,7 +299,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         const owed = downs(yield* fresh(store));
 
         if (Result.isSuccess(exited)) {
-          expect(owed).toEqual([Down.make({ ref, process: A, reason: "crashed", to: toW })]);
+          expect(owed).toEqual([Down.make({ ref, process: A, reason: CRASHED, to: toW })]);
         } else {
           expect(yield* ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store)))).toBe(true);
         }
@@ -317,7 +319,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         yield* cancel(store, ref);
         expect(downs(yield* fresh(store))).toEqual([]);
         yield* monitor(store, ref);
-        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason: "noproc", to: toW })]);
+        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason: NOPROC, to: toW })]);
         const inbox = store.rows().filter((row) => row.stream === "watcher:1/inbox");
         expect(new Set(inbox.map((row) => row.id)).size).toBe(2);
       });

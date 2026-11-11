@@ -13,6 +13,7 @@ import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -207,9 +208,10 @@ const world = () => {
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const data = () =>
-    Layer.mergeAll(Ledger.sql(project.sql, { reader: "recovery-test" }), LedgerTransaction.layer(project.sql)).pipe(
-      Layer.provide(quiet),
-    );
+    Layer.mergeAll(
+      LedgerSql.layer(project.sql, { reader: "recovery-test" }),
+      LedgerTransaction.layer(project.sql),
+    ).pipe(Layer.provide(quiet));
   const records = RecordManager.sql((name) => {
     let p = partFiles.get(name);
 
@@ -849,7 +851,7 @@ describe("P34 door recovery", () => {
               const p = yield* ProcessManager;
 
               if (yield* p.isLive(P1)) {
-                yield* p.exit(P1, "crashed", from());
+                yield* p.exit(P1, { _tag: "crashed", phase: "step", error: "Error" }, from());
               }
 
               yield* p.start(
