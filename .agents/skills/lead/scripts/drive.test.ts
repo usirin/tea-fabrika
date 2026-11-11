@@ -40,7 +40,16 @@ import "./gcloop.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./flow/Beat.ts?raw";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
@@ -69,8 +78,10 @@ import {
   endName,
   FINISH,
   firstEventAt,
-  freshBox,
+  freeLane,
+  holdLane,
   holdsElectron,
+  laneRunning,
   machine,
   phasesIn,
   reportOf,
@@ -79,6 +90,7 @@ import {
   STEPS,
   tailFor,
 } from "./drive.ts";
+import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -1037,44 +1049,19 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 });
 
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
-  const suffixes = [
-    "",
-    "-gitdata",
-    "-mutbox",
-    "-prompt.md",
-    ".md",
-    ".jsonl",
-    ".err",
-    ".log",
-    "-plan.md",
-    "-plan.jsonl",
-  ];
-  // Plants: check only the box folder and prompt, as before; skip a free number; start below n.
-  // p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
+  // Plants: count only the box folders; reuse the highest number taken. p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
-  it("picks the first box number from n up that no older file holds", () => {
-    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...suffixes)));
+  it("property: the next run id is held by no file an older run of that lane and step left", () => {
+    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
-      fc.property(
-        fc.constantFrom("plan", "review", "build"),
-        fc.integer({ min: 1, max: 4 }),
-        left,
-        (step, n, files) => {
-          const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
-          const box = freshBox("p12", step, n, (name) => taken.has(name));
-          const i = Number(box.slice(`p12-${step}`.length));
-          expect(box).toBe(`p12-${step}${i}`);
-          expect(i).toBeGreaterThanOrEqual(n);
+      fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
+        const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
+        const box = RunId.next("p12", step, taken);
 
-          for (const suffix of suffixes) {
-            expect(taken.has(`${box}${suffix}`)).toBe(false);
-          }
-
-          for (let j = n; j < i; j += 1) {
-            expect(suffixes.some((suffix) => taken.has(`p12-${step}${j}${suffix}`))).toBe(true);
-          }
-        },
-      ),
+        for (const suffix of RunId.FILES) {
+          expect(taken.has(`${box}${suffix}`)).toBe(false);
+        }
+      }),
       options,
     );
   });
@@ -1260,6 +1247,54 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
+  });
+});
+
+describe("one live process drives a lane, today's tooling", () => {
+  // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.
+  // p39s1, 2026-11-11: a second chain started 18 s after the first, and both took p39s1-tests2.
+  it("scenario: the lane is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const lock = join(boxes, "state", "l.lock");
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    const live = process.ppid;
+
+    expect(holdLane(boxes, "l")).toBeNull();
+    expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
+    expect(holdLane(boxes, "l")).toBeNull();
+    writeFileSync(lock, String(live));
+    expect(holdLane(boxes, "l")).toBe(live);
+    freeLane(boxes, "l");
+    expect(readFileSync(lock, "utf8")).toBe(String(live));
+    writeFileSync(lock, String(dead));
+    expect(holdLane(boxes, "l")).toBeNull();
+    freeLane(boxes, "l");
+    const gone = existsSync(lock);
+    rmSync(boxes, { recursive: true, force: true });
+    expect(gone).toBe(false);
+  });
+
+  it("scenario: a step started while another process drives its lane is refused before any box is made", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const boxes = join(dir, "boxes");
+    const brief = join(dir, "brief.md");
+    writeFileSync(brief, "brief");
+    mkdirSync(join(boxes, "state"), { recursive: true });
+    writeFileSync(join(boxes, "state", "l.lock"), String(process.pid));
+    const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "tests", brief], {
+      encoding: "utf8",
+      env: { ...process.env, BOXES: boxes },
+    });
+    const made = readdirSync(boxes);
+    const still = readFileSync(join(boxes, "state", "l.lock"), "utf8");
+    rmSync(dir, { recursive: true, force: true });
+    expect(r.status).toBe(3);
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      outcome: "refused:lane_running",
+      reason: laneRunning("l", process.pid),
+    });
+    expect(made).toEqual(["state"]);
+    expect(still).toBe(String(process.pid));
   });
 });
 

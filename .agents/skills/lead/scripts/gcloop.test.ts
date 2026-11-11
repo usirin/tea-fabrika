@@ -43,6 +43,10 @@ import "../../mutation/scripts/scope.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./runid.ts?raw";
 import { NodeServices } from "@effect/platform-node";
 import { Duration, Effect, FileSystem, Result, Schema, type Scope } from "effect";
 import fc from "fast-check";

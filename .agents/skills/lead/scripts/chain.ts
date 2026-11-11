@@ -89,7 +89,6 @@ import {
   appendFileSync,
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
@@ -110,9 +109,13 @@ import {
   FAULTS,
   type Fault,
   faultFrom,
+  freeLane,
+  holdLane,
+  laneRunning,
   loadEnv,
   MUTATION_AGENT,
   prepare,
+  runNames,
   sh,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
@@ -120,6 +123,7 @@ import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import * as Typecheck from "./flow/typecheck.ts";
 import { stepOf, wipOf } from "./lane.ts";
+import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
 /** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
@@ -1327,7 +1331,7 @@ const handlers = (s: Setup) => {
       }),
     judge: (cmd: { step: StepName; line: Line; round: number }) =>
       Effect.gen(function* () {
-        const box = `${s.lane}-judge${earlier + cmd.round}`;
+        const box = RunId.next(s.lane, "judge", runNames(env.BOXES, s.lane));
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
         s.beats.enter("judge", at(".jsonl"));
@@ -1355,7 +1359,7 @@ const handlers = (s: Setup) => {
         appendFileSync(
           join(env.BOXES, `${s.lane}-rows.jsonl`),
           stepRow({
-            run: `t${s.ticket}-judge${earlier + cmd.round}`,
+            run: box,
             ticket: s.ticket,
             step: cmd.step,
             provider: "codex-read",
@@ -1523,7 +1527,8 @@ const handlers = (s: Setup) => {
         };
         saveStep(entry);
         s.beats.enter("host", null);
-        note(`round ${round}: starting host at ${head.slice(0, 8)} (${s.host.length} commands)`);
+        const name = RunId.next(s.lane, "host", runNames(env.BOXES, s.lane));
+        note(`round ${round}: starting host ${name} at ${head.slice(0, 8)} (${s.host.length} commands)`);
         const args = {
           main: env.MAIN,
           boxes: env.BOXES,
@@ -1532,7 +1537,7 @@ const handlers = (s: Setup) => {
           branch: s.branch,
           plan: s.plan,
           head,
-          round,
+          name,
           commands: s.host,
           minutes: yield* HostMinutes,
         };
@@ -1550,7 +1555,7 @@ const handlers = (s: Setup) => {
           head: hosted.head,
           reason: hosted.outcome.reason,
           report: hosted.log,
-          box: `${s.lane}-host${round}`,
+          box: name,
           exit: hosted.outcome._tag === "stuck" ? 30 : 0,
           // A host stuck is the tool's (git, the signer, the push); the host step runs no agent.
           fault: hosted.outcome._tag === "stuck" ? "tool" : null,
@@ -1664,7 +1669,18 @@ export const chainMain = (args: string[], env: Env) =>
       process.exit(2);
     }
 
-    mkdirSync(join(env.BOXES, "state"), { recursive: true });
+    // One live process drives a lane: a second chain, or a chain beside a step run alone, stops
+    // here, before any box is made. The scope gives the lane back however the chain ends.
+    const running = yield* Effect.acquireRelease(
+      Effect.sync(() => holdLane(env.BOXES, lane)),
+      (held) => (held === null ? Effect.sync(() => freeLane(env.BOXES, lane)) : Effect.void),
+    );
+
+    if (running !== null) {
+      console.error(`chain.ts: ${laneRunning(lane, running)}`);
+      process.exit(3);
+    }
+
     const statePath = join(env.BOXES, "state", `${lane}.json`);
     const saved: { ticket?: string; branch?: string; plan?: string } = existsSync(statePath)
       ? JSON.parse(readFileSync(statePath, "utf8"))
