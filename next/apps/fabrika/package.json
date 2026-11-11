@@ -26,6 +26,7 @@
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
+    "react-dom": "catalog:",
     "@kampus/counter": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",

@@ -646,6 +646,9 @@ importers:
       playwright:
         specifier: 'catalog:'
         version: 1.64.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
       rolldown:
         specifier: 'catalog:'
         version: 1.2.13
