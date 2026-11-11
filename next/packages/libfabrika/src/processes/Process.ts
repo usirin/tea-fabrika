@@ -2,6 +2,7 @@ import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { ExitReason, sameReason } from "./ExitReason.ts";
 import type { From } from "./Mailbox.ts";
 
 /**
@@ -42,14 +43,14 @@ export type Start = typeof Start.Type;
 
 export const State = Schema.TaggedUnion({
   live: { process: ProcessId, code: Code },
-  ended: { process: ProcessId, code: Code, reason: Text },
+  ended: { process: ProcessId, code: Code, reason: ExitReason },
   down: { process: ProcessId, code: Code, reason: Text, crashes: Count, until: Schema.Int },
 });
 
 export const ProcessEvent = Schema.TaggedUnion({
   registered: { name: Text, program: Text, owner: Owner },
   started: { process: ProcessId, name: Text, program: Text, hash: Text },
-  exited: { process: ProcessId, reason: Text },
+  exited: { process: ProcessId, reason: ExitReason },
   restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
   down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
   monitored: { ref: Text, process: ProcessId, to: Recipient },
@@ -77,10 +78,13 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
 export const inRunnerSpace = (id: string): boolean =>
   /^process_[^/]+\/(?:due\/|[0-9]+\/[0-9]+\/answer(?:$|\/))/.test(id);
 
+/** What a monitor answers for a target that was never live; a monitor result, never an exit reason. */
+export const NoProc = Schema.TaggedStruct("noproc", {});
+
 export const Down = Schema.TaggedStruct("DOWN", {
   ref: Text,
   process: ProcessId,
-  reason: Text,
+  reason: Schema.Union([ExitReason, NoProc]),
   to: Recipient,
 });
 
@@ -170,6 +174,8 @@ type Life = {
   readonly request: Start;
   readonly from: From;
   readonly rev: number;
+  /** The reason it exited with, kept when a later `down` replaces its state. */
+  readonly exited?: ExitReason;
 };
 
 /** `round` counts this (recipient, ref)'s monitored events, so a monitor after a cancel is new. */
@@ -274,6 +280,7 @@ export class ProcessTable {
           const life = this.require(event.process);
           this.#lives.set(event.process, {
             ...life,
+            exited: event.reason,
             state: State.cases.ended.make({
               process: event.process,
               code: life.state.code,
@@ -423,19 +430,16 @@ export class ProcessTable {
     return Equal.equals(this.#names.get(life.name)?.owner, owner) ? Result.succeed(life) : denied("not_parent");
   }
 
-  exit(process: string, reason: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-    if (!isText(reason)) {
-      return denied("bad_text");
-    }
-
+  /** The life a decoded exit ends; an ended process answers again only to the same reason. */
+  exit(process: string, reason: ExitReason, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
     const parent = this.parent(process, owner);
 
     if (Result.isFailure(parent)) {
       return parent;
     }
 
-    const state = parent.success.state;
-    return state._tag !== "live" && state.reason !== reason ? denied("ended") : parent;
+    const { state, exited } = parent.success;
+    return state._tag !== "live" && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
   }
 
   /** The life a supervisor gives up on; refused while that process still lives. */
