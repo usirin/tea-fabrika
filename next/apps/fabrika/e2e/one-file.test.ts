@@ -111,7 +111,9 @@ describe("P16 real browser from a copied one-file build", () => {
                   root: home,
                   entry: join(home, "src/brain.ts"),
                   out: join(home, "dist"),
-                  programs: [{ name: "counter", package: "@p16/browser", export: "program" }],
+                  // The app's brain starts `counter:1` on the core pack's `fabrika/counter` (runtime.ts), so
+                  // the build must hold that name, which is also the re-exported program's own.
+                  programs: [{ name: "fabrika/counter", package: "@p16/browser", export: "program" }],
                   chaos: false,
                   files: [],
                   ledger: [],
@@ -153,6 +155,8 @@ describe("P16 real browser from a copied one-file build", () => {
               ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
             );
             assert(entry, "entry script missing");
+            // P40: the window's entry route keeps its qualified program name.
+            expect(entry[0]).toContain("fabrika/counter");
             const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
@@ -340,7 +344,7 @@ const servedCounter = Effect.gen(function* () {
       root: home,
       entry: join(home, "src/brain.ts"),
       out: join(home, "dist"),
-      programs: [{ name: "counter", package: "@kampus/counter", export: "counter" }],
+      programs: [{ name: "fabrika/counter", package: "@kampus/counter", export: "counter" }],
       chaos: false,
       files: [],
       ledger: [],

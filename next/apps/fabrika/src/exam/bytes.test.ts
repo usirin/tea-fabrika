@@ -278,7 +278,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   );
   yield* fs.writeFileString(
     path.join(pkg, "program.ts"),
-    `import {counter} from "@kampus/counter"; export const program = {...counter, name: "win"};`,
+    `import {counter} from "@kampus/counter"; export const program = {...counter, name: "p8/win"};`,
   );
   yield* fs.writeFileString(path.join(pkg, "window.ts"), window);
   // A synthetic stand-in for the MCP SDK: only its package path matters to the check.
@@ -303,7 +303,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
     out: path.join(home, "dist"),
     root: home,
     entry: path.join(home, "src/brain.ts"),
-    programs: [{ name: "win", package: "@p8/win", export: "program" }],
+    programs: [{ name: "p8/win", package: "@p8/win", export: "program" }],
     files: [],
     ledger: [],
     chaos: false,

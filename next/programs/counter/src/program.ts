@@ -26,7 +26,7 @@ export const counterMachine = Machine.make({
 });
 
 export const counter = Program.make({
-  name: "counter",
+  name: "fabrika/counter",
   machine: counterMachine,
   state: { v: 1, upgrades: [] },
   view: (model) => ({ count: model.count }),
