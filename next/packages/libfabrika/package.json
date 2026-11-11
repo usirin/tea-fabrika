@@ -18,6 +18,8 @@
     "./processes/internal/*": null,
     "./presence/*": "./src/presence/*.ts",
     "./presence/internal/*": null,
+    "./jobs/*": "./src/jobs/*.ts",
+    "./jobs/internal/*": null,
     "./packs/*": "./src/packs/*.ts",
     "./packs/internal/*": null,
     "./access/*": "./src/access/*.ts",
