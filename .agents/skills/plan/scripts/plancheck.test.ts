@@ -1086,13 +1086,13 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           [`\`${path}\`, \`:${line}\``, `:${line}`],
           [`\`${path}\`, new`, "new"],
         ] as const) {
-          const bad = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          const bad = modeCheck(`\nPlancheck-Version: 3\n${at(cell)}`, "--draft");
           expect(bad.code, bad.text).toBe(1);
           expect(bad.text).toContain(`${key} is not a repo path`);
         }
 
         for (const cell of [`\`${path}\``, "`README.md`", `\`src/${name}/\``]) {
-          const good = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          const good = modeCheck(`\nPlancheck-Version: 3\n${at(cell)}`, "--draft");
           expect(good.code, `${cell}\n${good.text}`).toBe(0);
         }
       }),
