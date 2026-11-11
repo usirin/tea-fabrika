@@ -280,8 +280,9 @@ describe("T695, the object adapters keep what failed", () => {
             : Effect.scoped(Layer.build(connectionLayer(state, env, config))),
         );
         expect(error).toBeInstanceOf(LedgerError);
-        expect((error as LedgerError).reason).toBe("bad_row");
-        expect(Schema.isSchemaError((error as LedgerError).cause), "the cause is the decoder's own failure").toBe(true);
+        const ledger = error instanceof LedgerError ? error : undefined;
+        expect(ledger?.reason).toBe("bad_row");
+        expect(Schema.isSchemaError(ledger?.cause), "the cause is the decoder's own failure").toBe(true);
       }),
   );
 });

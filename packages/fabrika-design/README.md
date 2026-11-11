@@ -29,7 +29,7 @@ terminalTheme(fabrika).background; // "#111113", slate 1
 | `tokens/color/<token>.toml` | One file per color token: its type, tier and owner, what it is for, both looks' Radix steps (or a bend with its reason), what it sits on and its contrast floor. |
 | `tokens/manti.toml`, `tokens/parts.toml` | Manti's `--manti-*` tokens, each set from one of ours; and each owner, with the stylesheets a part's tokens may appear in. |
 | `src/build/tokens.ts` | The token build, `pnpm tokens`: reads and checks the TOML (`schema.ts`, `contrast.ts`), then writes the generated files below. `--check` fails on drift, and `pnpm lint` runs it. The one place that imports `@radix-ui/colors`. |
-| `src/themes.ts` | `fabrika` and `fabrika-light`: Radix 3.0.0, slate and indigo, the fifteen colors (from `theme-colors.ts`, generated) and the terminal's. The four bends are listed in its header. |
+| `src/themes.ts` | `fabrika` and `fabrika-light`: Radix 3.0.0, slate and indigo, the sixteen colors (from `theme-colors.ts`, generated) and the terminal's. The four bends are listed in its header. |
 | `src/tokens.css` | The tokens: two generated regions, the colors and Manti's `--manti-*` tokens, and by hand the px type scale, spacing, radii, rows, motion and the keycap. |
 | `src/theme-colors.ts`, `src/token-names.json` | Generated: the themes' colors, and every token name with its owner and every Radix step's name, for the CSS lint rules. |
 | `src/index.ts` | The top level: the themes and nothing else. It imports nothing, so it loads in a browser tab, in Electron's main and in Node. |

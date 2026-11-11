@@ -29,9 +29,10 @@ import { Activity, Owner, Recipient, recoverActivity, Start } from "../processes
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
-import { RecoveryStore } from "./RecoveryStore.ts";
+import { RecoveryStore, recoveryStore as openRecovery } from "./RecoveryStore.ts";
 import { ProgramRunner, RunnerError, type RunnerOptions } from "./Runner.ts";
 
 const PROCESS = "process_0000000000e008000000000000";
@@ -68,7 +69,8 @@ const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm
   };
 };
 
-const recoveryStore = (sql: Sql) => RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3 });
+const recoveryStore = (sql: Sql) =>
+  RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
 
 /** The process store's calls a runner makes, by name. */
 type StoreCall = "load" | "readActivity" | "placed" | "save";
@@ -545,10 +547,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             runner(undefined, broken, sql),
           );
           expect(sent).toBeInstanceOf(ProgramDown);
-          const saved = yield* Effect.provide(
-            RecoveryStore.use((store) => store.load),
-            RecoveryStore.layer(sql, { name: NAME, capacity: 1024 ** 3 }),
-          );
+          const saved = yield* openRecovery(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }).load;
           const stored = [
             ...(saved?.receipts ?? []).flatMap((receipt) => receipt.errors),
             ...(saved?.observations ?? []).flatMap((o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
