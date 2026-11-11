@@ -38,6 +38,10 @@ const leaf = (value: unknown, path: Path): Path => {
   return key === undefined ? path : leaf(value, [...path, key]);
 };
 
+/** A value as the message shows it: a scalar as written, an array or a table only by its shape. */
+const shape = (value: unknown) =>
+  Array.isArray(value) ? "[…]" : Predicate.isObject(value) ? "{…}" : JSON.stringify(value);
+
 /** "file, line n" for the key at `path`, or for its nearest table with a line. */
 const located = (place: Place, path: Path) => {
   for (let n = path.length; n > 0; n--) {
@@ -103,7 +107,7 @@ const explain = (
   if (own.some((d) => under(d, path))) {
     const d = own.find((d) => same(d.segments, path));
     return d !== undefined
-      ? refused(located(place, path), d, JSON.stringify(at(place.document.value, path)))
+      ? refused(located(place, path), d, shape(at(place.document.value, path)))
       : new SettingsError({
           reason: "invalid",
           message: `${located(place, path)}: ${path.join(".")} is a table of settings.\n  fabrika settings lists every setting. ${STOP}`,
@@ -152,7 +156,7 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
   }
 
   if (!Schema.is(d.schema)(wanted)) {
-    return yield* refused(located(repo, d.segments), d, JSON.stringify(wanted));
+    return yield* refused(located(repo, d.segments), d, shape(wanted));
   }
 
   if (newer(triple(wanted), triple(version))) {
