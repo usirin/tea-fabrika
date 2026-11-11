@@ -923,6 +923,120 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
   });
 
+  it("D4: a getter- or proxy-backed machine sees the same reads, in order, and the same answer as the old guard", () => {
+    const Read = fc.constantFrom("table", "table", "array", "null", "function", "string", "throw");
+    const Field = fc.record({ present: fc.boolean(), reads: fc.array(Read, { minLength: 1, maxLength: 3 }) });
+    const Backed = fc.record({
+      kind: fc.constantFrom("proxy", "proxy", "getters"),
+      target: fc.constantFrom("object", "object", "array", "function"),
+      update: Field,
+      init: Field,
+      throwOnHas: fc.option(fc.constantFrom("update", "init"), { nil: undefined }),
+    });
+    type Backed = typeof Backed extends fc.Arbitrary<infer A> ? A : never;
+    type Field = Backed["update"];
+
+    const value = (read: string): unknown => {
+      switch (read) {
+        case "table":
+          return {};
+        case "array":
+          return [];
+        case "null":
+          return null;
+        case "function":
+          return () => 0;
+        case "string":
+          return "update";
+        default:
+          throw new Error("read");
+      }
+    };
+
+    /** A machine whose field reads are logged, and whose nth read of a field gives that field's nth value. */
+    const backed = (b: Backed, trace: Array<string>): unknown => {
+      const count = new Map<string, number>();
+      const fields: Record<string, Field> = { update: b.update, init: b.init };
+      const next = (key: string) => {
+        const field = fields[key]!;
+        const n = count.get(key) ?? 0;
+        count.set(key, n + 1);
+        const read = field.reads[Math.min(n, field.reads.length - 1)]!;
+        // An init that reads as a table or array is given a callable instead, so init varies too.
+        return key === "init" && read === "table" ? () => 0 : value(read);
+      };
+      const target: object = b.target === "array" ? [] : b.target === "function" ? () => 0 : {};
+
+      if (b.kind === "getters") {
+        for (const key of Object.keys(fields).filter((k) => fields[k]!.present)) {
+          Object.defineProperty(target, key, {
+            get: () => {
+              trace.push(`get:${key}`);
+              return next(key);
+            },
+          });
+        }
+
+        return target;
+      }
+
+      return new Proxy(target, {
+        has: (t, key) => {
+          trace.push(`has:${String(key)}`);
+
+          if (key === b.throwOnHas) {
+            throw new Error("has");
+          }
+
+          return typeof key === "string" && key in fields ? fields[key]!.present : Reflect.has(t, key);
+        },
+        get: (t, key, receiver) => {
+          trace.push(`get:${String(key)}`);
+          return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
+        },
+      });
+    };
+
+    const outcome = (run: () => Result.Result<unknown, unknown>) => {
+      const ran = Result.try({ try: run, catch: () => "thrown" as const });
+      return Result.isFailure(ran) ? "thrown" : Result.isSuccess(ran.success) ? "accepted" : "refused";
+    };
+
+    const oldMachine = Schema.declare((u: unknown): u is unknown => oldIsSteps(u), { expected: "a tea machine" });
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(declarations, Backed, ({ fields }, b) => {
+        const before: Array<string> = [];
+        const old = outcome(() => Schema.decodeUnknownResult(oldMachine)(backed(b, before)));
+        const after: Array<string> = [];
+        const p = Program.make(fields);
+        const now = outcome(() => Schema.decodeUnknownResult(Program.schema)({ ...p, machine: backed(b, after) }));
+        expect(after).toEqual(before);
+        expect(now).toBe(old);
+        seen.add(old);
+      }),
+      {
+        ...parameters,
+        numRuns: 1_000,
+        examples: [
+          // pinned: review of T737 round 3. The first rewrite read update once, so an update that reads
+          // as a table and then null passed where the old guard refused it.
+          [
+            fc.sample(declarations, { seed: SEED, numRuns: 1 })[0]!,
+            {
+              kind: "proxy",
+              target: "object",
+              update: { present: true, reads: ["table", "null"] },
+              init: { present: true, reads: ["function"] },
+              throwOnHas: undefined,
+            },
+          ],
+        ],
+      },
+    );
+    expect([...seen].sort()).toEqual(["accepted", "refused", "thrown"]);
+  });
+
   it("D5: an authored program keeps the machine it was given, and refuses an equal-shaped replacement read later", () => {
     const seen = new Set<string>();
     fc.assert(
