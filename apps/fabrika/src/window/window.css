@@ -2986,7 +2986,8 @@ main.program:has(> .view) {
 .ask-marks [data-variant="tertiary"] {
   padding-inline: 0;
 }
-/* The marks are quiet: small words, and a pressed one takes the selected fill and its check. */
+/* The marks are quiet: small words, and a pressed one takes the selected fill, its primary text and
+   an underline, so color is never the only cue (WCAG 1.4.1). */
 .ask-marks [data-scope="button"] {
   /* A 24px target (WCAG 2.5.8) that takes a text line's height in the flow: the line under the
 	   marks starts where it would under words. */
@@ -2994,17 +2995,31 @@ main.program:has(> .view) {
   margin-block: -4px;
   color: var(--text-faint);
 }
+/* A press never changes the piece's width, so the marks stay on the line they had and under the
+   pointer that pressed them: the cue is an underline, which takes no width, not a check beside the
+   words. The fill hugs the words: it reaches past them sideways only, and its box is the words' own
+   height, so it keeps the bar's row gap (`--s-1`) from the line above and the row below, also where
+   the piece wraps under a blind ask's hint. */
 .ask-marks [aria-pressed="true"] {
+  min-block-size: 0;
+  margin-block: 0;
+  border-block-width: 0;
   background: var(--surface-selected);
-  /* The fill reaches past the words as padding would, and the words keep their edge. */
-  box-shadow: 0 0 0 var(--s-1) var(--surface-selected);
+  box-shadow:
+    var(--s-1) 0 0 0 var(--surface-selected),
+    calc(-1 * var(--s-1)) 0 0 0 var(--surface-selected);
   color: var(--text-primary);
+  line-height: 1;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
-/* A pressed mark says so with a check beside its words, not only with its fill. */
-.ask-on {
-  inline-size: 10px;
-  block-size: 10px;
-  margin-inline-end: var(--s-1);
+/* The pressed mark's target stays 24px tall (WCAG 2.5.8) around its smaller fill. */
+.ask-marks [aria-pressed="true"]::before {
+  position: absolute;
+  inset-block: calc(50% - 12px);
+  inset-inline: 0;
+  content: "";
 }
 
 /* Every pick, a list under the bar: rows with no edge of their own, each number at the same edge. */
@@ -3042,6 +3057,9 @@ main.program:has(> .view) {
 }
 .ask-note [data-scope="field"][data-part="input"] {
   padding-inline: var(--s-3);
+  /* At rest one line (`rows={1}`), growing as the words wrap: the note is one line by its schema,
+     so the bar from "Your turn" to Send and Cancel fits a short tile. */
+  field-sizing: content;
 }
 .ask-note [data-scope="field"][data-part="control"]:has([data-part="input"]:focus-visible) {
   outline-offset: -1px;

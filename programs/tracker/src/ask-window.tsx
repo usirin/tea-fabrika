@@ -848,20 +848,6 @@ function EvidenceText({ shows }: { readonly shows: Shows }) {
   }
 }
 
-/** The mark that says a toggle is on, beside its words, so color is never the only cue. */
-const ON = (
-  <svg className="ask-on" viewBox="0 0 10 10" aria-hidden="true">
-    <path
-      d="M2.5 5.2 4.3 7 7.6 3.2"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 const MARKS = [
   [true, "Needed me"],
   [false, "Agent could work it out"],
@@ -1292,7 +1278,6 @@ export function AskView({
                   disabled={view.busy}
                   onClick={() => send({ type: "mark", needed })}
                 >
-                  {pressed && ON}
                   {label}
                 </Button>
               );
@@ -1351,7 +1336,9 @@ export function AskView({
               rec._tag === "pick" ? "Needed: one line the next step reads." : "Optional: one line the next step reads."
             }
             maxLength={120}
-            rows={2}
+            // The note is one line by its schema: the field rests at one line and grows as its words
+            // wrap (`field-sizing` in window.css), so the bar fits a short tile.
+            rows={1}
             resize="none"
             fullWidth
             disabled={view.busy}

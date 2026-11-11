@@ -28,12 +28,12 @@ Look E: the ask is one quiet bar under the ticket title, with only a hairline un
 | `no-rec` | An ask with no rec. |
 | `shown` | A shown rec: "Recommended Approve · 95% sure", once. |
 | `every-pick` | Every pick opened as a list under the bar. |
-| `required-note` | Not the rec, with its required note ("Why no?") open and focused: one 2px ring, no second edge. |
-| `needed-true`, `needed-false` | A mark pressed: a check, the selected fill and the words. |
+| `required-note` | Not the rec, with its required note ("Why no?") open and focused: one 2px ring, no second edge. The field rests at one line and grows as its words wrap. |
+| `needed-true`, `needed-false` | A mark pressed: the selected fill, its words in the primary text and underlined. A press never changes the marks' width, so the piece stays on the line it had. |
 | `evidence-open` | The evidence opened under the bar, as words: the ticket, then every field of the plan (stories, tasks, pointers, each open question with its options, lean, cost, sureness and doubt, and any field a later plan writer added). Each item's fields sit under one bullet. |
 | `running`, `stuck`, `done` | Not your turn: the turn card says what runs, what stopped or what ended. |
 | `saving` | The answer is being saved. |
-| `failed-save` | A save that did not land, with Try again. Its line scrolls into the tile's view when it appears. |
+| `failed-save` | A save that did not land, with Try again. Its line scrolls into the tile's view when it appears, with the question still in view above it. |
 | `focus` | One layout only: the bar holding keyboard focus, its hairline turned into the 2px focus line. |
 
 The open ask's own "asks you" row is gone from Activity while the bar holds that ask. It comes back
@@ -51,13 +51,14 @@ The same in dark and light unless a line says otherwise.
   still fit one line; at side the hint keeps its one line and "Did this need you?" with both marks
   takes the next line, at the hint's left edge.
 - **2x2** (each tile about 930px wide in a 1440 window): the Properties side column is still shown. The bar
-  sits in the main column, and the rec line with both marks fits on one line. A blind ask is as in
-  side: the hint on one line, the marks on the next. With evidence open, the
+  sits in the main column, and the rec line with both marks fits on one line, with a mark pressed
+  too. A blind ask is as in side: the hint on one line, the marks on the next. With evidence open, the
   bar and its first lines fit, and the rest scrolls inside the tile.
 - **small** (1024x700, four tiles): the ticket tile is short, so a note, its buttons or a failed
   save's line can sit below the fold. The tile scrolls, and the e2e checks each one in flow.
-  - In `failed-save`, the tile scrolls the failure line into view, so it is at the tile's bottom
-    edge in the shot, and the question's line is scrolled off the top.
+  - In `failed-save`, the question is at the tile's top and "Not saved." with Try again is under
+    it. The note field rests at one line, so Send no and Cancel are in view too: every button of
+    the bar is inside the tile.
   - The rec line with both marks still fits on one line in the ticket tile, and so does a blind
     ask's hint with its marks.
 - **asks menu**: 400px wide, or the window less 16px (round 7 tried 660px; the lead kept it narrow).
@@ -75,8 +76,12 @@ The same in dark and light unless a line says otherwise.
   chips, Evidence too, and their sides are 4px. The keys still work, each button names its key in
   `aria-keyshortcuts`, and the menu's footer names Move, Open, Later and Close.
 - The marks and Evidence have no side padding, so their words start at the same edge as the line
-  above. A pressed mark's fill reaches past its words with a spread shadow, so its text keeps that
-  edge.
+  above. A pressed mark's fill reaches past its words sideways only, so its text keeps that edge,
+  and its fill is the words' own height, so it keeps 4px (`--s-1`) from the line above and the row
+  below, also where the marks wrap under a blind ask's hint. Its target stays 24px tall.
+- A mark under the pointer shows Manti's quiet hover fill, with no underline and its faint words,
+  so it does not read as pressed. In `evidence-open` the e2e parks the pointer off the tile before
+  each shot, so no shot shows it.
 - Keyboard focus on the bar itself turns its hairline into a 2px line in the app's focus color, the
   full width of the bar (WCAG 2.4.7), not a box. Each control inside keeps the app's own ring
   (`.view :focus-visible`).
