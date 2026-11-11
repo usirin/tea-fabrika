@@ -8,11 +8,15 @@
 //   `{ values, snapshot }`. A missing file is an empty one; any other read failure is a
 //   `SettingsError` with reason `read`, and broken TOML one with reason `syntax`.
 // - Its requirements are met by `NodeServices.layer`, `TomlParser.layer` and `Digest.layerWebCrypto`.
+// - T730, P38 slice 2: the result also holds `repo`, `{ minimum }`, when a repo place is given: the
+//   `fabrika-version` the repo's file states, or that declaration's default when it states none,
+//   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Ref } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
+import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
@@ -187,6 +191,67 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             if (tag === "file") {
               expect(origin).toEqual({ _tag: "file", file: PERSON, line: 4 });
             }
+          }
+        },
+      ),
+      check,
+    );
+  });
+});
+
+// T730 L6 and L7: the repo context a load returns, for the version warnings. A repo's minimum is
+// the version its own file states, or the declaration's default when the file states none; a flag
+// or an environment value for `fabrika-version` changes the resolved value, never that minimum.
+describe("T730, a load keeps the repo file's own minimum, and invents none without a repo", () => {
+  const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
+  const release = fc.tuple(part, part, part).map((t) => t.join("."));
+  const repoFile = fc.oneof(
+    fc.constant({ _tag: "none" as const }),
+    fc.constant({ _tag: "missing" as const }),
+    fc.constant({ _tag: "unstated" as const }),
+    release.map((minimum) => ({ _tag: "stated" as const, minimum })),
+  );
+
+  it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        repoFile,
+        fc.option(release, { nil: undefined }),
+        fc.option(release, { nil: undefined }),
+        async (repo, flag, env) => {
+          const d = Declarations.version;
+          const { exit } = await Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const places = yield* lay(
+                  repo._tag === "stated"
+                    ? text(`fabrika-version = "${repo.minimum}"\n`)
+                    : repo._tag === "unstated"
+                      ? text("# no version\n")
+                      : { _tag: "missing" },
+                  text(""),
+                );
+                const exit = yield* Load.load({
+                  person: places.person,
+                  ...(repo._tag === "none" ? {} : { repo: places.repo }),
+                  flags: flag === undefined ? {} : { [d.path]: flag },
+                  env: env === undefined ? {} : { [d.env]: env },
+                  // Newer than every generated release, so no stated minimum refuses the load.
+                  version: "200.0.0",
+                }).pipe(Effect.exit);
+                return { exit };
+              }),
+            ).pipe(Effect.provide(services)),
+          );
+          expect(Exit.isSuccess(exit), String(exit)).toBe(true);
+
+          if (Exit.isSuccess(exit)) {
+            const stated = repo._tag === "stated" ? repo.minimum : d.default;
+            expect(exit.value.repo).toEqual(repo._tag === "none" ? undefined : { minimum: stated });
+            // The resolved value still follows the sources' order.
+            expect(exit.value.snapshot.values[d.path]).toBe(
+              flag ?? env ?? (repo._tag === "stated" ? repo.minimum : d.default),
+            );
           }
         },
       ),
