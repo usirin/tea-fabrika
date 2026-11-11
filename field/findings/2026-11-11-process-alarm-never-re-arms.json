@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-process-alarm-never-re-arms",
+  "date": "2026-11-11",
+  "by": "write-pattern",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/runtime.ts",
+    "line": 858
+  },
+  "says": "The Process object's alarm handler lets a runner failure escape and never sets the alarm again, so after the platform's six retries a program's saved wake is dropped until some other call reaches the object; decision 0105 says an alarm handler catches its own failures and always re-arms.",
+  "proof": "runtime.ts:858-861 is rpc(storage.get('wake')) then runner.due(at), with no catch. Runner.ts:1286 sets alarmAt = undefined before the work (the platform consumed the alarm), and setAlarm runs only on the paths that return (Runner.ts:1409, catchUp's publish at :878); a LedgerError from ready(), mailbox.send (:1414-1420) or the refused branch (:1418) leaves storage 'wake' set and no alarm. Cloudflare's base class docs: alarm() 'will be retried upon failure using exponential backoff, starting at two second delays for up to six retries'. No test in next/ fails an alarm seven times.",
+  "cost": "A program that asked to wake later silently never wakes if the ledger or storage fails for about two minutes around its due time; nothing records that the wake was missed.",
+  "head": "a8c4cd722a643077a9a1585147e432d5721c4d0e",
+  "ticket": null,
+  "pr": null
+}

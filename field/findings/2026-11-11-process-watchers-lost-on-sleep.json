@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-process-watchers-lost-on-sleep",
+  "date": "2026-11-11",
+  "by": "write-pattern",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 225
+  },
+  "says": "A process's view watchers are kept only in a Set in the runner's memory, so once the Process object sleeps or is evicted, later view patches go to nobody until the client opens the view again.",
+  "proof": "Runner.ts:225 'const clients = new Set<string>()' is the only store of watchers; it is filled only by open at Runner.ts:1333 and read by publish at Runner.ts:868. The runner lives in the object's runtime, a class field built in the constructor (next/apps/fabrika/src/brain.ts:208). Cloudflare's lifecycle docs: an idle object with no socket is evicted after 70 to 140 s, and when hibernated 'the in-memory state is discarded'; experiment 231 saw the constructor run again after 15 s idle on workerd. The Process object holds no socket, so a client watching over the Connection object's socket keeps its socket while the Process forgets it. worker-supervision.test.ts:382 calls view.open again after an abort and never checks that a patch reaches a watcher opened before it.",
+  "cost": "A window watching a program stops getting updates after the program's object is idle for a minute or two, with no error; it looks frozen.",
+  "head": "a8c4cd722a643077a9a1585147e432d5721c4d0e",
+  "ticket": null,
+  "pr": null
+}

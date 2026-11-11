@@ -1,10 +1,13 @@
 import type { WindowProps, Writer } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
+import { AskIdentity } from "@kampus/pipeline/tickets/ask";
 import type { Entry } from "@kampus/pipeline/tickets/ticket";
 import { Kbd } from "@manti-ui/react";
+import { Button } from "@manti-ui/react";
 import { type Head, lineOf, type OpenAsk, type Row, type StepNow, stepWords } from "@tea-fabrika/tracker";
+import { AskActions, AskStatus, AskView, StopView } from "@tea-fabrika/tracker/ask-window";
 import { whenOf } from "@tea-fabrika/tracker/window";
-import { type KeyboardEvent, type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState, useContext } from "react";
 import type { ticket } from "./index.ts";
 import { type Page, runTicketOf } from "./view.ts";
 
@@ -97,91 +100,23 @@ const usd = (n: number) => `$${n.toFixed(2)}`;
 /** A pick as a button says it: the first letter up. */
 const said = (pick: string) => pick.slice(0, 1).toUpperCase() + pick.slice(1);
 
-/** The main button's words: the ask itself when it starts with its pick, "Approve plan v1". */
-const primaryWords = (ask: OpenAsk, pick: string) => (ask.what.startsWith(`${pick} `) ? said(ask.what) : said(pick));
-
 function AskCard(props: { readonly ask: OpenAsk; readonly page: Page; readonly now: number; readonly send: Send }) {
-  const { ask, page, now, send } = props;
-  const [first, ...rest] = ask.picks;
-  const [other, setOther] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const saw = { title: page.opened.ticket.title, body: page.body };
-  const ticket = page.opened.ticket.number;
-  const answer = (pick: string, text: string) =>
-    send({ type: "answer", value: { ticket, ask: ask.ask, pick, note: text, saw } });
-  return (
-    <section className="turnc you" aria-label="Whose turn">
-      <span className="m p you lg" aria-hidden="true">
-        Y
-      </span>
-      <div className="what">
-        <span className="big">
-          <span className="w-you">Your turn</span> · {ask.what}
-        </span>
-        <span className="sub">
-          <Mark by={ask.by} />
-          <Who by={ask.by} /> asked at {whenOf(ask.at, now)}
-          {page.plan !== null && (
-            <>
-              <span aria-hidden="true">·</span>
-              {page.plan.tasks.length} task{page.plan.tasks.length === 1 ? "" : "s"}
-            </>
-          )}
-        </span>
-      </div>
-      <div className="acts">
-        {rest.map((pick) => (
-          <button
-            key={pick}
-            type="button"
-            className="btn quiet"
-            aria-expanded={other === pick}
-            onClick={() => setOther(other === pick ? null : pick)}
-          >
-            {said(pick)}
-          </button>
-        ))}
-        <button type="button" className="btn turn" onClick={() => answer(first, "")}>
-          {primaryWords(ask, first)}
-        </button>
-      </div>
-      {other !== null && (
-        <div className="noform">
-          <label className="sr" htmlFor="ticket-note">
-            Why {other}
-          </label>
-          <textarea
-            id="ticket-note"
-            rows={2}
-            placeholder={`Why ${other}? The note goes with your answer.`}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-          <div className="row2">
-            <button type="button" className="btn quiet sm" onClick={() => setOther(null)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn sm"
-              onClick={() => {
-                answer(other, note.trim());
-                setOther(null);
-                setNote("");
-              }}
-            >
-              Send {other}
-            </button>
-          </div>
-        </div>
-      )}
-    </section>
+  const { ask, page } = props;
+  return ask.sealed === undefined ? (
+    <StopView ticket={page.opened.ticket.number} why="State not recorded" />
+  ) : (
+    <AskView
+      key={new AskIdentity({ ticket: page.opened.ticket.number, ask: ask.ask }).key}
+      ticket={page.opened.ticket.number}
+      ask={ask.sealed}
+    />
   );
 }
 
 /** One card that says whose turn it is: yours, with the ask's buttons, or what runs or ended. */
 function TurnCard(props: { readonly head: Head; readonly page: Page; readonly now: number; readonly send: Send }) {
   const { head, page, now, send } = props;
+  const actions = useContext(AskActions);
   const line = lineOf(head, (at) => whenOf(at, now));
 
   switch (head._tag) {
@@ -190,7 +125,7 @@ function TurnCard(props: { readonly head: Head; readonly page: Page; readonly no
     case "running":
       return (
         <section className="turnc" aria-label="Whose turn">
-          <span className="m a lg" aria-hidden="true">
+          <span className="turn-icon" aria-hidden="true">
             {SPARK}
           </span>
           <div className="what">
@@ -201,7 +136,7 @@ function TurnCard(props: { readonly head: Head; readonly page: Page; readonly no
               <span className="dot run live" />
               <span className="w-run">running</span>
               <span aria-hidden="true">·</span>
-              run {head.run}, since {whenOf(head.since, now)}
+              since {whenOf(head.since, now)}
             </span>
           </div>
         </section>
@@ -216,18 +151,21 @@ function TurnCard(props: { readonly head: Head; readonly page: Page; readonly no
             </span>
             <span className="sub">{line}. Nothing runs until someone looks.</span>
           </div>
+          <Button variant="tertiary" onClick={() => actions?.openLane(page.opened.ticket.number)}>
+            Open lane
+          </Button>
         </section>
       );
     case "done":
       return (
         <section className="turnc" aria-label="Whose turn">
-          <span className="m s lg" aria-hidden="true">
+          <span className="turn-icon w-done" aria-hidden="true">
             {CHECK}
           </span>
           <div className="what">
             <span className="big">Done</span>
             <span className="sub">
-              <span className="w-done">✓</span> {line.replace(/^done: /, "")}
+              {line.replace(/^done: /, "")}
               <span aria-hidden="true">·</span>
               {usd(page.usd)} in all
             </span>
@@ -470,8 +408,31 @@ function Detail({ entry, now }: { readonly entry: Entry; readonly now: number })
   );
 }
 
-function Activity(props: { readonly rows: readonly Row[]; readonly timeline: readonly Entry[]; readonly now: number }) {
-  const { rows, timeline, now } = props;
+/** What opens under a sealed ask's row: its question and each pick with what it does. */
+function AskDetail({ ask }: { readonly ask: Sealed }) {
+  return (
+    <dl className="kv">
+      <dt>question</dt>
+      <dd>{ask.what}</dd>
+      {ask.picks.map((p) => [
+        <dt key={`${p.pick}-k`}>{p.pick}</dt>,
+        <dd key={`${p.pick}-v`} className="muted">
+          {p.does}
+        </dd>,
+      ])}
+    </dl>
+  );
+}
+
+type Sealed = Page["opened"]["sealed"][number];
+
+function Activity(props: {
+  readonly rows: readonly Row[];
+  readonly timeline: readonly Entry[];
+  readonly sealed: readonly Sealed[];
+  readonly now: number;
+}) {
+  const { rows, timeline, sealed, now } = props;
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
   const flip = (pos: number) =>
     setOpen((was) => {
@@ -509,7 +470,14 @@ function Activity(props: { readonly rows: readonly Row[]; readonly timeline: rea
       </div>
       <ol className="acts-l" onKeyDown={walk}>
         {rows.map((row) => {
+          const ask = sealed.find((a) => a.pos === row.pos);
           const entry = timeline.find((e) => e.pos === row.pos);
+          const opens =
+            ask !== undefined ? (
+              <AskDetail ask={ask} />
+            ) : entry !== undefined ? (
+              <Detail entry={entry} now={now} />
+            ) : null;
           const shown = open.has(row.pos);
           return (
             <li key={row.pos} className={`act${shown ? " open" : ""}`}>
@@ -530,9 +498,9 @@ function Activity(props: { readonly rows: readonly Row[]; readonly timeline: rea
                 <time>{whenOf(row.at, now)}</time>
                 {CHEVRON}
               </button>
-              {shown && entry !== undefined && (
+              {shown && opens !== null && (
                 <div className="act-x" id={`fact-${row.pos}`}>
-                  <Detail entry={entry} now={now} />
+                  {opens}
                 </div>
               )}
             </li>
@@ -605,6 +573,19 @@ function Composer(props: { readonly ticket: number; readonly send: Send; readonl
 }
 
 /**
+ * The activity rows, less the "asks you" row of the ask the bar holds: the bar is that ask, so the
+ * list does not say it twice. The row comes back once the ask is answered or withdrawn.
+ */
+function rowsBeside(head: Head, rows: readonly Row[]): readonly Row[] {
+  if (head._tag !== "asks") {
+    return rows;
+  }
+
+  const inBar = head.asks[0].pos;
+  return rows.filter((row) => row.pos !== inBar);
+}
+
+/**
  * The window, drawn afresh for each ticket it shows: a half-written comment or an opened row of
  * #7 never shows on #3 when a pipe moves it there.
  */
@@ -640,69 +621,77 @@ function OneTicket({ view, send }: WindowProps<typeof ticket>) {
   }
 
   const { opened } = page;
+  const asks = opened.head._tag === "asks" ? opened.head.asks : [];
   const paragraphs = paragraphsOf(page.body);
   return (
     <div className="view ticket-view">
-      <div className="tkv">
-        <div className="tk-main">
-          <div className="tk-col">
-            <div>
-              <div className="idl">
-                <span className="mono">#{number}</span>
-                {page.filed !== null && (
-                  <span>
-                    filed by {page.filed.by.id}, {whenOf(page.filed.at, now)}
-                  </span>
-                )}
-                {opened.ticket.state === "closed" && <span className="tag">closed</span>}
+      <AskStatus asks={asks.map((ask) => ({ ticket: number, ask: ask.ask }))} left={asks.length}>
+        <div className="tkv">
+          <div className="tk-main">
+            <div className="tk-col">
+              <div>
+                <div className="idl">
+                  <span className="mono">#{number}</span>
+                  {page.filed !== null && (
+                    <span>
+                      filed by {page.filed.by.id}, {whenOf(page.filed.at, now)}
+                    </span>
+                  )}
+                  {opened.ticket.state === "closed" && <span className="tag">closed</span>}
+                </div>
+                <h1 className="tk-title">
+                  <Ticks text={opened.ticket.title} />
+                </h1>
               </div>
-              <h1 className="tk-title">
-                <Ticks text={opened.ticket.title} />
-              </h1>
-            </div>
-            {view.unreachable !== null && (
-              <p className="alert" role="alert">
-                The ledger did not answer: {view.unreachable}
-              </p>
-            )}
-            {view.failed !== null && (
-              <p className="alert" role="alert">
-                A write did not land: {view.failed.why}
-              </p>
-            )}
-            <TurnCard head={opened.head} page={page} now={now} send={send} />
-            <section className="props-inline" aria-label="Properties">
-              <Props page={page} number={number} now={now} />
-            </section>
-            <div className="desc">
-              {paragraphs.length === 0 ? (
-                <p className="empty">No description.</p>
-              ) : (
-                paragraphs.map((p) => (
-                  <p key={p.at}>
-                    <Ticks text={p.text} />
-                  </p>
-                ))
+              {view.unreachable !== null && (
+                <p className="alert" role="alert">
+                  The ledger did not answer: {view.unreachable}
+                </p>
               )}
+              {view.failed !== null && (
+                <p className="alert" role="alert">
+                  A write did not land: {view.failed.why}
+                </p>
+              )}
+              <TurnCard head={opened.head} page={page} now={now} send={send} />
+              <section className="props-inline" aria-label="Properties">
+                <Props page={page} number={number} now={now} />
+              </section>
+              <div className="desc">
+                {paragraphs.length === 0 ? (
+                  <p className="empty">No description.</p>
+                ) : (
+                  paragraphs.map((p) => (
+                    <p key={p.at}>
+                      <Ticks text={p.text} />
+                    </p>
+                  ))
+                )}
+              </div>
+              <section aria-label="Activity">
+                <Activity
+                  rows={rowsBeside(opened.head, opened.rows)}
+                  timeline={opened.ticket.timeline}
+                  sealed={opened.sealed}
+                  now={now}
+                />
+                <Composer ticket={number} send={send} saving={view.saving.length} />
+              </section>
             </div>
-            <section aria-label="Activity">
-              <Activity rows={opened.rows} timeline={opened.ticket.timeline} now={now} />
-              <Composer ticket={number} send={send} saving={view.saving.length} />
-            </section>
           </div>
+          <aside className="tk-side" aria-label="Properties">
+            <div>
+              <h3>Properties</h3>
+              <Props page={page} number={number} now={now} />
+            </div>
+            <div className="made">
+              <h3>Made of</h3>
+              <span>A lane and its steps, writing facts to one ledger stream. Type this in a tile to see them:</span>
+              <code className="cmd">map --ticket {number}</code>
+            </div>
+          </aside>
         </div>
-        <aside className="tk-side" aria-label="Properties">
-          <div>
-            <h3>Properties</h3>
-            <Props page={page} number={number} now={now} />
-          </div>
-          <div className="made">
-            <h3>Made of</h3>
-            <span>A lane and its steps, writing facts to one ledger stream. Type this in a tile to see them:</span>
-            <code className="cmd">map --ticket {number}</code>
-          </div>
-        </aside>
-      </div>
+      </AskStatus>
     </div>
   );
 }
