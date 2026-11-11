@@ -55,9 +55,7 @@ describe("the pipeline's laws", () => {
 
 describe("a planted mistake", () => {
   it("a ledger with no guard, where an unfenced write under a claimed name lands, breaks P2", async () => {
-    const rs = await lawsOn(
-      layerPlanted(join(dir, "no-guard.sqlite"), "no guard (95 and 96: an unfenced write under a name lands)"),
-    );
+    const rs = await lawsOn(layerPlanted("no guard (95 and 96: an unfenced write under a name lands)"));
     expect(brokenLaws(rs)).toContain("P2");
   });
 

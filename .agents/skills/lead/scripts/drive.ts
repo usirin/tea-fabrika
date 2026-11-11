@@ -1895,7 +1895,9 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   const verdict =
-    step === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
+    step === "review"
+      ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\nThe verdict is not the answer. The last line is `answer: done <why>` when merge-ready, else `answer: send build <why>`, `send tests` or `send plan`. Never `answer: merge-ready`.\n"
+      : "";
   writeFileSync(
     ask.prompt,
     readFileSync(p.brief, "utf8") +
