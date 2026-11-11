@@ -1,8 +1,10 @@
-import { Effect, Path, Schema } from "effect";
+import { Cause, Effect, Path, Schema } from "effect";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
 }) {}
+
+class PortError extends Schema.TaggedError<PortError>()("PortError", { message: Schema.String }) {}
 
 export const localStage = Effect.fn("brain.localStage")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
@@ -23,5 +25,17 @@ export const localStage = Effect.fn("brain.localStage")(function* (
     try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
     catch: () => new BrainError({ reason: "storage" }),
   });
-  return yield* startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
+  // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
+  return yield* startDev(built, options).pipe(
+    Effect.provide(ProcessIdGenerator.layer),
+    Effect.catchCause((cause) =>
+      /AddressInUse|EADDRINUSE/.test(Cause.pretty(cause))
+        ? Effect.fail(
+            new PortError({
+              message: `Port ${options.port} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
+            }),
+          )
+        : Effect.failCause(cause),
+    ),
+  );
 });
