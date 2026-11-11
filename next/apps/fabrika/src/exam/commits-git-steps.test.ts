@@ -26,6 +26,7 @@ import {
   personLink,
   squashed,
   log,
+  twoSteps,
 } from "./commits-git.test-support.ts";
 
 describe("stale_link (p89)", () => {
@@ -131,7 +132,21 @@ describe("build_touched_exam (p84)", () => {
   });
 });
 
-describe("broken_chain at pull request time (p86)", () => {
+/** Moves main ahead of the branch by `n` commits, each touching `path`, and checks the branch out again. */
+const moveMain = (r: Repo, n: number, path = "docs/other.md") => {
+  r.git("checkout", "-q", "main");
+  let main = r.base;
+
+  for (let i = 0; i < n; i += 1) {
+    r.write(path, `[${i}]\n`);
+    main = r.commit(`main moves ${i}`);
+  }
+
+  r.git("checkout", "-q", "pr");
+  return main;
+};
+
+describe("a branch behind main at pull request time (0098)", () => {
   // scenario: two diverged branches distinguish a three-dot diff from a two-dot diff.
   it("scenario: the branch is behind main, whose own exam change asks nothing (a three-dot diff)", () => {
     const r = new Repo();
@@ -140,10 +155,8 @@ describe("broken_chain at pull request time (p86)", () => {
     r.change("b.ts");
     r.sign("build");
     const head = r.head();
-    r.git("checkout", "-q", "main");
-    r.write("boundary-rules.json", "[6]\n");
-    const main = r.commit("main moves");
-    expect(r.check([], main, head).answers).toEqual([stuck("broken_chain", head)]);
+    const main = moveMain(r, 1, "boundary-rules.json");
+    expect(r.check([], main, head).answers).toEqual([DONE]);
   });
 
   // scenario: event base, event head and newer main need separate real histories.
@@ -152,11 +165,90 @@ describe("broken_chain at pull request time (p86)", () => {
     r.change("a.ts");
     r.sign("tests");
     const head = r.head();
-    r.git("checkout", "-q", "main");
-    r.write("docs/other.md", "o\n");
-    const main = r.commit("main moves after the event");
+    const main = moveMain(r, 1);
     expect(r.check([], r.base, head).answers).toEqual([DONE]);
-    expect(r.check(["--main", main], r.base, head).answers).toEqual([stuck("broken_chain", head)]);
+    expect(r.check(["--main", main], r.base, head).answers).toEqual([DONE]);
+  });
+
+  // Plant: answer broken_chain when main is not an ancestor of the head. Generated: how far behind.
+  it("G24: a branch behind main by any number of commits, each validly linked, is done", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 4 }), (n) => {
+        const r = new Repo();
+        twoSteps(r);
+        const head = r.head();
+        const main = moveMain(r, n);
+        expect(r.check(["--main", main], r.base, head)).toMatchObject({ code: 0, answers: [DONE] });
+      }),
+      runs,
+    );
+  });
+
+  // scenario: being behind must hide nothing; one real unsigned commit among signed ones.
+  it("scenario: behind main with one unsigned commit: unsigned_commit, and nothing else", () => {
+    const r = new Repo();
+    r.change("a.ts");
+    r.sign("tests");
+    const bare = r.change("b.ts");
+    const head = r.head();
+    const main = moveMain(r, 2);
+    expect(r.check(["--main", main], r.base, head)).toMatchObject({
+      code: 1,
+      answers: [stuck("unsigned_commit", bare)],
+    });
+  });
+
+  // scenario: main's newer exam changes are main's, never the branch's, in a real diverged history.
+  it("scenario: behind main whose newer commits touch exam paths: no ask and no build_touched_exam", () => {
+    const r = new Repo();
+    twoSteps(r);
+    const head = r.head();
+    moveMain(r, 1, "boundary-rules.json");
+    const main = moveMain(r, 1, "next/apps/fabrika/src/exam/commits.ts");
+    expect(r.check(["--main", main], main, head).answers).toEqual([DONE]);
+  });
+
+  // scenario: a real build commit on a diverged branch still meets the exam list.
+  it("scenario: behind main, a build commit touching an exam path is still build_touched_exam", () => {
+    const r = new Repo();
+    r.change("a.ts");
+    r.sign("tests");
+    r.write("boundary-rules.json", "[9]\n");
+    const c = r.commit();
+    r.sign("build");
+    const main = moveMain(r, 2);
+    expect(r.check(["--main", main], main, c).answers).toEqual([
+      stuck("build_touched_exam", c, { paths: ["boundary-rules.json"] }),
+      ask("boundary-rules.json"),
+    ]);
+  });
+
+  // scenario: real sign commands on two branches, then main moves past the one under test.
+  it("scenario: behind main, a tests link newer than the one the branch uses is still stale_link", () => {
+    const r = new Repo();
+    const t1 = r.change("a.ts");
+    r.signWith("tests");
+    r.git("checkout", "-q", "-b", "redo", r.base);
+    r.change("a2.ts");
+    r.signWith("tests");
+    r.git("checkout", "-q", "pr");
+    r.change("b.ts");
+    r.sign("build");
+    const head = r.head();
+    const main = moveMain(r, 1);
+    expect(r.check(["--main", main], main, head).answers).toEqual([stuck("stale_link", t1, { step: "tests" })]);
+  });
+
+  // scenario: a note planted over another commit's trees is a gap; at pull request time it does not fit.
+  it("scenario: behind main, a link that does not start where the last ended is unsigned_commit, never done", () => {
+    const r = new Repo();
+    const c1 = r.change("a.ts");
+    r.sign("tests");
+    const c2 = r.change("b.ts");
+    const n2 = r.sign("build");
+    r.setNote(c2, JSON.stringify({ ...n2, from: r.head(`${c1}^1^{tree}`) }));
+    const main = moveMain(r, 1);
+    expect(r.check(["--main", main], main, c2).answers).toEqual([stuck("unsigned_commit", c2)]);
   });
 });
 
@@ -370,7 +462,8 @@ describe("person commits between step links (p86b)", () => {
   });
 
   // scenario: native signed merge ancestry is checked before and after catching up.
-  it("scenario: counts a person's signed merge of main and still requires the base in the head", () => {
+  // 0098 changed it: the head behind main was broken_chain, and is now judged as it stands, done.
+  it("scenario: counts a person's signed merge of main, and the head before it is done too", () => {
     const r = new Repo(PERSON_KEYS);
     r.change("a.ts");
     r.sign("tests");
@@ -397,8 +490,8 @@ describe("person commits between step links (p86b)", () => {
     const merged = r.check([], main);
     expect(merged.answers).toEqual([DONE]);
     expect(merged.code).toBe(0);
-    expect(stale.answers).toEqual([stuck("broken_chain", behind)]);
-    expect(stale.code).toBe(1);
+    expect(stale.answers).toEqual([DONE]);
+    expect(stale.code).toBe(0);
   });
 });
 

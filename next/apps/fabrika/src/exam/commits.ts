@@ -225,12 +225,12 @@ export interface Commit {
   readonly person?: true | undefined;
 }
 
+/** A branch behind main is judged as one that is not: only what it added counts (0098). */
 export interface PullRequest {
   readonly head: string;
-  readonly containsBase: boolean;
-  /** The pull request's own change, `base...head`. */
+  /** The pull request's own change, `base...head`, from the merge base. */
   readonly changed: ReadonlyArray<string>;
-  /** `base..head`, oldest first, merges included. */
+  /** `base..head`, oldest first, merges included: the commits the branch added since it left main. */
   readonly commits: ReadonlyArray<Commit>;
   /** Every note on `refs/notes/fabrika`, the pull request's and any other. */
   readonly notes: ReadonlyArray<Signed>;
@@ -301,10 +301,6 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
     }
   }
 
-  if (!pr.containsBase) {
-    answers.push(stuck("broken_chain", pr.head));
-  }
-
   const exam = [...new Set(pr.changed.filter(isExam))].sort();
 
   if (exam.length > 0) {
@@ -326,14 +322,21 @@ interface Placed {
   readonly onMain: boolean;
   /** Commits on main before the squash (ancestors of its first parent), among the links' bases. */
   readonly before: ReadonlySet<string>;
+  /**
+   * The pull request head's tree, when the squash is that head merged onto main before it: the last
+   * link's commit, whose clean merge with the squash's first parent gives the squash's tree. Null
+   * when no such commit is known. A squash that landed behind main has a tree no link names (0098).
+   */
+  readonly head: string | null;
 }
 
 /**
- * p86 and p89 after the merge: the links logged for one squash run from its base's tree to its
- * tree. `trees` maps a commit to its tree, for the squash and the first link's base. The squash must
- * be on main, and every link's base on main before it: a base off main could start the chain
- * anywhere. A link's `base` is main when its step started, so after a `lead` merge of a moved main
- * it is older than the squash's first parent, and an ancestor is what is asked, not that parent.
+ * p86 and p89 after the merge: the links logged for one squash run from its base's tree to the pull
+ * request head's tree, which is the squash's tree when it landed up to date (0098). `trees` maps a
+ * commit to its tree, for the squash and the first link's base. The squash must be on main, and every
+ * link's base on main before it: a base off main could start the chain anywhere. A link's `base` is
+ * main when its step started, so after a `lead` merge of a moved main it is older than the squash's
+ * first parent, and an ancestor is what is asked, not that parent.
  */
 export const chain = (
   squash: string,
@@ -360,7 +363,7 @@ export const chain = (
     new Set(empty.map((l) => l.from)).size === empty.length &&
     first.from === trees.get(first.base) &&
     links.every((l, i) => i === 0 || l.from === links[i - 1]?.to) &&
-    last.to === trees.get(squash);
+    (last.to === trees.get(squash) || last.to === placed.head);
 
   if (!whole || first === undefined) {
     return [stuck("broken_chain", squash)];
@@ -574,10 +577,11 @@ const resolve = Effect.fnUntraced(function* (rev: string) {
 });
 
 /**
- * The commits to judge. `--main` is the main CI checked out, the trusted one: the keys file, the exam
- * list and the up-to-date check are read there, so a key main has dropped since the event's base stops
- * counting. With no `--main`, the base stands in, as on a laptop. With `--fetch`, the workflow's values:
- * `--main` is required, every sha is checked, and the event's shas are fetched by sha, notes too.
+ * The commits to judge. `--main` is the main CI checked out, the trusted one: the keys file and the
+ * exam list are read there, so a key main has dropped since the event's base stops counting. The
+ * commits and paths judged are the head's own, from its merge base with it. With no `--main`, the
+ * base stands in, as on a laptop. With `--fetch`, the workflow's values: `--main` is required, every
+ * sha is checked, and the event's shas are fetched by sha, notes too.
  */
 const endpoints = Effect.gen(function* () {
   const base = yield* need("--base");
@@ -734,8 +738,7 @@ const checkMain = Effect.gen(function* () {
     all.push(mine ?? (yield* signedBy(n.note)));
   }
 
-  const containsBase = (yield* run("git", ["merge-base", "--is-ancestor", main, head])).code === 0;
-  const result = check({ head, containsBase, changed, commits, notes: all }, isExam);
+  const result = check({ head, changed, commits, notes: all }, isExam);
   const extra = result.ticket === null ? "" : `, ticket ${result.ticket}`;
   yield* Console.error(`commits: ${commits.length} commits${extra}`);
   return yield* report("commits", result.answers, extra);
@@ -791,6 +794,33 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
 
 const ancestor = Effect.fnUntraced(function* (older: string, newer: string) {
   return yield* run("git", ["merge-base", "--is-ancestor", older, newer]).pipe(Effect.map((r) => r.code === 0));
+});
+
+/**
+ * The tree of `commit`, the last link's, when its clean merge onto the squash's first parent gives the
+ * squash's tree: the squash is then that pull request head, landed behind main (0098). Else null.
+ * The merge base is pinned to `base`, the first link's, which `chain` proves is on main with the
+ * signed starting tree. A row's `commit` is not signed, so its own parents must never pick the base:
+ * a commit forged with the head's tree and a newer main parent would undo main's newer work.
+ */
+const headTree = Effect.fnUntraced(function* (squash: string, base: string, commit: string) {
+  // A squash does not keep the pull request's commits in main's history.
+  if ((yield* gitMaybe(["cat-file", "-e", `${commit}^{commit}`])) === null) {
+    yield* run("git", ["fetch", "--no-tags", "-q", "origin", commit]);
+  }
+
+  const merged = yield* gitMaybe([
+    "merge-tree",
+    "--write-tree",
+    "--no-messages",
+    `--merge-base=${base}`,
+    `${squash}^1`,
+    commit,
+  ]);
+  const tree = yield* treeAt(squash);
+  return merged === null || tree === null || merged.trim() !== tree.trim()
+    ? null
+    : ((yield* treeAt(commit))?.trim() ?? null);
 });
 
 const chainMain = Effect.gen(function* () {
@@ -884,7 +914,14 @@ const chainMain = Effect.gen(function* () {
     }
 
     const onMain = yield* ancestor(squash, main);
-    answers.push(...chain(squash, rows, trees, { onMain, before }));
+    const mine = rows.filter((r) => r.link.squash === squash);
+    const first = mine.at(0)?.link;
+    const last = mine.at(-1)?.link;
+    const head =
+      first === undefined || last === undefined || last.to === trees.get(squash)
+        ? null
+        : yield* headTree(squash, first.base, last.commit);
+    answers.push(...chain(squash, rows, trees, { onMain, before, head }));
   }
 
   if (squashes.length === 0) {
