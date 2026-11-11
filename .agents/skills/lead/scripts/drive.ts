@@ -23,9 +23,9 @@
 //
 // The step is a tea machine on the Effect engine:
 //
-//   (before)           box.sh gc (at most once in 30 min across starts, always on a nearly full
-//                      disk: gcDue), then a refusal when the data volume has under 20 GB free, or
-//                      when a worktree of the main checkout holds the lane's branch. Each start
+//   (before)           a refusal when the data volume has under 20 GB free, or when a worktree
+//                      of the main checkout holds the lane's branch. No start runs or waits for
+//                      box.sh gc: its own timer and each merge do (gcloop.ts, 0101). Each start
 //                      phase's time goes on the step's entry in state/<lane>.json as `phases`
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
@@ -46,7 +46,7 @@
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
 // any agent ran: `refused:<check>`, one of agent_cap (8 agents running: the ACP harnesses drive
-// started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
+// started), low_disk (under 20 GB free, with gcloop.ts's status line), branch_checked_out (the lane's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
@@ -1766,28 +1766,6 @@ export const firstEventAt = (events: string): number | null => {
   return Number.isFinite(at) ? at : null;
 };
 
-/** How long after one sweep a step's start skips box.sh gc. A box is removable only after 2 h idle
- * (gc's IDLE), so a sweep every 30 min frees a box at most 30 min later; the ticket cites Ramp's
- * 30-minute rebuild for the same trade. One sweep took about 22 s of reads on 2026-11-11. */
-export const GC_EVERY = 30 * 60_000;
-
-/** Whether a step's start sweeps the boxes (gcDue), and why. */
-export const Sweep = Schema.TaggedUnion({ run: { reason: Schema.String }, skip: { reason: Schema.String } });
-
-/** Whether this start runs box.sh gc: always on a nearly full or unreadable disk, so the low_disk
- * refusal always follows a fresh sweep; else when no sweep started in the last GC_EVERY. */
-export const gcDue = (now: number, last: number | null, free: number | null): typeof Sweep.Type => {
-  if (free === null || free < MIN_FREE_GB) {
-    return Sweep.cases.run.make({ reason: free === null ? "df could not read the free space" : `${free} GB free` });
-  }
-
-  if (last === null || now - last >= GC_EVERY || now < last) {
-    return Sweep.cases.run.make({ reason: last === null ? "no sweep recorded" : "the last sweep is old" });
-  }
-
-  return Sweep.cases.skip.make({ reason: `the last sweep started ${Math.round((now - last) / 60_000)} min ago` });
-};
-
 /** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
 const freeGb = (path: string): number | null => {
   const r = sh("df", ["-k", path]);
@@ -2052,39 +2030,19 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     });
   }
 
-  // Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
-  // naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
-  // The sweep runs at most once in GC_EVERY across all starts, and always on a nearly full disk
-  // (gcDue); its start time is stamped first, so starts beside it skip it (ticket 673).
-  const stamp = join(env.BOXES, "state", "gc.last");
-  const before = freeGb(env.BOXES);
-  const swept = Date.parse(existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : "");
-  const due = gcDue(Date.now(), Number.isFinite(swept) ? swept : null, before);
-  let gcOut = "";
-
-  if (due._tag === "run") {
-    const gcStart = Date.now();
-    writeFileSync(stamp, `${new Date(gcStart).toISOString()}\n`);
-    const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
-      stdio: ["ignore", "pipe", 2],
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    gcOut = gc.stdout ?? "";
-    process.stderr.write(gcOut);
-    phases.push({ name: "gc", ms: Date.now() - gcStart });
-  } else {
-    process.stderr.write(`box.sh gc skipped: ${due.reason}\n`);
-  }
-
-  const free = due._tag === "run" ? freeGb(env.BOXES) : before;
+  // Dead boxes filled the disk once (2026-11-09). The cleanup is no step's job any more: a timer and
+  // each merge run it (gcloop.ts, 0101; a hung one held 12 starts over 6 minutes each on
+  // 2026-11-10). A nearly full disk refuses here and starts no cleanup of its own: the reason says
+  // when the loop last swept and what it kept, so the lead fixes the cause and never asks the owner
+  // for space. A standing box name never refuses: freshBox above takes the first free one.
+  const free = freeGb(env.BOXES);
 
   if (free === null || free < MIN_FREE_GB) {
     const said = free === null ? "df could not read the free space" : `${free} GB free`;
-    const keeps = gcOut.split("\n").filter((l) => l.startsWith("keep "));
+    const loop = sh(process.execPath, [join(HERE, "gcloop.ts"), "status", "--keeps"]);
     return refusal({
       outcome: endName({ kind: "refused", check: "low_disk" }),
-      reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
+      reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}; ${loop.out.trim() || `gcloop.ts status failed: ${tail(loop.err)}`}`,
       exit: 3,
     });
   }

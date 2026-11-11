@@ -242,7 +242,8 @@ discovery contract
 ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
 
 Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
-when called: `drive.ts` runs `box.sh gc` itself on start.
+when called. Box cleanup (`box.sh gc`) runs on a launchd timer and after each merge, never on a
+step's start ([0101](./.decisions/0101-box-cleanup-runs-on-a-timer.md)): `gcloop.ts`.
 
 Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
 GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).

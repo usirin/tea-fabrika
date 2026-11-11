@@ -32,6 +32,8 @@
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
+#   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
+#     background and the merge's own exit never waits on it
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -505,4 +507,7 @@ if cd "$MAIN"; then
 else
 	echo "kept cleanup: cannot leave catch-up checkout"
 fi
+# One box cleanup sweep after each merge (0101). kick returns at once and the sweep runs on, so
+# trouble here prints a line and never turns a landed merge red.
+node "$LEAD/gcloop.ts" kick --trigger merge || echo "pr $pr: box cleanup not started"
 exit 0
