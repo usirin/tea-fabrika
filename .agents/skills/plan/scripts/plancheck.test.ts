@@ -12,6 +12,8 @@ import "../../mutation/scripts/sample.ts?raw";
 import "../../mutation/scripts/scope.ts?raw";
 import "./plancheck.sh?raw";
 import "../../lead/scripts/leakgrep.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import "../../lead/scripts/box.sh?raw";
@@ -933,6 +935,27 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
     rmSync(folder, { recursive: true, force: true });
   }
 };
+
+describe("T686 size advice in the draft check, today's tooling", () => {
+  // Plant: let a slice over the cap fail the draft, or drop the advice. 0087 says it advises until
+  // the replay, so the exit code is the same either way, and only a slice over 600 is named.
+  it("property: the draft names each slice over 600 product lines and never changes the exit code", () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 1, max: 1200 }), { minLength: 1, maxLength: 4 }), (slices) => {
+        const listed = slices.map((lines, at) => `${at + 1}. **Slice ${at + 1}: ${lines} lines.**`).join("\n");
+        const body = complete().replace(
+          "Size: 1 agent hour, 80 lines. Confidence: 85%.",
+          `Size: 1 agent hour. Confidence: 85%.\n\n${listed}`,
+        );
+        const ran = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+        expect(ran.code, ran.text).toBe(0);
+        const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
+        expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
+      }),
+      { seed: 686, numRuns: 4 },
+    );
+  });
+});
 
 describe("T321 K11 sections and K2 approval, today's tooling", () => {
   // Plant: count required content inside fences. Each deletion is tried alone.
