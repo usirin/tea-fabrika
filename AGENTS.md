@@ -178,16 +178,17 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
-  subject, with front files and an `internal/` no other room imports, and it re-exports no other
-  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
-  never from its own. A room offers Effect services in its own types and errors, plus the shared
-  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
-  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
-  ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the floors too, with no
-  exemption: a room whose laws need a real database writes them as a suite, read through its
-  module as `SinkTest.suite(nodeSql)`, and the room that owns the driver runs it; a helper two
-  rooms share sits on a floor both may import
+- **In `next/`, a folder of libfabrika is a module, and its rank is a layer,** like rooms on
+  floors, which stays only the analogy ([0091](./.decisions/0091-modules-and-layers.md)). A module
+  holds one subject, with front files and an `internal/` no other module imports, and it re-exports
+  no other module's names. Its layer is one line in `layer-rules.json`: a module imports only from
+  lower layers, never from its own. A module offers Effect services in its own types and errors,
+  plus the shared names beside `Id.ts`: a lower module's error is translated at the service, with
+  its cause kept, and `runtime/` never imports `ledger/`. A new file goes in its module now, before
+  the move lands ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the layers too,
+  with no exemption: a module whose laws need a real database writes them as a suite, read through
+  its namespace as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
+  two modules share sits on a layer both may import
   ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
