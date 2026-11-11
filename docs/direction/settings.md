@@ -17,9 +17,8 @@ probe. The reading is not a measurement. A tag such as [c5] points at that exper
 
 - **Instance.** One running copy of fabrika: one brain and its ledger, which clients dial. "The local
   instance" runs on a laptop, "the cloud instance" on Cloudflare
-  ([0080](../../.decisions/0080-a-running-copy-is-an-instance.md)). Code on main still says stage
-  (`localStage`, `StageError`, `STAGE`, `stage.json`) until the rename, tracker ticket 681, so a name
-  cited from code keeps that word.
+  ([0080](../../.decisions/0080-a-running-copy-is-an-instance.md)). Tracker ticket 681 renamed
+  the code to match (`localInstance`, `InstanceError`, `INSTANCE`, `instance.json`).
 - **The hands.** What runs on a person's computer and acts there: it reads files, starts processes
   and watches folders ([brain, hands, window, agent](./brain-hands-window-agent.md)).
 - **Pack.** One or more programs in a package, and the only place a program lives. It is listed by
@@ -91,7 +90,7 @@ hand     build({ packs }), the instance({ port }); no machine reads a file
 record   the instance's start entry holds the values in force and their hash, beside `build`
 ```
 
-The real fixture is in `next/apps/fabrika/src/stage-records.test.ts`. Today it writes three one-file
+The real fixture is in `next/apps/fabrika/src/instance-records.test.ts`. Today it writes three one-file
 programs into a temp home (`:145`, `:158`) and hands them to `build` by name and path (`:176`).
 Under 0083 that test changes in two ways. It writes a `pack.toml` beside the three files, listing
 them. It lists the pack in its test home's `fabrika.toml`, or through `ConfigProvider.fromUnknown`
@@ -178,7 +177,7 @@ the step order             it decides what happens next: a flow does   0074, the
 a wall                     a check, an approval, a person-only answer  the React Compiler's exceptions
 a secret                   Config.Redacted, from the env or a locker   secrets are redacted
 an identity or a founding  a fact, written once on the ledger          dev.ts --founder, --window
-state                      it changes as things run                    ~/.fabrika/stage.json
+state                      it changes as things run                    ~/.fabrika/instance.json
 process plumbing           one process telling another                 dev.ts --child, --parent
 the home itself            the files live there                        FABRIKA_HOME
 a security limit           changing it weakens recovery                P36's 10 minutes and 5 tries
@@ -213,7 +212,7 @@ export const humanApprovals = Setting.make("review.human-approvals", {
 - **The doubt.** "Makes sense as a value" is judgment. P38's plan and the next few plans will show
   whether the list covers what comes up.
 - **Today.** Breaks: `programs` (`next/apps/fabrika/src/build.ts:16`) and the record cap
-  (`stage-records.test.ts:193`) are choices only a test reaches.
+  (`instance-records.test.ts:193`) are choices only a test reaches.
 
 ### S2: declared once, and everything else comes from the declaration
 
@@ -307,7 +306,7 @@ instance.port     18787                      default
   first source that has it (experiment 251's probe). Joining the two files' pack tables by name, and
   knowing which file gave a value, may need each file to be its own small provider that tags its
   source, with the join done in the room.
-- **Today.** Breaks: a flag beats `~/.fabrika/stage.json` and then is written into it
+- **Today.** Breaks: a flag beats `~/.fabrika/instance.json` and then is written into it
   (`next/apps/fabrika/dev.ts:57`, `:76`), so a later start cannot tell a flag from a saved value,
   and nothing prints a source. Today's version prints each pick and where it came from
   (`packages/pipeline/src/setup.ts:5`).
@@ -349,7 +348,7 @@ yield* Schema.decodeUnknownEffect(Setting.fileSchema(all, "person"))(doc.value, 
   out-of-range value fails and names its key; a property that every key set outside its scope stops
   the start and is never offered as a "Did you mean".
 - **Today.** Half: the schema refuses a bad port, but `dev.ts` turns every failure into
-  `StageError({ reason: "settings" })` (`next/apps/fabrika/dev.ts:75`), so the key and the value are
+  `InstanceError({ reason: "settings" })` (`next/apps/fabrika/dev.ts:75`), so the key and the value are
   lost. Today's keys reader already gives a line (`apps/fabrika/src/host/keybindings.ts:84`).
 
 ### S6: read at the edge, handed in, and recorded
@@ -378,7 +377,7 @@ const settings = yield* Fixtures.settings.parse(provider.pipe(forPack("fixtures"
 - **The doubt.** Whether the brain's Worker gets each value as its own binding or one value as today
   (`next/apps/fabrika/alchemy.run.ts:52`). P38's plan answers it.
 - **Today.** Half: `dev.ts` reads once and hands values to the instance. But the Worker decodes
-  `STAGE` again (`next/packages/libfabrika/src/cloudflare/record.ts:83`), and no record names its
+  `INSTANCE` again (`next/packages/libfabrika/src/cloudflare/record.ts:83`), and no record names its
   settings.
 
 ### S7: you find out what you can set from fabrika itself
@@ -780,7 +779,7 @@ Not filed. One small fix the owner may pick:
 - **The glossary's `setting` row** says a setting "does not change during a run". A `live` setting
   arrives as input; the row is amended with this note.
 - **The glossary's `Policy` row** keeps restart policy out of settings, as OTP does, at 60%.
-- **`next/`'s `~/.fabrika/stage.json`** mixes saved flags with founding facts. The 2026-10-30 note
+- **`next/`'s `~/.fabrika/instance.json`** mixes saved flags with founding facts. The 2026-10-30 note
   says "State is not settings". P38 splits it.
 
 ## What it costs
@@ -791,7 +790,7 @@ Not filed. One small fix the owner may pick:
 - The `Toml` service and its first Layer, about 100 to 200 lines with tests, a guess.
 - `dev.ts` moves its flags onto the declarations, and `build`, the local instance and the Worker take
   one `Settings` value.
-- `stage-records.test.ts` writes a `pack.toml` and names its programs under the pack.
+- `instance-records.test.ts` writes a `pack.toml` and names its programs under the pack.
 - One settings entry per process start.
 
 ## What it cannot tell us

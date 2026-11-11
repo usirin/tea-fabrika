@@ -9,7 +9,7 @@ import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/i
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
@@ -191,7 +191,7 @@ const replyCase = (
           ),
         ),
         Layer.provide(
-          LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+          LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
             Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
           ),
         ),

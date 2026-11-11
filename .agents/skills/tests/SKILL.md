@@ -77,7 +77,8 @@ the rest.
 5. **Commit** with the step-commit skill. In a box use `--commit-only`; fetch signs the run.
 6. **Report** each new law with `file:line` and how you saw it fail, each plant you ran for it (the
    file and line you broke, and the law's result), anything in the plan you found wrong, and any
-   red that is a sandbox limit.
+   red that is a sandbox limit. Your answer's JSON object lists the plants under `plants`, each
+   `{law, plant, result}` with `result` `red` or `green`, so they land on your field row.
 
 ## Outside your task
 
