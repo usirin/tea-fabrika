@@ -3,12 +3,14 @@
 // `LedgerCauseTest.suite(law, fresh, corrupt)`; the module that owns the driver runs it (0062).
 //
 // Audit sites: `Ledger.ts:86` (a rejected stub call), `Ledger.ts:91` (an answer that does not
-// decode), `internal/ledgerStore.ts:192` (a throw in the atomic step, and its pass-through branch).
+// decode), both now in `LedgerRemote.ts` (0095), `internal/ledgerStore.ts:192` (a throw in the atomic step, and its pass-through branch).
 import { describe, expect } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
+import * as LedgerRemote from "./LedgerRemote.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import { Appended, type Line, lineFor, Waited } from "./Log.ts";
 import { Referee } from "./Referee.ts";
 
@@ -120,8 +122,8 @@ export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) =>
  * the first entry's required integer `seen` to `text`, since only a test file writes ledger tables.
  */
 export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: string) => void) => {
-  describe("T695, Ledger.remote keeps what failed", () => {
-    // C1, Ledger.ts:86. Plant: `catch: () => new LedgerError({ reason: "unreachable" })`.
+  describe("T695, LedgerRemote.layer keeps what failed", () => {
+    // C1, LedgerRemote.ts (was Ledger.ts:86). Plant: `catch: () => new LedgerError({ reason: "unreachable" })`.
     law(
       "C1: a generated rejection on any call is `unreachable` with that very value as its cause",
       fc.record({ method: methods, failure: failures }),
@@ -131,10 +133,10 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
           expect(error.cause).toBe(failure);
-        }).pipe(Effect.provide(Ledger.remote(rejecting(failure), { reader: READER }))),
+        }).pipe(Effect.provide(LedgerRemote.layer(rejecting(failure), { reader: READER }))),
     );
 
-    // C3, Ledger.ts:91. Plant: `Effect.mapError(() => new LedgerError({ reason: "bad_row" }))`.
+    // C3, LedgerRemote.ts (was Ledger.ts:91). Plant: `Effect.mapError(() => new LedgerError({ reason: "bad_row" }))`.
     law(
       "C3: an answer with a damaged required field is `bad_row` carrying the decoder's SchemaError",
       fc.record({ method: methods, rev: fc.integer({ min: 1, max: 1_000 }), bad: fc.string() }),
@@ -143,7 +145,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
           const error = yield* Effect.flip(callOn(method));
           expect(error.reason).toBe("bad_row");
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
-        }).pipe(Effect.provide(Ledger.remote(answering(damaged(method, rev, bad)), { reader: READER }))),
+        }).pipe(Effect.provide(LedgerRemote.layer(answering(damaged(method, rev, bad)), { reader: READER }))),
     );
 
     // C2: a remote call whose referee failed keeps the whole chain: the outer `unreachable` holds
@@ -170,7 +172,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
             wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
           };
-          const remote = Ledger.remote(calls, { reader: READER });
+          const remote = LedgerRemote.layer(calls, { reader: READER });
           // Setup on the real referee first: the tables exist, then the disk fails.
           yield* Effect.provide(callOn("append"), remote);
           planted.arm();
@@ -188,7 +190,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
     );
   });
 
-  describe("T695, Ledger.sql keeps what the store threw", () => {
+  describe("T695, LedgerSql.layer keeps what the store threw", () => {
     // C1, ledgerStore.ts:192. Plant: drop `cause` from the `storage` failure.
     law(
       "C1: a generated throw in the atomic step is `storage` with the thrown value as its cause",
@@ -196,7 +198,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       ({ method, failure }) =>
         Effect.gen(function* () {
           const planted = throwing(fresh(), failure);
-          const ledger = Ledger.sql(planted.sql, { reader: READER }).pipe(Layer.provide(ring));
+          const ledger = LedgerSql.layer(planted.sql, { reader: READER }).pipe(Layer.provide(ring));
           yield* Effect.provide(callOn("append"), ledger);
           planted.arm();
           const error = yield* Effect.flip(Effect.provide(callOn(method), ledger));
@@ -212,7 +214,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       ({ notes, bad }) =>
         Effect.gen(function* () {
           const sql = fresh();
-          const ledger = Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(ring));
+          const ledger = LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(ring));
           yield* Effect.provide(
             Effect.forEach(notes, (note, n) => Ledger.use((l) => l.append("notes:1", `w-${n}`, line(note))), {
               concurrency: 1,
@@ -239,7 +241,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
         Effect.gen(function* () {
           const thrown = new LedgerError({ reason, cause: failure });
           const planted = throwing(fresh(), thrown);
-          const ledger = Ledger.sql(planted.sql, { reader: READER }).pipe(Layer.provide(ring));
+          const ledger = LedgerSql.layer(planted.sql, { reader: READER }).pipe(Layer.provide(ring));
           yield* Effect.provide(callOn("append"), ledger);
           planted.arm();
           const error = yield* Effect.flip(Effect.provide(callOn(method), ledger));

@@ -2,7 +2,8 @@
 // 12). Audit site: `Id.ts:198`, a throw while drawing random bits. `Id.ts:183` decodes an ID the
 // generator built from its own registered prefix, which no generated input can make fail.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -39,7 +40,8 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
                 yield* ids.next(schema);
               }
 
-              yield* Effect.sleep(Duration.millis(1));
+              // A new millisecond on the test clock, so the next ID draws fresh random bits.
+              yield* TestClock.adjust(Duration.millis(1));
               const error = yield* Effect.flip(
                 Effect.acquireUseRelease(
                   Effect.sync(() => randomThrows(failure)),
@@ -50,7 +52,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
               expect(error).toBeInstanceOf(Id.IdError);
               expect(error.reason).toBe("entropy");
               expect(error.cause).toBe(failure);
-            }).pipe(Effect.provide(Id.Generator.layer)),
+            }).pipe(Effect.provide(Layer.merge(Id.Generator.layer, TestClock.layer()))),
           ),
       ),
       { seed: SEED, numRuns: 100 },

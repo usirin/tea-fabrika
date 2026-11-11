@@ -20,6 +20,7 @@ import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Line, lineFor } from "../ledger/Log.ts";
 import { Connections } from "../presence/Connections.ts";
@@ -69,7 +70,7 @@ const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm
 };
 
 const ledgerOn = (sql: Sql) =>
-  Ledger.sql(sql, { reader: PROCESS }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
+  LedgerSql.layer(sql, { reader: PROCESS }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
 
 const processStore = (sql: Sql, storage?: Parameters<typeof ProcessStore.layer>[1]["storage"]) =>
   ProcessStore.layer(sql, { process: PROCESS, ...(storage === undefined ? {} : { storage }) }).pipe(

@@ -8,6 +8,8 @@ import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "../ledger/Ledger.ts";
 import * as LedgerCauseTest from "../ledger/LedgerCauseTest.ts";
+import * as LedgerRemote from "../ledger/LedgerRemote.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import * as RuntimeCauseTest from "../runtime/RuntimeCauseTest.ts";
@@ -125,7 +127,7 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
       wait: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
     };
     return Ledger.use((ledger) => ledger.wait("notes:1", 0)).pipe(
-      Effect.provide(Ledger.remote(calls, { reader: "connection:t1" })),
+      Effect.provide(LedgerRemote.layer(calls, { reader: "connection:t1" })),
     );
   }
 
@@ -149,7 +151,9 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
   };
   const store = ProcessStore.layer(broken, { process: PROCESS }).pipe(
     Layer.provide(
-      Ledger.sql(disk, { reader: PROCESS }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+      LedgerSql.layer(disk, { reader: PROCESS }).pipe(
+        Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+      ),
     ),
   );
   return ProcessStore.use((s) => s.load).pipe(Effect.provide(store));
