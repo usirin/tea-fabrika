@@ -210,16 +210,16 @@ export class SpanSink extends Context.Service<
 >()("@kampus/libfabrika/SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
    *  the tables come with the first span. */
-  static readonly layer = (sql: Sql, who: { readonly object: string }): Layer.Layer<SpanSink> =>
+  static readonly layer = (sql: Sql, options: { readonly object: string }): Layer.Layer<SpanSink> =>
     Layer.unwrap(
       Effect.sync(() => {
-        const { tracer, sink } = make(sql, who);
+        const { tracer, sink } = make(sql, options);
         return Layer.merge(Layer.succeed(SpanSink, sink), Layer.succeed(Tracer.Tracer, tracer));
       }),
     );
 }
 
-const make = (sql: Sql, who: { readonly object: string }) => {
+const make = (sql: Sql, options: { readonly object: string }) => {
   let ready = false;
   /** Spans held after a full disk, a failure owed to the next flush, and the newest hour sized.
    *  Changed only by what `applyCell` returns. Memory only: a wake checks once more. */
@@ -280,9 +280,9 @@ const make = (sql: Sql, who: { readonly object: string }) => {
   };
 
   const tracer = Tracer.make({
-    span: (options) =>
-      new SinkSpan(options, (span, endTime, exit) => {
-        commit([ended(span, endTime, exit, who.object)], Number(endTime / 1_000_000n), true);
+    span: (init) =>
+      new SinkSpan(init, (span, endTime, exit) => {
+        commit([ended(span, endTime, exit, options.object)], Number(endTime / 1_000_000n), true);
       }),
   });
 
@@ -367,7 +367,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
       }
     }
 
-    yield* archiveDays(sql, who.object, yield* Clock.currentTimeMillis);
+    yield* archiveDays(sql, options.object, yield* Clock.currentTimeMillis);
     return { sent };
   });
 

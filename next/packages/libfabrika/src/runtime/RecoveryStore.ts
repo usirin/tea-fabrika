@@ -36,7 +36,7 @@ export class RecoveryStore extends Context.Service<
 >()("@kampus/libfabrika/RecoveryStore") {
   static readonly layer = (
     sql: Sql,
-    who: { readonly name: string; readonly capacity: number },
+    options: { readonly name: string; readonly capacity: number },
   ): Layer.Layer<RecoveryStore> => {
     const stored = <A>(f: () => A) =>
       Effect.try({
@@ -53,7 +53,7 @@ export class RecoveryStore extends Context.Service<
             : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
       });
     const snapshot = () => {
-      const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name);
+      const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name);
 
       if (row === undefined) {
         return null;
@@ -61,7 +61,7 @@ export class RecoveryStore extends Context.Service<
 
       const saved = decode(row.value);
 
-      if (saved.name !== who.name) {
+      if (saved.name !== options.name) {
         throw new LedgerError({ reason: "bad_row" });
       }
 
@@ -76,7 +76,10 @@ export class RecoveryStore extends Context.Service<
 
       const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
 
-      for (const row of sql.exec("SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid", who.name)) {
+      for (const row of sql.exec(
+        "SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid",
+        options.name,
+      )) {
         const receipt = receiptFor(row.value, row.letter);
         receipts.set(receipt.letter, receipt);
       }
@@ -85,7 +88,7 @@ export class RecoveryStore extends Context.Service<
     });
     const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
       return yield* stored(() => {
-        const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", who.name, letter);
+        const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", options.name, letter);
 
         // Read old single-row snapshots until their next atomic save splits the receipts.
         if (row === undefined) {
@@ -99,13 +102,13 @@ export class RecoveryStore extends Context.Service<
       stored(() => {
         const saved = Schema.decodeUnknownSync(Supervision)(value);
 
-        if (saved.name !== who.name) {
+        if (saved.name !== options.name) {
           throw new LedgerError({ reason: "bad_row" });
         }
 
         const text = encode({ ...saved, receipts: [] });
         sql.transaction(() => {
-          const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name)[0];
+          const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name)[0];
           let growth = bytes(text) - (typeof old?.value === "string" ? bytes(old.value) : 0);
           const changed: Array<{ letter: string; text: string }> = [];
           // Omitted receipts are retained, including during migration from the old snapshot.
@@ -119,7 +122,7 @@ export class RecoveryStore extends Context.Service<
             const next = encodeReceipt(receipt);
             const [prior] = sql.exec(
               "SELECT value FROM process_receipts WHERE name=? AND letter=?",
-              who.name,
+              options.name,
               receipt.letter,
             );
 
@@ -130,20 +133,20 @@ export class RecoveryStore extends Context.Service<
             growth += bytes(next) - (typeof prior?.value === "string" ? bytes(prior.value) : 0);
 
             if (prior === undefined) {
-              growth += bytes(who.name) + bytes(receipt.letter);
+              growth += bytes(options.name) + bytes(receipt.letter);
             }
 
             changed.push({ letter: receipt.letter, text: next });
           }
 
-          if (sql.size() + growth > who.capacity) {
+          if (sql.size() + growth > options.capacity) {
             throw new LedgerError({ reason: "storage" });
           }
 
           for (const receipt of changed) {
             sql.exec(
               "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
-              who.name,
+              options.name,
               receipt.letter,
               receipt.text,
             );
@@ -152,7 +155,7 @@ export class RecoveryStore extends Context.Service<
           if (old?.value !== text) {
             sql.exec(
               "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
-              who.name,
+              options.name,
               text,
             );
           }

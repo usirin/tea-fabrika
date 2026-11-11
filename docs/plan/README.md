@@ -121,6 +121,13 @@ and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
 storage for these saved shapes; this change does not migrate old lab stores. Today's version
 keeps `why`. → lands once its steps pass
 
+Question-word sweep, ticket 682 (2026-11-11): `next/` and `.agents/` name no key, field, option or
+binding `where`, `why`, `what`, `who` or `how` ([0081](../../.decisions/0081-no-question-word-names.md)).
+oxlint's `eslint/id-denylist` holds every identifier, and `fabrika/no-question-word-key`, renamed from
+`fabrika/no-why-key`, holds quoted, computed and template keys. A saw says `location` and `method`, a
+socket's admitted client is `identity`, and a saved waiting row says `location`; no old-key reader is
+added. Today's outcome, field and lane formats keep their keys. → lands once its steps pass
+
 Today's hand-run tooling, ticket 318: [review, cleanup and saved waits](../direction/hand-run-review-and-cleanup.md)
 is decided 2026-11-08. Review sweeps every law and decided note and answers once. Drivers save
 waits and end; lead starts fresh drivers when the saved fact holds. After merge, catch-up keeps

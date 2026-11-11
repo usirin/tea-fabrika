@@ -51,11 +51,11 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("accepted"), keys: Schema.Array(Schema.String) }),
 ]);
 
-/** The saved row: the legacy `where` key, and `tabs` derived from its clients. @internal */
+/** The saved row, with `tabs` derived from its clients. @internal */
 export const Row = Schema.Struct({
   key: Schema.String,
   label: Schema.String,
-  where: Schema.String,
+  location: Schema.String,
   code: Schema.String,
   until: Schema.Number,
   tabs: Schema.Int,
@@ -71,7 +71,7 @@ const Saved = Schema.Struct({ rows: Schema.Array(Row), ...Config.fields });
 const toPending = (r: Row): Pending => ({
   key: r.key,
   label: r.label,
-  location: r.where,
+  location: r.location,
   code: r.code,
   until: r.until,
   clients: r.clients,
@@ -83,7 +83,7 @@ const toPending = (r: Row): Pending => ({
 const toRow = (p: Pending): Row => ({
   key: p.key,
   label: p.label,
-  where: p.location,
+  location: p.location,
   code: p.code,
   until: p.until,
   tabs: p.clients.length,

@@ -308,14 +308,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   });
   const membership = Effect.fnUntraced(function* (raw: string) {
     const members = yield* clients.members;
-    const who = admitted(members, raw);
+    const identity = admitted(members, raw);
 
-    if ("reason" in who) {
+    if ("reason" in identity) {
       return yield* new NotGranted({});
     }
 
     const key = yield* fingerprint(raw, false);
-    return Writer.cases[who.as === "agent" ? "agent" : "person"].make({ key, for: who.person });
+    return Writer.cases[identity.as === "agent" ? "agent" : "person"].make({ key, for: identity.person });
   });
   const sessions = yield* Effect.service(SessionManager).pipe(
     Effect.provide(
@@ -477,10 +477,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           const members = existing ?? (yield* clients.members);
-          const who = admitted(members, raw);
-          return "reason" in who
+          const identity = admitted(members, raw);
+          return "reason" in identity
             ? Admission.cases.refused.make({ reason: "not_granted" })
-            : Admission.cases.admitted.make({ who: { ...who, key: trusted.name } });
+            : Admission.cases.admitted.make({ identity: { ...identity, key: trusted.name } });
         }),
       }),
     );
@@ -523,8 +523,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const recordHello = Effect.fn("gateway.initialize")(function* () {
       const from = yield* fromHere({
-        by: result.who.key,
-        for: result.who.person,
+        by: result.identity.key,
+        for: result.identity.person,
         seen: 0,
         parent: null,
         build: options.build,
@@ -554,7 +554,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           Attached,
           Attached.cases.online.make({
             client,
-            who: result.who,
+            identity: result.identity,
             version: result.version,
             waits: [],
             watching: false,

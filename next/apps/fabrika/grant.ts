@@ -74,8 +74,8 @@ const grant = Command.make(
       saw: {
         code: target.code,
         label: values.label ?? target.label,
-        where: "local",
-        how: "command",
+        location: "local",
+        method: "command",
         check: "none",
         has: [],
       },

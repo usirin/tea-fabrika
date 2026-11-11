@@ -454,8 +454,8 @@ const greenOf = (report: string) => {
 type Judged = { readonly outcome: Outcome; readonly reason: string };
 type Ended = { readonly outcome: End; readonly reason: string };
 
-const stuck = (why: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
-  outcome: { kind: "stuck", why },
+const stuck = (reason: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
+  outcome: { kind: "stuck", why: reason },
   reason: text,
 });
 
@@ -503,6 +503,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
   // A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
   if (read.manifests.length > 0) {
     return {
+      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
       reason:
         `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
@@ -564,6 +565,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
     case "ask":
+      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
     case "skip":
       return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
@@ -1256,10 +1258,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const head = ask.step === "review" ? ask.base : git("rev-parse", ref).out.trim();
-        const failed = (what: string, r: { code: number; err: string }) => ({
+        const failed = (message: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
-          problem: `${what}: ${tail(r.err)}`,
+          problem: `${message}: ${tail(r.err)}`,
         });
         const count = git("rev-list", "--count", `${ask.base}..${head}`);
 
