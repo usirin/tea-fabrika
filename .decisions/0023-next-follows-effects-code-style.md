@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md)
+status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md), [0095](0095-a-service-file-holds-only-its-contract.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---

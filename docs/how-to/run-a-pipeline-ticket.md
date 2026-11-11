@@ -187,19 +187,20 @@ names and account names. Do not give the merge yes until that is clean.
 
 ## What to log
 
-The same day, in [`field/`](../../field/README.md):
+The same day, in [`field/`](../../field/README.md), each row its own file named
+`<date>-<slug>.json` ([how to write a row](../../field/README.md#how-to-write-a-row)):
 
-- **`runs.jsonl`, one `pipeline` row:** the lane as a whole, with `ticket` as `<owner>/<repo>#117`,
+- **`runs/`, one `pipeline` row:** the lane as a whole, with `ticket` as `<owner>/<repo>#117`,
   `pr` as the PR it opened (or `null`), and `started` and `ended`. New rows write `ticket` and `pr`,
   not `lane`.
-- **`runs.jsonl`, one `step` row per agent run.** Its `parent` is the `pipeline` row's `run`, and its
+- **`runs/`, one `step` row per agent run.** Its `parent` is the `pipeline` row's `run`, and its
   `why` starts `pipeline, tracker ticket 117, <step>:`, so it cannot be taken for an older row with
   the same number.
 - **The numbers:** the lane prints them for each step and keeps them on the ticket. `field/README.md`
   says which goes where.
 - **Dollars:** `gpt-6-astra` has no known price, so the app's cost reads zero for it. Write `costUsd`
   for Claude only, and say the Codex dollars are unknown.
-- **`notes.jsonl`, one note per thing** that broke, cost too much, needed a person or worked well.
+- **`notes/`, one note per thing** that broke, cost too much, needed a person or worked well.
 - **Say which parts were which:** in the `pipeline` row's `why`, the lane and step machines were this
   repo's machine; the agents were Codex and Claude; today's fabrika, the older pipeline, ran none of it.
 
