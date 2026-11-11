@@ -3,9 +3,9 @@ import type { CreateRule } from "@oxlint/plugins";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const OWNERS = new Set([
-  "next/packages/libfabrika/src/data/ledger-store.ts",
-  "next/packages/libfabrika/src/data/referee.ts",
-  "next/packages/libfabrika/src/data/ledger.ts",
+  "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts",
+  "next/packages/libfabrika/src/ledger/Referee.ts",
+  "next/packages/libfabrika/src/ledger/Ledger.ts",
 ]);
 
 // Strip SQL comments before recognizing quoted or plain table names in table positions.

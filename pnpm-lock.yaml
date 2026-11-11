@@ -345,7 +345,7 @@ overrides:
 patchedDependencies:
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': 7cc192309c69f6bde73904889a3e499616b2c2d5bfec0ab06dc1907ad8dc9131
   '@alchemy.run/cloudflare@2.0.0-beta.84': 3af6d632e341410524197081b8e7c723747ae8508a6d389f49e82abcc6c3d2f0
-  '@demlik/code-graph@0.15.0': 327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83
+  '@demlik/code-graph@0.15.0': 13e1179b1894479e58c380d74fc27e3cf17c7b7b73217b601f706873a34ed7c0
   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
   alchemy@2.0.0-beta.84: 8605064856c7743d5f1bc7c11b9d43f9acac2997a315121bbbf59edd4013109a
@@ -358,7 +358,7 @@ importers:
     dependencies:
       '@demlik/code-graph':
         specifier: 'catalog:'
-        version: 0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)
+        version: 0.15.0(patch_hash=13e1179b1894479e58c380d74fc27e3cf17c7b7b73217b601f706873a34ed7c0)
       '@demlik/tea':
         specifier: 'catalog:'
         version: 0.25.0(patch_hash=a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3)(@opentelemetry/api@1.9.1)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
@@ -396,6 +396,9 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.157.0
       oxfmt:
         specifier: 'catalog:'
         version: 0.75.0
@@ -6427,7 +6430,7 @@ snapshots:
       smol-toml: 1.9.0
       zod: 4.0.0
 
-  '@demlik/code-graph@0.15.0(patch_hash=327c1b18f1f541ef6d69cb38b361a79f6019380cf78f69482f35c7b3916bcf83)':
+  '@demlik/code-graph@0.15.0(patch_hash=13e1179b1894479e58c380d74fc27e3cf17c7b7b73217b601f706873a34ed7c0)':
     dependencies:
       '@typescript/native-preview': 7.0.0-dev.20260707.2
       chalk: 5.6.2
