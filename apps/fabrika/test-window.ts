@@ -12,8 +12,9 @@ import { corner, quietEnv } from "./src/launch.ts";
 // `launch`, and nothing else imports Playwright's `_electron` (.oxlintrc.json). A test window
 // stays out of the way of the person at the laptop (AGENTS.md, "Go easy on the machine"):
 //
-//   the home        its own, short: a fresh one under the temp root, or the one given. A home
-//                   whose socket path passes macOS's limit is refused before Electron starts
+//   the home        its own, short: a fresh one under the temp root, or the one given. An empty
+//                   home, or one whose socket path passes macOS's limit, is refused before
+//                   Electron starts
 //   the env         the parent's, less FABRIKA_FOREGROUND (launch.ts, `quietEnv`), so the start
 //                   is quiet and the app hides the window itself before it is ever shown
 //   the size        `size` only: content size, then back to the work area's corner. A test never
@@ -50,6 +51,10 @@ const envFor = (parent: Readonly<Record<string, string | undefined>>, home: stri
 
   if (made.kind === "long") {
     throw new Error(`a test window's home is too long for the host's socket: ${made.home}`);
+  }
+
+  if (made.kind === "empty") {
+    throw new Error("a test window needs a home: an empty FABRIKA_HOME starts the owner's app");
   }
 
   return made.env;

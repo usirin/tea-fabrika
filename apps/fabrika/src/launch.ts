@@ -17,6 +17,7 @@
 //
 //   quietEnv(parent, home)            ok    the parent's env, less FABRIKA_FOREGROUND, on that home
 //                                     long  the home's socket path passes macOS's limit
+//                                     empty no home at all: launchOf would read it as the owner's
 
 import { fitsSocket } from "./host/socket.ts";
 
@@ -80,7 +81,14 @@ export const hidden = (area: Area, size: Size): Hidden => ({ opacity: 0, ignoreM
 export const quietEnv = (
   parent: Readonly<Record<string, string | undefined>>,
   home: string,
-): { readonly kind: "ok"; readonly env: Record<string, string> } | { readonly kind: "long"; readonly home: string } => {
+):
+  | { readonly kind: "ok"; readonly env: Record<string, string> }
+  | { readonly kind: "long"; readonly home: string }
+  | { readonly kind: "empty" } => {
+  if (home === "") {
+    return { kind: "empty" };
+  }
+
   if (!fitsSocket(home)) {
     return { kind: "long", home };
   }
