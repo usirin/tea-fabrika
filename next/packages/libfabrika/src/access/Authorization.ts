@@ -3,7 +3,8 @@ import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";
 import { short } from "../telemetry/Trace.ts";
-import { admitted, foldAccess, MemberEvent } from "./Access.ts";
+import { admitted, MemberEvent } from "./Access.ts";
+import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
