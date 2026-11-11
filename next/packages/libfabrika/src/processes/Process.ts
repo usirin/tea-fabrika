@@ -1,14 +1,27 @@
+import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import {
+  Code,
+  Count,
+  type Life,
+  type Model,
+  Owner,
+  ProcessEvent,
+  processTableFor,
+  Recipient,
+  signalId,
+  Start,
+  State,
+  Text,
+  watchKey,
+} from "./internal/processTable.ts";
 import type { From } from "./Mailbox.ts";
 
-/**
- * Every text a client gives that lands in a brain line: at most 256 characters, counted as
- * `string.length`, so no brain line can reach the ledger's per-line limit.
- */
-const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
+export { Owner, ProcessEvent, Recipient, signalId, Start, State };
+
 const PROCESSES = "processes";
 const CLIENTS = "client:";
 /** Names that lead streams this layer or the gateway already owns. */
@@ -23,38 +36,7 @@ const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLI
 /** A client id has no `:`, the mark of a process name such as `counter:1`. */
 const ClientId = Text.check(Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0-9][a-z0-9._-]*$`)));
 
-const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
-const Code = Schema.Struct({ program: Text, hash: Text });
-export const Owner = Schema.TaggedUnion({ brain: {}, process: { process: ProcessId } });
-
-export const Recipient = Schema.TaggedUnion({
-  process: { process: ProcessId },
-  client: { client: Text, session: ProcessId },
-});
-
 export type Caller = { readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type };
-
-export const Start = Schema.TaggedUnion({
-  first: { id: Text, name: Text, code: Code },
-  again: { id: Text, name: Text, code: Code, after: ProcessId, reason: Text },
-});
-export type Start = typeof Start.Type;
-
-export const State = Schema.TaggedUnion({
-  live: { process: ProcessId, code: Code },
-  ended: { process: ProcessId, code: Code, reason: Text },
-  down: { process: ProcessId, code: Code, reason: Text, crashes: Count, until: Schema.Int },
-});
-
-export const ProcessEvent = Schema.TaggedUnion({
-  registered: { name: Text, program: Text, owner: Owner },
-  started: { process: ProcessId, name: Text, program: Text, hash: Text },
-  exited: { process: ProcessId, reason: Text },
-  restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
-  down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
-  monitored: { ref: Text, process: ProcessId, to: Recipient },
-  demonitored: { ref: Text, to: Recipient, reason: Schema.Literals(["canceled", "watcher_exited"]) },
-});
 
 /** Where a registered name's own lifecycle events live: `processes/<name>`. */
 const eventStream = (name: string): string => `${PROCESSES}/${name}`;
@@ -162,21 +144,19 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
   ]),
 }) {}
 
-type Reservation = typeof ProcessEvent.cases.registered.Type;
-
-type Life = {
-  readonly name: string;
-  readonly state: typeof State.Type;
-  readonly request: Start;
-  readonly from: From;
-  readonly rev: number;
-};
-
-/** `round` counts this (recipient, ref)'s monitored events, so a monitor after a cancel is new. */
+/** A live watch as queries return it; `canceled` is always false and never stored. */
 type Watch = typeof ProcessEvent.cases.monitored.Type & {
   readonly canceled: boolean;
   readonly round: number;
 };
+
+type Held = Model["watches"] extends ReadonlyMap<string, infer W> ? W : never;
+
+const shown = (watch: Held): Watch => ({
+  ...ProcessEvent.cases.monitored.make({ ref: watch.ref, process: watch.process, to: watch.to }),
+  canceled: false,
+  round: watch.round,
+});
 
 export type StartAnswer = { readonly process: string; readonly rev: number };
 
@@ -188,24 +168,12 @@ export type ProcessInfo = {
   readonly restarts: number;
 };
 
-const decodeEvent = Schema.decodeUnknownSync(ProcessEvent);
 const decodeDown = Schema.decodeUnknownOption(Down);
 const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({ reason }));
 const isText = Schema.is(Text);
 
-const canonical = (to: typeof Recipient.Type): typeof Recipient.Type =>
-  to._tag === "process"
-    ? Recipient.cases.process.make({ process: to.process })
-    : Recipient.cases.client.make({ client: to.client, session: to.session });
-
-const watchKey = (to: typeof Recipient.Type, ref: string): string => JSON.stringify([canonical(to), ref]);
-
 /** A client's own inbox, `client:<id>/inbox`, where its DOWNs land; never a process's inbox. */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
-
-/** The one id a DOWN for (recipient, ref) in that watch's `round` is written under. */
-export const signalId = (to: typeof Recipient.Type, ref: string, round: number): string =>
-  JSON.stringify(["DOWN", canonical(to), ref, round]);
 
 const SIGNAL_LEAD = JSON.stringify(["DOWN"]).slice(0, -1);
 
@@ -223,101 +191,18 @@ export class ProcessTable {
   static readonly stream = PROCESSES;
   static readonly events = eventStream;
   readonly #by: string;
-  readonly #names = new Map<string, Reservation>();
-  readonly #lives = new Map<string, Life>();
-  readonly #watches = new Map<string, Watch>();
-  readonly #current = new Map<string, string>();
-  readonly #restarts = new Map<string, Array<number>>();
+  readonly #model: Model;
 
   constructor(entries: Iterable<Entry>, by: string) {
     this.#by = by;
+    const machine = processTableFor(by);
+    let model = machine.init(null, undefined)[0];
 
     for (const entry of entries) {
-      if (!Object.hasOwn(ProcessEvent.cases, entry._tag) || entry.by !== by) {
-        continue;
-      }
-
-      const event = decodeEvent(valueFor(entry));
-
-      switch (event._tag) {
-        case "registered":
-          this.#names.set(event.name, event);
-          break;
-        case "started": {
-          const code = { program: event.program, hash: event.hash };
-          this.#lives.set(event.process, {
-            name: event.name,
-            state: State.cases.live.make({ process: event.process, code }),
-            request: Start.cases.first.make({ id: entry.id, name: event.name, code }),
-            from: entry,
-            rev: entry.rev,
-          });
-          this.#current.set(event.name, event.process);
-          break;
-        }
-        case "restarted": {
-          const life = this.require(event.process);
-          this.#lives.set(event.process, {
-            ...life,
-            request: Start.cases.again.make({
-              id: life.request.id,
-              name: event.name,
-              code: life.state.code,
-              after: event.after,
-              reason: event.reason,
-            }),
-          });
-          this.#restarts.set(event.name, [...(this.#restarts.get(event.name) ?? []), entry.arrivedAt]);
-          break;
-        }
-        case "exited": {
-          const life = this.require(event.process);
-          this.#lives.set(event.process, {
-            ...life,
-            state: State.cases.ended.make({
-              process: event.process,
-              code: life.state.code,
-              reason: event.reason,
-            }),
-          });
-          break;
-        }
-        case "down": {
-          const life = this.require(event.process);
-          this.#lives.set(event.process, {
-            ...life,
-            state: State.cases.down.make({ ...event, code: life.state.code }),
-          });
-          break;
-        }
-        case "monitored": {
-          const key = watchKey(event.to, event.ref);
-          const round = (this.#watches.get(key)?.round ?? 0) + 1;
-          this.#watches.set(key, { ...event, canceled: false, round });
-          break;
-        }
-        case "demonitored": {
-          const key = watchKey(event.to, event.ref);
-          const watch = this.#watches.get(key);
-
-          if (watch !== undefined) {
-            this.#watches.set(key, { ...watch, canceled: true });
-          }
-
-          break;
-        }
-      }
-    }
-  }
-
-  private require(process: string): Life {
-    const life = this.#lives.get(process);
-
-    if (life === undefined) {
-      throw new LedgerError({ reason: "bad_row" });
+      model = applyCell(machine, model, { type: "recorded", entry })[0];
     }
 
-    return life;
+    this.#model = model;
   }
 
   static read(read: (stream: string, after: number) => Iterable<Entry>, by: string): ProcessTable {
@@ -340,7 +225,7 @@ export class ProcessTable {
       return denied("bad_text");
     }
 
-    const saved = [...this.#lives.values()].find((life) => life.request.id === request.id);
+    const saved = [...this.#model.lives.values()].find((life) => life.request.id === request.id);
 
     if (saved !== undefined) {
       if (!Equal.equals(saved.request, request) || saved.from.for !== from.for || saved.from.parent !== from.parent) {
@@ -353,7 +238,7 @@ export class ProcessTable {
         : Result.succeed(Option.some({ process: saved.state.process, rev: saved.rev }));
     }
 
-    const name = this.#names.get(request.name);
+    const name = this.#model.names.get(request.name);
 
     if (request._tag === "first") {
       return name === undefined ? Result.succeed(Option.none()) : denied("name_taken");
@@ -367,7 +252,7 @@ export class ProcessTable {
       return denied("name_taken");
     }
 
-    if (this.#current.get(request.name) !== request.after) {
+    if (this.#model.current.get(request.name) !== request.after) {
       return denied("stale");
     }
 
@@ -379,11 +264,11 @@ export class ProcessTable {
   }
 
   collision(process: string): boolean {
-    return this.#lives.has(process);
+    return this.#model.lives.has(process);
   }
 
   isLive(process: string): boolean {
-    return this.#lives.get(process)?.state._tag === "live";
+    return this.#model.lives.get(process)?.state._tag === "live";
   }
 
   status(
@@ -397,30 +282,32 @@ export class ProcessTable {
     },
     ProcessError
   > {
-    const process = this.#current.get(name);
+    const process = this.#model.current.get(name);
 
     if (process === undefined) {
       return denied("ended");
     }
 
     const life = this.parent(process, owner);
+    const restarts = this.#model.restarts.get(name) ?? [];
     return Result.isFailure(life)
       ? Result.fail(life.failure)
-      : Result.succeed({ name, state: life.success.state, restarts: this.#restarts.get(name) ?? [] });
+      : Result.succeed({ name, state: life.success.state, restarts });
   }
 
   life(process: string): Option.Option<Life> {
-    return Option.fromUndefinedOr(this.#lives.get(process));
+    return Option.fromUndefinedOr(this.#model.lives.get(process));
   }
 
   parent(process: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
-    const life = this.#lives.get(process);
+    const life = this.#model.lives.get(process);
 
     if (life === undefined) {
       return denied("ended");
     }
 
-    return Equal.equals(this.#names.get(life.name)?.owner, owner) ? Result.succeed(life) : denied("not_parent");
+    const reserved = this.#model.names.get(life.name);
+    return Equal.equals(reserved?.owner, owner) ? Result.succeed(life) : denied("not_parent");
   }
 
   exit(process: string, reason: string, owner: typeof Owner.Type): Result.Result<Life, ProcessError> {
@@ -463,13 +350,13 @@ export class ProcessTable {
       return denied("bad_name");
     }
 
-    const watch = this.#watches.get(watchKey(to, ref));
+    const watch = this.#model.watches.get(watchKey(to, ref));
 
     if (watch !== undefined && watch.process !== process) {
       return denied("bad_ref");
     }
 
-    if (watch !== undefined && !watch.canceled) {
+    if (watch !== undefined && watch._tag === "live") {
       return Result.succeed(Option.none());
     }
 
@@ -482,17 +369,20 @@ export class ProcessTable {
 
   /** The caller's own live watch under `ref`, if any. Another recipient's ref is never touched. */
   demonitor(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
-    return Option.filter(Option.fromUndefinedOr(this.#watches.get(watchKey(to, ref))), (watch) => !watch.canceled);
+    const watch = this.#model.watches.get(watchKey(to, ref));
+    return watch?._tag === "live" ? Option.some(shown(watch)) : Option.none();
   }
 
   inbound(process: string): ReadonlyArray<Watch> {
-    return [...this.#watches.values()].filter((watch) => !watch.canceled && watch.process === process);
+    return [...this.#model.watches.values()]
+      .filter((watch) => watch._tag === "live" && watch.process === process)
+      .map(shown);
   }
 
   outbound(process: string): ReadonlyArray<Watch> {
-    return [...this.#watches.values()].filter(
-      (watch) => !watch.canceled && watch.to._tag === "process" && watch.to.process === process,
-    );
+    return [...this.#model.watches.values()]
+      .filter(({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process)
+      .map(shown);
   }
 
   /**
@@ -512,7 +402,7 @@ export class ProcessTable {
     }
 
     const { to, ref } = down.value;
-    const watch = this.#watches.get(watchKey(to, ref));
+    const watch = this.#model.watches.get(watchKey(to, ref));
 
     if (entry.by !== this.#by || watch === undefined || watch.process !== down.value.process) {
       return "mail";
@@ -525,19 +415,19 @@ export class ProcessTable {
     }
 
     // An earlier round's signal belongs to a watch already canceled.
-    const current = round === watch.round && !watch.canceled;
+    const current = round === watch.round && watch._tag === "live";
     return current && to._tag === "process" && to.process === process ? "signal" : "drop";
   }
 
   get info(): ReadonlyArray<ProcessInfo> {
-    return [...this.#lives.values()]
+    return [...this.#model.lives.values()]
       .filter((life) => life.state._tag === "live")
       .map((life) => ({
         process: life.state.process,
         name: life.name,
         program: life.state.code.program,
         build: life.state.code.hash,
-        restarts: this.#restarts.get(life.name)?.length ?? 0,
+        restarts: this.#model.restarts.get(life.name)?.length ?? 0,
       }));
   }
 }
