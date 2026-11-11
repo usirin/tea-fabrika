@@ -62,8 +62,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # The tests beside the changed files (0066): for each changed product file, its own
-      # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Product files are
-      # sample.ts's PRODUCT list. A path mutbox.ts's --related would refuse is left out.
+      # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Of the lead tooling,
+      # only lane code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
+      # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
+      # out.
       - id: range
         env:
           BASE: ${{ inputs.base }}
@@ -72,16 +74,11 @@ jobs:
           base=$(git rev-parse --verify "$BASE^{commit}")
           head=$(git rev-parse --verify "$HEAD^{commit}")
           plain='^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$'
-          {
-            git diff --name-only --diff-filter=d "$base" "$head" -- \
-              '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' '*.cjs' \
-              ':!*.test.*' ':!*.d.ts' ':!*.d.mts' ':!*.d.cts' |
-              while IFS= read -r f; do
-                stem=${f%.*}
-                printf '%s\n' "$stem.test.ts" "$stem.test.tsx"
-              done
-            git diff --name-only --diff-filter=d "$base" "$head" -- '*.test.ts' '*.test.tsx'
-          } | sort -u | grep -E "$plain" | grep -v '/\.\./' |
+          # Each in its own line, so a broken diff or scope.ts fails the job and is never read as
+          # "no tests".
+          git diff --name-only --diff-filter=d "$base" "$head" > "$RUNNER_TEMP/changed.txt"
+          node .agents/skills/mutation/scripts/scope.ts < "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/tests.txt"
+          grep -E "$plain" "$RUNNER_TEMP/tests.txt" | grep -v '/\.\./' |
             while IFS= read -r t; do
               if git cat-file -e "$head:$t" 2> /dev/null; then printf '%s\n' "$t"; fi
             done > "$RUNNER_TEMP/related.txt" || :
@@ -121,7 +118,7 @@ jobs:
             if [ -z "$BASE" ]; then
               echo "no run: base or head is not a commit on main's history"
             elif [ -z "$RELATED" ]; then
-              echo "skip: no test beside a changed file, so nothing ran"
+              echo "skip: no test beside a changed file in scope, so nothing ran"
             elif [ ! -s "$JSON" ]; then
               echo "no result: mutbox wrote no mutbox.json"
             else

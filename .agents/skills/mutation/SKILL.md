@@ -63,8 +63,9 @@ With a base, the sample is the pull request's own lines, `base..build`, so a tip
 samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
 `RELATED=<paths>`, which `drive.ts` reads. They are the tests that run, never the files mutated:
-the sample is drawn from every changed product file in the diff (`PRODUCT` in `sample.ts`: `.ts`,
-`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`), each file's cheapest
+the sample is drawn from every changed product file in the diff (`PRODUCT` in `scope.ts`: `.ts`,
+`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`; of `.agents/`, only
+`chain.ts`, `drive.ts` and the lead's `flow/` folder, 0089), each file's cheapest
 range first, round-robin, so every changed file gets a mutant before any gets a second (ticket
 655). For arm a, name the base's test file a moved or changed law came from too: arm a runs only
 the related tests the base has. `--plan` is the approved plan; drive passes it. Ticket 520's proof uses

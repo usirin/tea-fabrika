@@ -10,6 +10,8 @@
     "skills/lead/scripts/chain.ts",
     "skills/lead/scripts/chain.test.ts",
     "skills/lead/scripts/drive.ts",
-    "skills/lead/scripts/drive.test.ts"
+    "skills/lead/scripts/drive.test.ts",
+    "skills/mutation/scripts/scope.ts",
+    "skills/mutation/scripts/scope.test.ts"
   ]
 }
