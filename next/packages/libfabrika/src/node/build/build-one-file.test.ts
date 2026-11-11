@@ -529,16 +529,18 @@ const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.
   );
 };
 
-/** A stylesheet of the walk: its mark, and whether its text tries to end its `<style>` element. */
-type Style = { readonly mark: string; readonly trap: boolean };
+/** A stylesheet of the walk: its mark, whether its text tries to end its `<style>` element, and
+ *  whether the listed file holds only a local `@import` of the file with its rules. */
+type Style = { readonly mark: string; readonly trap: boolean; readonly split?: boolean };
 /** The tab's files now: the label its view shows and its stylesheets in page order. */
 type Tab = { readonly label: string; readonly styles: ReadonlyArray<Style> };
-type TabMove = "add" | "bare" | "label" | "style" | "reorder" | "trap" | "drop" | "same";
+type TabMove = "add" | "bare" | "label" | "style" | "reorder" | "trap" | "split" | "drop" | "same";
 
+// The trap sits in a comment and in a string, so a build that drops comments still meets one.
 const styleText = (style: Style, n: number) =>
   `.${style.mark} { --p14-order: ${n}; }\n.${style.mark} b { color: red; }\n${
     style.trap
-      ? `/* </style><script>globalThis.__p14Escaped = 1</script><style> */\n.${style.mark}-t { order: ${n}; }\n`
+      ? `/* </style><script>globalThis.__p14Escaped = 1</script><style> */\n.${style.mark}-t { order: ${n}; }\n.${style.mark}-t::after { content: "</style><script>globalThis.__p14Escaped = 2</script><style>"; }\n`
       : ""
   }`;
 
@@ -557,11 +559,35 @@ const tabHome = (value: string) => {
     );
     return tab.styles.map((style, n) => {
       const file = join(dir, `s${n}.css`);
-      writeFileSync(file, styleText(style, n));
+
+      if (style.split === true) {
+        mkdirSync(join(dir, "parts"), { recursive: true });
+        writeFileSync(join(dir, "parts", `s${n}.css`), styleText(style, n));
+        writeFileSync(file, `@import "./parts/s${n}.css";\n`);
+      } else {
+        writeFileSync(file, styleText(style, n));
+      }
+
       return file;
     });
   };
-  return { ...f, dir, view, entry, write };
+  /** A helper module chain from the entry: `depth` files, the last naming `line`. */
+  const chain = (depth: number, line: string) => {
+    for (let n = 1; n <= depth; n++) {
+      writeFileSync(
+        join(dir, `h${n}.ts`),
+        n === depth ? line : `export * from "./h${n + 1}.ts"; export const h${n} = ${n};`,
+      );
+    }
+
+    writeFileSync(
+      entry,
+      `import {Effect} from "effect"; import {Tip} from "./view.tsx"; ${
+        depth === 0 ? line : 'export * from "./h1.ts";'
+      } export const mounted = [Tip, Effect.succeed("boundary")];`,
+    );
+  };
+  return { ...f, dir, view, entry, write, chain };
 };
 
 /** The temporary folders a build makes beside `out`; none may outlive the build. */
@@ -627,10 +653,13 @@ const checkCarried = (
       "no other call emitted the page",
     ).toEqual([]);
     // Its stylesheets in the given order, each element closed only by itself, and one script: /window.js.
-    const given = state.tab.styles.map((_, n) => readFileSync(state.styles[n]!, "utf8"));
+    // The rules are the walk's own: a listed file's local `@import` is inlined, so the page asks for no file.
+    const given = state.tab.styles.map((style, n) => styleText(style, n));
+    expect(state.styles, "the walk listed one file per stylesheet").toHaveLength(given.length);
     expect(pageRules(page!.body), "the page holds every stylesheet's rules, in order").toEqual(
       parsedRules(given.join("\n")),
     );
+    expect(page!.body, "no stylesheet in the page imports another file").not.toMatch(/@import\b/i);
     const markup = page!.body.replace(STYLE, "");
     expect(count(page!.body, STYLE), "one style element per stylesheet").toBe(given.length);
     expect(count(markup, /<\/?style\b/gi), "no stylesheet text ends its element early").toBe(0);
@@ -654,6 +683,22 @@ const checkCarried = (
 const word = fc.stringMatching(/^[a-z][a-z0-9]{2,10}$/);
 const choices = fc.array(fc.record({ move: fc.nat(), word }), { minLength: 2, maxLength: 4 });
 
+/** Modules a browser tab has no way to load: Node's and the Workers runtime's. */
+const BOUNDARY = ["node:fs", "node:path", "cloudflare:workers", "cloudflare:sockets"] as const;
+
+/** Each way a module can name another, each one that keeps the name in the bundle. */
+const NAMING: ReadonlyArray<(specifier: string) => string> = [
+  (s) => `import * as m from ${JSON.stringify(s)}; export const used = m;`,
+  (s) => `import ${JSON.stringify(s)};`,
+  (s) => `export * from ${JSON.stringify(s)};`,
+  (s) => `export const later = () => import(${JSON.stringify(s)});`,
+];
+
+/** Local references a stylesheet can make to a file next to it. */
+const LOCAL_URL = ['"./img.png"', "img.png", "'../tab/img.png'"] as const;
+// Each boundary walk builds 3 to 6 times; 8 walks reach every case above from seed 119120.
+const boundaryWalks = { seed: 119120, numRuns: 8 };
+
 describe("P14 slice 1: the tab's page and script ride in the one build", () => {
   it(
     "S1.1 generated build walks: a complete tab build carries exactly its emitted page, script and styles; hashes, types and bytes agree",
@@ -669,7 +714,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
           for (const { move, word } of steps) {
             // The moves this state allows: a tab can be added, or a present one edited, restyled,
-            // reordered, trapped, dropped or rebuilt unchanged.
+            // reordered, trapped, split behind a local `@import`, dropped or rebuilt unchanged.
             const allowed: ReadonlyArray<TabMove> =
               tab === null
                 ? ["add", "bare"]
@@ -678,6 +723,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                     ...(tab.styles.length < 3 ? (["style"] as const) : []),
                     ...(tab.styles.length > 1 ? (["reorder"] as const) : []),
                     "trap",
+                    "split",
                     "drop",
                     "same",
                   ];
@@ -695,11 +741,15 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                       ? { ...tab!, styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }] }
                       : chosen === "reorder"
                         ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
-                        : chosen === "trap"
+                        : chosen === "trap" || chosen === "split"
                           ? {
                               ...tab!,
                               styles: tab!.styles.map((s, n) =>
-                                n === move % tab!.styles.length ? { ...s, trap: !s.trap } : s,
+                                n !== move % tab!.styles.length
+                                  ? s
+                                  : chosen === "trap"
+                                    ? { ...s, trap: !s.trap }
+                                    : { ...s, split: s.split !== true },
                               ),
                             }
                           : tab;
@@ -707,6 +757,10 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             if (tab?.styles.some((s) => s.trap) === true) {
               reached.add("trapped");
+            }
+
+            if (tab?.styles.some((s) => s.split === true) === true) {
+              reached.add("imported");
             }
 
             const { spans, tracer } = tracing();
@@ -737,6 +791,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
       // A run that never reached a tab cannot claim this law.
       expect(reached.has("add"), "the walks built a tab").toBe(true);
       expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
+      expect(reached.has("imported"), "the walks built a stylesheet behind a local @import").toBe(true);
       expect([...reached].filter((m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
     },
   );
@@ -817,6 +872,96 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
         ["compiler", "bundle", "read"].some((fault) => reached.has(`${fault}-after-good`)),
         "a tab fault was reached after a good build",
       ).toBe(true);
+    },
+  );
+
+  it(
+    "S1.2 generated boundary walks: a tab that reaches a node: or cloudflare: module, or a stylesheet that names a local file, fails typed and keeps the last good brain",
+    { timeout: buildTimeout(boundaryWalks.numRuns * 6) },
+    async () => {
+      const reached = new Set<string>();
+      await fc.assert(
+        fc.asyncProperty(
+          word,
+          fc.array(fc.record({ move: fc.nat(), word }), { minLength: 3, maxLength: 6 }),
+          async (value, steps) => {
+            const f = tabHome(value);
+            // The walk's state: whether a tab exists, and the last good output (none before the first).
+            let tab: Tab | null = null;
+            let good: Array<Array<string>> | null = null;
+
+            for (const { move, word } of steps) {
+              // A boundary fault needs a tab to reach; before one exists the walk adds it or builds plain.
+              const allowed = tab === null ? (["add", "plain"] as const) : (["build", "import", "url"] as const);
+              const chosen = allowed[move % allowed.length]!;
+              const detail = Math.floor(move / allowed.length);
+
+              if (chosen === "add") {
+                tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
+              }
+
+              let styles: readonly string[] = tab === null ? [] : f.write(tab);
+              let label: string = chosen;
+
+              if (chosen === "import") {
+                // The module named, how the tab names it, and how many local modules sit between.
+                const specifier = BOUNDARY[detail % BOUNDARY.length]!;
+                const form = NAMING[Math.floor(detail / BOUNDARY.length) % NAMING.length]!;
+                const depth = Math.floor(detail / (BOUNDARY.length * NAMING.length)) % 3;
+                f.chain(depth, form(specifier));
+                label = `import-${specifier.split(":")[0]}-${depth === 0 ? "direct" : "transitive"}`;
+              }
+
+              if (chosen === "url") {
+                // A local file named by `url()`, in the listed stylesheet or in one it imports. The file exists.
+                const imported = detail % 2 === 1;
+                const ref = LOCAL_URL[Math.floor(detail / 2) % LOCAL_URL.length]!;
+                const first = tab!.styles[0]!;
+                styles = f.write({ ...tab!, styles: [{ ...first, split: imported }, ...tab!.styles.slice(1)] });
+                writeFileSync(join(f.dir, "img.png"), "not a picture");
+                writeFileSync(
+                  imported ? join(f.dir, "parts", "s0.css") : styles[0]!,
+                  `${styleText(first, 0)}.${first.mark}-u { background: url(${ref}); }\n`,
+                );
+                label = `url-${imported ? "imported" : "listed"}`;
+              }
+
+              const result = await runBuild({
+                ...f.options,
+                ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
+              });
+              reached.add(label);
+
+              if (chosen === "import" || chosen === "url") {
+                reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
+                expect(result._tag, `${label} fails`).toBe("Failure");
+                expect(result, `${label} fails typed`).toMatchObject({ failure: { _tag: "BuildError" } });
+                expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
+              } else {
+                expect(result._tag, `${label} builds`).toBe("Success");
+                good = outFiles(f.options.out);
+              }
+
+              expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
+            }
+          },
+        ),
+        boundaryWalks,
+      );
+
+      // A run that never reached a case cannot claim it.
+      for (const label of [
+        "import-node-direct",
+        "import-node-transitive",
+        "import-cloudflare-direct",
+        "import-cloudflare-transitive",
+        "url-listed",
+        "url-imported",
+        "import-after-good",
+        "url-after-good",
+      ]) {
+        expect(reached.has(label), `the walks reached ${label}`).toBe(true);
+      }
     },
   );
 
