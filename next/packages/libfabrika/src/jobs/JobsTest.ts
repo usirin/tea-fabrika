@@ -10,7 +10,7 @@ import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
 import { Command, type Executor, type Job, type Recorded, type Request, Result, State } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
@@ -277,14 +277,14 @@ type Move =
   | "cut_after"
   | "reopen";
 
-type Stage = "requested" | "assigned" | "started" | "finished";
+type Phase = "requested" | "assigned" | "started" | "finished";
 type Receipt = { readonly rev: number; readonly arrivedAt: number };
 type Event = "requested" | "taken" | "started" | "finished";
 
 /** What the fold knows of one job, from its own calls and their answers. */
 type Saved = {
   readonly request: Request;
-  stage: Stage;
+  phase: Phase;
   executor?: Executor;
   execution?: string;
   result?: Result;
@@ -342,7 +342,7 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 const layer = (sql: Sql) =>
   JobsLedger.layer.pipe(
     Layer.provide(
-      Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:jobs-test" }), LedgerTransaction.layer(sql)).pipe(
+      Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:jobs-test" }), LedgerTransactionSql.layer(sql)).pipe(
         Layer.provide(quiet),
       ),
     ),
@@ -369,20 +369,20 @@ const expected = (saved: Saved): Job => {
   const { request, executor, execution, result } = saved;
   const assignment = executor === undefined || execution === undefined ? undefined : { execution, executor };
   const state =
-    saved.stage === "requested"
+    saved.phase === "requested"
       ? State.cases.requested.make({ request })
-      : saved.stage === "assigned" && assignment !== undefined
+      : saved.phase === "assigned" && assignment !== undefined
         ? State.cases.assigned.make({ request, assignment })
-        : saved.stage === "started" && assignment !== undefined
+        : saved.phase === "started" && assignment !== undefined
           ? State.cases.started.make({ request, assignment })
           : assignment !== undefined && result !== undefined
             ? State.cases.finished.make({ request, assignment, result })
-            : expect.fail("the fold reached a stage without its facts");
+            : expect.fail("the fold reached a phase without its facts");
   return { state, events: saved.events } as Job;
 };
 
-const at = (world: World, stages: ReadonlyArray<Stage>) =>
-  [...world.jobs.values()].filter((j) => stages.includes(j.stage));
+const at = (world: World, phases: ReadonlyArray<Phase>) =>
+  [...world.jobs.values()].filter((j) => phases.includes(j.phase));
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
@@ -430,8 +430,8 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 const otherExecution = (execution: string, variant: number): string =>
   choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
 
-/** A move, or a move in the one stage of the job it was played on. */
-type Done = Move | `${Move}@${Stage}`;
+/** A move, or a move in the one phase of the job it was played on. */
+type Done = Move | `${Move}@${Phase}`;
 
 const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<Move>, done: Set<Done>) =>
   Effect.fnUntraced(function* (tape: Tape) {
@@ -473,10 +473,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
       const move = choose(options, cell.move);
       const recorded = said(cell);
-      /** The job a move is played on, and the stage it was in then. */
-      const on = (stages: ReadonlyArray<Stage>) => {
-        const saved = choose(at(world, stages), cell.pick);
-        done.add(`${move}@${saved.stage}`);
+      /** The job a move is played on, and the phase it was in then. */
+      const on = (phases: ReadonlyArray<Phase>) => {
+        const saved = choose(at(world, phases), cell.pick);
+        done.add(`${move}@${saved.phase}`);
         return saved;
       };
 
@@ -484,7 +484,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         case "request_new": {
           const request = choose(tape.requests, world.next++);
           const receipt = success(yield* jobs((j) => j.request(copied(request), recorded)), "a new request is saved");
-          const saved: Saved = { request, stage: "requested", receipts: new Map(), events: [] };
+          const saved: Saved = { request, phase: "requested", receipts: new Map(), events: [] };
           world.jobs.set(request.id, saved);
           keep(saved, "requested", recorded, receipt);
           break;
@@ -509,7 +509,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           const executor = able(saved, cell);
           const taken = success(yield* jobs((j) => j.take(saved.request.id, copied(executor), recorded)), "a take");
           expect(taken.execution.length, "the take allocates an execution identity").toBeGreaterThan(0);
-          saved.stage = "assigned";
+          saved.phase = "assigned";
           saved.executor = executor;
           saved.execution = taken.execution;
           saved.taken = taken;
@@ -553,7 +553,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             yield* jobs((j) => j.started(saved.request.id, execution, recorded)),
             "a start by the assignment",
           );
-          saved.stage = "started";
+          saved.phase = "started";
           keep(saved, "started", recorded, receipt);
           break;
         }
@@ -583,7 +583,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           const saved = on(["requested", "assigned"]);
           const execution = saved.execution ?? "any-execution";
           const answer =
-            saved.stage === "requested" && cell.variant % 2 === 0
+            saved.phase === "requested" && cell.variant % 2 === 0
               ? yield* jobs((j) => j.started(saved.request.id, execution, recorded))
               : yield* jobs((j) => j.finish(saved.request.id, execution, cell.result, recorded));
           refused(answer, "a start or a finish out of order", "wrong_state");
@@ -596,7 +596,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             yield* jobs((j) => j.finish(saved.request.id, execution, copied(cell.result), recorded)),
             "a finish by the assignment",
           );
-          saved.stage = "finished";
+          saved.phase = "finished";
           saved.result = cell.result;
           keep(saved, "finished", recorded, receipt);
           break;
@@ -685,11 +685,11 @@ const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, job
     const id = saved.request.id;
     const execution = saved.execution ?? "";
 
-    if (saved.stage === "requested") {
+    if (saved.phase === "requested") {
       options.push(() => jobs((j) => j.take(id, able(saved, cell), recorded)));
-    } else if (saved.stage === "assigned") {
+    } else if (saved.phase === "assigned") {
       options.push(() => jobs((j) => j.started(id, execution, recorded)));
-    } else if (saved.stage === "started") {
+    } else if (saved.phase === "started") {
       options.push(() => jobs((j) => j.finish(id, execution, cell.result, recorded)));
     }
   }
@@ -775,9 +775,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         "take_other",
         "reopen",
         "take_lacking@requested",
-        ...(["assigned", "started", "finished"] as const).flatMap((stage) => [
-          `take_again@${stage}` as const,
-          `take_lacking@${stage}` as const,
+        ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+          `take_again@${phase}` as const,
+          `take_lacking@${phase}` as const,
         ]),
       ],
     );

@@ -1,6 +1,6 @@
 // P39 slice 1, L2 to L5 and L7 on the job machine itself (0037, 0046): its real `init` and its real
 // update, one Msg at a time. Every law walks a decision tape (0093): each cell is read against the
-// stage the fold has reached, so a retry repeats the saved request, a start names the real
+// phase the fold has reached, so a retry repeats the saved request, a start names the real
 // assignment or a near miss of it, and a finish answers a real start. The expected state is this
 // file's own reading of the plan's states table, never the machine.
 import { applyCell } from "@demlik/tea";
@@ -24,14 +24,14 @@ const RUNS = { seed: 119120, numRuns: 100 };
 
 type Model = (typeof job)["model"]["Type"];
 type Msg = (typeof job)["msg"]["Type"];
-type Stage = "absent" | "requested" | "assigned" | "started" | "finished";
+type Phase = "absent" | "requested" | "assigned" | "started" | "finished";
 
 const init = (): Model => job.init(null, undefined)[0];
 const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
 
 /** What the fold knows, from its own Msgs only. */
 type World = {
-  stage: Stage;
+  phase: Phase;
   request?: Request;
   executor?: Executor;
   execution?: string;
@@ -77,7 +77,7 @@ type Move =
   | "finish_wrong";
 
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
-  const s = world.stage;
+  const s = world.phase;
   const owned = s === "assigned" || s === "started" || s === "finished";
   const can: Record<Move, boolean> = {
     request_new: s === "absent",
@@ -104,21 +104,21 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
 const expected = (world: World) => {
   const { request, executor, execution, result } = world;
 
-  if (world.stage === "absent" || request === undefined) {
+  if (world.phase === "absent" || request === undefined) {
     return State.cases.absent.make({});
   }
 
-  if (world.stage === "requested" || executor === undefined || execution === undefined) {
+  if (world.phase === "requested" || executor === undefined || execution === undefined) {
     return State.cases.requested.make({ request });
   }
 
   const assignment = { execution, executor };
 
-  if (world.stage === "assigned") {
+  if (world.phase === "assigned") {
     return State.cases.assigned.make({ request, assignment });
   }
 
-  if (world.stage === "started" || result === undefined) {
+  if (world.phase === "started" || result === undefined) {
     return State.cases.started.make({ request, assignment });
   }
 
@@ -148,7 +148,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 
   switch (move) {
     case "request_new":
-      return [{ type: "request", request: copied(request) }, { stage: "requested", request }, { answer: "accepted" }];
+      return [{ type: "request", request: copied(request) }, { phase: "requested", request }, { answer: "accepted" }];
     case "early": {
       const msgs: ReadonlyArray<Msg> = [
         { type: "take", executor: able(request, cell, base), execution: cell.execution },
@@ -165,7 +165,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
     }
     case "take_ok": {
       const executor = able(request, cell, base);
-      const next = { ...world, stage: "assigned" as const, executor, execution: cell.execution };
+      const next = { ...world, phase: "assigned" as const, executor, execution: cell.execution };
       return [{ type: "take", executor: copied(executor), execution: cell.execution }, next, { answer: "accepted" }];
     }
     case "take_again": {
@@ -189,7 +189,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
     case "out_of_order": {
       // Before a take nothing may start or finish; an assigned job may not finish, even by its own execution.
       const msgs: ReadonlyArray<Msg> =
-        world.stage === "assigned"
+        world.phase === "assigned"
           ? [{ type: "finish", execution, result: cell.result }]
           : [
               { type: "start", execution: cell.execution },
@@ -198,13 +198,13 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       return [choose(msgs, cell.variant), world, refuse("wrong_state")];
     }
     case "start_ok":
-      return [{ type: "start", execution: `${execution}` }, { ...world, stage: "started" }, { answer: "accepted" }];
+      return [{ type: "start", execution: `${execution}` }, { ...world, phase: "started" }, { answer: "accepted" }];
     case "start_again":
       return [{ type: "start", execution: `${execution}` }, world, same];
     case "start_wrong":
       return [{ type: "start", execution: near(execution, cell.variant) }, world, refuse("wrong_execution")];
     case "finish_ok": {
-      const next = { ...world, stage: "finished" as const, result: cell.result };
+      const next = { ...world, phase: "finished" as const, result: cell.result };
       return [{ type: "finish", execution, result: copied(cell.result) }, next, { answer: "accepted" }];
     }
     case "finish_equal":
@@ -225,8 +225,8 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
   }
 };
 
-/** A move, or a move in the one stage it must have been played in. */
-type Done = Move | `${Move}@${Stage}`;
+/** A move, or a move in the one phase it must have been played in. */
+type Done = Move | `${Move}@${Phase}`;
 
 const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<Done>) =>
   it(name, () => {
@@ -234,7 +234,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
     fc.assert(
       fc.property(Tape, (tape) => {
         let model = init();
-        let world: World = { stage: "absent" };
+        let world: World = { phase: "absent" };
         const accepted: Array<Msg> = [];
         expect(model.state, "a job starts absent").toEqual(State.cases.absent.make({}));
 
@@ -249,7 +249,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
           const [msg, next, answer] = play(world, tape, cell, move);
           const before = model.state;
           model = step(model, msg);
-          done.add(move).add(`${move}@${world.stage}`);
+          done.add(move).add(`${move}@${world.phase}`);
 
           expect(model.answer._tag, `${move}: the answer`).toBe(answer.answer);
 
@@ -291,9 +291,9 @@ describe("P39 slice 1: the job machine", () => {
       "take_ok",
       "take_other",
       "early",
-      ...(["assigned", "started", "finished"] as const).flatMap((stage) => [
-        `take_again@${stage}` as const,
-        `take_lacking@${stage}` as const,
+      ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+        `take_again@${phase}` as const,
+        `take_lacking@${phase}` as const,
       ]),
       "take_lacking@requested",
     ],

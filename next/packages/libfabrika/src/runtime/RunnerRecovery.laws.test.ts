@@ -8,7 +8,7 @@ import { Mailbox, ProcessManager, ProcessStore, RecoveryStore, Writer } from "..
 import { processId } from "../Id.test-support.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -147,7 +147,7 @@ describe("P12 saved mail recovery", () => {
                     ),
                   ),
                   Layer.provide(
-                    LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+                    LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
                       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                     ),
                   ),
@@ -371,7 +371,7 @@ describe("P34 id reuse at the runner", () => {
                       ),
                     ),
                     Layer.provide(
-                      LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+                      LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
                         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                       ),
                     ),
