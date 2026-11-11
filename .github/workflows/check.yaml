@@ -347,3 +347,24 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: node next/apps/fabrika/src/exam/edges.ts --base "$BASE"
+
+  # The one check from this workflow that GitHub's ruleset for main requires, so a merge made outside
+  # catchup.sh is refused while a job above is red. The same name and shape as phoenix's (its ci.yml
+  # and decisions 0061, 0092 and 0404). It needs every other job here, and runs even when one failed
+  # or the run was canceled: a skipped required check counts as passed on GitHub, so this job never
+  # skips. required.mjs passes a job's skip only when changes said that job need not run, from the
+  # same output its `if:` reads. `commits` is commits.yaml's own job, from `pull_request_target`, and
+  # stays required beside this one: folding it in here would judge it from the pull request's copy.
+  # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
+  ci-required:
+    needs: [changes, field, check, e2e, test, next]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/ci
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: node .github/ci/required.mjs
