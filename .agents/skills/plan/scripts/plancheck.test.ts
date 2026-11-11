@@ -967,7 +967,7 @@ describe("T686 size advice in the draft check, today's tooling", () => {
           "Size: 1 agent hour, 80 lines. Confidence: 85%.",
           `Size: 1 agent hour. Confidence: 85%.\n\n${listed}`,
         );
-        const ran = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+        const ran = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(ran.code, ran.text).toBe(0);
         const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
         expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
