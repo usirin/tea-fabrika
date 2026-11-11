@@ -40,6 +40,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { NO_SPENT } from "./agents.ts";
 import {
+  AGENT_CAP,
+  agentCapFull,
   agentsDraft,
   agentTail,
   ownedHead,
@@ -518,6 +520,24 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
       expect(name).toBe(`refused:${c}`);
       expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
+  });
+});
+
+describe("the agent cap refuses a start once 12 agents run (0012), today's tooling", () => {
+  // Plants: compare with > instead of >=; keep the old cap of 8.
+  it("property: a start is refused exactly when the agents running reach AGENT_CAP", () => {
+    fc.assert(
+      fc.property(fc.nat({ max: 40 }), (agents) => {
+        expect(agentCapFull(agents)).toBe(agents >= AGENT_CAP);
+      }),
+      options,
+    );
+  });
+
+  it("pinned: the cap is 12, decision 0012's at most 12 code agents at once", () => {
+    expect(AGENT_CAP).toBe(12);
+    expect(agentCapFull(11)).toBe(false);
+    expect(agentCapFull(12)).toBe(true);
   });
 });
 

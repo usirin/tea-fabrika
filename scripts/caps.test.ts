@@ -86,6 +86,30 @@ describe("T325 K9 machine caps, today's tooling", () => {
     expect(JSON.parse(ran.stdout).shared).toEqual(JSON.parse(JSON.stringify(testConfig)));
   });
 
+  // Vitest reads a config only from the folder it starts in (vitest 5.0.5's findConfigFile), so a
+  // run started in `.agents/` got its 5 s default limit, not the 60 s above: 9 to 12 false
+  // timeouts in catchup.test.ts on 2026-11-11. Plant: delete `.agents/vitest.config.ts`.
+  it("scenario: a run started in .agents/ refuses before any test and names the root", () => {
+    const ran = spawnSync(
+      process.execPath,
+      [
+        join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs"),
+        "run",
+        "--maxWorkers=1",
+        "skills/lead/scripts/catchup.test.ts",
+      ],
+      {
+        cwd: join(root, ".agents"),
+        encoding: "utf8",
+        timeout: 30_000,
+        env: { ...process.env, CI: undefined },
+      },
+    );
+    expect(ran.status).not.toBe(0);
+    expect(ran.stderr).toContain("Run vitest from the repo root, not .agents/");
+    expect(ran.stdout + ran.stderr).not.toMatch(/Test Files/);
+  });
+
   // No domain Schema for runtime versions. Plant: omit the check or refuse CI too.
   it("R5 refuses mismatched or missing local Node versions and lets CI run", () => {
     const pinned = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).engines?.node;
