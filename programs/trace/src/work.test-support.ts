@@ -6,7 +6,10 @@
 // catches the plain index loop. The shape is PR 803's `scripts/effect-arbitrary.test.ts`: wrap,
 // count, restore.
 
-/** The built-ins whose cost grows with their receiver's length. */
+/**
+ * The built-ins whose cost grows with their receiver's length. `concat`, `flat` and `flatMap` also
+ * copy what their arguments or elements hold, so they are charged for their result too (GROWS).
+ */
 const LINEAR = [
   "concat",
   "slice",
@@ -40,6 +43,9 @@ const LINEAR = [
   "unshift",
 ] as const;
 
+/** The LINEAR methods whose result can outgrow their receiver: `[].concat(list)`, `[list].flat()`. */
+const GROWS: ReadonlySet<string> = new Set(["concat", "flat", "flatMap"]);
+
 /** The iterators every spread, `for...of` and destructuring of an Array, Map or Set steps. */
 const ITERATORS: readonly object[] = [
   Object.getPrototypeOf([][Symbol.iterator]()),
@@ -67,9 +73,9 @@ const lengthOf = (x: unknown): number => {
 
 /**
  * The work `f` does through the built-ins: 1 per step of an Array, Map or Set iterator (so every
- * spread, `for...of` and destructuring), the receiver's length per call of a LINEAR method, the
- * result's length per `Array.from`. Throws OverCap once work passes `cap`. Puts every wrapped
- * method back before it returns or throws.
+ * spread, `for...of` and destructuring), the receiver's length per call of a LINEAR method, plus
+ * the result's length for `concat`, `flat` and `flatMap`, and the result's length per `Array.from`.
+ * Throws OverCap once work passes `cap`. Puts every wrapped method back before it returns or throws.
  */
 export const counted = <A>(f: () => A, cap: number): { readonly value: A; readonly work: number } => {
   const saved: { readonly target: object; readonly key: string; readonly method: unknown }[] = [];
@@ -114,7 +120,7 @@ export const counted = <A>(f: () => A, cap: number): { readonly value: A; readon
   }
 
   for (const key of LINEAR) {
-    wrap(Array.prototype, key, (before) => before);
+    wrap(Array.prototype, key, GROWS.has(key) ? (before, result) => before + lengthOf(result) : (before) => before);
   }
 
   wrap(Array, "from", (_, result) => lengthOf(result));

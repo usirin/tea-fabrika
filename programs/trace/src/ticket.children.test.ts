@@ -20,8 +20,9 @@ import { counted, OverCap } from "./work.test-support.ts";
 // The law first compared two clock readings, and on 2026-11-10 a shared CI runner gave the linear
 // code 52.3 ms once against 17.1 ms four times, a false red (ticket 649). A clock on a noisy runner
 // moves one side and not the other, and a test may not lean on the machine (0052). So the law now
-// counts the work instead, through the built-ins (./work.test-support.ts): each iterator step, and
-// each linear Array method by its receiver's length. That sees the copies of the index's own
+// counts the work instead, through the built-ins (./work.test-support.ts): each iterator step, each
+// linear Array method by its receiver's length, and `concat`, `flat` and `flatMap` by their result's
+// length too, so `[].concat(list, [s])` and `[list, [s]].flat()` cost the list they copy. That sees the copies of the index's own
 // arrays, which a record that counts its reads cannot. The count is the same on every run (0065).
 //
 // Counted on main and on ec39c211's parent, which copied a parent's list for each child:
@@ -29,6 +30,9 @@ import { counted, OverCap } from "./work.test-support.ts";
 //   children under the step     500        2,000       one at 2,000 / four at 500
 //   main                        2,498      8,750       0.88
 //   before ec39c211             133,145    2,016,803   3.79
+//
+// The same copy through `[].concat(list, [s])` counts as the spread does, 3.84 to 3.97 over the
+// law's sizes, and through `[list, [s]].flat()` 3.81 to 3.97.
 //
 // Over the law's six sizes, main gives 0.79 to 0.96. The bar is 2x, and a cap of 100 units per span
 // (main spends about 4) stops a squared walk early: L1b trips it at n = 250 already.
@@ -149,7 +153,8 @@ describe("the spans under a long step (childrenOf)", () => {
     expect(got.map((s) => s.span)).toEqual(whole.under.map((s) => s.span));
   });
 
-  // Plant L1: ec39c211's parent's childrenOf, a spread copy of the parent's list for each child.
+  // Plant L1: ec39c211's parent's childrenOf, a spread copy of the parent's list for each child; the
+  // same copy through `([] as Span[]).concat(list, [s])`; and through `[list, [s]].flat()`.
   it("does under 2x the counted work for 4n children once as for n four times: linear, not squared (L1)", () => {
     fc.assert(
       fc.property(sizes, (n) => {

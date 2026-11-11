@@ -244,8 +244,8 @@ describe("a lane's record read again", () => {
 // at 4n calls against four redraws at n, with a bar of 2x. Counted, the first redraw of each state:
 //
 //   calls under the step     500       2,000      one at 2,000 / four at 500
-//   main                     6,059     24,059     0.99
-//   e3dc0b85's spanRowsOf    256,059   4,024,059  3.93
+//   main                     6,063     24,063     0.99
+//   e3dc0b85's spanRowsOf    256,563   4,026,063  3.92
 
 /** A ticket whose step has `n` calls under it, read, with the step and its calls row open. */
 const callsOpen = (n: number): Model =>
@@ -297,7 +297,7 @@ describe("a step's calls row, open", () => {
 // Measured on the owner's laptop on 2026-11-03, under load from a live lane and two agents: a read
 // and two redraws, the step open, took 6 ms on e3dc0b85 (the index built on got) and 16,547 ms on
 // 5f426e11 (childrenOf per row, copying). The law had a budget of 1,000 ms; it now counts the work
-// instead (ticket 649, 0052, 0065), with a bound of 4 units per span. Counted: main spends 76,668
+// instead (ticket 649, 0052, 0065), with a bound of 4 units per span. Counted: main spends 76,679
 // units, about 1.0 per span, every run. 5f426e11's copying walk passes the bound within its
 // first few hundred children, so OverCap stops it early.
 //
