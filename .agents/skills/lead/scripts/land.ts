@@ -31,6 +31,10 @@
 //
 // Every refusal before the push puts the tree's HEAD and refs/notes/fabrika back where they were,
 // so a refused run changes nothing. It never resolves a conflict and never reads a key.
+//
+// Each part is an exported Effect (readReady, checkTree, draftPr, mergeMain, leakCheck, signLead,
+// push, openPr, catchup), so the lead's flows (0064, ticket 656) can run them as steps; `run` only
+// calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
@@ -260,271 +264,335 @@ const ready = Command.make(
   }),
 );
 
-const run = Command.make(
-  "run",
-  { lane: Argument.String("lane"), ticket: Argument.String("ticket") },
-  Effect.fn("land.run")(function* ({ lane, ticket }) {
-    const fs = yield* FileSystem.FileSystem;
-    const env = yield* loadEnv;
-    const say = (line: string) => Effect.andThen(note(env.BOXES, lane, `land.ts: ${line}`), Console.log(line));
-    const saved = yield* fs.readFileString(`${env.BOXES}/state/${lane}.land.json`).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(ReadyJson)),
-      Effect.mapError(
-        () =>
-          new Refused({ check: "ready", reason: `no readable state/${lane}.land.json: run land.ts ready`, output: "" }),
-      ),
-    );
-    const { tree, branch } = saved;
-    const git = (check: typeof Check.Type, reason: string, ...args: ReadonlyArray<string>) =>
-      must(check, reason, tree, "git", args);
+// The steps, one exported Effect each, so a flow (0064, ticket 656) can run them one by one. Each
+// takes the lane's facts and gives back what the next one needs; `run` below is a thin caller.
 
-    // check: what the lead lands is what the lane agent said was ready.
-    const on = yield* git("check", "the tree is on no branch", "symbolic-ref", "--short", "HEAD");
-    const head = yield* git("check", "HEAD does not read", "rev-parse", "HEAD");
-    const dirty = yield* git("check", "git status failed", "status", "--porcelain");
+/** The lane as the lead lands it: what the lane agent recorded, the ticket, and env.sh's paths. */
+export type Lane = {
+  readonly lane: string;
+  readonly ticket: string;
+  readonly ready: Ready;
+  readonly env: Effect.Success<typeof loadEnv>;
+};
 
-    if (on !== branch || head !== saved.head) {
+const gitIn =
+  (tree: string) =>
+  (check: typeof Check.Type, reason: string, ...args: ReadonlyArray<string>) =>
+    must(check, reason, tree, "git", args);
+
+/** Reads what the lane agent recorded with `land.ts ready`. */
+export const readReady = Effect.fn("land.readReady")(function* (lane: string, ticket: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const env = yield* loadEnv;
+  const ready = yield* fs.readFileString(`${env.BOXES}/state/${lane}.land.json`).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(ReadyJson)),
+    Effect.mapError(
+      () =>
+        new Refused({ check: "ready", reason: `no readable state/${lane}.land.json: run land.ts ready`, output: "" }),
+    ),
+  );
+  return { lane, ticket, ready, env } satisfies Lane;
+});
+
+/** Refuses unless the tree is clean, on the ready branch and at the ready head. */
+export const checkTree = Effect.fn("land.checkTree")(function* ({ ready }: Lane) {
+  const git = gitIn(ready.tree);
+  const on = yield* git("check", "the tree is on no branch", "symbolic-ref", "--short", "HEAD");
+  const head = yield* git("check", "HEAD does not read", "rev-parse", "HEAD");
+  const dirty = yield* git("check", "git status failed", "status", "--porcelain");
+
+  if (on !== ready.branch || head !== ready.head) {
+    return yield* new Refused({
+      check: "check",
+      reason: `the tree is at ${on} ${head.slice(0, 8)}, not the ready ${ready.branch} ${ready.head.slice(0, 8)}; run land.ts ready again`,
+      output: "",
+    });
+  }
+
+  if (dirty !== "") {
+    return yield* new Refused({ check: "check", reason: "the tree has changes; nothing was done", output: dirty });
+  }
+});
+
+/** Writes the PR body as it will be posted and leak-greps it; none for a mid-lane handover. */
+export const draftPr = Effect.fn("land.draftPr")(function* ({ lane, ready, env }: Lane) {
+  const fs = yield* FileSystem.FileSystem;
+
+  if (ready.pr === undefined) {
+    return undefined;
+  }
+
+  const posted = prBody(
+    yield* fs.readFileString(ready.pr.body),
+    yield* fs.readFileString(ready.pr.loosening),
+    yield* fs.readFileString(ready.pr.mutation),
+  );
+  const file = `${env.BOXES}/${lane}-land-body.md`;
+  yield* fs.writeFileString(file, posted.body);
+  yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
+  return { title: posted.title, file };
+});
+
+/** Fetches main and merges it in as the bot, never a rebase; a conflict names each file's step. */
+export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: Lane) {
+  const git = gitIn(ready.tree);
+  yield* git("fetch", "origin main could not be fetched", "fetch", "-q", "origin", "main");
+  const main = yield* git("fetch", "the fetched main is not a commit", "rev-parse", "FETCH_HEAD^{commit}");
+  const behind = (yield* sh(ready.tree, "git", ["merge-base", "--is-ancestor", main, "HEAD"])).code !== 0;
+
+  if (behind) {
+    const merged = yield* sh(ready.tree, "git", [
+      ...BOT,
+      "merge",
+      "-q",
+      "--no-ff",
+      "--no-edit",
+      "-m",
+      `Merge main into ${ready.branch}`,
+      "-m",
+      `Co-authored-by: ${env.COAUTHOR}`,
+      main,
+    ]);
+
+    if (merged.code !== 0) {
+      const conflicts = (yield* sh(ready.tree, "git", ["diff", "--name-only", "--diff-filter=U"])).out
+        .split("\n")
+        .filter((p) => p !== "");
+      const owners = yield* planOwners(env.MAIN, ready.plan);
       return yield* new Refused({
-        check: "check",
-        reason: `the tree is at ${on} ${head.slice(0, 8)}, not the ready ${branch} ${saved.head.slice(0, 8)}; run land.ts ready again`,
+        check: "merge",
+        reason: [
+          `merging main ${main.slice(0, 8)} conflicts in ${conflicts.length} files; nothing changed. Send each to the step that owns it:`,
+          ...conflicts.map((p) => `  ${p}: ${stepOwning(owners, p)}`),
+        ].join("\n"),
+        output: `${merged.out}${merged.err}`,
+      });
+    }
+  }
+
+  return { main, merged: behind };
+});
+
+/** Leak-greps the branch's net change from main and each commit a push would send (0048). */
+export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Lane, main: string) {
+  const leakgrep = `${HERE}/leakgrep.sh`;
+  const diff = yield* gitIn(ready.tree)(
+    "leak",
+    "the diff from main does not read",
+    "diff",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--unified=0",
+    `${main}...HEAD`,
+  );
+  yield* must("leak", "the leak grep refused the branch's change", ready.tree, "sh", [leakgrep], `${diff}\n`);
+  yield* must("leak", "the leak grep refused a commit", ready.tree, "sh", [
+    leakgrep,
+    "--commits",
+    "HEAD",
+    "--not",
+    "--remotes=origin",
+  ]);
+});
+
+/**
+ * Signs as lead through main's own signer, which alone reads the key: each named lead commit,
+ * oldest first, each in the lane with one parent and no note yet, then the merge of main when there
+ * is one. Gives back how many it signed.
+ */
+export const signLead = Effect.fn("land.signLead")(function* (
+  { lane, ticket, ready, env }: Lane,
+  main: string,
+  merged: boolean,
+) {
+  const git = gitIn(ready.tree);
+  const commits = (yield* git(
+    "sign",
+    "the lane's commits do not read",
+    "rev-list",
+    "--reverse",
+    "--topo-order",
+    `${main}..HEAD`,
+  )).split("\n");
+  const missing = ready.lead.filter((sha) => !commits.includes(sha));
+
+  if (missing.length > 0) {
+    return yield* new Refused({
+      check: "sign",
+      reason: `lead commits not on the lane: ${missing.join(" ")}`,
+      output: "",
+    });
+  }
+
+  const signer = `${env.MAIN}/next/apps/fabrika/src/exam/commits.ts`;
+  const key = `${env.HOME}/.fabrika/step-keys/lead`;
+  const sign = (at: string, what: string) =>
+    must("sign", `the sign script refused ${what}`, at, "node", [
+      signer,
+      "sign",
+      "--step",
+      "lead",
+      "--ticket",
+      ticket,
+      "--key",
+      key,
+    ]);
+
+  for (const sha of commits.filter((c) => ready.lead.includes(c))) {
+    const parents = (yield* git("sign", `${sha} does not read`, "rev-list", "--parents", "-n", "1", sha)).split(" ");
+    const noted = yield* sh(ready.tree, "git", ["notes", "--ref=fabrika", "show", sha]);
+
+    if (parents.length !== 2 || noted.code === 0) {
+      return yield* new Refused({
+        check: "sign",
+        reason: `${sha} is a merge or already signed; name only unsigned lead commits`,
         output: "",
       });
     }
 
-    if (dirty !== "") {
-      return yield* new Refused({ check: "check", reason: "the tree has changes; nothing was done", output: dirty });
-    }
-
-    const leakgrep = `${HERE}/leakgrep.sh`;
-    const bodyFile = `${env.BOXES}/${lane}-land-body.md`;
-    const wip = saved.pr === undefined;
-    const posted =
-      saved.pr &&
-      prBody(
-        yield* fs.readFileString(saved.pr.body),
-        yield* fs.readFileString(saved.pr.loosening),
-        yield* fs.readFileString(saved.pr.mutation),
-      );
-
-    if (posted !== undefined) {
-      yield* fs.writeFileString(bodyFile, posted.body);
-      yield* must("leak", "the leak grep refused the PR body", tree, "sh", [leakgrep, "--text", bodyFile]);
-    }
-
-    yield* git("fetch", "origin main could not be fetched", "fetch", "-q", "origin", "main");
-    const main = yield* git("fetch", "the fetched main is not a commit", "rev-parse", "FETCH_HEAD^{commit}");
-    const notes = yield* sh(tree, "git", ["rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
-    // Puts HEAD and the notes back as they were: the tree was clean, so nothing else is lost.
-    const back = Effect.gen(function* () {
-      yield* sh(tree, "git", ["merge", "--abort"]);
-      yield* sh(tree, "git", ["reset", "-q", "--hard", head]);
-      yield* sh(
-        tree,
-        "git",
-        notes.code === 0
-          ? ["update-ref", "refs/notes/fabrika", notes.out.trim()]
-          : ["update-ref", "-d", "refs/notes/fabrika"],
-      );
-    });
-
-    const prepared = Effect.gen(function* () {
-      const behind = (yield* sh(tree, "git", ["merge-base", "--is-ancestor", main, "HEAD"])).code !== 0;
-
-      if (behind) {
-        const merged = yield* sh(tree, "git", [
-          ...BOT,
-          "merge",
-          "-q",
-          "--no-ff",
-          "--no-edit",
-          "-m",
-          `Merge main into ${branch}`,
-          "-m",
-          `Co-authored-by: ${env.COAUTHOR}`,
-          main,
-        ]);
-
-        if (merged.code !== 0) {
-          const conflicts = (yield* sh(tree, "git", ["diff", "--name-only", "--diff-filter=U"])).out
-            .split("\n")
-            .filter((p) => p !== "");
-          const owners = yield* planOwners(env.MAIN, saved.plan);
-          return yield* new Refused({
-            check: "merge",
-            reason: [
-              `merging main ${main.slice(0, 8)} conflicts in ${conflicts.length} files; nothing changed. Send each to the step that owns it:`,
-              ...conflicts.map((p) => `  ${p}: ${stepOwning(owners, p)}`),
-            ].join("\n"),
-            output: `${merged.out}${merged.err}`,
-          });
-        }
-      }
-
-      const diff = yield* git(
-        "leak",
-        "the diff from main does not read",
-        "diff",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--unified=0",
-        `${main}...HEAD`,
-      );
-      yield* must("leak", "the leak grep refused the branch's change", tree, "sh", [leakgrep], `${diff}\n`);
-      yield* must("leak", "the leak grep refused a commit", tree, "sh", [
-        leakgrep,
-        "--commits",
-        "HEAD",
-        "--not",
-        "--remotes=origin",
-      ]);
-
-      // The lane's own lead commits, oldest first, each in the lane, with one parent and no note yet.
-      const commits = (yield* git(
-        "sign",
-        "the lane's commits do not read",
-        "rev-list",
-        "--reverse",
-        "--topo-order",
-        `${main}..HEAD`,
-      )).split("\n");
-      const named = new Set(saved.lead);
-      const missing = saved.lead.filter((sha) => !commits.includes(sha));
-
-      if (missing.length > 0) {
-        return yield* new Refused({
-          check: "sign",
-          reason: `lead commits not on the lane: ${missing.join(" ")}`,
-          output: "",
-        });
-      }
-
-      const signer = `${env.MAIN}/next/apps/fabrika/src/exam/commits.ts`;
-      const key = `${env.HOME}/.fabrika/step-keys/lead`;
-      const sign = (at: string, what: string) =>
-        must("sign", `the sign script refused ${what}`, at, "node", [
-          signer,
-          "sign",
-          "--step",
-          "lead",
-          "--ticket",
-          ticket,
-          "--key",
-          key,
-        ]);
-
-      for (const sha of commits.filter((c) => named.has(c))) {
-        const parents = (yield* git("sign", `${sha} does not read`, "rev-list", "--parents", "-n", "1", sha)).split(
-          " ",
-        );
-        const noted = yield* sh(tree, "git", ["notes", "--ref=fabrika", "show", sha]);
-
-        if (parents.length !== 2 || noted.code === 0) {
-          return yield* new Refused({
-            check: "sign",
-            reason: `${sha} is a merge or already signed; name only unsigned lead commits`,
-            output: "",
-          });
-        }
-
-        // The signer signs HEAD, so each older commit gets a detached checkout of its own, given back after.
-        const at = `${env.BOXES}/land-${lane}-${sha.slice(0, 8)}`;
-        yield* Effect.acquireUseRelease(
-          git("sign", `no checkout of ${sha}`, "worktree", "add", "-q", "--detach", at, sha),
-          () => sign(at, `lead commit ${sha.slice(0, 8)}`),
-          () => sh(tree, "git", ["worktree", "remove", "--force", at]),
-        );
-      }
-
-      if (behind) {
-        yield* sign(tree, "the merge of main");
-      }
-
-      const target = wip ? `${branch.replace(/(-wip)+$/, "")}-wip` : branch;
-      yield* must("push", `botpush.mjs to ${target} failed`, tree, "node", [
-        `${HERE}/botpush.mjs`,
-        tree,
-        target,
-        "HEAD",
-      ]);
-      return { behind, target };
-    }).pipe(Effect.onError(() => back));
-
-    const { behind, target } = yield* prepared;
-    const tip = yield* git("push", "HEAD does not read", "rev-parse", "HEAD");
-    yield* say(
-      `${behind ? `merged main ${main.slice(0, 8)}, ` : ""}signed ${saved.lead.length + (behind ? 1 : 0)} lead commits, pushed ${target} at ${tip.slice(0, 8)}`,
+    // The signer signs HEAD, so each older commit gets a detached checkout of its own, given back after.
+    const at = `${env.BOXES}/land-${lane}-${sha.slice(0, 8)}`;
+    yield* Effect.acquireUseRelease(
+      git("sign", `no checkout of ${sha}`, "worktree", "add", "-q", "--detach", at, sha),
+      () => sign(at, `lead commit ${sha.slice(0, 8)}`),
+      () => sh(ready.tree, "git", ["worktree", "remove", "--force", at]),
     );
+  }
 
-    if (posted === undefined) {
+  if (merged) {
+    yield* sign(ready.tree, "the merge of main");
+  }
+
+  return ready.lead.length + (merged ? 1 : 0);
+});
+
+/** Pushes with botpush.mjs: to the branch, or to its -wip backup for a mid-lane handover. */
+export const push = Effect.fn("land.push")(function* ({ ready }: Lane) {
+  const target = ready.pr === undefined ? `${ready.branch.replace(/(-wip)+$/, "")}-wip` : ready.branch;
+  yield* must("push", `botpush.mjs to ${target} failed`, ready.tree, "node", [
+    `${HERE}/botpush.mjs`,
+    ready.tree,
+    target,
+    "HEAD",
+  ]);
+  return { target, tip: yield* gitIn(ready.tree)("push", "HEAD does not read", "rev-parse", "HEAD") };
+});
+
+/** Opens the PR, or updates the open one through the REST API (`gh pr edit` fails here, AGENTS.md). */
+export const openPr = Effect.fn("land.openPr")(function* (
+  { ready, env }: Lane,
+  draft: { readonly title: string; readonly file: string },
+) {
+  const listed = yield* must("pr", "gh pr list failed", ready.tree, "gh", [
+    "pr",
+    "list",
+    "-R",
+    env.GH_REPO,
+    "--head",
+    ready.branch,
+    "--state",
+    "open",
+    "--json",
+    "number",
+    "-q",
+    ".[0].number",
+  ]);
+  const open = Number(listed);
+
+  if (listed !== "" && Number.isInteger(open) && open > 0) {
+    yield* must("pr", `PR ${open} could not be updated`, ready.tree, "gh", [
+      "api",
+      "-X",
+      "PATCH",
+      `repos/${env.GH_REPO}/pulls/${open}`,
+      "-f",
+      `title=${draft.title}`,
+      "-F",
+      `body=@${draft.file}`,
+    ]);
+    return open;
+  }
+
+  const made = yield* must("pr", "gh pr create failed", ready.tree, "gh", [
+    "pr",
+    "create",
+    "-R",
+    env.GH_REPO,
+    "--head",
+    ready.branch,
+    "--title",
+    draft.title,
+    "--body-file",
+    draft.file,
+  ]);
+  const number = Number(/\/pull\/(\d+)/.exec(made)?.[1]);
+
+  if (!Number.isInteger(number)) {
+    return yield* new Refused({ check: "pr", reason: "gh pr create named no PR", output: made });
+  }
+
+  return number;
+});
+
+/** Runs catchup.sh, which waits for CI on the pushed head and squash-lands it. */
+export const catchup = Effect.fn("land.catchup")(function* ({ ticket, ready }: Lane, pr: number) {
+  const code = yield* Effect.scoped(
+    Effect.flatMap(
+      ChildProcess.make("sh", [`${HERE}/catchup.sh`, String(pr), ticket], {
+        cwd: ready.tree,
+        stdout: "inherit",
+        stderr: "inherit",
+      }),
+      (h) => h.exitCode,
+    ),
+  ).pipe(Effect.mapError(() => new Refused({ check: "catchup", reason: "catchup.sh could not start", output: "" })));
+
+  if (Number(code) !== 0) {
+    return yield* new Refused({ check: "catchup", reason: `catchup.sh ${pr} ${ticket} exited ${code}`, output: "" });
+  }
+});
+
+/** Puts HEAD and the notes back as they were before the merge: the tree was clean, so nothing else is lost. */
+const rollback = Effect.fn("land.rollback")(function* ({ ready }: Lane) {
+  const notes = yield* sh(ready.tree, "git", ["rev-parse", "--verify", "-q", "refs/notes/fabrika"]);
+  return Effect.gen(function* () {
+    yield* sh(ready.tree, "git", ["merge", "--abort"]);
+    yield* sh(ready.tree, "git", ["reset", "-q", "--hard", ready.head]);
+    yield* sh(
+      ready.tree,
+      "git",
+      notes.code === 0
+        ? ["update-ref", "refs/notes/fabrika", notes.out.trim()]
+        : ["update-ref", "-d", "refs/notes/fabrika"],
+    );
+  });
+});
+
+const run = Command.make(
+  "run",
+  { lane: Argument.String("lane"), ticket: Argument.String("ticket") },
+  Effect.fn("land.run")(function* ({ lane: name, ticket }) {
+    const lane = yield* readReady(name, ticket);
+    const say = (line: string) => Effect.andThen(note(lane.env.BOXES, name, `land.ts: ${line}`), Console.log(line));
+    yield* checkTree(lane);
+    const draft = yield* draftPr(lane);
+    const back = yield* rollback(lane);
+    // Every refusal before the push changes nothing.
+    const { main, signed, target, tip } = yield* Effect.gen(function* () {
+      const { main, merged } = yield* mergeMain(lane);
+      yield* leakCheck(lane, main);
+      const signed = yield* signLead(lane, main, merged);
+      return { main, signed, ...(yield* push(lane)) };
+    }).pipe(Effect.onError(() => back));
+    yield* say(`main at ${main.slice(0, 8)}, signed ${signed} lead commits, pushed ${target} at ${tip.slice(0, 8)}`);
+
+    if (draft === undefined) {
       return;
     }
 
-    const listed = yield* must("pr", "gh pr list failed", tree, "gh", [
-      "pr",
-      "list",
-      "-R",
-      env.GH_REPO,
-      "--head",
-      branch,
-      "--state",
-      "open",
-      "--json",
-      "number",
-      "-q",
-      ".[0].number",
-    ]);
-    const open = Number(listed);
-    let pr: number;
-
-    if (listed !== "" && Number.isInteger(open) && open > 0) {
-      // `gh pr edit` fails here with a classic Projects error (AGENTS.md).
-      yield* must("pr", `PR ${open} could not be updated`, tree, "gh", [
-        "api",
-        "-X",
-        "PATCH",
-        `repos/${env.GH_REPO}/pulls/${open}`,
-        "-f",
-        `title=${posted.title}`,
-        "-F",
-        `body=@${bodyFile}`,
-      ]);
-      pr = open;
-    } else {
-      const made = yield* must("pr", "gh pr create failed", tree, "gh", [
-        "pr",
-        "create",
-        "-R",
-        env.GH_REPO,
-        "--head",
-        branch,
-        "--title",
-        posted.title,
-        "--body-file",
-        bodyFile,
-      ]);
-      const number = Number(/\/pull\/(\d+)/.exec(made)?.[1]);
-
-      if (!Number.isInteger(number)) {
-        return yield* new Refused({ check: "pr", reason: "gh pr create named no PR", output: made });
-      }
-
-      pr = number;
-    }
-
-    yield* say(`PR https://github.com/${env.GH_REPO}/pull/${pr}; catchup.sh ${pr} ${ticket}`);
-    const handle = ChildProcess.make("sh", [`${HERE}/catchup.sh`, String(pr), ticket], {
-      cwd: tree,
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    const code = yield* Effect.scoped(Effect.flatMap(handle, (h) => h.exitCode)).pipe(
-      Effect.mapError(() => new Refused({ check: "catchup", reason: "catchup.sh could not start", output: "" })),
-    );
-
-    if (Number(code) !== 0) {
-      return yield* new Refused({ check: "catchup", reason: `catchup.sh ${pr} ${ticket} exited ${code}`, output: "" });
-    }
-
+    const pr = yield* openPr(lane, draft);
+    yield* say(`PR https://github.com/${lane.env.GH_REPO}/pull/${pr}; catchup.sh ${pr} ${ticket}`);
+    yield* catchup(lane, pr);
     yield* say(`landed PR ${pr}`);
   }),
 );
