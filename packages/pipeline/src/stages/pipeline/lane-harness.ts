@@ -15,12 +15,13 @@ import { fileURLToPath } from "node:url";
 import { Ledger, streams } from "@kampus/fabrika-old";
 import { memoryTracing } from "@kampus/fabrika-old/otel";
 import { fileStorage } from "@kampus/fabrika-old/storage/node";
-import { Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
+import { Author, saveCell, Write } from "@tea-fabrika/tracker";
+import { Clock, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
 import { expect, vi } from "vitest";
 import { memoryLedger } from "../../asks/ledger.ts";
 import type { Polling } from "../../code-host-github.ts";
-import { hashOf, textOf } from "../../tickets/approval.ts";
-import { type Entry, nameOf } from "../../tickets/ticket.ts";
+import { Answer, Asked } from "../../tickets/ask.ts";
+import { type Entry, nameOf, picksOf, questionOf, readAnswer } from "../../tickets/ticket.ts";
 import { Tickets, TicketsFailed, ticketsOnLedger } from "../../tickets/tickets.ts";
 import { MutationRunner } from "../mutation/services.ts";
 import { TestsWork } from "../test-writer/program.ts";
@@ -39,9 +40,7 @@ import { LaneWork } from "./work.ts";
 // touched. Today's version.
 
 export const MODULES = fileURLToPath(new URL("../../../node_modules", import.meta.url));
-
 export const BRIEFS = fileURLToPath(new URL("../../../../../programs/pipeline/briefs", import.meta.url));
-
 export const OWNER = "user:owner";
 export const NUMBER = 1;
 
@@ -66,6 +65,40 @@ const read = readNumbered(NUMBER);
 /** A person's yes at the plan and at each merge, the rule change's too. A step's question has none. */
 export const YES = { approve: "approve", exam_merge: "merge", merge: "merge" };
 
+/** A fake person uses the same answer path as the ticket window. */
+export const answerAsk = (ticket: number, ask: Asked, pick: string, note = "") =>
+  Effect.gen(function* () {
+    const rec = ask.shows.rec;
+    const answer =
+      rec._tag !== "pick"
+        ? Schema.decodeUnknownSync(Answer)({ _tag: "chose", pick, ...(note ? { note } : {}) })
+        : rec.pick === pick
+          ? Answer.cases.rec.make({})
+          : Answer.cases.against.make({ pick, note: note || `Choose ${pick} instead.` });
+    yield* saveCell({
+      type: "save",
+      id: `answer/${ask.ask}`,
+      next: ticket + 1,
+      write: Schema.decodeUnknownSync(Write)({
+        kind: "answer",
+        ticket,
+        ask: ask.ask,
+        answer,
+        saw: ask.saw,
+        via: {
+          _tag: "window",
+          took: {
+            key: answer._tag === "rec" ? "y" : String(ask.shows.picks.findIndex((p) => p.pick === pick) + 1),
+            rec: rec._tag === "pick" ? "shown" : rec._tag === "hidden" ? "hidden" : "none",
+            ms: 0,
+            opened: [],
+            said: yield* Clock.currentTimeMillis,
+          },
+        },
+      }),
+    });
+  }).pipe(Effect.provideService(Author, { kind: "user", id: "owner" }));
+
 /**
  * Answers every ask as a person, with `picks[kind]`, until the fiber is stopped. A question it has no
  * pick for fails it, out loud: a silent first pick could say `again` for ever.
@@ -84,7 +117,6 @@ export const answering = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const ledger = yield* Ledger;
     const done = new Set<string>();
     const queue = [...steps];
     const inTurn = new Map(Object.entries(queues).map(([kind, said]) => [kind, [...said]]));
@@ -117,22 +149,16 @@ export const answering = (
         if (pick === undefined) {
           return yield* Effect.die(
             new Error(
-              `The test's person has no pick for ${fact.ask}, "${fact.what}" (${fact.picks.join(" or ")}). Give the test one.`,
+              `The test's person has no pick for ${fact.ask}, "${questionOf(fact)}" (${picksOf(fact).join(" or ")}). Give the test one.`,
             ),
           );
         }
 
-        yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
-          kind: "answered",
-          writer: OWNER,
-          data: {
-            type: "answered",
-            ask: fact.ask,
-            pick,
-            note: notes[kind] ?? "",
-            text: yield* hashOf(textOf(ticket)),
-          },
-        });
+        if (!("format" in fact)) {
+          return yield* Effect.die(new Error(`The test's person needs a sealed ask: ${fact.ask}`));
+        }
+
+        yield* answerAsk(NUMBER, fact, pick, notes[`${kind}/${pick}`] ?? notes[kind]);
       }
 
       yield* Effect.sleep("50 millis");
@@ -198,7 +224,7 @@ export interface Script {
   readonly picks?: Readonly<Record<string, string>>;
   /** A step's questions, answered in turn. Past the last, `picks` answers. */
   readonly steps?: readonly string[];
-  /** What a person writes beside their pick, by the kind of question. */
+  /** The person's note by kind/pick or kind; required only against a shown recommendation. */
   readonly notes?: Readonly<Record<string, string>>;
   /** The person's picks for one kind of question, in turn. Past the last, `picks` answers. */
   readonly queues?: Readonly<Record<string, readonly string[]>>;
@@ -1268,7 +1294,6 @@ export const SEE = ["src/lower.ts", "src/lower.test.ts"];
 
 export const runsOf = (ran: Ran, step: string) => codexRuns(ran.dir).filter((r) => r.step === step);
 export const THE_PLANS_NO = { approve: "no" };
-
 export const commentsOf = (ran: Ran) => ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
 
 export const REAL_LEAN =
@@ -1329,19 +1354,21 @@ export const P1_CANNOT = {
 
 // For the tests under "a lane, on what the real agents answered > what a person is asked".
 
-/** All a person has in front of them at one question: what its step wrote since it began, and the question. */
+/** The exact question and evidence a person sees in the sealed ask. */
 export const readBy = (ran: Ran, prefix: string) => {
-  const at = ran.facts.findIndex((f) => f.type === "asked" && String(f.ask).startsWith(prefix));
-  const asked = ran.facts[at];
-  const from = ran.facts.slice(0, at).findLastIndex((f) => f.type === "started");
-  const next = ran.facts.findIndex((f, i) => i > at && f.type === "answered");
-  const said = ran.facts
-    .slice(from, next < 0 ? undefined : next)
-    .filter((f) => f.type === "commented")
-    .map((f) => String(f.body));
-  const what = String(asked?.what);
-  const picks = Array.isArray(asked?.picks) ? asked.picks.map(String) : [];
-  return { what, picks, text: [...said, what].join("\n") };
+  const { shows } = Schema.decodeUnknownSync(Asked)(
+    ran.facts.find((f) => f.type === "asked" && String(f.ask).startsWith(prefix)),
+  );
+  return {
+    what: shows.what,
+    picks: shows.picks.map((p) => p.pick),
+    text: [
+      shows.what,
+      ...shows.picks.map((p) => `${p.pick}: ${p.does}`),
+      JSON.stringify(shows.evidence),
+      JSON.stringify(shows.rec),
+    ].join("\n"),
+  };
 };
 
 /** A line that names the pick, and says more than the pick. */
@@ -1446,8 +1473,15 @@ export const RUN_3: FakeScript = {
 
 export const bye = (ran: Ran) => ran.lines.at(-1) ?? "";
 
+export const answersOf = (ran: Ran) =>
+  ran.entries.flatMap((entry) =>
+    entry.fact.type === "answered" ? [{ fact: entry.fact, answer: readAnswer(ran.entries, entry.fact) }] : [],
+  );
+
 export const answeredWith = (ran: Ran, pick: string) =>
-  ran.facts.filter((f) => f.type === "answered" && f.pick === pick);
+  answersOf(ran)
+    .filter((a) => a.answer?.pick === pick)
+    .map((a) => a.fact);
 
 /** What makes round 2's test pass: a build's change to the file round 1's build wrote. */
 export const FOLDS = {

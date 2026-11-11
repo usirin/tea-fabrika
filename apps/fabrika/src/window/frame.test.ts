@@ -1,9 +1,10 @@
 import { applyCell } from "@demlik/tea";
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { property } from "../../../../fixtures/ask-desk/property.ts";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, type Desk, type DeskCmd, type DeskMsg, deskMachine, type Open } from "../desk/desk.ts";
 import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
@@ -14,6 +15,7 @@ import {
   agentsWord,
   agoWord,
   asksSections,
+  asksHead,
   asksWord,
   bottomLineShows,
   clockWord,
@@ -75,6 +77,24 @@ const fold = (msgs: readonly DeskMsg[]): Open => {
 
   return s;
 };
+
+property(
+  "the asks head names asks and stops with the right counts",
+  {
+    asks: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10000 })),
+    stops: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10000 })),
+  },
+  ({ asks, stops }) => {
+    for (const [a, s] of [
+      [0, 0],
+      [1, 1],
+      [2, 3],
+      [asks, stops],
+    ]) {
+      expect(asksHead(a!, s!)).toBe(`${a} ${a === 1 ? "ask" : "asks"} · ${s} ${s === 1 ? "stop" : "stops"}`);
+    }
+  },
+);
 
 it("K18: moved keys update palette search, prefix hints, keycaps and spoken words", () => {
   const read = decodeKeys('prefix = "ctrl+a"\ntezgah.zoom = "<prefix>shift+f6"', true);
@@ -469,7 +489,7 @@ describe("the bottom line and the asks list", () => {
     expect([...shown]).toEqual([["ticket:1", 7]]);
   });
 
-  it("makes one row per ask: what it asks, its ticket and tile under it, its time", () => {
+  it("makes one row per ask: what it asks, its ticket under it, its time", () => {
     const at = new Date(2026, 9, 30, 11, 13).getTime();
     const asks = now({
       asks: [
@@ -492,7 +512,8 @@ describe("the bottom line and the asks list", () => {
         id: "7/a-1",
         icon: "ask",
         title: "Approve plan",
-        sub: "#7 Login fails · t2",
+        // Review 4: tile ids are not display text. The generated law below forbids them.
+        sub: expect.stringContaining("#7 Login fails"),
         side: "11:13",
         second: { name: "Later", cap: "H" },
       },
@@ -513,6 +534,84 @@ describe("the bottom line and the asks list", () => {
     });
     // Nothing set aside: no Later section at all.
     expect(asksSections(now({ asks: [ask()] }), lined, SHOWN, at)).toHaveLength(1);
+  });
+
+  // Today's version, review 4 finding 5. Plant already present: askRowOf adds ` · ${tile}`.
+  // Inspect only the row's drawn words; its internal id remains available for selection.
+  it("menu rows never show machine ids, for any asks, Later marks and matching ticket tiles", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(
+          fc.record({
+            ticket: fc.integer({ min: 1, max: 100_000 }),
+            kind: fc.constantFrom("ask" as const, "stuck" as const),
+            later: fc.boolean(),
+            shown: fc.boolean(),
+          }),
+          { selector: (row) => row.ticket, maxLength: 8 },
+        ),
+        (rows) => {
+          const shown = rows.filter((row) => row.shown);
+          const [first, ...rest] = shown.map((row) => ({
+            id: `ticket:${row.ticket}`,
+            program: "ticket",
+          }));
+          const desk = fold(
+            first === undefined
+              ? []
+              : [
+                  {
+                    type: "covered",
+                    tile: "t1",
+                    runs: [first, ...rest],
+                  },
+                ],
+          );
+          const tickets = new Map(shown.map((row) => [`ticket:${row.ticket}`, row.ticket]));
+          const asks = rows.map((row) =>
+            ask({
+              ticket: row.ticket,
+              kind: row.kind,
+              key:
+                row.kind === "ask" ? `${row.ticket}/a-plan-${row.ticket}` : `${row.ticket}/stuck/r-build-${row.ticket}`,
+              title: "Read names in one form",
+              what: row.kind === "ask" ? "Approve this plan?" : "Checks failed",
+            }),
+          );
+          const sections = asksSections(
+            now({
+              asks: asks.filter((_, i) => !rows[i]!.later),
+              later: asks.filter((_, i) => rows[i]!.later),
+            }),
+            desk,
+            tickets,
+            0,
+          );
+          const drawn = sections.flatMap((section) => section.rows);
+          expect(drawn).toHaveLength(rows.length);
+
+          for (const row of drawn) {
+            const words = JSON.stringify([row.title, row.sub, row.side]);
+            expect(words).not.toMatch(/\bt\d+\b|\b[ar]-[a-z_]+-\d+\b|ticket:\d+/);
+            expect(words).not.toContain(row.id);
+            expect(row.sub).toContain("Read names in one form");
+          }
+        },
+      ),
+      {
+        seed: 119120,
+        numRuns: 100,
+        // Review 4's asks-menu-rec shots: a closed row leaked the matching tile's t1.
+        examples: [
+          [
+            [
+              { ticket: 117, kind: "ask", later: false, shown: true },
+              { ticket: 102, kind: "ask", later: false, shown: false },
+            ],
+          ],
+        ],
+      },
+    );
   });
 
   it("opens an ask in the tile that shows its ticket, else turns the tracker to it, else says so", () => {
