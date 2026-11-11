@@ -15,11 +15,11 @@ feature and back-fill local. Never `Alchemy.remote()`.
 **Added 2026-11-09 (owner,
 [0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)):** in `next/`, the local
 side goes through Alchemy just as the cloud side does. Everything that starts or talks to the
-local runtime (the local stage in `next/apps/fabrika/src/local-stage.ts` and
-`next/packages/libfabrika/src/node/stage.ts`, and any test helper that boots a stage) uses
+local runtime (the local instance in `next/apps/fabrika/src/local-instance.ts` and
+`next/packages/libfabrika/src/node/dev/dev.ts`, and any test helper that boots an instance) uses
 `alchemy` and `@alchemy.run/cloudflare-runtime`, never Miniflare or workerd directly. "Local
 Miniflare" above means the local runtime Alchemy runs: the installed runtime package drives
-workerd itself, and `next/` has no `miniflare` import. The stage's start already goes this way.
+workerd itself, and `next/` has no `miniflare` import. The instance's start already goes this way.
 What does not yet: 16 lines that reach the workerd process by `ps`, `process.kill` or a plain
 `fetch`, listed in 0042 with the gap behind each. A gap is patched locally with its upstream
 issue, as the lifecycle hook already is
@@ -55,12 +55,12 @@ const job = Cloudflare.Container("job", {schedulingPolicy: "durable_object", doc
 
 ## How it is kept
 
-- **One stack file, two stages.** The local stage runs Workers and Durable
+- **One stack file, two instances.** The local instance runs Workers and Durable
   Objects in workerd with no account (experiments 145 and 146) and containers
   in Docker, which is how Cloudflare's own dev mode runs them.
 - **Make falling behind impossible, not discouraged.** A check in `pnpm lint`
   fails on a stack resource with no local provider. CI runs the tests against
-  the local stage. The check is planned in Tier 1's P12.
+  the local instance. The check is planned in Tier 1's P12.
 - **Moving a project:** stop, copy in `pos` order, check by hash, switch. That
   is the move [the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)
   leans to, measured in experiment 145.
@@ -71,7 +71,7 @@ const job = Cloudflare.Container("job", {schedulingPolicy: "durable_object", doc
   local one is plain.
 - Some Cloudflare parts have no local twin today: where a container is placed,
   how far it is from its Durable Object, and the real cold start. Those are
-  measured live, and the local stage says it cannot show them.
+  measured live, and the local instance says it cannot show them.
 - Open: whether `alchemy dev` runs a Durable Object's container locally
   (experiment 148), and whether container snapshots have a local twin.
   Lean: the rule holds either way, and a missing twin is built by us, not

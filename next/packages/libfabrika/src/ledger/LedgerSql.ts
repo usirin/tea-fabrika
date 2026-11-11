@@ -5,6 +5,7 @@ import type { Sql } from "../Sql.ts";
 import { pages } from "./internal/ledgerPages.ts";
 import { type Doorbell, Ledger } from "./Ledger.ts";
 import { Referee } from "./Referee.ts";
+import * as RefereeSql from "./RefereeSql.ts";
 
 /** The referee in this process. `caller.reader` is the object's own name, such as
  *  `connection:t1`. */
@@ -19,4 +20,4 @@ export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Laye
         wait: (stream, after) => referee.wait(stream, after, caller.reader),
       };
     }),
-  ).pipe(Layer.provide(Referee.layer(sql)));
+  ).pipe(Layer.provide(RefereeSql.layer(sql)));

@@ -202,17 +202,19 @@ top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
 Its property test generates file contents and checks nearby paths stay allowed.
 
-### libfabrika's rooms
+### libfabrika's modules
 
-Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md). One rule of ours and two of oxlint's own hold a room's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `rooms.test.ts` plants each law at its real path with that config.
+Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md), with the words of [0091](../.decisions/0091-modules-and-layers.md) (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.
 
 | Rule | Refuses | Lists, in `.oxlintrc.json` | Tests |
 |---|---|---|---|
-| `rooms` | a room file that re-exports another room's names (`export ... from`, `export *`, or an imported name sent on); a file in a folder or at a top name `src/` does not list; an export in a room's `internal/` with no `/** @internal */` above it; a service or an error in a shared top file | `src`, `rooms`, `folders`, `files`, `values` | on |
+| `modules` | a module file that re-exports another module's names (`export ... from`, `export *`, or an imported name sent on); a file in a folder or at a top name `src/` does not list; an export in a module's `internal/` with no `/** @internal */` above it; a service or an error in a shared top file | `src`, `modules`, `folders`, `files`, `values` | on |
 
-The other two laws are oxlint's own rules, since an existing rule comes before a hand-written one ([0040](../.decisions/0040-existing-tools-before-hand-written.md)). `eslint/no-restricted-imports` refuses an import or `export ... from` of another room's `internal/`, by one pattern group in an override for `src/**`; the override repeats the base rule's Radix entry, since an override replaces a rule's options. `unicorn/filename-case` holds a front file to PascalCase and an `internal/` file to camelCase, in two overrides.
+The other two laws are oxlint's own rules, since an existing rule comes before a hand-written one ([0040](../.decisions/0040-existing-tools-before-hand-written.md)). `eslint/no-restricted-imports` refuses an import or `export ... from` of another module's `internal/`, by one pattern group in an override for `src/**`; the override repeats the base rule's Radix entry, since an override replaces a rule's options. `unicorn/filename-case` holds a front file to PascalCase and an `internal/` file to camelCase, in two overrides.
 
-Count on 2026-11-10, on main at `33a282f8` with this change: `rooms` 0, the `internal/` pattern 0, `filename-case` 0. Zero was expected and measures no false-alarm rate: no room has an `internal/` yet, and only `transport/` and `door/` exist. So the lists hold main's old names too (`data`, `coordination`, `app`, `id`, `testing`), and the two case overrides name only the six rooms with no file on main. Each old name leaves, and `transport` and `door` join the case overrides, in the pull request that moves its files. The top of `rooms.ts` lists what the rule does not see: a package specifier, a name given a new binding before it is exported, and an error or service made by a helper under another name.
+Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words (the rule was `rooms` until ticket 688): `rooms` 0, the `internal/` pattern 0, `filename-case` 0. Zero was expected and measures no false-alarm rate: no room has an `internal/` yet, and only `transport/` and `door/` exist. So the lists hold main's old names too (`data`, `coordination`, `app`, `id`, `testing`), and the two case overrides name only the six rooms with no file on main. Each old name leaves, and `transport` and `door` join the case overrides, in the pull request that moves its files. The top of `modules.ts` lists what the rule does not see: a package specifier, a name given a new binding before it is exported, and an error or service made by a helper under another name.
+
+The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
 Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
@@ -274,6 +276,55 @@ A zero-hit scan has no false-alarm percentage denominator. The generated positiv
 negative plants check both sides separately; they cover parameter modifiers, default values,
 instance/static/abstract accessors, decoded key spellings and permitted plain parameters.
 
+### Ticket 681: instance, not stage, in next/
+
+`no-stage-word` holds decision [0080](../.decisions/0080-a-running-copy-is-an-instance.md): in
+`next/`, a running copy of fabrika is an instance. It reads identifiers, decoded string literals,
+template text, JSX text, comments and the file's path below `next/`. A word is a run of letters
+split at case changes, so `localStage`, `StageError`, `STAGE`, `P34_STAGE_DRIVER`, `stage-wire`
+and a `stages/` folder fire, and `backstage`, `stagecoach`, `instance` and `startDev` pass.
+Oxlint's own `id-denylist`, `no-restricted-properties` and `no-restricted-imports` each see one
+of identifiers, properties or imports, never comments, paths and text together, so this is our
+own rule (0040). It has its own `next/**` block in `.oxlintrc.json`, so the two equal rule blocks
+for `next/` and `.agents/` stay equal; `.agents/` and today's version keep their pipeline stages.
+
+An exception is one line under `// oxlint-disable-next-line fabrika/no-stage-word -- <why>`.
+Template text and comments report on each line that holds the word, so one comment allows one
+line. Of an ignore comment, only the reason after `--` is read: the rule name in it never fires,
+and the reason is written without the word, since its own line is not the one it allows. A path
+reports at the file's start, where no comment silences it. There is no autofix, since the rule
+cannot choose `dev` or `instance`, or move a saved name.
+
+What stays, each under its own exception: Alchemy's own `stage` key in `src/brain.ts`, the app's
+deploy call and `sibling.laws.test.ts`, and experiment 238's saved driver name in
+`instance-one-file.test.ts`. The one quote of today's app, "capture stages" in the pinned bytes
+of `exam-paths.json`, sits inside one inline snapshot, a single template where no comment fits
+beside the line. So `commits.test.ts` brackets that one `expect` with `oxlint-disable` and
+`oxlint-enable` for this rule alone; the other lines of that snapshot are held by the snapshot
+itself, which must equal `exam-paths.json` byte for byte.
+
+What it cannot see: JSON and Markdown, such as `package.json`'s export keys, which the review's
+`rg -i stage next/` audit reads; a word built at run time; and a regular expression's pattern.
+
+`no-stage-word.test.ts` runs the real config over generated names (word parts, case, eight
+spellings, up to twelve placements in `.ts` and `.tsx`), with seed 681080 and 12 runs per property. Every
+run holds a retired spelling and its neighbors in the same places, including a fused lowercase
+word around the letters. Further properties place an annotated exception at generated offsets
+beside unannotated uses, and check generated `next/` paths against today's paths, `.agents/`
+and top-level scripts, and `oxlint-plugins/` among absolute, relative and Windows spellings
+of one path. Fixed cases pin escapes, each comment and text form, the Alchemy key, the two kept literals, directives and
+empty files named for the word. Nine plants each turned at least one law red: lowercase
+identifiers only, any property named stage allowed, a whole file excluded, a directive read
+whole or skipped whole, no path check, raw spelling only, no Windows separators, and no split
+at case changes.
+
+The scan on 2026-11-11, main at `0bb25969`, through the real config over all 244 files oxlint
+reads in `next/`: 302 fires in 33 files before the rename. `rg -n -i stage next/` finds 34 files.
+Every line it finds in a linted file fired, and all eight files whose own path holds the word
+fired by path; the 34th file is `package.json`, outside the rule. None was false. After the tests
+step, the exam files show 0 fires; 37 remain in the 9 build-owned files the plan lists. Two of
+those are Alchemy keys that keep their word under an exception; the other 35 are renames.
+
 ### P12 checks in lint
 
 `no-node-filesystem` refuses `fs`, `fs/promises` and `path`, with or without `node:`,
@@ -281,8 +332,8 @@ in `next/` product files. It covers imports, re-exports, dynamic imports, `requi
 and TypeScript import assignments. Tests, test support files, declarations, the
 exam and browser test drivers are left out. Its generated plants use the real
 config at these paths. The P12 review-6 sweep found one filesystem import in
-`node/stage-recording.ts`, plus six path imports: that file, `node/build.ts`,
-and the app's `build.ts`, `dev.ts`, `src/local-stage.ts` and `src/stage.ts`.
+`node/dev/dev-recording.ts`, plus six path imports: that file, `node/build.ts`,
+and the app's `build.ts`, `dev.ts`, `src/local-instance.ts` and `src/instance.ts`.
 These are seven findings in six files, all read by hand, with no false alarm.
 All can use Effect's existing FileSystem or Path service. This rule deliberately
 stays red until the builder removes those imports.
@@ -324,7 +375,7 @@ the build step rather than making every unknown return a finding:
 | File | Lines | Real or false | Why |
 |---|---|---|---|
 | `next/packages/libfabrika/src/app/program.ts` | 411 | real | A Standard Schema validator can create a Promise behind its `unknown` return type. |
-| `next/packages/libfabrika/src/node/stage.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
+| `next/packages/libfabrika/src/node/dev/dev.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its

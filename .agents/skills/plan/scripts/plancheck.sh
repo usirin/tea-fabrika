@@ -8,7 +8,8 @@
 # "path", or that has an owner column ("owner", "step", "writer" or "writes it"). Exits 1 when a
 # files table has no owner column, a row has an empty owner, or an exam path in a row is owned by a
 # step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
-# Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
+# Version 3, the one a draft must carry, also needs one `Estimate: <n> steps, $<d>` line ending the
+# Size section in draft and approved modes; plans approved at version 2 keep passing. Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
 # `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit,
 # and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
@@ -100,23 +101,27 @@ for line in raw:
     if re.match(r"^##\s", line): first_section = True
     lines.append(line)
 bad = []
+# Version 3 adds the Estimate line. A new draft writes the current version; a plan approved at an
+# older one keeps passing, so the lane it started is not stranded.
+CURRENT, KNOWN = 3, ("Plancheck-Version: 2", "Plancheck-Version: 3")
 if draft == "approved":
     approval = re.fullmatch(r"Approved by the lead agent, builds (\S(?:.*\S)?); body ([0-9a-f]{12})", raw[0] if raw else "")
     if not approval: bad.append("plan approval: invalid approval line")
     elif approval[2] != digest[:12]: bad.append("plan approval: body hash mismatch")
-    if len(raw) < 2 or raw[1] != "Plancheck-Version: 2": bad.append("plan approval: missing version on line 2")
+    if len(raw) < 2 or raw[1] not in KNOWN: bad.append("plan approval: missing version on line 2")
     if any(l.lstrip().startswith("Approved by the lead agent,") for l in lines[1:]):
         bad.append("plan approval: duplicate approval line")
 if draft == "1":
     if not raw or raw[0].strip(): bad.append("draft: leave the first line blank for approval")
-    if len(raw) < 2 or raw[1] != "Plancheck-Version: 2":
-        bad.append("draft: put Plancheck-Version: 2 on line 2")
+    if len(raw) < 2 or raw[1] != f"Plancheck-Version: {CURRENT}":
+        bad.append(f"draft: put Plancheck-Version: {CURRENT} on line 2")
     if any(line.lstrip().startswith("Approved by the lead agent,") for line in lines):
         bad.append("draft: only the lead session may add an approval line")
 markers = [line.strip() for line in lines if re.match(r"^\s*Plancheck-Version\b", line)]
-versioned = markers == ["Plancheck-Version: 2"]
+versioned = len(markers) == 1 and markers[0] in KNOWN
+version = int(markers[0].split()[-1]) if versioned else 0
 if not markers and draft != "owners": print("legacy plan: generator checks skipped")
-elif not versioned: bad.append("invalid or duplicate Plancheck-Version: expected one Plancheck-Version: 2")
+elif not versioned: bad.append("invalid or duplicate Plancheck-Version: expected one Plancheck-Version: 2 or 3")
 fc = set()
 if versioned and draft != "owners":
     exported = subprocess.run(["node", "--input-type=module", "-e",
@@ -199,6 +204,25 @@ for i, l in enumerate(lines):
 if draft == "owners":
     # Owner lookup uses the same fence and table parser, including appended amendments.
     print(json.dumps(owned)); sys.exit(0)
+FORM = "`Estimate: <n> steps, $<d>`, both above zero"
+def estimate():
+    # Version 3: the Size section ends with one Estimate line, the lane's budget (.decisions/0076).
+    # The lane chain's estimateIn reads the first line anywhere, fences included, that says "estimate",
+    # "<n> steps" and "$<d>", so any second such line is refused: it could set the backstop.
+    reads = lambda l: re.search(r"\bestimate\b.*?\b\d+\s+steps?\b.*?\$\s?\d", l, re.I)
+    seen = [i for i, l in enumerate(raw) if reads(l) or re.match(r"\s*estimate\s*:", lines[i], re.I)]
+    if len(seen) > 1:
+        return [f"plan estimate: {len(seen)} estimate lines (lines {', '.join(str(i + 1) for i in seen)}); keep one"]
+    if not seen: return [f"plan estimate: end the Size section with {FORM}"]
+    i = seen[0]
+    m = re.fullmatch(r"Estimate: ([1-9][0-9]*) steps?, \$([0-9]+(?:\.[0-9]+)?)", lines[i].rstrip())
+    if not m or float(m[2]) <= 0:
+        return [f"plan estimate: line {i + 1} must read {FORM}, outside a code block"]
+    heads = [j for j, l in enumerate(lines) if re.match(r"^##\s", l)]
+    size = next((j for j in heads if re.match(r"^##\s+size\b", lines[j], re.I)), None)
+    end = next((j for j in heads if size is not None and j > size), len(lines))
+    last = next((j for j in range(end - 1, size, -1) if lines[j].strip()), None) if size is not None else None
+    return [] if last == i else [f"plan estimate: line {i + 1} must be the last line of the Size section"]
 if draft in ("1", "approved"):
     if not opening: bad.append("plan_section_missing: opening fenced block")
     if not laws_table: bad.append("plan_section_missing: laws table")
@@ -215,6 +239,8 @@ if draft in ("1", "approved"):
         if heading:
             current = heading[1].strip().lower(); sections.setdefault(current, [])
         elif current: sections[current].append(line)
+    if version >= CURRENT:
+        bad.extend(estimate())
     for needle in ("records", "cannot tell", "open questions"):
         if not any(needle in k for k in sections): bad.append("plan_section_missing: " + needle)
     for key, content in sections.items():
