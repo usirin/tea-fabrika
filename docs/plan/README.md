@@ -73,8 +73,10 @@ setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-o
 into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
 [0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
 only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
-`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. → the lead lands each slice once its
-steps pass
+`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. P40, programs written outside
+fabrika's own source (ticket 715), is planned in 4 slices; slice 1, the core counter built and run as
+`fabrika/counter`, is being built, and P40 stays open until its cold-author check passes. → the lead
+lands each slice once its steps pass
 
 *2026-11-09:* the local stage, P12, landed as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too
