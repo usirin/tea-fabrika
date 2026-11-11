@@ -1,13 +1,14 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { pullRequestsOf } from "@tea-fabrika/tracker";
-import { Effect, Exit, FileSystem, Schedule, Scope } from "effect";
+import { Effect, Exit, FileSystem, type Path, Schedule, Scope } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Down } from "../link.ts";
 import { readToPage } from "../messages.ts";
 import { go, home, options, plant, repo } from "../project.test-support.ts";
+import type { Project } from "../project.ts";
 import { appWire } from "../wire.ts";
 import { runHost } from "./run.ts";
 import { reach } from "./socket.ts";
@@ -132,50 +133,70 @@ it("P2: two real hosts keep equal tile and agent names, ledger files, jobs and p
   );
 });
 
-plant("P2 reuse one wire or storage home", ops, () =>
-  separate(["same-socket", "same-home"], ["same-socket", "same-home"]),
-);
+// P2's plant, one wire or storage home for both, has no entry point to take it: each real host
+// picks its own paths. The tests report gives the hand edit and says the box could not run it.
+
+type Recover = (
+  app: string,
+  project: Project,
+  why: "crash" | "stale" | "restart",
+  sibling: { readonly sock: string },
+) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
+
+/** P10's check: a crash, a stale cleanup or a restart of one project leaves its sibling's runtime files. */
+const leavesSibling = async (recover: Recover, operations: typeof ops extends fc.Arbitrary<infer A> ? A : never) => {
+  const { Project } = await import("../project.ts");
+  const app = home();
+  const projects = await Promise.all(["left", "right"].map((name) => go(Project.check(repo(app, name)))));
+  const paths = await Promise.all(projects.map((project) => go(Project.paths(app, project))));
+
+  for (const op of operations) {
+    const why = op.action;
+
+    if (why !== "crash" && why !== "stale" && why !== "restart") {
+      continue;
+    }
+
+    const selected = projects[op.index]!;
+    const sibling = paths[1 - op.index]!;
+    await go(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs.makeDirectory(sibling.dir, { recursive: true, mode: 0o700 });
+
+        for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock]) {
+          writeFileSync(file, "sibling fixture");
+        }
+
+        yield* recover(app, selected, why, sibling);
+
+        for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock]) {
+          expect(readFileSync(file, "utf8")).toBe("sibling fixture");
+        }
+      }),
+    );
+  }
+};
 
 it("P10: crash, stale cleanup and restart touch only the chosen project's runtime files", async () => {
   const { Project } = await import("../project.ts");
   await fc.assert(
-    fc.asyncProperty(ops, async (operations) => {
-      const app = home();
-      const projects = await Promise.all(["left", "right"].map((name) => go(Project.check(repo(app, name)))));
-      const paths = await Promise.all(projects.map((project) => go(Project.paths(app, project))));
-
-      for (const op of operations) {
-        const why = op.action;
-
-        if (why !== "crash" && why !== "stale" && why !== "restart") {
-          continue;
-        }
-
-        const selected = projects[op.index]!;
-        const sibling = paths[1 - op.index]!;
-        await go(
-          Effect.gen(function* () {
-            const fs = yield* FileSystem.FileSystem;
-            yield* fs.makeDirectory(sibling.dir, { recursive: true, mode: 0o700 });
-
-            for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock]) {
-              writeFileSync(file, "sibling fixture");
-            }
-
-            yield* Project.recover(app, selected, why);
-
-            for (const file of [sibling.sock, sibling.mcp, sibling.pid, sibling.lock]) {
-              expect(readFileSync(file, "utf8")).toBe("sibling fixture");
-            }
-          }),
-        );
-      }
-    }),
+    fc.asyncProperty(ops, (operations) =>
+      leavesSibling((app, project, why) => Project.recover(app, project, why), operations),
+    ),
     options,
   );
 });
 
-plant("P10 remove a sibling socket", ops, () => expect(undefined).toBe("sibling fixture"));
+// The plant: recovery clears the sibling's socket too.
+plant("P10 remove a sibling socket", ops, async (operations) => {
+  const { Project } = await import("../project.ts");
+  await leavesSibling(
+    (app, project, why, sibling) =>
+      Project.recover(app, project, why).pipe(Effect.andThen(Effect.sync(() => rmSync(sibling.sock, { force: true })))),
+    [...operations, { index: 0, action: "crash" }] as typeof operations,
+  );
+});
 
 /** Every row of one record file, as written, once the file holds `min` rows (5 s at most). */
 const rowsOf = (file: string, min: number) =>

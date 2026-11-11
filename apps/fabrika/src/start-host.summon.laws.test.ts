@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
-import { go, home, options, plant, repo, word } from "./project.test-support.ts";
+import { go, home, options, repo, word } from "./project.test-support.ts";
 import { startHost } from "./start-host.ts";
 
 // Replaces T237-R2-3's inherited-repo fallback. T276 always requires a checked project.
@@ -60,6 +60,5 @@ process.stderr.write(JSON.stringify(result));
   );
 });
 
-plant("P1 read the inherited repository", input, ({ name, inherited }) =>
-  rootCheck(inherited === "absent" ? "" : "/fixture/wrong", `/fixture/chosen-${name}`),
-);
+// P1's plant, reading the inherited repository, has no entry point to take it: the child reads the
+// record startHost writes. The tests report gives the hand edit to start-host.ts and its red.

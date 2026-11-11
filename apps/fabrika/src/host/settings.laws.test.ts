@@ -3,7 +3,6 @@ import {
   type Cause,
   Clock,
   Effect,
-  Equal,
   FileSystem,
   Logger,
   Option,
@@ -22,9 +21,10 @@ import { type Setting, settingsSaves } from "./settings.ts";
 // Today's version. No disk, OS watch, or real sleep. @effect/vitest is not a dependency
 // of today's app; use its installed fast-check with a fresh TestClock per generated run.
 // The reader is settingsSaves, the one product reads (host/keybindings.ts). It answers for each save
-// burst, the same text included, where ticket 553's settingsFile answered only a new text. The laws
-// below are about what is heard and when, so `got`, `at` and `logs` drop an answer equal to the one
-// before it, with its log row; the per-burst claim has its own law, L5b.
+// burst, the same text included, where ticket 553's settingsFile answered only a new text: it tells
+// saves apart by the file's stamp (mtime, size, inode), which the fake file system changes on each
+// write, rename and remove. `got`, `at` and `logs` hold every answer and log row, repeats included,
+// as on main (T276 amendment 4 undoes amendment 3's dedupe), so L2 and L7 read every answer.
 const runs = { seed: 119120, numRuns: 20, endOnFailure: true };
 const name = "keybindings.toml";
 const file = `/settings/${name}`;
@@ -71,9 +71,10 @@ const start = Effect.fnUntraced(function* (ready = true) {
   const got: Setting<string>[] = [];
   const at: number[] = [];
   const logs: Record<string, unknown>[] = [];
-  /** Every answer and every log row, repeats included. */
-  const every: Setting<string>[] = [];
-  const everyLog: Record<string, unknown>[] = [];
+  /** Each file's stamp: a new one on each write, rename and remove, and on nothing else. */
+  const stamps = new Map<string, number>();
+  let stamped = 0;
+  const restamp = (path: string) => stamps.set(path, ++stamped);
   const backend = FileSystem.WatchBackend.of({
     register: (_path, _stat, options) =>
       Option.some(
@@ -108,15 +109,36 @@ const start = Effect.fnUntraced(function* (ready = true) {
       writeFileString: (path, text) =>
         Effect.sync(() => {
           files.set(path, text);
+          restamp(path);
         }),
       rename: (from, to) =>
         Effect.sync(() => {
           files.set(to, files.get(from)!);
           files.delete(from);
+          stamps.delete(from);
+          restamp(to);
         }),
       remove: (path) =>
         Effect.sync(() => {
           files.delete(path);
+          stamps.delete(path);
+          ++stamped;
+        }),
+      // The save stamp settingsSaves reads with the text. A refused read still stats: the
+      // folder can be listed while the file cannot be read.
+      stat: (path) =>
+        Effect.suspend(() => {
+          const text = files.get(path);
+          const stamp = stamps.get(path);
+          return text === undefined || stamp === undefined
+            ? Effect.fail(PlatformError.systemError({ _tag: "NotFound", module: "FileSystem", method: "stat" }))
+            : Effect.succeed<FileSystem.File.Info>({
+                ...info,
+                type: "File",
+                mtime: Option.some(new Date(stamp)),
+                ino: Option.some(BigInt(stamp)),
+                size: ByteSize.bytes(BigInt(new TextEncoder().encode(text).length)),
+              });
         }),
       watch: (path, options) => Option.getOrThrow(watch.register(path, info, options)),
     });
@@ -125,15 +147,8 @@ const start = Effect.fnUntraced(function* (ready = true) {
   yield* settingsSaves("/settings", name, Result.succeed).pipe(
     Stream.runForEach((answer) =>
       Effect.gen(function* () {
-        const index = every.length;
-        const again = index > 0 && Equal.equals(every[index - 1], answer);
-        every.push(answer);
-
-        if (!again) {
-          at.push(yield* Clock.currentTimeMillis);
-          got.push(answer);
-          logs.push(everyLog[index]!);
-        }
+        at.push(yield* Clock.currentTimeMillis);
+        got.push(answer);
       }),
     ),
     Effect.provideService(FileSystem.FileSystem, fs),
@@ -144,7 +159,7 @@ const start = Effect.fnUntraced(function* (ready = true) {
           const row = Logger.formatStructured.log(options);
 
           if (row.message === "settings_heard") {
-            everyLog.push(row.annotations);
+            logs.push(row.annotations);
           }
         }),
       ]),
@@ -158,7 +173,6 @@ const start = Effect.fnUntraced(function* (ready = true) {
     got,
     at,
     logs,
-    every,
     events,
     refuse: Effect.sync(() => {
       unreadable = true;
@@ -573,12 +587,13 @@ it("L4 scenario: first answer needs no ready signal or elapsed time; one start c
   );
 });
 
-it("L5: ticks over an unchanged or unreadable file never repeat an answer", async () => {
+it("L5: ticks and hints with no write never answer, readable or refused", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(fc.string(), { minLength: 1, maxLength: 5 }),
       fc.integer({ min: 2, max: 5 }),
-      (texts, ticks) =>
+      fc.integer({ min: 1, max: 3 }),
+      (texts, ticks, hints) =>
         go(
           Effect.gen(function* () {
             const h = yield* start();
@@ -587,23 +602,36 @@ it("L5: ticks over an unchanged or unreadable file never repeat an answer", asyn
               yield* h.fs.writeFileString(file, text);
               yield* h.event();
               yield* bound;
-              // The poll alone, with no event, finds the same text again: nothing more is said.
-              const before = h.every.length;
+              // The poll alone, with no event, finds the same file again: nothing more is said.
+              const before = h.got.length;
               yield* bound;
               yield* bound;
-              expect(h.every).toHaveLength(before);
+              expect(h.got).toHaveLength(before);
+
+              // A watch hint with no write, as an editor's touch or a late duplicate: nothing.
+              for (let hint = 0; hint < hints; hint++) {
+                yield* h.event();
+                yield* bound;
+              }
+
+              expect(h.got).toHaveLength(before);
             }
 
             yield* h.refuse;
             yield* bound;
-            const refused = h.every.length;
-            expect(h.every.at(-1)?._tag).toBe("refused");
+            const refused = h.got.length;
+            expect(h.got.at(-1)?._tag).toBe("refused");
 
             for (let tick = 0; tick < ticks; tick++) {
               yield* bound;
             }
 
-            expect(h.every).toHaveLength(refused);
+            for (let hint = 0; hint < hints; hint++) {
+              yield* h.event();
+              yield* bound;
+            }
+
+            expect(h.got).toHaveLength(refused);
           }),
         ),
     ),
@@ -615,7 +643,7 @@ it("L5: ticks over an unchanged or unreadable file never repeat an answer", asyn
 // said (the plan's amendment of 2026-11-10; ticket 553's settingsFile answered only a new text).
 // The keybindings reader writes the file itself, so another host's save that puts the old text back
 // is news to it, though not to the watch (host/keybindings.ts).
-it("L5b scenario: each save burst answers once, the same text and an unreadable file included", async () => {
+it("L5b scenario: each save burst answers once, the same text and a refused read included", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(fc.string(), { minLength: 1, maxLength: 5 }),
@@ -632,19 +660,21 @@ it("L5b scenario: each save burst answers once, the same text and an unreadable 
                 yield* h.event();
                 yield* bound;
                 bursts += 1;
-                expect(h.every).toHaveLength(1 + bursts);
-                expect(h.every.at(-1)).toEqual({ _tag: "read", value: text });
+                expect(h.got).toHaveLength(1 + bursts);
+                expect(h.got.at(-1)).toEqual({ _tag: "read", value: text });
               }
             }
 
             yield* h.refuse;
 
+            // Each burst writes the file while reads are refused: one refused answer per write.
             for (let burst = 0; burst < refusals; burst++) {
+              yield* h.fs.writeFileString(file, texts[burst % texts.length]!);
               yield* h.event();
               yield* bound;
               bursts += 1;
-              expect(h.every).toHaveLength(1 + bursts);
-              expect(h.every.at(-1)?._tag).toBe("refused");
+              expect(h.got).toHaveLength(1 + bursts);
+              expect(h.got.at(-1)?._tag).toBe("refused");
             }
           }),
         ),

@@ -116,205 +116,229 @@ const fixture = async (body: string, job: number, folders: readonly string[]) =>
   return { app, old, before: snapshot(old) };
 };
 
-it("P11: reserve the summons' root or first accepted root; every write failure can retry without losing bytes or IDs", async () => {
+type Migrate = (typeof import("./project-migration.ts"))["migrateProject"];
+
+/** P11's check: the move reserves the right root, and a failure at any write boundary recovers on retry. */
+const recovers = async (
+  migrateProject: Migrate,
+  { body, job, sameRoot, failAt }: typeof saved extends fc.Arbitrary<infer A> ? A : never,
+) => {
   const { Project } = await import("./project.ts");
+  const roots = home();
+  const left = await go(Project.check(repo(roots, "left")));
+  const right = await go(Project.check(repo(roots, "right")));
+  const folders = sameRoot ? [left.root, left.root] : [left.root, right.root];
+  const baseline = await fixture(body, job, folders);
+  let count = 0;
+  await go(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const disk = FileSystem.FileSystem.of({
+        ...fs,
+        writeFile: (...args) => {
+          count++;
+          return fs.writeFile(...args);
+        },
+        writeFileString: (...args) => {
+          count++;
+          return fs.writeFileString(...args);
+        },
+        copyFile: (...args) => {
+          count++;
+          return fs.copyFile(...args);
+        },
+        copy: (...args) => {
+          count++;
+          return fs.copy(...args);
+        },
+        makeDirectory: (...args) => {
+          count++;
+          return fs.makeDirectory(...args);
+        },
+        chmod: (...args) => {
+          count++;
+          return fs.chmod(...args);
+        },
+        rename: (...args) => {
+          count++;
+          return fs.rename(...args);
+        },
+      });
+      return yield* migrateProject({
+        home: baseline.app,
+        legacy: baseline.old,
+        project: right,
+        restart: "accepted",
+      }).pipe(Effect.provideService(FileSystem.FileSystem, disk));
+    }),
+  );
+  expect(count).toBeGreaterThan(0);
+
+  for (let offset = 0; offset < count; offset++) {
+    const f = await fixture(body, job, folders);
+    const failure = (failAt + offset) % count;
+    let boundary = 0;
+    const attempt = await go(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const fault = PlatformError.systemError({
+          _tag: "PermissionDenied",
+          module: "FileSystem",
+          method: "writeFile",
+          description: "fixture interrupted migration",
+        });
+        const disk = FileSystem.FileSystem.of({
+          ...fs,
+          writeFile: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.writeFile(...args)),
+          writeFileString: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.writeFileString(...args)),
+          copyFile: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.copyFile(...args)),
+          copy: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.copy(...args)),
+          makeDirectory: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.makeDirectory(...args)),
+          chmod: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.chmod(...args)),
+          rename: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.rename(...args)),
+        });
+        return yield* migrateProject({
+          home: f.app,
+          legacy: f.old,
+          project: right,
+          restart: "accepted",
+        }).pipe(Effect.provideService(FileSystem.FileSystem, disk), Effect.result);
+      }),
+    );
+    sameFiles(snapshot(f.old), f.before);
+
+    if (Result.isFailure(attempt)) {
+      // A failed move cannot claim completion or silently become an empty desk.
+      const marker = join(f.app, "migration.json");
+
+      if (existsSync(marker)) {
+        expect(JSON.parse(readFileSync(marker, "utf8")).phase).not.toBe("complete");
+      }
+    }
+
+    const recovered = await go(migrateProject({ home: f.app, legacy: f.old, project: right, restart: "accepted" }));
+    const target = sameRoot ? left : right;
+    expect(recovered.project.key).toBe(target.key);
+    expect(recovered.rule).toBe(sameRoot ? "summons" : "first_accepted");
+    expect(recovered.phase).toBe("complete");
+    sameFiles(snapshot(join(f.app, "projects", target.key)), f.before);
+    sameFiles(snapshot(f.old), f.before);
+    const again = await go(migrateProject({ home: f.app, legacy: f.old, project: left, restart: "accepted" }));
+    expect(again.project.key).toBe(target.key);
+    const record = JSON.parse(readFileSync(join(f.app, "migration.json"), "utf8"));
+
+    for (const field of ["format", "project", "rule", "files", "digests", "phase", "at", "result"]) {
+      expect(record).toHaveProperty(field);
+    }
+  }
+};
+
+it("P11: reserve the summons' root or first accepted root; every write failure can retry without losing bytes or IDs", async () => {
   const { migrateProject } = await import("./project-migration.ts");
   await fc.assert(
-    fc.asyncProperty(saved, async ({ body, job, sameRoot, failAt }) => {
-      const roots = home();
-      const left = await go(Project.check(repo(roots, "left")));
-      const right = await go(Project.check(repo(roots, "right")));
-      const folders = sameRoot ? [left.root, left.root] : [left.root, right.root];
-      const baseline = await fixture(body, job, folders);
-      let count = 0;
-      await go(
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const disk = FileSystem.FileSystem.of({
-            ...fs,
-            writeFile: (...args) => {
-              count++;
-              return fs.writeFile(...args);
-            },
-            writeFileString: (...args) => {
-              count++;
-              return fs.writeFileString(...args);
-            },
-            copyFile: (...args) => {
-              count++;
-              return fs.copyFile(...args);
-            },
-            copy: (...args) => {
-              count++;
-              return fs.copy(...args);
-            },
-            makeDirectory: (...args) => {
-              count++;
-              return fs.makeDirectory(...args);
-            },
-            chmod: (...args) => {
-              count++;
-              return fs.chmod(...args);
-            },
-            rename: (...args) => {
-              count++;
-              return fs.rename(...args);
-            },
-          });
-          return yield* migrateProject({
-            home: baseline.app,
-            legacy: baseline.old,
-            project: right,
-            restart: "accepted",
-          }).pipe(Effect.provideService(FileSystem.FileSystem, disk));
-        }),
-      );
-      expect(count).toBeGreaterThan(0);
-
-      for (let offset = 0; offset < count; offset++) {
-        const f = await fixture(body, job, folders);
-        const failure = (failAt + offset) % count;
-        let boundary = 0;
-        const attempt = await go(
-          Effect.gen(function* () {
-            const fs = yield* FileSystem.FileSystem;
-            const fault = PlatformError.systemError({
-              _tag: "PermissionDenied",
-              module: "FileSystem",
-              method: "writeFile",
-              description: "fixture interrupted migration",
-            });
-            const disk = FileSystem.FileSystem.of({
-              ...fs,
-              writeFile: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.writeFile(...args)),
-              writeFileString: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.writeFileString(...args)),
-              copyFile: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.copyFile(...args)),
-              copy: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.copy(...args)),
-              makeDirectory: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.makeDirectory(...args)),
-              chmod: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.chmod(...args)),
-              rename: (...args) => (boundary++ === failure ? Effect.fail(fault) : fs.rename(...args)),
-            });
-            return yield* migrateProject({
-              home: f.app,
-              legacy: f.old,
-              project: right,
-              restart: "accepted",
-            }).pipe(Effect.provideService(FileSystem.FileSystem, disk), Effect.result);
-          }),
-        );
-        sameFiles(snapshot(f.old), f.before);
-
-        if (Result.isFailure(attempt)) {
-          // A failed move cannot claim completion or silently become an empty desk.
-          const marker = join(f.app, "migration.json");
-
-          if (existsSync(marker)) {
-            expect(JSON.parse(readFileSync(marker, "utf8")).phase).not.toBe("complete");
-          }
-        }
-
-        const recovered = await go(migrateProject({ home: f.app, legacy: f.old, project: right, restart: "accepted" }));
-        const target = sameRoot ? left : right;
-        expect(recovered.project.key).toBe(target.key);
-        expect(recovered.rule).toBe(sameRoot ? "summons" : "first_accepted");
-        expect(recovered.phase).toBe("complete");
-        sameFiles(snapshot(join(f.app, "projects", target.key)), f.before);
-        sameFiles(snapshot(f.old), f.before);
-        const again = await go(migrateProject({ home: f.app, legacy: f.old, project: left, restart: "accepted" }));
-        expect(again.project.key).toBe(target.key);
-        const record = JSON.parse(readFileSync(join(f.app, "migration.json"), "utf8"));
-
-        for (const field of ["format", "project", "rule", "files", "digests", "phase", "at", "result"]) {
-          expect(record).toHaveProperty(field);
-        }
-      }
-    }),
+    fc.asyncProperty(saved, (input) => recovers(migrateProject, input)),
     { ...options, numRuns: 5 },
   );
 });
 
-plant("P11 mark complete before publication", saved, ({ body }) =>
-  sameFiles({}, { history: { digest: body, bytes: body.length, mode: 0o600 } }),
-);
+// The plant: the move marks itself complete before it publishes anything.
+plant("P11 mark complete before publication", saved, async (input) => {
+  const { migrateProject } = await import("./project-migration.ts");
+  await recovers(
+    (move) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        yield* fs
+          .writeFileString(join(move.home, "migration.json"), JSON.stringify({ phase: "complete" }))
+          .pipe(Effect.orDie);
+        return yield* migrateProject(move);
+      }),
+    input,
+  );
+});
+
+const restartOrders = fc.array(fc.constantFrom("refused", "accepted", "failed"), { minLength: 1, maxLength: 12 });
+
+/** P12's check: a live legacy host is stopped before any copy, only once accepted, and the source stays. */
+const leavesLiveHost = async (migrateProject: Migrate, orders: readonly ("refused" | "accepted" | "failed")[]) => {
+  const { Project } = await import("./project.ts");
+  const root = home();
+  const project = await go(Project.check(repo(root, "repo")));
+  const f = await fixture("fixture", 71, [project.root]);
+  let stopped = false;
+  const calls: string[] = [];
+
+  for (const restart of orders) {
+    await go(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const disk = FileSystem.FileSystem.of({
+          ...fs,
+          copy: (...args) => {
+            calls.push("copy");
+            expect(stopped).toBe(true);
+            return restart === "failed"
+              ? Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "copy",
+                    description: "fixture migration failed",
+                  }),
+                )
+              : fs.copy(...args);
+          },
+          copyFile: (...args) => {
+            calls.push("copy");
+            expect(stopped).toBe(true);
+            return restart === "failed"
+              ? Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "copyFile",
+                    description: "fixture migration failed",
+                  }),
+                )
+              : fs.copyFile(...args);
+          },
+        });
+        return yield* migrateProject({
+          home: f.app,
+          legacy: f.old,
+          project,
+          restart: restart === "refused" ? "refused" : "accepted",
+          live: () => Effect.succeed(!stopped),
+          stop: () =>
+            Effect.sync(() => {
+              calls.push("stop");
+              stopped = true;
+            }),
+        }).pipe(Effect.provideService(FileSystem.FileSystem, disk), Effect.result);
+      }),
+    );
+    sameFiles(snapshot(f.old), f.before);
+
+    if (!stopped) {
+      expect(calls).toEqual([]);
+    }
+  }
+
+  if (calls.includes("copy")) {
+    expect(calls.indexOf("stop")).toBeLessThan(calls.indexOf("copy"));
+  }
+};
 
 it("P12: refusal leaves a live legacy host alone; acceptance precedes copying; failed moves keep their source", async () => {
-  const { Project } = await import("./project.ts");
   const { migrateProject } = await import("./project-migration.ts");
   await fc.assert(
-    fc.asyncProperty(
-      fc.array(fc.constantFrom("refused", "accepted", "failed"), { minLength: 1, maxLength: 12 }),
-      async (orders) => {
-        const root = home();
-        const project = await go(Project.check(repo(root, "repo")));
-        const f = await fixture("fixture", 71, [project.root]);
-        let stopped = false;
-        const calls: string[] = [];
-
-        for (const restart of orders) {
-          await go(
-            Effect.gen(function* () {
-              const fs = yield* FileSystem.FileSystem;
-              const disk = FileSystem.FileSystem.of({
-                ...fs,
-                copy: (...args) => {
-                  calls.push("copy");
-                  expect(stopped).toBe(true);
-                  return restart === "failed"
-                    ? Effect.fail(
-                        PlatformError.systemError({
-                          _tag: "PermissionDenied",
-                          module: "FileSystem",
-                          method: "copy",
-                          description: "fixture migration failed",
-                        }),
-                      )
-                    : fs.copy(...args);
-                },
-                copyFile: (...args) => {
-                  calls.push("copy");
-                  expect(stopped).toBe(true);
-                  return restart === "failed"
-                    ? Effect.fail(
-                        PlatformError.systemError({
-                          _tag: "PermissionDenied",
-                          module: "FileSystem",
-                          method: "copyFile",
-                          description: "fixture migration failed",
-                        }),
-                      )
-                    : fs.copyFile(...args);
-                },
-              });
-              return yield* migrateProject({
-                home: f.app,
-                legacy: f.old,
-                project,
-                restart: restart === "refused" ? "refused" : "accepted",
-                live: () => Effect.succeed(!stopped),
-                stop: () =>
-                  Effect.sync(() => {
-                    calls.push("stop");
-                    stopped = true;
-                  }),
-              }).pipe(Effect.provideService(FileSystem.FileSystem, disk), Effect.result);
-            }),
-          );
-          sameFiles(snapshot(f.old), f.before);
-
-          if (!stopped) {
-            expect(calls).toEqual([]);
-          }
-        }
-
-        if (calls.includes("copy")) {
-          expect(calls.indexOf("stop")).toBeLessThan(calls.indexOf("copy"));
-        }
-      },
-    ),
+    fc.asyncProperty(restartOrders, (orders) => leavesLiveHost(migrateProject, orders)),
     options,
   );
 });
 
-plant("P12 copy before stopping or delete the originals", fc.array(word, { minLength: 1 }), () =>
-  expect(["copy", "stop"].indexOf("stop")).toBeLessThan(["copy", "stop"].indexOf("copy")),
-);
+// The plant: the move never asks whether the old host is live, so it copies the live SQLite.
+plant("P12 copy live SQLite before the restart", restartOrders, async (orders) => {
+  const { migrateProject } = await import("./project-migration.ts");
+  await leavesLiveHost((move) => migrateProject({ ...move, live: () => Effect.succeed(false) }), orders);
+});

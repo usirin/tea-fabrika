@@ -70,11 +70,27 @@ export const projectHome = (app: string, name: string) =>
     return { app, home, project, paths: yield* Project.paths(app, project) };
   });
 
-// Run the same assertion on a deliberately bad answer. fc.check must reach that assertion;
-// a missing product import never counts as catching a plant.
-export const plant = <A>(name: string, input: fc.Arbitrary<A>, check: (input: A) => void) => {
-  it(`plant: ${name}`, () => {
-    const result = fc.check(fc.property(input, check), { ...options, endOnFailure: true });
+// Run the law's own check on the product with the planted break: a planted reducer, route or row
+// list fed through the entry point the law uses (amendment 4). `needs` are the product functions
+// the check calls; a missing one never counts as catching a plant, so the plant fails first.
+export const plant = <A>(
+  name: string,
+  input: fc.Arbitrary<A>,
+  check: (input: A) => void | Promise<void>,
+  ...needs: readonly unknown[]
+) => {
+  it(`plant: ${name}`, async () => {
+    for (const need of needs) {
+      expect(typeof need, "the plant's product entry point is missing").toBe("function");
+    }
+
+    const result = await fc.check(
+      fc.asyncProperty(input, async (a) => check(a)),
+      {
+        ...options,
+        endOnFailure: true,
+      },
+    );
     expect(result.failed).toBe(true);
     expect(result.counterexample).not.toBeNull();
   });

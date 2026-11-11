@@ -3,36 +3,104 @@ import { Result } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../project.test-support.ts";
+import * as Frames from "../window/frame.ts";
+import { FRAME, type FrameMsg, frameUpdate } from "../window/frame.ts";
 import { commandOn, decodeKeys, defaults, Does, type Key, type Keys, spell } from "./keymap.ts";
+import type { Press } from "./keys.ts";
 
-it("P18: opening is a shared configurable app binding, available before any host or terminal", () => {
+/** A press as the page reads it, from the table's spelling: `<m-o>` is Cmd-O, `<c-o>` Ctrl-O. */
+const pressOf = (spelled: string): Press => {
+  const match = /^<((?:[cams]-)*)(.+)>$/.exec(spelled);
+  const mods = match?.[1] ?? "";
+  return {
+    key: match?.[2] ?? spelled,
+    ctrl: mods.includes("c-"),
+    alt: mods.includes("a-"),
+    meta: mods.includes("m-"),
+    shift: mods.includes("s-"),
+  };
+};
+
+/** The frame's overs a key may meet: none, a menu, an item's lines, or the palette on each source. */
+const overs = [
+  FRAME,
+  frameUpdate(FRAME, { type: "show", what: "asks" }),
+  frameUpdate(FRAME, { type: "show", what: "jobs" }),
+  frameUpdate(FRAME, { type: "item", what: "agents" }),
+  frameUpdate(FRAME, { type: "palette" }),
+  frameUpdate(FRAME, { type: "show", what: "keys" }),
+  frameUpdate(FRAME, { type: "projects", rows: [], focus: "tile:t1", press: "box" } as FrameMsg),
+].map((f) => f.over);
+
+const routeInput = fc.record({
+  look: fc.constantFrom("welcome", "project"),
+  over: fc.constantFrom(...overs),
+  desk: fc.record({ armed: fc.boolean(), asking: fc.boolean() }),
+  recording: fc.constantFrom("none", "waiting", "candidate", "saving"),
+  target: fc.constantFrom("terminal", "field", "button", "page"),
+  mac: fc.boolean(),
+  key: fc.option(fc.constantFrom("o", "p", "e"), { nil: null }),
+});
+
+type RouteInput = typeof routeInput extends fc.Arbitrary<infer A> ? A : never;
+
+type Route = (
+  state: Omit<RouteInput, "mac" | "key">,
+  press: Press,
+  keys: Keys,
+  mac: boolean,
+) => { readonly _tag: string };
+
+/** Amendment 4's `keyRoute`: absent until the build adds it, and then the law runs on it. */
+const keyRoute = (): Route => {
+  const route = (Frames as { keyRoute?: Route }).keyRoute;
+
+  if (route === undefined) {
+    throw new Error("frame.ts exports no keyRoute");
+  }
+
+  return route;
+};
+
+/**
+ * P18's check: the opening binding, the default or a rebinding, routes to the projects flow from
+ * every look, over, prefix and question state and target while no key is being recorded, and
+ * never while one is.
+ */
+const opensProjects = (route: Route, { mac, key, ...state }: RouteInput) => {
+  const keys = key === null ? defaults : read(`projects.open = "cmd+${key}"`, mac);
+  const bound = keys.rows.find((row) => row.does === "projects.open")?.keys.find((k) => k._tag === "alone")?.key;
+  expect(bound).toBeDefined();
+  expect(commandOn(keys, { _tag: "alone", key: bound! })).toBe("projects.open");
+  const answer = route(state, pressOf(bound!), keys, mac);
+
+  if (state.recording === "none") {
+    expect(answer._tag).toBe("projects");
+  } else {
+    expect(answer._tag).not.toBe("projects");
+  }
+};
+
+it("P18: the opening binding routes to projects from every look, layer, prefix state and target, never while a key is recorded", () => {
+  expect(commandOn(defaults, { _tag: "alone", key: "<m-o>" })).toBe("projects.open");
   fc.assert(
-    fc.property(
-      fc.record({
-        target: fc.constantFrom("terminal", "popover", "welcome"),
-        armed: fc.boolean(),
-        key: fc.constantFrom("o", "p", "e"),
-        quiet: fc.boolean(),
-      }),
-      ({ key }) => {
-        expect(commandOn(defaults, { _tag: "alone", key: "<m-o>" })).toBe("projects.open");
-        const changed = decodeKeys(`projects.open = "cmd+${key}"`, true);
-        expect(Result.isSuccess(changed)).toBe(true);
-
-        if (Result.isSuccess(changed)) {
-          expect(commandOn(changed.success, { _tag: "alone", key: `<m-${key}>` })).toBe("projects.open");
-        }
-      },
-    ),
-    { seed: 119120, numRuns: 25 },
+    fc.property(routeInput, (input) => opensProjects(keyRoute(), input)),
+    { seed: 119120, numRuns: 200 },
   );
   // E2 presses this key over a real terminal, popover, prefix and welcome, and checks quiet focus.
 });
 
+// The plant: the opening binding routes to projects only from a terminal.
 plant(
-  "P18 handle project opening only inside a tile",
-  fc.record({ target: fc.constantFrom("welcome", "popover"), armed: fc.boolean() }),
-  () => expect(undefined).toBe("projects.open"),
+  "P18 route to projects only from a terminal",
+  routeInput,
+  (input) =>
+    opensProjects(
+      (state, press, keys, mac) =>
+        state.target === "terminal" ? keyRoute()(state, press, keys, mac) : { _tag: "page" },
+      input,
+    ),
+  (Frames as { keyRoute?: unknown }).keyRoute,
 );
 
 // The keybindings file, read: ~/.fabrika/keybindings.toml, laid over the defaults that ship with

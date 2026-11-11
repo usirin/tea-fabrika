@@ -1,5 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Duration, Effect, Exit, Fiber, Logger, type Scope, Stream } from "effect";
@@ -112,79 +122,128 @@ const whyOf = (e: unknown) =>
 
 const TIME = 60_000;
 
-it("P16: saved summons keep their original folder; another root stays down and is never reopened", async () => {
+/** How a saved summon's folder may spell the host's root, or name another (T276 amendment 4, P16). */
+const SPELLINGS = ["itself", "link", "subfolder", "trailing", "tmp", "other root", "other worktree"] as const;
+type Spelling = (typeof SPELLINGS)[number];
+
+/**
+ * The host's root and the folder a saved summon recorded for it, spelled one way. `tmp` spells a
+ * root under /private/tmp as /tmp, where the platform has that link (macOS); elsewhere it is the
+ * plain root. Another root and another worktree of the same repo are other projects.
+ */
+const spelled = (spelling: Spelling): { root: string; saved: string; same: boolean } => {
+  if (spelling === "tmp") {
+    const linked = existsSync("/private/tmp") && realpathSync("/tmp") === "/private/tmp";
+    const root = realpathSync(mkdtempSync(linked ? "/tmp/summon-" : join(tmpdir(), "summon-")));
+    made.push(root);
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    return { root, saved: linked ? root.replace(/^\/private\/tmp\//, "/tmp/") : root, same: true };
+  }
+
+  const root = repo();
+
+  switch (spelling) {
+    case "itself":
+      return { root, saved: root, same: true };
+    case "link": {
+      const at = realpathSync(mkdtempSync(join(tmpdir(), "summon-link-")));
+      made.push(at);
+      symlinkSync(root, join(at, "repo"));
+      return { root, saved: join(at, "repo"), same: true };
+    }
+    case "subfolder":
+      mkdirSync(join(root, "sub"));
+      return { root, saved: join(root, "sub"), same: true };
+    case "trailing":
+      return { root, saved: `${root}/`, same: true };
+    case "other root":
+      return { root, saved: repo(), same: false };
+    case "other worktree": {
+      const git = (...args: string[]) => execFileSync("git", args, { cwd: root, stdio: "pipe" });
+      git(
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.invalid",
+        "commit",
+        "--allow-empty",
+        "-qm",
+        "fixture",
+      );
+      const at = realpathSync(mkdtempSync(join(tmpdir(), "summon-tree-")));
+      made.push(at);
+      git("worktree", "add", "-qb", "fixture-tree", join(at, "tree"));
+      return { root, saved: join(at, "tree"), same: false };
+    }
+  }
+};
+
+it("P16: a saved summon under the same root, by any spelling, comes up with its folder as saved; another root or worktree stays down", async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.record({ matching: fc.boolean(), name: fc.stringMatching(/^[a-z][a-z0-9]{0,10}$/) }),
-      async (input) => {
-        for (const matching of [input.matching, !input.matching]) {
-          const { name } = input;
-          const folder = repo();
-          const original = matching ? folder : repo();
-          const storage = memoryStorage();
-          await Effect.runPromise(
-            Effect.gen(function* () {
-              const names = yield* openNames(storage);
-              yield* names.take({
-                name,
-                agent: "fake",
-                run: `acp:${name}-fixture`,
-                model: { typed: null, resolved: "fake-small" },
-                effort: { typed: null, set: null },
-                folder: original,
-                since: 1,
-                by: PERSON,
-              });
-            }).pipe(Effect.scoped),
-          );
-          const seen = await hosted(
-            storage,
-            folder,
-            Effect.gen(function* () {
-              const manager = yield* SummonManager;
-              let list = yield* manager.list;
+      fc.record({ spelling: fc.constantFrom(...SPELLINGS), name: fc.stringMatching(/^[a-z][a-z0-9]{0,10}$/) }),
+      async ({ spelling, name }) => {
+        const { root, saved, same } = spelled(spelling);
+        const storage = memoryStorage();
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const names = yield* openNames(storage);
+            yield* names.take({
+              name,
+              agent: "fake",
+              run: `acp:${name}-fixture`,
+              model: { typed: null, resolved: "fake-small" },
+              effort: { typed: null, set: null },
+              folder: saved,
+              since: 1,
+              by: PERSON,
+            });
+          }).pipe(Effect.scoped),
+        );
+        const seen = await hosted(
+          storage,
+          root,
+          Effect.gen(function* () {
+            const manager = yield* SummonManager;
+            let list = yield* manager.list;
 
-              for (let i = 0; i < 150 && list.some((s) => s.state === "opening"); i++) {
-                yield* Effect.sleep("20 millis");
-                list = yield* manager.list;
-              }
+            for (let i = 0; i < 150 && list.some((s) => s.state === "opening"); i++) {
+              yield* Effect.sleep("20 millis");
+              list = yield* manager.list;
+            }
 
-              return list;
-            }),
-          );
-          expect(seen).toHaveLength(1);
-          expect(seen[0]?.folder).toBe(original);
-          expect(seen[0]?.state).toBe(matching ? "idle" : "down");
+            return list;
+          }),
+        );
+        expect(seen).toHaveLength(1);
+        expect(seen[0]?.folder).toBe(saved);
+        expect(seen[0]?.state, `${spelling}: ${saved} for ${root}`).toBe(same ? "idle" : "down");
 
-          if (!matching) {
-            expect(sessions(original)).toEqual([]);
-          }
-
-          const keptNames = await Effect.runPromise(
-            Effect.gen(function* () {
-              return (yield* openNames(storage)).now().names;
-            }).pipe(Effect.scoped),
-          );
-          expect(keptNames[0]?.folder).toBe(original);
+        if (!same) {
+          expect(sessions(saved)).toEqual([]);
         }
+
+        const keptNames = await Effect.runPromise(
+          Effect.gen(function* () {
+            return (yield* openNames(storage)).now().names;
+          }).pipe(Effect.scoped),
+        );
+        expect(keptNames[0]?.folder).toBe(saved);
       },
     ),
-    { seed: 119120, numRuns: 5 },
+    {
+      seed: 119120,
+      numRuns: 10,
+      // Review 2 of T276, finding 3: each spelling of the same root came up "summoned in another
+      // project", and both other projects must stay down.
+      examples: SPELLINGS.map((spelling) => [{ spelling, name: "scout" }]),
+    },
   );
 });
 
-it("plant: P16 replace every saved folder", () => {
-  const result = fc.check(
-    fc.property(
-      fc.record({ old: fc.stringMatching(/^[a-z]+$/), current: fc.stringMatching(/^[a-z]+$/) }),
-      ({ old, current }) => {
-        expect(`/current/${current}`).toBe(`/original/${old}`);
-      },
-    ),
-    { seed: 119120, numRuns: 25 },
-  );
-  expect(result.failed).toBe(true);
-});
+// P16's plant, comparing raw folder strings, is manager.ts at the head this law was written on
+// (`name.folder !== folder`): the law is red there for that reason. No entry point takes the break
+// once the build resolves roots, so the tests report gives the hand edit and its red.
 
 describe("summon", () => {
   it(

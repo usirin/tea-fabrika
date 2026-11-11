@@ -698,6 +698,190 @@ export const observeProjectFlow = async (flow: RecordedProjectFlow) => {
   }
 };
 
+/**
+ * Each press P17 drives in the built app, and the source and picked pair its opening records must
+ * carry (T276 amendment 4): the box from Cmd-O, the project button or File > Open Project…, then a
+ * row or its Open Folder…; File > Open Folder…; and a welcome row or welcome's Open Folder….
+ */
+export const PRESS_RECORDS = {
+  "cmd-o row": { source: "box", picked: "recent" },
+  "button row": { source: "button", picked: "recent" },
+  "menu row": { source: "menu", picked: "recent" },
+  "cmd-o folder": { source: "box", picked: "folder" },
+  "button folder": { source: "button", picked: "folder" },
+  "menu folder": { source: "menu", picked: "folder" },
+  "file folder": { source: "sheet", picked: "folder" },
+  "welcome row": { source: "welcome", picked: "recent" },
+  "welcome folder": { source: "welcome", picked: "folder" },
+} as const;
+
+/** A press P17 drives in the built app: how the box was shown, or the sheet or welcome, then what was picked. */
+export type ProjectPress = keyof typeof PRESS_RECORDS;
+
+/** The app's own opening records so far, in the order it wrote them (`<home>/records/projects.jsonl`). */
+const openingRecords = (home: string): Record<string, unknown>[] => {
+  let text = "";
+
+  try {
+    text = readFileSync(join(home, "records", "projects.jsonl"), "utf8");
+  } catch {
+    return [];
+  }
+
+  return text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((record) => record._tag === "opening");
+};
+
+/** File's item with this label, clicked as the menu clicks it: main.ts sends it to the window in front. */
+const clickFileItem = (app: ElectronApplication, label: "Open Project…" | "Open Folder…") =>
+  app.evaluate(({ Menu }, wanted) => {
+    const all = (items: readonly Electron.MenuItem[]): Electron.MenuItem[] =>
+      items.flatMap((item) => [item, ...(item.submenu ? all(item.submenu.items) : [])]);
+    const item = all(Menu.getApplicationMenu()?.items ?? []).find((i) => i.label === wanted);
+
+    if (item === undefined) {
+      throw new Error(`the File menu has no ${wanted}`);
+    }
+
+    item.click();
+  }, label);
+
+/** The project window main.ts treats as in front when none is focused: the last one made. */
+const front = async (app: ElectronApplication): Promise<Page> =>
+  required(
+    await until(
+      async () => {
+        for (const page of [...app.windows()].reverse()) {
+          if (!page.isClosed() && (await button(page).count())) {
+            return page;
+          }
+        }
+
+        return null;
+      },
+      (page) => page !== null,
+      30_000,
+    ),
+  );
+
+/** The window that shows this project: its title names the project's parent folder. */
+const windowOf = async (app: ElectronApplication, parent: "left" | "right"): Promise<Page> =>
+  required(
+    await until(
+      async () => {
+        for (const page of app.windows()) {
+          if (!page.isClosed() && (await button(page).count()) && (await page.title()).includes(parent)) {
+            return page;
+          }
+        }
+
+        return null;
+      },
+      (page) => page !== null,
+      30_000,
+    ),
+  );
+
+/**
+ * P17's built-app route: each press, by keys, clicks and menu items in the real app, and the opening
+ * records it wrote. Welcome's press comes first, since only a fresh window shows welcome; a welcome
+ * row needs a recent project, so the app opens one from welcome's Open Folder…, quits and launches
+ * again. A row needs the other project among the recents, so a folder press comes before the first
+ * row. Those setup presses are steps too: each step names the press it made.
+ */
+export const observePresses = async (
+  presses: readonly ProjectPress[],
+): Promise<readonly { readonly press: ProjectPress; readonly records: readonly Record<string, unknown>[] }[]> => {
+  const f = fixture();
+  const parents = ["left", "right"] as const;
+  const steps: { press: ProjectPress; records: Record<string, unknown>[] }[] = [];
+  let app: ElectronApplication | null = await launch(f);
+
+  /** Run one press and keep the opening records it wrote, waiting for the one that ends it. */
+  const recorded = async (press: ProjectPress, act: () => Promise<void>) => {
+    const before = openingRecords(f.home).length;
+    await act();
+    const records = await until(
+      async () => openingRecords(f.home).slice(before),
+      (rows) => rows.some((row) => ["opened", "focused", "failed"].includes(String(row.result))),
+      30_000,
+    );
+    steps.push({ press, records });
+  };
+
+  try {
+    let page = await app.firstWindow();
+    await page.getByRole("heading", { name: "Open a folder to start" }).waitFor();
+    const welcomeFirst = presses.find((p) => p.startsWith("welcome")) ?? "welcome folder";
+    await recorded("welcome folder", async () => {
+      page = await openFixtureProject(required(app), page, f.projects[0]);
+    });
+
+    if (welcomeFirst === "welcome row") {
+      await app.close();
+      app = await launch(f);
+      const again = await app.firstWindow();
+      await again.getByRole("heading", { name: "Open a folder to start" }).waitFor();
+      await recorded("welcome row", async () => {
+        await again.getByRole("option").filter({ hasText: parents[0] }).click();
+      });
+      page = await windowOf(app, parents[0]);
+    }
+
+    let current: 0 | 1 = 0;
+    const rest = presses.filter((p) => !p.startsWith("welcome"));
+    const ordered: ProjectPress[] = rest[0]?.endsWith("row") === true ? ["cmd-o folder", ...rest] : [...rest];
+
+    for (const press of ordered) {
+      const other: 0 | 1 = current === 0 ? 1 : 0;
+      const live = required(app);
+      const [by, pick] = press.split(" ") as [string, string];
+
+      if (by === "file") {
+        await live.evaluate(({ dialog }, root) => {
+          dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [root] });
+        }, f.projects[other]);
+        await recorded(press, () => clickFileItem(live, "Open Folder…"));
+        page = await windowOf(live, parents[other]);
+        current = other;
+        continue;
+      }
+
+      // File > Open Project… goes to the window in front, so the press starts there.
+      const from = by === "menu" ? await front(live) : page;
+      current = (await from.title()).includes(parents[1]) ? 1 : 0;
+      const target: 0 | 1 = current === 0 ? 1 : 0;
+      await recorded(press, async () => {
+        if (by === "cmd-o") {
+          await from.keyboard.press("Meta+o");
+        } else if (by === "button") {
+          await button(from).click();
+        } else {
+          await clickFileItem(live, "Open Project…");
+        }
+
+        await box(from).waitFor();
+
+        if (pick === "row") {
+          await box(from).getByRole("option").filter({ hasText: parents[target] }).click();
+        } else {
+          await openFixtureProject(live, from, f.projects[target]);
+        }
+      });
+      page = await windowOf(live, parents[target]);
+      current = target;
+    }
+
+    await app.close();
+    return steps;
+  } finally {
+    await dispose(app, f);
+  }
+};
+
 const setLook = async (app: ElectronApplication, page: Page, look: Look) => {
   await app.evaluate(({ nativeTheme }, look) => {
     nativeTheme.themeSource = look;
@@ -1270,6 +1454,23 @@ export const runProjectChecks = async (only?: "flow" | "captures") => {
 
     for (const [name, output] of Object.entries(outputs)) {
       check(!JSON.stringify(output).includes(credential), `scenario: P29 credential in ${name}`);
+    }
+
+    // scenario: P17's presses, every one once, each opening record with its source and picked pair.
+    const presses = Object.keys(PRESS_RECORDS) as ProjectPress[];
+
+    for (const welcome of ["welcome row", "welcome folder"] as const) {
+      for (const step of await observePresses([welcome, ...presses.filter((p) => !p.startsWith("welcome"))])) {
+        const wanted = PRESS_RECORDS[step.press];
+        check(step.records.length > 0, `scenario: P17 ${step.press} wrote no opening record`);
+
+        for (const record of step.records) {
+          check(
+            record.source === wanted.source && record.picked === wanted.picked,
+            `scenario: P17 ${step.press} recorded ${String(record.source)}/${String(record.picked)}`,
+          );
+        }
+      }
     }
   }
 
