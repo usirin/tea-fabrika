@@ -89,6 +89,26 @@ const BANNED: readonly Shape[] = [
   banned((n, i) => `const { a: ${n} } = { a: ${i} }; export type { ${n} };`),
   banned((n, i) => `function ${n}() { return ${i}; } export type { ${n} };`),
   banned((n, i) => `declare function ${n}(h${i}: string): string; export { type ${n} };`),
+  // Beside a top-level `const of; export { of }`, which passes: the flag it sets covers that one
+  // binding, never a nested `of`. An `xOf` name fires at both.
+  ...[
+    (n: string, i: number) => `export function h${i}() { const ${n} = ${i}; return ${n}; }`,
+    (n: string, i: number) => `{ const ${n} = ${i}; void ${n}; }`,
+    (n: string, i: number) => `namespace S${i} { const ${n} = ${i}; void ${n}; }`,
+    (n: string, i: number) => `declare module "m${i}" { function ${n}(): void; }`,
+  ].map((nested): Shape => ({
+    text: (n, i) => `const ${n} = ${i}; export { ${n} }; ${nested(n, i)}`,
+    of: ["name"],
+    xOf: ["name", "name"],
+  })),
+  // Neither sets the flag: `export { of } from` names another module's `of`, and `export { a as of }`
+  // exports `a`, so the local `of` stays a bare `of`.
+  banned((n, i, from) => `const ${n} = ${i}; export { ${n} } from "${from}";`),
+  {
+    text: (n, i) => `const ${n} = ${i}; declare const h${i}: number; export { h${i} as ${n} };`,
+    of: ["name"],
+    xOf: ["name", "name"],
+  },
   banned((n) => `export type ${n} = number;`),
   banned((n, i) => `export interface ${n} { readonly h${i}: string }`),
   banned((n) => `export class ${n} {}`),
