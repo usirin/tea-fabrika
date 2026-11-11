@@ -1,7 +1,7 @@
 ---
 id: 0071
 title: fabrika gives each change a risk tier, set from what the change touches and never from who wrote it, that decides how many people must look at it, with its shape left open
-status: accepted
+status: amended-in-part by [0079](0079-size-counts-governed-paths-name-who.md)
 date: 2026-11-10
 tags: [risk-tier, review, attention, person, merge, next, pipeline, settings]
 ---
@@ -82,6 +82,7 @@ Not decided here:
 
 - How many risk tiers there are, and their names.
 - What sets the risk tier: paths, a classifier, or both.
+  *2026-11-10: answered by [0079](0079-size-counts-governed-paths-name-who.md): size sets how many, governed paths set who.*
 - The count of people for each risk tier, and whether the top one may be zero.
 - Whether a look comes before the merge or after it.
 - Which risk tier a repo's settings may change. 0069 says a choice that makes sense as a
