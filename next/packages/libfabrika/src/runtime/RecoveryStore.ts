@@ -1,8 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
-import { Receipt } from "./internal/recovery.ts";
-import { Supervision } from "./internal/supervisor.ts";
+import { Receipt, Supervision } from "./internal/recovery.ts";
 
 // The journal row keeps its receipts apart, so it is read whole only once they are merged back.
 const Row = Schema.fromJsonString(Schema.Struct(Supervision.fields));
