@@ -48,7 +48,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
    Name every test the report lists under `excluded` or `skipped`, with its reason: those did not
-   run. Give the report's `narrowing` list as the arm a against arm b comparison.
+   run. Give the report's `narrowing` list as the arm a against arm b comparison. Quote its
+   `reach` line, "the sample reached N of M changed files", with the files it names.
    When the sampler selects no mutation ranges, because the diff has no product lines, commit
    nothing and end with `answer: skip <why>`; review takes that row in place of a mutation run.
 
@@ -60,7 +61,12 @@ on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an 
 With a base, the sample is the pull request's own lines, `base..build`, so a tip that merged main
 samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
-`RELATED=<paths>`, which `drive.ts` reads. Ticket 520's proof uses
+`RELATED=<paths>`, which `drive.ts` reads. They are the tests that run, never the files mutated:
+the sample is drawn from every changed product file in the diff (`PRODUCT` in `sample.ts`: `.ts`,
+`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`), each file's cheapest
+range first, round-robin, so every changed file gets a mutant before any gets a second (ticket
+655). For arm a, name the base's test file a moved or changed law came from too: arm a runs only
+the related tests the base has. `--plan` is the approved plan; drive passes it. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
 The executable inside the container is `scripts/run.sh`, from the build commit. There it mutates
@@ -85,12 +91,23 @@ node .agents/skills/lead/scripts/mutbox.ts run --checkout . --ticket 520 --build
 It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no product line) or
 `stuck`. Docker missing or stopped is `stuck`. It is never run on the host instead.
 
-- `excluded` names each related test left out before the run, with why: a test that imports
-  Electron or a browser driver needs a display, and the container has none. `skipped` names each
+- `excluded` names each related test left out before the run, with why: a test that loads
+  Electron or a browser driver needs a display, and the container has none. That is read from its
+  parsed imports, so a lint rule's test whose planted strings name Electron still runs. `skipped` names each
   test that skipped itself inside the container. Neither ran. A test that fails there before any
   mutant makes the run `stuck`, naming it.
 - `b` is the branch's own tests. `a` is the same sample against the base's tests, and `narrowing`
-  the mutants `a` kills that `b` lets live.
+  the mutants `a` kills that `b` lets live. `reach` is the line "the sample reached N of M changed
+  files", naming each file with zero mutants.
+- Arm a first runs the base's related tests on the build and keeps only the files that pass,
+  since Stryker stops at a failing test in its dry run; `armA.dropped` names each one left out
+  and why.
+- A run never passes silently. A known gap is `done` with the gap in its reason and `narrowing:
+  "unknown"`: `no_arm_a:base_has_none` or `no_arm_a:none_pass` (arm a had nothing to run), and
+  `no_reach:old_sampler` (the build's `sample.ts` predates per-file reach). Say so in the report;
+  the lead hand-checks the laws as for a loosening hit. Arm a that was due and gave no clean
+  answer is `stuck` `arm_a_failed`, and a sample that reached none of the plan's build-owned files
+  with a mutant on their changed lines is `stuck` `no_build_reach`.
 
 - `<out>/box/b/report.json` holds every answer when Stryker finished. When the cap stopped it,
   `mutbox.ts` reads `events/*-onMutantTested.json`, one file per mutant as it came: that is what it

@@ -157,6 +157,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
   output in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
+  From 0066 the mutation comparison comes from the hourly run on main, after the merge, so at
+  merge the lead reads loosening.sh alone.
   The lead merges any pull request, product code and exam changes included, with `catchup.sh`
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
