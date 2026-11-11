@@ -67,6 +67,7 @@ Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a 
 Each blocker cites that source and shows the missed case.
 
 Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
+Write changes: <n> only when n is 1 or more; with nothing blocking, the line is merge-ready.
 n counts blocking classes. Each class lists every affected case. m counts the finding rows in
 this answer.
 Give every finding in that answer, grouped by class, most serious first.

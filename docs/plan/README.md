@@ -86,6 +86,12 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
 build can start.
 
+*2026-11-10:* P14, the first window in a browser tab, is built (ticket 286,
+[PR 810](https://github.com/usirin/tea-fabrika/pull/810)): `@kampus/tuval`, the browser key, the waiting
+view, the counter's window and the keys table, served from P16's one built brain file. A brain call is
+a write whose answer the socket hears, so a hung brain never holds the window. The lead's runs:
+first-window 16 of 16, window-recovery 53 of 53. → P15 and P18, which need P14, can build.
+
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
 and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
