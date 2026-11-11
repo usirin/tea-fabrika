@@ -241,6 +241,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-transport": "transport",
   "next-telemetry": "data",
   "next-ledger": "data",
+  "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
   "next-processes": "coordination",
   "next-presence": "coordination",
   "next-packs": "coordination",
@@ -1142,6 +1143,7 @@ describe("layers", () => {
       "next-packs": 3,
       "next-ledger": 2,
       "next-transport": 2,
+      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
       "next-shared": 0,
     });

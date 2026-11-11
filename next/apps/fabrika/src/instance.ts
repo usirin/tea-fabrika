@@ -1,6 +1,7 @@
 import { startDev as start } from "@kampus/libfabrika/node/dev";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
+import { AuthProvidersLive } from "alchemy/Auth/Registry";
 import { deploy } from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import { localState } from "alchemy/State/LocalState";
@@ -24,6 +25,7 @@ export const startDev = Effect.fn("instance.startDev")(function* (
       }),
       Layer.succeed(ArtifactStore, createArtifactStore()),
       Interaction.layerNonInteractive(),
+      AuthProvidersLive,
     );
     // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
     return deploy({ stack: stack(built, config, local), stage: "local", dev: true, scope }).pipe(

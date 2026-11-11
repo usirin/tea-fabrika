@@ -1,8 +1,28 @@
-import { Effect, Path, Schema } from "effect";
+import { Cause, Effect, Path, Predicate, Schema } from "effect";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
 }) {}
+
+class PortError extends Schema.TaggedError<PortError>()("PortError", { message: Schema.String }) {}
+
+// The runtime refuses a taken port as a ConfigError with subtag AddressInUse, and Node as EADDRINUSE;
+// either may arrive as the cause of another error.
+const addressInUse = (error: unknown): boolean =>
+  (Predicate.isTagged(error, "ConfigError") &&
+    Predicate.hasProperty(error, "subtag") &&
+    error.subtag === "AddressInUse") ||
+  (Predicate.hasProperty(error, "code") && error.code === "EADDRINUSE") ||
+  (Predicate.hasProperty(error, "cause") && error.cause !== error && addressInUse(error.cause));
+
+const portTaken = (cause: Cause.Cause<unknown>) =>
+  cause.reasons.some(
+    (reason) =>
+      (Cause.isFailReason(reason) && addressInUse(reason.error)) ||
+      (Cause.isDieReason(reason) && addressInUse(reason.defect)),
+  ) ||
+  // Edge: a refusal that reached us only as text, its structure gone, is known by the runtime's words.
+  /AddressInUse|EADDRINUSE|already in use/.test(Cause.pretty(cause));
 
 export const localInstance = Effect.fn("brain.localInstance")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
@@ -23,5 +43,17 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
     try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
     catch: () => new BrainError({ reason: "storage" }),
   });
-  return yield* startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
+  // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
+  const started = startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
+  return yield* started.pipe(
+    Effect.catchCause((cause): Effect.Effect<never, PortError | Effect.Error<typeof started>> =>
+      portTaken(cause)
+        ? Effect.fail(
+            new PortError({
+              message: `Port ${options.port} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
+            }),
+          )
+        : Effect.failCause(cause),
+    ),
+  );
 });
