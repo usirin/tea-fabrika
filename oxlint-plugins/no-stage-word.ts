@@ -27,7 +27,7 @@ const PART = /\p{Lu}+(?!\p{Ll})|\p{Lu}?\p{Ll}+|[^\p{Lu}\p{Ll}]+/gu;
 const DIRECTIVE = /^\s*(?:oxlint|eslint)-(?:disable|enable)[^]*?(?:--|$)/;
 
 /** Where each stage word starts in the text, and its length. */
-export const stageWords = (text: string): ReadonlyArray<{ readonly index: number; readonly length: number }> => {
+const stageWords = (text: string): ReadonlyArray<{ readonly index: number; readonly length: number }> => {
   const found: Array<{ readonly index: number; readonly length: number }> = [];
 
   for (const run of text.matchAll(RUN)) {

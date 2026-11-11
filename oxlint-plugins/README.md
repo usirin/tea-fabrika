@@ -330,8 +330,8 @@ in `next/` product files. It covers imports, re-exports, dynamic imports, `requi
 and TypeScript import assignments. Tests, test support files, declarations, the
 exam and browser test drivers are left out. Its generated plants use the real
 config at these paths. The P12 review-6 sweep found one filesystem import in
-`node/stage-recording.ts`, plus six path imports: that file, `node/build.ts`,
-and the app's `build.ts`, `dev.ts`, `src/local-stage.ts` and `src/stage.ts`.
+`node/dev/dev-recording.ts`, plus six path imports: that file, `node/build.ts`,
+and the app's `build.ts`, `dev.ts`, `src/local-instance.ts` and `src/instance.ts`.
 These are seven findings in six files, all read by hand, with no false alarm.
 All can use Effect's existing FileSystem or Path service. This rule deliberately
 stays red until the builder removes those imports.
@@ -373,7 +373,7 @@ the build step rather than making every unknown return a finding:
 | File | Lines | Real or false | Why |
 |---|---|---|---|
 | `next/packages/libfabrika/src/app/program.ts` | 411 | real | A Standard Schema validator can create a Promise behind its `unknown` return type. |
-| `next/packages/libfabrika/src/node/stage.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
+| `next/packages/libfabrika/src/node/dev/dev.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its
