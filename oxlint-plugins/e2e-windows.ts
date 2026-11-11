@@ -228,7 +228,8 @@ export const e2eWindows: CreateRule = {
         (w) => w.pattern.type === "Identifier" && hasPosition(w.value, new Set(seen)),
       );
     };
-    const propertyKind = (base: Kind | undefined, name: string | undefined): Kind | undefined => {
+    const unique = (kinds: Kind[]): Kind[] => [...new Set(kinds)];
+    const propertyOf = (base: Kind, name: string | undefined): Kind | undefined => {
       if (base === "electron" && name === "BrowserWindow") {
         return "BrowserWindow";
       }
@@ -247,56 +248,42 @@ export const e2eWindows: CreateRule = {
 
       return undefined;
     };
-    const patternKind = (pattern: Node, name: string, base: Kind | undefined): Kind | undefined => {
+    /** Every kind a property of any base kind can be. */
+    const propertyKind = (bases: readonly Kind[], name: string | undefined): Kind[] =>
+      unique(bases.flatMap((base) => propertyOf(base, name) ?? []));
+    const patternKind = (pattern: Node, name: string, bases: readonly Kind[]): Kind[] => {
       if (pattern.type === "Identifier") {
-        return pattern.name === name ? base : undefined;
+        return pattern.name === name ? [...bases] : [];
       }
 
       if (pattern.type === "AssignmentPattern") {
-        return patternKind(pattern.left, name, base);
+        return patternKind(pattern.left, name, bases);
       }
 
       if (pattern.type === "ObjectPattern") {
-        for (const prop of pattern.properties) {
-          if (prop.type !== "Property") {
-            continue;
-          }
-
-          const found = patternKind(prop.value, name, propertyKind(base, key(prop.key)));
-
-          if (found) {
-            return found;
-          }
-        }
+        return unique(
+          pattern.properties.flatMap((prop) =>
+            prop.type === "Property" ? patternKind(prop.value, name, propertyKind(bases, key(prop.key))) : [],
+          ),
+        );
       }
 
-      if (pattern.type === "ArrayPattern" && base === "windows") {
-        for (const item of pattern.elements) {
-          const found = item && patternKind(item, name, "window");
-
-          if (found) {
-            return found;
-          }
-        }
+      if (pattern.type === "ArrayPattern" && bases.includes("windows")) {
+        return unique(pattern.elements.flatMap((item) => (item ? patternKind(item, name, ["window"]) : [])));
       }
 
-      return undefined;
+      return [];
     };
-    const infer = (node: Node | null | undefined, seen = new Set<Binding>()): Kind | undefined => {
+    const named = (name: string): Kind[] =>
+      playwright(name) ? ["playwright"] : name === "electron" ? ["electron"] : [];
+    /** The set of every recognized kind that can reach an expression. */
+    const infer = (node: Node | null | undefined, seen = new Set<Binding>()): Kind[] => {
       if (!node) {
-        return undefined;
+        return [];
       }
 
       if (node.type === "ConditionalExpression" || node.type === "LogicalExpression") {
-        for (const arm of arms(node)) {
-          const found = infer(arm, new Set(seen));
-
-          if (found) {
-            return found;
-          }
-        }
-
-        return undefined;
+        return unique(arms(node).flatMap((arm) => infer(arm, new Set(seen))));
       }
 
       if (node.type === "AwaitExpression") {
@@ -308,15 +295,11 @@ export const e2eWindows: CreateRule = {
       }
 
       if (node.type === "ImportExpression" && node.source.type === "Literal") {
-        return playwright(String(node.source.value))
-          ? "playwright"
-          : node.source.value === "electron"
-            ? "electron"
-            : undefined;
+        return named(String(node.source.value));
       }
 
-      if (node.type === "NewExpression" && infer(node.callee, seen) === "BrowserWindow") {
-        return "window";
+      if (node.type === "NewExpression") {
+        return infer(node.callee, seen).includes("BrowserWindow") ? ["window"] : [];
       }
 
       if (node.type === "MemberExpression") {
@@ -324,51 +307,52 @@ export const e2eWindows: CreateRule = {
       }
 
       if (node.type === "CallExpression") {
+        const found: Kind[] = [];
+
         if (
           node.callee.type === "Identifier" &&
           node.callee.name === "require" &&
           !binding(node.callee)?.defs.length &&
           node.arguments[0]?.type === "Literal"
         ) {
-          const name = String(node.arguments[0].value);
-          return playwright(name) ? "playwright" : name === "electron" ? "electron" : undefined;
+          return named(String(node.arguments[0].value));
         }
 
-        if (["launch", "auditedLaunch"].includes(infer(node.callee, new Set(seen)) ?? "")) {
-          return "app";
+        if (infer(node.callee, new Set(seen)).some((k) => k === "launch" || k === "auditedLaunch")) {
+          found.push("app");
         }
 
         if (node.callee.type === "MemberExpression") {
-          const owner = infer(node.callee.object, seen);
+          const owners = infer(node.callee.object, seen);
           const method = member(node.callee);
 
-          if (owner === "BrowserWindow" && method === "getAllWindows") {
-            return "windows";
+          if (owners.includes("BrowserWindow") && method === "getAllWindows") {
+            found.push("windows");
           }
 
           if (
-            owner === "BrowserWindow" &&
+            owners.includes("BrowserWindow") &&
             ["getFocusedWindow", "fromId", "fromWebContents", "fromBrowserView"].includes(method ?? "")
           ) {
-            return "window";
+            found.push("window");
           }
 
-          if (owner === "app" && method === "browserWindow") {
-            return "handle";
+          if (owners.includes("app") && method === "browserWindow") {
+            found.push("handle");
           }
         }
 
-        return undefined;
+        return unique(found);
       }
 
       if (node.type !== "Identifier") {
-        return undefined;
+        return [];
       }
 
       const variable = binding(node);
 
       if (!variable || seen.has(variable)) {
-        return undefined;
+        return [];
       }
 
       seen.add(variable);
@@ -376,7 +360,7 @@ export const e2eWindows: CreateRule = {
 
       if (def?.type === "ImportBinding" && def.parent?.type === "ImportDeclaration") {
         if (def.parent.importKind === "type") {
-          return undefined;
+          return [];
         }
 
         const from = def.parent.source.value;
@@ -384,28 +368,22 @@ export const e2eWindows: CreateRule = {
         const name = spec.type === "ImportSpecifier" ? key(spec.imported) : "*";
 
         if (from === "electron") {
-          return name === "*" ? "electron" : propertyKind("electron", name);
+          return name === "*" ? ["electron"] : propertyKind(["electron"], name);
         }
 
         if (playwright(from)) {
-          return name === "*" ? "playwright" : propertyKind("playwright", name);
+          return name === "*" ? ["playwright"] : propertyKind(["playwright"], name);
         }
 
         if (from.endsWith("electron-launch.ts") && name === "launchElectron") {
-          return "auditedLaunch";
+          return ["auditedLaunch"];
         }
       }
 
       if (def?.node.type === "VariableDeclarator") {
-        for (const w of reaching(variable, node)) {
-          const found = patternKind(w.pattern, node.name, infer(w.value, new Set(seen)));
-
-          if (found) {
-            return found;
-          }
-        }
-
-        return undefined;
+        return unique(
+          reaching(variable, node).flatMap((w) => patternKind(w.pattern, node.name, infer(w.value, new Set(seen)))),
+        );
       }
 
       if (def?.type === "Parameter") {
@@ -416,13 +394,13 @@ export const e2eWindows: CreateRule = {
           fn.type !== "FunctionExpression" &&
           fn.type !== "FunctionDeclaration"
         ) {
-          return undefined;
+          return [];
         }
 
         const param = fn.params[0];
 
         if (!param) {
-          return undefined;
+          return [];
         }
 
         const parent = fn.parent;
@@ -432,13 +410,23 @@ export const e2eWindows: CreateRule = {
           parent.callee.type === "MemberExpression" &&
           member(parent.callee) === "evaluate"
         ) {
-          const owner = infer(parent.callee.object, seen);
+          const owners = infer(parent.callee.object, seen);
           // Electron evaluate callbacks expose BrowserWindow explicitly. DOM callbacks do not.
           const native =
-            owner === "app" ||
+            owners.includes("app") ||
             (param.type === "ObjectPattern" &&
               param.properties.some((p) => p.type === "Property" && key(p.key) === "BrowserWindow"));
-          return patternKind(param, node.name, owner === "handle" ? "window" : native ? "electron" : undefined);
+          const passed: Kind[] = [];
+
+          if (owners.includes("handle")) {
+            passed.push("window");
+          }
+
+          if (native) {
+            passed.push("electron");
+          }
+
+          return patternKind(param, node.name, passed);
         }
 
         if (
@@ -454,23 +442,28 @@ export const e2eWindows: CreateRule = {
             imported.node.type === "ImportSpecifier" &&
             key(imported.node.imported) === "ElectronApplication"
           ) {
-            return patternKind(param, node.name, "app");
+            return patternKind(param, node.name, ["app"]);
           }
         }
       }
 
-      return undefined;
+      return [];
     };
     return {
       CallExpression(node) {
-        if (!launcher && infer(node.callee) === "launch") {
+        if (!launcher && infer(node.callee).includes("launch")) {
           context.report({
             node,
             message: "Launch Electron through src/testing/electron-launch.ts inside runE2e.",
           });
         }
 
-        if (!inDrivers || hook || node.callee.type !== "MemberExpression" || infer(node.callee.object) !== "window") {
+        if (
+          !inDrivers ||
+          hook ||
+          node.callee.type !== "MemberExpression" ||
+          !infer(node.callee.object).includes("window")
+        ) {
           return;
         }
 

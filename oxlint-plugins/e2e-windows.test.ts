@@ -182,8 +182,43 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
         files["apps/fabrika/src/testing/may-not-run-position.ts"] =
           `const {BrowserWindow: W} = require("electron");\n${position.join("\n")}`;
         files["apps/fabrika/lane-e2e.ts"] = `${launches[1]}\n${launcher.join("\n")}`;
+        // Competing recognized kinds: every kind that can reach a use counts, wherever it sits among the arms.
+        const n = name;
+        const competing = [
+          `{ let ${n} = W.fromId(1); ${n} ??= W; ${n}.focus(); }`,
+          `{ let ${n} = W.fromId(1); ${n} ||= W; ${n}.show(); }`,
+          `{ let ${n} = W; ${n} = cond ? ${n} : W.fromId(1); ${n}.setOpacity(0); }`,
+          `{ const ${n} = cond ? W : W.fromId(1); ${n}.focus(); }`,
+          `{ const ${n} = W ?? W.fromId(1); ${n}.show(); }`,
+          `{ const ${n} = (cond && W) || W.getFocusedWindow(); ${n}.setIgnoreMouseEvents(true); }`,
+          `{ const a = cond ? W : W.fromId(1); const b = a; const ${n} = b; ${n}.capturePage(); }`,
+          `{ const o = cond ? P : E; o.BrowserWindow.fromId(1).focus(); }`,
+          `{ const o = cond ? E : P; const ${n} = o.BrowserWindow.fromId(1); ${n}?.center(); }`,
+          `{ const {BrowserWindow: B} = cond ? P : E; const ${n} = B.fromId(1); ${n}.focus(); }`,
+          `{ const {BrowserWindow: B = W} = cond ? E : P; const ${n} = new B(); ${n}.setPosition(1, 2); }`,
+          `{ const [${n}] = cond ? W : W.getAllWindows(); ${n}.focus(); }`,
+          `{ let ${n}; [${n}] = cond ? W : W.getAllWindows(); ${n}.focus(); }`,
+          `{ const h = cond ? app : await app.browserWindow(page); h.evaluate((${n}) => ${n}.focus()); }`,
+          `{ const h = (await app.browserWindow(page)) ?? app; h.evaluate((${n}) => { ${n}.setBounds({x: 1}); }); }`,
+          `{ let ${n} = require("playwright")._electron; ${n} ??= require("electron"); ${n}.launch({}); }`,
+          `{ const ${n} = cond ? require("electron") : require("playwright")._electron; ${n}.launch({}); }`,
+          `{ const {_electron: ${n}} = cond ? E : P; ${n}.launch({}); }`,
+          `{ const o = cond ? E : P; const ${n} = o._electron; ${n}["launch"]?.({}); }`,
+          `{ const a = cond ? E : P; const b = a; const ${n} = b._electron; ${n}.launch({}); }`,
+        ];
+        const competingAllowed = [
+          `{ const ${n} = cond ? page.locator("a") : page; ${n}.focus(); }`,
+          `{ const o = cond ? P : E; o.other.focus(); o.other.launch({}); }`,
+          `{ const h = cond ? app : page; h.evaluate((el) => el.focus()); }`,
+          `{ const {chromium: C} = cond ? E : P; C.launch({headless: true}); }`,
+          `{ const ${n} = cond ? W : page; ${n}.focus(); const ${n}2 = cond ? W : W.fromId(1); ${n}2.setBounds({width: 5}); }`,
+          `{ let ${n} = cond ? W : W.fromId(1); ${n} = page; ${n}.focus(); }`,
+        ];
+        files["apps/fabrika/src/testing/competing.ts"] =
+          `import {BrowserWindow as W} from "electron";\nimport * as E from "electron";\nimport * as P from "playwright";\nimport {launchElectron} from "./electron-launch.ts";\nconst app = await launchElectron({});\n${competing.join("\n")}\n${competingAllowed.join("\n")}`;
         const fires = lint(files);
 
+        expect(fires(Code, "apps/fabrika/src/testing/competing.ts")).toHaveLength(competing.length);
         expect(fires(Code, "apps/fabrika/src/testing/may-not-run-window.ts")).toHaveLength(write.length);
         expect(fires(Code, "apps/fabrika/src/testing/may-not-run-position.ts")).toHaveLength(write.length);
         expect(fires(Code, "apps/fabrika/lane-e2e.ts")).toHaveLength(1 + write.length);
