@@ -39,7 +39,7 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { Refusal } from "./Program.ts";
-import { RecoveryStore } from "./RecoveryStore.ts";
+import { RecoveryStore, recoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
 const NAME = "counter:1";
@@ -940,11 +940,11 @@ describe("P34 runner supervision", () => {
                   }
 
                   const armed = w.alarm();
-                  const recovery = yield* RecoveryStore.use((s) => s.load).pipe(
-                    Effect.provide(
-                      RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
-                    ),
-                  );
+                  const recovery = yield* recoveryStore(w.state.sql, {
+                    name: NAME,
+                    capacity: 1024 ** 3,
+                    schema: Supervision,
+                  }).load;
                   // The program is live, so no recovery deadline remains. Earlier down
                   // exits above checked the other side of the same earliest-deadline law.
                   // P34c slice 2: a live program with no deadline is an idle journal.
@@ -1241,11 +1241,8 @@ describe("P34 runner supervision", () => {
             w.reopen();
             yield* recover(w);
             const status = yield* ProcessManager.use((p) => p.status(NAME)).pipe(Effect.provide(w.manager()));
-            const saved = yield* RecoveryStore.use((s) => s.load).pipe(
-              Effect.provide(
-                RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
-              ),
-            );
+            const saved = yield* recoveryStore(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision })
+              .load;
             expect({ records, saved, state: status.state }).toMatchObject({
               records: [{ build, body: { build, input: id } }],
               saved: { build },
