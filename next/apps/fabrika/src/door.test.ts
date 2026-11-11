@@ -14,6 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
@@ -381,7 +382,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
-  const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+  const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
@@ -397,7 +398,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
     const freshLedger = LedgerSql.layer(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
-    const freshClients = ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
+    const freshClients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(freshLedger));
     return Gateway.layer({ ...settings, sql: storage }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
@@ -1842,7 +1843,7 @@ describe("P10 signed membership changes", () => {
                 })),
               ),
             ).pipe(Layer.provide(w.env));
-            const clients = ClientManager.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
+            const clients = ClientManagerLedger.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
             const env = Layer.mergeAll(w.env, clients, Mailbox.layer.pipe(Layer.provide(clients)));
             yield* Effect.gen(function* () {
               const d = yield* Gateway;
