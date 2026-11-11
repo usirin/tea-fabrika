@@ -7,6 +7,7 @@ import { Saw } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
@@ -118,7 +119,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
   const controls = { fail: "", deliveryFails: false };
   const actual = yield* Effect.service(Ledger).pipe(
     Effect.provide(
-      Ledger.sql(sql, { reader: "project" }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+      LedgerSql.layer(sql, { reader: "project" }).pipe(
+        Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+      ),
     ),
   );
   const ledger = Layer.succeed(Ledger, {

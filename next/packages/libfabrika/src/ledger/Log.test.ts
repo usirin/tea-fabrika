@@ -25,6 +25,7 @@ import { ParentText } from "../Rev.ts";
 import type { Sql } from "../Sql.ts";
 import * as LedgerFront from "./Ledger.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import * as LedgerTransactionFront from "./LedgerTransaction.ts";
 import * as LogFront from "./Log.ts";
 import type { Entry, InputId, Line } from "./Log.ts";
@@ -104,7 +105,7 @@ afterAll(() => {
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 const onReferee = (sql: Sql) => Referee.layer(sql).pipe(Layer.provide(quiet));
-const onLedger = (sql: Sql) => Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(quiet));
+const onLedger = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
 
 const full: Line = {
   by: "SHA256:writer-a",

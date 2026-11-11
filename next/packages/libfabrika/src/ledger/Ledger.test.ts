@@ -25,6 +25,8 @@ import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
+import * as LedgerRemote from "./LedgerRemote.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
@@ -74,7 +76,7 @@ const bell = () => {
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
-  Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(doorbell));
+  LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell));
 
 const line = (over: Partial<Line> = {}): Line => ({
   by: "SHA256:writer-a",
@@ -533,7 +535,7 @@ describe("p20, failures are typed, and pass", () => {
             }
 
             expect(errors.map((error) => error.reason)).toEqual(["unreachable", "unreachable", "unreachable"]);
-          }).pipe(Effect.provide(Ledger.remote(stub, { reader: READER })));
+          }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
         },
         { concurrency: 1, discard: true },
       ),
@@ -565,7 +567,7 @@ describe("p20, failures are typed, and pass", () => {
             }
 
             expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
-          }).pipe(Effect.provide(Ledger.remote(stub, { reader: READER })));
+          }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
         },
         { concurrency: 1, discard: true },
       ),
@@ -593,7 +595,7 @@ describe("p20, failures are typed, and pass", () => {
       expect(asked[0]).toEqual(["read", "a", 0, READER]);
       expect(asked.at(-1)).toEqual(["wait", "a", 1, READER]);
       expect(asked.every(([, , , reader]) => reader === READER)).toBe(true);
-    }).pipe(Effect.provide(Ledger.remote(stub, { reader: READER })));
+    }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
   });
 
   it.effect.prop(

@@ -70,7 +70,11 @@ built. P38, settings (ticket 664), is planned in 7 slices; slice 1, the local po
 setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-once.md) and
 [the settings note](../direction/settings.md), both on main. P14 (ticket 286) is
 [PR 810](https://github.com/usirin/tea-fabrika/pull/810), too large for the cap, so it is being cut
-into slices, and its restack plan is being written. → the lead lands each slice once its steps pass
+into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
+[0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
+only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
+`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. → the lead lands each slice once its
+steps pass
 
 *2026-11-09:* the local stage, P12, landed as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too

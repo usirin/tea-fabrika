@@ -17,6 +17,7 @@ import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
@@ -376,7 +377,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     events: { personOnly: ["answered"] },
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
   const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
@@ -392,7 +393,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
-    const freshLedger = Ledger.sql(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
+    const freshLedger = LedgerSql.layer(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
     const freshClients = ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
     return Gateway.layer({ ...settings, sql: storage }).pipe(
       Layer.provideMerge(
