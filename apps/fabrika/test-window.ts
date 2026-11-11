@@ -105,7 +105,12 @@ export const launch = async (options: {
   const env = envFor(options.env ?? process.env, home);
   const watching = await watchFile();
   const app = await _electron
-    .launch({ executablePath: electronPath, args: ["-r", watching.file, here], env, cwd: options.cwd })
+    .launch({
+      executablePath: electronPath,
+      args: ["-r", watching.file, here],
+      env,
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+    })
     .catch(async (e: unknown) => {
       await rm(watching.folder, { recursive: true, force: true });
       throw e;

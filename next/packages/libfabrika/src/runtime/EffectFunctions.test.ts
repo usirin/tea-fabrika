@@ -10,7 +10,7 @@ import { ClientManager } from "../access/ClientManager.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { Appended, fromHere, type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -490,7 +490,7 @@ describe("T285, coordination tracing keep-laws", () => {
               by: "brain",
             },
             Effect.succeed(PROCESS),
-          ).pipe(Layer.provide(LedgerTransaction.layer(d.sql).pipe(Layer.provide(quiet))));
+          ).pipe(Layer.provide(LedgerTransactionSql.layer(d.sql).pipe(Layer.provide(quiet))));
 
           try {
             await Effect.runPromise(
@@ -969,7 +969,7 @@ const runnerWorld = (
         nextId,
       ),
     ),
-    Layer.provide(LedgerTransaction.layer(processes.sql).pipe(Layer.provide(quiet))),
+    Layer.provide(LedgerTransactionSql.layer(processes.sql).pipe(Layer.provide(quiet))),
   );
   const adapters = Layer.mergeAll(
     ProgramLoader.layer(
