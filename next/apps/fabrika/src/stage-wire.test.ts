@@ -15,7 +15,7 @@ import { Entry, PAGE } from "@kampus/libfabrika/data";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
-import { killWorkerd } from "./workerd.test-support.ts";
+import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -189,7 +189,8 @@ const launch = async (held: Held, saved?: Saved) => {
 
 const stage = (saved?: Saved) => launch(shared, saved);
 
-// Read only the named public metadata tables. Never inspect general storage or key rows.
+// Read only the named public metadata tables. Never inspect general storage or key rows. The crash cases
+// read two more rows through `killedMoment`: the name's `process_recovery` row and its object's `activity` row.
 const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
   const rows: Array<Record<string, unknown>> = [];
 
@@ -764,6 +765,8 @@ describe("P12 real dev.ts wire", () => {
         );
         yield* killWorkerd(s.child.pid!);
         const resumed = yield* reconnected(s, "after-crash");
+        // Every answer was in before the kill, so the rows the wake reads say no step was cut.
+        expect(yield* killedMoment(s.home, "counter:1", pid)).toEqual({ _tag: "between" });
 
         for (const n of range(20)) {
           const id = `kill-${n}`,
@@ -800,33 +803,47 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* staged;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
-        const answered = yield* Deferred.make<void>();
+        const firstStart = (yield* Effect.promise(() => read(c, "door/brain"))).find((row) => row._tag === "started")!;
+        const firstAnswer = yield* Deferred.make<void>();
         const fibers = yield* Effect.forEach(
           range(20),
-          (n) => Effect.forkScoped(sendSettled(c, pid, `kill-${n}`, answered)),
+          (n) => Effect.forkScoped(sendSettled(c, pid, `kill-${n}`, firstAnswer)),
           {
             concurrency: 1,
           },
         );
-        yield* Deferred.await(answered);
+        yield* Deferred.await(firstAnswer);
         yield* killWorkerd(s.child.pid!);
         const before = yield* Effect.forEach(fibers, Fiber.join, { concurrency: "unbounded" });
         const resumed = yield* reconnected(s, "after-crash");
-        const refused: Array<string> = [];
+        // The old workerd is gone and nothing has called the object yet: read where the kill landed, from the
+        // same committed rows the wake reads. The moment decides which of the two laws below this run must meet.
+        const moment = yield* killedMoment(s.home, "counter:1", pid);
+        const refused: Array<{ call: string; retry: Frame }> = [];
+        // A refusal is the name restarting; the refused call's one retry waits for the fact that says so.
+        const answered = (call: string, first: Frame, again: () => Promise<Frame>) =>
+          Effect.gen(function* () {
+            if (first.error === undefined) {
+              return first;
+            }
+
+            expect(moment, `${call} refused after a kill between steps`).toMatchObject({ _tag: "inside" });
+            expect(
+              refused.map((r) => r.call),
+              "exactly one call meets a refusal",
+            ).toEqual([]);
+            expect(first.error.data?.reason).toBe("unreachable");
+            yield* restartedAfter(resumed, "processes/counter:1", pid);
+            const retry = yield* Effect.promise(again);
+            refused.push({ call, retry });
+            return retry;
+          });
 
         for (const n of range(20)) {
           const id = `kill-${n}`;
-          let reply = yield* Effect.promise(() => send(resumed, pid, id));
-
-          if (reply.error !== undefined) {
-            // A refusal is the name restarting; its resend waits for the fact that says so.
-            expect(refused, "at most one letter meets a refusal").toEqual([]);
-            expect(reply.error.data?.reason).toBe("unreachable");
-            refused.push(id);
-            yield* restartedAfter(resumed, "processes/counter:1", pid);
-            reply = yield* Effect.promise(() => send(resumed, pid, id));
-          }
-
+          const reply = yield* answered(id, yield* Effect.promise(() => send(resumed, pid, id)), () =>
+            send(resumed, pid, id),
+          );
           const now = placing(reply);
           const was = before[n]!;
 
@@ -839,24 +856,40 @@ describe("P12 real dev.ts wire", () => {
         expect(inbox).toHaveLength(20);
         expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
         // When the door answered every resend (each letter settled or held), the view is the first call
-        // into the object: it wakes a `stepping` marker and is the one refusal, so it too waits for the fact.
-        const opened = yield* Effect.promise(() => resumed.call("view.open", { pid }));
-
-        if (opened.error !== undefined) {
-          expect(refused, "at most one call meets a refusal").toEqual([]);
-          expect(opened.error.data?.reason).toBe("unreachable");
-          refused.push("view.open");
-          yield* restartedAfter(resumed, "processes/counter:1", pid);
-        }
-
+        // into the object: it wakes a cut step and is the one refusal, so it too waits for the fact.
+        const opened = yield* answered(
+          "view.open",
+          yield* Effect.promise(() => resumed.call("view.open", { pid })),
+          () => resumed.call("view.open", { pid }),
+        );
+        expect(opened.error).toBeUndefined();
         const live = yield* Effect.promise(() => counter(resumed));
         expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
         const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
           (row) => (row.body as { after?: string }).after === pid,
         );
-        // A refusal waited for its fact above. However the kill landed, no more than one restart follows it.
-        expect(restarted.length).toBeLessThanOrEqual(1);
-        expect(live).toBe(restarted.length === 0 ? pid : (restarted[0]!.body as { process: string }).process);
+
+        if (moment._tag === "between") {
+          // The kill missed every step: every resend and the view were accepted on the first try.
+          expect(refused).toEqual([]);
+          expect(restarted).toEqual([]);
+          expect(live).toBe(pid);
+        } else {
+          // The kill cut a step: one call was refused, one restart followed, and its one retry was accepted.
+          expect(refused.map((r) => r.call)).toHaveLength(1);
+          expect(refused[0]!.retry.error).toBeUndefined();
+          expect(restarted).toHaveLength(1);
+          expect(live).toBe((restarted[0]!.body as { process: string }).process);
+          expect(live).not.toBe(pid);
+        }
+
+        const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
+        expect(starts).toHaveLength(2);
+        expect(starts[1]!.body).toMatchObject({
+          after: (firstStart.body as { start: string }).start,
+          build: expect.any(String),
+          reason: "crash",
+        });
       }),
   );
 });

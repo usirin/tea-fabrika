@@ -1,7 +1,13 @@
 // next/, test support. Kills the one workerd under a parent process, for the real-workerd crash laws
-// (stage-wire's cases A and C, worker-supervision's case B). Read through its module, as port.test-support is.
+// (stage-wire's cases A and C, worker-supervision's case B), and reads where the kill landed.
+// Read through its module, as port.test-support is.
+// edge: Effect SQL has no read-only open of another process's SQLite file, which killedMoment needs
+import { DatabaseSync } from "node:sqlite";
+// edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
+import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Stream } from "effect";
+import { Activity } from "@kampus/libfabrika/coordination";
+import { Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 const processes = Effect.gen(function* () {
@@ -49,3 +55,87 @@ export const killWorkerd = Effect.fn("workerd.kill")(function* (parent: number) 
   yield* Effect.sync(() => process.kill(pid, "SIGKILL"));
   return pid;
 });
+
+/** Where a kill landed for one name: inside a step, with its letter, or between steps. */
+const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: {} });
+
+// Only what the wake rule reads from the saved supervision: its name and its saved attempt.
+const Saved = Schema.fromJsonString(
+  Schema.Struct({
+    name: Schema.String,
+    attempt: Schema.NullOr(Schema.Struct({ process: Schema.String, letter: Schema.String })),
+  }),
+);
+
+/** One object's two rows, or null when its file holds no `process_recovery` row for `name`. */
+const objectRows = (db: DatabaseSync, name: string) => {
+  const table = (t: string) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
+
+  if (!table("process_recovery")) {
+    return null;
+  }
+
+  const saved = db.prepare("SELECT value FROM process_recovery WHERE name=?").get(name);
+
+  if (saved === undefined) {
+    return null;
+  }
+
+  // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
+  const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
+  return {
+    attempt: Schema.decodeUnknownSync(Saved)(saved.value).attempt,
+    marker: kv === undefined ? undefined : Schema.decodeUnknownSync(Activity)(deserialize(kv.value as Uint8Array)),
+  };
+};
+
+/**
+ * What a kill left on disk for `name`, read-only, after the reconnect and before any call into the object:
+ * the product's own wake rule (runner.ts, the first runner call after a restart). Inside means the saved
+ * attempt names `pid`, or the stored `activity` marker is `stepping` for `pid`; between means neither.
+ * It reads the home's SQLite files as stage-wire's `savedRows` does, and no row but these two.
+ */
+export const killedMoment = Effect.fn("workerd.killedMoment")(function* (home: string, name: string, pid: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  // Walks real folders only: a test home may link `node_modules`, and a link is never followed.
+  const files: Array<string> = [];
+  const folders = [home];
+
+  for (let folder = folders.pop(); folder !== undefined; folder = folders.pop()) {
+    for (const entry of yield* fs.readDirectoryEntries(folder).pipe(Effect.orDie)) {
+      const at = path.join(folder, entry.name);
+
+      if (entry.type === "Directory") {
+        folders.push(at);
+      } else if (entry.type === "File" && /\.(sqlite|db)$/.test(entry.name)) {
+        files.push(at);
+      }
+    }
+  }
+
+  const found: Array<NonNullable<ReturnType<typeof objectRows>>> = [];
+
+  for (const file of files) {
+    const rows = yield* Effect.acquireUseRelease(
+      Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
+      (db) => Effect.sync(() => objectRows(db, name)),
+      (db) => Effect.sync(() => db.close()),
+    );
+
+    if (rows !== null) {
+      found.push(rows);
+    }
+  }
+
+  const [only] = found;
+
+  if (found.length !== 1 || only === undefined) {
+    return yield* Effect.die(new Error(`expected one saved supervision for ${name}, found ${found.length}`));
+  }
+
+  const attempt = only.attempt?.process === pid ? only.attempt : null;
+  const marker = only.marker?._tag === "stepping" && only.marker.process === pid ? only.marker : null;
+  const letter = attempt?.letter ?? marker?.letter;
+  return letter === undefined ? Moment.cases.between.make({}) : Moment.cases.inside.make({ letter });
+}, Effect.provide(NodeServices.layer));

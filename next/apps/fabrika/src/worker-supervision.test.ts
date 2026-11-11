@@ -12,7 +12,7 @@ import type { From } from "@kampus/libfabrika/coordination";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
-import { killWorkerd } from "./workerd.test-support.ts";
+import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -370,7 +370,7 @@ const worldScoped = Effect.gen(function* () {
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
   };
-  return { stage, key, fixture };
+  return { stage, key, fixture, home };
 });
 
 /** A real WebSocket client at the door, closed when the test's scope closes. */
@@ -655,7 +655,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
     "scenario: ticket 646 plant (ignore the marker, refuse a live name, count one attempt twice): workerd killed inside a step refuses one letter, restarts once and accepts its one resend",
     () =>
       Effect.gen(function* () {
-        const { stage, key, fixture } = yield* worldScoped;
+        const { stage, key, fixture, home } = yield* worldScoped;
         const name = "kill:1";
         const first = yield* Effect.promise(() => fixture.start(name));
         const before = yield* wired(stage, key, "before");
@@ -678,6 +678,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         });
         yield* killWorkerd(process.pid);
         const after = yield* reconnected(stage, key, "after");
+        // Before the first send, the rows the wake reads say the kill cut k-10, the marker recover() read.
+        expect(yield* killedMoment(home, name, first)).toEqual({ _tag: "inside", letter: "k-10" });
 
         // Settled letters are answered from the door's saved bindings and never wake the Process object.
         for (const n of range(10)) {
