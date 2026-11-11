@@ -50,6 +50,7 @@ import {
   type Sql,
   type Writer,
 } from "../coordination/index.ts";
+import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import {
   Alarm,
@@ -67,6 +68,8 @@ import { Failure, Policy, Recovery, type Supervision } from "./internal/recovery
 import { defaultPolicy, supervisor, type SupervisorMsg } from "./internal/supervisor.ts";
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { Replies, type RepliesError } from "./Replies.ts";
+import * as RepliesSql from "./RepliesSql.ts";
 
 export { defaultPolicy } from "./internal/supervisor.ts";
 
@@ -205,6 +208,7 @@ export class ProgramRunner extends Context.Service<
         const recovery = yield* RecoveryStore.pipe(
           Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
         );
+        const replies = yield* Replies.pipe(Effect.provide(RepliesSql.layer(options.recovery.sql, options.recovery)));
         let supervision: Supervision | null = null;
         let woke = false;
         const mailbox = yield* Mailbox;
@@ -1376,6 +1380,19 @@ export class ProgramRunner extends Context.Service<
                   }
                 }
 
+                // A program's refusal is terminal: it answers again before any fresh check, and only
+                // for the writer and input it first answered.
+                const terminal = yield* replies.reply(process.name, input.id);
+
+                if (terminal !== null) {
+                  if ((yield* inputDigest(input)) !== terminal.digest) {
+                    return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
+                  }
+
+                  const { _tag: _case, ...reason } = terminal.answer;
+                  return { answer: Sent.cases.refused.make(reason), jobs: [] };
+                }
+
                 return yield* accept(yield* ready(), input);
               }),
             ),
@@ -1544,7 +1561,25 @@ export class ProgramRunner extends Context.Service<
 
             if (prepared._tag === "refused") {
               const { _tag: _case, ...reason } = prepared;
-              return { answer: Sent.cases.refused.make(reason), jobs: [] };
+              const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
+
+              // A delivery saved before input TypeIDs has no input ID to bind; its refusal stays unsaved.
+              if (Option.isNone(parent)) {
+                return { answer: Sent.cases.refused.make(reason), jobs: [] };
+              }
+
+              // Saved before it is answered: a lost answer's retry reads this first row.
+              const kept = yield* replies.rememberReply({
+                name: process.name,
+                id: input.id,
+                parent: parent.value,
+                by: input.envelope.by.key,
+                for: input.envelope.by.for,
+                digest: yield* inputDigest(input),
+                answer: prepared,
+              });
+              const { _tag: _first, ...first } = kept.answer;
+              return { answer: Sent.cases.refused.make(first), jobs: [] };
             }
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.
@@ -1590,7 +1625,7 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
   reason: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted;
+type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted | RepliesError;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });
