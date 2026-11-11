@@ -79,3 +79,5 @@ bounded turn inside a flow and never carries one (owner, 2026-11-10).**
   become steps in it.
 - Not decided here: whether flows later run inside fabrika's app as programs a person can watch.
   For now the runner stays a tea machine, not a `Program.make` ([0070](0070-flow-runner-stays-a-machine.md)).
+- Any agent, not only the lead, composes work by handing fabrika a flow as data
+  ([0074](0074-agent-hands-over-a-flow.md)). The rules above still hold as written.
