@@ -48,9 +48,9 @@
       "paths": ["next/packages/libfabrika/src/mcp"]
     },
     {
-      "name": "next-loops",
+      "name": "next-schedules",
       "layer": 6,
-      "paths": ["next/packages/libfabrika/src/loops"]
+      "paths": ["next/packages/libfabrika/src/schedules"]
     },
     {
       "name": "next-door",

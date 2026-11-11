@@ -816,7 +816,7 @@
               "access",
               "runtime",
               "gateway",
-              "loops"
+              "schedules"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
@@ -958,7 +958,7 @@
         "next/packages/libfabrika/src/transport/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/settings/**",
-        "next/packages/libfabrika/src/loops/**"
+        "next/packages/libfabrika/src/schedules/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -975,7 +975,7 @@
         "next/packages/libfabrika/src/transport/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
         "next/packages/libfabrika/src/settings/internal/**",
-        "next/packages/libfabrika/src/loops/internal/**"
+        "next/packages/libfabrika/src/schedules/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },
@@ -1008,7 +1008,7 @@
       "rules": { "typescript/prefer-for-of": "error" }
     },
     {
-      "files": ["next/packages/libfabrika/src/loops/**"],
+      "files": ["next/packages/libfabrika/src/schedules/**"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -1024,12 +1024,12 @@
               },
               {
                 "name": "effect/Schedule",
-                "message": "A loop wakes through its Process alarm."
+                "message": "A scheduled job wakes through its Process alarm."
               },
               {
                 "name": "effect",
                 "importNames": ["Schedule"],
-                "message": "A loop wakes through its Process alarm."
+                "message": "A scheduled job wakes through its Process alarm."
               }
             ],
             "patterns": [

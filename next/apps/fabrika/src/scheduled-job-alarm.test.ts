@@ -8,10 +8,10 @@ import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 
-const PROJECT = "loop-alarm";
+const PROJECT = "scheduled-job-alarm";
 const NAME = "beat:1";
-// Build table keys allow identifiers and hyphens; the fixture still declares loops/beat.
-const PROGRAM = "loops-beat";
+// Build table keys allow identifiers and hyphens; the fixture still declares schedules/beat.
+const PROGRAM = "schedules-beat";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const WAIT = 25_000;
 
@@ -65,7 +65,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "loop-" });
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "sjob-" });
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = {
@@ -102,9 +102,10 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const module = path.join(home, "beat.ts");
-      const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/loops/beat.ts");
+      const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");
+      // Build beside the app's dependencies; the fixture directory has no package links.
       // The app builder selects `program`; the pack's public export is `beat`.
-      yield* fs.writeFileString(module, `export { beat as program } from ${JSON.stringify(fixture)};\n`);
+      yield* fs.writeFileString(module, `${yield* fs.readFileString(fixture)}\nexport { beat as program };\n`);
       const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: module } });
       const code = built.programs[PROGRAM];
       expect(code).toBeDefined();
@@ -172,11 +173,11 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           "stable idle view around saved alarm",
           Effect.gen(function* () {
             const before = Schema.decodeUnknownSync(View)(
-              yield* Effect.promise(() => instance.process(pid).open("loop-observer")),
+              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );
             const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
             const after = Schema.decodeUnknownSync(View)(
-              yield* Effect.promise(() => instance.process(pid).open("loop-observer")),
+              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );
             return { before, alarm, after };
           }),

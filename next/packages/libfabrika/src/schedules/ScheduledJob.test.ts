@@ -4,7 +4,7 @@ import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/
 import { Result, Schema } from "effect";
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import * as Loop from "./Loop.ts";
+import * as ScheduledJob from "./ScheduledJob.ts";
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
@@ -12,7 +12,9 @@ const write = Cmd.make("write", {
   err: ["not_delivered", "ended", "spent"],
 });
 
-const make = (period: number) => Loop.make({ period, cmd: write, job: (due, ms) => write({ due, period: ms }) });
+const make = (period: number) =>
+  ScheduledJob.make({ period, cmd: write, work: (due, ms) => write({ due, period: ms }) });
+
 const ctx = stubCtxThrowingProxy<unknown>();
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
@@ -53,7 +55,7 @@ const walks = period.chain((ms) => {
 
 const options = { seed: 119120, numRuns: 150 };
 
-it("L1: only a due idle loop emits one job; answers while idle do nothing", () => {
+it("L1: only a due idle scheduled job emits work; answers while idle do nothing", () => {
   fc.assert(
     fc.property(walks, ({ ms, messages }) => {
       const { machine } = Result.getOrThrow(make(ms));
@@ -81,7 +83,7 @@ it("L1: only a due idle loop emits one job; answers while idle do nothing", () =
             }
 
             if (prev._tag === "idle") {
-              const [due, jobs] = applyCell<Loop.Model, { type: "timer"; at: number }, CmdValue<typeof write>>(
+              const [due, jobs] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdValue<typeof write>>(
                 machine,
                 prev,
                 { type: "timer", at: prev.next },
@@ -110,14 +112,14 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
       const { machine } = Result.getOrThrow(make(ms));
       const [initial] = machine.init(undefined, ctx);
       expect(initial).toEqual({ _tag: "idle", next: 0, period: ms });
-      expect(Loop.wake(initial)).toBe(0);
+      expect(ScheduledJob.wake(initial)).toBe(0);
       propertyTrace(
         machine,
         ctx,
         fc.constant(messages),
         (steps) => {
           for (const { prev, msg, next } of steps) {
-            expect(Loop.wake(next)).toBe(next._tag === "idle" ? next.next : null);
+            expect(ScheduledJob.wake(next)).toBe(next._tag === "idle" ? next.next : null);
             expect(next.period).toBe(ms);
 
             if (prev._tag === "running" && msg.type !== "timer") {
@@ -146,11 +148,11 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
             const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
-            const [unchanged, sent] = applyCell<Loop.Model, { type: "timer"; at: number }, CmdValue<typeof write>>(
-              machine,
-              prev,
-              { type: "timer", at },
-            );
+            const [unchanged, sent] = applyCell<
+              ScheduledJob.Model,
+              { type: "timer"; at: number },
+              CmdValue<typeof write>
+            >(machine, prev, { type: "timer", at });
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
             const ignored = msg.type === "timer" && (prev._tag === "running" || msg.at < prev.next);
@@ -180,7 +182,7 @@ it("L4: only positive whole millisecond periods succeed", () => {
       expect(Result.isFailure(rejected)).toBe(true);
 
       if (Result.isFailure(rejected)) {
-        expect(rejected.failure).toMatchObject({ _tag: "LoopError", reason: "bad_period" });
+        expect(rejected.failure).toMatchObject({ _tag: "ScheduledJobError", reason: "bad_period" });
       }
 
       expect(Result.isSuccess(make(good))).toBe(true);
