@@ -64,6 +64,8 @@ const SAW = {
 } as const;
 
 const SENT = "2026-11-08T04:00:00.000Z";
+/** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
+const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
 const START = processId();
 const TOOK = { label: "Browser", where: "test", how: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -3063,7 +3065,7 @@ describe("P33 signal ids belong to the brain", () => {
                   }),
                 ),
               ).toMatchObject({ _tag: "SigningRefused" });
-              yield* ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+              yield* ProcessManager.use((p) => p.exit(TARGET, CRASHED, brainFrom)).pipe(
                 Effect.provide(processes(w, asBrain, brainSeat)),
               );
               const inbox = yield* entries("watcher:1/inbox");
@@ -3071,13 +3073,13 @@ describe("P33 signal ids belong to the brain", () => {
               expect(inbox[0]).toMatchObject({
                 _tag: "send",
                 by: BRAIN,
-                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed" } },
+                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED } },
               });
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([
-                { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed", to: toWatcher },
+                { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED, to: toWatcher },
               ]);
             }).pipe(w.provide);
           }),

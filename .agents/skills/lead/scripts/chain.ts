@@ -65,6 +65,9 @@
 //
 // Each step's record is a Schema value (`StepRecord`) written to `state/<lane>-chain.json` before
 // the step starts and again when it ends, so a resume (`--start <step>`) needs nothing in memory.
+// While the lane runs, the record also holds its heartbeat (./flow/Beat.ts, ticket 685): the phase
+// the chain is in, since when, and when an agent last wrote, written on each phase change and every
+// 30 seconds, so a status page tells a lane at work from one blocked in a hung call.
 // The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
@@ -94,7 +97,19 @@ import { Cmd, run } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
-import { driveStep, type Env, FAULTS, type Fault, faultFrom, loadEnv, MUTATION_AGENT, prepare, sh } from "./drive.ts";
+import {
+  type DrivePhase,
+  driveStep,
+  type Env,
+  FAULTS,
+  type Fault,
+  faultFrom,
+  loadEnv,
+  MUTATION_AGENT,
+  prepare,
+  sh,
+} from "./drive.ts";
+import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import * as Typecheck from "./flow/typecheck.ts";
@@ -543,6 +558,8 @@ export const ChainRecord = Schema.Struct({
   steps: Schema.Array(StepRecord),
   /** Why the chain last stopped to ask a person (0076), when it did. */
   stop: Schema.optionalKey(Stop),
+  /** The heartbeat while the chain runs (./flow/Beat.ts); gone once the lane ends. */
+  beat: Schema.optionalKey(Beat.Beat),
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
@@ -980,6 +997,7 @@ type Setup = {
   readonly model: string;
   /** The `## host` section's commands; none skips the host step. */
   readonly host: ReadonlyArray<string>;
+  readonly beats: Beats;
 };
 
 /** The last `n` lines of a file, or a line saying it is not there. */
@@ -1023,6 +1041,51 @@ const chainFile = (path: string, lane: string) => {
   };
   return { readRecord, writeRecord };
 };
+
+/** drive.ts's machine phase as a beat's; `null` where the chain names the phase itself. */
+const beatPhase = {
+  idle: null,
+  starting: "box",
+  drafting: "agent",
+  reading: "collect",
+  pushing: "commit",
+  recording: "cleanup",
+  over: null,
+} as const satisfies Record<DrivePhase, Beat.Phase | null>;
+
+/** When a file was last written, or `null` when it is not there. */
+const writtenAt = (path: string | null): Date | null =>
+  path !== null && existsSync(path) ? statSync(path).mtime : null;
+
+/**
+ * The lane's heartbeat in its chain record (./flow/Beat.ts). `enter` names a new phase and, for a
+ * phase with an agent, the event log that agent appends to; `tick` writes the beat again; `clear`
+ * drops it when the lane ends. The record on disk holds the beat; only the log's path is in memory.
+ */
+const beating = (file: ReturnType<typeof chainFile>) => {
+  let events: string | null = null;
+  const write = (beat: Beat.Beat) => file.writeRecord({ ...file.readRecord(), beat });
+  const enter = (phase: Beat.Phase, log: string | null) => {
+    events = log;
+    const now = new Date();
+    const entered = Beat.enter(file.readRecord().beat ?? null, phase, now);
+    write(Beat.tick(entered, now, writtenAt(events)));
+  };
+  const tick = () => {
+    const beat = file.readRecord().beat;
+
+    if (beat !== undefined) {
+      write(Beat.tick(beat, new Date(), writtenAt(events)));
+    }
+  };
+  const clear = () => {
+    const { beat: _, ...rest } = file.readRecord();
+    file.writeRecord(rest);
+  };
+  return { enter, tick, clear };
+};
+
+type Beats = ReturnType<typeof beating>;
 
 const handlers = (s: Setup) => {
   const { env } = s;
@@ -1099,6 +1162,8 @@ const handlers = (s: Setup) => {
         // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
         // A slot refusal is a typed failure the schedule retries.
         const once = Effect.gen(function* () {
+          // prepare runs box.sh gc and the start checks in this thread: a hung one stops the beat.
+          s.beats.enter("cleanup", null);
           const prepared = prepare(env, {
             lane: s.lane,
             step: cmd.step,
@@ -1116,6 +1181,7 @@ const handlers = (s: Setup) => {
 
             if (check !== null) {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
+              s.beats.enter("wait", null);
               return yield* Effect.fail(new SlotRefused({ check, reason: prepared.reason }));
             }
 
@@ -1131,7 +1197,15 @@ const handlers = (s: Setup) => {
             } satisfies Line;
           }
 
-          const ran = yield* driveStep(env, s.agents, prepared);
+          const events = prepared.ask.events;
+          s.beats.enter("wait", events);
+          const ran = yield* driveStep(env, s.agents, prepared, (phase) => {
+            const named = beatPhase[phase];
+
+            if (named !== null) {
+              s.beats.enter(named, events);
+            }
+          });
           return {
             outcome: ran.outcome,
             head: ran.head,
@@ -1189,6 +1263,7 @@ const handlers = (s: Setup) => {
         const box = `${s.lane}-judge${earlier + cmd.round}`;
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
+        s.beats.enter("judge", at(".jsonl"));
         const started = new Date();
         // One turn in the main checkout on the row that only reads (Codex's read-only profile):
         // the judgment cannot change the checkout, by the harness and not by a promise. That row
@@ -1250,6 +1325,7 @@ const handlers = (s: Setup) => {
       }).pipe(Effect.provide(NodeServices.layer)),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
+        s.beats.enter("pr", null);
         const title = (s.brief.sections.pr ?? "")
           .split("\n")[0]
           ?.replace(/^#+\s*/, "")
@@ -1330,6 +1406,7 @@ const handlers = (s: Setup) => {
     // as a comment before anything lands (0014); a comment that fails is exit 2, never a pass.
     loosen: (cmd: { pr: number; head: string }) =>
       Effect.sync(() => {
+        s.beats.enter("loosening", null);
         sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
         const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
 
@@ -1377,6 +1454,7 @@ const handlers = (s: Setup) => {
           judged: null,
         };
         saveStep(entry);
+        s.beats.enter("host", null);
         note(`round ${round}: starting host at ${head.slice(0, 8)} (${s.host.length} commands)`);
         const args = {
           main: env.MAIN,
@@ -1417,6 +1495,7 @@ const handlers = (s: Setup) => {
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
         note(`catchup.sh ${cmd.pr} ${s.ticket}`);
+        s.beats.enter("land", null);
         const size = existsSync(errFile) ? statSync(errFile).size : 0;
         const ran = yield* spawnEffect("sh", [join(HERE, "catchup.sh"), String(cmd.pr), s.ticket], {
           errFile,
@@ -1537,7 +1616,12 @@ export const chainMain = (args: string[], env: Env) =>
       process.exit(2);
     }
 
+    const record = chainFile(join(env.BOXES, "state", `${lane}-chain.json`), lane);
+    const beats = beating(record);
+    // A beat left by a process that died is not this one's: its phase must not lend its `since`.
+    beats.clear();
     const setup: Omit<Setup, "agents"> = {
+      beats,
       env,
       lane,
       ticket,
@@ -1564,6 +1648,9 @@ export const chainMain = (args: string[], env: Env) =>
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // The beat between phase changes; it stops with this scope, or with a call that blocks.
+    const every = Schedule.spaced(Duration.millis(Beat.EVERY));
+    yield* Effect.sync(beats.tick).pipe(Effect.repeat(every), Effect.forkScoped);
     yield* runtime.dispatch({ type: "start", step: start });
     const end = yield* runtime.done();
 
@@ -1572,11 +1659,11 @@ export const chainMain = (args: string[], env: Env) =>
     }
 
     const { stop } = end.end;
+    beats.clear();
 
     // The stop goes in the chain record with the rule that fired and what was spent (0076).
     if (stop !== undefined) {
-      const file = chainFile(join(env.BOXES, "state", `${lane}-chain.json`), lane);
-      file.writeRecord({ ...file.readRecord(), stop });
+      record.writeRecord({ ...record.readRecord(), stop });
     }
 
     console.log(
