@@ -6,7 +6,8 @@ import { Effect, Exit, Layer, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, RecoveryStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
-import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import { Doorbell } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -78,7 +79,7 @@ describe("P12 saved mail recovery", () => {
                   reply: async () => null,
                 });
                 const base = Layer.mergeAll(
-                  Ledger.sql(sql, { reader: PID }).pipe(
+                  LedgerSql.layer(sql, { reader: PID }).pipe(
                     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                   ),
                   RecordManager.memory(1_000_000_000),
@@ -285,7 +286,7 @@ describe("P34 id reuse at the runner", () => {
                     reply: async () => null,
                   });
                   const base = Layer.mergeAll(
-                    Ledger.sql(sql, { reader: PID }).pipe(
+                    LedgerSql.layer(sql, { reader: PID }).pipe(
                       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                     ),
                     RecordManager.memory(1_000_000_000),

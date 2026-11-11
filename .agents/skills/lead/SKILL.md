@@ -28,6 +28,12 @@ A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not 
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
 
+An agent's own worktree gets its own install, as `catchup.sh` does: `pnpm install --offline
+--frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
+Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
+(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), so `pnpm typecheck` fails, and a pnpm run in the
+worktree rewrites the main checkout's install state through the link.
+
 For a stacked lane, put the parent and landing facts in the state file and the brief before the
 first step:
 
@@ -482,8 +488,10 @@ visible, and never weaken the rules to hide this message.
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
     own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
-    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
-    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close
+    gets a comment naming the PR and its merge commit (`scripts/catchup.sh:86`). No row per merge
+    is written: that measure is proposed
+    ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 

@@ -17,8 +17,9 @@ import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
-import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerRemote from "../ledger/LedgerRemote.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
@@ -50,6 +51,7 @@ import {
   type ProjectBinding,
   type RecordBinding,
 } from "./bindings.ts";
+import { cloudflareSql } from "./CloudflareSql.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
@@ -333,7 +335,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }),
   });
   const ledgerLayer = Layer.mergeAll(
-    Ledger.sql(sql, { reader: `project:${name}` }),
+    LedgerSql.layer(sql, { reader: `project:${name}` }),
     LedgerTransaction.layer(sql),
     Referee.layer(sql),
   ).pipe(Layer.provide(bell));
@@ -739,7 +741,7 @@ const processLogic = Effect.fnUntraced(function* (
     sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs);
   const saved = yield* processDescriptor(ctx);
-  const ledger = Ledger.remote(stub, { reader: saved.id });
+  const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
   const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
     Layer.provideMerge(base),
