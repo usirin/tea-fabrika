@@ -66,7 +66,8 @@ const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
     Effect.scoped(
       Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
-        return yield* Effect.tryPromise({ try: () => use(held.port), catch: (error) => error });
+        // A failed assertion in `use` is a defect: the run rejects with it and the test goes red.
+        return yield* Effect.promise(() => use(held.port));
       }),
     ),
   );
