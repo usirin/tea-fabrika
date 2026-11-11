@@ -211,8 +211,8 @@ export const run = Effect.fn("typecheck.run")(
 
     if (Option.isNone(installed) || installed.value.code !== 0) {
       const late = `ran past ${a.minutes} minutes`;
-      const why = Option.isNone(installed) ? late : tail(installed.value.output);
-      return notRun(`\`${install}\` failed: ${why}`);
+      const reason = Option.isNone(installed) ? late : tail(installed.value.output);
+      return notRun(`\`${install}\` failed: ${reason}`);
     }
 
     const checked = yield* within(dir, "nice -n 19 pnpm typecheck", node, a.minutes);

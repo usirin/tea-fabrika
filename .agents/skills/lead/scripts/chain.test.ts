@@ -764,13 +764,13 @@ describe("one host typecheck runs before the pull request opens, today's tooling
 
   it("property: green opens the PR; one that did not run opens it too, and the lane keeps why", () => {
     fc.assert(
-      fc.property(sha, word, (head, why) => {
+      fc.property(sha, word, (head, reason) => {
         const [m] = reviewed(head);
         const [green, opens] = answered(m, { _tag: "green" });
         expect(green).toMatchObject({ phase: "opening", lane: { unchecked: null } });
         expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
-        const [skipped, also] = answered(m, { _tag: "skipped", reason: why });
-        expect(skipped).toMatchObject({ phase: "opening", lane: { unchecked: why } });
+        const [skipped, also] = answered(m, { _tag: "skipped", reason });
+        expect(skipped).toMatchObject({ phase: "opening", lane: { unchecked: reason } });
         expect(also).toEqual([expect.objectContaining({ type: "pr_open", head })]);
         const [threw, again] = machine.update.typecheck_run_err(m, {
           type: "typecheck_run_err",
