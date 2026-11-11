@@ -118,10 +118,6 @@ export type Setup = {
   tickets?: Record<number, "open" | "closed">;
   // The last look at main refuses: main moved after the checks and the merged tree is red (552).
   stale?: boolean;
-  // gh reads merge state BEHIND and refuses on its own side (0049); the REST merge then answers
-  // merged, `moved` (a newer head, 409) or `refused` (GitHub's own rules, 405).
-  behind?: boolean;
-  rest?: "merged" | "moved" | "refused";
   // The pull request's state, one answer per read of it (the start read, then each look inside a
   // wait), the last one repeating. OPEN by default. UNKNOWN is gh's answer for no such PR.
   views?: View[];
@@ -167,7 +163,6 @@ if (cmd === "gh") {
     key = args.includes("state,mergeCommit") ? "landed" : args.includes("body") ? "body" : args.includes("headRefOid") ? "oid" : "head";
   else if (args[0] === "stack" && args[1] === "merge") key = "stack";
   else if (args[0] === "pr" && args[1] === "merge") key = "merge";
-  else if (args[0] === "api" && args.includes("PUT")) key = "rest";
   else if (args[0] === "run" && args[1] === "view") key = "logs";
   else if (args[0] === "api" && args[1].includes("check_name=")) key = "apps";
   else if (args[0] === "api" && args[1].includes("check-runs?")) key = "checks";
@@ -228,10 +223,6 @@ if (cmd === "gh") {
   if (key === "apps") console.log(setup.answer === "app" ? "impostor" : "github-actions");
   if (key === "logs") console.log("commits\tcheck\t2026-11-08T00:00:00Z commits: 3 commits, ticket " + (setup.answer === "ticket" ? "521" : "520"));
   if (key === "merge" && setup.mergeFails) die("merge refused");
-  if (key === "merge" && setup.behind)
-    die("X Pull request fixture/repo#900 is not mergeable: the head branch is not up to date with the base branch.");
-  if (key === "rest" && setup.rest === "moved") die("gh: Head branch was modified. Review and try the merge again. (HTTP 409)");
-  if (key === "rest" && setup.rest === "refused") die("gh: Pull Request is not mergeable (HTTP 405)");
   process.exit(0);
 }
 if (cmd === "git") {
