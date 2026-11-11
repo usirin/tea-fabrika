@@ -8,6 +8,9 @@ blog post 10 (deleted from main; see the tag `archive/2026-11-09`); the first co
 `.fabrika/programs` are Tier 5 and packs are Tier 7, both proposed
 ([the tiers](../plan/tiers.md)).*
 
+*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
+outside fabrika's own source get a thin slice before Tier 5; its shape is not decided yet.
+
 ## Where the files live (2026-10-30)
 
 Decided: the repo's file moves into a `.fabrika/` folder, and a person's own
