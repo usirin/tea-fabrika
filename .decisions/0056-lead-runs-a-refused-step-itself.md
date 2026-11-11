@@ -68,3 +68,14 @@ lead session runs that same action itself, without asking the owner again (owner
 - The cost: the lead session holds more of the work. A mistake there is fixed forward.
 - Not decided here: changing the permission check so step agents are not refused these steps in
   the first place.
+
+## Amendments
+
+- 2026-11-10: **the permanent fix landed** (tracker ticket 652). A lane agent is no longer handed
+  a lead-only step: its last act is `land.ts ready`, which records "ready to land" in the lane's
+  state file with the PR body, the loosening output and the mutation comparison, and it stops
+  there. The lead session runs `land.ts run <lane> <ticket>`, which merges main in, signs as lead
+  through main's own signer, leak-greps, pushes with `botpush.mjs`, opens or updates the PR and
+  runs `catchup.sh`. `skillscheck.sh` fails a brief template in the lead skill that names a lead
+  sign, a step key, `botpush`, `catchup.sh` or `land.ts run`. This decision still covers any other
+  step agent the check refuses. The permission check itself is unchanged.
