@@ -1,6 +1,6 @@
 ---
 name: review
-description: Do the one review of a tea-fabrika ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests, build and mutation steps.
+description: Do the one review of a tea-fabrika ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests and build steps.
 ---
 
 # The one review
@@ -49,7 +49,9 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      failures. Check every named output, including encoded URL forms, and a leak planted in each.
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - Screenshots in the program's `docs/` folder when the plan asks for them, at its layouts.
-   - Anything else the brief names for this round, such as the mutation step's added laws.
+   - Anything else the brief names for this round. A lane has no mutation step
+     ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)); a lane that finished one
+     started before 0066 names its added laws here.
 4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
    n counts blocking classes. Each class lists every affected case. m counts the finding rows in
    this answer.

@@ -122,8 +122,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
 - **Every pull request, `next/` or today's, goes through the pipeline's steps:**
-  plan, test writer, build, mutation step, one review, each by its own agent, with
-  laws. Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
+  plan, test writer, build, one review, each by its own agent, with
+  laws. Mutation is no step: it runs hourly against main and files tickets
+  ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)). Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
@@ -140,7 +141,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
   Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
-  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  they are not product work. They skip the plan, tests and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
@@ -153,8 +154,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
   Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
-  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
+  output in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
   The lead merges any pull request, product code and exam changes included, with `catchup.sh`
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
@@ -166,8 +167,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   (tracker ticket 341). The lead skill says how.
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
-  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and mutation shows no law got
-  narrower. A change that loosens or removes a law still waits on the owner
+  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
+  narrower (the hourly mutation run files any narrowing it finds later, 0066). A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one

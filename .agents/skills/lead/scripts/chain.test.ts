@@ -52,8 +52,11 @@ import {
   looseningEnd,
   makeMachine,
   judgedMove,
+  lacks,
+  LANE_STEPS,
   moveFrom,
   moveOf,
+  providers,
   RetriesExhausted,
   sectionsOf,
   slotRefusal,
@@ -65,14 +68,16 @@ import {
 
 // Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
+// Every step the chain can start at, and the lane's own steps (0066: no mutation step).
 const step = fc.constantFrom(...STEPS);
+const laneStep = fc.constantFrom(...LANE_STEPS);
 const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
 const word = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
 
 const outcome = fc.oneof(
   fc.constant("done"),
   fc.constant("skip:step_said"),
-  fc.constantFrom("send:tests:step_said", "send:build:step_said", "send:tests:exam_paths"),
+  fc.constantFrom("send:tests:step_said", "send:build:step_said", "send:tests:exam_paths", "send:mutation:step_said"),
   fc.constant("send:plan:plancheck"),
   fc.constantFrom("ask:lead:question", "ask:lead:lockfile"),
   fc.constantFrom("refused:agent_cap", "refused:low_disk"),
@@ -90,29 +95,32 @@ const line = (o: string, head: string, reason = "why"): Line => ({
 });
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
-  it("done walks tests -> build -> mutation -> review -> open; skip walks the same way", () => {
+  // 0066: a lane's steps are tests -> build -> review; a mutation step (a lane started there)
+  // hands to review. Plants: build hands to mutation; mutation hands to build; skip stops the walk.
+  it("property: done walks tests -> build -> review -> open; a started mutation goes to review; skip walks the same way", () => {
     const walk: Record<StepName, string> = {
       tests: "build",
-      build: "mutation",
+      build: "review",
       mutation: "review",
       review: "open",
     };
-
-    for (const s of STEPS) {
-      for (const o of ["done", "skip:step_said"]) {
-        const m = moveOf(s, line(o, "h"), 0, 3);
+    fc.assert(
+      fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, why) => {
+        const m = moveOf(s, line(o, "h", why), 0, 3);
         expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 
         if (m._tag === "step") {
           expect(m.note).toBe("");
+          expect(m.step).not.toBe("mutation");
         }
-      }
-    }
+      }),
+      options,
+    );
   });
 
-  it("a send goes to the step it names with the sender's word; a send to plan parks", () => {
+  it("property: a send goes to the lane step it names with the sender's word; a send to plan or mutation parks", () => {
     fc.assert(
-      fc.property(step, step, word, (from, to, why) => {
+      fc.property(step, laneStep, word, (from, to, why) => {
         const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
 
@@ -121,6 +129,12 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
         }
 
         expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
+        const toMutation = moveOf(from, line("send:mutation:step_said", "h", why), 0, 3);
+        expect(toMutation._tag).toBe("park");
+
+        if (toMutation._tag === "park") {
+          expect(toMutation.reason).toContain(why);
+        }
       }),
       options,
     );
@@ -190,9 +204,9 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 });
 
 describe("T341 the judgment agent's answer, today's tooling", () => {
-  it("reads the last answer line: a send names a step and carries its note; park carries its why", () => {
+  it("reads the last answer line: a send names a lane step and carries its note; park carries its why", () => {
     fc.assert(
-      fc.property(step, word, word, (s, note, chatter) => {
+      fc.property(laneStep, word, word, (s, note, chatter) => {
         const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
         expect(sent).toMatchObject({ _tag: "step", step: s });
 
@@ -209,10 +223,12 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
     );
   });
 
-  it("no answer line, or one naming a step that is not a step, parks", () => {
+  it("no answer line, or one naming a step that is not a lane step, parks", () => {
     expect(judgedOf("I think the build should run again").toString()).toBe(judgedOf("").toString());
     expect(judgedOf("answer: send plan fix it")._tag).toBe("park");
     expect(judgedOf("")._tag).toBe("park");
+    // pinned: 0066, a lane has no mutation step, so an older answer that names one parks.
+    expect(judgedOf("answer: send mutation rerun it")).toEqual({ _tag: "park", reason: "rerun it" });
   });
 });
 
@@ -279,6 +295,29 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
     expect(cut.sections.pr?.split("\n")[0]).toBe("# T7 the title");
     expect(Object.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
   });
+
+  // 0066: a brief needs no `## mutation`; an older one that has it is accepted. Plants: demand
+  // every STEPS section; refuse a brief that has mutation; drop pr from the needed list.
+  it("property: a brief lacks only what its start needs: lane steps and pr always, mutation only to start there", () => {
+    const sections = fc.subarray([...STEPS, "pr"]);
+    fc.assert(
+      fc.property(sections, step, (have, start) => {
+        const text = ["Shared.", ...have.flatMap((k) => [`## ${k}`, `body of ${k}`])].join("\n");
+        const needed = [...LANE_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"];
+        expect(lacks(sectionsOf(text), start).toSorted()).toEqual(needed.filter((k) => !have.includes(k)).toSorted());
+      }),
+      options,
+    );
+    const withoutMutation = laneBrief.replace("## mutation\nRun stryker.\n", "");
+    expect(sectionsOf(withoutMutation).sections.mutation).toBeUndefined();
+
+    for (const start of LANE_STEPS) {
+      expect(lacks(sectionsOf(withoutMutation), start)).toEqual([]);
+      expect(lacks(sectionsOf(laneBrief), start)).toEqual([]);
+    }
+
+    expect(lacks(sectionsOf(withoutMutation), "mutation")).toEqual(["mutation"]);
+  });
 });
 
 describe("T341 drive's last line is what the chain reads, today's tooling", () => {
@@ -303,12 +342,12 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
     machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
 
-  it("a clean lane runs the four steps, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
+  it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
     expect(cmds[0]).toMatchObject({ type: "step_run", step: "tests", round: 1 });
     const heads: string[] = [];
 
-    for (const [i, s] of STEPS.entries()) {
+    for (const [i, s] of LANE_STEPS.entries()) {
       expect(m).toMatchObject({ phase: "stepping", step: s });
       const head = String(i + 1).repeat(40);
       heads.push(head);
@@ -316,12 +355,12 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     }
 
     expect(m.phase).toBe("opening");
-    expect(cmds[0]).toMatchObject({ type: "pr_open", head: heads[3] });
+    expect(cmds[0]).toMatchObject({ type: "pr_open", head: heads[2] });
     [m, cmds] = machine.update.pr_open_ok(m, {
       type: "pr_open_ok",
       value: { pr: 42, detail: "opened" },
     } as never);
-    expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[3] });
+    expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[2] });
     [m, cmds] = machine.update.loosen_ok(m, {
       type: "loosen_ok",
       value: { code: 0, text: "loosening: 0 hits in 0 exam files" },
@@ -339,15 +378,89 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
       expect(m.lane.heads).toEqual({
         tests: heads[0],
         build: heads[1],
-        mutation: heads[2],
-        review: heads[3],
+        review: heads[2],
       });
     }
   });
 
+  // 0066. Plants: route build's done to mutation; let a judgment or a send start mutation.
+  it("property: no path from a lane started at tests, build or review ever runs mutation", () => {
+    const answer = fc.oneof(
+      outcome.map((o) => ({ _tag: "line" as const, o })),
+      fc
+        .constantFrom(
+          "answer: send mutation rerun",
+          JSON.stringify({ _tag: "step", step: "mutation", note: "rerun" }),
+          "answer: send build fix",
+          "answer: send review again",
+        )
+        .map((text) => ({ _tag: "judged" as const, text })),
+    );
+    fc.assert(
+      fc.property(laneStep, fc.array(answer, { maxLength: 20 }), (first, answers) => {
+        const [idle] = machine.init(null, undefined);
+        let [m, cmds] = machine.update.start(idle, { type: "start", step: first });
+        const started: string[] = cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : []));
+
+        for (const a of answers) {
+          if (m.phase === "stepping" && a._tag === "line") {
+            [m, cmds] = ran(m, line(a.o, "c".repeat(40)));
+          } else if (m.phase === "judging" && a._tag === "judged") {
+            [m, cmds] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: a.text } } as never);
+          } else {
+            continue;
+          }
+
+          started.push(...cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : [])));
+          expect(m.phase === "stepping" || m.phase === "judging" ? m.step : "none").not.toBe("mutation");
+        }
+
+        expect(started).not.toContain("mutation");
+      }),
+      options,
+    );
+  });
+
+  it("property: after a done build the lane runs review, whatever ran before", () => {
+    fc.assert(
+      fc.property(fc.constantFrom("tests", "build"), sha, (first, head) => {
+        const [idle] = machine.init(null, undefined);
+        let [m, cmds] = machine.update.start(idle, { type: "start", step: first });
+
+        if (first === "tests") {
+          [m, cmds] = ran(m, line("done", head));
+        }
+
+        expect(m).toMatchObject({ phase: "stepping", step: "build" });
+        [m, cmds] = ran(m, line("done", head));
+        expect(m).toMatchObject({ phase: "stepping", step: "review" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review" })]);
+      }),
+      options,
+    );
+  });
+
+  // A lane parked inside its mutation step before 0066 is not stranded. Plants: refuse a mutation
+  // start; send a started mutation's done to build; run mutation twice.
+  it("property: a lane started at mutation runs that one step, then review", () => {
+    fc.assert(
+      fc.property(fc.constantFrom("done", "skip:step_said"), sha, (o, head) => {
+        const [idle] = machine.init(null, undefined);
+        let [m, cmds] = machine.update.start(idle, { type: "start", step: "mutation" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "mutation", round: 1 })]);
+        [m, cmds] = ran(m, line(o, head));
+        expect(m).toMatchObject({ phase: "stepping", step: "review" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 2 })]);
+        [m, cmds] = ran(m, line("done", head));
+        expect(m.phase).toBe("opening");
+      }),
+      options,
+    );
+  });
+
   it("a send back reruns the named step with the sender's word in its note", () => {
     fc.assert(
-      fc.property(step, word, (to, why) => {
+      fc.property(laneStep, word, (to, why) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
         [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
@@ -364,7 +477,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a stuck asks for judgment; the judgment's send reruns that step, its park ends as ask (exit 20)", () => {
     fc.assert(
-      fc.property(step, word, (to, why) => {
+      fc.property(laneStep, word, (to, why) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("stuck:timeout", "", why));
         expect(m.phase).toBe("judging");
@@ -439,7 +552,7 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     const [idle] = machine.init(null, undefined);
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
-    for (const _ of STEPS) {
+    for (const _ of LANE_STEPS) {
       [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never);
     }
 
@@ -520,6 +633,23 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     expect(rows[2]).toContain("| tests | l-tests1 | done |");
     expect(rows.at(-1)).toBe("| total | | | 0.00 |");
   });
+
+  // 0066: a lane that ran no mutation step claims none. Plants: always name mutation; name a
+  // Claude step that never ran.
+  it("property: the body names Claude only for steps the lane ran on it, mutation only when it ran", () => {
+    fc.assert(
+      fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude) => {
+        const text = providers(ran, new Set(claude));
+        expect(text.startsWith("Codex in a box")).toBe(true);
+        expect(text.includes("mutation")).toBe(ran.includes("mutation"));
+
+        for (const s of LANE_STEPS) {
+          expect(text.includes(s)).toBe(ran.includes(s) && claude.includes(s));
+        }
+      }),
+      options,
+    );
+  });
 });
 
 describe("T341 the chain record is a Schema value, today's tooling", () => {
@@ -579,7 +709,7 @@ describe("T341 the judgment agent's typed answer is a move, today's tooling", ()
 
   it("the judge Cmd's answer reads back as the move it chose, and an older text by its answer line", () => {
     fc.assert(
-      fc.property(step, word, (s, note) => {
+      fc.property(laneStep, word, (s, note) => {
         const move = { _tag: "step" as const, step: s, note };
         expect(moveFrom(JSON.stringify(move))).toEqual(move);
         expect(moveFrom(JSON.stringify({ _tag: "park", reason: note }))).toEqual({
