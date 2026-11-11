@@ -1,9 +1,11 @@
 import { type DepKeyedSub, defineMachine, type Sub } from "@demlik/tea";
 import { Cmd } from "@demlik/tea/effect";
-import { Ledger } from "@kampus/fabrika-old";
+import { Ledger, streams } from "@kampus/fabrika-old";
+import { AskShown } from "@kampus/pipeline/tickets/ask";
 import { Entry, fold, ROOT, readRow, type Ticket, TicketNumber, Title } from "@kampus/pipeline/tickets/ticket";
-import { headOf, words } from "@tea-fabrika/tracker";
+import { headOf, words, preparePending } from "@tea-fabrika/tracker";
 import { Cause, Clock, Duration, Effect, Exit, Schema, Stream } from "effect";
+import type { Noticed } from "./link.ts";
 
 // The asks: every ask on the ledger that waits on the person, folded in the host, once, for
 // every place that shows a count of them: the window's top bar, the Dock badge and the asks list
@@ -47,6 +49,10 @@ export const Ask = Schema.Struct({
   /** What it asks, in its own words, or why the run is stuck. */
   what: Schema.String,
   kind: Schema.Literals(["ask", "stuck"]),
+  sealed: Schema.optionalKey(AskShown),
+  for: Schema.optionalKey(Schema.String),
+  why: Schema.optionalKey(Schema.String),
+  resume: Schema.optionalKey(Schema.String),
   /** When it was asked, or the run ended stuck. */
   at: Schema.Finite,
   /** The person has opened the list since it came. */
@@ -248,6 +254,7 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
           key: `${ticket.number}/${a.ask}`,
           what: a.what,
           kind: "ask",
+          ...(a.sealed === undefined ? {} : { sealed: a.sealed, ...(a.for === undefined ? {} : { for: a.for }) }),
           at: a.at,
         }));
       }
@@ -264,6 +271,8 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
           key: `${ticket.number}/stuck/${run}`,
           what: words(head.why),
           kind: "stuck",
+          why: head.why,
+          resume: head.stage,
           at: ended?.at ?? now,
         },
       ];
@@ -272,7 +281,14 @@ export const waitingOf = (tickets: readonly Ticket[], now: number): readonly Wai
 
 /** The frame's view of the asks: one value, for the top bar, the badge and the list alike. */
 export const asksNow = (s: Asks): AsksNow => {
-  const all = waitingOf(s.tickets, s.now).map((a) => ({ ...a, seen: s.seen.includes(a.key) }));
+  const groups = new Map<string, Waiting[]>();
+
+  for (const row of waitingOf(s.tickets, s.now)) {
+    const kind = row.for ?? row.kind;
+    groups.set(kind, [...(groups.get(kind) ?? []), row]);
+  }
+
+  const all = [...groups.values()].flat().map((a) => ({ ...a, seen: s.seen.includes(a.key) }));
   return {
     asks: all.filter((a) => !s.later.includes(a.key)),
     later: all.filter((a) => s.later.includes(a.key)),
@@ -312,11 +328,35 @@ export const noticeOf = (fresh: readonly [Ask, ...Ask[]]): { title: string; body
 
 // ---------------------------------------------------------------- the cells, on the `Ledger`
 
+/**
+ * The name whose inbox keeps each system notification sent of new asks, one row per notification
+ * (plan: "Record each newly sent notice"). Outside `tracker/ticket`, so no ticket's facts and no
+ * count of asks reads it; attention per ticket folds it by the tickets each row names.
+ */
+const NOTICES = "asks/notices";
+
+/**
+ * Keep one sent notification on the ledger, as `noticed` in `asks/notices/inbox`, written as the
+ * person whose app showed it. Its id is the app's send time and first ask, so a retry of one send
+ * is one row. A past notification is never invented: only a send the app reports is kept.
+ */
+export const noticeCell = (notice: Noticed, writer: string) =>
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    yield* ledger.register(NOTICES, writer);
+    const { type: _type, ...data } = notice;
+    yield* ledger.send(streams(NOTICES).inbox, `notice/${notice.sentAt}/${notice.asks[0].key}`, {
+      kind: "noticed",
+      writer,
+      data,
+    });
+  });
+
 /** Rows read per call. */
 const PAGE = 500;
 
 /** Every ticket's row after `after`, read in pages. A row that does not read is left out. */
-const loadCell = (cmd: ReturnType<typeof load>) =>
+export const loadCell = (cmd: ReturnType<typeof load>) =>
   Effect.gen(function* () {
     const ledger = yield* Ledger;
     const entries: Entry[] = [];
@@ -336,10 +376,25 @@ const loadCell = (cmd: ReturnType<typeof load>) =>
       last = page.at(-1)?.pos ?? last;
 
       if (page.length < PAGE) {
-        return { entries, last };
+        break;
       }
     }
-  }).pipe(Effect.mapError((e) => ({ _tag: "unreachable" as const, why: e.message })));
+
+    // Each ticket's parked old asks are sealed once per read, after the paging. A ticket whose old
+    // ask cannot be sealed keeps it parked and leaves every other ticket's asks to load; the sealed
+    // asks written here come back on the next read, which the poll starts.
+    for (const n of new Set(
+      entries.filter((e) => e.fact.type === "asked" && !("format" in e.fact)).map((e) => e.ticket),
+    )) {
+      yield* preparePending(n).pipe(
+        Effect.catch((e) =>
+          Effect.logWarning(`ticket ${n}: an old ask was not sealed`, "why" in e ? e.why : e.message),
+        ),
+      );
+    }
+
+    return { entries, last };
+  }).pipe(Effect.mapError((e) => ({ _tag: "unreachable" as const, why: "why" in e ? e.why : e.message })));
 
 /** How often the poll asks the ledger for news, as the tracker's does. */
 const POLL = Duration.seconds(1);

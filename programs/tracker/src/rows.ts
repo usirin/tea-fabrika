@@ -1,8 +1,16 @@
 import { Writer } from "@kampus/fabrika-old";
 import { endedAs } from "@kampus/pipeline/stages/status";
-import type { Check, Entry, Fact } from "@kampus/pipeline/tickets/ticket";
+import {
+  type Check,
+  closedAsks,
+  type Entry,
+  type Fact,
+  readAnswer,
+  questionOf,
+  picksOf,
+} from "@kampus/pipeline/tickets/ticket";
 import { Schema } from "effect";
-import { prRefOf, words } from "./head.ts";
+import { openAsksOf, prRefOf, words } from "./head.ts";
 
 // One short row per fact on a ticket's timeline (docs/direction/what-a-ticket-shows.md,
 // section 2). A row is a view of its fact, and nothing reads it back:
@@ -74,8 +82,14 @@ type Said = Pick<Row, "text" | "more" | "body">;
 
 const said = (text: string, more = "", body: string | null = null): Said => ({ text, more, body });
 
+/** An ask's question in quotes, by its id: a row names it in words, never by id. */
+const askedOf = (timeline: readonly Entry[], ask: string, earlier: ReadonlySet<string>): string => {
+  const asked = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === ask)?.fact;
+  return asked?.type === "asked" ? `${earlier.has(ask) ? "earlier ask " : ""}"${questionOf(asked)}"` : "a question";
+};
+
 /** A fact's words. `timeline`: the ticket's, for an answer to name what it answered. */
-const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
+const saidOf = (fact: Fact, timeline: readonly Entry[], earlier: ReadonlySet<string>): Said => {
   switch (fact.type) {
     case "filed":
       return said("filed it", "", fact.body === "" ? null : fact.body);
@@ -127,11 +141,21 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
     case "pr":
       return said(`PR ${prRefOf(fact.url)} ${fact.state}`, checksLine(fact.checks));
     case "asked":
-      return said(`asks you: ${fact.what}`, fact.picks.join(" / "));
+      return said(
+        `${earlier.has(fact.ask) ? "earlier ask" : "asks you"}: ${questionOf(fact)}`,
+        picksOf(fact).join(" / "),
+      );
+    case "withdrawn":
+      return said(`withdrew ${askedOf(timeline, fact.ask, earlier)}`, fact.why);
+    case "stopped":
+      return said(`stopped: ${words(fact.why)}`, `resume at ${fact.resume}`);
     case "answered": {
-      const asked = timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask);
-      const what = asked?.fact.type === "asked" ? asked.fact.what : fact.ask;
-      return said(`answered "${what}": ${fact.pick}`, "", fact.note === "" ? null : fact.note);
+      const answer = readAnswer(timeline, fact);
+      return said(
+        `answered ${askedOf(timeline, fact.ask, earlier)}: ${answer?.pick ?? "unknown"}`,
+        "",
+        answer?.note || null,
+      );
     }
     case "rated":
       return said(`rated finding ${fact.finding}: ${words(fact.says)}`);
@@ -144,15 +168,31 @@ const saidOf = (fact: Fact, timeline: readonly Entry[]): Said => {
   }
 };
 
-/** One entry's row. */
-export const rowOf = (entry: Entry, timeline: readonly Entry[]): Row => ({
+/** Closed asks that could be mistaken for the first open ask, which the ticket's bar holds. */
+const earlierAsks = (timeline: readonly Entry[]): ReadonlySet<string> => {
+  const open = openAsksOf(timeline)[0];
+  const closed = closedAsks(timeline);
+  return new Set(
+    timeline.flatMap(({ fact }) =>
+      fact.type === "asked" && closed.has(fact.ask) && questionOf(fact) === open?.what ? [fact.ask] : [],
+    ),
+  );
+};
+
+const row = (entry: Entry, timeline: readonly Entry[], earlier: ReadonlySet<string>): Row => ({
   pos: entry.pos,
   type: entry.fact.type,
   by: entry.by,
   ...(entry.whose === undefined ? {} : { whose: entry.whose }),
   at: entry.at,
-  ...saidOf(entry.fact, timeline),
+  ...saidOf(entry.fact, timeline, earlier),
 });
 
+/** One entry's row. */
+export const rowOf = (entry: Entry, timeline: readonly Entry[]): Row => row(entry, timeline, earlierAsks(timeline));
+
 /** Every row of a timeline, oldest first. */
-export const rowsOf = (timeline: readonly Entry[]): readonly Row[] => timeline.map((e) => rowOf(e, timeline));
+export const rowsOf = (timeline: readonly Entry[]): readonly Row[] => {
+  const earlier = earlierAsks(timeline);
+  return timeline.map((e) => row(e, timeline, earlier));
+};

@@ -145,7 +145,7 @@ const useOverlay = (box: RefObject<HTMLElement | null>, id: string, into: () => 
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
-function Foot(props: { readonly hints: readonly Hint[]; readonly children?: ReactNode }): ReactNode {
+export function Foot(props: { readonly hints: readonly Hint[]; readonly children?: ReactNode }): ReactNode {
   return (
     <div className="pop-foot" aria-hidden="true">
       {props.children}
