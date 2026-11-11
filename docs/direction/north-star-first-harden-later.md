@@ -2,6 +2,8 @@
 
 Decided 2026-10-12. The order of work was added 2026-10-18.
 
+Its decided rules are in: [0324](../../.decisions/0324-security-follows-the-goal.md).
+
 ## What was decided
 
 - **Security is always a concern, never a limit on the goal.** The same holds
