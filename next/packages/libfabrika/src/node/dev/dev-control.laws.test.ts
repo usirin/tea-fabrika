@@ -1,4 +1,4 @@
-// T708, next/. The real stage, walked through its lifecycle callbacks, its control plugin and its calls.
+// T708, next/. The real instance, walked through its lifecycle callbacks, its control plugin and its calls.
 // Only platform calls, the clock and the pending-file rename are supplied. Each move is chosen from the
 // state the walk has reached (0093), and every check reads calls, saved rows and spans, never a selector.
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
@@ -65,7 +65,7 @@ type Span = { readonly span: { name: string; ok: boolean; attributes: Record<str
 type Phase = "up" | "exited" | "waiting" | "braked";
 type Kind = "exit" | "restart" | "start" | "brake" | "kill" | "listen" | "call" | "block" | "release";
 
-// The walk's own view of the platform: what Alchemy and workerd did, never the stage's model.
+// The walk's own view of the platform: what Alchemy and workerd did, never the instance's model.
 type World = {
   phase: Phase;
   port: number;
@@ -162,7 +162,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     failed: 0,
   };
 
-  // Count the stage's wall-clock reads, and tell the walk when the 1-second sampler sleeps again.
+  // Count the instance's wall-clock reads, and tell the walk when the 1-second sampler sleeps again.
   const counted = new Proxy(clock, {
     get: (target, key) => {
       if (key === "currentTimeMillis") {
@@ -194,7 +194,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     },
   });
   // Hold each pending-file rename, and acknowledge the write once its folder sync has closed: the
-  // stage then runs to its next queue take without another file step.
+  // instance then runs to its next queue take without another file step.
   let synced = false;
   const gated = new Proxy(fs, {
     get: (target, key) => {
