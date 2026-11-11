@@ -295,6 +295,7 @@ describe("each rule refuses what it is there to refuse", () => {
     // `no-bare-disable` reports at the top of the file, so it has its own test below.
     const elsewhere = [
       "prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
+      "law-shape", // one generated line per edge case, at next/ test paths, in law-shape.test.ts
       "no-secret-env",
       "no-redacted-value",
       "no-project-settings",

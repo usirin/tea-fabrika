@@ -47,6 +47,7 @@
     "oxfmt": "catalog:",
     "oxc-parser": "catalog:",
     "oxlint": "catalog:",
+    "smol-toml": "catalog:",
     "stylelint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

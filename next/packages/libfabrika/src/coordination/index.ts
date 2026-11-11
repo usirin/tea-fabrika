@@ -11,7 +11,6 @@ export {
   AddSaw,
   Adds,
   admitted,
-  foldAccess,
   Grant,
   MemberEvent,
   type Access,
@@ -21,6 +20,7 @@ export {
   Took,
   Reason,
 } from "../access/Access.ts";
+export { foldAccess } from "../access/AccessFold.ts";
 export { CoordinationLayer, ProcessManager } from "../processes/ProcessManager.ts";
 export { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 export {
