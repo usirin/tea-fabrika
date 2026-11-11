@@ -76,7 +76,8 @@ type Setup = {
   /** Head branches of the open PRs the fake gh lists; `gh: "down"` makes it fail. */
   openPrs?: string[];
   gh?: "down";
-  /** A ref the fake git deletes just before the first `rev-list`, as a lead's `git branch -D` mid-scan. */
+  /** A ref the fake git deletes just before the scan's first walk of a branch (its `diff --no-renames`),
+   * as a lead's `git branch -D` mid-scan. */
   dropOnWalk?: string;
 };
 
@@ -113,7 +114,7 @@ if (cmd === "nice") finish(run(args[2],args.slice(3)));
 if (cmd === "git") {
   let cwd=process.cwd();
   for(let i=0;i<args.length;i++) if(args[i]==="-C") cwd=path.resolve(cwd,args[++i]);
-  if(setup.dropOnWalk && args.includes("rev-list") && !fs.existsSync(path.join(dir,"dropped"))) {
+  if(setup.dropOnWalk && args.includes("diff") && args.includes("--no-renames") && !fs.existsSync(path.join(dir,"dropped"))) {
     fs.writeFileSync(path.join(dir,"dropped"),""); run("/usr/bin/git",["-C",cwd,"update-ref","-d",setup.dropOnWalk]);
   }
   if(process.env.T321_FETCH==="1" && cwd===path.join(dir,"boxes/one")) {
@@ -974,12 +975,14 @@ describe("T321 K2 box start, today's tooling", () => {
 
   // Plant: walk each branch by its name again after listing it (box.sh before ticket 567). A branch
   // deleted during the scan then fails the start as "stuck base commit walk failed" with no reason,
-  // as layout-tests3 and layout-tests6 did on 2026-11-10.
+  // as layout-tests3 and layout-tests6 did on 2026-11-10. Both branches carry the ticket, so the scan
+  // walks both, and neither is live.
   it("K2 scenario: a branch deleted while the shared-ticket scan runs does not fail the start", () => {
     fixture((b) => {
       for (const name of ["fabrikalfa/aa-first", "fabrikalfa/zz-gone"]) {
         b.git(b.main, "checkout", "-q", "-b", name, b.base);
         b.commit(b.main, "src/b.ts", `${name}\n`);
+        b.sign(b.main, "tests", "321");
       }
 
       b.git(b.main, "checkout", "-q", "main");
@@ -987,6 +990,48 @@ describe("T321 K2 box start, today's tooling", () => {
       const got = b.new();
       expect(existsSync(join(b.dir, "dropped")), "the fake git deleted the branch mid-scan").toBe(true);
       expect(got.code, got.text).toBe(0);
+    });
+  });
+
+  // Plant: read only each branch tip's note, walk each branch with its own rev-list again, or list
+  // every branch when no link is found (ticket 673: the per-branch walk took 128 s on 1,655
+  // branches). A link two commits under a live branch's tip still blocks, a malformed note and a
+  // note on another ticket count for nothing, and the scan asks git for the branches once.
+  it("K2 scenario: the batched scan finds a link under a live branch's tip in one branch listing", () => {
+    fixture((b) => {
+      b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/noise", b.base);
+      b.commit(b.main, "src/c.ts", "noise\n");
+      b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "not json {", "HEAD");
+      b.commit(b.main, "src/d.ts", "other ticket\n");
+      b.sign(b.main, "tests", "322");
+      b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other", b.base);
+      b.commit(b.main, "src/a.ts", "linked\n");
+      b.sign(b.main, "tests", "321");
+      b.commit(b.main, "src/e.ts", "after one\n");
+      b.commit(b.main, "src/f.ts", "after two\n");
+      b.git(b.main, "checkout", "-q", "main");
+      b.setup({ openPrs: ["fabrikalfa/other", "fabrikalfa/noise"] });
+      const got = b.new();
+      checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
+      const listings = b.calls().filter((c) => c.cmd === "git" && c.args.some((a) => a.startsWith("--contains=")));
+      expect(listings.length).toBe(1);
+      expect(b.calls().some((c) => c.cmd === "git" && c.args.includes("rev-list"))).toBe(false);
+    });
+  });
+
+  // format: box.sh new prints one `phase <name> <ms>` line per start phase, which drive reads from
+  // the box's log (ticket 673).
+  it("K2 format: a made box prints its start phases in order", () => {
+    fixture((b) => {
+      b.setup({ openPrs: [] });
+      const got = b.new();
+      expect(got.code, got.text).toBe(0);
+      expect([...got.text.matchAll(/^phase ([a-z_]+) \d+$/gm)].map((m) => m[1])).toEqual([
+        "box_plancheck_fetch",
+        "box_scan",
+        "box_clone",
+        "box_install",
+      ]);
     });
   });
 
