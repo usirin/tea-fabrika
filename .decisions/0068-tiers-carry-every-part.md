@@ -1,7 +1,7 @@
 ---
 id: 0068
 title: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together, a person starting a program, an agent fabrika starts and a flow fabrika runs start early, never in a late tier
-status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md), [0078](0078-agent-and-flow-slices-start-early.md)
+status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md), [0078](0078-agent-and-flow-slices-start-early.md), [0088](0088-six-slices-in-tier-1.md)
 date: 2026-11-10
 tags: [tiers, plan, next, hands, programs, packs, pipes, slice, client]
 ---
@@ -80,7 +80,8 @@ rest of this file still holds.
   window, agent](../docs/direction/brain-hands-window-agent.md) each get a dated pointer to this
   file. No tier table row moves here.
 - Not decided here: which tier each thin slice lands in. Tier 1 is approved at 37 rows, so adding
-  any slice to it is the owner's call.
+  any slice to it is the owner's call. *Decided 2026-11-10 in [0088](0088-six-slices-in-tier-1.md):*
+  all four land in Tier 1.
 - Not decided here: the shape of each slice. For hands, the lead's sketch is one host, one command,
   and no queue or leases yet. Its plan also says what it records now so later leases lose nothing,
   and how it squares with the glossary's `hands` row, which says hands take jobs from the queue
