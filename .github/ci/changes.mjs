@@ -10,8 +10,12 @@ const all = { check: true, test: true, next: true, e2e: true, field: true };
 const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
-/** @param {string} path */
-const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path);
+/**
+ * Field rows: a direct `.jsonl` file, or anything in a log's folder, where each new row is its own
+ * file (decision 0090). field-check.ts names and checks them; a misnamed file fails there.
+ * @param {string} path
+ */
+const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 /** @param {string} path */
