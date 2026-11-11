@@ -13,7 +13,7 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Three rules only advise: `no-effect-promise`, `no-raw-try-catch` and `prefer-schema-arbitrary`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these three. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+Four rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch` and `prefer-schema-arbitrary`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these four. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
 
 ## Effect property data advice
 
@@ -29,6 +29,33 @@ const invalid: fc.Arbitrary<typeof Input.Type> = fc.record({text: fc.string()});
 Use `unsupported Effect` in that comment for a generator Effect cannot make. This rule does not execute modules or read types from another file. Its generated syntax laws and four planted breaks are in `prefer-schema-arbitrary.test.ts`. One law runs `lint.ts` and proves advice exits 0 while another warning exits 1.
 
 Ticket 325, 2026-11-08, at [PR 532](https://github.com/usirin/tea-fabrika/pull/532)'s `1af180f6` next-test tree: the first scan found one false hit, `data/sink.test.ts:738`, where `Redacted.make` is not a schema. The match now excludes Effect modules other than Schema. The narrowed scan found 0 hits: 0 useful, 0 false and 0 unknown. Zero hits gives no false-alarm rate. The next-test files are unchanged in this tests commit, so its final-head count is the same. A separate parser scan found 189 named data constructors in 19 next-test files, including multiline calls. One useful miss is `data/log.test.ts:34`, checked through `parents(50).every(is)` at line 316. That helper flow needs review; it is outside the rule's direct binding matches. Effect 4.1.1 generated 10 valid `ParentText` values at seed 119120. Other constructor families exercise operation orders, invalid input or extra fields without direct schema evidence. These counts cannot show that every untyped generator should stay, or that Effect supports every domain schema.
+
+## Law shape advice
+
+`law-shape` asks of every test in `next/**/*.test.{ts,tsx}`, a shared suite `next/**/*Test.ts` and `.agents/**/*.test.ts` what [0093](../.decisions/0093-laws-walk-plants-run-once.md) asks: is it a property, or is it labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason? The label starts the title, or comes right after one ticket or law id: one token of letters, digits and dots, then a space (`T652 scenario: ...`, `R3 format: ...`; the lead, 2026-11-11). A label deeper in the title, or only in a comment above the test, does not count.
+
+```ts
+it.prop("the window's client is the client machine's own fold", [Run], ([run]) => {/* ... */}); // a property
+it("adds one", () => { fc.assert(fc.property(fc.nat(), (n) => add(n) > n)); });           // a property
+it("format: every Msg the runner sends decodes", () => {/* ... */});                    // labeled
+it("adds one to zero", () => { expect(add(0)).toBe(1); });                              // advice
+```
+
+A property is `it.prop` or `it.effect.prop`, or a body that calls fast-check's `assert` or a `@demlik/tea/pbt` runner (`propertyTrace`, `propertyInvariant`, `propertyTerminates`), directly or through a function the same file declares. `syncTest` is not one: it checks one Msg list it is given. The rule's head comment lists what counts as a test, and `law-shape.test.ts` has one generated line per edge case. A title that is not written out (a helper's parameter) is not judged. Today's version's tests are left out: 0093 covers `next/`, and 0033 holds `.agents/` to `next/`'s rules. The exam's own rule tests under `next/apps/fabrika/src/exam/` are read too. 0093 says it covers laws on product code, so whether those tests belong in scope is still open; while the rule only advises, they stay in.
+
+Oxlint's [`jest/valid-title`](https://oxc.rs/docs/guide/usage/linter/rules/jest/valid-title.html) (also under the `vitest` plugin) and [`@vitest/eslint-plugin`'s `valid-title`](https://github.com/vitest-dev/eslint-plugin-vitest/blob/main/docs/rules/valid-title.md) can require a title pattern with `mustMatch`, but neither can say "or the body is a property", so this rule is ours (0040). [`eslint-plugin-jest`](https://github.com/jest-community/eslint-plugin-jest) has no rule that reads a test's body for a property runner either.
+
+Count on 2026-11-11, on `origin/main` at `e2d553013`. Tests are call sites, so a loop or `it.each` counts once:
+
+| Folder | Properties | Labeled | Neither (fires) | Title not written out |
+|---|---|---|---|---|
+| `next/apps` | 244 | 107 | 108 | 2 |
+| `next/packages` | 556 | 23 | 167 | 0 |
+| `next/programs` | 6 | 0 | 1 | 0 |
+| `.agents` | 261 | 105 | 38 | 0 |
+| today's `packages`, `apps`, `programs` (left out) | 266 | 16 | 4,198 | 37 |
+
+The rule fires 314 times. A first hand read, of 30 fires out of 342 at seed 119120 on `b882a8062`, before ticket ids were allowed, found all 30 to be tests that are not a property and carry no label at the start of the title. But 5 of the 30 carried a label somewhere else: 4 after a ticket name (`"T652 scenario: ..."`, `"K2 scenario: ..."`) and 1 in a comment above the test (`// format: ...`). Read as false alarms, that is 17%, above the 10% an advice rule may have. So the lead let one leading id stand before the label, and the tests were not renamed. Those 4 now pass. Of the 26 left from that sample, 1 is labeled only in a comment, which still fires: 1 of 26 is 4%. Over all 314 fires, 2 have a label deeper in the title and 4 in a comment just above. 110 are plant tests, which 0093 stops keeping, and 79 are the exam's own rule tests.
 
 Phoenix's `no-node-sqlite-test-backing.grit` is not here. It bans a fake of Cloudflare D1; this repo has no D1, and `node:sqlite` is the ledger's real driver. Experiment 125 found it wrong 8 of 8 times.
 

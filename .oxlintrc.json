@@ -638,6 +638,16 @@
       }
     },
     {
+      // Each law is a property or a labeled example (0093). "warn" only advises: lint.ts prints it
+      // and does not fail on it until its false alarms on main are counted at about 0%. A shared
+      // suite (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
+      // next/, and .agents/ follows next/'s rules (0033).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", ".agents/**/*.test.ts"],
+      "rules": {
+        "fabrika/law-shape": "warn"
+      }
+    },
+    {
       // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
       // another room's names, `src/` holds only what is listed here, every export in an `internal/`
       // file is `@internal`, and the `values` files hold no service and no error. `folders` also

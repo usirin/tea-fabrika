@@ -52,7 +52,8 @@ git config --global commit.gpgsign true
 Your commits need no step note. The check verifies their Git signature against the base's person
 keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
 A person's signed commit is itself a link, from its parent's tree to its own. After the squash, the
-lead writes it in `field/runs.jsonl` as a row with `step: "person"`, as for every other link.
+lead writes it as a row with `step: "person"`, as for every other link
+([a step's links](../../field/README.md#a-steps-links)).
 Squash drops the person's signature, so this verification runs on the pull request's commits.
 
 ## A step signs
@@ -84,7 +85,8 @@ It fetches the remote notes into `refs/notes/fabrika-origin`, merges them in, pu
 pushed after the branch starts no new run: re-run the job.
 
 **Catch up by merging `main` in, never by rebasing.** A rebased commit's note no longer fits its
-trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead signs it:
+trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead session signs it,
+most often through `land.ts run` or `catchup.sh` (a lane agent stops at `land.ts ready`, ticket 652):
 
 ```sh
 git merge --no-edit origin/main
