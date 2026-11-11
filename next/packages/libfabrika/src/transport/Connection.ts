@@ -1,4 +1,6 @@
+import { applyCell } from "@demlik/tea";
 import { Effect, Result, Schema, Semaphore } from "effect";
+import * as State from "./internal/connection.ts";
 import { Answer, type Attached, Wait } from "./Wire.ts";
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
 
@@ -28,10 +30,20 @@ type Options<E, ReadError> = {
 
 export const connection = <E, ReadError = never>(options: Options<E, ReadError>) => {
   const turn = Semaphore.makeUnsafe(1);
+  const [unloaded] = State.connection.init(null, {});
+  const step = (model: State.Model, msg: State.Msg) => applyCell(State.connection, model, msg)[0];
+  // The saved attachment is the Model: each read starts from it, never from a cached copy.
   const read = Effect.suspend(() => {
     const state = options.read();
     return Effect.isEffect(state) ? state : Effect.succeed(state);
-  });
+  }).pipe(Effect.map((attached) => step(unloaded, { type: "observed", attached })));
+  const save = (model: State.Model) => {
+    const attached = State.attachment(model);
+
+    if (attached !== null) {
+      options.save(attached);
+    }
+  };
   const respond = (id: string | number, answer: typeof Answer.Type) => {
     if (answer._tag === "parked") {
       return;
@@ -51,15 +63,13 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   };
   const remove = Effect.fnUntraced(function* (wait: typeof Wait.Type, answer: typeof Answer.Type) {
     const now = yield* read;
+    const next = step(now, { type: "answered", wait });
 
-    if (
-      now._tag !== "online" ||
-      !now.waits.some((w) => w.id === wait.id && w.stream === wait.stream && w.after === wait.after)
-    ) {
+    if (next === now) {
       return;
     }
 
-    options.save({ ...now, waits: now.waits.filter((w) => w.id !== wait.id) });
+    save(next);
     respond(wait.id, answer);
   });
   const register = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
@@ -81,7 +91,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
     const now = yield* read;
 
-    if (now._tag !== "online") {
+    if (!State.online(now)) {
       return respond(id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
@@ -92,36 +102,36 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
 
     const wait = Wait.make({ id, ...decoded.success });
-    const next = { ...now, waits: [...now.waits, wait] };
+    const next = step(now, { type: "waited", wait });
 
-    if (
-      now.waits.some((w) => w.id === id) ||
-      next.waits.length > 64 ||
-      new TextEncoder().encode(JSON.stringify(next)).length > 16_384
-    ) {
+    if (next === now) {
       return respond(id, Answer.cases.refused.make({ reason: "too_many_waits" }));
     }
 
-    options.save(next);
+    // Saved before registration, outside the turn, so a ring during registration finds it.
+    save(next);
     yield* register(wait);
   });
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
 
-    if (now._tag !== "online" && !["initialize", "gateway.knock"].includes(request.method)) {
+    if (!State.online(now) && !["initialize", "gateway.knock"].includes(request.method)) {
       return respond(request.id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
-    if (now._tag === "online") {
-      options.save({ ...now, busy: true });
+    const busy = step(now, { type: "started" });
+
+    if (State.online(busy)) {
+      save(busy);
     }
 
     const answer = yield* options.call(request.method, request.params);
     respond(request.id, answer);
-    const latest = yield* read;
+    // The call may have replaced the attachment: finish from a fresh read.
+    const idle = step(yield* read, { type: "finished" });
 
-    if (latest._tag === "online") {
-      options.save({ ...latest, busy: false });
+    if (State.online(idle)) {
+      save(idle);
     }
   });
   return {
@@ -149,7 +159,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     ring: Effect.fn("connection.ring")(function* (stream: string, rev: number) {
       const now = yield* read;
 
-      if (now._tag === "online") {
+      if (State.online(now)) {
         for (const wait of now.waits) {
           if (wait.stream === stream && rev > wait.after) {
             yield* remove(wait, Answer.cases.ok.make({ result: { rev } }));
@@ -160,7 +170,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       while (true) {
         const latest = yield* read;
 
-        if (latest._tag !== "online") {
+        if (!State.online(latest)) {
           return;
         }
 
@@ -179,12 +189,12 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     wake: Effect.fn("connection.wake")(function* () {
       const now = yield* read;
 
-      if (now._tag === "online" && now.busy) {
+      if (now._tag === "busy") {
         options.close(1012);
       }
     }),
     probe: Effect.fn("connection.probe")(function* (session: string) {
-      return session === options.session && (yield* read)._tag === "online" ? options.ping() : null;
+      return session === options.session && State.online(yield* read) ? options.ping() : null;
     }),
   };
 };
