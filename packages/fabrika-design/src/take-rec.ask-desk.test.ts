@@ -245,9 +245,10 @@ describe("law 23: Take rec's label reads 4.5:1 on its own background", () => {
     );
   });
 
-  // plant: Manti's own unpatched light mix, toward white (hover 88%, press 78%), read through the
-  // same resolver and the same ratio.
-  it("plant: Manti's unpatched light mix toward white under the label is caught by the same ratio", () => {
+  // pinned: the pale light Take rec of the 2026-11-09 amendment, Manti's own unpatched light mix
+  // toward white (hover 88%, press 78%: 4.10:1 and 3.37:1), read through the same resolver and the
+  // same ratio. It is the plant of the law above, kept so the unpatched mix never comes back.
+  it("pinned: plant, Manti's unpatched light mix toward white under the label is caught by the same ratio", () => {
     const unpatched = mantiCss
       .replaceAll(
         "88%, black),color-mix(in oklab, var(--variant-solid) 88%, black)",

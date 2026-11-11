@@ -838,7 +838,9 @@ describe("the shared ask view's laws, design E (askView)", () => {
     expect(() => law.check(draw)).toThrow();
   });
 
-  it("every view law has a planted mistake", () => {
+  // pinned: a law added without its plant, the class plants.test.ts caught for the lint rule
+  // program-package-layout; the plan says each plant must make its property fail.
+  it("pinned: every view law has a planted mistake", () => {
     fc.assert(
       fc.property(fc.shuffledSubarray(VIEW_LAWS, { minLength: VIEW_LAWS.length }), (laws) => {
         expect(laws.filter((law) => !VIEW_PLANTS.some((p) => p.law === law))).toEqual([]);
@@ -857,7 +859,9 @@ describe("the shared ask editor's laws (askMachine)", () => {
     expect(() => law.check(machine)).toThrow();
   });
 
-  it("every law has a planted mistake", () => {
+  // pinned: a law added without its plant, the class plants.test.ts caught for the lint rule
+  // program-package-layout; the plan says each plant must make its property fail.
+  it("pinned: every law has a planted mistake", () => {
     fc.assert(
       fc.property(fc.shuffledSubarray(LAWS, { minLength: LAWS.length }), (laws) => {
         expect(laws.filter((law) => !PLANTS.some((p) => p.law === law))).toEqual([]);
