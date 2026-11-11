@@ -120,6 +120,12 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   raw handle from the platform is wrapped once, at the edge. A process killed with SIGKILL runs no
   finalizer, so a resource that must not outlive it needs a guard outside the process too
   ([0061](./.decisions/0061-resources-are-acquired-in-a-scope.md)).
+- **In `next/`, a service file holds only its contract.** The service class, its own error and the
+  types it speaks in, with its type written out: no layer, no SQL, nothing that runs. Each layer is
+  a sibling file read through its module, as `LedgerSql.layer(...)`, and no service class has a
+  static layer. A module keeps domain, application and infrastructure files apart, and a file that
+  names a platform lives in `cloudflare/` or `node/`, so one platform's bundle holds no other's
+  code ([0095](./.decisions/0095-a-service-file-holds-only-its-contract.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
