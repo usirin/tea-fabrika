@@ -857,8 +857,9 @@ describe("P10 review regressions", () => {
                 const failure = yield* Effect.flip(edge.fail(w, armed)).pipe(
                   Effect.ensuring(Effect.sync(() => restore())),
                 );
-                expect(failure).toBeInstanceOf(LedgerError);
-                expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
+                // T749: the gateway's own crypto fault, keeping the thrown or rejected value itself.
+                expect(failure).toMatchObject({ _tag: "GatewayError", reason: "crypto" });
+                expect((failure as { readonly cause?: unknown }).cause).toBe(thrown);
                 expect(w.deliveries).toHaveLength(before);
               }),
             ),
@@ -896,7 +897,7 @@ describe("P10 review regressions", () => {
               const result = yield* Effect.result(d.initialize(overflow.client, overflow.hello, overflow.trusted));
               expect.soft(result).toMatchObject({
                 _tag: "Failure",
-                failure: { _tag: "LedgerError", reason: "storage" },
+                failure: { _tag: "GatewayError", reason: "storage" },
               });
               expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
               expect.soft(receipts()).toEqual(full);
@@ -2245,8 +2246,8 @@ describe("P10 inputs, retries and signer", () => {
               const { client } = yield* online(d, w);
               lose = true;
               expect(yield* Effect.flip(d.route(client, "process.send", request(value)))).toMatchObject({
-                _tag: "LedgerError",
-                reason: "unreachable",
+                _tag: "GatewayError",
+                cause: { _tag: "LedgerError", reason: "unreachable" },
               });
               expect(lose).toBe(false);
               expect(w.deliveries).toEqual([]);
@@ -2404,7 +2405,7 @@ describe("P10 inputs, retries and signer", () => {
         yield* d.route(client, "process.send", request("first"));
         const parent = w.deliveries[0]!.envelope.id;
         expect(yield* Effect.flip(d.route(client, "process.send", request("second")))).toMatchObject({
-          _tag: "LedgerError",
+          _tag: "GatewayError",
         });
         expect(w.deliveries).toHaveLength(1);
         expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(parent);
@@ -3471,8 +3472,8 @@ describe("P10 span reader and recording", () => {
               const { client } = yield* online(d, w);
               block = true;
               expect(yield* Effect.flip(d.route(client, "process.send", request(value)))).toMatchObject({
-                _tag: "LedgerError",
-                reason: "storage",
+                _tag: "GatewayError",
+                cause: { _tag: "LedgerError", reason: "storage" },
               });
               expect(block).toBe(false);
               expect(rawRows(w.db, "gateway/inputs")).toEqual([]);
@@ -3920,8 +3921,8 @@ describe("P10 refusal records and checked writes", () => {
               const armored = yield* w.root.sign(text);
               fail = true;
               expect(yield* Effect.flip(d.grant({ text, armored }))).toMatchObject({
-                _tag: "LedgerError",
-                reason: "unreachable",
+                _tag: "GatewayError",
+                cause: { _tag: "LedgerError", reason: "unreachable" },
               });
               expect(yield* d.grant({ text, armored: `${armored}\n` })).toMatchObject({
                 _tag: "refused",
@@ -4248,7 +4249,7 @@ describe("P10 refusal records and checked writes", () => {
                 sentAt: SENT,
               });
               expect(yield* Effect.flip(d.grant({ text, armored: yield* w.root.sign(text) }))).toMatchObject({
-                _tag: "LedgerError",
+                _tag: "GatewayError",
                 reason: "bad_row",
               });
             }).pipe(w.provide);

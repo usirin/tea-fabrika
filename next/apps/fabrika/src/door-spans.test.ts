@@ -488,7 +488,13 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     expect(Exit.isSuccess(result)).toBe(ok);
 
                     if (Exit.isFailure(result)) {
-                      expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
+                      // T749: the gateway's own error, with the ledger's failure as its cause.
+                      const failure = Cause.squash(result.cause) as {
+                        readonly _tag?: unknown;
+                        readonly cause?: unknown;
+                      };
+                      expect(failure).toMatchObject({ _tag: "GatewayError" });
+                      expect(failure.cause).toBeInstanceOf(LedgerError);
                     }
 
                     const spans = c.spans.filter((s) => s.name.startsWith("gateway."));

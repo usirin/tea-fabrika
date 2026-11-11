@@ -463,7 +463,7 @@ describe("P17a, revoke stops writes at the final door", () => {
               const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
               expect(yield* Effect.result(door.route(client.client, "process.send", params))).toMatchObject({
                 _tag: "Failure",
-                failure: { _tag: "LedgerError", reason: "bad_row" },
+                failure: { _tag: "GatewayError", reason: "bad_row" },
               });
               expect(w.first.sql.exec("SELECT * FROM entries ORDER BY rev")).toEqual(before);
               expect(w.deliveries).toHaveLength(1);
@@ -1104,7 +1104,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             );
             expect(malformed).toMatchObject({
               _tag: "Failure",
-              failure: { _tag: "LedgerError", reason: "bad_row" },
+              failure: { _tag: "GatewayError", reason: "bad_row" },
             });
 
             for (const changed of [
