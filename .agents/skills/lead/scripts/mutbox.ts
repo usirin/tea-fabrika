@@ -823,6 +823,10 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const repo = path.join(input, "repo.git");
   yield* fs.makeDirectory(repo, { recursive: true }).pipe(Effect.ignore);
   yield* fs.makeDirectory(box, { recursive: true }).pipe(Effect.ignore);
+  // The container writes here as its `node` user. Docker Desktop maps a bind mount to whoever
+  // runs it, but a Linux host keeps the folder's owner, so on a CI runner (another uid) the box
+  // could not write a byte. Open to any user: it holds only what the container leaves.
+  yield* fs.chmod(box, 0o777).pipe(Effect.ignore);
   const git = (...args: ReadonlyArray<string>) =>
     sh("git", ["--git-dir", repo, "-c", "core.hooksPath=/dev/null", ...args]);
   const resolve = Effect.fnUntraced(function* (ref: string) {
