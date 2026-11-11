@@ -56,6 +56,81 @@ describe("the counter is live (L2)", () => {
   });
 });
 
+// Each cost path on its own, on k elements built before the count starts, so only that path is in
+// play. An iterator's `next` is called once per element and once more to say it is done. The exact
+// count also shows the wrapper adds no work: rest parameters and Reflect.apply take no iterator step.
+// Plants: remove one wrap (the Map or Set iterator, the LINEAR loop, GROWS, Array.from) and its own
+// law goes red with 0 or k too few.
+describe("every cost path is counted, and nothing else (L2)", () => {
+  const sizes = fc.integer({ min: 0, max: 2_000 });
+  const filled = (k: number): number[] => Array.from({ length: k }, () => 0);
+  const workOf = (f: () => unknown): number => counted(f, Infinity).work;
+
+  it("a step of the Array iterator costs 1", () => {
+    fc.assert(
+      fc.property(sizes, (k) => {
+        const xs = filled(k);
+        expect(workOf(() => [...xs])).toBe(k + 1);
+      }),
+      runs,
+    );
+  });
+
+  it("a step of the Map iterator costs 1", () => {
+    fc.assert(
+      fc.property(sizes, (k) => {
+        const map = new Map(filled(k).map((_, i) => [i, i]));
+        expect(workOf(() => [...map.values()])).toBe(k + 1);
+      }),
+      runs,
+    );
+  });
+
+  it("a step of the Set iterator costs 1", () => {
+    fc.assert(
+      fc.property(sizes, (k) => {
+        const set = new Set(filled(k).map((_, i) => i));
+        expect(workOf(() => [...set])).toBe(k + 1);
+      }),
+      runs,
+    );
+  });
+
+  it("a LINEAR method costs its receiver's length", () => {
+    fc.assert(
+      fc.property(sizes, fc.constantFrom("includes", "indexOf", "slice", "join", "toReversed"), (k, key) => {
+        const xs = filled(k);
+        expect(workOf(() => Reflect.apply(Reflect.get(xs, key), xs, [1]))).toBe(k);
+      }),
+      runs,
+    );
+  });
+
+  it("concat, flat and flatMap also cost their result's length", () => {
+    fc.assert(
+      fc.property(sizes, (k) => {
+        const xs = filled(k);
+        expect(workOf(() => ([] as number[]).concat(xs))).toBe(k);
+        expect(workOf(() => [xs].flat())).toBe(1 + k);
+      }),
+      runs,
+    );
+  });
+
+  it("Array.from costs its result's length", () => {
+    fc.assert(
+      fc.property(sizes, (k) => {
+        expect(workOf(() => Array.from({ length: k }))).toBe(k);
+      }),
+      runs,
+    );
+  });
+
+  it("scenario: f that touches no built-in costs 0", () => {
+    expect(workOf(() => 1 + 1)).toBe(0);
+  });
+});
+
 const TARGETS: readonly (readonly [string, object])[] = [
   ["Array", Array],
   ["Array.prototype", Array.prototype],

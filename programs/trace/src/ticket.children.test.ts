@@ -22,8 +22,9 @@ import { counted, OverCap } from "./work.test-support.ts";
 // moves one side and not the other, and a test may not lean on the machine (0052). So the law now
 // counts the work instead, through the built-ins (./work.test-support.ts): each iterator step, each
 // linear Array method by its receiver's length, and `concat`, `flat` and `flatMap` by their result's
-// length too, so `[].concat(list, [s])` and `[list, [s]].flat()` cost the list they copy. That sees the copies of the index's own
-// arrays, which a record that counts its reads cannot. The count is the same on every run (0065).
+// length too, so `[].concat(list, [s])` and `[list, [s]].flat()` cost the list they copy. That sees
+// the copies of the index's own arrays, which a record that counts its reads cannot. The count is
+// the same on every run (0065).
 //
 // Counted on main and on ec39c211's parent, which copied a parent's list for each child:
 //

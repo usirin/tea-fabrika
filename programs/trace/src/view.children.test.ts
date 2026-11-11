@@ -297,7 +297,7 @@ describe("a step's calls row, open", () => {
 // Measured on the owner's laptop on 2026-11-03, under load from a live lane and two agents: a read
 // and two redraws, the step open, took 6 ms on e3dc0b85 (the index built on got) and 16,547 ms on
 // 5f426e11 (childrenOf per row, copying). The law had a budget of 1,000 ms; it now counts the work
-// instead (ticket 649, 0052, 0065), with a bound of 4 units per span. Counted: main spends 76,679
+// instead (ticket 649, 0052, 0065), with a bound of 4 units per span. Counted: main spends 76,676
 // units, about 1.0 per span, every run. 5f426e11's copying walk passes the bound within its
 // first few hundred children, so OverCap stops it early.
 //
