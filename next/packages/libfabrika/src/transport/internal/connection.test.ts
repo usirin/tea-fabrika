@@ -172,8 +172,8 @@ const sized = (size: number, unit: string) => {
 /** A wait whose candidate attachment lands `shift` bytes off the encoded limit. */
 const boundary = (saved: Saved & { readonly _tag: "online" }, choice: Choice): W => {
   const probe = Wait.make({ id: choice.wait.id, stream: "", after: choice.wait.after });
-  const room = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
-  return Wait.make({ ...probe, stream: sized(Math.max(0, room + choice.shift), choice.unit) });
+  const space = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
+  return Wait.make({ ...probe, stream: sized(Math.max(0, space + choice.shift), choice.unit) });
 };
 
 /** Read the fold, then pick a Msg that is possible there, stale or refused. */

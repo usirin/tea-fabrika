@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.ts";
 
-// Lead tooling for ticket 477: the laws of the move checker. libfabrika's files move into rooms
+// Lead tooling for ticket 477: the laws of the move checker. libfabrika's files move into modules
 // over 16 pull requests (decision 0043), and a move must change no line of logic. `movecheck` reads
 // a pull request's diff and says where it did more than move. These laws run on its pure functions
 // over diff data, so none needs a git repository.
@@ -614,7 +614,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
   });
 
   // main's rows for libfabrika at 33a282f8, and the head as PRs 1 to 5 leave it (the plan's config
-  // table): each old row gains its rooms, and three patterns keep three runtime files in coordination.
+  // table): each old row gains its modules, and three patterns keep three runtime files in coordination.
   const BASE: ReadonlyArray<Row> = [
     { name: "next-door", paths: [at("door")] },
     { name: "next-app", paths: [at("app"), at("testing.ts")] },

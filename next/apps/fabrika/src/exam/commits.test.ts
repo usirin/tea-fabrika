@@ -78,7 +78,6 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
 
 const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => ({
   head: "head",
-  containsBase: true,
   changed: commits.flatMap((c) => c.paths),
   commits,
   notes: commits.flatMap((c) => (c.signed === null ? [] : [c.signed])),
@@ -491,11 +490,17 @@ describe("check (p83 to p86)", () => {
       runs,
     );
   });
-  // Plant: skip containsBase.
-  it("P18: a branch behind its base is broken at its own head", () => {
+  // 0098: where a branch stands against main is no input, so no pull request is broken for it; a gap
+  // in its links is a commit whose note does not fit, unsigned_commit. Plant: answer broken_chain at
+  // the head again.
+  it("P18: no pull request, signed or not, is broken_chain at pull request time", () => {
+    const drops = fc.array(fc.boolean(), { minLength: 10, maxLength: 10 });
     fc.assert(
-      fc.property(route, sha, ({ commits }, head) => {
-        expect(answers(pr(commits, { containsBase: false, head }))).toEqual([stuck("broken_chain", head)]);
+      fc.property(route, sha, drops, ({ commits }, head, drop) => {
+        const mixed = commits.map((c, i) => (drop[i] === true ? { ...c, signed: null } : c));
+        const reasons = answers(pr(mixed, { head })).flatMap((a) => (a._tag === "stuck" ? [a.reason] : []));
+        expect(reasons).not.toContain("broken_chain");
+        expect(reasons).toEqual(mixed.flatMap((c) => (c.signed === null ? ["unsigned_commit"] : [])));
       }),
       runs,
     );
@@ -616,7 +621,7 @@ const chainData = fc
       [base!, r.trees[0]!],
       [squash!, r.trees.at(-1)!],
     ]),
-    placed: { onMain: true, before: new Set([base!]) },
+    placed: { onMain: true, before: new Set([base!]), head: null },
   }));
 
 describe("chain (p86 and p89 after merge)", () => {
@@ -728,6 +733,25 @@ describe("chain (p86 and p89 after merge)", () => {
         ]) {
           expect(chain(d.squash, [noise, ...d.rows], d.trees, d.placed)).toEqual([DONE]);
         }
+      }),
+      runs,
+    );
+  });
+  // 0098: a squash that landed behind main has its own tree, and the chain ends at the head's tree.
+  // Plant: end at the squash's tree only; or accept any end once a head is given.
+  it("P31: a chain ends at the head's tree when the squash landed behind main, and only there", () => {
+    fc.assert(
+      fc.property(chainData, (d) => {
+        const end = d.rows.at(-1)!.link.to;
+        const behind = new Map(d.trees).set(d.squash, d.other);
+        const atHead = { ...d.placed, head: end };
+        expect(chain(d.squash, d.rows, behind, atHead)).toEqual([DONE]);
+        expect(chain(d.squash, d.rows, behind, d.placed)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows.slice(0, -1), behind, atHead)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows.slice(1), behind, atHead)).toEqual([stuck("broken_chain", d.squash)]);
+        expect(chain(d.squash, d.rows, behind, { ...atHead, onMain: false })).toEqual([
+          stuck("broken_chain", d.squash),
+        ]);
       }),
       runs,
     );
