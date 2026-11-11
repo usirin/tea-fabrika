@@ -10,6 +10,7 @@ import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrik
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   commitReply,
@@ -22,6 +23,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema } from "effect";
+import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectRuntime, type Env } from "./runtime.ts";
@@ -1094,4 +1096,125 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
       }),
     flowOptions,
   );
+});
+
+describe("P34c slice 1: structured exit reasons over Project RPC", () => {
+  const FROM = {
+    by: "SHA256:p34c-test",
+    for: PERSON,
+    sentAt: SENT,
+    seen: 0,
+    parent: null,
+    traceId: TRACE,
+    build: "brain-test",
+  };
+  const same = (a: ExitReason, b: ExitReason) => JSON.stringify(a) === JSON.stringify(b);
+  const Cell = fcExitReason.chain((reason) =>
+    fc.record({
+      move: fc.nat(),
+      pick: fc.nat(),
+      reason: fc.constant(reason),
+      other: fcExitReason,
+      bad: fcBadReason(reason),
+    }),
+  );
+  type Move = "start" | "throw" | "exit" | "bad" | "retry" | "reopen";
+
+  it("L1 / L3 / L4: a Project call decodes each reason before it writes, a runner crash arrives whole, and a retry is answered from the ledger", async () => {
+    const done = new Set<Move>();
+    await fc.assert(
+      fc.asyncProperty(fc.array(Cell, { minLength: 4, maxLength: 9 }), async (tape) => {
+        const w = world("healthy");
+        await w.project.info();
+        const client = await w.admit();
+        // The fold's own record: each name's process chain and each ended process's reason.
+        const names: Array<{ name: string; process: string; live: boolean }> = [];
+        const exits = new Map<string, ExitReason>();
+        const exited = async (name: string) =>
+          (await w.project.read(`processes/${name}`, 0, "audit"))
+            .filter((row) => row._tag === "exited")
+            .map((row) => Object(row.body) as { process: string; reason: unknown })
+            .map(({ process, reason }) => [process, reason] as const);
+
+        for (const cell of tape) {
+          const live = names.filter((n) => n.live);
+          const options: ReadonlyArray<Move> = [
+            ...(names.length < 2 ? (["start"] as const) : []),
+            ...(live.length > 0 ? (["throw", "exit", "bad"] as const) : []),
+            ...(exits.size > 0 ? (["retry"] as const) : []),
+            "reopen",
+          ];
+          const move = options[cell.move % options.length]!;
+
+          switch (move) {
+            case "start": {
+              const name = `poison:${names.length + 1}`;
+              names.push({ name, process: await w.startPoison(name), live: true });
+              break;
+            }
+            case "throw": {
+              // The real runner crashes on a fresh letter and reports it over Project RPC.
+              const target = live[cell.pick % live.length]!;
+              await w.project
+                .route(client, "process.send", {
+                  pid: target.process,
+                  letter: `throw-${exits.size}`,
+                  m: { type: "throw" },
+                  sentAt: SENT,
+                  seen: 0,
+                })
+                .catch(() => undefined);
+              exits.set(target.process, { _tag: "crashed", phase: "step", error: "TypeError" });
+              const next = await until("successor", w.project.info, (rows) =>
+                rows.some((row) => row.name === target.name && row.process !== target.process),
+              );
+              target.process = next.find((row) => row.name === target.name)!.process;
+              break;
+            }
+            case "exit": {
+              const target = live[cell.pick % live.length]!;
+              const reply = await w.project.processExit(target.process, copied(cell.reason), FROM);
+              expect(reply, "a valid reason commits").toMatchObject({ _tag: "ok" });
+              exits.set(target.process, cell.reason);
+              target.live = false;
+              break;
+            }
+            case "bad": {
+              const target = live[cell.pick % live.length]!;
+              const before = await exited(target.name);
+              const reply = await w.project
+                .processExit(target.process, cell.bad as ExitReason, FROM)
+                .catch((error: unknown) => ({ _tag: Object(error)._tag }));
+              expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
+                _tag: "ProcessError",
+              });
+              expect(await exited(target.name), "a refused exit writes nothing").toEqual(before);
+              expect(await w.project.processIsLive(target.process)).toBe(true);
+              break;
+            }
+            case "retry": {
+              const [process, reason] = [...exits.entries()][cell.pick % exits.size]!;
+              const sent = cell.move % 2 === 0 ? copied(reason) : cell.other;
+              const reply = await w.project.processExit(process, sent, FROM);
+              expect(reply).toMatchObject(
+                same(sent, reason) ? { _tag: "ok" } : { _tag: "ProcessError", reason: "ended" },
+              );
+              break;
+            }
+            case "reopen":
+              await w.reopenAll();
+              break;
+          }
+
+          done.add(move);
+          const rows = (await Promise.all(names.map(({ name }) => exited(name)))).flat();
+          expect(Object.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
+            Object.fromEntries(exits),
+          );
+        }
+      }),
+      { seed: 119120, numRuns: 40, endOnFailure: true },
+    );
+    expect([...done]).toEqual(expect.arrayContaining(["start", "throw", "exit", "bad", "retry", "reopen"]));
+  }, 600_000);
 });

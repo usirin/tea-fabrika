@@ -79,7 +79,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -374,6 +374,9 @@ type Model =
       readonly kept: boolean;
       readonly spent: Spent;
     };
+
+/** Where the step's machine is; the chain's heartbeat names it. */
+export type DrivePhase = Model["phase"];
 
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
@@ -1470,6 +1473,44 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 
+/** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
+const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
+
+/** The approved plan's owners, read as stepcommit reads them; `null` when there is no plan to read. */
+const planOwners = (env: Env, plan: string) => {
+  if (!existsSync(plan)) {
+    return null;
+  }
+
+  const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+};
+
+/**
+ * The paths the approved plan's files table gives this step, at the top of its prompt. stepcommit
+ * refuses any other path at collect, after the whole turn: on 2026-11-09, 10 of 72 stuck steps were
+ * that `not_owner` (ticket 430). Told first, a step that needs another path asks instead. A
+ * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
+ * (it changes no file) or a lane with no plan drive can read.
+ */
+export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
+  if (step === "plan" || step === "review" || owners === null) {
+    return "";
+  }
+
+  const mine = Object.keys(owners)
+    .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
+    .toSorted();
+  const other =
+    "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
+    "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
+    "git status and check every changed path against this list.\n";
+  return mine.length === 0
+    ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
+    : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
+        `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
+};
+
 /**
  * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
  * "anything the brief names"), and its box reads nothing outside itself. Briefs named
@@ -2058,7 +2099,8 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       : "";
   writeFileSync(
     ask.prompt,
-    readFileSync(p.brief, "utf8") +
+    ownedHead(step, planOwners(env, plan)) +
+      readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
@@ -2091,9 +2133,15 @@ export interface DriveLine {
 /**
  * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
  * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
- * crash is a `stuck:crash` line, with the box kept.
+ * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
+ * before that phase's work starts.
  */
-export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+export const driveStep = (
+  env: Env,
+  agents: Agents,
+  p: Prepared,
+  onPhase: (phase: DrivePhase) => void = () => {},
+): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
@@ -2117,6 +2165,8 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // tea's change notifier fires after each transition and before its first Cmd starts.
+    runtime.subscribe(() => onPhase(runtime.getState().phase));
     yield* runtime.dispatch({ type: "start", ask });
     const end = yield* runtime.done();
 

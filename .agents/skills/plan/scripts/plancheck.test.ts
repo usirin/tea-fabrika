@@ -1055,6 +1055,35 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
     );
   });
 
+  // Plants: let an anchored path, a bare anchor or a note word through as an owner key, or refuse
+  // a plain path, a root file or a folder. stepcommit matches keys to staged paths exactly
+  // (ticket 425, lane t411: `serve.test.ts:162`, `:537` and `new` became keys).
+  it("property: --draft fails a files-table path that is no repo path, naming its row", () => {
+    fc.assert(
+      fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
+        const path = `src/${name}.test.ts`;
+        const at = (cell: string) =>
+          complete().replace("| src/plain.ts | build |", `| src/plain.ts | build |\n| ${cell} | tests |`);
+
+        for (const [cell, key] of [
+          [`\`${path}:${line}\``, `${path}:${line}`],
+          [`\`${path}\`, \`:${line}\``, `:${line}`],
+          [`\`${path}\`, new`, "new"],
+        ] as const) {
+          const bad = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          expect(bad.code, bad.text).toBe(1);
+          expect(bad.text).toContain(`${key} is not a repo path`);
+        }
+
+        for (const cell of [`\`${path}\``, "`README.md`", `\`src/${name}/\``]) {
+          const good = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          expect(good.code, `${cell}\n${good.text}`).toBe(0);
+        }
+      }),
+      { seed: 425, numRuns: 3 },
+    );
+  });
+
   // Plants: hash line one; omit appended amendments; normalize CRLF, UTF-8 or the final LF.
   it("K2/K11 binds approval to exact bytes after the second LF, including amendments", () => {
     fc.assert(

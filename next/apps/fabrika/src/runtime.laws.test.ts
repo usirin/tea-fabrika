@@ -354,7 +354,7 @@ describe("P12 Project authority", () => {
     const w = await world(trace, build);
     const first = w.p.boot;
     const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-    await w.run(w.p.exit(first.process, "normal", w.from));
+    await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
     const configured = w.configured.length;
     const reopened = await w.reopen();
     expect(reopened.boot).toEqual(first);
@@ -458,7 +458,7 @@ describe("P12 Project authority", () => {
       } else if (operation === "start") {
         await w.start();
       } else if (operation === "exit") {
-        await w.run(w.p.exit(pid, "normal", w.from));
+        await w.run(w.p.exit(pid, { _tag: "normal" }, w.from));
       } else {
         await w.send(pid, "inc", letter);
         await w.run(w.p.inbox(pid, w.received[0]!));

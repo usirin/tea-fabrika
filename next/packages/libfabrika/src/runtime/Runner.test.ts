@@ -2026,7 +2026,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     { generated: Down.fields.reason },
     ({ generated }) =>
       Effect.forEach(
-        ["ended", generated],
+        [{ _tag: "shutdown" } as const, generated],
         (value) =>
           Effect.promise(async () => {
             const w = await world();

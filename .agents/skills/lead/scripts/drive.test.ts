@@ -42,6 +42,7 @@ import { NO_SPENT } from "./agents.ts";
 import {
   agentsDraft,
   agentTail,
+  ownedHead,
   boxChanges,
   caseRenames,
   changedFiles,
@@ -1110,6 +1111,42 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
       }),
       options,
     );
+  });
+});
+
+describe("a step is told its owned paths first, today's tooling (ticket 430)", () => {
+  const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+    "plan" | "tests" | "build" | "mutation" | "review"
+  >;
+  const owner = fc.constantFrom("tests", "build", "mutation", "lead");
+  const owners = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.ts$/), owner, { maxKeys: 6 });
+
+  // Plants: list a path another step owns, drop one this step owns, keep mutation off tests' paths,
+  // or tell a plan or review step anything.
+  it("property: lists exactly the paths stepcommit lets the step commit, and asks for any other", () => {
+    fc.assert(
+      fc.property(steps, owners, (step, given) => {
+        const head = ownedHead(step, given);
+
+        if (step === "plan" || step === "review") {
+          expect(head).toBe("");
+          return;
+        }
+
+        const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+        const allowed = Object.keys(given).filter(
+          (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
+        );
+        expect(listed).toEqual(allowed.toSorted());
+        expect(head).toContain("answer ask");
+        expect(head.endsWith("---\n\n")).toBe(true);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: no plan drive can read tells the step nothing", () => {
+    expect(ownedHead("build", null)).toBe("");
   });
 });
 
