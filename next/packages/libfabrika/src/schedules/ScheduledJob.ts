@@ -22,28 +22,34 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly cmd: C;
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
+  if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
+    return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
+  }
+
   const duration = Duration.fromInput(config.period);
   const period = Option.isSome(duration) ? Duration.toMillis(duration.value) : Number.NaN;
 
-  if (!Number.isSafeInteger(period) || period <= 0) {
+  const nanos = Option.flatMap(duration, Duration.toNanos);
+
+  if (!Number.isSafeInteger(period) || period <= 0 || Option.isNone(nanos) || nanos.value % 1_000_000n !== 0n) {
     return Result.fail(new ScheduledJobError({ reason: "bad_period" }));
   }
+
+  const settle = (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>
+    s._tag === "running" ? [Model.cases.idle.make({ next: m.at + s.period, period: s.period }), []] : [s, []];
 
   const machine = Machine.make({
     model: Model,
     msg: Timer,
     cmds: [config.cmd],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ next: 0, period }), []],
-    update: (s, m) => {
-      if (m.type === "timer") {
-        return s._tag === "idle" && m.at >= s.next
+    update: {
+      timer: (s: Model, m: { readonly at: number }): readonly [Model, readonly CmdOf<C>[]] =>
+        s._tag === "idle" && m.at >= s.next
           ? [Model.cases.running.make({ due: m.at, period: s.period }), [config.work(m.at, s.period)]]
-          : [s, []];
-      }
-
-      return s._tag === "running" && (m.type === config.cmd.okType || m.type === config.cmd.errType)
-        ? [Model.cases.idle.make({ next: m.at + s.period, period: s.period }), []]
-        : [s, []];
+          : [s, []],
+      [config.cmd.okType]: settle,
+      [config.cmd.errType]: settle,
     },
   });
 
