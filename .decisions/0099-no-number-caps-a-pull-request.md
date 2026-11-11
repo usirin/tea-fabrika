@@ -1,12 +1,12 @@
 ---
 id: 0099
-title: No number caps the size of a pull request, and a plan still cuts big work into slices by what lands whole
+title: No number caps the size of a pull request: a plan cuts big work by what lands whole, size picks who looks, and a warning drawn from our own merged pull requests only advises
 status: accepted
 date: 2026-11-11
 tags: [size, review, plan, slice, stack, cap, settings]
 ---
 
-# 0099: No number caps the size of a pull request, and a plan still cuts big work into slices by what lands whole
+# 0099: No number caps the size of a pull request: a plan cuts big work by what lands whole, size picks who looks, and a warning drawn from our own merged pull requests only advises
 
 **Before:**
 
@@ -67,6 +67,25 @@ line count, and a plan still cuts big work into slices, each of which lands whol
   is by what works on its own, never to fit a count.
 - Size is still recorded: each slice's estimated product lines in the plan, and its real product
   lines on the merged pull request ([record wide, read later](../AGENTS.md)).
+- **Size picks who looks, never whether it lands.**
+  [0079](0079-size-counts-governed-paths-name-who.md) stays as it is.
+- **A warning, never a block.** A pull request far larger than what this repo has merged before
+  gets one printed line that asks whether it should have been sliced. The number comes from our own
+  merged pull requests (the lean: larger than 95 of every 100 of them), counted without generated
+  files and lockfiles, and it moves as the data moves. Nobody picks it by hand.
+
+What the makers do, read 2026-11-11:
+
+- Google's ["Small CLs"](https://google.github.io/eng-practices/review/developer/small-cls.html)
+  asks for one self-contained change and gives no hard limit: 100 lines is usually fine, 1,000 is
+  usually too large, and the reviewer judges.
+- Teams that check size with a bot such as [Danger](https://danger.systems/) mostly warn, at 500 to
+  750 changed lines in the examples read. **Secondary:** example files and blog posts, not a study.
+- The often repeated 400 lines is SmartBear's 2006 study at Cisco, the vendor's own summary (0087
+  gives the links).
+- Our own [experiment 252](../experiments/252-risk-tiers-on-phoenix.md): later fixes rise with
+  size, 1.3% at 50 lines or fewer, 7.3% from 51 to 400, 11.6% above. Size matters; no source gives
+  a clean cut.
 
 **Binding constraints**
 
@@ -83,5 +102,8 @@ line count, and a plan still cuts big work into slices, each of which lands whol
   [PR 810](https://github.com/usirin/tea-fabrika/pull/810) any more. The guards left are the plan's
   slices, the lead's read of the plan, and [0076](0076-a-lane-stops-at-its-budget.md)'s budget in
   steps and dollars. PR 810 is still restacked.
-- Not decided here: whether a measured size ever advises again. The recorded estimates and real
-  sizes are there if someone asks.
+- The warning is lead tooling today, fast-tracked ([0033](0033-agents-code-follows-next-rules.md)).
+  Before it is trusted it is replayed on this repo's merged pull requests: were the ones it flags
+  the ones later fixed?
+- Not decided here: the exact count of lines, and whether the warning ever does more than print.
+  The doubt: a warning nobody must act on may not be read.

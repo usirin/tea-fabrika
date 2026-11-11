@@ -176,7 +176,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
 - **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
-  slices, each landing whole with its tests, by what works on its own and never to fit a count
+  slices, each landing whole with its tests, by what works on its own and never to fit a count.
+  Size picks who looks, and a warning drawn from our own merged pull requests only advises
   ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
