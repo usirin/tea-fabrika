@@ -25,6 +25,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, Layer, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
@@ -246,6 +247,7 @@ const world = () => {
       records,
       Archive.memory,
       A.Id.Generator.layer,
+      SecureRandom.layerWebCrypto,
       Layer.effect(
         SpanSink,
         Effect.gen(function* () {

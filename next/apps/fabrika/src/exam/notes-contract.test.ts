@@ -39,6 +39,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 import { TestClock } from "effect/testing";
 
@@ -273,6 +274,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         Archive.memory,
         Id.Generator.layer,
         ProcessIdGenerator.layer,
+        SecureRandom.layerWebCrypto,
       );
       let deliveries = 0;
       const layer = Gateway.layer({
@@ -378,6 +380,17 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
   if (Exit.isFailure(exit)) {
     expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "ProgramDown", reason });
+  }
+};
+
+// T749 G1: through the door the same failure is the gateway's own, with the runner's ProgramDown as cause.
+const doorFailedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+
+  if (Exit.isFailure(exit)) {
+    const failed = Cause.squash(exit.cause);
+    expect(failed).toMatchObject({ _tag: "GatewayError" });
+    expect((failed as { cause?: unknown }).cause).toMatchObject({ _tag: "ProgramDown", reason });
   }
 };
 
@@ -825,7 +838,7 @@ it.effect.prop(
         const answer = yield* Effect.exit(first.door.route(first.client, "process.send", request));
 
         if (tries < 3) {
-          failedAs(answer, "step");
+          doorFailedAs(answer, "step");
           yield* w.recover(runner);
         } else {
           expect(Exit.isSuccess(answer)).toBe(true);

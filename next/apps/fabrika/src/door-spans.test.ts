@@ -15,6 +15,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -199,6 +200,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
         records,
         Archive.memory,
         SpanSink.layer(sql, { object: PROCESS }),
+        SecureRandom.layerWebCrypto,
       ),
     ),
   );

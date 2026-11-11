@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -192,6 +193,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       Archive.memory,
       ProcessIdGenerator.layer,
       Id.Generator.layer,
+      SecureRandom.layerWebCrypto,
     );
     const layer = Gateway.layer({
       sql: saved.sql,

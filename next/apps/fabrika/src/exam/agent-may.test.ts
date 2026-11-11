@@ -19,6 +19,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 
 const options = { arbitrary: { seed: 119120, runs: 20, size: 4096, concurrency: 1 } };
@@ -99,6 +100,7 @@ const world = Effect.fnUntraced(function* () {
     Archive.memory,
     Id.Generator.layer,
     ProcessIdGenerator.layer,
+    SecureRandom.layerWebCrypto,
   );
   const delivered: Incoming[] = [];
   const layer = Gateway.layer({

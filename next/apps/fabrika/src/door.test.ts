@@ -32,6 +32,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Hello } from "@kampus/libfabrika/transport/Wire";
 import { Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -392,6 +393,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     Archive.memory,
     ProcessIdGenerator.layer,
     Id.Generator.layer,
+    SecureRandom.layerWebCrypto,
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -408,6 +410,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
           Archive.memory,
           ProcessIdGenerator.layer,
           Id.Generator.layer,
+          SecureRandom.layerWebCrypto,
         ),
       ),
     );
@@ -3223,14 +3226,13 @@ describe("P10 span reader and recording", () => {
           Effect.gen(function* () {
             const w = yield* world();
             let block = false;
+            const thrown = new SinkError({ reason: value, held: 1 });
             const sink = Layer.effect(
               SpanSink,
               SpanSink.pipe(
                 Effect.map((real: typeof SpanSink.Service) => ({
                   ...real,
-                  flush: Effect.suspend(() =>
-                    block ? Effect.fail(new SinkError({ reason: value, held: 1 })) : real.flush,
-                  ),
+                  flush: Effect.suspend(() => (block ? Effect.fail(thrown) : real.flush)),
                 })),
               ),
             ).pipe(Layer.provide(w.env));
@@ -3238,9 +3240,10 @@ describe("P10 span reader and recording", () => {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
               block = true;
-              expect(yield* Effect.flip(d.route(client, "process.send", request("flush-failure")))).toMatchObject({
-                _tag: "SinkError",
-              });
+              // T749 G1: the gateway owns the failure and keeps the sink's own error as its cause.
+              const failed = yield* Effect.flip(d.route(client, "process.send", request("flush-failure")));
+              assert(failed._tag === "GatewayError");
+              expect(failed.cause).toBe(thrown);
               expect(w.deliveries).toEqual([]);
               block = false;
               yield* d.route(client, "process.send", request("flush-failure"));
@@ -3311,21 +3314,23 @@ describe("P10 span reader and recording", () => {
         (value) =>
           Effect.gen(function* () {
             const w = yield* world();
+            const thrown = new SinkError({ reason: value, held: 0 });
             const broken = Layer.effect(
               RecordManager,
               RecordManager.pipe(
                 Effect.map((r: typeof RecordManager.Service) => ({
                   ...r,
-                  read: () => Stream.fail(new SinkError({ reason: value, held: 0 })),
+                  read: () => Stream.fail(thrown),
                 })),
               ),
             ).pipe(Layer.provide(w.env));
             yield* Effect.gen(function* () {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
-              expect(
-                yield* Effect.flip(d.route(client, "spans.read", { chain: { _tag: "spans" }, after: 0 })),
-              ).toMatchObject({ _tag: "SinkError" });
+              // T749 G1: still an Effect failure, now the gateway's own, with the reader's error as cause.
+              const failed = yield* Effect.flip(d.route(client, "spans.read", { chain: { _tag: "spans" }, after: 0 }));
+              assert(failed._tag === "GatewayError");
+              expect(failed.cause).toBe(thrown);
             }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, broken)))));
           }),
         { concurrency: 1, discard: true },
