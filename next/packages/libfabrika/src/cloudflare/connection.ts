@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
-import { workerSql } from "../ledger/CloudflareSql.ts";
+import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -15,7 +15,9 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
     Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
   );
-  const recording = yield* Layer.build(recordingLayer(workerSql(ctx.storage), env, config.name, `gateway:${gateway}`));
+  const recording = yield* Layer.build(
+    recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
+  );
   const recorded = <A, E>(work: Effect.Effect<A, E>) => complete(work).pipe(Effect.provideContext(recording));
   yield* recorded(Effect.void);
   const connections = new Map<WebSocket, ReturnType<typeof connection>>();
@@ -98,7 +100,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             });
           }
 
-          if (method === "door.knock") {
+          if (method === "gateway.knock") {
             const input = yield* Schema.decodeUnknownEffect(Schema.Struct({ label: Schema.String }))(params).pipe(
               Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
             );
@@ -108,7 +110,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
               )(result.result).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
-              yield* rpc(p.publish(client, { method: "door.waiting", params: waiting }));
+              yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
               return Answer.cases.ok.make({ result: waiting });
             }
 
@@ -127,7 +129,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const connected = Effect.fnUntraced(function* (ws: WebSocket) {
     return connections.get(ws) ?? (yield* make(ws));
   });
-  const close = Effect.fn("gateway.close")(function* (ws: WebSocket) {
+  const close = Effect.fn("connection.close")(function* (ws: WebSocket) {
     const state = yield* attached(ws),
       [session] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String, Schema.String, Schema.String]))(
         ctx.getTags(ws),
@@ -136,14 +138,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
   });
-  const ring = Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
+  const ring = Effect.fn("connection.ring")(function* (stream: string, rev: number) {
     for (const ws of ctx.getWebSockets()) {
       if ((yield* attached(ws))._tag === "online") {
         yield* (yield* connected(ws)).ring(stream, rev);
       }
     }
   });
-  const probe = Effect.fn("gateway.probe")(function* (session: string) {
+  const probe = Effect.fn("connection.probe")(function* (session: string) {
     for (const ws of ctx.getWebSockets(session)) {
       if ((yield* attached(ws))._tag === "online") {
         return yield* (yield* connected(ws)).probe(session);
@@ -152,7 +154,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
     return yield* new LedgerError({ reason: "unreachable" });
   });
-  const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
+  const notify = Effect.fn("connection.notify")(function* (client: string, news: unknown) {
     for (const ws of ctx.getWebSockets()) {
       if ((yield* attached(ws)).client === client) {
         yield* Effect.try({
@@ -230,12 +232,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   };
 });
 
-export class GatewayService extends Context.Service<GatewayService, Effect.Success<ReturnType<typeof gatewayLogic>>>()(
-  "fabrika/Gateway",
-) {}
+export class ConnectionService extends Context.Service<
+  ConnectionService,
+  Effect.Success<ReturnType<typeof gatewayLogic>>
+>()("fabrika/Connection") {}
 
-export const gatewayLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  Layer.effect(GatewayService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));
+export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
+  Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));
 
-export const gatewayRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
-  ManagedRuntime.make(gatewayLayer(ctx, env, config));
+export const connectionRuntime = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
+  ManagedRuntime.make(connectionLayer(ctx, env, config));

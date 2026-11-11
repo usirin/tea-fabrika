@@ -71,7 +71,7 @@ export const Rolled = Schema.TaggedStruct("rolled", {
 export type Rolled = typeof Rolled.Type;
 
 /** A raw health row, one per ended span: local about two weeks, then R2, forever. */
-export const Health = Schema.Struct({
+export const Measurements = Schema.Struct({
   piece: Schema.String,
   /** When the span ended, in ms on the object's clock. */
   at: Schema.Int,
@@ -83,10 +83,10 @@ export const Health = Schema.Struct({
   /** The span this row measured, so it joins its span row. Null when no span was current. */
   spanId: Schema.NullOr(Schema.String),
 });
-export type Health = typeof Health.Type;
+export type Measurements = typeof Measurements.Type;
 
 /** One piece's closed hour, kept forever. `hour` is the ms at the hour's start (UTC). */
-export const Summary = Schema.TaggedStruct("summary", {
+export const MetricPoint = Schema.TaggedStruct("metric", {
   piece: Schema.String,
   hour: Schema.Int,
   count: Schema.Int,
@@ -94,7 +94,7 @@ export const Summary = Schema.TaggedStruct("summary", {
   ms: Schema.Struct({ p50: Schema.Number, p95: Schema.Number, max: Schema.Number }),
   lag: Schema.NullOr(Schema.Number),
 });
-export type Summary = typeof Summary.Type;
+export type MetricPoint = typeof MetricPoint.Type;
 
 /** The object's own size, at most once an hour while it is awake, forever. */
 export const Size = Schema.TaggedStruct("size", { at: Schema.Int, bytes: Schema.Int });

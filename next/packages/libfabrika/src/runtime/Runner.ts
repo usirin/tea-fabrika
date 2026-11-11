@@ -1094,7 +1094,7 @@ export class ProgramRunner extends Context.Service<
           if (
             brainOnly({ stream, id: job.id, tag: kind }) ||
             stream === "door" ||
-            stream.startsWith("door/") ||
+            stream.startsWith("gateway/") ||
             (stream.endsWith("/inbox") && stream !== `${process.name}/inbox`)
           ) {
             return yield* err(job, "forbidden");

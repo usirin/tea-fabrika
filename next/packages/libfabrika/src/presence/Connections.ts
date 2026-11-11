@@ -29,17 +29,17 @@ const decodeConnection = Schema.decodeUnknownSync(Connection);
 // T6's 30-second ping tolerates a missing reply before the 75-second away boundary.
 const AWAY = 75_000;
 
-export class GatewayManager extends Context.Service<
-  GatewayManager,
+export class Connections extends Context.Service<
+  Connections,
   {
     readonly join: (connection: Connection) => Effect.Effect<void, LedgerError>;
     readonly leave: (client: string, session: string) => Effect.Effect<void, LedgerError>;
     readonly online: (key: string) => Effect.Effect<ReadonlyArray<Online>, LedgerError>;
   }
->()("@kampus/libfabrika/GatewayManager") {
-  static readonly layer = <P, A>(sql: Sql, adapter: Adapter<P, A>): Layer.Layer<GatewayManager, never, P | A> =>
+>()("@kampus/libfabrika/Connections") {
+  static readonly layer = <P, A>(sql: Sql, adapter: Adapter<P, A>): Layer.Layer<Connections, never, P | A> =>
     Layer.effect(
-      GatewayManager,
+      Connections,
       Effect.gen(function* () {
         // Capture the adapters' services once. Calling a method still does all its work lazily.
         const context = yield* Effect.context<P | A>();
@@ -47,35 +47,35 @@ export class GatewayManager extends Context.Service<
           return yield* Effect.try({
             try: () =>
               sql.transaction(() => {
-                sql.exec(`CREATE TABLE IF NOT EXISTS process_gateways (
-							client TEXT PRIMARY KEY, "key" TEXT NOT NULL, gateway TEXT NOT NULL,
+                sql.exec(`CREATE TABLE IF NOT EXISTS process_connections (
+							client TEXT PRIMARY KEY, "key" TEXT NOT NULL, connection TEXT NOT NULL,
 							session TEXT NOT NULL, at INTEGER NOT NULL)`);
                 return step();
               }),
             catch: (error) => new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
           });
         });
-        const probe = Effect.fn("gateway.probe")(function* (connection: Connection) {
+        const probe = Effect.fn("connections.probe")(function* (connection: Connection) {
           yield* Effect.annotateCurrentSpan(
-            short({ "fab.gateway": connection.gateway, "fab.gateway.session": connection.session }),
+            short({ "fab.connection": connection.gateway, "fab.connection.session": connection.session }),
           );
           return yield* Effect.suspend(() => adapter.probe(connection.gateway, connection.session)).pipe(
             Effect.provideContext(context),
           );
         });
         return {
-          join: Effect.fn("gateway.join")(function* (connection: Connection) {
+          join: Effect.fn("connections.join")(function* (connection: Connection) {
             yield* Effect.annotateCurrentSpan(
               short({
-                "fab.gateway.client": connection.client,
-                "fab.gateway.session": connection.session,
+                "fab.connection.client": connection.client,
+                "fab.connection.session": connection.session,
               }),
             );
             yield* stored(() => {
               const row = decodeConnection(connection);
               sql.exec(
-                `INSERT INTO process_gateways ("key", client, gateway, session, at) VALUES (?, ?, ?, ?, ?)
-							ON CONFLICT(client) DO UPDATE SET "key" = excluded."key", gateway = excluded.gateway,
+                `INSERT INTO process_connections ("key", client, connection, session, at) VALUES (?, ?, ?, ?, ?)
+							ON CONFLICT(client) DO UPDATE SET "key" = excluded."key", connection = excluded.connection,
 							session = excluded.session, at = excluded.at`,
                 row.key,
                 row.client,
@@ -85,14 +85,16 @@ export class GatewayManager extends Context.Service<
               );
             });
           }),
-          leave: Effect.fn("gateway.leave")(function* (client: string, session: string) {
-            yield* Effect.annotateCurrentSpan(short({ "fab.gateway.client": client, "fab.gateway.session": session }));
+          leave: Effect.fn("connections.leave")(function* (client: string, session: string) {
+            yield* Effect.annotateCurrentSpan(
+              short({ "fab.connection.client": client, "fab.connection.session": session }),
+            );
             yield* stored(() => {
-              sql.exec(`DELETE FROM process_gateways WHERE client = ? AND session = ?`, client, session);
+              sql.exec(`DELETE FROM process_connections WHERE client = ? AND session = ?`, client, session);
             });
           }),
-          online: Effect.fn("gateway.online")(function* (key: string) {
-            yield* Effect.annotateCurrentSpan(short({ "fab.gateway.key": key }));
+          online: Effect.fn("connections.online")(function* (key: string) {
+            yield* Effect.annotateCurrentSpan(short({ "fab.connection.key": key }));
 
             if (!(yield* Effect.suspend(() => adapter.admitted(key)).pipe(Effect.provideContext(context)))) {
               return [];
@@ -100,8 +102,8 @@ export class GatewayManager extends Context.Service<
 
             const connections = yield* stored(() =>
               sql
-                .exec(`SELECT * FROM process_gateways WHERE "key" = ? ORDER BY client`, key)
-                .map((row) => decodeConnection(row)),
+                .exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key)
+                .map((row) => decodeConnection({ ...row, gateway: row.connection })),
             );
             return yield* Effect.forEach(
               connections,

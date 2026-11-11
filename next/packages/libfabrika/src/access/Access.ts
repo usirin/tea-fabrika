@@ -3,7 +3,7 @@
 // client. Every device the person owns is a master: devices are equal roots, and only tabs and
 // agents hang under the device that let them in. The sheet belongs to the person and works once.
 //
-// It never checks a signature: the door does, then hands the event here. `Members` is a projection,
+// It never checks a signature: the door does, then hands the event here. `Access` is a projection,
 // never stored, so a later rule re-judges old events.
 import { Result, Schema } from "effect";
 
@@ -129,7 +129,7 @@ type Rank = "person" | "window" | "agent" | "recovery";
 
 type Key = { readonly rank: Rank; readonly live: boolean; readonly under: string | null };
 
-export type Members = {
+export type Access = {
   /** From `founded`, never changed. */
   readonly person: string;
   readonly name: string;
@@ -142,9 +142,9 @@ export type Members = {
 export const Reason = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
 export type Reason = typeof Reason.Type;
 
-/** Who belongs so far, plus what the rule needs that `Members` does not show. */
+/** Who belongs so far, plus what the rule needs that `Access` does not show. */
 export type Folded = {
-  readonly members: Members;
+  readonly members: Access;
   /** Sheets a newer sheet ended. */
   readonly replaced: ReadonlySet<string>;
   /** The id of every event folded, so the same event twice changes nothing. */
@@ -383,11 +383,11 @@ export const allows = (folded: Folded, event: MemberEvent): Result.Result<Folded
 };
 
 /** Every event in order, each one taken or refused by `allows`. */
-export const foldMembers = (events: ReadonlyArray<MemberEvent>): Members =>
+export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access =>
   events.reduce((folded, event) => Result.getOrElse(allows(folded, event), () => folded), EMPTY).members;
 
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
-const chainLive = (members: Members, key: string): boolean => {
+const chainLive = (members: Access, key: string): boolean => {
   const passed = new Set<string>();
 
   for (let at = members.keys.get(key)?.under ?? null; at !== null;) {
@@ -407,7 +407,7 @@ const chainLive = (members: Members, key: string): boolean => {
 /** Who a dialing key is: a live window or agent with every key above it live. Person and recovery
  *  keys never dial. The same shape as transport's `Who`; wiring joins them. */
 export const admitted = (
-  members: Members,
+  members: Access,
   key: string,
 ):
   | { readonly key: string; readonly person: string; readonly as: "window" | "agent" }

@@ -16,12 +16,12 @@ import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
-import { workerSql } from "../ledger/CloudflareSql.ts";
+import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
-import { GatewayManager } from "../presence/Connections.ts";
+import { Connections } from "../presence/Connections.ts";
 import { Mailbox, type From } from "../processes/Mailbox.ts";
 import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -40,8 +40,8 @@ import {
   ProcessReplies,
   SigningReply,
   type ConnectionId,
-  type DoorCalls,
-  type GatewayBinding,
+  type GatewayCalls,
+  type ConnectionBinding,
   type ProcessBinding,
   type ProcessReply,
   type ProjectBinding,
@@ -66,10 +66,10 @@ const SavedDescriptor = Schema.Struct({
 export interface Env {
   readonly PROJECT: DurableObjectNamespace<ProjectBinding>;
   readonly PROCESS: DurableObjectNamespace<ProcessBinding>;
-  readonly GATEWAY: DurableObjectNamespace<GatewayBinding>;
+  readonly CONNECTION: DurableObjectNamespace<ConnectionBinding>;
   readonly RECORD: DurableObjectNamespace<RecordBinding>;
   readonly LOADER: WorkerLoader;
-  readonly HEALTH: R2Bucket;
+  readonly MEASUREMENTS: R2Bucket;
 }
 
 export interface BrainOptions {
@@ -103,7 +103,7 @@ export interface ProjectOptions {
   readonly door: (
     options: ProjectDoorOptions,
   ) => Effect.Effect<
-    DoorCalls,
+    GatewayCalls,
     unknown,
     Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
   >;
@@ -245,7 +245,7 @@ export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
 
 const recordLayer = (env: Env, project: string) => RecordManager.remote((name) => recordStub(env, project, name));
 
-const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.HEALTH));
+const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 const flushed = SpanSink.use((sink) => sink.flush);
 
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
@@ -283,7 +283,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
 const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectState, env: Env, options: ProjectOptions) {
   const { config, programs, bootstrap } = options;
   const name = ctx.id.name ?? config.name,
-    sql = workerSql(ctx.storage);
+    sql = cloudflareSql(ctx.storage);
   const turn = yield* Semaphore.make(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
     "fabrika/WriteNotifications",
@@ -313,7 +313,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     build: config.build,
   };
   const ring = Effect.fn("project.ring")(function* (to: string, stream: string, rev: number) {
-    yield* rpc(GatewayClient.make(env.GATEWAY.getByName(to)).ring(stream, rev));
+    yield* rpc(GatewayClient.make(env.CONNECTION.getByName(to)).ring(stream, rev));
   });
   const bell = Layer.succeed(Doorbell, {
     ring: Effect.fnUntraced(function* (to, stream, rev) {
@@ -353,15 +353,15 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const loader = workerLoader(env.LOADER, programs);
   const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
   sql.exec(
-    "CREATE TABLE IF NOT EXISTS stage_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
+    "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
 
-  if (!sql.exec("PRAGMA table_info(stage_descriptors)").some((column) => column.name === "pending")) {
-    sql.exec("ALTER TABLE stage_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
+  if (!sql.exec("PRAGMA table_info(dev_descriptors)").some((column) => column.name === "pending")) {
+    sql.exec("ALTER TABLE dev_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
   }
 
   const configure = Effect.fnUntraced(function* (pid: string) {
-    const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=? AND pending=1", pid);
+    const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=? AND pending=1", pid);
 
     if (saved === undefined) {
       return;
@@ -371,7 +371,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
     );
     yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor));
-    sql.exec("UPDATE stage_descriptors SET pending=0 WHERE process=?", pid);
+    sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
   });
   /** A process ID's life from history, first or successor; an unknown ID is refused. */
   const resolved = (pid: string) =>
@@ -399,10 +399,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     const program = yield* loader.load(process.program, process.process);
     remember(process.name, program.declaration);
 
-    if (sql.exec("SELECT process FROM stage_descriptors WHERE process=?", process.process).length === 0) {
+    if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
       const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
       sql.exec(
-        "INSERT INTO stage_descriptors (process,value) VALUES (?,?)",
+        "INSERT INTO dev_descriptors (process,value) VALUES (?,?)",
         process.process,
         JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
       );
@@ -426,14 +426,14 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return remember(life.name, program.declaration);
   });
   const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
-    const [row] = sql.exec("SELECT gateway FROM stage_clients WHERE client=?", client);
+    const [row] = sql.exec("SELECT connection FROM dev_clients WHERE client=?", client);
 
     if (row !== undefined) {
-      yield* rpc(GatewayClient.make(env.GATEWAY.getByName(String(row.gateway))).notify(client, news));
+      yield* rpc(GatewayClient.make(env.CONNECTION.getByName(String(row.connection))).notify(client, news));
     }
   });
   sql.exec(
-    "CREATE TABLE IF NOT EXISTS stage_clients (client TEXT PRIMARY KEY, gateway TEXT NOT NULL, session TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS dev_clients (client TEXT PRIMARY KEY, connection TEXT NOT NULL, session TEXT NOT NULL)",
   );
   const door = yield* options
     .door({
@@ -461,10 +461,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       wait: referee.wait,
     })
     .pipe(Effect.provideContext(services));
-  const gateways = yield* GatewayManager.pipe(
+  const gateways = yield* Connections.pipe(
     Effect.provide(
-      GatewayManager.layer(sql, {
-        probe: (gateway, session) => rpc(GatewayClient.make(env.GATEWAY.getByName(gateway)).probe(session)),
+      Connections.layer(sql, {
+        probe: (gateway, session) => rpc(GatewayClient.make(env.CONNECTION.getByName(gateway)).probe(session)),
         admitted: (key) =>
           members.members.pipe(
             Effect.flatMap((m) =>
@@ -510,7 +510,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         // Only a first start configures its name's object. A successor shares that object, which
         // may be the caller awaiting this start, so it is recorded here and never called back.
         sql.exec(
-          "INSERT OR IGNORE INTO stage_descriptors (process,value,pending) VALUES (?,?,?)",
+          "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
           result.process,
           JSON.stringify(descriptor),
           request._tag === "first" ? 1 : 0,
@@ -558,14 +558,14 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    if (stream.startsWith("door/") || stream.startsWith("processes")) {
+    if (stream.startsWith("gateway/") || stream.startsWith("processes")) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
     const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
       Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
     );
-    const [saved] = sql.exec("SELECT value FROM stage_descriptors WHERE process=?", pid);
+    const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
 
     if (saved === undefined) {
       return yield* new LedgerError({ reason: "bad_row" });
@@ -584,7 +584,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return yield* ledger.append(stream, id, lineFor(origin, body));
   });
   const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
-    return yield* ledger.append("door/brain", event.id, lineFor(yield* from(), event));
+    return yield* ledger.append("gateway/brain", event.id, lineFor(yield* from(), event));
   });
   yield* flushed.pipe(Effect.provideContext(services));
   return {
@@ -592,7 +592,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     register: (client: string, gateway: string, session: string) =>
       Effect.sync(() => {
         sql.exec(
-          "INSERT INTO stage_clients VALUES (?,?,?) ON CONFLICT(client) DO UPDATE SET gateway=excluded.gateway,session=excluded.session",
+          "INSERT INTO dev_clients VALUES (?,?,?) ON CONFLICT(client) DO UPDATE SET connection=excluded.connection,session=excluded.session",
           client,
           gateway,
           session,
@@ -616,7 +616,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     disconnect: (client: ConnectionId) => wrapped(door.disconnect(client)),
     join: Effect.fnUntraced(function* (row: Parameters<typeof gateways.join>[0]) {
       sql.exec(
-        "INSERT INTO stage_clients VALUES (?,?,?) ON CONFLICT(client) DO UPDATE SET gateway=excluded.gateway,session=excluded.session",
+        "INSERT INTO dev_clients VALUES (?,?,?) ON CONFLICT(client) DO UPDATE SET connection=excluded.connection,session=excluded.session",
         row.client,
         row.gateway,
         row.session,
@@ -624,7 +624,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       yield* wrapped(gateways.join(row));
     }),
     leave: Effect.fnUntraced(function* (client: string, session: string) {
-      sql.exec("DELETE FROM stage_clients WHERE client=? AND session=?", client, session);
+      sql.exec("DELETE FROM dev_clients WHERE client=? AND session=?", client, session);
       yield* wrapped(gateways.leave(client, session));
     }),
     online: (key: string) => wrapped(gateways.online(key)),
@@ -727,7 +727,7 @@ const processLogic = Effect.fnUntraced(function* (
   const stub = projectStub(env, project),
     p = ProjectClient.make(stub),
     storage = StorageClient.make(ctx.storage),
-    sql = workerSql(ctx.storage),
+    sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs);
   const saved = yield* processDescriptor(ctx);
   const ledger = Ledger.remote(stub, { reader: saved.id });

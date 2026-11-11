@@ -42,7 +42,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 
   const { id, method, params } = request.success;
 
-  if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "door.knock")) {
+  if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "gateway.knock")) {
     return {
       send: JSON.stringify({
         jsonrpc: "2.0",

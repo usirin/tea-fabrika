@@ -1,11 +1,11 @@
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { LedgerError } from "../ledger/Ledger.ts";
-import type { doorStore } from "./GatewayStore.ts";
+import type { gatewayStore } from "./GatewayStore.ts";
 
 // SYN cookies keep an unproved connection out of storage (RFC 4987, section 3.6).
-export const doorNonce = Effect.fn("door.nonce")(function* (
-  store: ReturnType<typeof doorStore>,
+export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
+  store: ReturnType<typeof gatewayStore>,
   ttl: number,
   cap: number,
 ) {
@@ -78,16 +78,16 @@ export const doorNonce = Effect.fn("door.nonce")(function* (
   });
   // Called in the signature-checked transaction. Never evict a still-live receipt.
   const spend = (nonce: string, until: number, at: number) => {
-    if (until <= at || store.sql.exec("SELECT nonce FROM door_spent WHERE nonce=?", nonce).length > 0) {
+    if (until <= at || store.sql.exec("SELECT nonce FROM gateway_spent WHERE nonce=?", nonce).length > 0) {
       return Result.succeed(false);
     }
 
-    if (Number(store.sql.exec("SELECT count(*) n FROM door_spent WHERE until>?", at)[0]?.n ?? 0) >= cap) {
+    if (Number(store.sql.exec("SELECT count(*) n FROM gateway_spent WHERE until>?", at)[0]?.n ?? 0) >= cap) {
       return Result.fail(new LedgerError({ reason: "storage" }));
     }
 
-    store.sql.exec("DELETE FROM door_spent WHERE until<=?", at);
-    store.sql.exec("INSERT INTO door_spent (nonce,until) VALUES (?,?)", nonce, until);
+    store.sql.exec("DELETE FROM gateway_spent WHERE until<=?", at);
+    store.sql.exec("INSERT INTO gateway_spent (nonce,until) VALUES (?,?)", nonce, until);
     return Result.succeed(true);
   };
   return { issue, check, spend };

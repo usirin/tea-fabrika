@@ -10,7 +10,7 @@ import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { brainLife } from "../../runtime/BrainLife.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
-import { stageRecording } from "./dev-recording.ts";
+import { devRecording } from "./dev-recording.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
 class ControlPlugin extends Plugin.Service<ControlPlugin>()("cloudflare-runtime/plugin/FabrikaControl") {}
@@ -58,7 +58,7 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   };
 });
 
-export const startStage = Effect.fn("brain.stage")(function* <E, R>(
+export const startDev = Effect.fn("brain.stage")(function* <E, R>(
   options: {
     readonly name: string;
     readonly port: number;
@@ -144,7 +144,7 @@ export const startStage = Effect.fn("brain.stage")(function* <E, R>(
     return answer.value;
   });
   const flush = outbox.flush((event) => call("project", config.name, "", "brain", [event]));
-  const recording = yield* stageRecording(options.home, `brain:${config.name}`, (target, name, method, args) =>
+  const recording = yield* devRecording(options.home, `brain:${config.name}`, (target, name, method, args) =>
     call(target, config.name, name, method, args),
   );
   const sink = Context.get(recording, SpanSink);

@@ -23,12 +23,12 @@ import {
   Chain,
   chainName,
   errorClass,
-  type Health,
+  type Measurements,
   OBJECT,
   PROCESS,
   SinkError,
   SpanRow,
-  type Summary,
+  type MetricPoint,
   short,
   sinkError,
   type Tag,
@@ -63,7 +63,7 @@ const decodePart = Schema.decodeUnknownSync(Schema.Struct({ part: Schema.Int }))
 
 /** What one ended span writes: its health row and its unsent row, worked out before any write. */
 type Ended = {
-  readonly health: Health;
+  readonly health: Measurements;
   readonly chain: Chain;
   readonly row: SpanRow;
   readonly content: string | null;
@@ -212,7 +212,7 @@ export class SpanSink extends Context.Service<
      *  before it sends anything, when an `end` met a write it could not land since the last flush. */
     readonly flush: Effect.Effect<{ readonly sent: number }, SinkError, RecordManager | Archive>;
     /** The summaries whose hour is in `[from, to)`, after rolling up every closed hour. */
-    readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<Summary>, SinkError>;
+    readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<MetricPoint>, SinkError>;
   }
 >()("@kampus/libfabrika/SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:

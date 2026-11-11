@@ -6,7 +6,7 @@ import { RecordManager } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
 // This is P37's durable span queue, never a second ledger. Delivery makes no spans.
-export const stageRecording = Effect.fn("brain.stageRecording")(function* <E>(
+export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
   home: string,
   object: string,
   call: (

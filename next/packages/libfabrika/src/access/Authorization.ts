@@ -3,7 +3,7 @@ import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";
 import { short } from "../telemetry/Trace.ts";
-import { admitted, foldMembers, MemberEvent } from "./Access.ts";
+import { admitted, foldAccess, MemberEvent } from "./Access.ts";
 import { NotGranted } from "./SessionManager.ts";
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
@@ -19,7 +19,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
     const result = yield* transaction.transact((turn): Result.Result<Appended, LedgerError | NotGranted> => {
       const events: MemberEvent[] = [];
 
-      for (const row of turn.read("door/members", 0)) {
+      for (const row of turn.read("gateway/access", 0)) {
         if (!known.has(row._tag)) {
           continue;
         }
@@ -33,7 +33,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
         events.push(event.success);
       }
 
-      if ("reason" in admitted(foldMembers(events), key)) {
+      if ("reason" in admitted(foldAccess(events), key)) {
         return Result.fail(new NotGranted({}));
       }
 

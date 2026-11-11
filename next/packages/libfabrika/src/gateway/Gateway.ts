@@ -1,6 +1,6 @@
 import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import { admitted, foldMembers, MemberEvent, Saw } from "../access/Access.ts";
+import { admitted, foldAccess, MemberEvent, Saw } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import {
@@ -32,8 +32,8 @@ import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
-import { doorNonce } from "./GatewayNonce.ts";
-import { doorStore } from "./GatewayStore.ts";
+import { gatewayNonce } from "./GatewayNonce.ts";
+import { gatewayStore } from "./GatewayStore.ts";
 import { Row, Waiting } from "./internal/waiting.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
@@ -203,12 +203,12 @@ const methods: ReadonlySet<string> = new Set([
   "spans.read",
   "spans.content",
   "spans.deleteContent",
-  "door.watch",
-  "door.deny",
+  "gateway.watch",
+  "gateway.deny",
 ]);
 
 type Options<A, RNext, RDeliver, RNotify> = {
-  readonly sql: Parameters<typeof doorStore>[0];
+  readonly sql: Parameters<typeof gatewayStore>[0];
   readonly founder: Parameters<typeof ClientManager.layer>[0];
   readonly name: string;
   readonly url: string;
@@ -264,20 +264,20 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const processes = yield* Effect.serviceOption(ProcessManager);
-  const store = doorStore(options.sql),
+  const store = gatewayStore(options.sql),
     sql = options.sql;
-  const nonces = yield* silent(doorNonce(store, options.waiting.ttl, options.spentCap));
+  const nonces = yield* silent(gatewayNonce(store, options.waiting.ttl, options.spentCap));
   // Only calls currently checking a proof live here. No challenge is retained.
   const checking = new Map<ConnectionId, Set<{ current: boolean }>>();
   const turn = options.turn ?? (yield* Semaphore.make(1));
   const write = options.write ?? turn.withPermit;
   const flush = sink.flush.pipe(Effect.provideService(RecordManager, records), Effect.provideService(Archive, archive));
   const clock = Effect.clockWith((c) => c.currentTimeMillis);
-  const notify = Effect.fn("door.notify")(function* (client: string, news: unknown) {
+  const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
     const result = yield* Effect.exit(options.notify(client, news).pipe(Effect.provideContext(context)));
-    yield* Effect.annotateCurrentSpan("fab.door.notified", Exit.isSuccess(result));
+    yield* Effect.annotateCurrentSpan("fab.gateway.notified", Exit.isSuccess(result));
   });
-  const memberRows = Stream.runCollect(ledger.read("door/members", 0));
+  const memberRows = Stream.runCollect(ledger.read("gateway/access", 0));
   const readMembers = Effect.fnUntraced(function* () {
     const rows = yield* memberRows;
 
@@ -285,7 +285,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return null;
     }
 
-    return foldMembers(
+    return foldAccess(
       yield* Effect.forEach(
         rows,
         (row) =>
@@ -332,16 +332,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   });
   const prunePending = (at: number) => {
     const expired = sql.exec(
-      "SELECT client FROM door_pending WHERE until<=? OR client IN (SELECT client FROM door_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
+      "SELECT client FROM gateway_pending WHERE until<=? OR client IN (SELECT client FROM gateway_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
       at,
       options.waiting.most,
     );
 
     for (const row of expired) {
       const client = String(row.client);
-      sql.exec("DELETE FROM door_state WHERE name=?", `client/${client}`);
-      sql.exec("DELETE FROM door_state WHERE name=?", `key/${client}`);
-      sql.exec("DELETE FROM door_pending WHERE client=?", client);
+      sql.exec("DELETE FROM gateway_state WHERE name=?", `client/${client}`);
+      sql.exec("DELETE FROM gateway_state WHERE name=?", `key/${client}`);
+      sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     }
   };
   const attachment = Effect.fnUntraced(function* (client: ConnectionId) {
@@ -377,8 +377,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     yield* store.atomic(() => {
       // A reconnect retires this checked connection, never another client's proof.
-      sql.exec("DELETE FROM door_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
-      sql.exec("DELETE FROM door_pending WHERE client=?", client);
+      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
     return yield* silent(nonces.issue(client));
   });
@@ -499,7 +499,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               nonce: hello.nonce,
             }),
           );
-          sql.exec("INSERT OR REPLACE INTO door_pending (client,until) VALUES (?,?)", client, at + options.waiting.ttl);
+          sql.exec(
+            "INSERT OR REPLACE INTO gateway_pending (client,until) VALUES (?,?)",
+            client,
+            at + options.waiting.ttl,
+          );
           prunePending(at);
         });
       }
@@ -507,7 +511,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return result;
     }
 
-    const recordHello = Effect.fn("door.initialize")(function* () {
+    const recordHello = Effect.fn("gateway.initialize")(function* () {
       const from = yield* fromHere({
         by: result.who.key,
         for: result.who.person,
@@ -523,7 +527,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         build: options.build,
       });
       const placed = yield* appendChecked(result.hello.key, {
-        stream: "door/hellos",
+        stream: "gateway/hellos",
         id: `hello-${random()}`,
         line: lineFor(from, event),
       });
@@ -533,7 +537,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
 
       yield* store.atomic(() => {
-        sql.exec("DELETE FROM door_pending WHERE client=?", client);
+        sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
         store.set(`key/${client}`, Schema.String, result.hello.key);
         store.set(
           `client/${client}`,
@@ -626,8 +630,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         store.set("waiting", Waiting, Waiting.leave(waiting(at), { key: attached.key, client }));
       }
 
-      sql.exec("DELETE FROM door_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
-      sql.exec("DELETE FROM door_pending WHERE client=?", client);
+      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
   });
   const enrollment = Effect.fnUntraced(function* (binding: typeof Enrollment.Type) {
@@ -654,11 +658,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return false;
         }
 
-        if (sql.exec("SELECT id FROM door_starts WHERE id=?", candidate).length > 0) {
+        if (sql.exec("SELECT id FROM gateway_starts WHERE id=?", candidate).length > 0) {
           return false;
         }
 
-        sql.exec("INSERT INTO door_starts (id) VALUES (?)", candidate);
+        sql.exec("INSERT INTO gateway_starts (id) VALUES (?)", candidate);
         return true;
       });
 
@@ -669,10 +673,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     return start;
   });
-  const saveBinding = (b: Binding) => sql.exec("UPDATE door_bindings SET value=? WHERE id=?", encodeBinding(b), b.id);
+  const saveBinding = (b: Binding) =>
+    sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", encodeBinding(b), b.id);
   const savedBinding = Effect.fnUntraced(function* (id: string) {
     return yield* store.atomic(() => {
-      const [row] = sql.exec("SELECT value FROM door_bindings WHERE id=?", id);
+      const [row] = sql.exec("SELECT value FROM gateway_bindings WHERE id=?", id);
 
       if (row === undefined) {
         return null;
@@ -714,7 +719,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const members =
       (yield* silent(readMembers())) ??
-      foldMembers([
+      foldAccess([
         MemberEvent.cases.founded.make({
           id: options.founder.person,
           name: options.founder.name,
@@ -812,7 +817,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
     }
 
-    const applyGrant = Effect.fn("door.grant")(function* () {
+    const applyGrant = Effect.fn("gateway.grant")(function* () {
       const prior = yield* store.atomic(() => store.get(`change/${value.id}`, Receipt));
 
       if (prior !== null) {
@@ -921,7 +926,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             }
 
             const connections = yield* store.atomic(() =>
-              sql.exec("SELECT name FROM door_state WHERE name LIKE 'key/%'"),
+              sql.exec("SELECT name FROM gateway_state WHERE name LIKE 'key/%'"),
             );
 
             for (const connection of connections) {
@@ -941,7 +946,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
-  const denyFrom = Effect.fn("door.deny")(function* (by: Writer) {
+  const denyFrom = Effect.fn("gateway.deny")(function* (by: Writer) {
     return yield* fromHere({
       by: by.key,
       for: by.for,
@@ -1039,7 +1044,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const delivered = yield* store.atomic(
         () =>
           sql.exec(
-            "SELECT 1 FROM door_bindings WHERE json_extract(value, '$.process')=? AND json_extract(value, '$.span.traceId')=? AND json_extract(value, '$.state._tag') IN ('delivered','retryable','settled') LIMIT 1",
+            "SELECT 1 FROM gateway_bindings WHERE json_extract(value, '$.process')=? AND json_extract(value, '$.span.traceId')=? AND json_extract(value, '$.state._tag') IN ('delivered','retryable','settled') LIMIT 1",
             target,
             traceId,
           ).length > 0,
@@ -1057,7 +1062,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const at = yield* clock;
     const letter =
       refusal === null && request !== null && Result.isSuccess(request) ? `${target}/${request.success.letter}` : null;
-    const recordInput = Effect.fn("door.input")(function* () {
+    const recordInput = Effect.fn("gateway.input")(function* () {
       const span = yield* Effect.currentSpan;
       const destination = letter !== null && Option.isSome(processes) ? yield* processes.value.resolve(target) : null;
       const accepted =
@@ -1067,7 +1072,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               (entry) => entry.id === request.success.letter,
             );
       const allocation = yield* store.atomic(() => {
-        const [prior] = letter === null ? [] : sql.exec("SELECT value FROM door_bindings WHERE letter=?", letter);
+        const [prior] = letter === null ? [] : sql.exec("SELECT value FROM gateway_bindings WHERE letter=?", letter);
         let processId = destination?.state._tag === "live" ? destination.state.process : target;
 
         if (prior !== undefined) {
@@ -1093,13 +1098,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           // Keep the old parent and its authority unchanged. Only the pending letter gets a new delivery.
-          sql.exec("UPDATE door_bindings SET letter=NULL WHERE id=?", old.id);
+          sql.exec("UPDATE gateway_bindings SET letter=NULL WHERE id=?", old.id);
           processId = destination.state.process;
         }
 
         if (
           (letter !== null &&
-            Number(sql.exec("SELECT count(*) n FROM door_bindings WHERE letter IS NOT NULL")[0]?.n ?? 0) >=
+            Number(sql.exec("SELECT count(*) n FROM gateway_bindings WHERE letter IS NOT NULL")[0]?.n ?? 0) >=
               options.inputCap) ||
           !Number.isSafeInteger(count + 1)
         ) {
@@ -1129,7 +1134,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
         if (letter !== null) {
           sql.exec(
-            "INSERT INTO door_bindings (id,letter,value) VALUES (?,?,?)",
+            "INSERT INTO gateway_bindings (id,letter,value) VALUES (?,?,?)",
             binding.id,
             letter,
             encodeBinding(binding),
@@ -1186,7 +1191,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })))
         : event;
       const placed = yield* appendChecked(binding.client, {
-        stream: "door/inputs",
+        stream: "gateway/inputs",
         id: binding.id,
         line: lineFor(fromInput(binding), recordedEvent),
       });
@@ -1214,7 +1219,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return no("id_reused");
     }
 
-    const routeInput = Effect.fn("door.route", {
+    const routeInput = Effect.fn("gateway.route", {
       links: [{ span: Tracer.externalSpan(binding.span), attributes: {} }],
     })(
       function* () {
@@ -1222,12 +1227,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return no(refusal);
         }
 
-        if (method === "door.watch") {
+        if (method === "gateway.watch") {
           const answer = yield* watch(client);
           return answer._tag === "refused" ? no(answer.reason) : ok({ rows: answer.rows });
         }
 
-        if (method === "door.deny") {
+        if (method === "gateway.deny") {
           const answer = yield* deny(client, params);
           return answer._tag === "refused" ? no(answer.reason) : ok(answer);
         }
@@ -1367,14 +1372,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
         return no("unknown_method");
       },
-      Effect.tap((answer) => Effect.annotateCurrentSpan("fab.door.outcome", answer._tag)),
+      Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
     );
     const routed = yield* Effect.exit(routeInput());
     yield* flush;
     return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
   });
   /** The runner may save only the exact input whose checked binding the door delivered. */
-  const accept = Effect.fn("door.accept")(function* (input: Incoming) {
+  const accept = Effect.fn("gateway.accept")(function* (input: Incoming) {
     const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
       Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
     );
@@ -1445,7 +1450,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     });
   });
-  const append = Effect.fn("door.append")(function* (a: {
+  const append = Effect.fn("gateway.append")(function* (a: {
     readonly id: string;
     readonly parent: string;
     readonly process: string;
@@ -1471,7 +1476,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       if (
         event === null ||
         event._tag !== a.kind ||
-        a.stream.startsWith("door/") ||
+        a.stream.startsWith("gateway/") ||
         brainOnly({ stream: a.stream, id: a.id, tag: a.kind })
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
@@ -1523,7 +1528,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }).pipe(write);
   });
   return {
-    target: Effect.fn("door.target")(function* (name: string, code: string) {
+    target: Effect.fn("gateway.target")(function* (name: string, code: string) {
       const at = yield* clock;
       const rows = yield* store.atomic(() => waiting(at).rows);
 
@@ -1551,10 +1556,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     grant,
     deny,
     route,
-    signer: Effect.fn("door.signer")(function* (parent: string, process: string, kind: string) {
+    signer: Effect.fn("gateway.signer")(function* (parent: string, process: string, kind: string) {
       return yield* (yield* sessionsFor(process)).signer(parent, process, kind);
     }),
-    sign: Effect.fn("door.sign")(function* (process: string, id: string, parent: string, kind: string) {
+    sign: Effect.fn("gateway.sign")(function* (process: string, id: string, parent: string, kind: string) {
       if (options.isLive !== undefined && !(yield* options.isLive(process))) {
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
@@ -1564,7 +1569,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         .pipe(Effect.provideService(SignRequest, { id }));
     }),
     retire: sessions.end,
-    checkDelivery: Effect.fn("door.checkDelivery")(function* (process: string, input: Incoming) {
+    checkDelivery: Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
       const binding = yield* savedBinding(input.envelope.id);
 
       if (binding === null || binding.letter !== input.id || binding.process !== process) {
@@ -1593,9 +1598,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
 });
 
-export class Door extends Context.Service<Door, Effect.Success<ReturnType<typeof make>>>()("@kampus/libfabrika/Door") {
+export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
+  "@kampus/libfabrika/Gateway",
+) {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>
-    Layer.effect(Door, make(options));
+    Layer.effect(Gateway, make(options));
 }
 
 const HelloEvent = Schema.TaggedStruct("initialized", {

@@ -50,7 +50,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   }
 
   if (url.pathname.startsWith("/client/")) {
-    return yield* rpc(GatewayClient.make(env.GATEWAY.getByName(url.pathname)).fetch(request));
+    return yield* rpc(GatewayClient.make(env.CONNECTION.getByName(url.pathname)).fetch(request));
   }
 
   const project = ProjectClient.make(projectStub(env, config.name));

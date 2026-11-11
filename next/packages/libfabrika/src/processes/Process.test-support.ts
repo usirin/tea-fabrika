@@ -144,7 +144,9 @@ export type Storage = ReturnType<typeof storage>;
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const data = (sql: Sql, bell = quiet) =>
-  Layer.mergeAll(Ledger.sql(sql, { reader: "gateway:test" }), LedgerTransaction.layer(sql)).pipe(Layer.provide(bell));
+  Layer.mergeAll(Ledger.sql(sql, { reader: "connection:test" }), LedgerTransaction.layer(sql)).pipe(
+    Layer.provide(bell),
+  );
 
 export const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;

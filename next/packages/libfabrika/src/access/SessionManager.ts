@@ -109,19 +109,19 @@ export class SessionManager extends Context.Service<
       Effect.gen(function* () {
         const context = yield* Effect.context<R>();
         const ensure = () => {
-          sql.exec("CREATE TABLE IF NOT EXISTS door_sessions (parent TEXT PRIMARY KEY, saved TEXT NOT NULL)");
-          sql.exec("CREATE TABLE IF NOT EXISTS door_ended (process TEXT PRIMARY KEY)");
+          sql.exec("CREATE TABLE IF NOT EXISTS gateway_sessions (parent TEXT PRIMARY KEY, saved TEXT NOT NULL)");
+          sql.exec("CREATE TABLE IF NOT EXISTS gateway_ended (process TEXT PRIMARY KEY)");
           sql.exec(
-            "CREATE TABLE IF NOT EXISTS door_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
+            "CREATE TABLE IF NOT EXISTS gateway_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
           );
         };
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {
           return yield* Effect.try({ try: step, catch: () => new LedgerError({ reason: "storage" }) });
         });
         const ended = (process: string) =>
-          sql.exec("SELECT process FROM door_ended WHERE process=?", process).length > 0;
+          sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;
         const load = (parent: string) => {
-          const [row] = sql.exec("SELECT saved FROM door_sessions WHERE parent=?", parent);
+          const [row] = sql.exec("SELECT saved FROM gateway_sessions WHERE parent=?", parent);
           return row === undefined ? null : decode(row.saved);
         };
         const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
@@ -161,7 +161,7 @@ export class SessionManager extends Context.Service<
               }
 
               const [receipt] = sql.exec(
-                "SELECT * FROM door_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
+                "SELECT * FROM gateway_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
                 request.id,
                 parent,
                 process,
@@ -178,7 +178,7 @@ export class SessionManager extends Context.Service<
               }
 
               sql.exec(
-                "INSERT INTO door_receipts (id,parent,process,kind,session) VALUES (?,?,?,?,?)",
+                "INSERT INTO gateway_receipts (id,parent,process,kind,session) VALUES (?,?,?,?,?)",
                 request.id,
                 parent,
                 process,
@@ -200,7 +200,7 @@ export class SessionManager extends Context.Service<
               ensure();
               return (
                 sql.exec(
-                  "SELECT id FROM door_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
+                  "SELECT id FROM gateway_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
                   id,
                   parent,
                   process,
@@ -236,7 +236,7 @@ export class SessionManager extends Context.Service<
                     : Result.fail(new SigningRefused({ reason: "not_delivered" }));
                 }
 
-                sql.exec("INSERT INTO door_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
+                sql.exec("INSERT INTO gateway_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
                 return Result.succeed(undefined);
               }),
             );
@@ -261,7 +261,7 @@ export class SessionManager extends Context.Service<
                 }
 
                 sql.exec(
-                  "UPDATE door_sessions SET saved=? WHERE parent=?",
+                  "UPDATE gateway_sessions SET saved=? WHERE parent=?",
                   encode(SavedInput.make({ ...saved, state: State.cases.delivered.make({}) })),
                   parent,
                 );
@@ -277,7 +277,7 @@ export class SessionManager extends Context.Service<
             yield* stored(() =>
               sql.transaction(() => {
                 ensure();
-                sql.exec("INSERT OR IGNORE INTO door_ended (process) VALUES (?)", process);
+                sql.exec("INSERT OR IGNORE INTO gateway_ended (process) VALUES (?)", process);
               }),
             );
           }),

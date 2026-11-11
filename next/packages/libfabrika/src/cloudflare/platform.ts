@@ -1,6 +1,6 @@
 import { Context, Effect } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
-import type { GatewayBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
+import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 
 type Client<S> = {
   readonly [K in keyof S]: S[K] extends (...args: infer A) => infer B
@@ -167,21 +167,21 @@ export class ProcessClient extends Context.Service<
 
 export class GatewayClient extends Context.Service<
   GatewayClient,
-  Client<Omit<GatewayBinding, keyof Rpc.DurableObjectBranded>>
+  Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
 >()("fabrika/GatewayClient") {
-  static make(stub: GatewayBinding): GatewayClient["Service"] {
+  static make(stub: ConnectionBinding): GatewayClient["Service"] {
     return {
       fetch: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Gateway fetch RPC enters Effect
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection fetch RPC enters Effect
         Effect.tryPromise({ try: () => stub.fetch(...args), catch: unreachable }),
       ring: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Gateway ring RPC enters Effect
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection ring RPC enters Effect
         Effect.tryPromise({ try: () => stub.ring(...args), catch: unreachable }),
       notify: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Gateway notify RPC enters Effect
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection notify RPC enters Effect
         Effect.tryPromise({ try: () => stub.notify(...args), catch: unreachable }),
       probe: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Gateway probe RPC enters Effect
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Connection probe RPC enters Effect
         Effect.tryPromise({ try: () => stub.probe(...args), catch: unreachable }),
     };
   }

@@ -2,7 +2,7 @@ import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended } from "../ledger/Log.ts";
-import type { GatewayManager } from "../presence/Connections.ts";
+import type { Connections } from "../presence/Connections.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { ProcessError, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
@@ -40,7 +40,7 @@ export type ProcessReply<A> =
   | (Omit<typeof ProcessReplies.cases.ok.Type, "value"> & { readonly value: A })
   | typeof ProcessReplies.cases.ProcessError.Type;
 
-export interface DoorCalls {
+export interface GatewayCalls {
   readonly connect: () => Effect.Effect<ConnectionId>;
   readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
   readonly initialize: (
@@ -89,9 +89,9 @@ export interface DoorCalls {
 type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;
 
 type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
-type DoorService = DoorCalls;
+type DoorService = GatewayCalls;
 type Processes = (typeof ProcessManager)["Service"];
-type Gateways = (typeof GatewayManager)["Service"];
+type Gateways = (typeof Connections)["Service"];
 type Runner = (typeof ProgramRunner)["Service"];
 
 /** One ProcessManager call over Project RPC: a refusal comes back as reply data. */
@@ -155,7 +155,7 @@ export type ProcessBinding = Rpc.DurableObjectBranded &
     abort: RemoteCall<() => Effect.Effect<void>>;
   };
 
-export type GatewayBinding = Rpc.DurableObjectBranded &
+export type ConnectionBinding = Rpc.DurableObjectBranded &
   Remote<{
     fetch: (request: Request) => Effect.Effect<Response>;
     ring: (stream: string, rev: number) => Effect.Effect<void>;

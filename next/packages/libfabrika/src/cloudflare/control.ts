@@ -61,14 +61,14 @@ const dispatch = Effect.fnUntraced(function* (
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
       )(args).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
-      return yield* checkedPut(env.HEALTH, key, Uint8Array.from(bytes), checksum);
+      return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
     }
 
     if (method === "head") {
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
         Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
       );
-      return yield* bucketHead(env.HEALTH, key);
+      return yield* bucketHead(env.MEASUREMENTS, key);
     }
 
     return yield* Effect.fail({ reason: "unknown_method" });

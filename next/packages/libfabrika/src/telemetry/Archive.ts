@@ -1,4 +1,4 @@
-// Where an object's old raw health rows go: one R2 bucket, `health`, behind our own small interface,
+// Where an object's old raw health rows go: one R2 bucket, `measurements`, behind our own small interface,
 // so nothing here imports Cloudflare. Tier 1, P37 (law p101). P12 passes the env's R2 binding.
 //
 // R2's `put` takes a `sha256` and fails when the bytes do not match it, and `head` answers the stored

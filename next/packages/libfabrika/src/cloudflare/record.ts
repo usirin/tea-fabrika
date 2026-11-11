@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { workerSql } from "../ledger/CloudflareSql.ts";
+import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
 import { type Chain } from "../telemetry/Trace.ts";
@@ -23,7 +23,7 @@ const part = Effect.fnUntraced(function* (
     return yield* new SinkError({ reason: "bad_row", held: 0 });
   }
 
-  return recordPart(workerSql(ctx.storage), chain, at, bytes ?? 1_000_000_000);
+  return recordPart(cloudflareSql(ctx.storage), chain, at, bytes ?? 1_000_000_000);
 });
 
 export const recordWrite = Effect.fn(function* (

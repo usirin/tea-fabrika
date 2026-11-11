@@ -2,7 +2,7 @@
 // passes the ledger's error and answers on, so a layer above never imports `./data`.
 export { ClientManager, Founder, Written } from "../access/ClientManager.ts";
 export { appendAdmitted } from "../access/Authorization.ts";
-export { GatewayManager } from "../presence/Connections.ts";
+export { Connections } from "../presence/Connections.ts";
 export { type From, type History, type Letter, Mailbox, RunnerMail } from "../processes/Mailbox.ts";
 export { Checkpoint, Placed, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 export { RecoveryStore } from "../runtime/RecoveryStore.ts";
@@ -11,10 +11,10 @@ export {
   AddSaw,
   Adds,
   admitted,
-  foldMembers,
+  foldAccess,
   Grant,
   MemberEvent,
-  type Members,
+  type Access,
   Revoke,
   Saw,
   Signed,

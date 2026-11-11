@@ -1,1 +1,1 @@
-export { doorNonce } from "@kampus/libfabrika/gateway/GatewayNonce";
+export { gatewayNonce } from "@kampus/libfabrika/gateway/GatewayNonce";

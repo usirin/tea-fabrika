@@ -31,7 +31,7 @@ export type LedgerCalls = {
   wait(stream: string, after: number, reader: string): Promise<unknown>;
 };
 
-/** Who is calling, given once when a ledger is built: the object's own name, such as `gateway:t1`. */
+/** Who is calling, given once when a ledger is built: the object's own name, such as `connection:t1`. */
 type Who = { readonly reader: string };
 
 /** A read as a Stream of pages, fetched only as it is pulled; a short page is the last. */

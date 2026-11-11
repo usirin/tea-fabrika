@@ -108,7 +108,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
 
-    if (now._tag !== "online" && !["initialize", "door.knock"].includes(request.method)) {
+    if (now._tag !== "online" && !["initialize", "gateway.knock"].includes(request.method)) {
       return respond(request.id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
@@ -125,7 +125,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
   });
   return {
-    frame: Effect.fn("gateway.frame")(function* (text: string) {
+    frame: Effect.fn("connection.frame")(function* (text: string) {
       const parsed = Result.try({ try: () => JSON.parse(text), catch: () => null });
 
       if (Result.isFailure(parsed)) {
@@ -146,7 +146,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
       yield* ordinary(request).pipe(turn.withPermit);
     }),
-    ring: Effect.fn("gateway.ring")(function* (stream: string, rev: number) {
+    ring: Effect.fn("connection.ring")(function* (stream: string, rev: number) {
       const now = yield* read;
 
       if (now._tag === "online") {
@@ -176,14 +176,14 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         }
       }
     }),
-    wake: Effect.fn("gateway.wake")(function* () {
+    wake: Effect.fn("connection.wake")(function* () {
       const now = yield* read;
 
       if (now._tag === "online" && now.busy) {
         options.close(1012);
       }
     }),
-    probe: Effect.fn("gateway.probe")(function* (session: string) {
+    probe: Effect.fn("connection.probe")(function* (session: string) {
       return session === options.session && (yield* read)._tag === "online" ? options.ping() : null;
     }),
   };

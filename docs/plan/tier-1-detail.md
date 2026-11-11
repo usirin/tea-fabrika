@@ -115,7 +115,7 @@ node next/apps/fabrika/grant.ts client <url> SHA256:ab12... --code=482109 --labe
 
 It asks the door for the ledger's name, prints what it will sign, calls `ssh-keygen -Y sign -n fabrika-client` with an ordinary key named in `founded.keys`, and posts to `/grant`. It writes the same fact, with `saw.how: "command"`. In PR B the waiting words change to the ones above, and the command stays only as a developer path.
 
-**Deny.** The row's Deny writes one `denied` fact and needs no finger, because saying no should be easy. It goes over the menu bar's own link as `door.deny`, so `by` comes from the checked key and no signature is needed. Only a person's own client can call it, so an unknown key cannot grow the log. The tab shows "Denied. [Ask again]".
+**Deny.** The row's Deny writes one `denied` fact and needs no finger, because saying no should be easy. It goes over the menu bar's own link as `gateway.deny`, so `by` comes from the checked key and no signature is needed. Only a person's own client can call it, so an unknown key cannot grow the log. The tab shows "Denied. [Ask again]".
 
 **The code.** The brain picks it fresh, per key. It is for eyes only and carries no power: the door checks the key, and `saw` records what the person looked at. Waiting keys are kept in the project object's own storage, outside the log, so they outlive its sleep ([a wait is data](#cloudflare)). They have a small cap (64, a guess) that drops the oldest, and a 10-minute life, then a new code. Nothing goes in the log for an unknown key.
 
@@ -123,7 +123,7 @@ It asks the door for the ledger's name, prints what it will sign, calls `ssh-key
 
 **Why two keys.** A window signs every hello, silently. The person key only signs when a person says yes. One key cannot do both. It also lets a person remove a window without touching themselves. Cost: one more field at founding. Sure: 85%.
 
-**The very first fact.** The app shows a founding screen, with one name field and a Start button. It is drawn from a local file, since no brain runs yet. Start writes the public halves and the name to the app's home and then starts the brain. The stack reads them at start or deploy (`--founder=<founder.json>`), so they are not in the repo. When `door/members` is empty, the door writes `founded {name, keys, window}`. After that the ledger's facts rule, not the config. So the first person to connect never gets to claim anything, as the ledger note says. A founding screen never appears when data exists. A key that fails to open is an error in plain words, never a reason to make a new key. `founded.keys` stays a list, so more keys can join later.
+**The very first fact.** The app shows a founding screen, with one name field and a Start button. It is drawn from a local file, since no brain runs yet. Start writes the public halves and the name to the app's home and then starts the brain. The stack reads them at start or deploy (`--founder=<founder.json>`), so they are not in the repo. When `gateway/access` is empty, the door writes `founded {name, keys, window}`. After that the ledger's facts rule, not the config. So the first person to connect never gets to claim anything, as the ledger note says. A founding screen never appears when data exists. A key that fails to open is an error in plain words, never a reason to make a new key. `founded.keys` stays a list, so more keys can join later.
 
 **When an agent runs the demo.** An agent starts the app, and the owner clicks. In tests, `e2e` uses a temp home and a test `PersonCheck`, and a throwaway key in a temp folder for the real `ssh-keygen` path. The cloud smoke run goes the same way as the demo.
 
@@ -167,16 +167,16 @@ const update = (m, msg) =>
 
 | Job | Where it lives | In a test |
 |---|---|---|
-| Who may let whom in | The door plus ledger facts: the brain decides, the menu bar signs | Node, with `answerFrame` and `foldMembers` |
+| Who may let whom in | The door plus ledger facts: the brain decides, the menu bar signs | Node, with `answerFrame` and `foldAccess` |
 | Holding the key | `PersonKey`, with platform Layers | `tuval/headless`, a key in memory |
 | The menu | `menuView`, drawn by `tuval/electron`, an array in headless | An array to read |
 | Checking the person | `PersonCheck`: the Mac version only in Tier 1, plus a test version | Answers given by the test |
 
 - **`PersonCheck` on a Mac:** Touch ID where `canPromptTouchID` is true, a plain click otherwise. No Swift helper. Sure: 85%. The doubt is Touch ID from a dev build signed by a self-made card. T8's spike settles it, and the plain click is the way out. *P4, 2026-11-05 ([experiment 214](../../experiments/214-mac-app-four-unknowns.md)):* `canPromptTouchID()` is true on an unsigned build; `promptTouchID` itself needs a person and was not called.
-- **Its link.** Main dials the brain as one more client, `<window fingerprint>/menubar`, signing its hello with the window key. It reads rows with `door.watch`. Reading rows never touches the person key, so opening fabrika asks nothing.
+- **Its link.** Main dials the brain as one more client, `<window fingerprint>/menubar`, signing its hello with the window key. It reads rows with `gateway.watch`. Reading rows never touches the person key, so opening fabrika asks nothing.
 - **The law: kill the menu bar and the counter keeps working; only new approvals wait.** In one Electron app, killing the menu bar means killing the app. The brain is its own service, so tabs stay online. A new tab shows its code and waits. Reopen the app, and the row is there.
 
-**Remove.** The panel keeps a small list of let-in windows under the waiting rows: label, where, and how many tabs are online. The list folds from `granted` and `revoked` facts, and the brain sends it as `door.clients` on the same `door.watch`, so reading it never touches the person key. Remove asks for the same check as Approve, Enter does nothing, and it has no default focus. A yes signs one `revoked` fact with the person key, and it goes to `/grant`, the door's one way in for signed facts. No finger, no fact. The fact keeps what the person saw: label, where, and the check.
+**Remove.** The panel keeps a small list of let-in windows under the waiting rows: label, where, and how many tabs are online. The list folds from `granted` and `revoked` facts, and the brain sends it as `door.clients` on the same `gateway.watch`, so reading it never touches the person key. Remove asks for the same check as Approve, Enter does nothing, and it has no default focus. A yes signs one `revoked` fact with the person key, and it goes to `/grant`, the door's one way in for signed facts. No finger, no fact. The fact keeps what the person saw: label, where, and the check.
 
 - **The app's own window has no Remove.** Its key also signs the menu bar's link, so removing it would end approvals with no way back in this tier. A command can still do it, on purpose.
 - **An agent is on the same list,** named as one, from PR D.
@@ -482,7 +482,7 @@ Tools are listed at once, from the program table, so adding the line never fails
 const agentMay = ["initialize", "view.open", "window.msg:notes", "ledger.read", "ledger.wait"];
 ```
 
-- **No tool can grant, approve or remove.** Those are door acts and not program inputs, so no tool is made from them. `door.watch` and `door.deny` refuse `as: "agent"`, and a signature by an agent's key does not count at `/grant`. p27 already refuses any signer outside `founded.keys`.
+- **No tool can grant, approve or remove.** Those are door acts and not program inputs, so no tool is made from them. `gateway.watch` and `gateway.deny` refuse `as: "agent"`, and a signature by an agent's key does not count at `/grant`. p27 already refuses any signer outside `founded.keys`.
 - **An agent never writes as the person.** `by` is its checked key. `for` comes from its grant. It has no person key, and its tools take no name.
 - **Chaos is not listed.** The bridge's program table holds only `notes`, chaos has no inputs, and the door refuses it. An input with `personOnly: true` gets no tool at all; none exists yet, and a law holds it for the first.
 - **A retry is one row.** An MCP call has no id, so the bridge makes one from the key, note, base and body. Running the same call again repeats that id, which p53 keeps once.
@@ -843,7 +843,7 @@ windowApp.pipe(Effect.provide(layer), runMain);
 - **browser:** `screen`, from `domScreen`.
 - **electron:** `screen`, plus three named extras. `verify` is `PersonCheck`, listed only where `canPromptTouchID` is true. `seal` is `PersonKey` and the window key, listed only where `safeStorage` can seal. `open-link` is main handing a link to the person's browser. Their services stay. The names only tie them to `has`.
 - **headless:** none. A test hands in the list it wants. The bridge is an agent, not a host, so its hello says `has: []`.
-- **The list comes from the Layer, and the hello carries it (p66).** Main works out Electron's list at start and hands it over through the preload, and the menu bar's link sends the same list. Nothing reads `has` yet, and `door/hellos` records it. In PR A a tab has no Layer until T7, so its hello says `has: []`. No real ledger exists before PR D, so nothing is lost.
+- **The list comes from the Layer, and the hello carries it (p66).** Main works out Electron's list at start and hands it over through the preload, and the menu bar's link sends the same list. Nothing reads `has` yet, and `gateway/hellos` records it. In PR A a tab has no Layer until T7, so its hello says `has: []`. No real ledger exists before PR D, so nothing is lost.
 - **A word says "can", never "may".** A client can claim anything. Whether it may do something is a grant.
 - **Not in Tier 1:** a queue, leases, or a tab that runs a job. They are in Tier 4.
 
@@ -921,7 +921,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 - **Does Worker Loader need anything on the account?** Yes, one thing: Cloudflare's plan must include Dynamic Workers ([docs](https://developers.cloudflare.com/dynamic-workers/)), and the account's plan does. Our `hash:pid` id is stable, so only a new build counts as a new one.
 - **The address:** Cloudflare's default address for a Worker. Why: no DNS to set up, and the door does the same job. Cost: a domain later means a new origin, so each browser asks again; the ledger's name stays a stable id, so grants stay good. Sure: 85%. Settled by my call, as the owner asked.
 - **The approval flow is the same here.** PR C gives the menu bar a second link, to the cloud stage, and each row says which stage it is from. `founded` on the cloud ledger names the same person key and window key, read from the app's home at deploy. The one-time link works here too. Remove works here too. When `stage.json` says `cloud`, the app starts no local brain and keeps only the cloud link.
-- **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `door.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `door.knock` itself stays.
+- **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `gateway.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `gateway.knock` itself stays.
 
 ```ts
 // A sketch. transport/Answer.ts: Tier 1's Attached, grown. `Row` (waiting.ts) becomes a Schema.Struct, same fields.
@@ -979,14 +979,14 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
 **Recorded from day one:**
 
 - `by`: the checked key's fingerprint, stamped at the door. Anything the params say is dropped. The person behind it folds from the grant, which is kept forever.
-- `granted` and `revoked`: the signed text and the signature whole, in `door/members`. So anyone can re-check them later, with no trust in the door.
+- `granted` and `revoked`: the signed text and the signature whole, in `gateway/access`. So anyone can re-check them later, with no trust in the door.
 - `saw` on each grant: code, label, where, how and `has`, plus `check`. What the person looked at when they said yes exists only at that moment. The label and where are recorded, never trusted.
 - `saw.check`: `"touch"`, `"click"` or `"none"`. **It is kept in Tier 1 because of the later-tiers check:** once other `PersonCheck` versions arrive, no old grant could say how its person was checked. Cost: one field.
 - `saw.has`: what the host claimed when the person said yes. It exists only at that moment. It's recorded, never trusted, and the row doesn't print it in Tier 1. Cost: one field.
 - `as: "window" | "agent"` on each grant. Later rules need it, and an old grant could never tell.
 - `denied`, with what the person saw. A Deny is a person's act, so it costs nothing to keep.
 - `founded.keys` as a list, and `founded.window`.
-- `door/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `sentAt`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
+- `gateway/hellos`, one fact per online hello: key, tab, platform, versions, has, nonce, signature, `sentAt`, `where`, brain code hash. Why: which window on which code at which moment exists only then. Cost: one append per connect. Refused hellos write nothing, so an unknown key cannot fill the log.
 - `started` gains the brain's build hash, and each letter's fold can name the program's hash. A chaos letter's `tick`, seed, target, asked and did.
 - `seen` on a letter, the last log rev the writer had read, filled by code, and `sentAt`, both kept out of deciding code's types. The referee refuses a `seen` past its head. This was `saw`, the window's inbox position (the slice has it for counter); it became `seen` on the entry wrapper on 2026-11-01 ([saved state](../direction/saved-state.md)). A grant's `saw`, what a person looked at when they said yes, is a different fact and keeps its name.
 - **On each note's save:** `base`, since which version a writer worked on exists only then. `body` whole and raw, every time, since a version is never overwritten. `how`, since "kept from a stale screen" cannot be worked out later, and `from`, since nothing else ties a kept note to its source. The letter's `by`, `arrivedAt`, `sentAt`, `seen`, `parent` and `traceId` come with it, using the plan's existing fields: who wrote it, the log's clock, their own clock, what they had seen. **New on every letter: `for`, the person the writer works for,** from the checked grant, so a fact names both the agent and its person with no fold. The agent's name is its grant's `saw.label`, recorded and shown to the person at Approve. `sentAt` stays out of deciding code's types, and `refuse` sees only the Msg. Cost: one full body per save, about 500 small rows a day at most, a guess.
@@ -1126,7 +1126,7 @@ const fact = Schema.decodeUnknownOption(MemberFact)(fromLine(line));
 
 ## The public interface
 
-The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). The coordination half of the block below, `client-manager.ts` and `mailbox.ts`, is as planned: P9 built it anew, with `From`, `Revoke`, `Written` and `Members` beside it ([coordination, as built](#coordination-as-p9-built-it), 2026-11-07). These are the changes and additions.
+The tests compile against this block and nothing else of the new code. Plan-115's `CoordinationLayer` and `ProgramDown` carry over as written. `Ledger`, `LedgerCalls` and `LedgerError` do not: P6 built them anew, with `Doorbell`, `Appended` and `Waited` beside them ([the data layer, as built](#the-data-layer-as-p6-built-it), 2026-11-07). `ProcessManager` does not: it gains `exit`, `info`, `monitor`, `demonitor` and a new process id for each start in P33 (owner, 2026-11-06). The coordination half of the block below, `client-manager.ts` and `mailbox.ts`, is as planned: P9 built it anew, with `From`, `Revoke`, `Written` and `Access` beside it ([coordination, as built](#coordination-as-p9-built-it), 2026-11-07). These are the changes and additions.
 
 ```ts
 // next/packages/libfabrika/src/transport/Wire.ts
@@ -1523,7 +1523,7 @@ export const Why = Schema.Literals(["not_member", "not_allowed", "used", "replac
 export const foldMembers: (facts: ReadonlyArray<MemberFact>) => Members;
 export const admitted: (members: Members, key: string) => {key, person, as: "window" | "agent"} | {why: "not_granted"};
 
-// client-manager.ts: reads and writes `door/members`
+// client-manager.ts: reads and writes `gateway/access`
 export const Written = Schema.TaggedUnion({
 	applied: {rev: Rev},                                // in the log, and the fold takes it
 	ignored: {rev: Rev, why: Why},                      // in the log, but an earlier fact won the race
@@ -1539,8 +1539,8 @@ export class ClientManager extends Context.Service<ClientManager, {
 // index.ts also passes on Appended, Rev and LedgerError, so `app/` never imports `data/`.
 ```
 
-- One rule, `allows`, decides; `foldMembers` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
-- `founded` is written by the first call on an empty `door/members`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
+- One rule, `allows`, decides; `foldAccess` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
+- `founded` is written by the first call on an empty `gateway/access`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
 - No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `members.read`, `members.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
 
 ### Processes, as P33 built it
@@ -1637,13 +1637,13 @@ export class GatewayManager extends Context.Service<GatewayManager, {
 - **`receive` never fails on what another writer put in the inbox.** A `send` with no `m` is skipped, and any other `m` is mail. It fails only with `ended` for a process that is not live, or with the ledger's own error.
 - **Text caps.** Every client text that lands in a brain line is at most 256 characters, so no brain line can reach the ledger's line limit. An over-cap start, exit, monitor or down is `bad_text` and writes nothing. `Dead.errors` holds at most 32 entries.
 - **Who is online** is computed on each ask from each gateway's last ping: online under 75 s, away after, `unknown` when the probe fails. No online fact is written.
-- Spans: `process.start`, `process.exit`, `process.monitor`, `process.demonitor`, `process.down`, `process.receive`, `process.info`, `process.isLive`, `gateway.join`, `gateway.leave`, `gateway.online`, `gateway.probe`. Each `process.*` span carries `fab.process`, the real process ID, refusals included (p97).
+- Spans: `process.start`, `process.exit`, `process.monitor`, `process.demonitor`, `process.down`, `process.receive`, `process.info`, `process.isLive`, `connections.join`, `connections.leave`, `connections.online`, `connections.probe`. Each `process.*` span carries `fab.process`, the real process ID, refusals included (p97).
 
 **Where it hands off.**
 
 - **P11:** writes the `Activity` marker around each step and calls `storage.sync()` right after `stepping`. [Experiment 231](../../experiments/231-process-wakes.md) found that a constructor runs on every wake, idle ones too, so it can never mean a crash, and that the marker was lost twice when the object aborted right after the put; `sync()` kept it. P11 also reads fresh mail through `ProcessManager.receive` and puts the real process ID on runner spans. *As P11 built it: it reads its inbox through its own `Mailbox.read`, not `ProcessManager.receive`, and no wake reads the marker yet ([as built](#programs-as-p11-built-it)).*
 - **P34:** supplies the restart policy, calls `down` and `canRestart`, writes `dead`, and starts the successor with `Start.cases.again`. Retry counts must survive the new process ID.
-- **P10 and P12:** the signer checks `isLive` in the same project turn as a new append, and P12 wires connections to `GatewayManager` and the platform probe.
+- **P10 and P12:** the signer checks `isLive` in the same project turn as a new append, and P12 wires connections to `Connections` and the platform probe.
 - **P18** binds a window's monitor to its exact client session. **P21** reads `online(key)`. **P25** reads `info` for `ps`. **P27** checks recovery from these facts and P37's records.
 
 **What it cannot tell us.** The cost of folding process history and probing gateways on workerd (P12 measures it). Whether local wakes match every cloud shutdown (P24 checks real hibernation; experiment 231 ran on Miniflare only). Whether P11's step path writes and clears the marker at the right point. Whether P34's brake and backoff recover correctly. How a `DOWN`'s reason reads in P18's real window. Whether 256 characters is the right cap: it keeps every brain line under the ledger's limit, but no real text has been measured against it.
@@ -1915,7 +1915,7 @@ export class Archive extends Context.Service<Archive, {
 - **A span's `end`, in one SQLite step:** its health row and its `unsent` row, then, at a new hour, the rollup of every closed hour and the hour's size row. A step that throws keeps the spans held in memory, tries them again at each later `end`, and the next `flush` fails with `storage`.
 - **`flush`:** each chain's `unsent` rows, 100 a call, to the part in `parts`; a row is deleted only after its part answers. On `rolled`, the `had` rows are deleted and the rest go to the next part. Then the archive.
 - **The archive:** each UTC day older than 336 hours whose every hour with rows is summarized leaves as one JSON-lines file, `health/<object>/<day>.jsonl`. Its local rows are deleted only when the stored hash equals the one worked out here, and the rows read still count the same, so a row that landed during the put stays. Rows that land after their day left go as part 2, `<day>.2.jsonl`, and on. Every try, good or failed, writes a `sink.archive` health row, with `error` `unreachable` or `mismatch`; a failed try deletes nothing and never fails `flush`.
-- **Tables in an object with a sink:** `health`, `summarized`, `summary`, `sizes`, `archived`, `unsent`, `parts`, made with the first span, never when the layer is built. A record part's: its spans, its content and at most one `rolled`.
+- **Tables in an object with a sink:** `measurements`, `aggregated`, `summary`, `sizes`, `archived`, `unsent`, `parts`, made with the first span, never when the layer is built. A record part's: its spans, its content and at most one `rolled`.
 - **The sink's own functions end no span.** `sha256` and `archiveDays` are exported and use unnamed `Effect.fn` (a stack frame, no span), and the helpers `Effect.fnUntraced`, since a named one would make the sink record spans about itself ([the exception](../direction/effect-fn-for-traced-functions.md#the-rule)).
 - The record object classes, their stubs, the R2 binding and the wiring in `brain.ts` are P12's; `spans.read` at the door is one line in P10's table, over `RecordManager.read`.
 
@@ -1967,7 +1967,7 @@ import "./window/style.css";                 // only what the package lacks, cop
 | T20 drawing a note | D | new `programs/notes/{root.ts,drawn.tsx,highlight.ts,highlighter.ts}`, `programs/notes/{tile.ts,view.tsx}`, `window/style.css`, `window/page.ts`, `brain.ts` for the policy and `/highlight.js`, `build.ts`, `entry/electron-main.ts` for links, `next/programs/notes/package.json` |
 | T21 agents through MCP | D | new `mcp/{tools,serve,drive,client,index}.ts`, `next/apps/fabrika/mcp.ts`; `programs/notes/program.ts` inputs, `runtime/Program.ts` `Input`, `transport/Answer.ts`, `gateway/internal/waiting.ts`, `desktop/menu.ts`, `processes/Mailbox.ts` for `for`, `next/packages/libfabrika/package.json` |
 | T19 where notes live, and the demo | D | `entry/electron-main.ts`, `launchd.ts`, `desktop/menu.ts` for the status words, `alchemy.run.ts`, `README.md`, `docs/*.png`; the run in `field/` |
-| T22 backup and recovery | D2 | designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided for the sheet 2026-11-06. Its fold and door parts move to P9 and P10 (`MemberFact`, `foldMembers`, p28, `added`); T22 keeps the sheet's screens, the words and the menu bar row |
+| T22 backup and recovery | D2 | designed in the account recovery note ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)), decided for the sheet 2026-11-06. Its fold and door parts move to P9 and P10 (`MemberFact`, `foldAccess`, p28, `added`); T22 keeps the sheet's screens, the words and the menu bar row |
 | T12 program | E | new package `next/programs/chaos`, `app/nemesis.ts`, the layout in `entry/views.ts` |
 | T13 live faults | E | `brain.ts`, `transport/Connection.ts`, `app/process.ts`, `data/project.ts`, `build.ts`, `dev.ts`, `alchemy.run.ts` |
 | T14 drill and run | E | `chaos-drill.ts` on `mcp/client.ts`, `README.md`, `docs/*.png`, `field/` |
@@ -2037,14 +2037,14 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - **p25** is `new`, no longer waits on the owner. **Rewritten 2026-11-06 (owner):** when a program's step throws on a fresh letter: no answer and no line, and the letter is counted; at its delivery limit it moves to dead (p80). The limit is per program: the program's own `maxDeliveries`, else the policy's, 3 by default, from 1 to 32 (as P34 built it, 2026-11-09; it said "on the third throw"). A wake that fails on a saved letter is a crash like any other: inside the restart budget the process restarts after its backoff, only the brake writes `down`, and every letter is kept, never skipped or moved (owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)). *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): the restart is at once, and past the brake the name is `failed` until a person restarts it (p80).* A thrown fresh step is never a program refusal, and `bad_msg` is for a malformed or disallowed fresh message, not every program refusal (P8, 2026-11-10; it said: a real refusal still gets `bad_msg`). From PR D, "old letters the new code refuses count for nothing" holds only for the counter and chaos; a saved note always folds (p55). *It said, from plan-115: on a wake, the wake fails rather than skipping the letter, which no note backed and which left a process down for good with no way to say why.*
 
 **p26, the signed hello (scenario of T4).** `new`, node. s4. `transport/Hello.ts`, `answer.ts`.
-- A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `door.knock` gets `no_hello`. Nothing is written before online. `door.watch` and `door.deny` answer only an online client.
-- Why: this is the whole door. Plants: nonce not checked; name not checked; a method served while `waiting`; `door.watch` open to a key not let in.
+- A known key with a good signature goes online, `who` from the fold. A key that does not hash to the dialed name, a signature over another nonce, url or tab, and a reused nonce are each refused and change nothing. Unknown key: `not_granted`, and every method but `gateway.knock` gets `no_hello`. Nothing is written before online. `gateway.watch` and `gateway.deny` answer only an online client.
+- Why: this is the whole door. Plants: nonce not checked; name not checked; a method served while `waiting`; `gateway.watch` open to a key not let in.
 
 **p27, the grant (scenario of T5).** `new`, node. s4. `transport/Sshsig.ts`, door.
 - Real `ssh-keygen` vectors: good signature passes. A wrong namespace, other signer, changed text, and non-Ed25519 are refused with the same answer. A grant for another ledger is refused. A signer who is not a key of the person named is refused, and that includes a window key named at founding. Any key in `founded.keys` passes the same way, whatever made the signature. The same grant id twice gives one fact and the same answer.
 - Why: this is what makes a person's say real. Plants: namespace ignored; `to` ignored; `for` ignored; verify always true; window key accepted as a signer.
 
-**p28, who belongs (pbt).** `new`, node. s4. `foldMembers`, `admitted`.
+**p28, who belongs (pbt).** `new`, node. s4. `foldAccess`, `admitted`.
 - Over any list of facts: `founded` is first and never replaced. Its `window` is admitted with no grant. A revoked key stays out forever, whatever comes later. A `denied` changes who belongs in no way. Adding the same fact twice changes nothing.
 - A good thing happens: a grant by a person's key admits that key.
 - Why: rules checked on every hello. Plants: last fact wins for revoke; second `founded` accepted; `denied` blocks a later grant.
@@ -2104,7 +2104,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: `by` from params; signature dropped; `saw` or its `has` left out of the signed text; a fact saved with `kind` in place of `_tag`.
 
 **p43, waiting (pbt).** `new`, node. s4. `gateway/internal/waiting.ts`.
-- Over any list of knocks: one row per key, and two tabs of one key share its code. A key's code holds until `until`, then a new one is picked. There are never more than `most` rows, and the oldest goes first. A knock never touches the ledger, and a test with `door/members` watched sees no write. The code never appears in the door's check: an approve with any code lets the key in, and `saw` records it.
+- Over any list of knocks: one row per key, and two tabs of one key share its code. A key's code holds until `until`, then a new one is picked. There are never more than `most` rows, and the oldest goes first. A knock never touches the ledger, and a test with `gateway/access` watched sees no write. The code never appears in the door's check: an approve with any code lets the key in, and `saw` records it.
 - Plants: a code per tab; no cap; a knock that writes; the door reading the code.
 
 **p44, one signature shape.** `new`, node, with real `ssh-keygen`. s4. `writeSshsig`, `PersonKey`.
@@ -2194,7 +2194,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a tool for a `personOnly` input; `by` taken from `--as`; a name used without a grant; a retry with a new id.
 
 **p64, an agent stays an agent.** `new`, node. s11, s4. `transport/Answer.ts`, door.
-- A client granted `as: "agent"` gets `not_for_agents` on `door.watch`, `door.deny`, a Msg to anything but `notes:*`, and any window Msg. A grant, a `revoked` or an Approve signed by an agent's key is refused. A letter's `by` never equals a person key from any agent's call. `as` in a grant cannot be changed by the client after signing, and a knock's claim of `window` shows as such, and only the person's signature makes it true. Remove on an agent ends it at once. `@modelcontextprotocol` is not in the brain's bytes.
+- A client granted `as: "agent"` gets `not_for_agents` on `gateway.watch`, `gateway.deny`, a Msg to anything but `notes:*`, and any window Msg. A grant, a `revoked` or an Approve signed by an agent's key is refused. A letter's `by` never equals a person key from any agent's call. `as` in a grant cannot be changed by the client after signing, and a knock's claim of `window` shows as such, and only the person's signature makes it true. Remove on an agent ends it at once. `@modelcontextprotocol` is not in the brain's bytes.
 - Why: the laws the owner named: no person-only tool, an agent never writes as the person. Plants: `agentMay` left open; `as` read from the hello; a signature by an agent's key accepted.
 
 **p65, `next/` stands alone (scenario of T0).** `new`, node, in the exam. s12, s1. `exam/layers.test.ts`, `exam/deps.test.ts`.
@@ -2204,7 +2204,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: `package.json` alone stops neither a walk up to the root nor a Node import at a top level. Plants: an import of `@kampus/fabrika-old`, which the root would resolve; `node:fs` in a top level; a program importing `@kampus/libfabrika/transport`; `@kampus/tuval` imported from the library; a deep path into another package's `src/`.
 
 **p66, a host says what it can do.** `new`, node and real Chromium, real Electron for its half. s5, s2. `desktop/services.ts`, `tuval/*`, `transport/Wire.ts`, `gateway/internal/waiting.ts`.
-- On each Layer, the hello that goes out holds exactly that Layer's `Host.has`, and its `door/hellos` fact records the same list. Over any list from a test Layer, the same list reaches the waiting row and the signed text of the grant a click makes.
+- On each Layer, the hello that goes out holds exactly that Layer's `Host.has`, and its `gateway/hellos` fact records the same list. Over any list from a test Layer, the same list reaches the waiting row and the signed text of the grant a click makes.
 - Every word in a Layer's list has a service or a platform call behind it in that Layer. With `canPromptTouchID` false, `verify` is not listed. With `safeStorage` unable to seal, `seal` is not listed.
 - Nothing reads it yet: any list gets the same answers from the door, and a hello from an unknown key that claims `verify` still gets `not_granted`.
 - Why: old hellos can never get the list back, and with no reader, nothing else would notice a wrong one. Plants: a list written by hand in the hello, not read from `Host`; `has` dropped from the row; `verify` listed where it can't prompt; the door branching on `has`.
@@ -2281,7 +2281,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
 
 **p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
-- Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `door/hellos`. A fault that leaves any of the four blank fails the run.
+- Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `gateway/hellos`. A fault that leaves any of the four blank fails the run.
 - The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
 - Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a process's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
 
@@ -2472,7 +2472,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 
 - Typed codes on Cloudflare. `saw.how` gains a word; nothing lost.
 - Invites and join. New facts on a `founded.keys` list; nothing lost.
-- Windows list tile, in full: last seen, host, every tab. The panel's small list and Remove land in Tier 1. It folds from grants, `revoked` and `door/hellos`, kept now; nothing lost.
+- Windows list tile, in full: last seen, host, every tab. The panel's small list and Remove land in Tier 1. It folds from grants, `revoked` and `gateway/hellos`, kept now; nothing lost.
 - Docked-Mac password helper. **`saw.check` is kept in Tier 1 for this;** old grants say how their person was checked.
 - GitHub Actions releases. Records no fact.
 - Who may start chaos. `by` comes from the checked key on every letter, kept now; nothing lost.

@@ -9,7 +9,7 @@
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
-import { type Health, type SinkError, Summary, sinkError } from "../Trace.ts";
+import { type Measurements, type SinkError, MetricPoint, sinkError } from "../Trace.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -21,11 +21,11 @@ export const hourStart = (at: number): number => Math.floor(at / HOUR) * HOUR;
 
 /** @internal */
 export const HEALTH_TABLES = [
-  `CREATE TABLE IF NOT EXISTS health (
+  `CREATE TABLE IF NOT EXISTS measurements (
 		piece TEXT NOT NULL, at INTEGER NOT NULL, ms REAL NOT NULL, ok INTEGER NOT NULL, error TEXT,
 		lag REAL, "spanId" TEXT)`,
-  `CREATE INDEX IF NOT EXISTS health_by_at ON health (at)`,
-  `CREATE TABLE IF NOT EXISTS summarized (hour INTEGER PRIMARY KEY)`,
+  `CREATE INDEX IF NOT EXISTS measurements_by_at ON measurements (at)`,
+  `CREATE TABLE IF NOT EXISTS aggregated (hour INTEGER PRIMARY KEY)`,
   `CREATE TABLE IF NOT EXISTS summary (
 		piece TEXT NOT NULL, hour INTEGER NOT NULL, count INTEGER NOT NULL, errors INTEGER NOT NULL,
 		p50 REAL NOT NULL, p95 REAL NOT NULL, max REAL NOT NULL, lag REAL, PRIMARY KEY (piece, hour))`,
@@ -64,19 +64,19 @@ const decodeSummary = Schema.decodeUnknownSync(
   }),
 );
 
-/** Reads `health` rows back as `Health`. */
-const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Health> =>
+/** Reads `measurements` rows back as `Measurements`. */
+const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Measurements> =>
   sql.exec(query, ...params).map((row) => toHealth(row));
 
-const toHealth = (row: unknown): Health => {
+const toHealth = (row: unknown): Measurements => {
   const { ok, ...rest } = decodeHealth(row);
   return { ...rest, ok: ok === 1 };
 };
 
 /** @internal */
-export const writeHealth = (sql: Sql, { piece, at, ms, ok, error, lag, spanId }: Health): void =>
+export const writeHealth = (sql: Sql, { piece, at, ms, ok, error, lag, spanId }: Measurements): void =>
   void sql.exec(
-    `INSERT INTO health (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO measurements (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
     piece,
     at,
     ms,
@@ -91,8 +91,8 @@ const rank = (sorted: ReadonlyArray<number>, percent: number): number =>
   sorted[Math.max(0, Math.ceil((percent * sorted.length) / 100) - 1)] ?? 0;
 
 /** One hour's rows as one summary per piece. */
-const summarize = (hour: number, rows: ReadonlyArray<Health>): Array<Summary> => {
-  const pieces = new Map<string, Array<Health>>();
+const summarize = (hour: number, rows: ReadonlyArray<Measurements>): Array<MetricPoint> => {
+  const pieces = new Map<string, Array<Measurements>>();
 
   for (const row of rows) {
     pieces.set(row.piece, [...(pieces.get(row.piece) ?? []), row]);
@@ -101,7 +101,7 @@ const summarize = (hour: number, rows: ReadonlyArray<Health>): Array<Summary> =>
   return [...pieces].map(([piece, group]) => {
     const ms = group.map((row) => row.ms).sort((x, y) => x - y);
     const lags = group.flatMap((row) => (row.lag === null ? [] : [row.lag]));
-    return Summary.make({
+    return MetricPoint.make({
       piece,
       hour,
       count: group.length,
@@ -117,15 +117,15 @@ const summarize = (hour: number, rows: ReadonlyArray<Health>): Array<Summary> =>
 export const rollup = (sql: Sql, now: number): void => {
   const hours = sql
     .exec(
-      `SELECT DISTINCT (at / ${HOUR}) * ${HOUR} AS hour FROM health
-			WHERE at < ? AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM summarized)
+      `SELECT DISTINCT (at / ${HOUR}) * ${HOUR} AS hour FROM measurements
+			WHERE at < ? AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)
 			ORDER BY hour`,
       hourStart(now),
     )
     .map((row) => decodeHour(row).hour);
 
   for (const hour of hours) {
-    const rows = healthRows(sql, `SELECT * FROM health WHERE at >= ? AND at < ?`, hour, hour + HOUR);
+    const rows = healthRows(sql, `SELECT * FROM measurements WHERE at >= ? AND at < ?`, hour, hour + HOUR);
 
     for (const { piece, count, errors, ms, lag } of summarize(hour, rows)) {
       sql.exec(
@@ -142,7 +142,7 @@ export const rollup = (sql: Sql, now: number): void => {
       );
     }
 
-    sql.exec(`INSERT INTO summarized (hour) VALUES (?)`, hour);
+    sql.exec(`INSERT INTO aggregated (hour) VALUES (?)`, hour);
   }
 };
 
@@ -161,10 +161,10 @@ export const writeSize = (sql: Sql, now: number): void => {
 
 /** The summaries whose hour is in `[from, to)`, oldest first. */
 /** @internal */
-export const readSummaries = (sql: Sql, from: number, to: number): Array<Summary> =>
+export const readSummaries = (sql: Sql, from: number, to: number): Array<MetricPoint> =>
   sql.exec(`SELECT * FROM summary WHERE hour >= ? AND hour < ? ORDER BY hour, piece`, from, to).map((row) => {
     const { p50, p95, max, ...rest } = decodeSummary(row);
-    return Summary.make({ ...rest, ms: { p50, p95, max } });
+    return MetricPoint.make({ ...rest, ms: { p50, p95, max } });
   });
 
 const encoder = new TextEncoder();
@@ -188,20 +188,20 @@ type Part = {
 
 /** Part 1 is the day's own file; a later part says its number. */
 const partKey = (object: string, day: string, part: number): string =>
-  `health/${object}/${day}${part === 1 ? "" : `.${part}`}.jsonl`;
+  `measurements/${object}/${day}${part === 1 ? "" : `.${part}`}.jsonl`;
 
 /** Each day ready to leave, as its next part: old enough, every hour with rows summarized, and with
  *  rows still local. */
 const due = (sql: Sql, object: string, now: number): Array<Part> => {
   const cutoff = Math.floor((now - KEEP) / DAY) * DAY;
   return sql
-    .exec(`SELECT DISTINCT (at / ${DAY}) * ${DAY} AS day FROM health WHERE at < ? ORDER BY day`, cutoff)
+    .exec(`SELECT DISTINCT (at / ${DAY}) * ${DAY} AS day FROM measurements WHERE at < ? ORDER BY day`, cutoff)
     .map((row) => decodeDay(row).day)
     .flatMap((start) => {
       const day = new Date(start).toISOString().slice(0, 10);
       const [open] = sql.exec(
-        `SELECT count(*) AS n FROM health WHERE at >= ? AND at < ?
-				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM summarized)`,
+        `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
+				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
         start,
         start + DAY,
       );
@@ -211,7 +211,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
       }
 
       const read = sql.exec(
-        `SELECT rowid AS seq, * FROM health WHERE at >= ? AND at < ? ORDER BY at, rowid`,
+        `SELECT rowid AS seq, * FROM measurements WHERE at >= ? AND at < ? ORDER BY at, rowid`,
         start,
         start + DAY,
       );
@@ -231,7 +231,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
 /** Whether the day still holds exactly the rows read for `part`: none of them gone since. */
 const unchanged = (sql: Sql, { start, rows, last }: Part): boolean => {
   const [now] = sql.exec(
-    `SELECT count(*) AS n FROM health WHERE at >= ? AND at < ? AND rowid <= ?`,
+    `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ? AND rowid <= ?`,
     start,
     start + DAY,
     last,
@@ -266,7 +266,7 @@ const archivePart = Effect.fnUntraced(function* (sql: Sql, archive: (typeof Arch
             part.rows,
           );
           sql.exec(
-            `DELETE FROM health WHERE at >= ? AND at < ? AND rowid <= ?`,
+            `DELETE FROM measurements WHERE at >= ? AND at < ? AND rowid <= ?`,
             part.start,
             part.start + DAY,
             part.last,

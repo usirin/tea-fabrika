@@ -1,4 +1,4 @@
-// Who belongs, as a service: it reads and writes `door/members` and folds it with `Access.ts`'s one
+// Who belongs, as a service: it reads and writes `gateway/access` and folds it with `Access.ts`'s one
 // rule (p96, p97). Tier 1, P9. It never verifies a signature: the door checks SSHSIG at wiring, then
 // calls `write`.
 //
@@ -12,10 +12,10 @@ import { Appended, type Entry, fromHere, lineFor, valueFor } from "../ledger/Log
 import type { From } from "../processes/Mailbox.ts";
 import { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
-import { allows, EMPTY, eventId, type Folded, MemberEvent, type Members, signedBy, subject, Reason } from "./Access.ts";
+import { allows, EMPTY, eventId, type Folded, MemberEvent, type Access, signedBy, subject, Reason } from "./Access.ts";
 
 /** The stream who belongs is kept on. */
-const MEMBERS = "door/members";
+const MEMBERS = "gateway/access";
 
 /** What the founding screen gives: the name, the first person keys, and the first window. */
 export const Founder = Schema.Struct({
@@ -41,7 +41,7 @@ const tag = (word: string): string => `fab.members.${word}`;
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
-/** One entry of `door/members` and the event it holds; a case this piece does not know is none. */
+/** One entry of `gateway/access` and the event it holds; a case this piece does not know is none. */
 type Row = { readonly entry: Entry; readonly event: MemberEvent | null };
 
 /** The fold of a read, with the reason of each event it skipped, by rev. */
@@ -98,11 +98,11 @@ const view = ({ folded, skipped, rows }: Replayed) => ({
 export class ClientManager extends Context.Service<
   ClientManager,
   {
-    readonly members: Effect.Effect<Members, LedgerError>;
+    readonly members: Effect.Effect<Access, LedgerError>;
     readonly write: (event: MemberEvent, from: From) => Effect.Effect<Written, LedgerError>;
   }
 >()("@kampus/libfabrika/ClientManager") {
-  /** Building it writes nothing. The first call on an empty `door/members` writes `founded` under
+  /** Building it writes nothing. The first call on an empty `gateway/access` writes `founded` under
    *  the fixed id `founded`, inside that call's error channel, so the referee keeps it once (p20). */
   static readonly layer = (
     founder: Founder & {
