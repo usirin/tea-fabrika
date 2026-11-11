@@ -1033,9 +1033,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       refusal ??= "bad_input";
     }
 
-    const target = request !== null && Result.isSuccess(request) ? request.success.pid : "door";
+    const target = request !== null && Result.isSuccess(request) ? request.success.pid : "gateway";
     const policy =
-      target !== "door" && options.policy !== undefined
+      target !== "gateway" && options.policy !== undefined
         ? yield* options.policy(target)
         : { inputs: options.inputs.personOnly, events: options.events.personOnly };
 

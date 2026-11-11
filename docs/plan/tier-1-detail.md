@@ -1541,7 +1541,7 @@ export class ClientManager extends Context.Service<ClientManager, {
 
 - One rule, `allows`, decides; `foldAccess` skips what it refuses, and `write` answers with it. `write` refuses before it appends, then folds again to the new rev, so the Mac that lost a sheet race hears `ignored used`.
 - `founded` is written by the first call on an empty `gateway/access`, under the fixed id `founded`, with the Layer's `by`, `person` and `build`; a refusal other than `id_reused` fails the call with `LedgerError refused`.
-- No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `members.read`, `members.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
+- No `to` is checked here: P10's door checks it before `write`. Traced calls use `Effect.fn` ([Effect.fn for traced functions](../direction/effect-fn-for-traced-functions.md), owner, 2026-11-07). Spans: `mailbox.send`, `mailbox.receive`, `process.start`, `access.read`, `access.write`, with OpenTelemetry's `messaging.*` keys where they fit and `fab.<piece>.*` for the rest (p97).
 
 ### Processes, as P33 built it
 

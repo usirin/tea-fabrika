@@ -36,7 +36,7 @@ export const Written = Schema.TaggedUnion({
 });
 export type Written = typeof Written.Type;
 
-const tag = (word: string): string => `fab.members.${word}`;
+const tag = (word: string): string => `fab.access.${word}`;
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
@@ -139,7 +139,7 @@ export class ClientManager extends Context.Service<
           }
 
           const { by, person, build } = founder;
-          // Both callers, members.read and members.write, already own a span.
+          // Both callers, access.read and access.write, already own a span.
           const from = yield* fromHere({ by, for: person, seen: 0, parent: null, build }).pipe(Effect.orDie);
           // Two first calls at once write the same line under one id: the referee keeps one,
           // and the other hears `id_reused` and reads what the first wrote. Any other refusal
@@ -168,7 +168,7 @@ export class ClientManager extends Context.Service<
           return written;
         });
 
-        const write = Effect.fn("members.write")(
+        const write = Effect.fn("access.write")(
           function* (event: MemberEvent, from: From) {
             yield* Effect.annotateCurrentSpan(
               short({
@@ -207,7 +207,7 @@ export class ClientManager extends Context.Service<
           Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
         );
 
-        const members = Effect.fn("members.read")(function* () {
+        const members = Effect.fn("access.read")(function* () {
           return yield* load.pipe(
             Effect.tap((replayed) => Effect.annotateCurrentSpan(view(replayed))),
             Effect.map(({ folded }) => folded.members),
