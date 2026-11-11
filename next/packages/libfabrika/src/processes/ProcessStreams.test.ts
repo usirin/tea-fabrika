@@ -54,7 +54,7 @@ const examples =
 const nameInput = Start.cases.first.fields.name.check(Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/));
 
 const validName = Arbitrary.schema(nameInput).pipe(
-  Arbitrary.filter((name) => !["door", "processes"].includes(name) && !name.startsWith("client:")),
+  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
 );
 
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
@@ -101,7 +101,9 @@ describe("P33, every process event lives on a stream only the brain may write", 
     "lifecycle events are written under processes/, never on the name's own stream",
     [
       Arbitrary.schema(nameInput).pipe(
-        Arbitrary.filter((name) => !["processes", "door", "watcher:1"].includes(name) && !name.startsWith("client:")),
+        Arbitrary.filter(
+          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !name.startsWith("client:"),
+        ),
       ),
     ],
     examples([["counter:1"]], (name: string) => {
@@ -249,7 +251,7 @@ describe("P33, signal ids belong to the brain alone", () => {
     JSON.stringify(["DOWN"]),
   ];
   it.effect.prop(
-    "Mailbox.send refuses signal ids, as the door does",
+    "Mailbox.send refuses signal ids, as the gateway does",
     [
       Arbitrary.schema(Schema.Array(json(2)).check(Schema.isMaxLength(5))).pipe(
         Arbitrary.map((rest) => JSON.stringify(["DOWN", ...rest])),
@@ -421,7 +423,7 @@ describe("P33, every brain-written line records who asked", () => {
     "asked is kept out of the trust check: another writer's line naming the brain counts for nothing",
     [
       Arbitrary.schema(nameInput).pipe(
-        Arbitrary.filter((name) => !["door", "processes"].includes(name) && !name.startsWith("client:")),
+        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
       ),
     ],
     examples([["counter:1"]], (name: string) => {
@@ -450,14 +452,14 @@ describe("P33, every brain-written line records who asked", () => {
   );
 });
 
-describe("P33, a process name never meets a door stream", () => {
+describe("P33, a process name never meets a gateway stream", () => {
   it.effect.prop(
-    "a process named door is refused as bad_name and writes nothing",
-    [Schema.Literals(["door", "processes"])],
-    examples([["door"]], (name: string) => {
+    "a process named gateway is refused as bad_name and writes nothing",
+    [Schema.Literals(["gateway", "processes"])],
+    examples([["gateway"]], (name: string) => {
       const store = storage();
       return Effect.gen(function* () {
-        const answer = yield* Effect.result(ProcessManager.use((p) => p.start(first("start:door", name), from())));
+        const answer = yield* Effect.result(ProcessManager.use((p) => p.start(first("start:gateway", name), from())));
         expect(Result.isFailure(answer)).toBe(true);
 
         if (Result.isFailure(answer)) {

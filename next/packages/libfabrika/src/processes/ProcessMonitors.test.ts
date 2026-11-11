@@ -631,7 +631,7 @@ describe("P33, a client's inbox is not a process's inbox", () => {
   // A client and a process may share a name. Each DOWN lands in its own recipient's inbox only.
   const clientName = fc
     .stringMatching(/^[a-z][a-z0-9._-]{0,20}$/)
-    .filter((name) => name !== "processes" && name !== "door");
+    .filter((name) => name !== "processes" && name !== "gateway");
   const notesClient = (client: string) => Recipient.cases.client.make({ client, session: X });
   const twin = (store: Storage, name: string, client: string) =>
     Effect.gen(function* () {

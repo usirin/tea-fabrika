@@ -205,7 +205,7 @@ describe("p79, process identity", () => {
       fc.tuple(
         fc
           .stringMatching(/^[a-z][a-z0-9:]{0,20}$/)
-          .filter((name) => !["counter:1", "processes", "door"].includes(name) && !name.startsWith("client:")),
+          .filter((name) => !["counter:1", "processes", "gateway"].includes(name) && !name.startsWith("client:")),
         hash.filter((build) => build !== CODE.hash),
       ),
       [["counter:2", "build-b"]],
