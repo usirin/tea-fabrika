@@ -9,7 +9,15 @@
   // Each rule is named here, so a new oxlint release adds none on its own.
   "categories": { "correctness": "off" },
   "options": { "reportUnusedDisableDirectives": "error" },
-  "ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json", "agents-ledger.json"],
+  // `.claude/skills/*` are symlinks into `.agents/skills/`: walked there too, a file of `.agents/` is
+  // read a second time outside its override, where an edge comment looks unused and fails.
+  "ignorePatterns": [
+    "**/fixtures/**",
+    "**/experiments/results/**",
+    "unreachable-ledger.json",
+    "agents-ledger.json",
+    ".claude/**"
+  ],
   "rules": {
     // "warn" here only advises: lint.ts prints these two and does not fail on them. They were
     // wrong too often to block (experiment 125). Any other warning fails.
