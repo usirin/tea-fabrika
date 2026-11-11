@@ -80,7 +80,7 @@ itself. Both versions. Paths: `docs/`, `experiments/`, `field/`, `replay/`, `sin
 | next/ | The new version of fabrika, built on the five layers and on the notes in `docs/direction/`, never on today's code. Not on main yet ([PR 223](https://github.com/usirin/tea-fabrika/pull/223)). The words in this file are its words. [Clean slate](../docs/direction/clean-slate.md) | Not today's version. A name that exists in both may mean different things: check the path. |
 | owner | The person who sets direction, approves plans and is the only one who changes the exam. [Nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md) | Not "the user" in a note about who decides. |
 | quota | (decided Nov 7) A provider's usage limit on a subscription, such as Claude's five-hour and seven-day windows, as the run last read it: `id`, `used` (0 to 100), `minutes`, `until`. Google Cloud's word. [The meter on subscriptions](../docs/direction/one-ask-and-one-meter.md#the-meter-on-subscriptions) | Not the meter's own `Limits` (Ledger), which fabrika sets. Not a window (Frame). |
-| tier | One whole slice of `next/` a person can use, built in order. Tier 1 is the first. [The tiers](../docs/plan/tiers.md) | Not a priority level: fabrika has no priority. |
+| tier | One whole slice of `next/` a person can use, built in order. Tier 1 is the first. [The tiers](../docs/plan/tiers.md) | Not a priority level: fabrika has no priority. Not a risk tier (Pipeline). |
 | today's version | Everything outside `next/` (`packages/`, `programs/`, `packs/`, `apps/`, `wip`, `legacy`): the fabrika in daily use until `next/` takes each job over. Where its words differ, the last section says so. [Clean slate](../docs/direction/clean-slate.md) | Not `@kampus/fabrika`, which is the new app. |
 
 ## Tracker
@@ -141,6 +141,7 @@ today's for now: `packages/pipeline`, `programs/pipeline`.
 | resume point | `Resume` (`packages/pipeline/src/stages/pipeline/machine.ts`): where a stopped lane goes on, `{_tag: "start", step}` or `{_tag: "ask", for, step}`. `start` reads with the `started` fact: `{_tag: "start", step: "mutation"}` (decided Nov 3). A restart keeps finished steps and never starts over. | Not `_tag: "run"`, which today's code still says until the rename lands (last section). |
 | RetriesExhausted | (decided Nov 9) The typed error when a named `Schedule` runs out of tries. It keeps what was retried, the tries and the last error; the step answers `stuck` with `reason: "retries_exhausted"`. [0030](../.decisions/0030-copy-clankas-shapes-where-better.md) | Not a door binding's `retryable`. |
 | review | One review of the whole diff, by a different agent from the builder. The reviewer only finds; code works out pass or fail. [Nobody grades their own work](../docs/direction/nobody-grades-their-own-work.md), one review a plan | Not an approval: no agent approves a pull request. |
+| risk tier | (decided Nov 10) A change's class, worked out from what the change touches and never from who or what wrote it, that decides how many people must look at it: none, one or more. An agent's look never counts toward it. How many there are, their names, what sets one and the counts are open. Industry: a risk tier, as in risk-based review. In the product, `next/`. [0071](../.decisions/0071-risk-tier-decides-who-looks.md) | Not a plan tier (Records): always write "risk tier" in full. Not a priority: fabrika has no priority. Not a finding's rating. |
 | run (pipeline) | An agent run a step starts, as in Records. Only a noun here: the resume point says `start` (decided Nov 3). | Not a process, a running program (Runtime). Not today's resume tag `run` (last section). |
 | ship | The merge: the ship code, the one merge authority. A person's comment goes to that person, a bot's back to the builder. [Ship stage rules](../docs/direction/ship-stage-rules.md) | Not a merge by hand, and never auto-merge. |
 | step | (decided Nov 3) One place in a lane, in this order: `triage`, `plan`, `exam`, `exam_review`, `exam_merge`, `test_writer`, `build`, `mutation`, `mutants`, `review`, `push`, `merge` (`STEPS`, `packages/pipeline/src/stages/pipeline/routes.ts`). Each step is its own machine, which answers in the five outcome verbs. [One parent, stages as slots](../docs/direction/one-parent-stages-as-slots.md) | Not "stage", the older word for the same thing. Today's code and notes keep it until renamed: `fact.stage`, the `stages/` folder, "a stage answers in five verbs" (last section). |
@@ -428,6 +429,9 @@ Each word that crosses a border, one line each:
   shell line. In a ledger note, say "a ledger line" when the shell is near.
 - **lane:** the pipeline's lane is a ticket's run; the clients' ephemeral lane is an at-most-once
   channel. Always write "ephemeral lane" in full; a bare "lane" is the pipeline's.
+- **tier:** the records' tier is one slice of the plan for `next/`; the pipeline's risk tier is a
+  change's class that decides how many people look at it. Always write "risk tier" in full; a bare
+  "tier" is the plan's.
 - **project:** the tracker's project is a parent plan; the ledger's project object is the Durable
   Object that holds a team's ledger; a tracker project's tickets are facts on that ledger. In the
   ledger context, say "project object".
