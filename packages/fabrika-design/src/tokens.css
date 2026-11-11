@@ -27,6 +27,7 @@
   /* The design's backgrounds. */
   --scrim: light-dark(#00000066, #00000099); /* light black a6; dark black a8 */
   --surface: light-dark(#fcfcfd, #111113); /* slate 1 */
+  --surface-card: light-dark(#f0f0f3, #212225); /* slate 3 */
   --surface-hover: light-dark(#0000330f, #ddeaf814); /* slate a3 */
   --surface-raised: light-dark(#fcfcfd, #18191b); /* light slate 1; dark slate 2 */
   --surface-selected: light-dark(#0009321f, #d9edfe25); /* slate a5 */
