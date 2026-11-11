@@ -89,7 +89,7 @@ export class ProgramLoader extends Context.Service<
             }
 
             const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
-              Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })),
+              Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
             );
             return {
               stepper: loaded,

@@ -807,7 +807,7 @@ export class ProgramRunner extends Context.Service<
           const decoded = decodeDispatched(saved.cmds);
 
           if (Result.isFailure(decoded)) {
-            return yield* new ProgramDown({ reason: "saved_state", cause: decoded.failure });
+            return yield* new ProgramDown({ reason: "saved_state", error: "ProgramDown", cause: decoded.failure });
           }
 
           const cmds = decoded.success;

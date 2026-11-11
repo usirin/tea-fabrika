@@ -17,8 +17,10 @@ const decodeRow = Schema.decodeUnknownResult(Row);
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });
+
 /** The same, keeping the failure that stopped it. */
-const downFrom = (cause: unknown): ProgramDown => new ProgramDown({ reason: "saved_state", cause });
+const downFrom = (cause: unknown): ProgramDown =>
+  new ProgramDown({ reason: "saved_state", error: "ProgramDown", cause });
 
 export class Saved extends Schema.Opaque<Saved>()(Row) {
   /**
