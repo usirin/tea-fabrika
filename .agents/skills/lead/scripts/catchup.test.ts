@@ -193,7 +193,7 @@ describe("catchup, today's tooling", () => {
   });
 
   // Plants: remove union; retain one side; deduplicate IDs. Plain conflicts must still abort.
-  it("T300 real git preserves both field logs and aborts other conflicts without a push", () => {
+  it("T300 real git preserves every field log and aborts other conflicts without a push", () => {
     fc.assert(
       fc.property(
         fc.array(
@@ -236,7 +236,7 @@ describe("catchup, today's tooling", () => {
               );
               const prefix = rows.map((r) => JSON.stringify({ ...r, side: "base" }));
               const tails = ["ours", "theirs"].map((side) => rows.map((r) => JSON.stringify({ ...r, side })));
-              const logs = ["runs", "notes"].map((name) => join(dir, `field/${name}.jsonl`));
+              const logs = ["runs", "notes", "findings"].map((name) => join(dir, `field/${name}.jsonl`));
 
               for (const log of logs) {
                 writeFileSync(log, `${prefix.join("\n")}\n`);
