@@ -7,7 +7,7 @@ import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Attached } from "../transport/Wire.ts";
-import { GatewayService, gatewayRuntime } from "./connection.ts";
+import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";
 import { recordRead } from "./record.ts";
 import { ProcessService, processDescriptor, processRuntime, type Env } from "./runtime.ts";
@@ -117,7 +117,7 @@ const world = () => {
       }),
     },
     RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    HEALTH: {},
+    MEASUREMENTS: {},
   } as unknown as Env;
   return {
     ctx,
@@ -139,7 +139,7 @@ const world = () => {
 };
 
 for (const source of ["attachment", "tags", "name"] as const) {
-  it(`Gateway startup returns a typed error for malformed saved ${source}`, async () => {
+  it(`Connection startup returns a typed error for malformed saved ${source}`, async () => {
     const schema = {
       attachment: Attached,
       tags: Schema.Tuple([Schema.String, Schema.String, Schema.String]),
@@ -149,10 +149,10 @@ for (const source of ["attachment", "tags", "name"] as const) {
       fc.asyncProperty(malformed(schema), async (raw) => {
         const w = world();
         ({ attachment: w.attached, tags: w.tags, name: w.name })[source](raw);
-        const runtime = gatewayRuntime(w.ctx, w.env, config);
+        const runtime = connectionRuntime(w.ctx, w.env, config);
 
         try {
-          typed(await runtime.runPromiseExit(GatewayService));
+          typed(await runtime.runPromiseExit(ConnectionService));
         } finally {
           await runtime.dispose();
           w.db.close();
@@ -164,14 +164,14 @@ for (const source of ["attachment", "tags", "name"] as const) {
 }
 
 for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
-  it(`Gateway ${method} returns a typed error for a damaged attachment after startup`, async () => {
+  it(`Connection ${method} returns a typed error for a damaged attachment after startup`, async () => {
     await fc.assert(
       fc.asyncProperty(malformed(Attached), async (raw) => {
         const w = world(),
-          runtime = gatewayRuntime(w.ctx, w.env, config);
+          runtime = connectionRuntime(w.ctx, w.env, config);
 
         try {
-          const gateway = await runtime.runPromise(GatewayService);
+          const gateway = await runtime.runPromise(ConnectionService);
           w.attached(raw);
           const work = () =>
             ({
@@ -192,11 +192,11 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
   });
 }
 
-it("Gateway ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
+it("Connection ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        runtime = gatewayRuntime(w.ctx, w.env, config);
+        runtime = connectionRuntime(w.ctx, w.env, config);
       const original = Effect.result;
       const attempts: Array<Exit.Exit<unknown, unknown>> = [];
       const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
@@ -212,7 +212,7 @@ it("Gateway ready RPC decoding fails in the typed channel before the wait refusa
       );
 
       try {
-        const gateway = await runtime.runPromise(GatewayService);
+        const gateway = await runtime.runPromise(ConnectionService);
         w.route.mockResolvedValue({ _tag: "ok", result: raw });
         await runtime.runPromise(
           gateway
@@ -401,14 +401,14 @@ it("processDescriptor checks the saved value before returning it to a caller", a
   );
 });
 
-it("Gateway close checks saved tags again after startup", async () => {
+it("Connection close checks saved tags again after startup", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.String), async (raw) => {
       const w = world(),
-        runtime = gatewayRuntime(w.ctx, w.env, config);
+        runtime = connectionRuntime(w.ctx, w.env, config);
 
       try {
-        const gateway = await runtime.runPromise(GatewayService);
+        const gateway = await runtime.runPromise(ConnectionService);
         w.tags([raw, "tab", "key"]);
         typed(await runtime.runPromiseExit(gateway.close(w.socket)));
       } finally {
@@ -420,7 +420,7 @@ it("Gateway close checks saved tags again after startup", async () => {
   );
 });
 
-it("Gateway rejects missing or malformed URL segments with a typed error", async () => {
+it("Connection rejects missing or malformed URL segments with a typed error", async () => {
   const invalid = fc.oneof(
     fc.constantFrom("/ws", "/ws/key", "/ws/%/tab", "/ws/key/%"),
     fc.string().map((text) => `/ws/${encodeURIComponent(text)}%/tab`),
@@ -428,7 +428,7 @@ it("Gateway rejects missing or malformed URL segments with a typed error", async
   await fc.assert(
     fc.asyncProperty(invalid, async (path) => {
       const w = world(),
-        runtime = gatewayRuntime(w.ctx, w.env, config);
+        runtime = connectionRuntime(w.ctx, w.env, config);
       vi.stubGlobal(
         "WebSocketPair",
         class {
@@ -438,7 +438,7 @@ it("Gateway rejects missing or malformed URL segments with a typed error", async
       );
 
       try {
-        const gateway = await runtime.runPromise(GatewayService);
+        const gateway = await runtime.runPromise(ConnectionService);
         typed(
           await runtime.runPromiseExit(
             gateway.fetch(new Request(`http://local${path}`, { headers: { upgrade: "websocket" } })),

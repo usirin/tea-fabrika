@@ -24,10 +24,10 @@ import { A, brain, first as firstStart, ids } from "../processes/Process.test-su
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { foldMembers, MemberEvent } from "./Access.ts";
+import { foldAccess, MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 
-const READER = "gateway:t1";
+const READER = "connection:t1";
 const PARENT = `in-${A}-41`;
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TO = "ledger:home";
@@ -404,7 +404,7 @@ describe("p97, member spans", () => {
           return expect.unreachable();
         }
 
-        const events = yield* Stream.runCollect((yield* Ledger).read("door/members", 0));
+        const events = yield* Stream.runCollect((yield* Ledger).read("gateway/access", 0));
         expect(tagged(read, "events")).toBe(events.length);
         expect(typeof tagged(read, "keys")).toBe("number");
         expect(typeof tagged(read, "live")).toBe("number");
@@ -704,7 +704,7 @@ describe("p97, the tags hold the right names and numbers", () => {
     [MemberEvent.cases.founded, MemberEvent.cases.founded],
     ([first, input]) => {
       const second = { ...input, id: `${first.id}${input.id}-second` };
-      expect(foldMembers([first, second])).toEqual(foldMembers([first]));
+      expect(foldAccess([first, second])).toEqual(foldAccess([first]));
     },
     { arbitrary: { seed: 119120, runs: 100 } },
   );

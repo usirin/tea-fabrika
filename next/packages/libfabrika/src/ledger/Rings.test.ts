@@ -84,8 +84,8 @@ const line = (over: Partial<Line> = {}): Line => ({
 
 const placed = (rev: number, pos: number) => ({ _tag: "placed", rev, pos });
 const parked = { _tag: "parked" };
-const T1 = "gateway:t1";
-const T2 = "gateway:t2";
+const T1 = "connection:t1";
+const T2 = "connection:t2";
 
 const byWaiter = (rungs: ReadonlyArray<Rung>) =>
   [...rungs].sort((x, y) => `${x.to} ${x.stream}`.localeCompare(`${y.to} ${y.stream}`));

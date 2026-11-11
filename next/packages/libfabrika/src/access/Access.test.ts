@@ -3,8 +3,8 @@
 // the limits. Written before the module (Tier 1, P9, ticket 236).
 //
 // The shape these tests hold the module to, from the plan's "The shape" and flags 5 and 7:
-// - `foldMembers(events)` folds `founded`, `granted`, `denied`, `revoked` and `added` in order into
-//   `Members`: `person` and `name` from the first `founded`, `keys` as key -> {rank, live, under},
+// - `foldAccess(events)` folds `founded`, `granted`, `denied`, `revoked` and `added` in order into
+//   `Access`: `person` and `name` from the first `founded`, `keys` as key -> {rank, live, under},
 //   and `spent`, the recovery keys that signed once.
 // - `founded`: each of `keys` a `person` root, `window` under `keys[0]`. A second `founded` changes
 //   nothing.
@@ -22,7 +22,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { admitted, allows, EMPTY, foldMembers, type MemberEvent, type Members, Saw, Took } from "./Access.ts";
+import { admitted, allows, EMPTY, foldAccess, type MemberEvent, type Access, Saw, Took } from "./Access.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 300;
@@ -145,8 +145,8 @@ const denied = (key: string, by: string): MemberEvent => ({
   by,
 });
 
-/** Members as plain data, so two folds compare whatever order their maps were filled in. */
-const view = (m: Members) => ({
+/** Access as plain data, so two folds compare whatever order their maps were filled in. */
+const view = (m: Access) => ({
   person: m.person,
   name: m.name,
   keys: [...m.keys.entries()]
@@ -155,20 +155,20 @@ const view = (m: Members) => ({
   spent: [...m.spent].sort(),
 });
 
-const isIn = (m: Members, key: string): boolean => "as" in admitted(m, key);
+const isIn = (m: Access, key: string): boolean => "as" in admitted(m, key);
 
-const liveWith = (m: Members, rank: string): ReadonlyArray<string> =>
+const liveWith = (m: Access, rank: string): ReadonlyArray<string> =>
   [...m.keys.entries()]
     .filter(([key, k]) => k.rank === rank && k.live && !m.spent.has(key))
     .map(([key]) => key)
     .sort();
 
 /** Recovery keys that are live and not spent: the sheets that still work. */
-const liveSheets = (m: Members) => liveWith(m, "recovery");
-const livePersons = (m: Members) => liveWith(m, "person");
+const liveSheets = (m: Access) => liveWith(m, "recovery");
+const livePersons = (m: Access) => liveWith(m, "person");
 
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
-const chainLive = (m: Members, key: string): boolean => {
+const chainLive = (m: Access, key: string): boolean => {
   let at = m.keys.get(key)?.under ?? null;
 
   for (let step = 0; at !== null; step++) {
@@ -289,7 +289,7 @@ const twoDevices = fc
   .tuple(fc.constantFrom(["pA", "pB"], ["pA", "pB", "pC"]), fc.array(laterEvent, { maxLength: 20 }))
   .map(([keys, rest]) => [founded(keys, "wA"), ...rest.map((make) => make())]);
 
-const prefixes = (events: ReadonlyArray<MemberEvent>) => events.map((_, i) => foldMembers(events.slice(0, i + 1)));
+const prefixes = (events: ReadonlyArray<MemberEvent>) => events.map((_, i) => foldAccess(events.slice(0, i + 1)));
 
 // Distinct from the fixed roots and windows used around each generated subject.
 const leafKey = fc
@@ -343,7 +343,7 @@ describe("p28, recorded choices and founding limits", () => {
           { nil: null },
         ),
         (keys, window) => {
-          const members = foldMembers([founded(keys, window)]);
+          const members = foldAccess([founded(keys, window)]);
           expect([...members.keys.keys()]).toEqual(window !== null && keys.length > 0 ? [...keys, window] : keys);
 
           if (window !== null && keys.length > 0) {
@@ -386,7 +386,7 @@ describe("p28, the traced history from the plan", () => {
           addedSheet("pB", "r1"),
           granted("pA", "g1", { as: "agent" }),
         ];
-        const before = foldMembers(events);
+        const before = foldAccess(events);
         expect(before.person).toBe(P);
         expect(before.name).toBe(NAME);
         expect(livePersons(before)).toEqual(["pA", "pB"]);
@@ -400,10 +400,10 @@ describe("p28, the traced history from the plan", () => {
 
         // A window key and an agent's key sign nothing that counts.
         const tried = [...events, granted("wB", "t3"), revoked("g1", "pB")];
-        expect(view(foldMembers(tried))).toEqual(view(before));
+        expect(view(foldAccess(tried))).toEqual(view(before));
 
         const lost = addedDevice("r1", "pC", "wC", { drops: ["pA", "wA"], old: "lost" });
-        const after = foldMembers([...tried, lost]);
+        const after = foldAccess([...tried, lost]);
 
         for (const out of ["pA", "wA", tab, "g1"]) {
           expect(isIn(after, out), out).toBe(false);
@@ -420,7 +420,7 @@ describe("p28, the traced history from the plan", () => {
         expect(after.name).toBe(NAME);
 
         // The same sheet typed on Mac X: spent at the step before, so nothing.
-        const stolen = foldMembers([...tried, lost, addedDevice("r1", "pX", "wX", { old: "lost" })]);
+        const stolen = foldAccess([...tried, lost, addedDevice("r1", "pX", "wX", { old: "lost" })]);
         expect(view(stolen)).toEqual(view(after));
         expect(admitted(after, "t2")).toEqual({ key: "t2", person: P, as: "window" });
         expect(admitted(after, tab)).toEqual({ reason: "not_granted" });
@@ -435,7 +435,7 @@ describe("p28, founding", () => {
   it("each founding key is a person root, and the window hangs under the first one (flag 7)", () => {
     fc.assert(
       fc.property(fc.uniqueArray(fc.string(), { minLength: 3, maxLength: 12 }), ([one, two, window, ...rest]) => {
-        const m = foldMembers([founded([one!, two!, ...rest], window!)]);
+        const m = foldAccess([founded([one!, two!, ...rest], window!)]);
         expect(m.keys.get(one!)).toEqual({ rank: "person", live: true, under: null });
         expect(m.keys.get(two!)).toEqual({ rank: "person", live: true, under: null });
 
@@ -455,7 +455,7 @@ describe("p28, founding", () => {
       fc.property(
         fc.string().filter((key) => key !== "pA"),
         (window) => {
-          expect(admitted(foldMembers([founded(["pA"], window)]), window)).toEqual({
+          expect(admitted(foldAccess([founded(["pA"], window)]), window)).toEqual({
             key: window,
             person: P,
             as: "window",
@@ -469,7 +469,7 @@ describe("p28, founding", () => {
   it("a founding with no window admits nobody", () => {
     fc.assert(
       fc.property(fc.uniqueArray(fc.string()), (keys) => {
-        const m = foldMembers([founded(keys, null)]);
+        const m = foldAccess([founded(keys, null)]);
         expect([...ALL, ...keys].filter((key) => isIn(m, key))).toEqual([]);
       }),
       opts(["pA"]),
@@ -489,8 +489,8 @@ describe("p28, founding", () => {
         fc.string().filter((key) => !["pA", "wA", "t1"].includes(key)),
         (window) => {
           const later = { ...second, window };
-          const once = foldMembers([founded(), granted("pA", "t1")]);
-          const twice = foldMembers([founded(), later, granted("pA", "t1"), later]);
+          const once = foldAccess([founded(), granted("pA", "t1")]);
+          const twice = foldAccess([founded(), later, granted("pA", "t1"), later]);
           expect(view(twice)).toEqual(view(once));
           expect(isIn(twice, window)).toBe(false);
         },
@@ -501,8 +501,8 @@ describe("p28, founding", () => {
       fc.property(history, fc.nat(), (events, at) => {
         const i = 1 + (at % events.length);
         const withSecond = [...events.slice(0, i), second, ...events.slice(i)];
-        expect(view(foldMembers(withSecond))).toEqual(view(foldMembers(events)));
-        expect(foldMembers(withSecond).person).toBe(P);
+        expect(view(foldAccess(withSecond))).toEqual(view(foldAccess(events)));
+        expect(foldAccess(withSecond).person).toBe(P);
       }),
       { seed: SEED, numRuns: RUNS },
     );
@@ -513,7 +513,7 @@ describe("p28, grants", () => {
   it("a good thing happens: a grant by a live person key admits that key, as what it says", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
-        const m = foldMembers([founded(), granted("pA", key), granted("pA", "g1", { as: "agent" })]);
+        const m = foldAccess([founded(), granted("pA", key), granted("pA", "g1", { as: "agent" })]);
         expect(admitted(m, key)).toEqual({ key, person: P, as: "window" });
         expect(admitted(m, "g1")).toEqual({ key: "g1", person: P, as: "agent" });
       }),
@@ -522,7 +522,7 @@ describe("p28, grants", () => {
     let ran = 0;
     fc.assert(
       fc.property(history, fc.nat(), (events, pick) => {
-        const before = foldMembers(events);
+        const before = foldAccess(events);
         const signers = livePersons(before);
         const by = signers[pick % Math.max(1, signers.length)];
 
@@ -532,7 +532,7 @@ describe("p28, grants", () => {
 
         ran++;
         const as = pick % 2 === 0 ? "window" : "agent";
-        const after = foldMembers([...events, granted(by, FRESH_LEAF, { as })]);
+        const after = foldAccess([...events, granted(by, FRESH_LEAF, { as })]);
         expect(admitted(after, FRESH_LEAF)).toEqual({ key: FRESH_LEAF, person: P, as });
         expect(after.keys.get(FRESH_LEAF)?.under).toBe(by);
       }),
@@ -545,9 +545,9 @@ describe("p28, grants", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const base = [founded(), granted("pA", "t1")];
-        const m = foldMembers(base);
-        expect(view(foldMembers([...base, granted("pA", key, { for: OTHER })]))).toEqual(view(m));
-        expect(view(foldMembers([...base, granted(STRANGER, key)]))).toEqual(view(m));
+        const m = foldAccess(base);
+        expect(view(foldAccess([...base, granted("pA", key, { for: OTHER })]))).toEqual(view(m));
+        expect(view(foldAccess([...base, granted(STRANGER, key)]))).toEqual(view(m));
       }),
       opts("t2"),
     );
@@ -564,17 +564,17 @@ describe("p28, grants", () => {
             granted("pA", "g1", { as: "agent" }),
             addedSheet("pA", "r1"),
           ];
-          const m = foldMembers(base);
+          const m = foldAccess(base);
 
           for (const by of ["wA", "t1", "g1", "r1"]) {
-            expect(view(foldMembers([...base, granted(by, key)])), `${by} grants`).toEqual(view(m));
-            expect(view(foldMembers([...base, revoked(by, "pB")])), `${by} revokes`).toEqual(view(m));
+            expect(view(foldAccess([...base, granted(by, key)])), `${by} grants`).toEqual(view(m));
+            expect(view(foldAccess([...base, revoked(by, "pB")])), `${by} revokes`).toEqual(view(m));
           }
 
           for (const by of ["wA", "t1", "g1"]) {
             const adds = addedDevice(by, "pY", "wY");
-            expect(view(foldMembers([...base, adds])), `${by} adds a device`).toEqual(view(m));
-            expect(view(foldMembers([...base, addedSheet(by, "r2")])), `${by} makes a sheet`).toEqual(view(m));
+            expect(view(foldAccess([...base, adds])), `${by} adds a device`).toEqual(view(m));
+            expect(view(foldAccess([...base, addedSheet(by, "r2")])), `${by} makes a sheet`).toEqual(view(m));
           }
         },
       ),
@@ -583,7 +583,7 @@ describe("p28, grants", () => {
     let ran = 0;
     fc.assert(
       fc.property(history, (events) => {
-        const m = foldMembers(events);
+        const m = foldAccess(events);
         const weak = [...m.keys.entries()]
           .filter(([key, k]) => k.rank !== "person" || m.spent.has(key))
           .map(([key]) => key);
@@ -591,8 +591,8 @@ describe("p28, grants", () => {
 
         for (const by of weak) {
           ran++;
-          expect(view(foldMembers([...events, granted(by, FRESH_LEAF)])), by).toEqual(view(m));
-          expect(view(foldMembers([...events, revoked(by, target)])), by).toEqual(view(m));
+          expect(view(foldAccess([...events, granted(by, FRESH_LEAF)])), by).toEqual(view(m));
+          expect(view(foldAccess([...events, revoked(by, target)])), by).toEqual(view(m));
         }
       }),
       { seed: SEED, numRuns: RUNS },
@@ -605,7 +605,7 @@ describe("p28, a removed key stays out", () => {
   it("plant, last event wins for revoke: a revoked key is never let in again", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
-        const m = foldMembers([
+        const m = foldAccess([
           founded(["pA", "pB"], "wA"),
           granted("pA", key),
           revoked("pB", key),
@@ -624,7 +624,7 @@ describe("p28, a removed key stays out", () => {
       fc.property(
         fc.string().filter((key) => key !== "pB" && key !== "wA"),
         (root) => {
-          const m = foldMembers([
+          const m = foldAccess([
             founded([root, "pB"], "wA"),
             revoked("pB", root),
             addedDevice("pB", root, "wA"),
@@ -645,8 +645,8 @@ describe("p28, a removed key stays out", () => {
         fc.string().filter((key) => key !== "pB" && key !== "wA"),
         (root) => {
           const base = [founded([root, "pB"], "wA")];
-          const m = foldMembers([...base, revoked(root, root)]);
-          expect(view(m)).toEqual(view(foldMembers(base)));
+          const m = foldAccess([...base, revoked(root, root)]);
+          expect(view(m)).toEqual(view(foldAccess(base)));
         },
       ),
       opts("pA"),
@@ -657,7 +657,7 @@ describe("p28, a removed key stays out", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const base = [founded(["pA", "pB"], "wA"), granted("pA", key)];
-        expect(view(foldMembers([...base, revoked("pB", key, { for: OTHER })]))).toEqual(view(foldMembers(base)));
+        expect(view(foldAccess([...base, revoked("pB", key, { for: OTHER })]))).toEqual(view(foldAccess(base)));
       }),
       opts("t1"),
     );
@@ -702,7 +702,7 @@ describe("p28, the grant tree", () => {
   it("plant, a dropped device whose tabs stay: its window, tabs and agents all go with it", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
-        const m = foldMembers([
+        const m = foldAccess([
           founded(["pA", "pB"], "wA"),
           granted("pA", key),
           granted("pA", "g1", { as: "agent" }),
@@ -740,7 +740,7 @@ describe("p28, the grant tree", () => {
   it("over any list: person and recovery keys never dial, and a device never hangs under another", () => {
     fc.assert(
       fc.property(history, (events) => {
-        const m = foldMembers(events);
+        const m = foldAccess(events);
 
         for (const [key, k] of m.keys) {
           if (k.rank !== "person" && k.rank !== "recovery") {
@@ -764,7 +764,7 @@ describe("p28, devices are equal roots", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const base = [founded(["pA"], "wA"), addedDevice("pA", "pB", "wB"), granted("pB", key)];
-        const m = foldMembers([...base, revoked("pB", "pA")]);
+        const m = foldAccess([...base, revoked("pB", "pA")]);
         expect(livePersons(m)).toEqual(["pB"]);
         expect(isIn(m, "wB")).toBe(true);
         expect(isIn(m, key)).toBe(true);
@@ -779,7 +779,7 @@ describe("p28, devices are equal roots", () => {
         const base = [founded(["pA", "pB"], "wA"), addedSheet("pA", key)];
 
         for (const drop of [revoked("pB", "pA"), addedDevice("pB", "pY", "wY", { drops: ["pA"] })]) {
-          const m = foldMembers([...base, drop]);
+          const m = foldAccess([...base, drop]);
           expect(liveSheets(m)).toEqual([key]);
           expect([...m.spent]).toEqual([]);
         }
@@ -792,7 +792,7 @@ describe("p28, devices are equal roots", () => {
     let ran = 0;
     fc.assert(
       fc.property(twoDevices, fc.nat(), fc.boolean(), (events, pick, byAdd) => {
-        const before = foldMembers(events);
+        const before = foldAccess(events);
         const devices = livePersons(before);
 
         if (devices.length < 2) {
@@ -804,7 +804,7 @@ describe("p28, devices are equal roots", () => {
         const gone = devices.find((key) => key !== by) ?? "pB";
         const [key, window] = FRESH_DEVICES[0];
         const drop = byAdd ? addedDevice(by, key, window, { drops: [gone] }) : revoked(by, gone);
-        const after = foldMembers([...events, drop]);
+        const after = foldAccess([...events, drop]);
         expect(after.keys.get(gone)?.live).toBe(false);
         const others = devices.filter((d) => d !== gone);
         expect(livePersons(after).filter((d) => others.includes(d))).toEqual(others);
@@ -820,7 +820,7 @@ describe("p28, devices are equal roots", () => {
     let ran = 0;
     fc.assert(
       fc.property(twoDevices, fc.nat(), fc.boolean(), (events, pick, byAdd) => {
-        const m = foldMembers(events);
+        const m = foldAccess(events);
         const [one, two] = livePersons(m);
 
         if (one === undefined || two === undefined) {
@@ -838,8 +838,8 @@ describe("p28, devices are equal roots", () => {
         const [key, window] = FRESH_DEVICES[0];
         const by = (signer: string) =>
           byAdd ? addedDevice(signer, key, window, { drops: [target] }) : revoked(signer, target);
-        const viaOne = foldMembers([...events, by(one)]);
-        const viaTwo = foldMembers([...events, by(two)]);
+        const viaOne = foldAccess([...events, by(one)]);
+        const viaTwo = foldAccess([...events, by(two)]);
         expect(view(viaOne)).toEqual(view(viaTwo));
         expect(viaOne.keys.get(target)?.live).toBe(false);
         expect(isIn(viaOne, window)).toBe(byAdd);
@@ -855,11 +855,11 @@ describe("p28, the sheet", () => {
     fc.assert(
       fc.property(sheetKey, (key) => {
         const base = [founded(["pA", "pB"], "wA"), addedSheet("pA", key)];
-        const m = foldMembers([...base, addedSheet("pB", "r2")]);
+        const m = foldAccess([...base, addedSheet("pB", "r2")]);
         expect(liveSheets(m)).toEqual(["r2"]);
         expect(livePersons(m)).toEqual(["pA", "pB"]);
         // The old sheet cannot sign any more.
-        const used = foldMembers([...base, addedSheet("pB", "r2"), addedDevice(key, "pY", "wY", { old: "lost" })]);
+        const used = foldAccess([...base, addedSheet("pB", "r2"), addedDevice(key, "pY", "wY", { old: "lost" })]);
         expect(isIn(used, "wY")).toBe(false);
       }),
       opts("r1"),
@@ -870,11 +870,11 @@ describe("p28, the sheet", () => {
     fc.assert(
       fc.property(sheetKey, (key) => {
         const base = [founded(["pA"], "wA"), addedSheet("pA", key)];
-        const once = foldMembers([...base, addedDevice(key, "pY", "wY", { old: "lost", drops: ["pA"] })]);
+        const once = foldAccess([...base, addedDevice(key, "pY", "wY", { old: "lost", drops: ["pA"] })]);
         expect(isIn(once, "wY")).toBe(true);
         expect(livePersons(once)).toEqual(["pY"]);
         expect([...once.spent]).toEqual([key]);
-        const twice = foldMembers([
+        const twice = foldAccess([
           ...base,
           addedDevice(key, "pY", "wY", { old: "lost", drops: ["pA"] }),
           addedDevice(key, "pZ", "wZ", { old: "lost", drops: ["pY"] }),
@@ -889,9 +889,9 @@ describe("p28, the sheet", () => {
     fc.assert(
       fc.property(sheetKey, (key) => {
         const base = [founded(["pA"], "wA"), addedSheet("pA", key)];
-        const m = foldMembers(base);
-        expect(view(foldMembers([...base, granted(key, "t1")]))).toEqual(view(m));
-        expect(view(foldMembers([...base, addedSheet(key, "r2")]))).toEqual(view(m));
+        const m = foldAccess(base);
+        expect(view(foldAccess([...base, granted(key, "t1")]))).toEqual(view(m));
+        expect(view(foldAccess([...base, addedSheet(key, "r2")]))).toEqual(view(m));
       }),
       opts("r1"),
     );
@@ -912,7 +912,7 @@ describe("p28, the sheet", () => {
     let ran = 0;
     fc.assert(
       fc.property(history, fc.nat(), (events, pick) => {
-        const m = foldMembers(events);
+        const m = foldAccess(events);
         const devices = livePersons(m);
         const by = devices[pick % Math.max(1, devices.length)];
 
@@ -921,7 +921,7 @@ describe("p28, the sheet", () => {
         }
 
         ran++;
-        const after = foldMembers([...events, addedSheet(by, "r9")]);
+        const after = foldAccess([...events, addedSheet(by, "r9")]);
         expect(liveSheets(after)).toEqual(["r9"]);
         expect(livePersons(after)).toEqual(devices);
       }),
@@ -934,7 +934,7 @@ describe("p28, the sheet", () => {
     let ran = 0;
     fc.assert(
       fc.property(history, fc.uniqueArray(anyKey, { maxLength: 3 }), (events, dropped) => {
-        const m = foldMembers(events);
+        const m = foldAccess(events);
         const [sheet] = liveSheets(m);
 
         if (sheet === undefined) {
@@ -944,7 +944,7 @@ describe("p28, the sheet", () => {
         ran++;
         const [[key, window], [key2, window2]] = FRESH_DEVICES;
         const used = [...events, addedDevice(sheet, key, window, { old: "lost", drops: dropped })];
-        const after = foldMembers(used);
+        const after = foldAccess(used);
         expect(admitted(after, window)).toEqual({ key: window, person: P, as: "window" });
         expect(after.keys.get(key)).toEqual({ rank: "person", live: true, under: null });
         expect(after.spent.has(sheet)).toBe(true);
@@ -956,7 +956,7 @@ describe("p28, the sheet", () => {
           expect(isIn(after, gone), gone).toBe(false);
         }
 
-        const again = foldMembers([...used, addedDevice(sheet, key2, window2, { old: "lost" })]);
+        const again = foldAccess([...used, addedDevice(sheet, key2, window2, { old: "lost" })]);
         expect(view(again)).toEqual(view(after));
       }),
       { seed: SEED, numRuns: RUNS },
@@ -969,7 +969,7 @@ describe("p28, what changes nothing", () => {
   it("plant, denied blocks a later grant: a denied key is let in by a later grant", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
-        const m = foldMembers([founded(), denied(key, "pA"), granted("pA", key)]);
+        const m = foldAccess([founded(), denied(key, "pA"), granted("pA", key)]);
         expect(admitted(m, key)).toEqual({ key, person: P, as: "window" });
       }),
       opts("t1"),
@@ -981,7 +981,7 @@ describe("p28, what changes nothing", () => {
       fc.property(history, fc.nat(), anyKey, signer, (events, at, key, by) => {
         const i = 1 + (at % events.length);
         const withDenied = [...events.slice(0, i), denied(key, by), ...events.slice(i)];
-        expect(view(foldMembers(withDenied))).toEqual(view(foldMembers(events)));
+        expect(view(foldAccess(withDenied))).toEqual(view(foldAccess(events)));
       }),
       { seed: SEED, numRuns: RUNS },
     );
@@ -993,7 +993,7 @@ describe("p28, what changes nothing", () => {
         const i = at % events.length;
         const again = events[i] ?? founded();
         const twice = [...events.slice(0, i + 1), again, ...events.slice(i + 1)];
-        expect(view(foldMembers(twice))).toEqual(view(foldMembers(events)));
+        expect(view(foldAccess(twice))).toEqual(view(foldAccess(events)));
       }),
       { seed: SEED, numRuns: RUNS },
     );
@@ -1003,7 +1003,7 @@ describe("p28, what changes nothing", () => {
     fc.assert(
       fc.property(history, (events) => {
         const copy = structuredClone(events);
-        expect(view(foldMembers(events))).toEqual(view(foldMembers(events)));
+        expect(view(foldAccess(events))).toEqual(view(foldAccess(events)));
         expect(events).toEqual(copy);
       }),
       { seed: SEED, numRuns: 100 },
@@ -1020,7 +1020,7 @@ describe("p28, the rule's answer for a key that is out", () => {
         const folded = events.reduce((at, event) => Result.getOrElse(allows(at, event), () => at), EMPTY);
         const again = allows(folded, granted("pA", key));
         expect(Result.isFailure(again) && again.failure).toBe("revoked");
-        expect(isIn(foldMembers([...events, granted("pA", key)]), key)).toBe(false);
+        expect(isIn(foldAccess([...events, granted("pA", key)]), key)).toBe(false);
       }),
       opts("t1"),
     );
@@ -1049,7 +1049,7 @@ describe("p28, a device never drops itself", () => {
       fc.property(
         fc.string().filter((key) => !["pA", "wA", "pB"].includes(key)),
         (window) => {
-          const m = foldMembers([founded(["pA"], "wA"), addedDevice("pA", "pB", window, { drops: ["pA", "wA"] })]);
+          const m = foldAccess([founded(["pA"], "wA"), addedDevice("pA", "pB", window, { drops: ["pA", "wA"] })]);
           expect(livePersons(m)).toEqual(["pA", "pB"]);
           expect(isIn(m, window)).toBe(true);
           // The signer's own key is skipped; the rest of drops still stops.

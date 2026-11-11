@@ -1,5 +1,5 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
-// Raw process failure text may be content. It must never become tags or health data.
+// Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
@@ -222,9 +222,12 @@ describe("p97, process calls", () => {
           yield* TestClock.setTime(now + lag);
           expect(yield* receive(W).pipe(Effect.provide(manager(store, processCaller(W))))).toHaveLength(1);
           yield* SpanSink.use((sink) => sink.flush);
-          const health = world.sink.db().prepare("SELECT * FROM health WHERE piece='process.receive'").all();
-          expect(health).toHaveLength(1);
-          expect(health[0]?.["lag"]).toBe(lag);
+          const measurements = world.sink
+            .db()
+            .prepare("SELECT * FROM measurements WHERE piece='process.receive'")
+            .all();
+          expect(measurements).toHaveLength(1);
+          expect(measurements[0]?.["lag"]).toBe(lag);
         }).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
       },
     ),
@@ -232,7 +235,7 @@ describe("p97, process calls", () => {
   );
 });
 
-describe("p99, process content stays out of span tags and health", () => {
+describe("p99, process content stays out of span tags and measurements", () => {
   it.effect.prop(
     "plant, tag mail or stringify a failure: message and Redacted values never leak",
     [
@@ -266,10 +269,10 @@ describe("p99, process content stays out of span tags and health", () => {
         expect(rows.some((row) => row.name === "process.receive")).toBe(true);
         expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
-        const health = JSON.stringify(world.sink.db().prepare("SELECT * FROM health").all());
+        const measurements = JSON.stringify(world.sink.db().prepare("SELECT * FROM measurements").all());
 
         for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]) {
-          expect(health).not.toContain(mark);
+          expect(measurements).not.toContain(mark);
         }
       }).pipe(Effect.provide(world.layer));
     }),

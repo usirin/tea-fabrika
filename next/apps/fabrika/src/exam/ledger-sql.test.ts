@@ -17,7 +17,7 @@ describe("ledger SQL stays behind its service", () => {
           const word = upper ? table.toUpperCase() : table;
           const queries = [
             `SELECT * FROM${space}${word} AS e`,
-            `SELECT e.* FROM stage_clients c JOIN${space}"${word}" e ON 1=1`,
+            `SELECT e.* FROM dev_clients c JOIN${space}"${word}" e ON 1=1`,
             `SELECT * FROM${space}main.[${word}]`,
             `DELETE FROM${space}\`${word}\``,
             `INSERT INTO${space}${word} VALUES (?)`,
@@ -32,8 +32,7 @@ describe("ledger SQL stays behind its service", () => {
             "next/packages/libfabrika/src/cloudflare/runtime.test.ts": body,
             "next/packages/libfabrika/src/processes/Process.test-support.ts": body,
             "packages/today/runtime.ts": body,
-            "next/allowed.ts":
-              'sql.exec("SELECT * FROM stage_descriptors"); sql.exec("SELECT entries FROM directory");',
+            "next/allowed.ts": 'sql.exec("SELECT * FROM dev_descriptors"); sql.exec("SELECT entries FROM directory");',
           });
           expect(findings(CODE, FILE)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 

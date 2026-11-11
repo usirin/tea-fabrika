@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, FileSystem, Layer, Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { stageRecording } from "./dev-recording.ts";
+import { devRecording } from "./dev-recording.ts";
 
 for (const failed of [false, true]) {
   it(`recording creates its directory and database path through supplied FileSystem and Path: ${failed ? "refusal" : "success"}`, async () => {
@@ -48,7 +48,7 @@ for (const failed of [false, true]) {
 
         try {
           const exit = await Effect.runPromiseExit(
-            Effect.scoped(stageRecording(folder, "brain:test", () => Effect.succeed({ _tag: "written" }))).pipe(
+            Effect.scoped(devRecording(folder, "brain:test", () => Effect.succeed({ _tag: "written" }))).pipe(
               Effect.provide(platform),
               Effect.provide(NodeServices.layer),
             ),

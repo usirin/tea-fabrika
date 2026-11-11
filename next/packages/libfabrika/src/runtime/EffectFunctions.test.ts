@@ -623,7 +623,7 @@ describe("T285, caller context keep-laws", () => {
 });
 
 describe("T285, sink keep-law", () => {
-  it("generated flushes, record walks and health archives add no sink spans", async () => {
+  it("generated flushes, record walks and measurements archives add no sink spans", async () => {
     const sample = fc.record({
       name: text,
       value: fc.oneof(text, fc.integer(), fc.boolean()),
@@ -687,7 +687,7 @@ describe("T285, sink keep-law", () => {
                 }
 
                 expect((yield* sink.flush).sent).toBe(samples.length);
-                expect(d.db.prepare("SELECT count(*) AS n FROM health").get()?.n).toBe(samples.length);
+                expect(d.db.prepare("SELECT count(*) AS n FROM measurements").get()?.n).toBe(samples.length);
                 const original = yield* Stream.runCollect(records.read(chain));
                 expect(original.map((s) => s.name)).toEqual(samples.map((_, i) => `sample.${i}`));
 
@@ -709,7 +709,7 @@ describe("T285, sink keep-law", () => {
                   expect(row.links).toEqual([{ ...ctx, attributes: { "test.index": index } }]);
                 }
 
-                // Old health rows must really take the archive path, including hashing.
+                // Old measurements rows must really take the archive path, including hashing.
                 now += 20 * DAY;
                 yield* sink.summaries(0, now);
 

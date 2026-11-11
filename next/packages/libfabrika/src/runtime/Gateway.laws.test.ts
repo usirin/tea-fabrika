@@ -110,7 +110,7 @@ const setup = Effect.fnUntraced(function* (
 const request = (id: string | number, stream = "counter:1/inbox", after = 0) =>
   JSON.stringify({ jsonrpc: "2.0", id, method: "ledger.wait", params: { stream, after } });
 
-describe("P12 Gateway attachment laws", () => {
+describe("P12 Connection attachment laws", () => {
   // Cross each generated request with the schema's full finite reason domain, including
   // unreachable from the original law, so no fallback can hide a lost reason.
   law("a failed wait registration answers once and removes the saved request", ({ id }) =>

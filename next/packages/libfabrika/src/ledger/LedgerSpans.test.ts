@@ -52,7 +52,7 @@ afterAll(() => {
   rmSync(folder, { recursive: true, force: true });
 });
 
-const READER = "gateway:t1";
+const READER = "connection:t1";
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** A doorbell whose delivery to `fails` fails, as a gateway that went away would. */
@@ -577,7 +577,7 @@ describe("p95, every call is one span, names and numbers only", () => {
   class BellBroke extends Error {
     override readonly name = "BellBroke";
   }
-  const DIES = "gateway:dies";
+  const DIES = "connection:dies";
   const dying = (how: "inside" | "outside", rang: Array<string>) =>
     Layer.succeed(Doorbell, {
       ring: (to) => {

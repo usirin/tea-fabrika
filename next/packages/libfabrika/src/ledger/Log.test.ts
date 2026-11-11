@@ -45,7 +45,7 @@ const data = {
 };
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const READER = "gateway:t1";
+const READER = "connection:t1";
 
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;

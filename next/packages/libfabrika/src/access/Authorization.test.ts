@@ -193,7 +193,9 @@ describe("P17a, appendAdmitted", () => {
                 const future = Schema.TaggedStruct("future.member", { n: Schema.Int });
 
                 for (let n = 0; n < history; n++) {
-                  yield* Ledger.use((l) => l.append("door/members", `future-${n}`, lineFor(from, future.make({ n }))));
+                  yield* Ledger.use((l) =>
+                    l.append("gateway/access", `future-${n}`, lineFor(from, future.make({ n }))),
+                  );
                 }
 
                 yield* remove(); // Same clock. Ledger order, not timestamp, ends permission.
@@ -223,7 +225,7 @@ describe("P17a, appendAdmitted", () => {
                       .filter((x) => x.turn === write.turn)
                       .map(({ op, stream, after, inside }) => ({ op, stream, after, inside })),
                   ).toEqual([
-                    { op: "read", stream: "door/members", after: 0, inside: true },
+                    { op: "read", stream: "gateway/access", after: 0, inside: true },
                     { op: "append", stream: "notes", after: undefined, inside: true },
                   ]);
                 }
@@ -318,11 +320,11 @@ describe("P17a, appendAdmitted", () => {
             await Effect.runPromise(boot.pipe(Effect.provide(w.layer)));
 
             if (damage === "json") {
-              w.db.exec("UPDATE entries SET body='not JSON' WHERE stream='door/members' AND id='founded'");
+              w.db.exec("UPDATE entries SET body='not JSON' WHERE stream='gateway/access' AND id='founded'");
             } else if (damage === "known_fact") {
-              w.db.exec("UPDATE entries SET body='{}' WHERE stream='door/members' AND id='founded'");
+              w.db.exec("UPDATE entries SET body='{}' WHERE stream='gateway/access' AND id='founded'");
             } else {
-              w.db.exec("UPDATE entries SET seen=-1 WHERE stream='door/members' AND id='founded'");
+              w.db.exec("UPDATE entries SET seen=-1 WHERE stream='gateway/access' AND id='founded'");
             }
 
             if (reopen) {
@@ -427,7 +429,7 @@ describe("P17a, appendAdmitted", () => {
                 }
 
                 if (outcome === "bad_row") {
-                  w.db.exec("UPDATE entries SET body='{}' WHERE stream='door/members' AND id='founded'");
+                  w.db.exec("UPDATE entries SET body='{}' WHERE stream='gateway/access' AND id='founded'");
                 }
 
                 // Do not wrap the call in a test span. The operation must end its own span.

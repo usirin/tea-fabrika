@@ -1,10 +1,10 @@
 // P8, next/. Source: next/packages/libfabrika/src/door/revocation.test.ts at 9b48d622b5d4.
-// Current checked-writer, forged-role, signer and revocation checks run on the real Door.
+// Current checked-writer, forged-role, signer and revocation checks run on the real Gateway.
 // The complete closed method list belongs to P25 and remains a separately named pending law.
 import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
-import { Door, Id, type Incoming } from "@kampus/libfabrika";
+import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -23,14 +23,14 @@ import { Base64, Base64Url } from "effect/encoding";
 const options = { arbitrary: { seed: 119120, runs: 20, size: 4096, concurrency: 1 } };
 const bounded = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
 
-const DoorCalls = Arbitrary.schema(
+const GatewayCalls = Arbitrary.schema(
   Schema.Struct({
     name: bounded(1, 96),
     body: bounded(0, 4096),
   }),
 );
 
-type DoorCall = typeof DoorCalls extends Arbitrary.Arbitrary<infer C> ? C : never;
+type DoorCall = typeof GatewayCalls extends Arbitrary.Arbitrary<infer C> ? C : never;
 
 // WebCrypto owns ephemeral test key generation and signing. No machine key is read or printed.
 const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
@@ -100,7 +100,7 @@ const world = Effect.fnUntraced(function* () {
     ProcessIdGenerator.layer,
   );
   const delivered: Incoming[] = [];
-  const layer = Door.layer({
+  const layer = Gateway.layer({
     sql,
     founder,
     name: "p8",
@@ -122,7 +122,7 @@ const world = Effect.fnUntraced(function* () {
     inputs: { schema: Input, personOnly: [], raw: [], log: Schema.toCodecJson(Input) },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
-  const door = yield* Door.pipe(Effect.provide(layer));
+  const door = yield* Gateway.pipe(Effect.provide(layer));
   const log = yield* Ledger.pipe(Effect.provide(ledger));
   const hello = Effect.fnUntraced(function* (k: typeof agent, name: string, as: string) {
     const client = yield* door.connect(),
@@ -191,8 +191,8 @@ const request = (body: string) => ({
 });
 
 it.effect.prop(
-  "current Door: an ungranted key cannot enter by claiming a person, window or agent role",
-  { c: DoorCalls },
+  "current Gateway: an ungranted key cannot enter by claiming a person, window or agent role",
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world(),
@@ -213,8 +213,8 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "current Door: a signed agent grant wins over every claimed hello role and client label",
-  { c: DoorCalls },
+  "current Gateway: a signed agent grant wins over every claimed hello role and client label",
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world();
@@ -240,8 +240,8 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "current Door: accept and signer preserve checked agent key/person and reject forged writers",
-  { c: DoorCalls },
+  "current Gateway: accept and signer preserve checked agent key/person and reject forged writers",
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world(),
@@ -315,19 +315,19 @@ type GrantDoor = Pick<World["door"], "grant">;
 // p64: "/grant with grant, revoke or approval signed by an agent: refused; no membership change".
 const agentSignedRefused = Effect.fnUntraced(function* (w: World, door: GrantDoor, c: DoorCall) {
   const kinds = yield* changes(w, c);
-  const before = yield* Stream.runCollect(w.log.read("door/members", 0));
+  const before = yield* Stream.runCollect(w.log.read("gateway/access", 0));
 
   for (const text of [kinds.granted, kinds.revoked, kinds.added]) {
     expect((yield* door.grant({ text, armored: yield* w.agent.sign(text) }))._tag).toBe("refused");
-    expect(yield* Stream.runCollect(w.log.read("door/members", 0))).toEqual(before);
+    expect(yield* Stream.runCollect(w.log.read("gateway/access", 0))).toEqual(before);
   }
 
   return kinds;
 });
 
 it.effect.prop(
-  "current Door: agent-signed grant, revoke and add are refused with no membership change",
-  { c: DoorCalls },
+  "current Gateway: agent-signed grant, revoke and add are refused with no membership change",
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world();
@@ -338,19 +338,19 @@ it.effect.prop(
         expect((yield* w.door.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
       }
 
-      expect((yield* Stream.runCollect(w.log.read("door/members", 0))).length).toBeGreaterThanOrEqual(3);
+      expect((yield* Stream.runCollect(w.log.read("gateway/access", 0))).length).toBeGreaterThanOrEqual(3);
     }),
   options,
 );
 
 it.effect.prop(
   "checker plant: a door that refuses agent signers only for granted and revoked fails the /grant law",
-  { c: DoorCalls },
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world();
       // The plant trusts an agent's signature on an added change, as if a person key had signed it.
-      // A failed test-key signature is a broken harness, so it dies instead of joining the Door's errors.
+      // A failed test-key signature is a broken harness, so it dies instead of joining the Gateway's errors.
       const planted: GrantDoor = {
         grant: (input) =>
           Effect.gen(function* () {
@@ -373,8 +373,8 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "current Door: removal stops settled retries and signer",
-  { c: DoorCalls },
+  "current Gateway: removal stops settled retries and signer",
+  { c: GatewayCalls },
   ({ c }) =>
     Effect.gen(function* () {
       const w = yield* world(),
@@ -407,8 +407,8 @@ const METHODS = [
   "spans.read",
   "spans.content",
   "spans.deleteContent",
-  "door.watch",
-  "door.deny",
+  "gateway.watch",
+  "gateway.deny",
 ] as const;
 
 const allowed = new Set(["view.open", "ledger.read", "process.send:notes:save", "process.send:notes:list"]);
@@ -598,7 +598,7 @@ it.prop(
   ({ unknown }) => {
     for (const method of [
       "spans.read",
-      "door.watch",
+      "gateway.watch",
       "planted.newHandler",
       `unknown.${unknown}`,
       "process.send:counter",

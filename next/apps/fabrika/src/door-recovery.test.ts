@@ -26,7 +26,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { Door } from "./door.ts";
+import { Gateway } from "./door.ts";
 
 const P1 = "process_0000000000e008000000000000";
 const P2 = "process_0000000000e008000000000001";
@@ -124,7 +124,7 @@ const from = () => ({
 });
 
 const Input = Schema.TaggedUnion({ press: { poison: Schema.Boolean } });
-type DoorOptions = Parameters<typeof Door.layer<typeof Input.Type, never, never, never>>[0];
+type DoorOptions = Parameters<typeof Gateway.layer<typeof Input.Type, never, never, never>>[0];
 type Delivery = { process: string; parent: string; letter: string | undefined };
 
 const policy = {
@@ -300,7 +300,7 @@ const world = () => {
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE door_bindings") &&
+        query.startsWith("UPDATE gateway_bindings") &&
         args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
       ) {
         controls.cutRecorded = false;
@@ -310,7 +310,7 @@ const world = () => {
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE door_bindings") &&
+        query.startsWith("UPDATE gateway_bindings") &&
         args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
       ) {
         controls.cutRetryable = false;
@@ -361,9 +361,9 @@ const world = () => {
       ).pipe(Effect.provide(runner(pid)));
     },
   });
-  const layer = () => Door.layer(settings()).pipe(Layer.provideMerge(env()));
+  const layer = () => Gateway.layer(settings()).pipe(Layer.provideMerge(env()));
   const online = Effect.fnUntraced(function* (who = window) {
-    const d = yield* Door;
+    const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);
     const tab = "recovery-tab";
@@ -449,7 +449,10 @@ describe("P34 door recovery", () => {
                 const w = world();
                 const queued = request(false, letter);
                 const binding = () => {
-                  const [row] = w.project.sql.exec("SELECT value FROM door_bindings WHERE letter=?", `${P1}/${letter}`);
+                  const [row] = w.project.sql.exec(
+                    "SELECT value FROM gateway_bindings WHERE letter=?",
+                    `${P1}/${letter}`,
+                  );
                   return Schema.decodeUnknownSync(
                     Schema.fromJsonString(
                       Schema.Struct({
@@ -470,9 +473,11 @@ describe("P34 door recovery", () => {
                   w.controls.cutFlush = state === "recorded";
                   w.controls.cutRetryable = state === "delivered";
                   w.controls.failDelivery = true;
-                  expect(yield* Effect.exit(Door.use((d) => d.route(client, "process.send", queued)))).toMatchObject({
-                    _tag: "Failure",
-                  });
+                  expect(yield* Effect.exit(Gateway.use((d) => d.route(client, "process.send", queued)))).toMatchObject(
+                    {
+                      _tag: "Failure",
+                    },
+                  );
                   expect(binding()).toMatchObject({ process: P1, state: { _tag: state } });
                   expect(w.controls.cuts + w.controls.retryableCuts).toBe(state === "retryable" ? 0 : 1);
                   expect(yield* inbox).toEqual([]);
@@ -506,7 +511,7 @@ describe("P34 door recovery", () => {
                 w.reopen();
                 yield* Effect.gen(function* () {
                   const client = yield* w.online();
-                  const d = yield* Door;
+                  const d = yield* Gateway;
                   expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
                     name: NAME,
                     state: { _tag: "live", process: P2 },
@@ -590,7 +595,7 @@ describe("P34 door recovery", () => {
             yield* w.boot;
             const old = yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
                 _tag: "Failure",
               });
@@ -602,12 +607,14 @@ describe("P34 door recovery", () => {
             w.reopen();
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
                 name: NAME,
                 state: { _tag: "live", process: P2 },
               });
-              expect(w.project.sql.exec("SELECT id FROM door_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual([]);
+              expect(w.project.sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual(
+                [],
+              );
               expect(yield* d.route(client, "process.send", queued)).toMatchObject({
                 _tag: "ok",
                 result: { _tag: "accepted", pos: 1 },
@@ -674,13 +681,13 @@ describe("P34 door recovery", () => {
             w.controls.cutRetryable = true;
             const old = yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* Effect.exit(d.route(client, "process.send", request(true, letter)))).toMatchObject({
                 _tag: "Failure",
               });
               expect(w.controls.retryableCuts).toBe(1);
               const [binding] = w.project.sql.exec(
-                "SELECT json_extract(value, '$.state._tag') AS state FROM door_bindings WHERE letter=?",
+                "SELECT json_extract(value, '$.state._tag') AS state FROM gateway_bindings WHERE letter=?",
                 `${P1}/${letter}`,
               );
               expect(binding?.state).toBe("delivered");
@@ -694,7 +701,7 @@ describe("P34 door recovery", () => {
             w.reopen();
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* ProcessManager.use((p) => p.isLive(P2))).toBe(true);
               expect(yield* d.route(client, "process.send", request(true, letter))).toMatchObject({
                 _tag: "ok",
@@ -736,7 +743,7 @@ describe("P34 door recovery", () => {
       yield* w.boot;
       yield* Effect.gen(function* () {
         const client = yield* w.online();
-        const d = yield* Door;
+        const d = yield* Gateway;
         expect(yield* d.route(client, "process.send", request(false, "good"))).toMatchObject({
           _tag: "ok",
           result: { _tag: "accepted", rev: expect.any(Number), pos: 1 },
@@ -760,7 +767,7 @@ describe("P34 door recovery", () => {
             for (let n = 0; n < 3; n++) {
               yield* Effect.gen(function* () {
                 const client = yield* w.online();
-                const d = yield* Door;
+                const d = yield* Gateway;
                 expect(yield* Effect.exit(d.route(client, "process.send", request(true, value)))).toMatchObject(
                   n < 2 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
                 );
@@ -774,7 +781,7 @@ describe("P34 door recovery", () => {
 
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* d.route(client, "process.send", request(true, value))).toMatchObject({
                 _tag: "refused",
                 reason: "dead",
@@ -829,7 +836,7 @@ describe("P34 door recovery", () => {
             yield* w.boot;
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               yield* Effect.exit(d.route(client, "process.send", request(true, value)));
               const old = w.deliveries[0]!.parent;
               const p = yield* ProcessManager;

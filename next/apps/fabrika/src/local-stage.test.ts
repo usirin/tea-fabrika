@@ -11,7 +11,7 @@ import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 
-// P12, next/. Exercise startStage twice with one real home. Deployment and HTTP are fake.
+// P12, next/. Exercise startDev twice with one real home. Deployment and HTTP are fake.
 // The link law skips only the flush-to-disk waits. The outbox's own law in
 // next/packages/libfabrika/src/node/local-stage.test.ts pins the sync calls and their order.
 vi.mock("../alchemy.run.ts", () => ({
@@ -81,7 +81,7 @@ afterEach(() => {
 it("a later dev command links its first start to the last runtime in that home", async () => {
   await fc.assert(
     fc.asyncProperty(fc.tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 })), async (builds) => {
-      const { startStage } = await import("./stage.ts");
+      const { startDev } = await import("./stage.ts");
       const folder = home();
       vi.stubEnv("FABRIKA_HOME", folder);
       const events: Array<typeof BrainEvent.Type> = [];
@@ -108,7 +108,7 @@ it("a later dev command links its first start to the last runtime in that home",
 
       for (const build of builds) {
         await Effect.runPromise(
-          Effect.scoped(startStage({ build, brain: "unused.mjs", programs: {} }, config)).pipe(
+          Effect.scoped(startDev({ build, brain: "unused.mjs", programs: {} }, config)).pipe(
             Effect.provide(ProcessIdGenerator.layer),
             Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(filesWithoutSync),
@@ -147,12 +147,12 @@ it("stage readiness waits for the started event to reach the ledger", async () =
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
-      const { startStage } = await import("./stage.ts");
+      const { startDev } = await import("./stage.ts");
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
             const starting = yield* Effect.forkChild(
-              startStage(
+              startDev(
                 { build, brain: "unused.mjs", programs: {} },
                 {
                   home: folder,

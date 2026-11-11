@@ -9,7 +9,7 @@ import { expect, it } from "@effect/vitest";
 import {
   Alarm,
   CheckedWriter,
-  Door,
+  Gateway,
   Id,
   Input,
   Program,
@@ -274,7 +274,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         ProcessIdGenerator.layer,
       );
       let deliveries = 0;
-      const layer = Door.layer({
+      const layer = Gateway.layer({
         sql,
         founder,
         name: "p8",
@@ -304,7 +304,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         events: { personOnly: [] },
       }).pipe(Layer.provide(env));
       const connect = Effect.gen(function* () {
-        const door = yield* Door.pipe(Effect.provide(layer)),
+        const door = yield* Gateway.pipe(Effect.provide(layer)),
           client = yield* door.connect(),
           nonce = yield* door.challenge(client);
         const signed = yield* writeSshsig({
@@ -340,7 +340,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
       return {
         connect,
         deliveries: () => deliveries,
-        bindings: () => sql.exec("SELECT value FROM door_bindings").map((r) => JSON.parse(String(r.value))),
+        bindings: () => sql.exec("SELECT value FROM gateway_bindings").map((r) => JSON.parse(String(r.value))),
       };
     }),
     store,
@@ -803,7 +803,7 @@ it.effect.prop(
 const terminalAnswer = (actual: unknown) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
 
 it.effect.prop(
-  "p25: the real Door answers dead on terminal delivery and its saved settled retry",
+  "p25: the real Gateway answers dead on terminal delivery and its saved settled retry",
   { body: Arbitrary.schema(Body) },
   ({ body }) =>
     Effect.gen(function* () {
@@ -839,7 +839,7 @@ it.effect.prop(
       expect(sender.bindings()).toMatchObject([
         { state: { _tag: "settled", result: { _tag: "refused", reason: "dead" } } },
       ]);
-      // A new real Door layer reads the saved binding; the runner must not receive a fourth delivery.
+      // A new real Gateway layer reads the saved binding; the runner must not receive a fourth delivery.
       const restarted = yield* sender.connect;
       terminalAnswer(yield* restarted.door.route(restarted.client, "process.send", request));
       expect(sender.deliveries()).toBe(3);

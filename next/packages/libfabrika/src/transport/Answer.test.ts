@@ -24,14 +24,14 @@ const online = () =>
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-// Method names the door and the ledger answer today, and two near misses of door.knock.
+// Method names the door and the ledger answer today, and two near misses of gateway.knock.
 const METHODS = [
-  "door.knock",
-  "door.watch",
-  "door.grant",
-  "door.deny",
-  "door.input",
-  "door.initialize",
+  "gateway.knock",
+  "gateway.watch",
+  "gateway.grant",
+  "gateway.deny",
+  "gateway.input",
+  "gateway.initialize",
   "ledger.read",
   "ledger.append",
   "ledger.wait",
@@ -40,8 +40,8 @@ const METHODS = [
   "process.exit",
   "spans.read",
   "session.end",
-  "Door.knock",
-  "door.knock ",
+  "Gateway.knock",
+  "gateway.knock ",
 ] as const;
 
 const unauthenticated = fc.oneof(
@@ -151,14 +151,14 @@ describe("P10 JSON-RPC", () => {
 
   // d2/p23: a connection that is not online never reaches a route. Every request gets one
   // no_hello error with its own id, and the attachment stays as it was. The one way through
-  // is a waiting client's door.knock: its handler runs once with the params, and its answer is
+  // is a waiting client's gateway.knock: its handler runs once with the params, and its answer is
   // the one reply. Plants: drop the request silently; let waiting reach any method; answer
   // no_hello to a waiting knock; pass a third argument to the knock handler.
-  it("d2: for any unauthenticated state, method and id, only a waiting door.knock is routed", async () => {
+  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", async () => {
     await fc.assert(
       fc.asyncProperty(
         unauthenticated,
-        fc.oneof(fc.constant("door.knock"), fc.constantFrom(...METHODS), fc.string()),
+        fc.oneof(fc.constant("gateway.knock"), fc.constantFrom(...METHODS), fc.string()),
         fc.oneof(fc.string(), fc.integer()),
         fc.jsonValue(),
         fc.jsonValue(),
@@ -173,8 +173,8 @@ describe("P10 JSON-RPC", () => {
               expect(result.attached).toEqual(attached);
               const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
 
-              if (attached._tag === "waiting" && method === "door.knock") {
-                expect(route.mock.calls).toEqual([["door.knock", wire(params)]]);
+              if (attached._tag === "waiting" && method === "gateway.knock") {
+                expect(route.mock.calls).toEqual([["gateway.knock", wire(params)]]);
                 expect(JSON.parse(result.send!)).toEqual({
                   jsonrpc: "2.0",
                   id,
@@ -206,7 +206,7 @@ describe("P10 JSON-RPC", () => {
         (attached, id, stream, after) =>
           Effect.runPromise(
             Effect.gen(function* () {
-              const result = yield* answerFrame(frame({ id, method: "door.knock" }), attached, admit, () =>
+              const result = yield* answerFrame(frame({ id, method: "gateway.knock" }), attached, admit, () =>
                 Effect.succeed(Answer.cases.parked.make({ stream, after })),
               );
               expect(result).toEqual({ send: null, attached });

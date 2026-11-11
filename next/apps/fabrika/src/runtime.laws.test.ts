@@ -1,4 +1,4 @@
-// P12, next/. Project and Gateway use their real composition and SQLite services.
+// P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -14,7 +14,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
-import { GatewayService, gatewayRuntime } from "@kampus/libfabrika/workers/gateway";
+import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
@@ -184,7 +184,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         };
       },
     },
-    GATEWAY: {
+    CONNECTION: {
       getByName: () => ({ ring: () => onRing(), notify: async () => {}, probe: async () => 42 }),
     },
     RECORD: {
@@ -195,7 +195,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         },
       }),
     },
-    HEALTH: {},
+    MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => ({
@@ -346,7 +346,7 @@ describe("P12 Project authority", () => {
     await w.run(
       w.p.brain(event).pipe(Effect.withParentSpan(Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" }))),
     );
-    const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
+    const [row] = await w.run(w.p.read("gateway/brain", 0, "audit"));
     const { _tag, ...body } = event;
     expect(row).toMatchObject({ traceId: trace, id: write, _tag, body });
   });
@@ -381,7 +381,7 @@ describe("P12 Project authority", () => {
     const result = await w.run(Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")));
     expect(result).toMatchObject({ _tag: "Success", value: { by: { _tag: "person" } } });
     // The saved delivery is independent evidence of the declaration used at admission.
-    const saved = w.db.prepare("SELECT saved FROM door_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
+    const saved = w.db.prepare("SELECT saved FROM gateway_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
     expect(JSON.parse(String(saved!.saved))).toMatchObject({
       input: { personOnly: true, process: pid },
     });
@@ -571,7 +571,7 @@ describe("P12 Project saved and wire readers", () => {
               typed(await w.run(Effect.exit(w.p.own(pid, "invalid-event", "events", raw))));
             } else {
               w.db
-                .prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
+                .prepare("UPDATE dev_descriptors SET value=?, pending=? WHERE process=?")
                 .run(JSON.stringify(raw), reader === "pending descriptor" ? 1 : 0, pid);
               const exit =
                 reader === "pending descriptor"
@@ -623,7 +623,7 @@ describe("P12 WebCrypto failures", () => {
             } else {
               // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
               const bucket = { put } as unknown as R2Bucket;
-              await expect(bucketCalls(bucket).put("health", body, "0".repeat(64))).rejects.toMatchObject({
+              await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
                 _tag: "LedgerError",
                 reason: "crypto",
               });
@@ -645,7 +645,7 @@ describe("P12 WebCrypto failures", () => {
   }
 });
 
-describe("P12 Gateway recording", () => {
+describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
     law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
       const w = await world(),
@@ -670,7 +670,7 @@ describe("P12 Gateway recording", () => {
         },
         close: () => {},
       };
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Connection
       const ctx = {
         id: { name: "gateway-test" },
         storage: storage(db),
@@ -685,10 +685,10 @@ describe("P12 Gateway recording", () => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
       const config = await Effect.runPromise(settings(w.env));
-      const runtime = gatewayRuntime(ctx, { ...w.env, PROJECT: project }, config);
+      const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
 
       try {
-        const gateway = await runtime.runPromise(GatewayService),
+        const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
         const action: Effect.Effect<unknown, unknown> =
           operation === "ring"

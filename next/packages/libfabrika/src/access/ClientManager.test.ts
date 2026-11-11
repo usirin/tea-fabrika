@@ -5,11 +5,11 @@
 //
 // The shape these tests hold the module to, from the plan's "The shape" and flag 6:
 // - `ClientManager.layer(founder & {person})` over a `Ledger`. Building it writes nothing. The first
-//   call on an empty `door/members` writes `founded` under the fixed id `founded`, once, by the
+//   call on an empty `gateway/access` writes `founded` under the fixed id `founded`, once, by the
 //   key and build the layer was handed. A ledger refusal of it, except `id_reused`, is a
 //   `LedgerError` with its own `reason: "refused"` (not `bad_row`, which means a row that does not
 //   decode), never an empty member list.
-// - `members` folds `door/members` with `foldMembers`.
+// - `members` folds `gateway/access` with `foldAccess`.
 // - `write(event, from)` folds, refuses what the fold's rule refuses (`{_tag: "refused", reason}`,
 //   nothing written), else appends under the event's own id with `seen` the folded head, folds on to
 //   the new rev, and answers `{_tag: "applied", rev}` or `{_tag: "ignored", rev, reason}`. A refusal by
@@ -29,12 +29,12 @@ import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
-import { foldMembers, type MemberEvent, type Members } from "./Access.ts";
+import { foldAccess, type MemberEvent, type Access } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const READER = "gateway:t1";
-const MEMBERS = "door/members";
+const READER = "connection:t1";
+const MEMBERS = "gateway/access";
 const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
@@ -244,7 +244,7 @@ const eventId = (event: MemberEvent): string => {
   }
 };
 
-const view = (m: Members) => ({
+const view = (m: Access) => ({
   person: m.person,
   name: m.name,
   keys: [...m.keys.entries()]
@@ -336,7 +336,7 @@ describe("p96, founded is written once, by the first call", () => {
         const m = yield* members;
         expect(view(m)).toEqual(
           view(
-            foldMembers([
+            foldAccess([
               {
                 _tag: "founded",
                 id: founder.person,
@@ -473,7 +473,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
       );
       const raced = refusing(sql, "id_reused", other);
       return Effect.gen(function* () {
-        expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
+        expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
         expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
         expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
       }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
@@ -516,7 +516,7 @@ describe("p96, the traced history from the plan", () => {
         }
 
         const m = yield* members;
-        expect(view(m)).toEqual(view(foldMembers(kept)));
+        expect(view(m)).toEqual(view(foldAccess(kept)));
         expect([...m.spent]).toEqual(["r1"]);
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -614,7 +614,7 @@ describe("p96, why a write is refused", () => {
         }
 
         expect((yield* entries).length).toBe(before);
-        expect(view(yield* members)).toEqual(view(foldMembers([FOUNDED])));
+        expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
         expect((yield* write(denied(key, "SHA256:menu")))._tag).not.toBe("ignored");
       }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
     ),
@@ -761,7 +761,7 @@ describe("p96, write tells the truth over any history", () => {
               const answer = yield* write(next);
               const after = yield* entries;
               const changes =
-                JSON.stringify(view(foldMembers([...kept, next]))) !== JSON.stringify(view(foldMembers(kept)));
+                JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
               expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
               if (changes) {
@@ -785,7 +785,7 @@ describe("p96, write tells the truth over any history", () => {
               }
             }
 
-            expect(view(yield* members)).toEqual(view(foldMembers(kept)));
+            expect(view(yield* members)).toEqual(view(foldAccess(kept)));
           }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
         ),
       ),

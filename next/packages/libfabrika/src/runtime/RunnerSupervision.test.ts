@@ -621,7 +621,7 @@ describe("P34 runner supervision", () => {
                   const sent = shipped();
                   expect(spans.map((row) => row.spanId)).toEqual(
                     sink.sql
-                      .exec("SELECT spanId FROM health ORDER BY spanId")
+                      .exec("SELECT spanId FROM measurements ORDER BY spanId")
                       .map((row) => row.spanId)
                       .filter((id) => !sent.includes(id)),
                   );

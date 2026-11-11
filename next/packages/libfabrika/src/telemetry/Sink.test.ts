@@ -6,7 +6,7 @@
 // The shape these tests hold the modules to, from the plan's sketches:
 // - `SpanSink.layer(sql, {object})` gives Effect's `Tracer.Tracer` and `SpanSink` over the object's
 //   own SQLite, and needs nothing else. Building it touches nothing.
-// - A span that ends writes, before `end` returns, in one step: a `health` row (piece = the span's
+// - A span that ends writes, before `end` returns, in one step: a `measurements` row (piece = the span's
 //   name) and an `unsent` row. Its chain is its own `fab.process` tag, else its nearest ancestor's,
 //   else `spans`.
 // - `SpanSink.flush` sends `unsent` to each chain's part (`parts`, 0 if none), follows `rolled`,
@@ -269,7 +269,7 @@ describe("p98, a span that ends is never dropped", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     db.close();
     const again = open("object.db");
-    expect(count(again, "health", "piece IN ('runner.step', 'ledger.call')")).toBe(2);
+    expect(count(again, "measurements", "piece IN ('runner.step', 'ledger.call')")).toBe(2);
     expect(count(again, "unsent")).toBe(2);
     await Effect.runPromise(
       Effect.gen(function* () {
@@ -286,21 +286,21 @@ describe("p98, a span that ends is never dropped", () => {
     return Effect.gen(function* () {
       yield* traced("runner.step", { "fab.process": P1 }, traced("runner.cmd", {}, step("ledger.call")));
       yield* traced("runner.step", { "fab.process": P2 }, step("runner.cmd"));
-      yield* traced("door.envelope", {}, step("ledger.append"));
+      yield* traced("gateway.envelope", {}, step("ledger.append"));
       yield* traced(
         "runner.step",
         { "fab.process": P1 },
         traced("supervisor.restart", { "fab.process": P2 }, step("leaf")),
       );
-      expect(count(db, "unsent"), "every span gets an unsent row, none is health only").toBe(10);
-      expect(count(db, "health")).toBe(10);
+      expect(count(db, "unsent"), "every span gets an unsent row, none is measurements only").toBe(10);
+      expect(count(db, "measurements")).toBe(10);
       expect(yield* flush).toEqual({ sent: 10 });
       const one = yield* recorded(job(P1));
       const two = yield* recorded(job(P2));
       const outside = yield* recorded(spans);
       expect(one.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.cmd", "runner.step", "runner.step"]);
       expect(two.map((r) => r.name).sort()).toEqual(["leaf", "runner.cmd", "runner.step", "supervisor.restart"]);
-      expect(outside.map((r) => r.name).sort()).toEqual(["door.envelope", "ledger.append"]);
+      expect(outside.map((r) => r.name).sort()).toEqual(["gateway.envelope", "ledger.append"]);
       const all = [...ids(one), ...ids(two), ...ids(outside)];
       expect(new Set(all).size, "no span in two chains").toBe(10);
       expect(count(db, "unsent")).toBe(0);
@@ -346,8 +346,8 @@ describe("p98, a span that ends is never dropped", () => {
         attributes: { "rpc.method": "append" },
         ok: true,
       });
-      const health = db.prepare(`SELECT piece, ms, ok FROM health ORDER BY piece`).all();
-      expect(health.map((h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
+      const measurements = db.prepare(`SELECT piece, ms, ok FROM measurements ORDER BY piece`).all();
+      expect(measurements.map((h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
         ["ledger.call", 3, true],
         ["runner.step", 7, true],
       ]);
@@ -362,7 +362,7 @@ describe("p98, a span that ends is never dropped", () => {
     const ends = (sql: Sql, object: string, process: string) =>
       Effect.gen(function* () {
         yield* traced("runner.step", { "fab.process": process }, step("ledger.call"));
-        yield* step("door.envelope", { "fab.n": 1 });
+        yield* step("gateway.envelope", { "fab.n": 1 });
         expect(yield* flush).toEqual({ sent: 3 });
       }).pipe(Effect.provide(SpanSink.layer(sql, { object })));
     return Effect.gen(function* () {
@@ -722,77 +722,80 @@ class NoteError extends Error {
 }
 
 describe("p99, tags hold names, ids and numbers; a message only in content", () => {
-  it.effect("no Redacted text anywhere, and a throw's message only in content, never in a tag, health or R2", () => {
-    const h = home();
-    const r2 = bucket();
-    const day = Date.UTC(2026, 9, 23, 10);
-    return Effect.gen(function* () {
-      yield* TestClock.setTime(day);
-      const thrown = yield* Effect.exit(
-        traced(
-          "runner.step",
-          { "fab.process": P1, "fab.key": Redacted.make(SECRET) },
-          Effect.sync(() => {
-            // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- the law is about a step that throws, as the plan's trace has it
-            throw new TypeError(`${NOTE} was not a function`);
-          }),
-        ),
-      );
-      expect(Exit.isFailure(thrown)).toBe(true);
-      yield* Effect.exit(
-        traced("ledger.call", { "fab.process": P1 }, Effect.fail(new NoteError(`${NOTE_TWO} failed`))),
-      );
+  it.effect(
+    "no Redacted text anywhere, and a throw's message only in content, never in a tag, measurements or R2",
+    () => {
+      const h = home();
+      const r2 = bucket();
+      const day = Date.UTC(2026, 9, 23, 10);
+      return Effect.gen(function* () {
+        yield* TestClock.setTime(day);
+        const thrown = yield* Effect.exit(
+          traced(
+            "runner.step",
+            { "fab.process": P1, "fab.key": Redacted.make(SECRET) },
+            Effect.sync(() => {
+              // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- the law is about a step that throws, as the plan's trace has it
+              throw new TypeError(`${NOTE} was not a function`);
+            }),
+          ),
+        );
+        expect(Exit.isFailure(thrown)).toBe(true);
+        yield* Effect.exit(
+          traced("ledger.call", { "fab.process": P1 }, Effect.fail(new NoteError(`${NOTE_TWO} failed`))),
+        );
 
-      expect(places(h.db, NOTE), "before flush, only unsent's content holds the message").toEqual(["unsent.content"]);
-      expect(places(h.db, NOTE_TWO)).toEqual(["unsent.content"]);
-      const health = h.db.prepare(`SELECT piece, ok, error FROM health ORDER BY piece`).all();
-      expect(health.map((x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
-        ["ledger.call", false, "NoteError"],
-        ["runner.step", false, "TypeError"],
-      ]);
+        expect(places(h.db, NOTE), "before flush, only unsent's content holds the message").toEqual(["unsent.content"]);
+        expect(places(h.db, NOTE_TWO)).toEqual(["unsent.content"]);
+        const measurements = h.db.prepare(`SELECT piece, ok, error FROM measurements ORDER BY piece`).all();
+        expect(measurements.map((x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
+          ["ledger.call", false, "NoteError"],
+          ["runner.step", false, "TypeError"],
+        ]);
 
-      yield* flush;
-      const rows = yield* recorded(job(P1));
-      const failed = rows.find((x) => x.name === "runner.step");
-      expect(failed?.ok).toBe(false);
-      expect(failed?.attributes["fab.key"]).toBe("<redacted>");
-      expect(failed?.attributes["error.type"]).toBe("TypeError");
-      expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe("NoteError");
+        yield* flush;
+        const rows = yield* recorded(job(P1));
+        const failed = rows.find((x) => x.name === "runner.step");
+        expect(failed?.ok).toBe(false);
+        expect(failed?.attributes["fab.key"]).toBe("<redacted>");
+        expect(failed?.attributes["error.type"]).toBe("TypeError");
+        expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe("NoteError");
 
-      for (const x of rows) {
-        for (const value of Object.values(x.attributes)) {
-          expect(String(value)).not.toContain(NOTE);
-          expect(String(value)).not.toContain(NOTE_TWO);
+        for (const x of rows) {
+          for (const value of Object.values(x.attributes)) {
+            expect(String(value)).not.toContain(NOTE);
+            expect(String(value)).not.toContain(NOTE_TWO);
+          }
         }
-      }
 
-      const content = yield* RecordManager.use((records) => records.content(job(P1), failed?.spanId ?? ""));
-      expect(Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "").toContain(NOTE);
+        const content = yield* RecordManager.use((records) => records.content(job(P1), failed?.spanId ?? ""));
+        expect(Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "").toContain(NOTE);
 
-      // Two weeks on, the day's raw rows go to R2: they hold the class, never the message.
-      yield* TestClock.setTime(day + 15 * 24 * 3_600_000);
-      yield* step("runner.step", {});
-      yield* flush;
-      expect(r2.files.size, "the day was archived").toBeGreaterThan(0);
+        // Two weeks on, the day's raw rows go to R2: they hold the class, never the message.
+        yield* TestClock.setTime(day + 15 * 24 * 3_600_000);
+        yield* step("runner.step", {});
+        yield* flush;
+        expect(r2.files.size, "the day was archived").toBeGreaterThan(0);
 
-      for (const body of r2.files.values()) {
-        const text = new TextDecoder().decode(body);
-        expect(text).not.toContain(SECRET);
-        expect(text).not.toContain(NOTE);
-        expect(text).not.toContain(NOTE_TWO);
-      }
-
-      expect(places(h.db, NOTE), "the object keeps no message after flush").toEqual([]);
-
-      for (const [name, db] of h.parts) {
-        for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
-          expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
+        for (const body of r2.files.values()) {
+          const text = new TextDecoder().decode(body);
+          expect(text).not.toContain(SECRET);
+          expect(text).not.toContain(NOTE);
+          expect(text).not.toContain(NOTE_TWO);
         }
-      }
 
-      expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
-    }).pipe(Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))));
-  });
+        expect(places(h.db, NOTE), "the object keeps no message after flush").toEqual([]);
+
+        for (const [name, db] of h.parts) {
+          for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
+            expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
+          }
+        }
+
+        expect(h.bytes(SECRET), "no file holds the Redacted text, in any byte").toEqual([]);
+      }).pipe(Effect.provide(world(h.sql, RecordManager.sql(h.part, BIG), Archive.bucket(r2.calls))));
+    },
+  );
 
   it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
     const key = fc.constantFrom(...Array.from({ length: 8 }, (_, n) => `fab.k${n}`));

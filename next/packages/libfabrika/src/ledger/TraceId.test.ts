@@ -73,7 +73,7 @@ describe("T246, fromHere", () => {
       const sql = nodeSql(db);
       const world = Layer.mergeAll(
         Referee.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
-        SpanSink.layer(sql, { object: "gateway:t1" }),
+        SpanSink.layer(sql, { object: "connection:t1" }),
         RecordManager.memory(1024 * 1024 * 1024),
         Archive.memory,
       );
@@ -102,9 +102,9 @@ describe("T246, fromHere", () => {
         }).pipe(
           Effect.withSpan("notes.save"),
           Effect.withParentSpan(Tracer.externalSpan({ traceId, spanId: "00f067aa0ba902b7" })),
-          Effect.provide(Ledger.remote(calls, { reader: "gateway:t1" })),
+          Effect.provide(Ledger.remote(calls, { reader: "connection:t1" })),
         );
-        const [entry, ...rest] = yield* referee.read("notes:1", 0, "gateway:t1");
+        const [entry, ...rest] = yield* referee.read("notes:1", 0, "connection:t1");
         expect(rest).toEqual([]);
         expect(entry).toMatchObject({ id: "w-1", parent, traceId });
         yield* SpanSink.use((sink) => sink.flush);

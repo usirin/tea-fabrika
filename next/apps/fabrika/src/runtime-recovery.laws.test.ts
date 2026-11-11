@@ -1,4 +1,4 @@
-// P12, next/. The real Project and Process services, Door and runner on SQLite.
+// P12, next/. The real Project and Process services, Gateway and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
@@ -484,11 +484,11 @@ const world = (
         );
       },
     },
-    GATEWAY: {
+    CONNECTION: {
       getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }),
     },
     RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    HEALTH: {},
+    MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
@@ -567,7 +567,7 @@ const world = (
   });
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
-    const row = db.prepare("SELECT value FROM stage_descriptors WHERE process=?").get(pid);
+    const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
     return row === undefined ? undefined : JSON.parse(String(row.value)).name;
   };
   /** The storage owner of a process ID, however the runtime keys it. */
@@ -733,7 +733,7 @@ describe("P12 Project configure recovery", () => {
       const result = await first;
       expect("value" in result).toBe(fault === "healthy");
       const descriptor = w.attempts[0]!;
-      const saved = w.db.prepare("SELECT value FROM stage_descriptors WHERE process=?").get(descriptor.id);
+      const saved = w.db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(descriptor.id);
       expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
       expect(await w.reopen()).toMatchObject([{ process: descriptor.id, name: "counter:1", program: "counter" }]);
       expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);

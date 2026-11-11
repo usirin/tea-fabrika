@@ -1434,7 +1434,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 expect(yield* ProcessStore.use((s) => s.placed("borrowed-mail"))).toBeNull();
                 expect(yield* events).toEqual([]);
                 expect(w.signCalls).toEqual([]);
-                expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
+                expect(w.authority.db().prepare("SELECT count(*) AS n FROM gateway_receipts").get()?.n).toBe(0);
                 // Mail still works on a public port; only the borrowed parent is refused.
                 yield* m.send(NAME, "ordinary-mail", { type: "add", n: 2 }, from());
                 expect((yield* r.open("ordinary")).view.count).toBe(2);
@@ -1536,7 +1536,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 // program or spent a receipt. Cross-process and spent-parent guards cannot save us.
                 yield* w.deliver(person, "approve");
                 yield* w.deliver(agent, "comment");
-                expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
+                expect(w.authority.db().prepare("SELECT count(*) AS n FROM gateway_receipts").get()?.n).toBe(0);
                 const sent = yield* r.msg(agent);
                 expect(yield* events, "an agent input must never produce a person-signed answered").toEqual([]);
                 expect(sent).toMatchObject({ _tag: "refused" });
@@ -2105,7 +2105,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
             sessions.signer(input.envelope.id, PROCESS, "saved").pipe(Effect.provideService(SignRequest, { id })),
           );
           expect(refused._tag, "runner ids never acquire a signing receipt").toBe("Failure");
-          expect(w.authority.db().prepare("SELECT count(*) AS n FROM door_receipts").get()?.n).toBe(0);
+          expect(w.authority.db().prepare("SELECT count(*) AS n FROM gateway_receipts").get()?.n).toBe(0);
           expect(
             yield* sessions
               .signer(input.envelope.id, PROCESS, "saved")
@@ -2856,11 +2856,11 @@ describe("P11 monitoring, content and storage failures", () => {
                     links: row.links,
                   })),
                 );
-                const health = JSON.stringify(w.sink.db().prepare("SELECT * FROM health").all());
+                const measurements = JSON.stringify(w.sink.db().prepare("SELECT * FROM measurements").all());
 
                 for (const secret of [marker, signature, "private model body P11"]) {
                   expect(tags).not.toContain(secret);
-                  expect(health).not.toContain(secret);
+                  expect(measurements).not.toContain(secret);
                 }
 
                 const failed = rows.filter((row) => !row.ok);

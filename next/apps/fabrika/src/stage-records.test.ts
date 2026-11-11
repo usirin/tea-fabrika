@@ -231,7 +231,7 @@ const world = async (
 };
 
 // Test-only subclasses expose storage inspection and platform abort on the private control
-// socket. The production Gateway, runner, Project and transport behavior stays in the base.
+// socket. The production Connection, runner, Project and transport behavior stays in the base.
 // No HTTP route or extra target is installed in a product build.
 const instrumentBrain = async (brain: string, home: string) => {
   const entry = join(home, "exam-entry.mjs");
@@ -241,7 +241,7 @@ const instrumentBrain = async (brain: string, home: string) => {
 import * as Brain from ${JSON.stringify(brain)};
 export default Brain.default;
 export const RecordPart = Brain.RecordPart;
-export class Gateway extends Brain.Gateway {
+export class Connection extends Brain.Connection {
   incarnation = crypto.randomUUID();
   testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }
   testAbort() { this.ctx.abort("exam abort"); }
@@ -253,7 +253,7 @@ export class Process extends Brain.Process {
   async msg(input) { if (await this.ctx.storage.get("exam.hold")) {await this.ctx.storage.put("exam.entered",true); await new Promise(()=>{});} return super.msg(input); }
 }
 export class Project extends Brain.Project {
-  testGateway(name,method,args) { return this.env.GATEWAY.getByName(name)[method](...args); }
+  testGateway(name,method,args) { return this.env.CONNECTION.getByName(name)[method](...args); }
   testWaits(reader,stream) { return Array.from(this.ctx.storage.sql.exec('SELECT "to",stream,after FROM rings WHERE "to"=? AND stream=?',reader,stream)); }
 }
 export class Control extends Brain.Control {
@@ -642,7 +642,7 @@ describe("P12 real object adapters", () => {
     await world(async (stage) => {
       const { bucketCalls } = await import("@kampus/libfabrika/workers/runtime");
       const calls = bucketCalls(stage.bucket);
-      const body = new TextEncoder().encode("local health archive");
+      const body = new TextEncoder().encode("local measurements archive");
       const expected = createHash("sha256").update(body).digest("hex");
       await calls.put("p12/health.json", body, expected);
       expect(await calls.head("p12/health.json")).toEqual({ sha256: expected });
@@ -678,7 +678,7 @@ describe("P12 real object adapters", () => {
                 const sink = yield* SpanSink;
                 yield* sink.summaries(0, 1);
                 db.prepare(
-                  'INSERT INTO health (piece,at,ms,ok,error,lag,"spanId") VALUES (?,0,1,1,NULL,NULL,NULL)',
+                  'INSERT INTO measurements (piece,at,ms,ok,error,lag,"spanId") VALUES (?,0,1,1,NULL,NULL,NULL)',
                 ).run("fixture");
                 // Summarize the fixture's hour, so its day is due and flush tries the archive.
                 yield* sink.summaries(0, 1);
@@ -690,10 +690,10 @@ describe("P12 real object adapters", () => {
               ),
             ),
           ).resolves.toBeUndefined();
-          expect(db.prepare("SELECT piece FROM health WHERE piece='fixture'").all()).toHaveLength(1);
+          expect(db.prepare("SELECT piece FROM measurements WHERE piece='fixture'").all()).toHaveLength(1);
           expect(db.prepare("SELECT * FROM archived").all()).toEqual([]);
-          // The try happened and failed: its own health row gives the reason.
-          expect(db.prepare("SELECT ok,error FROM health WHERE piece='sink.archive'").all()).toEqual([
+          // The try happened and failed: its own measurements row gives the reason.
+          expect(db.prepare("SELECT ok,error FROM measurements WHERE piece='sink.archive'").all()).toEqual([
             { ok: 0, error: fail === "put" ? "unreachable" : "mismatch" },
           ]);
           expect(db.prepare("SELECT piece,count FROM summary").all()).toEqual(
@@ -738,7 +738,7 @@ describe("P12 real object adapters", () => {
       expect(failures.some((r) => r.ok === false && r.name === "runner.step")).toBe(true);
       expect(job.every((r) => r.attributes["fab.process"] === pid)).toBe(true);
       const outside = await collect({ _tag: "spans" });
-      expect(outside.some((r) => r.name === "door.initialize")).toBe(true);
+      expect(outside.some((r) => r.name === "gateway.initialize")).toBe(true);
       const permanent = JSON.stringify([...job, ...outside, ...failures]);
       expect(permanent).not.toContain("private raw frame P12");
       expect(permanent).not.toContain("private failure P12");

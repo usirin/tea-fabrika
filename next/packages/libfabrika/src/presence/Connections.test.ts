@@ -9,7 +9,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, W, storage } from "../processes/Process.test-support.ts";
-import { GatewayManager } from "./Connections.ts";
+import { Connections } from "./Connections.ts";
 
 const NOW = 1_790_000_000_000;
 
@@ -18,7 +18,7 @@ const setup = (now: number) => {
     key,
     client,
     session,
-    gateway: `gateway:${client}`,
+    gateway: `connection:${client}`,
     at: now,
   });
   const store = storage();
@@ -27,7 +27,7 @@ const setup = (now: number) => {
   const failed = new Set<string>();
   const asked: Array<{ gateway: string; session: string }> = [];
   const layer = () =>
-    GatewayManager.layer(store.sql, {
+    Connections.layer(store.sql, {
       admitted: (key: string) => Effect.sync(() => live.has(key)),
       probe: (gateway: string, session: string) =>
         Effect.suspend(() => {
@@ -66,7 +66,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       ({ count, delay }) => {
         const world = setup(NOW);
         const started: string[] = [];
-        const layer = GatewayManager.layer(world.store.sql, {
+        const layer = Connections.layer(world.store.sql, {
           admitted: () => Effect.succeed(true),
           probe: (gateway) =>
             Effect.gen(function* () {
@@ -77,7 +77,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         });
         return Effect.gen(function* () {
           yield* TestClock.setTime(NOW);
-          const gateway = yield* GatewayManager;
+          const gateway = yield* Connections;
 
           for (let i = 0; i < count; i++) {
             yield* gateway.join(world.connection(`tab-${i}`));
@@ -97,7 +97,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
   it.effect("storage and broken connection rows keep their typed LedgerError", () =>
     check(fc.string(), [], (message) => {
       const world = setup(NOW);
-      const broken = GatewayManager.layer(
+      const broken = Connections.layer(
         {
           ...world.store.sql,
           transaction: () => {
@@ -111,7 +111,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       );
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
-          const gateway = yield* GatewayManager;
+          const gateway = yield* Connections;
 
           for (const action of [
             gateway.join(world.connection()),
@@ -127,7 +127,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
           }
         }).pipe(Effect.provide(broken));
         yield* Effect.gen(function* () {
-          const gateway = yield* GatewayManager;
+          const gateway = yield* Connections;
           yield* gateway.join(world.connection());
           world.store.sql.exec("UPDATE process_gateways SET session = ?", `invalid:${message}`);
           const result = yield* Effect.result(gateway.online("key-a"));
@@ -155,7 +155,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
           world.pings.set(A, NOW);
           return Effect.gen(function* () {
             yield* TestClock.setTime(NOW);
-            const gateways = yield* GatewayManager;
+            const gateways = yield* Connections;
             yield* gateways.join(connection());
             yield* TestClock.setTime(NOW + elapsed);
             expect(
@@ -164,7 +164,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
                 state: row.state,
               })),
             ).toEqual([{ client: "tab-a", state }]);
-            expect(world.asked).toEqual([{ gateway: "gateway:tab-a", session: A }]);
+            expect(world.asked).toEqual([{ gateway: "connection:tab-a", session: A }]);
             expect(world.store.rows()).toEqual([]);
           }).pipe(Effect.provide(world.layer()));
         },
@@ -178,7 +178,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* TestClock.setTime(NOW + 74_999);
         expect((yield* gateways.online("key-a"))[0]?.state).toBe("online");
@@ -193,7 +193,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-b", B));
         yield* gateways.join(connection("tab-c", W, "key-b"));
@@ -210,7 +210,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       world.pings.set(B, NOW);
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-b", B));
         expect(
@@ -233,7 +233,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* gateways.join(connection("tab-a", B));
         yield* gateways.leave("tab-a", A);
@@ -250,7 +250,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         expect(yield* gateways.online("key-a")).toHaveLength(1);
         world.live.delete("key-a");
@@ -266,19 +266,19 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        yield* GatewayManager.use((g) => g.join(connection())).pipe(Effect.provide(world.layer()));
-        expect(
-          (yield* GatewayManager.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state,
-        ).toBe("online");
+        yield* Connections.use((g) => g.join(connection())).pipe(Effect.provide(world.layer()));
+        expect((yield* Connections.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state).toBe(
+          "online",
+        );
         world.store.reopen();
         yield* TestClock.setTime(NOW + 75_001);
-        expect(
-          (yield* GatewayManager.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state,
-        ).toBe("away");
+        expect((yield* Connections.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state).toBe(
+          "away",
+        );
         world.pings.set(A, NOW + 75_000);
-        expect(
-          (yield* GatewayManager.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state,
-        ).toBe("online");
+        expect((yield* Connections.use((g) => g.online("key-a")).pipe(Effect.provide(world.layer())))[0]?.state).toBe(
+          "online",
+        );
         expect(world.asked).toHaveLength(3);
         expect(world.store.rows()).toEqual([]);
       });
@@ -290,7 +290,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       const { connection } = world;
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* TestClock.adjust(75_001);
         expect(world.asked).toEqual([]);
@@ -315,19 +315,19 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
       });
       return Effect.gen(function* () {
         yield* TestClock.setTime(NOW);
-        const gateways = yield* GatewayManager;
+        const gateways = yield* Connections;
         yield* gateways.join(connection());
         yield* gateways.online("key-a");
         yield* gateways.leave("tab-a", A);
 
-        for (const name of ["gateway.join", "gateway.online", "gateway.probe", "gateway.leave"]) {
+        for (const name of ["connections.join", "gateway.online", "connections.probe", "gateway.leave"]) {
           expect(
             spans.filter((span) => span.name === name && span.status._tag === "Ended"),
             name,
           ).toHaveLength(1);
         }
 
-        const join = spans.find((span) => span.name === "gateway.join")!;
+        const join = spans.find((span) => span.name === "connections.join")!;
         expect(join.attributes.get("fab.gateway.client")).toBe("tab-a");
         expect(join.attributes.get("fab.gateway.session")).toBe(A);
       }).pipe(Effect.provide(world.layer()), Effect.withTracer(tracer));

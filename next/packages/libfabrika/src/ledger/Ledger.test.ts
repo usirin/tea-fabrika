@@ -29,7 +29,7 @@ import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const READER = "gateway:t1";
+const READER = "connection:t1";
 const PARENT = `in-${Effect.runSync(processId)}-41`;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";

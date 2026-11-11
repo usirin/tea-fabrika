@@ -222,7 +222,7 @@ const generatedThrow = fc.oneof(
 );
 
 for (const adapter of ["node", "worker"] as const) {
-  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and health`, async () => {
+  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and measurements`, async () => {
     await fc.assert(
       fc.asyncProperty(generatedThrow, (sample) =>
         Effect.runPromise(
@@ -253,7 +253,7 @@ for (const adapter of ["node", "worker"] as const) {
               );
               const dead = yield* read(`${A}/dead`);
               const events = yield* read(`processes/${NAME}`);
-              const health = w.sink.sql.exec("SELECT * FROM health");
+              const measurements = w.sink.sql.exec("SELECT * FROM measurements");
               const name =
                 sample.value instanceof Error
                   ? sample.value.constructor.name
@@ -262,7 +262,7 @@ for (const adapter of ["node", "worker"] as const) {
                     : typeof sample.value;
               expect(receipt).toMatchObject({ errors: [name], tries: 1 });
               expect(rows.find((row) => row.name === "runner.throw")?.attributes["error.type"]).toBe(name);
-              expect(health.filter((row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
+              expect(measurements.filter((row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
               expect(dead.map((row) => row.body)).toEqual([expect.objectContaining({ errors: [name], tries: 1 })]);
 
               for (const text of sample.private) {
@@ -271,7 +271,7 @@ for (const adapter of ["node", "worker"] as const) {
                   receipt,
                   events,
                   dead,
-                  health,
+                  measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
                   expect(JSON.stringify(permanent)).not.toContain(JSON.stringify(text).slice(1, -1));
@@ -297,7 +297,7 @@ for (const adapter of ["node", "worker"] as const) {
               }
 
               expect(yield* recorded(A)).toEqual(rows);
-              expect(w.sink.sql.exec("SELECT * FROM health")).toEqual(health);
+              expect(w.sink.sql.exec("SELECT * FROM measurements")).toEqual(measurements);
               expect(
                 yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
                   Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
@@ -348,7 +348,7 @@ describe("P34 supervision recording", () => {
   }
 
   it.effect.prop(
-    "content plant, message in errors/reason/health: only deletable content holds failure text and stack",
+    "content plant, message in errors/reason/measurements: only deletable content holds failure text and stack",
     { generated: Schema.String },
     ({ generated }) =>
       Effect.forEach(
@@ -378,13 +378,13 @@ describe("P34 supervision recording", () => {
                 "the original throw must reach deletable content before guards erase it",
               ).toBeGreaterThanOrEqual(0);
               expect(JSON.stringify(rows)).not.toContain(secret);
-              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM health"))).not.toContain(secret);
+              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
               expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
               expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
 
               for (const output of [
                 rows,
-                w.sink.sql.exec("SELECT * FROM health"),
+                w.sink.sql.exec("SELECT * FROM measurements"),
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {

@@ -1,4 +1,4 @@
-// P12, next/. [secrets] Generated flows through the real stage, control route, Gateway and sinks.
+// P12, next/. [secrets] Generated flows through the real stage, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema 
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
-import { GatewayService, gatewayRuntime } from "../../cloudflare/connection.ts";
+import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
 import { control } from "../../cloudflare/control.ts";
 import type { Env } from "../../cloudflare/runtime.ts";
 import { Doorbell, Ledger } from "../../ledger/Ledger.ts";
@@ -23,7 +23,7 @@ import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
 import { rssLayer } from "./dev.fixture.ts";
-import { startStage } from "./dev.ts";
+import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
 class CallError extends Schema.TaggedError<CallError>()("CallError", {
@@ -39,7 +39,7 @@ const config = {
   build: "test",
 };
 
-const destinations = ["spans", "logs", "journal", "health", "outbox"] as const;
+const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
 type Destination = (typeof destinations)[number];
 type Outputs = Record<Destination, Array<unknown>>;
 
@@ -82,8 +82,8 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
   expect(leaks, "no named output may hold a secret or raw frame").toEqual([]);
 };
 
-const health = (db: DatabaseSync) =>
-  ["health", "summary", "summarized", "sizes", "archived"].map((table) => ({
+const measurements = (db: DatabaseSync) =>
+  ["measurements", "summary", "aggregated", "sizes", "archived"].map((table) => ({
     table,
     rows: db.prepare(`SELECT * FROM ${table}`).all(),
   }));
@@ -120,7 +120,7 @@ const flow = async (sample: Flow) => {
     params: { body, key, pass: sample.pass, authorization: bearer },
   });
   const words = [material, bearer, key, body, sample.pass, rawFrame];
-  const outputs: Outputs = { spans: [], logs: [], journal: [], health: [], outbox: [] };
+  const outputs: Outputs = { spans: [], logs: [], journal: [], measurements: [], outbox: [] };
   const journalDb = new DatabaseSync(":memory:");
   const journal = ManagedRuntime.make(
     Ledger.sql(nodeSql(journalDb), { reader: "secret-test" }).pipe(
@@ -177,7 +177,7 @@ const flow = async (sample: Flow) => {
       await journal.runPromise(
         Ledger.use((ledger) =>
           ledger.append(
-            "door/brain",
+            "gateway/brain",
             event.id,
             lineFor(
               {
@@ -257,7 +257,7 @@ const flow = async (sample: Flow) => {
     getTags: () => ["session", "tab", "public"],
     getWebSocketAutoResponseTimestamp: () => null,
   } as unknown as DurableObjectState;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Gateway and record processing remain product code
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
     PROJECT: {
       getByName: () => ({
@@ -283,15 +283,15 @@ const flow = async (sample: Flow) => {
       }),
     },
   } as unknown as Env;
-  const runtime = gatewayRuntime(ctx, env, config);
+  const runtime = connectionRuntime(ctx, env, config);
 
   try {
-    const gateway = await runtime.runPromise(GatewayService.pipe(Effect.provide(logger)));
+    const gateway = await runtime.runPromise(ConnectionService.pipe(Effect.provide(logger)));
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           let observe: (event: RuntimeEvent) => void = () => {};
-          const stage = yield* startStage({ ...config, home }, (local) =>
+          const stage = yield* startDev({ ...config, home }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
               const plugin = [...local.mapUnsafe.values()].find(
@@ -345,7 +345,7 @@ const flow = async (sample: Flow) => {
               yield* awaitEvent((row) => row._tag === "started" && row.after === previous);
             }
 
-            // Arbitrary bodies and passes cross real Gateway parsing, including refusals and throws.
+            // Arbitrary bodies and passes cross real Connection parsing, including refusals and throws.
             yield* Effect.tryPromise({
               try: () =>
                 runtime.runPromise(
@@ -425,11 +425,11 @@ const flow = async (sample: Flow) => {
       outputs.spans.push(db.prepare("SELECT * FROM spans").all(), db.prepare("SELECT * FROM content").all());
     }
 
-    outputs.health.push(...health(gatewayDb));
+    outputs.measurements.push(...measurements(gatewayDb));
     const nodeDb = new DatabaseSync(join(home, "brain.records.sqlite"));
 
     try {
-      outputs.health.push(...health(nodeDb));
+      outputs.measurements.push(...measurements(nodeDb));
       outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
     } finally {
       nodeDb.close();
@@ -438,7 +438,7 @@ const flow = async (sample: Flow) => {
     outputs.journal.push(journalDb.prepare("SELECT * FROM entries").all());
     expect(parts.size).toBeGreaterThan(0);
     expect(outputs.journal.length).toBeGreaterThan(0);
-    expect(outputs.health.flat().length).toBeGreaterThan(0);
+    expect(outputs.measurements.flat().length).toBeGreaterThan(0);
     return { outputs, words, answer };
   } finally {
     fetch.mockRestore();

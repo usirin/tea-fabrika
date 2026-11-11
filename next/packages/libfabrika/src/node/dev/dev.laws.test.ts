@@ -12,7 +12,7 @@ import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { rssLayer } from "./dev.fixture.ts";
-import { startStage } from "./dev.ts";
+import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
 const step = fc.record({
@@ -36,7 +36,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
         try {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
-              startStage({ name: "port-test", port: 18787, build: "test", home }, (local) =>
+              startDev({ name: "port-test", port: 18787, build: "test", home }, (local) =>
                 Effect.suspend(() => {
                   const plugin = [...local.mapUnsafe.values()].find(
                     (value) => typeof value === "object" && value !== null && "sockets" in value,
@@ -110,7 +110,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                 const call = JSON.parse(String(options?.body)) as { method: string };
                 return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
               });
-              yield* startStage({ name: "life-test", port: 18787, build: "test", home }, (local) =>
+              yield* startDev({ name: "life-test", port: 18787, build: "test", home }, (local) =>
                 Effect.gen(function* () {
                   observe = Context.get(local, RuntimeLifecycle);
                   const plugin = [...local.mapUnsafe.values()].find(

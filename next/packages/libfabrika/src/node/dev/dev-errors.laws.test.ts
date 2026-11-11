@@ -12,7 +12,7 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { rssLayer } from "./dev.fixture.ts";
-import { startStage } from "./dev.ts";
+import { startDev } from "./dev.ts";
 
 const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
@@ -59,7 +59,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         try {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
-              startStage({ name: "errors", port: 18787, build: id, home }, deploy(mode === "offline" ? 0 : 27002)),
+              startDev({ name: "errors", port: 18787, build: id, home }, deploy(mode === "offline" ? 0 : 27002)),
             ).pipe(
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
@@ -93,7 +93,7 @@ it("stage reports start_timeout when deployment never opens the control listener
               const deployed = yield* Deferred.make<void>();
               const running = yield* Effect.forkChild(
                 Effect.scoped(
-                  startStage({ name: "errors", port: 18787, build, home }, () => Deferred.succeed(deployed, undefined)),
+                  startDev({ name: "errors", port: 18787, build, home }, () => Deferred.succeed(deployed, undefined)),
                 ),
               );
               yield* Deferred.await(deployed);
@@ -179,7 +179,7 @@ for (const mode of ["exit", "spawn"] as const) {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
               Effect.gen(function* () {
-                yield* startStage({ name: "errors", port: 18787, build: "test", home }, deploy(27002));
+                yield* startDev({ name: "errors", port: 18787, build: "test", home }, deploy(27002));
                 yield* TestClock.adjust("1 second");
               }),
             ).pipe(

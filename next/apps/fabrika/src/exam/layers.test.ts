@@ -468,7 +468,7 @@ describe("planted breaks", () => {
       ...Object.fromEntries(
         lower.map(([room]) => [
           `packages/libfabrika/src/${room}/Up.ts`,
-          lines('import {Door} from "../gateway/Gateway.ts";'),
+          lines('import {Gateway} from "../gateway/Gateway.ts";'),
         ]),
       ),
     });
@@ -875,7 +875,7 @@ describe("planted breaks in the room folders", () => {
     "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
     "packages/libfabrika/src/processes/Mailbox.ts": lines(
       'import {log} from "../ledger/Log.ts";',
-      'import {Door} from "../gateway/Gateway.ts";',
+      'import {Gateway} from "../gateway/Gateway.ts";',
     ),
     "packages/libfabrika/src/access/Access.ts": lines(
       'import {mailbox} from "../processes/Mailbox.ts";',

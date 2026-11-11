@@ -58,7 +58,7 @@ const world = (port: number, name: string) => {
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
-    GATEWAY: {
+    CONNECTION: {
       getByName: (to: string) => ({
         fetch: async (request: Request) => {
           calls.push({ to, method: "fetch", args: [request] });

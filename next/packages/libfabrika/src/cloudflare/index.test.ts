@@ -122,7 +122,7 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
         const stub = new Proxy({}, { get: () => refuse });
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
-          GATEWAY: { getByName: () => stub },
+          CONNECTION: { getByName: () => stub },
           PROJECT: { getByName: () => stub },
         } as unknown as Env;
         const origin = `http://127.0.0.1:${port}`;
