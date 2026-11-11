@@ -304,8 +304,13 @@ Start it in the background and read the last line only:
 ```sh
 node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 	[--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] \
-	[--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start <step>] &
+	[--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] \
+	[--model sonnet|opus] [--start <step>] &
 ```
+
+`--codex-exec` runs the named steps' Codex as the installed `codex exec`, on your own Codex config
+and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`). `drive.ts` takes
+`--agent codex-exec` for one step.
 
 - **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
   step (the ticket, its version, the approved plan, the decided notes). Then one section per step,

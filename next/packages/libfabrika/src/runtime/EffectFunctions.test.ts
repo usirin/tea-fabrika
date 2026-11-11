@@ -7,6 +7,7 @@ import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } fro
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
+import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -410,7 +411,7 @@ describe("T285, coordination tracing keep-laws", () => {
         async (a, ctx, keys, failures) => {
           const d = disk();
           const c = capture();
-          const layer = ClientManager.layer({
+          const layer = ClientManagerLedger.layer({
             name: a.id,
             keys,
             window: null,

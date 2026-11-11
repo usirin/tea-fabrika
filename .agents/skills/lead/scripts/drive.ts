@@ -2,13 +2,14 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
+//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
-// (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
+// (.decisions/0026, 0028). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
+// the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
 // commits them as one signed step commit through stepcommit, with main's own signer. A mutation
@@ -45,7 +46,8 @@
 // Exit codes: 0 done, 10 send to tests, 11 send to build, 12 send to plan, 20 ask (a question for
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
-// any agent ran: `refused:<check>`, one of agent_cap (8 agents running: the ACP harnesses drive
+// any agent ran: `refused:<check>`, one of lane_running (another live process drives this lane:
+// a chain, or a step run alone; state/<lane>.lock holds its pid), agent_cap (8 agents running: the ACP harnesses drive
 // started), low_disk (under 20 GB free after box.sh gc), branch_checked_out (the lane's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
@@ -64,6 +66,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -100,16 +103,30 @@ import {
 } from "./agents.ts";
 import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
-const AGENTS = ["codex", "claude"] as const;
+const AGENTS = ["codex", "codex-exec", "claude"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
-/** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
-export const stepProvider = (agent: AgentName, step: StepName): Provider =>
-  agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
+/**
+ * The provider row a step's agent runs on: Codex only reads for a plan or a review. `codex` is
+ * Codex through ACP; `codex-exec` is the installed `codex exec`, plain (./codexexec.ts).
+ */
+export const stepProvider = (agent: AgentName, step: StepName): Provider => {
+  const reads = step === "plan" || step === "review";
+
+  switch (agent) {
+    case "claude":
+      return "claude";
+    case "codex":
+      return reads ? "codex-read" : "codex";
+    case "codex-exec":
+      return reads ? "codex-exec-read" : "codex-exec";
+  }
+};
 
 // ---------------------------------------------------------------- the outcome
 
@@ -230,7 +247,7 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
  */
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
-const CHECKS = [...BOX_CHECKS, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
+const CHECKS = [...BOX_CHECKS, "lane_running", "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
 type Check = (typeof CHECKS)[number];
 type Refused = { readonly kind: "refused"; readonly check: Check };
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
@@ -580,35 +597,6 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
     default:
       return stuck("step_said", said.reason);
-  }
-};
-
-/** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
-const BOX_FILES = [
-  "",
-  "-gitdata",
-  "-view",
-  "-mutbox",
-  "-prompt.md",
-  ".md",
-  ".jsonl",
-  ".err",
-  ".log",
-  "-plan.md",
-  "-plan.jsonl",
-];
-
-/**
- * The first box `<lane>-<step><n>`, from `n` up, that no file of an older run holds. A refused run
- * once returned an older run's `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
- */
-export const freshBox = (lane: string, step: string, n: number, taken: (name: string) => boolean): string => {
-  for (let i = n; ; i += 1) {
-    const box = `${lane}-${step}${i}`;
-
-    if (!BOX_FILES.some((suffix) => taken(`${box}${suffix}`))) {
-      return box;
-    }
   }
 };
 
@@ -1728,7 +1716,7 @@ type Lane = {
   readonly branch?: string;
   readonly root?: string;
   readonly head?: string;
-  readonly steps: readonly { readonly step: string; readonly report?: string | null }[];
+  readonly steps: readonly { readonly step: string; readonly box?: string; readonly report?: string | null }[];
 };
 
 // ---------------------------------------------------------------- the command
@@ -1842,7 +1830,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1871,26 +1859,79 @@ const lockTaken = (lock: string): boolean => {
   }
 };
 
-/** One Electron step at a time: a lock file holding the owner's pid, taken over when it is dead. */
+/**
+ * A pid lock file, the one kind the lead's tools keep: `null` once this process holds it (taken
+ * now, or already its own), else the pid of the live process that holds it. A lock whose owner is
+ * dead is taken over.
+ */
+const holdLock = (lock: string): number | null => {
+  for (;;) {
+    if (lockTaken(lock)) {
+      return null;
+    }
+
+    const owner = Number(readFileSync(lock, "utf8").trim());
+
+    if (owner === process.pid) {
+      return null;
+    }
+
+    if (alive(owner)) {
+      return owner;
+    }
+
+    rmSync(lock, { force: true });
+  }
+};
+
+/** One Electron step at a time: the lock file, waited for while another live process holds it. */
 const takeElectron = (env: Env) =>
   Effect.gen(function* () {
     const lock = join(env.BOXES, "state", "electron.lock");
 
-    for (;;) {
-      if (lockTaken(lock)) {
-        process.on("exit", () => rmSync(lock, { force: true }));
-        return;
-      }
-
-      const owner = Number(readFileSync(lock, "utf8").trim());
-
-      if (alive(owner)) {
-        yield* Effect.sleep("20 seconds");
-      } else {
-        rmSync(lock, { force: true });
-      }
+    while (holdLock(lock) !== null) {
+      yield* Effect.sleep("20 seconds");
     }
+
+    process.on("exit", () => rmSync(lock, { force: true }));
   });
+
+/** The lock one live process holds while it drives a lane: a chain, or a step drive.ts runs alone. */
+const laneLock = (boxes: string, lane: string) => join(boxes, "state", `${lane}.lock`);
+
+/**
+ * Take the lane for this process: `null` once it holds it, else the pid of the live process that
+ * drives the lane now. Two launches of one lane once both took `p39s1-tests2` (2026-11-11).
+ */
+export const holdLane = (boxes: string, lane: string): number | null => {
+  mkdirSync(join(boxes, "state"), { recursive: true });
+  return holdLock(laneLock(boxes, lane));
+};
+
+/** Give the lane back, only when this process holds it. */
+export const freeLane = (boxes: string, lane: string): void => {
+  const lock = laneLock(boxes, lane);
+
+  if (existsSync(lock) && Number(readFileSync(lock, "utf8").trim()) === process.pid) {
+    rmSync(lock, { force: true });
+  }
+};
+
+/**
+ * The names a lane's next run id must pass, for `RunId.next`: every file in the boxes folder and
+ * every box the lane's state file records. A run id names its box and every file the run leaves,
+ * so an older run's file is never read as a new run's: a refused run once returned an older run's
+ * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
+ */
+export const runNames = (boxes: string, lane: string): string[] => {
+  const state = join(boxes, "state", `${lane}.json`);
+  const saved: Lane | null = existsSync(state) ? (JSON.parse(readFileSync(state, "utf8")) as Lane) : null;
+  return [...readdirSync(boxes), ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box]))];
+};
+
+/** What a second launch of a lane is told. */
+export const laneRunning = (lane: string, pid: number): string =>
+  `lane ${lane} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`;
 
 /** What one step is asked for, as the command line or the chain gives it. */
 export interface StepArgs {
@@ -1923,9 +1964,10 @@ const refusal = Start.cases.refused.make;
 const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reason, exit: 2 });
 
 /**
- * Everything before the agent: the usage checks, the base and the lane's root, a fresh box name,
- * the agent cap, the disk, the lane's branch not held by a worktree, and the prompt file. Pure
- * reads of the main checkout and the laptop; nothing it does needs undoing.
+ * Everything before the agent: the usage checks, the lane taken for this process, the base and the
+ * lane's root, a fresh run id, the agent cap, the disk, the lane's branch not held by a worktree,
+ * and the prompt file. Reads of the main checkout and the laptop, beside the lane's lock, which
+ * the process that took it gives back (`freeLane`).
  */
 export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const { lane, step, agent, electron } = p;
@@ -1948,11 +1990,21 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--electron is for --agent claude; a Codex box cannot start Electron");
   }
 
-  if (agent === "codex" && p.model !== undefined) {
+  if (agent !== "claude" && p.model !== undefined) {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
-  mkdirSync(join(env.BOXES, "state"), { recursive: true });
+  // A chain holds its lane already; a step run alone takes it here, before any box is made.
+  const running = holdLane(env.BOXES, lane);
+
+  if (running !== null) {
+    return refusal({
+      outcome: endName({ kind: "refused", check: "lane_running" }),
+      reason: laneRunning(lane, running),
+      exit: 3,
+    });
+  }
+
   const statePath = join(env.BOXES, "state", `${lane}.json`);
   const saved: Lane | null = existsSync(statePath) ? (JSON.parse(readFileSync(statePath, "utf8")) as Lane) : null;
   const ticket = p.ticket ?? saved?.ticket;
@@ -2007,10 +2059,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
-  const box = freshBox(lane, step, (saved?.steps.filter((e) => e.step === step).length ?? 0) + 1, (name) =>
-    existsSync(join(env.BOXES, name)),
-  );
-  const n = Number(box.slice(`${lane}-${step}`.length));
+  const box = RunId.next(lane, step, runNames(env.BOXES, lane));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
   const claude = agent === "claude";
   const ask: Ask = {
@@ -2025,7 +2074,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     base,
     root,
     box,
-    run: `t${ticket}-${step}${n === 1 ? "" : n}`,
+    run: box,
     prompt: at("-prompt.md"),
     report: step === "plan" ? at("-plan.md") : at(".md"),
     events: step === "plan" ? at("-plan.jsonl") : at(".jsonl"),
@@ -2283,6 +2332,8 @@ const main = () => {
   }
 
   const env = loadEnv();
+  // prepare takes the lane for this process; it is given back however the process ends.
+  process.on("exit", () => freeLane(env.BOXES, lane));
   const prepared = prepare(env, {
     lane,
     step: step as StepName,

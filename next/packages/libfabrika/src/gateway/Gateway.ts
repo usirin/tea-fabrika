@@ -5,6 +5,7 @@ import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
+import type * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import {
   type Envelope,
   NotGranted,
@@ -220,7 +221,7 @@ const methods: ReadonlySet<string> = new Set([
 
 type Options<A, RNext, RDeliver, RNotify> = {
   readonly sql: Parameters<typeof gatewayStore>[0];
-  readonly founder: Parameters<typeof ClientManager.layer>[0];
+  readonly founder: Parameters<typeof ClientManagerLedger.layer>[0];
   readonly name: string;
   readonly url: string;
   readonly origins: ReadonlyArray<string>;
