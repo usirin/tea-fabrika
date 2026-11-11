@@ -26,6 +26,9 @@
     "./runtime/internal/*": null,
     "./gateway/*": "./src/gateway/*.ts",
     "./gateway/internal/*": null,
+    "./settings/*": "./src/settings/*.ts",
+    "./settings/internal/*": null,
+    "./node/settings/*": "./src/node/settings/*.ts",
     "./coordination": "./src/coordination/index.ts",
     "./sqlite": "./src/ledger/NodeSqlite.ts",
     "./box": "./src/cloudflare/box.ts",
@@ -59,7 +62,8 @@
     "lightningcss": "catalog:",
     "oxc-parser": "catalog:",
     "oxc-transform-react": "catalog:",
-    "rolldown": "catalog:"
+    "rolldown": "catalog:",
+    "toml-eslint-parser": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",
