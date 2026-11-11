@@ -5,8 +5,18 @@ import { Option, Schema } from "effect";
 import type { Ask, AsksNow } from "../asks.ts";
 import { activeOf, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
 import type { HoldCmd, Key as HeldKey } from "../desk/hold.ts";
-import { bindingFor, defaults, type Does, type File, type Key, type Keys } from "../desk/keymap.ts";
-import { type Group, groupOf, type Show, wordOf } from "../desk/keys.ts";
+import { bindingFor, commandOn, defaults, type Does, type File, Key, type Keys } from "../desk/keymap.ts";
+import {
+  type Group,
+  groupOf,
+  keyName,
+  keyOwner,
+  type Press as KeyPress,
+  matchPress,
+  type Show,
+  THE_MACS,
+  wordOf,
+} from "../desk/keys.ts";
 import type { TileId, TileNode } from "../desk/layout/index.ts";
 import type { HostNow, LedgerLink, LinkNow, ToWindow } from "../messages.ts";
 import type { ProjectRow } from "../projects.ts";
@@ -804,7 +814,23 @@ type Over =
  * What the one palette lists: the commands (Cmd-K), every key (C-b ?), or the projects (Cmd-O,
  * the top bar's project button). Each replaces the last in the same palette, so two never stack.
  */
-type PaletteSource = { readonly _tag: "commands" } | { readonly _tag: "keys" } | { readonly _tag: "projects" };
+type PaletteSource =
+  | { readonly _tag: "commands" }
+  | { readonly _tag: "keys" }
+  | { readonly _tag: "projects"; readonly press: Press };
+
+/**
+ * What showed the projects box, kept through the opening it starts (docs/direction/project-window.md,
+ * "What the ledger records"): `box` for the opening binding or the `show projects` word, `button`
+ * for the top bar's project button, `menu` for File > Open Project….
+ */
+export type Press = "box" | "button" | "menu";
+
+/** The row the box opened last, by its key or `folder`, and the press that showed the box. */
+export interface Opening {
+  readonly id: string;
+  readonly source: Press;
+}
 
 /**
  * The palette: its source, what is typed, and what is picked. Commands are picked by place
@@ -874,11 +900,12 @@ export interface Frame {
   readonly over: Over;
   /**
    * Where focus goes back when the palette closes: the tile, the field or the button it was
-   * opened from (`tile:t1`, `button:project`), kept while one source replaces another.
+   * opened from (`tile:t1`, `button:project`), kept while one source replaces another. `null`
+   * when the palette was opened with no focus named, and whenever no palette is open.
    */
   readonly returnTo: string | null;
-  /** The project the box opened last, by its key, or `folder`: the app is opening it. */
-  readonly opening: string | null;
+  /** The project the box opened last, by its key, or `folder`, and its press: the app is opening it. */
+  readonly opening: Opening | null;
   readonly info: InfoMode;
   /** Both bars hidden; a thin band stays for the window's buttons. */
   readonly bare: boolean;
@@ -937,12 +964,11 @@ export type FrameMsg =
   | { readonly type: "info"; readonly focus: string | null }
   | { readonly type: "palette" }
   /** The projects box opens, on these rows, from `focus`: Cmd-O, the menu or the project button. */
-  | { readonly type: "projects"; readonly rows: readonly ProjectRow[]; readonly focus: string }
-  /** The palette shows another source in its place, opened from `focus` if it was closed. */
   | {
-      readonly type: "palette_source";
-      readonly source: PaletteSource["_tag"];
+      readonly type: "projects";
+      readonly rows: readonly ProjectRow[];
       readonly focus: string;
+      readonly press: Press;
     }
   /** The app sent the project rows again: a window opened or closed. The pick stays by id. */
   | { readonly type: "project_rows"; readonly rows: readonly ProjectRow[] }
@@ -962,12 +988,13 @@ export type FrameMsg =
 
 /**
  * The palette opens on a source, or shows it in place of the last: one palette, never two. Focus
- * goes back, when it closes, to where the first one was opened from.
+ * goes back, when it closes, to where the first one was opened from: `focus`, or `null` when the
+ * Msg that opened it named none, so the desk's own focus takes it back.
  */
-const opened = (f: Frame, palette: Palette, focus: string): Frame => ({
+const opened = (f: Frame, palette: Palette, focus: string | null): Frame => ({
   ...f,
   over: palette,
-  returnTo: f.over.kind === "palette" ? (f.returnTo ?? focus) : focus,
+  returnTo: f.over.kind === "palette" ? f.returnTo : focus,
 });
 
 /** A thing over the desk opens, or closes when it is open already, as a menu does. */
@@ -1045,20 +1072,15 @@ const shown = (f: Frame, what: Exclude<Show, "info">): Frame => {
     case "jobs":
       return toggle(f, { kind: "jobs" });
     case "keys":
-      return { ...f, over: paletteOf({ _tag: "keys" }) };
+      return opened(f, paletteOf({ _tag: "keys" }), null);
     case "palette":
-      // In the projects box's place, focus still goes back where that was opened from; opened
-      // alone, the desk's focus takes it back (desk.tsx).
-      return {
-        ...f,
-        over: paletteOf({ _tag: "commands" }),
-        returnTo: f.over.kind === "palette" ? f.returnTo : null,
-      };
+      return opened(f, paletteOf({ _tag: "commands" }), null);
     case "projects":
-      return {
-        ...f,
-        over: paletteOf({ _tag: "projects" }, f.over.kind === "palette" ? f.over.rows : []),
-      };
+      return opened(
+        f,
+        paletteOf({ _tag: "projects", press: "box" }, f.over.kind === "palette" ? f.over.rows : []),
+        null,
+      );
     case "bars":
       return { ...f, bare: !f.bare, over: { kind: "none" } };
   }
@@ -1081,6 +1103,131 @@ export const keyGoesTo = (over: Over, key: string, prefix: string, desk: MidKey)
   }
 
   return key === prefix || desk.armed || desk.asking ? "desk" : "over";
+};
+
+/** Where keyboard focus is when a key comes: a tile's terminal, a text field, a button, or the page. */
+export type Target = "terminal" | "field" | "button" | "page";
+
+/** The keys editor's recording, as a key meets it: none, or the stage it is at (keys/machine.ts). */
+export type Recording = "none" | "waiting" | "candidate" | "saving";
+
+/** What a key meets on the page: the look, what lies over the desk, the desk mid-key, recording and focus. */
+export interface KeyAt {
+  readonly look: "welcome" | "project";
+  readonly over: Over;
+  readonly desk: MidKey;
+  readonly recording: Recording;
+  readonly target: Target;
+}
+
+/**
+ * What the page does with a key (desk.tsx, `onKey`):
+ *
+ * - `mac`: one of the Mac's own keys, for the system; no terminal hears it.
+ * - `system`: the system's or the menu's; a terminal does not hear it, and focus goes into the over.
+ * - `pass`: the focused control has it as it is.
+ * - `swallow`: nobody hears it.
+ * - `interrupt`: Ctrl-C while a key is recorded, sent on to the focused tile's program.
+ * - `record`: the keys editor records it.
+ * - `cancel`: Escape drops the recorded candidate.
+ * - `projects`, `palette`, `focus`: the page's own commands, by the key's `name`.
+ * - `desk`: the frame, the over or the desk has it, by its `name`.
+ */
+export type KeyRoute =
+  | { readonly _tag: "mac" }
+  | { readonly _tag: "system" }
+  | { readonly _tag: "pass" }
+  | { readonly _tag: "swallow" }
+  | { readonly _tag: "interrupt" }
+  | { readonly _tag: "record" }
+  | { readonly _tag: "cancel" }
+  | { readonly _tag: "projects"; readonly name: string }
+  | { readonly _tag: "palette"; readonly name: string }
+  | { readonly _tag: "focus"; readonly does: Does; readonly name: string }
+  | { readonly _tag: "desk"; readonly name: string | null };
+
+/**
+ * Where a key goes, in the one order the page keeps. The Mac's own keys first; then the keys
+ * editor's recording, which takes the key it waits for and keeps app keys from a candidate; then
+ * the opening binding (`projects.open`), before welcome's rows, the palette's key, the prefix, an
+ * over or a tile can take it (P18); then the rest.
+ *
+ *   keyRoute({look: "project", recording: "none", ...}, Cmd-O, defaults, true)      {_tag: "projects"}
+ *   keyRoute({look: "project", recording: "waiting", ...}, Cmd-O, defaults, true)   {_tag: "record"}
+ */
+export const keyRoute = (at: KeyAt, press: KeyPress, keys: Keys, mac: boolean): KeyRoute => {
+  const raw = keyName(press);
+
+  if (mac && raw !== null && THE_MACS.has(raw)) {
+    return { _tag: "mac" };
+  }
+
+  if (at.recording !== "none" && raw === "<c-c>") {
+    return { _tag: "interrupt" };
+  }
+
+  if (at.recording === "waiting") {
+    const tab = press.key === "Tab" && !press.ctrl && !press.meta && !press.alt;
+    const clicks = (press.key === "Enter" || press.key === " ") && at.target === "button";
+    return tab || clicks ? { _tag: "pass" } : { _tag: "record" };
+  }
+
+  if (at.recording === "candidate" || at.recording === "saving") {
+    if (press.key === "Escape") {
+      return at.recording === "candidate" ? { _tag: "cancel" } : { _tag: "swallow" };
+    }
+
+    // Keep candidates away from app shortcuts while the native controls still receive their keys.
+    if (press.meta || press.ctrl || press.alt) {
+      return keyOwner(press, mac, keys) === "system" ? { _tag: "pass" } : { _tag: "swallow" };
+    }
+
+    return { _tag: "pass" };
+  }
+
+  const kind = at.desk.armed ? "after_prefix" : "alone";
+  const afterPrefix = at.desk.armed
+    ? matchPress(
+        press,
+        keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === "after_prefix")),
+        mac,
+      )
+    : null;
+  const owner = afterPrefix === null ? keyOwner(press, mac, keys) : "app";
+
+  if (owner === "nobody") {
+    return { _tag: "swallow" };
+  }
+
+  if (owner === "system") {
+    return { _tag: "system" };
+  }
+
+  const applicable = [
+    Key.cases.alone.make({ key: keys.prefix }),
+    ...keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === kind)),
+  ];
+  const name = matchPress(press, applicable, mac)?.key ?? raw;
+  const alone = name === null ? undefined : commandOn(keys, Key.cases.alone.make({ key: name }));
+
+  if (name !== null && alone === "projects.open") {
+    return { _tag: "projects", name };
+  }
+
+  // Welcome has no desk and no host: its own rows take the keys.
+  if (at.look === "welcome") {
+    return { _tag: "pass" };
+  }
+
+  if (name !== null && alone === "palette.open") {
+    return { _tag: "palette", name };
+  }
+
+  if (name !== null && (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"')) {
+    return { _tag: "focus", does: alone, name };
+  }
+
+  return { _tag: "desk", name };
 };
 
 /** What the page does for one Cmd of the hold's step, in order (`passOn`). */
@@ -1159,16 +1306,32 @@ export const deliver = (out: readonly Out[], ports: Ports): boolean => {
   return live;
 };
 
+/**
+ * Where focus goes back after a step: the palette's own opener when the step closed the palette,
+ * else `null`, and the desk's focus stays as it is (desk.tsx, `frameInstall`).
+ *
+ *   focusBack(projects from "tile:t3", none)      "tile:t3"
+ *   focusBack(keys from C-b ?, none)              null: the desk's focus takes it back
+ */
+export const focusBack = (before: Frame, after: Frame): string | null =>
+  before.over.kind === "palette" && after.over.kind === "none" ? before.returnTo : null;
+
 export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
+  const next = frameStep(f, m);
+  // Out of the palette, it gives focus back to no one: a later palette never finds an old opener.
+  return next.over.kind !== "palette" && next.returnTo !== null ? { ...next, returnTo: null } : next;
+};
+
+const frameStep = (f: Frame, m: FrameMsg): Frame => {
   switch (m.type) {
     case "show":
       return shown(f, m.what);
     case "palette":
-      return toggle(f, paletteOf({ _tag: "commands" }));
+      return f.over.kind === "palette"
+        ? { ...f, over: { kind: "none" } }
+        : opened(f, paletteOf({ _tag: "commands" }), null);
     case "projects":
-      return opened(f, paletteOf({ _tag: "projects" }, m.rows), m.focus);
-    case "palette_source":
-      return opened(f, paletteOf({ _tag: m.source }, f.over.kind === "palette" ? f.over.rows : []), m.focus);
+      return opened(f, paletteOf({ _tag: "projects", press: m.press }, m.rows), m.focus);
     case "project_rows": {
       if (f.over.kind !== "palette" || f.over.source._tag !== "projects") {
         return f;
@@ -1184,7 +1347,7 @@ export const frameUpdate = (f: Frame, m: FrameMsg): Frame => {
 
       const shown = projectRowsFor(f.over.rows, f.over.query);
       const id = m.id !== undefined && shown.some((r) => r.id === m.id) ? m.id : f.over.selected;
-      return { ...f, over: { kind: "none" }, opening: id };
+      return { ...f, over: { kind: "none" }, opening: { id, source: f.over.source.press } };
     }
     case "item":
       return itemLines(f, m.what);

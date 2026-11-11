@@ -32,9 +32,10 @@ import type { Launch } from "../launch.ts";
 // the file, so a save is heard even without an OS event. Both wait for the text to stay still
 // for 50 ms; hints with unchanged text do not delay it. Any watch hint keeps its source "watch".
 // Each file is read apart, so a bad fabrika.toml never touches the keys, and the other way round.
-// An answer is said once for each burst of saves, the same text as before included; a poll tick
-// that finds the text as it was says nothing. A page never reads a file; the host sends
-// each value on (a browser is always a client).
+// An answer is said once for each burst of saves, the same text as before included: each save
+// gives the file a new stamp (its mtime, size and inode), read with its text. A watch hint or a
+// poll tick that finds the text and the stamp as they were says nothing, readable or not. A page
+// never reads a file; the host sends each value on (a browser is always a client).
 
 /**
  * What an OS failure means, in words. The error's own message names the full path, which is a
@@ -88,10 +89,19 @@ const POLL = Duration.seconds(1);
 /** How a save was heard: the OS watch told us, or the poll found it. */
 type Heard = "watch" | "poll";
 
+/**
+ * What a read of the file found: its text (`said`) and its save stamp, or `null` when the file
+ * has none to give (it is not there). The stamp tells two saves of the same text apart.
+ */
+interface Seen<A> {
+  readonly said: A;
+  readonly stamp: string | null;
+}
+
 /** Wait for unchanged text, moving the end only on a change and keeping any watch hint. */
 const settle =
-  <A>(text: Effect.Effect<A>) =>
-  (hints: Stream.Stream<{ readonly said: A; readonly by: Heard }>) =>
+  <A>(read: Effect.Effect<Seen<A>>) =>
+  (hints: Stream.Stream<Seen<A> & { readonly by: Heard }>) =>
     Stream.unwrap(
       Effect.gen(function* () {
         const queue = yield* Stream.toQueue(
@@ -101,7 +111,7 @@ const settle =
         return Stream.fromEffectRepeat(
           Effect.gen(function* () {
             const first = yield* Queue.take(queue);
-            let window = { said: first.said, by: first.by, end: first.at + SETTLE_MS };
+            let window = { said: first.said, stamp: first.stamp, by: first.by, end: first.at + SETTLE_MS };
 
             while (true) {
               const now = yield* Clock.currentTimeMillis;
@@ -110,17 +120,18 @@ const settle =
               if (Option.isSome(hint)) {
                 window = {
                   said: hint.value.said,
+                  stamp: hint.value.stamp,
                   by: window.by === "watch" || hint.value.by === "watch" ? "watch" : "poll",
                   end: Equal.equals(window.said, hint.value.said) ? window.end : hint.value.at + SETTLE_MS,
                 };
               } else {
-                const said = yield* text;
+                const seen = yield* read;
 
-                if (Equal.equals(window.said, said)) {
-                  return { said, by: window.by };
+                if (Equal.equals(window.said, seen.said)) {
+                  return { ...seen, by: window.by };
                 }
 
-                window = { said, by: window.by, end: (yield* Clock.currentTimeMillis) + SETTLE_MS };
+                window = { ...seen, by: window.by, end: (yield* Clock.currentTimeMillis) + SETTLE_MS };
               }
             }
           }),
@@ -134,8 +145,9 @@ type Decode<A> = (text: string) => Result.Result<A, { readonly line: number; rea
  * An answer for each burst of saves to the file `name` in `folder`, even when its text is what the
  * last answer said; one at once, with no wait for the watch. For a reader that also writes the file:
  * its own save moves what it holds, so a later save by another process that puts the text back is
- * news to it, though not to the watch (host/keybindings.ts). A poll tick that finds the text as it
- * was last said, or an unreadable file again, says nothing. The folder is made if it is missing, so
+ * news to it, though not to the watch (host/keybindings.ts). A save is told by the file's stamp,
+ * read with its text; a watch hint or a poll tick that finds the text and the stamp as they were
+ * last said, an unreadable file's included, says nothing. The folder is made if it is missing, so
  * a file put there later is heard; when it cannot be made, the answer stays as it was last said. If
  * the watch ends, the poll carries on.
  */
@@ -174,6 +186,18 @@ export const settingsSaves = <A>(
           ? Setting.read({ value: read.success })
           : Setting.refused({ line: read.failure.line, why: read.failure.why });
       };
+      /** The file's save stamp: its mtime, size and inode, new on each write or rename. */
+      const stamp = fs.stat(file).pipe(
+        Effect.map(
+          (info) =>
+            `${Option.getOrUndefined(info.mtime)?.getTime() ?? ""}:${info.size}:${Option.getOrUndefined(info.ino) ?? ""}`,
+        ),
+        Effect.orElseSucceed(() => null),
+      );
+      const read = Effect.gen(function* () {
+        const at = yield* stamp;
+        return { said: yield* text, stamp: at };
+      });
       const made = yield* Effect.exit(fs.makeDirectory(folder, { recursive: true }));
 
       if (Exit.isFailure(made)) {
@@ -181,15 +205,21 @@ export const settingsSaves = <A>(
         return Stream.fromEffect(Effect.map(text, answer));
       }
 
-      const seen = yield* Ref.make<string | null | Setting<never> | undefined>(undefined);
-      const say = (said: string | null | Setting<never>, by: Heard | "start") =>
-        Ref.set(seen, said).pipe(
+      const last = yield* Ref.make<Seen<string | null | Setting<never>> | undefined>(undefined);
+      /** The text or the stamp differs from the last answer's: a save the last answer did not say. */
+      const fresh = (now: Seen<string | null | Setting<never>>) =>
+        Effect.map(
+          Ref.get(last),
+          (was) => was === undefined || !Equal.equals(now.said, was.said) || now.stamp !== was.stamp,
+        );
+      const say = (seen: Seen<string | null | Setting<never>>, by: Heard | "start") =>
+        Ref.set(last, seen).pipe(
           Effect.andThen(Effect.logInfo("settings_heard").pipe(Effect.annotateLogs({ file: name, by }))),
-          Effect.as(said),
+          Effect.as(seen.said),
         );
       const heard = fs.watch(folder).pipe(
         Stream.filter((event) => path.basename(event.path) === name),
-        Stream.mapEffect(() => Effect.map(text, (said) => ({ said, by: "watch" as const }))),
+        Stream.mapEffect(() => Effect.map(read, (seen) => ({ ...seen, by: "watch" as const }))),
         Stream.concat(
           Stream.fromEffect(Effect.logWarning(`fabrika host: the watch on ${folder} ended`)).pipe(Stream.drain),
         ),
@@ -198,17 +228,14 @@ export const settingsSaves = <A>(
         ),
       );
       const polled = Stream.tick(POLL).pipe(
-        Stream.mapEffect(() => text),
-        Stream.filterEffect((now) => Effect.map(Ref.get(seen), (was) => !Equal.equals(now, was))),
-        Stream.map((said) => ({ said, by: "poll" as const })),
+        Stream.mapEffect(() => read),
+        Stream.filterEffect(fresh),
+        Stream.map((seen) => ({ ...seen, by: "poll" as const })),
       );
-      const saves = Stream.merge(heard, polled).pipe(settle(text));
-      const first = Stream.fromEffect(Effect.map(text, (said) => ({ by: "start" as const, said })));
+      const saves = Stream.merge(heard, polled).pipe(settle(read), Stream.filterEffect(fresh));
+      const first = Stream.fromEffect(Effect.map(read, (seen) => ({ ...seen, by: "start" as const })));
       return Stream.concat(first, saves).pipe(
-        Stream.filterEffect(({ said, by }) =>
-          by === "poll" ? Effect.map(Ref.get(seen), (was) => !Equal.equals(said, was)) : Effect.succeed(true),
-        ),
-        Stream.mapEffect(({ said, by }) => say(said, by)),
+        Stream.mapEffect(({ by, ...seen }) => say(seen, by)),
         Stream.map(answer),
       );
     }),

@@ -298,17 +298,23 @@ export type ToPage = typeof ToPage.Type;
  *   {type: "again"}
  *   {type: "restart"}
  */
+/** Where a page's opening came from (docs/direction/project-window.md, "What the ledger records"). */
+const PageSource = Schema.Literals(["welcome", "box", "button", "menu"]);
+
 export const ToApp = Schema.Union([
   Schema.Struct({ type: Schema.Literal("again") }),
   Schema.Struct({ type: Schema.Literal("restart") }),
-  /** A recent project picked, in welcome or the box, by its key, and where it was picked. */
+  /**
+   * A recent project picked, in welcome or the box, by its key, and the press it came from:
+   * `welcome`, or what showed the box (`box` for Cmd-O, `button`, `menu` for File > Open Project…).
+   */
   Schema.Struct({
     type: Schema.Literal("open"),
     key: Schema.String,
-    source: Schema.Literals(["welcome", "box"]),
+    source: PageSource,
   }),
-  /** Open Folder…: the system's folder sheet, over this window. */
-  Schema.Struct({ type: Schema.Literal("folder"), source: Schema.Literals(["welcome", "box"]) }),
+  /** Open Folder…: the system's folder sheet, over this window, from the press it came from. */
+  Schema.Struct({ type: Schema.Literal("folder"), source: PageSource }),
   /** Try Again, after the old desk did not move. */
   Schema.Struct({ type: Schema.Literal("retry") }),
 ]);

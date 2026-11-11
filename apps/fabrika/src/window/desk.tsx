@@ -15,8 +15,7 @@ import { createRoot } from "react-dom/client";
 import type { AsksNow } from "../asks.ts";
 import { activeOf, type Desk, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
 import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
-import { commandOn, defaults, Key as KeyCase, type Keys, spell } from "../desk/keymap.ts";
-import { keyName, keyOwner, matchPress, THE_MACS } from "../desk/keys.ts";
+import { defaults, type Keys, spell } from "../desk/keymap.ts";
 import {
   type ContainerNode,
   findTile,
@@ -49,14 +48,19 @@ import {
   type Frame,
   type FrameMsg,
   type Delivery,
+  focusBack,
   frameKey,
   frameUpdate,
   keyGoesTo,
+  keyRoute,
   type MidKey,
   deliver,
   passOn,
   type Ports,
+  type Press,
+  type Recording,
   type Shapes,
+  type Target,
   ticketsShown,
 } from "./frame.ts";
 import { Band, BottomArea, type FrameProps, Over, TopBar } from "./frame.tsx";
@@ -451,7 +455,7 @@ const frameInstall = (next: Frame): boolean => {
   }
 
   // The palette or the projects box closed: focus goes back to where the first was opened from.
-  const back = store.frame.over.kind === "palette" && next.over.kind === "none" ? store.frame.returnTo : null;
+  const back = focusBack(store.frame, next);
   store.frame = next;
 
   if (back === null) {
@@ -538,7 +542,7 @@ interface KeyedFrom {
 /**
  * The bottom line's item keyboard focus was on when Ctrl-B was pressed, or `null`. While the desk
  * is mid-key, the line's right side says `esc cancels` in place of its items, so focus on one falls
- * to the page. It goes back to that item once the key is done (`focusBack`), and info mode, turned
+ * to the page. It goes back to that item once the key is done (`focusKeyedFrom`), and info mode, turned
  * on in between, explains that item.
  */
 let keyedFrom: KeyedFrom | null = null;
@@ -558,7 +562,7 @@ const noteKeyedFrom = (at: EventTarget | null) => {
 };
 
 /** Focus goes back to the bottom line's item it fell from while the desk was mid-key. */
-const focusBack = () => {
+const focusKeyedFrom = () => {
   const from = keyedFrom;
   keyedFrom = null;
 
@@ -595,7 +599,7 @@ const focusName = (at: Element | null): string => {
  * Cmd-O, File > Open Project…, `show projects`: on welcome, focus goes to its first row, with no
  * second box over it (P27); over a project's desk, the projects box opens in the palette's place.
  */
-const openProjects = () => {
+const openProjects = (press: Press) => {
   if (store.look === null) {
     return;
   }
@@ -606,7 +610,7 @@ const openProjects = () => {
     return changed();
   }
 
-  frameStep({ type: "projects", rows: store.projectRows, focus: focusName(document.activeElement) });
+  frameStep({ type: "projects", rows: store.projectRows, focus: focusName(document.activeElement), press });
 };
 
 /** The window's title: the project's full name, so two windows of equal folders differ (P15). */
@@ -676,8 +680,9 @@ const heard = (raw: unknown) => {
         return;
       }
 
+      // The `show projects` word is the opening binding's own command.
       if (m.what === "projects") {
-        return openProjects();
+        return openProjects("box");
       }
 
       return m.what === "info"
@@ -728,10 +733,33 @@ const heard = (raw: unknown) => {
       store.projectRows = m.rows;
       frameStep({ type: "project_rows", rows: m.rows });
       return changed();
+    // The app's File > Open Project….
     case "projects":
-      return openProjects();
+      return openProjects("menu");
   }
 };
+
+/** Where keyboard focus is, as `keyRoute` reads it: a tile's terminal, a text field, a button, or the page. */
+const targetOf = (at: EventTarget | null): Target => {
+  if (!(at instanceof Element)) {
+    return "page";
+  }
+
+  if (at.closest(".term") !== null) {
+    return "terminal";
+  }
+
+  if (at.closest("button") !== null) {
+    return "button";
+  }
+
+  const field = at instanceof HTMLInputElement || at instanceof HTMLTextAreaElement;
+  return field || (at instanceof HTMLElement && at.isContentEditable) ? "field" : "page";
+};
+
+/** The keys editor's recording, as `keyRoute` reads it: none while no editor records. */
+const recordingOf = (editor: Editor | null): Recording =>
+  editor === null || editor.recording._tag === "idle" ? "none" : editor.recording._tag;
 
 /**
  * On macOS, the window has no title bar of its own, so the top bar keeps room for its three
@@ -782,131 +810,84 @@ const onKey = (e: KeyboardEvent) => {
     composing: e.isComposing,
     altGraph: e.getModifierState("AltGraph"),
   };
-  const rawName = keyName(pressed);
+  const route = keyRoute(
+    {
+      look: store.look?._tag ?? "project",
+      over: store.frame.over,
+      desk: midKey(),
+      recording: recordingOf(store.keysEditor),
+      target: targetOf(e.target),
+    },
+    pressed,
+    store.keys,
+    MAC,
+  );
 
-  if (MAC && rawName !== null && THE_MACS.has(rawName)) {
-    e.stopPropagation();
-    return;
-  }
+  switch (route._tag) {
+    case "mac":
+      e.stopPropagation();
+      return;
+    case "pass":
+      return;
+    case "swallow":
+      return swallow(e);
+    case "interrupt": {
+      swallow(e);
+      const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
 
-  const recording = store.keysEditor?.recording;
+      if (tile !== null) {
+        window.fabrika.send(`tile:${tile.id}`, { type: "keys", data: "\u0003" });
+      }
 
-  if (recording !== undefined && recording._tag !== "idle" && rawName === "<c-c>") {
-    swallow(e);
-    const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
-
-    if (tile !== null) {
-      window.fabrika.send(`tile:${tile.id}`, { type: "keys", data: "\u0003" });
-    }
-
-    return;
-  }
-
-  if (recording?._tag === "waiting") {
-    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       return;
     }
+    case "record":
+      swallow(e);
+      return editKeys({ type: "press", press: pressed });
+    case "cancel":
+      swallow(e);
+      return editKeys({ type: "cancel" });
+    case "system":
+      if (targetOf(e.target) === "terminal") {
+        e.stopPropagation();
+      }
 
-    if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.closest("button") !== null) {
+      if (store.frame.over.kind !== "none") {
+        focusOver(e.target);
+      }
+
       return;
-    }
+    // The projects box is the page's own, before any tile, prefix or popover hears the key (P18).
+    case "projects":
+      swallow(e);
+      openProjects("box");
 
-    swallow(e);
-    return editKeys({ type: "press", press: pressed });
-  }
+      if (store.look?._tag === "project") {
+        said("projects.open", route.name);
+      }
 
-  if (recording?._tag === "candidate" || recording?._tag === "saving") {
-    if (e.key === "Escape") {
+      return;
+    case "palette":
+      swallow(e);
+      frameStep({ type: "show", what: "palette" });
+      said("palette.open", route.name);
+      return;
+    case "focus":
       swallow(e);
 
-      if (recording._tag === "candidate") {
-        editKeys({ type: "cancel" });
+      if (store.frame.over.kind !== "none") {
+        frameStep({ type: "close" });
       }
 
+      toHost({ type: "run", does: route.does, via: { keys: spell(route.name) } });
       return;
-    }
-
-    // Keep candidates away from app shortcuts while the native controls still receive their keys.
-    if (pressed.meta || pressed.ctrl || pressed.alt) {
-      if (keyOwner(pressed, MAC, store.keys) === "system") {
-        return;
-      }
-
-      return swallow(e);
-    }
-
-    return;
+    case "desk":
+      return deskKey(e, route.name, pressed);
   }
+};
 
-  const afterPrefix = midKey().armed
-    ? matchPress(
-        pressed,
-        store.keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === "after_prefix")),
-        MAC,
-      )
-    : null;
-  const owner = afterPrefix === null ? keyOwner(pressed, MAC, store.keys) : "app";
-
-  if (owner === "nobody") {
-    return swallow(e);
-  }
-
-  if (owner === "system") {
-    if (e.target instanceof Element && e.target.closest(".term") !== null) {
-      e.stopPropagation();
-    }
-
-    if (store.frame.over.kind !== "none") {
-      focusOver(e.target);
-    }
-
-    return;
-  }
-
-  const applicable = [
-    KeyCase.cases.alone.make({ key: store.keys.prefix }),
-    ...store.keys.rows.flatMap((row) =>
-      row.keys.filter((key) => key._tag === (midKey().armed ? "after_prefix" : "alone")),
-    ),
-  ];
-  const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
-  const alone = name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({ key: name }));
-
-  // The projects box is the page's own, before any tile, prefix or popover hears the key (P18).
-  if (alone === "projects.open") {
-    swallow(e);
-    openProjects();
-
-    if (store.look?._tag === "project") {
-      said("projects.open", name);
-    }
-
-    return;
-  }
-
-  // Welcome has no desk and no host: its own rows take the keys.
-  if (store.look?._tag === "welcome") {
-    return;
-  }
-
-  if (alone === "palette.open") {
-    swallow(e);
-    frameStep({ type: "show", what: "palette" });
-    said("palette.open", name);
-    return;
-  }
-
-  if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
-    swallow(e);
-
-    if (store.frame.over.kind !== "none") {
-      frameStep({ type: "close" });
-    }
-
-    toHost({ type: "run", does: alone, via: { keys: spell(name ?? "") } });
-    return;
-  }
-
+/** A key the frame, the over or the desk has (`keyRoute`'s `desk`): Escape first, then the over, then the hold. */
+const deskKey = (e: KeyboardEvent, name: string | null, press: Key["press"]) => {
   if (e.key === "Escape" && frameInstall(frameFor(e.key, "fresh"))) {
     return swallow(e);
   }
@@ -924,8 +905,6 @@ const onKey = (e: KeyboardEvent) => {
   if (forOver === "moved in") {
     return swallow(e);
   }
-
-  const press = pressed;
 
   if (name === store.keys.prefix) {
     noteKeyedFrom(e.target);
@@ -1212,7 +1191,7 @@ function App(): ReactNode {
   const mid = (open?.prefix.armed ?? false) || open?.ask != null;
   useLayoutEffect(() => {
     if (!mid) {
-      focusBack();
+      focusKeyedFrom();
     }
   }, [mid]);
   const props: FrameProps = {

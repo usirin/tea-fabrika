@@ -50,6 +50,7 @@ import {
   restored,
   rows,
   Session,
+  type Picked,
   type Source,
 } from "./projects.ts";
 import { noteOf, POLICY, reconnectMachine, type Tried } from "./reconnect.ts";
@@ -442,7 +443,7 @@ const main = Effect.gen(function* () {
    */
   const refusedOpening = new Set<string>();
   /** The opening a refused move waits on, for Try Again. */
-  let retryable: { readonly project: Project; readonly source: Source } | null = null;
+  let retryable: { readonly project: Project; readonly source: Source; readonly picked: Picked | null } | null = null;
   /** The projects machine's model, as it last changed. */
   let model: Projects | null = null;
 
@@ -755,24 +756,24 @@ const main = Effect.gen(function* () {
       .catch((cause) => console.warn(`fabrika: the refusal was not shown: ${String(cause)}`));
   };
 
-  /** Open a checked project, from the window that asked. */
-  const openChecked = (win: Win, project: Project, source: Source) => {
+  /** Open a checked project, from the window that asked, with the press and what it picked. */
+  const openChecked = (win: Win, project: Project, source: Source, picked: Picked | null) => {
     win.refusal = null;
 
     if (windowOf(project.key) === undefined) {
       askedFrom.set(project.key, win.id);
     }
 
-    dispatch({ type: "open", project, source, said: Date.now(), by: PERSON });
+    dispatch({ type: "open", project, source, ...(picked === null ? {} : { picked }), said: Date.now(), by: PERSON });
   };
 
   /** A folder, checked: a project, or a refusal in words (none names the folder). */
-  const checked = (folder: string, win: Win, source: Source) =>
+  const checked = (folder: string, win: Win, source: Source, picked: Picked) =>
     fork(
       Project.check(folder).pipe(
         Effect.match({
           onFailure: (e) => refuse(win, { _tag: "folder", why: e instanceof ProjectRefused ? e.why : String(e) }),
-          onSuccess: (project) => openChecked(win, project, source),
+          onSuccess: (project) => openChecked(win, project, source, picked),
         }),
       ),
     );
@@ -782,12 +783,15 @@ const main = Effect.gen(function* () {
     const known = model?.recent.find((r) => r.project.key === key);
 
     if (known !== undefined) {
-      checked(known.project.root, win, source);
+      checked(known.project.root, win, source, "recent");
     }
   };
 
-  /** The system's folder sheet, over the window that asked. */
-  const chooseFolder = (win: Win) => {
+  /**
+   * The system's folder sheet, over the window that asked: from the press that showed it, the
+   * welcome page's or the box's Open Folder…, or File > Open Folder… (`sheet`).
+   */
+  const chooseFolder = (win: Win, source: Source) => {
     dialog
       .showOpenDialog(win.window, { properties: ["openDirectory"], buttonLabel: "Open" })
       .then((picked) => {
@@ -797,7 +801,7 @@ const main = Effect.gen(function* () {
           return dispatch({ type: "cancel" });
         }
 
-        checked(folder, win, "sheet");
+        checked(folder, win, source, "folder");
       })
       .catch((cause) => console.warn(`fabrika: the folder sheet did not open: ${String(cause)}`));
   };
@@ -811,7 +815,7 @@ const main = Effect.gen(function* () {
     }
 
     retryable = null;
-    openChecked(win, waiting.project, waiting.source);
+    openChecked(win, waiting.project, waiting.source, waiting.picked);
   };
 
   /**
@@ -873,7 +877,7 @@ const main = Effect.gen(function* () {
         case "open":
           return openRecent(win, m.key, m.source);
         case "folder":
-          return chooseFolder(win);
+          return chooseFolder(win, m.source);
         case "retry":
           return retry(win);
       }
@@ -921,7 +925,12 @@ const main = Effect.gen(function* () {
               const why = e instanceof MigrationRefused ? e.why : String(e);
               const from = windows.get(askedFrom.get(c.project.key) ?? "");
               askedFrom.delete(c.project.key);
-              retryable = { project: c.project, source: "welcome" };
+              // Try Again is pressed on welcome; it picks what the refused press picked.
+              retryable = {
+                project: c.project,
+                source: "welcome",
+                picked: model?.projects[c.project.key]?.opening?.picked ?? null,
+              };
               refusedOpening.add(c.project.key);
               dispatch({ type: "open_failed", key: c.project.key, why });
 
@@ -1000,7 +1009,7 @@ const main = Effect.gen(function* () {
           const win = focusedWin();
 
           if (win !== undefined) {
-            chooseFolder(win);
+            chooseFolder(win, "sheet");
           }
 
           return null;
@@ -1057,7 +1066,7 @@ const main = Effect.gen(function* () {
         }
 
         if (item.action === "folder") {
-          return chooseFolder(win);
+          return chooseFolder(win, "sheet");
         }
 
         if (win.key === null) {

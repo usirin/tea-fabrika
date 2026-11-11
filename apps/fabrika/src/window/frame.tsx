@@ -29,6 +29,7 @@ import {
   fileWord,
   type Frame,
   type FrameMsg,
+  frameUpdate,
   hereWord,
   holdsWord,
   hostWord,
@@ -217,7 +218,9 @@ function ProjectButton(props: FrameProps & { readonly name: string }): ReactNode
       title={props.name}
       onClick={() =>
         props.step(
-          open ? { type: "close" } : { type: "projects", rows: props.projectRows ?? [], focus: "button:project" },
+          open
+            ? { type: "close" }
+            : { type: "projects", rows: props.projectRows ?? [], focus: "button:project", press: "button" },
         )
       }
     >
@@ -248,8 +251,18 @@ function ProjectsBox(props: FrameProps): ReactNode {
       onQuery={(q) => step({ type: "query", query: q })}
       onMove={(by) => step({ type: "move", by, of: rows.length })}
       onOpen={(id) => {
-        step({ type: "project_enter", id });
-        props.toApp(id === "folder" ? { type: "folder", source: "box" } : { type: "open", key: id, source: "box" });
+        // The app is told what the frame's own step opened, with the press that showed the box.
+        const enter = { type: "project_enter", id } as const;
+        const opening = frameUpdate(frame, enter).opening;
+        step(enter);
+
+        if (opening !== null && opening !== frame.opening) {
+          props.toApp(
+            opening.id === "folder"
+              ? { type: "folder", source: opening.source }
+              : { type: "open", key: opening.id, source: opening.source },
+          );
+        }
       }}
       onClose={close}
     />

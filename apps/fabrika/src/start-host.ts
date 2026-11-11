@@ -32,9 +32,9 @@ export interface HostStart {
    * The checked project the host serves. It is written into the home as `project.json`, which
    * the host reads and checks again as it starts (host/main.ts); the app always names one. An
    * inherited `FABRIKA_REPO` is never passed on: the project's root is the only folder its agents
-   * work in. A test of the start itself (start-host.test.ts) names none.
+   * work in.
    */
-  readonly project?: Project | undefined;
+  readonly project: Project;
   /**
    * The person's settings folder, which holds keybindings.toml (host/settings.ts,
    * `settingsFolder`), passed as `FABRIKA_SETTINGS`: shared by every project's host. Not said:
@@ -68,12 +68,10 @@ const envOf = (s: HostStart): NodeJS.ProcessEnv => {
 export const startHost = (s: HostStart): Effect.Effect<Effect.Effect<number | null>, StartFailed> =>
   Effect.try({
     try: () => {
-      if (s.project !== undefined) {
-        mkdirSync(s.home, { recursive: true, mode: 0o700 });
-        const record = join(s.home, "project.json");
-        writeFileSync(`${record}.new`, JSON.stringify(s.project), { mode: 0o600 });
-        renameSync(`${record}.new`, record);
-      }
+      mkdirSync(s.home, { recursive: true, mode: 0o700 });
+      const record = join(s.home, "project.json");
+      writeFileSync(`${record}.new`, JSON.stringify(s.project), { mode: 0o600 });
+      renameSync(`${record}.new`, record);
 
       mkdirSync(dirname(s.paths.log), { recursive: true, mode: 0o700 });
       const log = openSync(s.paths.log, "a", 0o600);

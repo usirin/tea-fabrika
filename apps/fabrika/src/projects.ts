@@ -34,6 +34,14 @@ export type Project = typeof ProjectSchema.Type;
 export const Source = Schema.Literals(["welcome", "box", "button", "menu", "sheet", "dock"]);
 export type Source = typeof Source.Type;
 
+/**
+ * What the press picked, named after the rows' tags: `recent` for a recent row or a Dock or
+ * notification reopen, `folder` for Open Folder…, Choose Folder or File > Open Folder…. With
+ * `source` it tells whether the folder sheet was used after the box, the button, the menu or welcome.
+ */
+export const Picked = Schema.Literals(["recent", "folder"]);
+export type Picked = typeof Picked.Type;
+
 /** One project a person opened before, as welcome and the projects box list it. */
 export const Recent = Schema.Struct({
   project: ProjectSchema,
@@ -160,6 +168,8 @@ export type Look = typeof Look.Type;
 interface Asked {
   readonly id: string;
   readonly source: Source;
+  /** `null` when the press did not say: unknown, never guessed. */
+  readonly picked: Picked | null;
   readonly said: number;
   readonly by: string;
 }
@@ -201,6 +211,8 @@ export const ProjectRecord = Schema.TaggedUnion({
     root: Schema.String,
     window: Schema.NullOr(Schema.String),
     source: Source,
+    /** `null` when the press did not say; entries written before this field have none. Never guessed. */
+    picked: Schema.NullOr(Picked),
     by: Schema.String,
     said: Schema.Number,
     /** When it was written, by the app's clock: main.ts sets it as it writes. */
@@ -300,6 +312,8 @@ export type ProjectsMsg =
       readonly type: "open";
       readonly project: Project;
       readonly source: Source;
+      /** What the press picked; main.ts always says. */
+      readonly picked?: Picked;
       /** When the person pressed, by the writer's own clock. */
       readonly said: number;
       /** Who pressed, as a writer's text. */
@@ -367,6 +381,7 @@ const opening = (
         root: entry.project.root,
         window: entry.window,
         source: asked.source,
+        picked: asked.picked,
         by: asked.by,
         said: asked.said,
         at: null,
@@ -408,7 +423,7 @@ const openProject = (s: Projects, m: Extract<ProjectsMsg, { type: "open" }>): St
   }
 
   const key = m.project.key;
-  const asked = { id: "", source: m.source, said: m.said, by: m.by };
+  const asked = { id: "", source: m.source, picked: m.picked ?? null, said: m.said, by: m.by };
   const found = s.projects[key];
 
   if (found?.window != null) {
@@ -531,7 +546,7 @@ const noticed = (s: Projects, key: string): Step => {
   }
 
   const [counted, id] = nextId(s, "press");
-  const asked: Asked = { id, source: "dock", said: 0, by: "user:owner" };
+  const asked: Asked = { id, source: "dock", picked: "recent", said: 0, by: "user:owner" };
   const reopening: Entry = { ...entry, opening: asked };
   const placed = withEntry(counted, key, reopening);
   const [next, kept] = opening(placed, reopening, asked, "started", null);

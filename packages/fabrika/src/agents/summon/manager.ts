@@ -7,6 +7,7 @@ import {
   Duration,
   Effect,
   Exit,
+  FileSystem,
   Layer,
   Option,
   PubSub,
@@ -17,6 +18,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { isAgentName } from "../../host/door.ts";
 import { type Ended, type RunningOf, start } from "../../program/program.ts";
 import type { Storage } from "../../program/storage.ts";
@@ -221,6 +223,34 @@ export interface SummonRecord {
 }
 
 /**
+ * The git working tree a folder is in, by its real top folder, or `null` when it is in none or
+ * cannot be read. Links resolve and a subfolder gives its tree's top, so two spellings of one
+ * project give one root; another clone or worktree gives its own. git is asked, never guessed.
+ */
+const rootOf = (folder: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const real = yield* fs.realPath(folder);
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(
+      ChildProcess.make("git", ["-C", real, "rev-parse", "--show-toplevel"], {
+        // Only what git needs: an inherited GIT_DIR or GIT_WORK_TREE would answer for another tree.
+        env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/" },
+        extendEnv: false,
+      }),
+    );
+    const [out, code] = yield* Effect.all([handle.stdout.pipe(Stream.decodeText(), Stream.mkString), handle.exitCode], {
+      concurrency: "unbounded",
+    });
+    const top = out.trim();
+    return Number(code) === 0 && top !== "" ? yield* fs.realPath(top) : null;
+  }).pipe(
+    Effect.scoped,
+    Effect.orElseSucceed(() => null),
+    Effect.provide(nodeServices),
+  );
+
+/**
  * The host's summoned agents, kept in `storage`, working in the repository `folder`: the
  * `SummonManager`, and `SummonedNow` beside it.
  */
@@ -271,9 +301,10 @@ export const summonManager = (options: {
       /**
        * Start a name's acp run, and hear it. Answers at once; `opened` is done once its session is
        * open. A run keeps the flags it was first started with, so no setting is a flag: each is set
-       * after the session opens (`settle`), at every start.
+       * after the session opens (`settle`), at every start. It runs in `at`, the name's own folder,
+       * or its project's root when that folder spells the root another way (a link, a subfolder).
        */
-      const open = (name: Name) =>
+      const open = (name: Name, at: string = name.folder) =>
         Effect.gen(function* () {
           const { acpInRepo } = yield* acpCode;
           const own = yield* Scope.fork(scope);
@@ -312,7 +343,7 @@ export const summonManager = (options: {
             acpInRepo,
             {
               agent: name.agent as (typeof AGENTS)[number],
-              folder: name.folder,
+              folder: at,
               model: undefined,
               effort: undefined,
               // Codex has no asks of its own to wait on: it runs read-only in a person's repo.
@@ -498,20 +529,28 @@ export const summonManager = (options: {
         });
 
       // A host started again: each kept name opens again, in the background, with its settings.
-      // One summoned in another folder stays down: it is never reopened here, and its folder is
-      // never rewritten, so the project it was for still finds it.
+      // One summoned in another project stays down: it is never reopened here, and its folder is
+      // never rewritten, so the project it was for still finds it. A project is its git root, so a
+      // folder spelled another way (a link, a subfolder, a trailing slash) is still this one.
+      const own = yield* Effect.cached(rootOf(folder));
+
       for (const name of kept.now().names) {
-        if (name.folder !== folder) {
+        const root = name.folder === folder ? folder : yield* rootOf(name.folder);
+
+        if (root === null || (root !== folder && root !== (yield* own))) {
           yield* downOf(
             name,
             new SummonRefused({
-              why: `${name.name} was summoned in another project: open that project to use it`,
+              why:
+                root === null
+                  ? `${name.name} was summoned in a folder that is no longer a git repository: open its project again to use it`
+                  : `${name.name} was summoned in another project: open that project to use it`,
             }),
           );
           continue;
         }
 
-        const l = yield* open(name).pipe(Effect.result);
+        const l = yield* open(name, root).pipe(Effect.result);
 
         if (l._tag === "Failure") {
           yield* downOf(name, l.failure);

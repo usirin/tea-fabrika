@@ -1,5 +1,5 @@
 import { type ReactNode, useLayoutEffect, useRef } from "react";
-import type { ProjectRow, Recent } from "../projects.ts";
+import { type ProjectRow, type Recent, rows } from "../projects.ts";
 import { agoWord } from "./frame.ts";
 import { Caps, Foot, Marked, useOverlay } from "./pop.tsx";
 
@@ -46,17 +46,8 @@ export interface WelcomeProps {
 /** The welcome page: what a window shows before it shows a project. */
 export function Welcome(props: WelcomeProps): ReactNode {
   const list = useRef<HTMLDivElement>(null);
-  const shown: readonly ProjectRow[] = [
-    ...props.recent.map((r): ProjectRow => ({
-      _tag: "recent",
-      id: r.project.key,
-      name: r.name,
-      path: r.path,
-      at: r.open ? "open" : r.at,
-      project: r.project,
-    })),
-    { _tag: "folder", id: "folder", name: "Open Folder…", caps: [] },
-  ];
+  // The same rows the box lists (P21): welcome shows no project, so it leaves none out.
+  const shown = rows(props.recent);
   const selected = shown.some((r) => r.id === props.selected) ? props.selected : (shown[0]?.id ?? "folder");
   const act = (row: ProjectRow) => (row._tag === "folder" ? props.onFolder() : props.onOpen(row.id));
   const tick = props.focusTick ?? 0;
