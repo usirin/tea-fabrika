@@ -5,7 +5,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
-import { counter } from "@kampus/counter";
+import { counter, counterModel } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { revokeText, Start } from "@kampus/libfabrika/coordination";
@@ -792,7 +792,7 @@ const observe = async (fault: Fault, name: string): Promise<Observation> => {
       object = w.process(pid).object;
     stored[n] = await object.descriptor();
     const view = await object.open("audit");
-    opened[n] = { rev: view.rev, count: view.view.count };
+    opened[n] = { rev: view.rev, count: Schema.decodeUnknownSync(counterModel)(view.view).count };
   }
 
   const client = await w.admit();
@@ -808,7 +808,7 @@ const observe = async (fault: Fault, name: string): Promise<Observation> => {
     const view = await w.process(saved[n]!.process).object.open("audit");
     after[n] = {
       rev: view.rev,
-      count: view.view.count,
+      count: Schema.decodeUnknownSync(counterModel)(view.view).count,
       inbox: (await w.project.read(`${n}/inbox`, 0, "audit")).length,
       processes: (await w.project.read(`processes/${n}`, 0, "audit")).length,
     };
