@@ -17,7 +17,8 @@ import { SinkError } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
-import { capture, nat, nth, sentinel, text, unleaked } from "./RepliesTest.ts";
+import type { RepliesError } from "./Replies.ts";
+import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
 
 const SEED = 119120;
@@ -120,7 +121,25 @@ const Step = Arbitrary.all({
 type Step = typeof Step extends Arbitrary.Arbitrary<infer A> ? A : never;
 const Walk = Arbitrary.array(Step, { minLength: 4, maxLength: 24 });
 
-type Move = "save" | "future" | "older" | "advance" | "retry" | "reuse" | "reopen" | "restart" | "flush" | "fault";
+type Move =
+  | "save"
+  | "future"
+  | "older"
+  | "advance"
+  | "retry"
+  | "reuse"
+  | "reopen"
+  | "restart"
+  | "flush"
+  | "fault"
+  | "corrupt";
+
+/** R5's damage to a stored refusal: broken JSON, a missing field, a key that disagrees with its
+ *  row. R6's: an accepted answer, or a refusal with a malformed reason. */
+const DAMAGE = ["json", "missing", "key", "accepted", "malformed"] as const;
+
+/** A refusal whose reason is not text. */
+const Malformed = Schema.TaggedStruct("refused", { reason: Schema.Struct({ text: Schema.String }) });
 
 /** A letter the record answered: the delivery as first sent, and its first terminal answer. */
 type Answered = { readonly letter: Incoming; readonly first: Sent; readonly note: string; readonly base: number };
@@ -144,6 +163,22 @@ const faulty = (sql: Sql, control: Control): Sql => ({
   transaction: (step) => sql.transaction(step),
   size: () => sql.size(),
 });
+
+/** The cells of tables main never had that hold this letter's reply as a JSON object. */
+const replyRows = (sql: Sql, id: string) =>
+  sql
+    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    .map(({ name }) => String(name))
+    .filter((table) => !KNOWN.has(table))
+    .flatMap((table) =>
+      sql
+        .exec(`SELECT * FROM "${table}"`)
+        .flatMap((row) =>
+          Object.entries(row).flatMap(([column, value]) =>
+            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
+          ),
+        ),
+    );
 
 /** The rows of every table main never had, as text. */
 const replyCells = (sql: Sql): ReadonlyArray<string> =>
@@ -180,6 +215,8 @@ const walk = (
     let accepted = 0;
     const secrets: Array<string> = [];
     const errors: Array<string> = [];
+    /** Stored refusals the walk damaged, by letter: the damaged cell as written. */
+    const damaged = new Map<string, string>();
 
     let scope = yield* Scope.make();
     let inbox: Sql | undefined;
@@ -353,7 +390,28 @@ const walk = (
       }
     });
 
+    /** A damaged reply fails the retry as a typed bad_row, changes nothing and stays stored. */
+    const broken = Effect.fnUntraced(function* (prior: Answered, cell: string) {
+      const before = yield* observe();
+      const exit = yield* Effect.exit(live.runner.msg(prior.letter));
+      expect(Exit.isFailure(exit), `a damaged reply gave an answer: ${JSON.stringify(exit)}`).toBe(true);
+
+      if (Exit.isFailure(exit)) {
+        errors.push(Cause.pretty(exit.cause));
+        // A throw or defect is not a typed failure.
+        expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+        const error = Cause.squash(exit.cause) as RepliesError;
+        expect(error._tag).toBe("RepliesError");
+        expect(error.reason).toBe("bad_row");
+      }
+
+      expect(yield* observe(), "a damaged reply adds no letter, patch or version").toEqual(before);
+      expect(replyCells(live.inbox), "a damaged reply is retained as it was").toContain(cell);
+    });
+
     for (const [n, step] of steps.entries()) {
+      const intact = answered.filter((a) => !damaged.has(a.letter.id));
+      const stored = intact.filter((a) => a.first._tag === "refused");
       const futures = answered.filter((a) => a.first._tag === "refused" && a.base > current(a.note));
       const moves = enabled.filter((move) =>
         move === "older"
@@ -361,8 +419,10 @@ const walk = (
           : move === "advance"
             ? futures.length > 0
             : move === "retry" || move === "reuse"
-              ? answered.length > 0
-              : true,
+              ? intact.length > 0
+              : move === "corrupt"
+                ? stored.length > 0
+                : true,
       );
       const move = nth(moves, step.pick);
       const note = nth(NOTES, step.kind);
@@ -380,13 +440,13 @@ const walk = (
         const target = nth(futures, step.kind);
         yield* fresh(target.note, current(target.note), step.body);
       } else if (move === "retry") {
-        const prior = nth(answered, step.kind);
+        const prior = nth(intact, step.kind);
         const before = yield* observe();
         expect(yield* live.runner.msg(prior.letter), "a retry answers the first answer").toEqual(prior.first);
         expect(yield* observe(), "a retry adds no letter, patch or version").toEqual(before);
       } else if (move === "reuse") {
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
-        const prior = nth(answered, step.kind);
+        const prior = nth(intact, step.kind);
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
@@ -450,12 +510,46 @@ const walk = (
         }
 
         answered.push({ letter: sent, first: answer, note, base });
+      } else if (move === "corrupt") {
+        // Damage a stored refusal's row, derived from its current shape (R5, R6).
+        const prior = nth(stored, step.kind);
+        const located = replyRows(live.inbox, prior.letter.id);
+        expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
+        const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+        const json = JSON.parse(value) as Record<string, unknown>;
+        const kind = nth(DAMAGE, step.kind);
+        const fields = ["parent", "by", "for", "digest", "answer"] as const;
+        const cell =
+          kind === "json"
+            ? `${value.slice(0, -1)}${step.secret}`
+            : kind === "missing"
+              ? JSON.stringify(
+                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
+                )
+              : kind === "key"
+                ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
+                : kind === "accepted"
+                  ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
+                  : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+        secrets.push(step.secret);
+        live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);
+        damaged.set(prior.letter.id, cell);
+      }
+
+      // After every move: each damaged reply still fails visibly and stays stored (R5, R6).
+      for (const prior of answered) {
+        const cell = damaged.get(prior.letter.id);
+
+        if (cell !== undefined) {
+          yield* broken(prior, cell);
+        }
       }
 
       const seen = yield* observe();
       expect({ ...seen, view: sorted(seen.view) }, `after ${move}`).toEqual(expected(seen.patches));
       // No reply row, failure or span holds a refused body (R11).
-      unleaked([...replyCells(live.inbox), ...errors, ...spans.text()], secrets);
+      const kept = new Set(damaged.values());
+      unleaked([...replyCells(live.inbox).filter((cell) => !kept.has(cell)), ...errors, ...spans.text()], secrets);
     }
 
     // Every first answer survives a last reopen and a successor.
@@ -463,7 +557,13 @@ const walk = (
     yield* live.runner.restart({ id: "restart-last", build: "test" });
 
     for (const prior of answered) {
-      expect(yield* live.runner.msg(prior.letter), "after reopen and restart").toEqual(prior.first);
+      const cell = damaged.get(prior.letter.id);
+
+      if (cell === undefined) {
+        expect(yield* live.runner.msg(prior.letter), "after reopen and restart").toEqual(prior.first);
+      } else {
+        yield* broken(prior, cell);
+      }
     }
 
     const seen = yield* observe();
@@ -500,6 +600,15 @@ export const suite = (harness: Harness) =>
       "advance",
       "fault",
       "retry",
+    ]);
+    law("R5, R6: a damaged stored refusal fails the retry as bad_row, through reopen and restart", harness, [
+      "save",
+      "future",
+      "advance",
+      "corrupt",
+      "retry",
+      "reopen",
+      "restart",
     ]);
     law("R7: a terminal refusal adds no accepted letter, patch or Cmd", harness, [
       "save",
@@ -538,5 +647,6 @@ export const suite = (harness: Harness) =>
       "reuse",
       "retry",
       "restart",
+      "corrupt",
     ]);
   });

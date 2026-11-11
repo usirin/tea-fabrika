@@ -172,7 +172,7 @@ const ANSWER = ["accepted", "malformed"] as const;
 const key = (name: string, id: string) => JSON.stringify([name, id]);
 
 /** A stored cell read as a JSON object, or undefined when it is not one. */
-const parsed = (cell: string): Record<string, unknown> | undefined => {
+export const parsed = (cell: string): Record<string, unknown> | undefined => {
   const value = Result.try(() => JSON.parse(cell) as unknown);
   return Result.isSuccess(value) && Predicate.isObject(value.success)
     ? (value.success as Record<string, unknown>)
