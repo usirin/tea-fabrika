@@ -136,7 +136,7 @@ for (const [kind, live] of [
   ["node", NodeLive],
   ["wire", WireLive],
 ] as const) {
-  // The wire stage is real processes on the real clock: under the test clock its own time limits,
+  // The wire instance is real processes on the real clock: under the test clock its own time limits,
   // Alchemy's 30-second cap on its Docker sweep among them, never fire, and the layer's release
   // waits forever. No law here reads the clock.
   layer(live, { excludeTestServices: true })(`RecordPart ${kind}`, (it) => {
