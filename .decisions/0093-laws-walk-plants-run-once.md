@@ -142,3 +142,7 @@ this file.
   reads each as a plant, not a law, under the first binding constraint.
 - Not decided here: what makes a generator "walk" well enough beyond the second check, and whether
   `arbGuidedSequence` becomes the one way to write one.
+
+## Amendments
+
+- 2026-11-11: the second check ran as [experiment 257](../experiments/257-second-check-blind-laws.md). A law file written from the plan alone, blind to the old tests, killed 98 of 144 mutants of `gateway/internal/waiting.ts`; the old file killed the same 98. By the rule above ("at least as many"), the trial ends and this stays the rule. One small file, so the write-up says what it cannot tell us.
