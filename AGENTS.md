@@ -141,7 +141,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
   Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
-  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  they are not product work. They skip the plan, tests and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
@@ -154,8 +154,8 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
   Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
-  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
+  output in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
   From 0066 the mutation comparison comes from the hourly run on main, after the merge, so at
   merge the lead reads loosening.sh alone.

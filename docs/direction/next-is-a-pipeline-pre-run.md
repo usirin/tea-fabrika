@@ -31,10 +31,14 @@ ticket -> triage -> plan (the owner approves its Properties)
        -> exam pull request, when rules change
        -> test writer: new tests red on the base, existing tests green
        -> build: cannot touch the tests
-       -> mutation step: StrykerJS, a fixed sample of about 150
        -> one review of the whole diff, by another agent
        -> push -> the lead agent's read, green CI, leak grep -> merge
+then, each hour: StrykerJS on what merged to main, a fixed sample of about 150 -> tickets
 ```
+
+*Changed 2026-11-10 ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)):* mutation left
+the pull request's steps and runs hourly against main. *It said: a mutation step between build and
+review.*
 
 - **Each step has its own agent.** The one that writes the code writes no law, no
   lint rule, no CI rule and no mutation skip list
