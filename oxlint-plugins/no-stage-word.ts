@@ -123,7 +123,9 @@ export const noStageWord: CreateRule = {
         lines(node, node.value.cooked ?? raw, raw, source.text.indexOf(raw, node.range[0]));
       },
       JSXText(node) {
-        lines(node, node.value, node.raw, node.range[0]);
+        // The parser may leave `raw` out; the source between the node's ends is the same text.
+        const raw = node.raw ?? source.text.slice(node.range[0], node.range[1]);
+        lines(node, node.value, raw, node.range[0]);
       },
     };
   },

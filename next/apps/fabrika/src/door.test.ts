@@ -1744,7 +1744,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             {
               key: connection.key,
               label,
-              where: "test-stage",
+              where: "test-instance",
               code: row.code,
               until: now + ttl,
               tabs: 1,
