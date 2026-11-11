@@ -9,7 +9,7 @@
 // file (default `BOXES/state/flow-<name>.json`) saved before each step starts and once it ends. A
 // first run refuses a state file that exists; `--resume` goes on from one, and refuses a flow file
 // that changed since. `--lead` says the lead session started this process: only then does a `lead`
-// step run. The steps' runners are the landing table.
+// step run. The steps' runners are the landing table and the host step (./host.ts).
 //
 // Exit codes, as the lane chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
@@ -18,6 +18,7 @@ import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "e
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
+import { runners as hosting } from "./host.ts";
 import { runners as landing } from "./landing.ts";
 import * as Runners from "./Runners.ts";
 import { ending, runFlow, Usage } from "./walk.ts";
@@ -102,7 +103,7 @@ const flowCommand = Command.make(
 if (import.meta.main) {
   NodeRuntime.runMain(
     Command.runWith(flowCommand, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-      Effect.provide(Layer.provideMerge(Runners.layer(landing), NodeServices.layer)),
+      Effect.provide(Layer.provideMerge(Runners.layer({ ...landing, ...hosting }), NodeServices.layer)),
     ),
     { disableErrorReporting: true },
   );

@@ -32,6 +32,14 @@ import "./botpush.mjs?raw";
 import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Outcome.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Runners.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Step.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/host.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./sizecap.ts?raw";
@@ -115,6 +123,17 @@ const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3)
   intensity: { count: 3, within: 5 },
   backstop,
 });
+
+type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
+
+/** A host step answered skip, as for a lane brief with no `## host`; any other state stays. */
+const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
+  m.phase === "hosting"
+    ? machine.update.host_run_ok(m, {
+        type: "host_run_ok",
+        value: { outcome: "skip", head: "", reason: "no host section" },
+      } as never)
+    : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
   // 0066: a lane's steps are tests -> build -> review; a mutation step (a lane started there)
@@ -283,6 +302,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           round,
           heads: { tests: head },
           note,
+          host: s === "review" ? `done at ${head}: 2 host commands passed` : null,
         });
         expect(text).toContain("Shared: ticket 7");
         expect(text).toContain(cut.sections[s] ?? "nothing");
@@ -300,6 +320,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
 
         // A review gets the two full SHAs its template needs; a mutation its build range.
         if (s === "review") {
+          expect(text).toContain(`: done at ${head}: 2 host commands passed`);
           expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
           expect(text).toContain(`Parent base: origin/main at ${root}`);
         }
@@ -370,8 +391,9 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
     const [idle] = machine.init(null, undefined);
     return machine.update.start(idle, { type: "start", step: "tests" });
   };
+  // Every review hosts first; these laws are about the other steps, so the host step skips.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
-    machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+    hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
 
   it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
@@ -481,7 +503,8 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "mutation", round: 1 })]);
         [m, cmds] = ran(m, line(o, head));
         expect(m).toMatchObject({ phase: "stepping", step: "review" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 2 })]);
+        // Round 2 is the host step's.
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
         [m, cmds] = ran(m, line("done", head));
         expect(m.phase).toBe("opening");
       }),
@@ -496,7 +519,8 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
         [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
         expect(m).toMatchObject({ phase: "stepping", step: to });
-        expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: 3 });
+        // A review hosts first, in round 3.
+        expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: to === "review" ? 4 : 3 });
 
         if (cmds[0]?.type === "step_run") {
           expect(cmds[0].note).toContain(why);
@@ -513,10 +537,13 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         [m, cmds] = ran(m, line("stuck:timeout", "", why));
         expect(m.phase).toBe("judging");
         expect(cmds[0]).toMatchObject({ type: "judge", step: "tests" });
-        const [sent, after] = machine.update.judge_ok(m, {
-          type: "judge_ok",
-          value: { text: `answer: send ${to} ${why}` },
-        } as never);
+        const [sent, after] = hostSkipped(
+          machine,
+          machine.update.judge_ok(m, {
+            type: "judge_ok",
+            value: { text: `answer: send ${to} ${why}` },
+          } as never),
+        );
         expect(sent).toMatchObject({ phase: "stepping", step: to });
         expect(after[0]).toMatchObject({ type: "step_run", step: to });
         const [parked] = machine.update.judge_ok(m, {
@@ -576,6 +603,119 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   });
 });
 
+describe("the host step runs before every review of a new head, today's tooling", () => {
+  const machine = makeMachine(limits(16));
+  const stepped = (m: Stepped[0], l: Line) => machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+  const hosted = (m: Stepped[0], outcome: "done" | "skip" | "send" | "stuck", head: string, reason = "why") =>
+    machine.update.host_run_ok(m, { type: "host_run_ok", value: { outcome, head, reason } } as never);
+  /** A lane started at build whose build answered done at `head`. */
+  const built = (head: string) => {
+    const [idle] = machine.init(null, undefined);
+    const [m] = machine.update.start(idle, { type: "start", step: "build" });
+    return stepped(m, line("done", head));
+  };
+
+  // Plants: build hands straight to review; the host step takes no round; it runs at another head.
+  it("property: a done build hosts at its head in its own round before review, and review runs at the host step's head", () => {
+    fc.assert(
+      fc.property(sha, sha, fc.constantFrom("done", "skip"), (head, after, outcome) => {
+        const [m, cmds] = built(head);
+        expect(m.phase).toBe("hosting");
+        expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head, round: 2 })]);
+        const next = outcome === "done" ? after : head;
+        const [r, rcmds] = hosted(m, outcome, outcome === "done" ? after : "");
+        expect(r).toMatchObject({ phase: "stepping", step: "review", lane: { head: next, hosted: next } });
+        expect(rcmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
+      }),
+      options,
+    );
+  });
+
+  // The owner's ruling: a failed host run is a red check. Plants: send it to review; drop the lines.
+  it("property: a host send goes back to build with the command's last lines in its note, and no review runs", () => {
+    fc.assert(
+      fc.property(sha, word, (head, said) => {
+        const [m] = built(head);
+        const [b, cmds] = hosted(m, "send", "", `host: \`node e2e.ts\` exited 1:\n${said}`);
+        expect(b).toMatchObject({ phase: "stepping", step: "build" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "build" })]);
+        expect(cmds.flatMap((c) => (c.type === "step_run" ? [c.note] : []))[0]).toContain(said);
+        expect(b.lane.hosted).toBeNull();
+      }),
+      options,
+    );
+  });
+
+  it("property: a review sent again at the same head does not host again; a new head does", () => {
+    fc.assert(
+      fc.property(sha, sha, (head, other) => {
+        const [m] = built(head);
+        const [r] = hosted(m, "skip", "");
+        const [again, cmds] = stepped(r, line("send:review:step_said", head));
+        expect(again).toMatchObject({ phase: "stepping", step: "review" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review" })]);
+        const [b] = stepped(r, line("send:build:step_said", head));
+        const [moved, mcmds] = stepped(b, line("done", other));
+        expect(moved.phase).toBe(other === head ? "stepping" : "hosting");
+        expect(mcmds[0]?.type).toBe(other === head ? "step_run" : "host_run");
+      }),
+      options,
+    );
+  });
+
+  // 0076 with the host step: its round is a step and its send a send back. Plants: give the host
+  // step no round; leave its mark out of the window; count a host stuck against the lane.
+  it("scenario: a host send is a send back in the budget's window, and the host round counts toward the backstop", () => {
+    const h = "a".repeat(40);
+    let [m] = built(h);
+
+    for (let i = 0; i < 2; i++) {
+      [m] = hosted(m, "send", "", "e2e red");
+      expect(m).toMatchObject({ phase: "stepping", step: "build" });
+      [m] = stepped(m, line("done", h));
+      expect(m.phase).toBe("hosting");
+    }
+
+    // The window is now send, pass, send, pass: a third host send trips 3 in 5.
+    const [sent] = hosted(m, "send", "", "e2e red");
+    expect(sent).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+    expect(sent.lane.window).toEqual(["send", "pass", "send", "pass", "send"]);
+    // A host stuck is the tool's: marked, never counted, and the lane ends stuck.
+    const [stuck] = hosted(m, "stuck", "", "botpush failed");
+    expect(stuck).toMatchObject({ phase: "over", end: { kind: "stuck" } });
+    expect(stuck.lane.window.at(-1)).toBe("tool");
+
+    // Backstop of 2 steps: build is round 1, the host step round 2, so the review never starts.
+    const small = makeMachine(limits(16, { steps: 2, dollars: 100 }));
+    const [idle] = small.init(null, undefined);
+    let [b, cmds] = small.update.start(idle, { type: "start", step: "build" });
+    [b, cmds] = small.update.step_run_ok(b, { type: "step_run_ok", value: line("done", h) } as never);
+    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", round: 2 })]);
+    [b, cmds] = small.update.host_run_ok(b, {
+      type: "host_run_ok",
+      value: { outcome: "skip", head: "", reason: "no section" },
+    } as never);
+    expect(cmds).toEqual([]);
+    expect(b).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "backstop", passed: "steps" } } });
+  });
+
+  it("scenario: a host stuck ends the lane stuck (exit 30), and a lane started at review hosts first", () => {
+    const [m] = built("a".repeat(40));
+    const [over] = hosted(m, "stuck", "", "git worktree add failed");
+    expect(over).toMatchObject({ phase: "over", end: { kind: "stuck", reason: "host: git worktree add failed" } });
+
+    if (over.phase === "over") {
+      expect(exitOf(over.end)).toBe(30);
+    }
+
+    const [idle] = machine.init(null, undefined);
+    const [started, cmds] = machine.update.start(idle, { type: "start", step: "review" });
+    expect(started.phase).toBe("hosting");
+    // The machine has no head yet: the handler reads the lane's state file for it.
+    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head: "", round: 1 })]);
+  });
+});
+
 describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
   const machine = makeMachine(limits(16));
   // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
@@ -584,7 +724,10 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
     for (const _ of LANE_STEPS) {
-      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never);
+      [m] = hostSkipped(
+        machine,
+        machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
+      );
     }
 
     return machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
