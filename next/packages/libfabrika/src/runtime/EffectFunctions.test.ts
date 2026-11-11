@@ -399,7 +399,7 @@ describe("T285, ledger tracing keep-laws", () => {
 });
 
 describe("T285, coordination tracing keep-laws", () => {
-  it("members.read stays lazy and keeps counts, founding parent and refused-read spans", async () => {
+  it("access.read stays lazy and keeps counts, founding parent and refused-read spans", async () => {
     await fc.assert(
       fc.asyncProperty(
         attributes,
@@ -431,19 +431,19 @@ describe("T285, coordination tracing keep-laws", () => {
                   const exit = yield* Effect.exit(request(clients.members));
                   expect(Exit.isSuccess(exit)).toBe(!fails);
                   const spans = c.spans.slice(before);
-                  const reads = spans.filter((s) => s.name === "members.read");
+                  const reads = spans.filter((s) => s.name === "access.read");
                   expect(reads).toHaveLength(1);
                   const read = reads[0]!;
                   ended(read, !fails);
                   child(read, spans[0]!);
                   expect(tags(read)).toEqual(
                     fails
-                      ? { "fab.members.reason": "storage" }
+                      ? { "fab.access.reason": "storage" }
                       : {
-                          "fab.members.events": 1,
-                          "fab.members.keys": keys.length,
-                          "fab.members.live": keys.length,
-                          "fab.members.ignored": 0,
+                          "fab.access.events": 1,
+                          "fab.access.keys": keys.length,
+                          "fab.access.live": keys.length,
+                          "fab.access.ignored": 0,
                         },
                   );
 

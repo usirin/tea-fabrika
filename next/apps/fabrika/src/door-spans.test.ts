@@ -327,7 +327,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                 expect(spans.map((s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
                 const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
@@ -394,10 +394,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                 expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
-                const write = c.spans.find((s) => s.name === "members.write")!;
+                const write = c.spans.find((s) => s.name === "access.write")!;
                 expect(Option.getOrThrow(write.parent).spanId).toBe(spans[0]!.spanId);
               }).pipe(Effect.provide(w.layer));
             }),
@@ -427,10 +427,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                 expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
-                const write = c.spans.find((s) => s.name === "members.write")!;
+                const write = c.spans.find((s) => s.name === "access.write")!;
                 expect(write.traceId).toBe(a.traceId);
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
@@ -488,7 +488,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = c.spans.filter((s) => s.name.startsWith("door."));
+                    const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                     expect(spans.map((s) => s.name)).toEqual(
                       call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );

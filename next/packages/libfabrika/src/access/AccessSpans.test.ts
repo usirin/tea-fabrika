@@ -4,7 +4,7 @@
 //
 // The shape these tests hold the modules to, from the plan's "What this piece records" and flag 12:
 // - Span names: `mailbox.send`, `mailbox.receive` (one per Stream run), `process.start`,
-//   `members.read` (one per `members` call) and `members.write`. P6's `ledger.*` spans nest inside.
+//   `access.read` (one per `members` call) and `access.write`. P6's `ledger.*` spans nest inside.
 // - Tags: OpenTelemetry's messaging keys where they fit and `fab.<piece>.*` for the rest. The plan
 //   does not fix each key, so these tests find a tag by its last word (`answer`, `reason`, `after`,
 //   `letters`, `skipped`, `events`, `keys`, `live`, `ignored`, `rev`, `program`, `hash`, `tag`), and
@@ -367,7 +367,7 @@ describe("p97, process spans", () => {
 
 describe("p97, member spans", () => {
   it.effect.prop(
-    "plant, a refused write with no span: every write ends one members.write span",
+    "plant, a refused write with no span: every write ends one access.write span",
     [keyArb],
     examples([["t1"]], (key: string) => {
       const { tracer, ended, spans } = capture();
@@ -377,7 +377,7 @@ describe("p97, member spans", () => {
         yield* write(granted("wA", "t2"));
         yield* write(denied("t3"));
         yield* write(revoked("pA", key));
-        const writes = ended("members.write");
+        const writes = ended("access.write");
         expect(writes.length).toBe(4);
         const [grant, refused, deny, revoke] = writes;
 
@@ -394,9 +394,9 @@ describe("p97, member spans", () => {
         expect(holds(refused, "wA")).toBe(true);
         expect(tagged(deny, "tag")).toBe("denied");
         expect(tagged(revoke, "tag")).toBe("revoked");
-        const before = ended("members.read").length;
+        const before = ended("access.read").length;
         yield* clients.members;
-        const reads = ended("members.read");
+        const reads = ended("access.read");
         expect(reads.length).toBe(before + 1);
         const read = reads.at(-1);
 
@@ -458,12 +458,12 @@ describe("p97, member spans", () => {
         yield* write(sheet);
         expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
         // Spans are kept in the order they start, and Mac X's starts inside Mac C's, so sort them.
-        const answers = ended("members.write")
+        const answers = ended("access.write")
           .map((span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`)
           .sort();
         expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
         yield* clients.members;
-        const read = ended("members.read").at(-1);
+        const read = ended("access.read").at(-1);
         expect(read === undefined ? null : tagged(read, "ignored")).toBe(1);
         clean(spans);
       }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))), Effect.withTracer(tracer));
@@ -495,7 +495,7 @@ describe("p97, names and numbers only", () => {
         );
         yield* write(granted(long("k"), "t1"));
 
-        for (const name of ["mailbox.send", "mailbox.receive", "process.start", "members.write"]) {
+        for (const name of ["mailbox.send", "mailbox.receive", "process.start", "access.write"]) {
           expect(ended(name).length, name).toBe(1);
         }
 
@@ -509,7 +509,7 @@ describe("p97, names and numbers only", () => {
 // Gaps the mutation step found on the build (ticket 236): tag names and numbers held loose above.
 describe("p97, the tags hold the right names and numbers", () => {
   it.effect.prop(
-    "members.read counts only live keys as live, and members.write names its key",
+    "access.read counts only live keys as live, and access.write names its key",
     [keyArb],
     examples([["t1"]], (key: string) => {
       const { tracer, ended } = capture();
@@ -518,7 +518,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         const event = granted("pA", key);
         yield* write(event);
         yield* write(revoked("pA", key));
-        const [grant] = ended("members.write");
+        const [grant] = ended("access.write");
 
         if (grant === undefined) {
           return expect.unreachable();
@@ -528,7 +528,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         expect(tagged(grant, "signer")).toBe("pA");
         expect(tagged(grant, "id")).toBe(event._tag === "granted" ? event.grant.id : expect.unreachable());
         yield* clients.members;
-        const read = ended("members.read").at(-1);
+        const read = ended("access.read").at(-1);
 
         if (read === undefined) {
           return expect.unreachable();
@@ -600,7 +600,7 @@ describe("p97, the tags hold the right names and numbers", () => {
       return Effect.gen(function* () {
         yield* write(sheet);
         expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
-        const ignored = ended("members.write").find((span) => tagged(span, "answer") === "ignored");
+        const ignored = ended("access.write").find((span) => tagged(span, "answer") === "ignored");
 
         if (ignored === undefined) {
           return expect.unreachable();
@@ -670,7 +670,7 @@ describe("p97, the tags hold the right names and numbers", () => {
       });
       return Effect.gen(function* () {
         expect((yield* Effect.flip((yield* ClientManager).members)).reason).toBe(reason);
-        const reads = ended("members.read");
+        const reads = ended("access.read");
         expect(reads).toHaveLength(1);
         expect(tagged(reads[0]!, "reason")).toBe(reason);
       }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))), Effect.withTracer(tracer));

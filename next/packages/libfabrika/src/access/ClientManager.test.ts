@@ -289,11 +289,11 @@ describe("p96 and p97, replay and write answers", () => {
       return Effect.gen(function* () {
         for (const signer of ["pA", "wA", "unknown-signer"]) {
           const answer = yield* write(granted(signer, key));
-          const span = spans.filter((s) => s.name === "members.write").at(-1)!;
-          expect(span.attributes.get("fab.members.answer")).toBe(answer._tag);
+          const span = spans.filter((s) => s.name === "access.write").at(-1)!;
+          expect(span.attributes.get("fab.access.answer")).toBe(answer._tag);
 
           if (answer._tag === "refused") {
-            expect(span.attributes.get("fab.members.reason")).toBe(answer.reason);
+            expect(span.attributes.get("fab.access.reason")).toBe(answer.reason);
           }
         }
       }).pipe(Effect.provide(clientsOn(onSql(fresh()))), Effect.withTracer(tracer));
