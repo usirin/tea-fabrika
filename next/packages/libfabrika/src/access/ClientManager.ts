@@ -12,7 +12,9 @@ import { Appended, type Entry, fromHere, lineFor, valueFor } from "../ledger/Log
 import type { From } from "../processes/Mailbox.ts";
 import { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
-import { allows, EMPTY, eventId, type Folded, MemberEvent, type Access, signedBy, subject, Reason } from "./Access.ts";
+import type { Access, Folded } from "./Access.ts";
+import { eventId, MemberEvent, members, signedBy, subject, Reason } from "./Access.ts";
+import { allows, EMPTY } from "./AccessFold.ts";
 
 /** The stream who belongs is kept on. */
 const MEMBERS = "gateway/access";
@@ -88,12 +90,19 @@ const replay = (rows: ReadonlyArray<Row>): Replayed => {
   return { rows, folded, skipped, head: rows.at(-1)?.entry.rev ?? 0 };
 };
 
-const view = ({ folded, skipped, rows }: Replayed) => ({
-  [tag("events")]: rows.length,
-  [tag("keys")]: folded.members.keys.size,
-  [tag("live")]: [...folded.members.keys.values()].filter((k) => k.live).length,
-  [tag("ignored")]: skipped.size,
-});
+/** Who belongs after a read: the machine's public view. */
+const current = ({ folded }: Replayed): Access => members(folded);
+
+const view = (replayed: Replayed) => {
+  const { rows, skipped } = replayed;
+  const { keys } = current(replayed);
+  return {
+    [tag("events")]: rows.length,
+    [tag("keys")]: keys.size,
+    [tag("live")]: [...keys.values()].filter((k) => k.live).length,
+    [tag("ignored")]: skipped.size,
+  };
+};
 
 export class ClientManager extends Context.Service<
   ClientManager,
@@ -210,7 +219,7 @@ export class ClientManager extends Context.Service<
         const members = Effect.fn("access.read")(function* () {
           return yield* load.pipe(
             Effect.tap((replayed) => Effect.annotateCurrentSpan(view(replayed))),
-            Effect.map(({ folded }) => folded.members),
+            Effect.map(current),
             Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
           );
         });

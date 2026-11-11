@@ -25,12 +25,14 @@ import { ParentText } from "../Rev.ts";
 import type { Sql } from "../Sql.ts";
 import * as LedgerFront from "./Ledger.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import * as LedgerTransactionFront from "./LedgerTransaction.ts";
 import * as LogFront from "./Log.ts";
 import type { Entry, InputId, Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import * as RefereeFront from "./Referee.ts";
 import { Referee } from "./Referee.ts";
+import * as RefereeSql from "./RefereeSql.ts";
 
 // What the old data barrel exported: the ledger's front files and the shared names it passed on.
 const data = {
@@ -103,8 +105,8 @@ afterAll(() => {
 });
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-const onReferee = (sql: Sql) => Referee.layer(sql).pipe(Layer.provide(quiet));
-const onLedger = (sql: Sql) => Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(quiet));
+const onReferee = (sql: Sql) => RefereeSql.layer(sql).pipe(Layer.provide(quiet));
+const onLedger = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
 
 const full: Line = {
   by: "SHA256:writer-a",

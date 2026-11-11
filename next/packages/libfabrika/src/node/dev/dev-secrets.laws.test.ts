@@ -1,4 +1,4 @@
-// P12, next/. [secrets] Generated flows through the real stage, control route, Connection and sinks.
+// P12, next/. [secrets] Generated flows through the real instance, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,6 +15,7 @@ import { ConnectionService, connectionRuntime } from "../../cloudflare/connectio
 import { control } from "../../cloudflare/control.ts";
 import type { Env } from "../../cloudflare/runtime.ts";
 import { Doorbell, Ledger } from "../../ledger/Ledger.ts";
+import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import { lineFor } from "../../ledger/Log.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -123,7 +124,7 @@ const flow = async (sample: Flow) => {
   const outputs: Outputs = { spans: [], logs: [], journal: [], measurements: [], outbox: [] };
   const journalDb = new DatabaseSync(":memory:");
   const journal = ManagedRuntime.make(
-    Ledger.sql(nodeSql(journalDb), { reader: "secret-test" }).pipe(
+    LedgerSql.layer(nodeSql(journalDb), { reader: "secret-test" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     ),
   );
@@ -291,7 +292,7 @@ const flow = async (sample: Flow) => {
       Effect.scoped(
         Effect.gen(function* () {
           let observe: (event: RuntimeEvent) => void = () => {};
-          const stage = yield* startDev({ ...config, home }, (local) =>
+          const instance = yield* startDev({ ...config, home }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
               const plugin = [...local.mapUnsafe.values()].find(
@@ -301,7 +302,7 @@ const flow = async (sample: Flow) => {
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;
               };
               // Plugin props and HTTP headers are both platform sends. Each must receive
-              // the bearer bytes; serializing a Redacted here would break the real stage.
+              // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
                 Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
@@ -356,14 +357,14 @@ const flow = async (sample: Flow) => {
               catch: (cause) => new CallError({ cause }),
             });
             yield* Effect.tryPromise({
-              try: () => Reflect.get(stage.project(config.name), "info")(),
+              try: () => Reflect.get(instance.project(config.name), "info")(),
               catch: (cause) => new CallError({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);
           }
 
           mode = "rpc";
-          // The real stage remains the single writer. Wait for its queue before closing scope.
+          // The real instance remains the single writer. Wait for its queue before closing scope.
           observe({
             type: "exit",
             worker: config.name,

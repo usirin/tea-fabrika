@@ -1,0 +1,295 @@
+diff --git a/dist/core/node/Runtime.d.mts b/dist/core/node/Runtime.d.mts
+index 1fb57b0712cdd0156a68b0a6c114b3574eedf0d8..f35b3bc69b87a3fa9a5921989d01feba3a7d6593 100644
+--- a/dist/core/node/Runtime.d.mts
++++ b/dist/core/node/Runtime.d.mts
+@@ -1,6 +1,6 @@
+ import { RuntimeError } from "./RuntimeError.shared.mjs";
+ import { Docker } from "./Docker.mjs";
+-import { Workerd } from "./workerd/Workerd.mjs";
++import { Workerd, WorkerdExit } from "./workerd/Workerd.mjs";
+ import { BindingHooks, RuntimeWorker } from "./RuntimeWorker.mjs";
+ import { BindingHook } from "./PluginContext.mjs";
+ import { Storage } from "./globals/Storage.mjs";
+@@ -10,6 +10,13 @@ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
+ import * as Scope from "effect/Scope";
+ //#region src/core/Runtime.d.ts
++export type RuntimeEvent = { readonly worker: string } & (
++  | { readonly type: "start"; readonly pid: number }
++  | { readonly type: "exit"; readonly exit: WorkerdExit }
++  | { readonly type: "restart"; readonly exit: WorkerdExit; readonly delay: number }
++  | { readonly type: "stop"; readonly exit: WorkerdExit; readonly reason: "intensity" | "restart_failed" }
++);
++export declare const RuntimeLifecycle: Context.Reference<(event: RuntimeEvent) => void>;
+ declare const Runtime_base: Context.ServiceClass<Runtime, "cloudflare-runtime/Runtime", {
+   readonly start: <B extends BindingHooks>(worker: RuntimeWorker<B>) => Effect.Effect<URL, RuntimeError, BindingRequirements<B> | Scope.Scope>;
+ }>;
+diff --git a/dist/core/node/Runtime.mjs b/dist/core/node/Runtime.mjs
+index ab641f224a671681a3e1c7f01a6188d4b679da7b..fa8ae402d94cf7e33b6af5c974a44b922ac72f6a 100644
+--- a/dist/core/node/Runtime.mjs
++++ b/dist/core/node/Runtime.mjs
+@@ -15,11 +15,13 @@ import * as Clock from "effect/Clock";
+ import * as Queue from "effect/Queue";
+ import * as Result from "effect/Result";
+ //#region src/core/Runtime.ts
++const RuntimeLifecycle = Context.Reference("cloudflare-runtime/RuntimeLifecycle", { defaultValue: () => () => {} });
+ var Runtime = class extends Context.Service()("cloudflare-runtime/Runtime") {};
+ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
+ 	const workerd = yield* Workerd;
+ 	const storage = yield* Storage;
+ 	const docker = yield* Docker;
++	const lifecycle = yield* RuntimeLifecycle;
+ 	const plugins = yield* pickPluginsFromContext();
+ 	const preparePlugins = Effect.fnUntraced(function* (worker) {
+ 		const context = yield* make(worker, plugins);
+@@ -176,6 +178,7 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
+ 			bin: worker.workerd?.path,
+ 			env: worker.workerd?.env,
+ 			onOutput: worker.logging?.onOutput,
++			onStart: (pid) => lifecycle({ type: "start", worker: worker.name, pid }),
+ 			onExit: (exit) => {
+ 				Queue.offerUnsafe(exits, exit);
+ 			}
+@@ -188,19 +191,24 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
+ 			let restartTimes = [];
+ 			while (true) {
+ 				const exit = yield* Queue.take(exits);
++				lifecycle({ type: "exit", worker: worker.name, exit });
+ 				yield* Scope.close(processScope, Exit.void);
+ 				const now = yield* Clock.currentTimeMillis;
+ 				restartTimes = restartTimes.filter((time) => now - time < 6e4);
+ 				if (restartTimes.length >= 3) {
++					lifecycle({ type: "stop", worker: worker.name, exit, reason: "intensity" });
+ 					yield* Effect.logError(`The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`);
+ 					return;
+ 				}
+ 				restartTimes.push(now);
+-				yield* Effect.sleep(250 * 2 ** (restartTimes.length - 1));
++				const delay = 250 * 2 ** (restartTimes.length - 1);
++				lifecycle({ type: "restart", worker: worker.name, exit, delay });
++				yield* Effect.sleep(delay);
+ 				yield* Effect.logWarning(`The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`);
+ 				processScope = yield* Scope.fork(parentScope);
+ 				const restarted = yield* startProcess(ports).pipe(Effect.result);
+ 				if (Result.isFailure(restarted)) {
++					lifecycle({ type: "stop", worker: worker.name, exit, reason: "restart_failed" });
+ 					yield* Effect.logError(`The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`);
+ 					return;
+ 				}
+@@ -219,6 +227,6 @@ const pinSocket = (ports) => (socket) => {
+ 	};
+ };
+ //#endregion
+-export { Runtime, RuntimeLive };
++export { Runtime, RuntimeLive, RuntimeLifecycle };
+ 
+ //# sourceMappingURL=Runtime.mjs.map
+\ No newline at end of file
+diff --git a/dist/core/node/internal/Port.d.mts b/dist/core/node/internal/Port.d.mts
+index 38e10422267247a535bde1df912e6db6a827a3a3..45ff49b574cfe7b6f19d2f936be402fcda0c5efa 100644
+--- a/dist/core/node/internal/Port.d.mts
++++ b/dist/core/node/internal/Port.d.mts
+@@ -54,6 +54,8 @@ export interface Ports {
+    * Note that this is best-effort; the caller should include retry logic to handle race conditions.
+    */
+   readonly reserve: (port: number) => Effect.Effect<void>;
++  /** Drops a reservation once its holder has closed the port, so the same process can bind it again. */
++  readonly release: (port: number) => Effect.Effect<void>;
+ }
+ interface PortsOptions {
+   /** Prevents redundant lookups and helps with race conditions; should only be disabled for testing. */
+diff --git a/dist/core/node/internal/Port.mjs b/dist/core/node/internal/Port.mjs
+index 1be4345eb83d71a6be18d4cdf75160576e1f7756..19532566c8285dba1f67d34cafe065486c6dca8a 100644
+--- a/dist/core/node/internal/Port.mjs
++++ b/dist/core/node/internal/Port.mjs
+@@ -167,6 +167,9 @@ const make = (options) => Effect.gen(function* () {
+ 	const reserve = (port) => Effect.sync(() => {
+ 		globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
+ 	}).pipe(Effect.andThen(reserveLocal(port)));
++	const release = (port) => Effect.sync(() => {
++		globalReservations.delete(port);
++	}).pipe(Effect.andThen(Cache.invalidate(cache, port)));
+ 	const searchLock = globalSearchLock;
+ 	const search = Effect.fn(function* (start) {
+ 		let port = start;
+@@ -201,7 +204,8 @@ const make = (options) => Effect.gen(function* () {
+ 			times: WAIT_FOR_ATTEMPTS
+ 		}), Effect.tap(() => reserve(port))),
+ 		check: (port) => Effect.suspend(() => isReserved(port) ? Effect.fail(addressInUseError(port)) : Cache.get(cache, port).pipe(Effect.flatMap((available) => available ? reserve(port).pipe(Effect.as(port)) : Effect.fail(addressInUseError(port))))),
+-		reserve
++		reserve,
++		release
+ 	};
+ });
+ //#endregion
+diff --git a/dist/core/node/proxy/WorkerProxy.mjs b/dist/core/node/proxy/WorkerProxy.mjs
+index 3f368d232444a507eb448e5233edf7cec7b4f7ab..789c0088972edf1475ad5bdc15de68bc73357745 100644
+--- a/dist/core/node/proxy/WorkerProxy.mjs
++++ b/dist/core/node/proxy/WorkerProxy.mjs
+@@ -234,6 +234,7 @@ const WorkerProxyLive = Layer.effect(WorkerProxy, Effect.gen(function* () {
+ 	});
+ 	const serve = Effect.fnUntraced(function* ({ host, port, ipv6, pendingTimeout }) {
+ 		const relay = makeRelay(pendingTimeout);
++		yield* Effect.addFinalizer(() => ports.release(port));
+ 		yield* listen(relay, host, port);
+ 		if (ipv6) yield* listen(relay, "::1", port);
+ 		yield* Effect.addFinalizer(() => relay.close);
+diff --git a/dist/core/node/workerd/Workerd.d.mts b/dist/core/node/workerd/Workerd.d.mts
+index 2991479e21238758c4536fca424d4e3edcedf9ad..a95567c956b2754a50c9c6009e312e77c30fa580 100644
+--- a/dist/core/node/workerd/Workerd.d.mts
++++ b/dist/core/node/workerd/Workerd.d.mts
+@@ -24,6 +24,8 @@ export interface WorkerdExit {
+   readonly stderr: string;
+ }
+ export interface ServeOptions {
++  /** Called with the actual child PID once its sockets are listening. */
++  readonly onStart?: (pid: number) => void;
+   /**
+    * Capture the workerd process's output instead of piping it to the parent
+    * process's stdout/stderr. Output produced before the process finishes
+diff --git a/dist/core/node/workerd/Workerd.mjs b/dist/core/node/workerd/Workerd.mjs
+index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..ca64633b57eec1a0dc5532436033ca831db0c5a5 100644
+--- a/dist/core/node/workerd/Workerd.mjs
++++ b/dist/core/node/workerd/Workerd.mjs
+@@ -94,6 +94,7 @@ const make = (spawn) => Workerd.of({
+ 		}), Effect.forkScoped);
+ 		const ports = {};
+ 		for (const message of control) if (message.event === "listen") ports[message.socket] = message.port;
++		options?.onStart?.(handle.pid);
+ 		return ports;
+ 	}, Effect.retry({
+ 		while: (error) => error._tag === "SystemError",
+@@ -166,6 +167,7 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
+ 		process.stderr.write(chunk);
+ 	});
+ 	return {
++		pid: child.pid,
+ 		control: (count) => Effect.callback((resume, signal) => {
+ 			if (!child.stdio[3]) return resume(SystemError.make({
+ 				subtag: "WorkerdSpawn",
+@@ -246,6 +248,7 @@ const makeNode = () => make((command, args, config, configuredAddresses, env) =>
+ 			stderrTail.push(chunk.toString());
+ 		});
+ 	})), Effect.map((child) => ({
++		pid: child.pid,
+ 		configure: () => Effect.callback((resume) => {
+ 			const onError = (cause, message = "Failed to write to the workerd process stdin.") => {
+ 				resume(SystemError.make({
+diff --git a/src/core/Runtime.ts b/src/core/Runtime.ts
+index 0e245166b84686f62b80f25d900dde4c940da4ab..8f140fb1ccb0bff96ae8556adab2134501c64942 100644
+--- a/src/core/Runtime.ts
++++ b/src/core/Runtime.ts
+@@ -24,6 +24,19 @@ import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
+ import type * as WorkerdConfig from "./workerd/Config.ts";
+ import * as Workerd from "./workerd/Workerd.ts";
+ 
++export type RuntimeEvent = { readonly worker: string } & (
++  | { readonly type: "start"; readonly pid: number }
++  | { readonly type: "exit"; readonly exit: Workerd.WorkerdExit }
++  | { readonly type: "restart"; readonly exit: Workerd.WorkerdExit; readonly delay: number }
++  | { readonly type: "stop"; readonly exit: Workerd.WorkerdExit; readonly reason: "intensity" | "restart_failed" }
++);
++
++/** Observe local workers without taking ownership of their restart loop. */
++export const RuntimeLifecycle = Context.Reference<(event: RuntimeEvent) => void>(
++  "cloudflare-runtime/RuntimeLifecycle",
++  { defaultValue: () => () => {} },
++);
++
+ export class Runtime extends Context.Service<
+   Runtime,
+   {
+@@ -42,6 +55,7 @@ export const RuntimeLive = Layer.effect(
+     const workerd = yield* Workerd.Workerd;
+     const storage = yield* Storage.Storage;
+     const docker = yield* Docker.Docker;
++    const lifecycle = yield* RuntimeLifecycle;
+     const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
+ 
+     const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
+@@ -269,6 +283,7 @@ export const RuntimeLive = Layer.effect(
+               bin: worker.workerd?.path,
+               env: worker.workerd?.env,
+               onOutput: worker.logging?.onOutput,
++              onStart: (pid) => lifecycle({ type: "start", worker: worker.name, pid }),
+               onExit: (exit) => {
+                 Queue.offerUnsafe(exits, exit);
+               },
+@@ -292,6 +307,7 @@ export const RuntimeLive = Layer.effect(
+           let restartTimes: Array<number> = [];
+           while (true) {
+             const exit = yield* Queue.take(exits);
++            lifecycle({ type: "exit", worker: worker.name, exit });
+             // Release the old process, output listeners and plugin tasks before
+             // starting another generation. Closing also detaches this child
+             // scope from the parent, so repeated crashes do not retain it.
+@@ -299,19 +315,23 @@ export const RuntimeLive = Layer.effect(
+             const now = yield* Clock.currentTimeMillis;
+             restartTimes = restartTimes.filter((time) => now - time < 60_000);
+             if (restartTimes.length >= 3) {
++              lifecycle({ type: "stop", worker: worker.name, exit, reason: "intensity" });
+               yield* Effect.logError(
+                 `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
+               );
+               return;
+             }
+             restartTimes.push(now);
+-            yield* Effect.sleep(250 * 2 ** (restartTimes.length - 1));
++            const delay = 250 * 2 ** (restartTimes.length - 1);
++            lifecycle({ type: "restart", worker: worker.name, exit, delay });
++            yield* Effect.sleep(delay);
+             yield* Effect.logWarning(
+               `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
+             );
+             processScope = yield* Scope.fork(parentScope);
+             const restarted = yield* startProcess(ports).pipe(Effect.result);
+             if (Result.isFailure(restarted)) {
++              lifecycle({ type: "stop", worker: worker.name, exit, reason: "restart_failed" });
+               yield* Effect.logError(
+                 `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
+               );
+diff --git a/src/core/workerd/Workerd.ts b/src/core/workerd/Workerd.ts
+index 6e8cc14b478c0fabececff5d28f1c9f3619a5210..7fec53c4367e3a6deec7097e865288d79ce0afe1 100644
+--- a/src/core/workerd/Workerd.ts
++++ b/src/core/workerd/Workerd.ts
+@@ -30,6 +30,8 @@ export interface WorkerdExit {
+ }
+ 
+ export interface ServeOptions {
++  /** Called with the actual child PID once its sockets are listening. */
++  readonly onStart?: (pid: number) => void;
+   /**
+    * Capture the workerd process's output instead of piping it to the parent
+    * process's stdout/stderr. Output produced before the process finishes
+@@ -89,6 +91,7 @@ type ControlMessage =
+     };
+ 
+ interface ProcessHandle {
++  readonly pid: number;
+   /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
+   readonly configure?: () => Effect.Effect<void, SystemError>;
+   /** Waits for the process to listen on the given number of sockets. */
+@@ -226,6 +229,7 @@ const make = (
+             ports[message.socket] = message.port;
+           }
+         }
++        options?.onStart?.(handle.pid);
+         return ports;
+       },
+       Effect.retry({
+@@ -311,6 +315,7 @@ const makeBun = () =>
+           process.stderr.write(chunk);
+         });
+         return {
++          pid: child.pid,
+           control: (count) =>
+             Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
+               if (!child.stdio[3]) {
+@@ -422,6 +427,7 @@ const makeNode = () =>
+         }),
+       ),
+       Effect.map((child) => ({
++        pid: child.pid!,
+         configure: () =>
+           Effect.callback((resume) => {
+             const onError = (

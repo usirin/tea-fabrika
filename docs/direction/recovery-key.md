@@ -91,7 +91,7 @@ move settles it):
   "<app> Safe Storage" item in the login Keychain file, and that file moves with Migration
   Assistant, from the old Mac or from a Time Machine backup. iCloud Keychain never carries it, and a
   Keychain copied by hand fails on macOS 26.4 and later. So a calm move needs no sheet, and the
-  local stage's ledger comes back with the app's home. The sheet's help says so: "Moving to a new
+  local instance's ledger comes back with the app's home. The sheet's help says so: "Moving to a new
   Mac? Migration Assistant brings fabrika with it."
 - **If the item did not come across,** Chromium quietly makes a new one, and every sealed key fails
   to open. **Then the app goes to the recovery screen, never to a new founding (decided):** "This
@@ -636,11 +636,11 @@ builder and read by the owner, holds:
 - **The sheet's pure laws:** words to key and back. One changed word fails the checksum or gives
   another key. The label matches only the right key. "Check my sheet" answers live, old or wrong,
   and makes no network call.
-- **The secret stays home:** during a full recovery on a stage, every frame sent, every ledger row
+- **The secret stays home:** during a full recovery on an instance, every frame sent, every ledger row
   and every log line is searched for each of the 12 words, the entropy and the seed. None is found.
 - **The done check, end to end,** on real Electron with a test `PersonCheck` and a stand-in
   printer that writes the sheet to the temp home:
-  1. Home A founds, saves a note on a stage that stands in for the cloud, lets in a tab and an
+  1. Home A founds, saves a note on an instance that stands in for the cloud, lets in a tab and an
      agent, and makes a sheet.
   2. Home B opens, picks "I have a backup sheet", types the address and words, and keeps the
      default, "lost".

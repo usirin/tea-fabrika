@@ -175,9 +175,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
-- **A pull request changes at most 600 lines of product code** (owner, 2026-11-10, a trial that
-  only advises until replayed): bigger work is a stack of slices the plan cuts, each landing whole
-  with its tests ([0087](./.decisions/0087-a-pull-request-caps-product-lines.md)).
+- **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
+  slices, each landing whole with its tests, by what works on its own and never to fit a count.
+  Size picks who looks, and a warning drawn from our own merged pull requests only advises
+  ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
   `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
@@ -424,7 +425,7 @@ pnpm test
 
 All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
-patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The two advice rules print and do not fail it (`oxlint-plugins/README.md`).
+patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The four advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
@@ -441,7 +442,7 @@ every row.
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
-| A dependency's version | as code; `pnpm lint` fails on a range |
+| A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite; `pnpm lint` fails on a range |
 | A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
 | A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
@@ -501,7 +502,10 @@ brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
-  Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
+  Never the full suite locally (owner, 2026-11-08). A change to a file that reruns every test (the
+  `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
+  a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
+  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
   the changed paths (`.github/ci/changes.mjs`). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
   and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
@@ -515,7 +519,8 @@ brief carries these caps. Each one came from a laptop that became unusable.
   about 8 cores, so small jobs add up.
 - "Under load" means at most 12 code agents, one `pnpm typecheck` at a time across all of
   them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
-  the wait, so that loop never ends), one Electron test app at a time, and one Docker
+  the wait, so that loop never ends; in a step's box, where `pgrep` cannot list processes, skip
+  the wait: `pnpm typecheck` takes its own lock, `scripts/typecheck.sh`), one Electron test app at a time, and one Docker
   box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
   with 3 code agents running, the load average sat near 5.5 with 45 GB free. Raised to 5 the
   same day, the owner asking again, with 4 running and the load near 9. Two type checks at

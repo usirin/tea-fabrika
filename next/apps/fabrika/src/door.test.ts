@@ -17,7 +17,9 @@ import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
@@ -63,6 +65,8 @@ const SAW = {
 } as const;
 
 const SENT = "2026-11-08T04:00:00.000Z";
+/** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
+const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
 const START = processId();
 const TOOK = { label: "Browser", where: "test", how: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -246,8 +250,12 @@ afterAll(() => {
   rmSync(top, { recursive: true, force: true });
 });
 
+// Each world is a fresh SQLite file, and every door call commits. No law here kills the process
+// mid-write, so the rollback journal stays in memory and no commit waits on the disk. A reopen
+// still reads the same file. This halves the ticket 707 walks, 200 worlds each.
 const open = (path: string) => {
   const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF");
   opened.push(db);
   return db;
 };
@@ -359,7 +367,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     url: URL,
     origins: ["https://fabrika.test"],
     versions: [1, 2],
-    location: "test-stage",
+    location: "test-instance",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
     ping: { min: 10_000, max: 60_000 },
@@ -376,13 +384,13 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     events: { personOnly: ["answered"] },
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
   const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
     clients,
-    LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
+    LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
     Mailbox.layer.pipe(Layer.provide(clients)),
     SpanSink.layer(sql, { object: START }),
     records,
@@ -392,13 +400,13 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
-    const freshLedger = Ledger.sql(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
+    const freshLedger = LedgerSql.layer(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
     const freshClients = ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
     return Gateway.layer({ ...settings, sql: storage }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           freshClients,
-          LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
+          LedgerTransactionSql.layer(storage).pipe(Layer.provide(quiet)),
           Mailbox.layer.pipe(Layer.provide(freshClients)),
           SpanSink.layer(storage, { object: START }),
           records,
@@ -1327,7 +1335,7 @@ describe("P10 door admission and waiting", () => {
           nonce: h.nonce,
           signed: h.hello.signed,
           sentAt: SENT,
-          location: "test-stage",
+          location: "test-instance",
           build: "test-build",
         });
         expect(rows[0]?.by).toBe(w.window.fingerprint);
@@ -1517,6 +1525,277 @@ describe("P10 door admission and waiting", () => {
       }).pipe(w.provide);
     }),
   );
+});
+
+// Ticket 707: the gateway steps the waiting machine. One generated walk of gateway calls, each
+// resolved against what the door holds now: a new tab of a key not yet granted, a repeat knock of
+// a tracked connection (pruned ones included), a close, a clock move before, at or after a live
+// row's deadline, a grant of a key with or without a row, and, for the second law, a reopen of
+// SQLite. After each call the owner's watch is read back and checked against the rows before it.
+type WatchRow = Effect.Success<ReturnType<typeof Gateway.Service.watch>>["rows"][number];
+type Connection = Effect.Success<ReturnType<typeof Gateway.Service.connect>>;
+
+const DoorMove = fc.record({
+  kind: fc.constantFrom("tab", "tab", "knock", "leave", "time", "grant", "reopen"),
+  pick: fc.nat(),
+  other: fc.nat(),
+  when: fc.integer({ min: -1, max: 2 }),
+  pass: fc.option(fc.string({ maxLength: 3 }), { nil: undefined }),
+});
+
+type DoorMove = typeof DoorMove extends fc.Arbitrary<infer A> ? A : never;
+
+// The saved value's row, field by field in its stored order: the legacy `where` and `tabs`.
+const legacyRow = (r: WatchRow) => ({
+  key: r.key,
+  label: r.label,
+  where: r.where,
+  code: r.code,
+  until: r.until,
+  tabs: r.tabs,
+  clients: r.clients,
+  pass: r.pass,
+  has: r.has,
+  as: r.as,
+});
+
+const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cuts: boolean) {
+  const w = yield* world();
+  const { most, ttl } = w.settings.waiting;
+  const pool = [
+    { k: w.otherWindow, as: "window" },
+    { k: w.agent, as: "agent" },
+    { k: w.otherRoot, as: "window" },
+    { k: w.sheet, as: "window" },
+  ] as const;
+  const granted = new Set<string>();
+  let connections: Array<{ client: Connection; key: string }> = [];
+  let owner: Connection | undefined;
+  let rows: ReadonlyArray<WatchRow> = [];
+  let now = 0,
+    made = 0,
+    index = 0,
+    layer = w.layer;
+
+  for (;;) {
+    const done = yield* Effect.gen(function* () {
+      const d = yield* Gateway;
+      const watch = Effect.fnUntraced(function* () {
+        assert(owner);
+        const reply = yield* d.watch(owner);
+        expect(reply._tag).toBe("watching");
+        const flat = reply.rows.map(legacyRow);
+        // format: watch replies and the saved value keep the stored row bytes, and the saved
+        // value keeps its flat rows-and-settings shape under the same gateway_state key.
+        expect(JSON.stringify(reply.rows)).toBe(JSON.stringify(flat));
+        expect(w.db.prepare("SELECT value FROM gateway_state WHERE name='waiting'").get()?.value).toBe(
+          JSON.stringify({ rows: flat, most, ttl }),
+        );
+        return reply.rows;
+      });
+
+      if (owner === undefined) {
+        owner = (yield* online(d, w)).client;
+        rows = yield* watch();
+      } else {
+        // A reopened door reads the same rows, written in the old shape, without renewing them.
+        expect(yield* watch()).toEqual(rows);
+      }
+
+      while (index < moves.length) {
+        const move = moves[index++]!;
+        const kept = rows.filter((r) => r.until > now);
+        const free = pool.filter((p) => !granted.has(p.k.raw));
+
+        if (move.kind === "reopen") {
+          if (cuts) {
+            return false;
+          }
+
+          continue;
+        }
+
+        if (move.kind === "time") {
+          const row = kept[move.pick % Math.max(1, kept.length)];
+          const by = row === undefined || move.when === 2 ? 1 + (move.other % 1000) : row.until - now + move.when;
+          yield* TestClock.adjust(by);
+          now += by;
+          rows = yield* watch();
+          expect(rows).toEqual(kept.filter((r) => r.until > now));
+          continue;
+        }
+
+        if (move.kind === "leave") {
+          const connection = connections[move.pick % Math.max(1, connections.length)];
+
+          if (connection === undefined) {
+            continue;
+          }
+
+          const saved = w.db.prepare("SELECT value FROM gateway_state WHERE name=?").get(`client/${connection.client}`);
+          const attached = saved !== undefined && JSON.parse(String(saved.value))._tag === "waiting";
+          yield* d.disconnect(connection.client);
+          connections = connections.filter((c) => c !== connection);
+          rows = yield* watch();
+          const row = kept.find((r) => r.key === connection.key && r.clients.includes(connection.client));
+          const clients = row?.clients.filter((c) => c !== connection.client) ?? [];
+          expect(rows).toEqual(
+            !attached || row === undefined
+              ? kept
+              : clients.length === 0
+                ? kept.filter((r) => r !== row)
+                : kept.map((r) => (r === row ? { ...row, clients, tabs: clients.length } : r)),
+          );
+          continue;
+        }
+
+        if (move.kind === "grant") {
+          const withRow = free.filter((p) => kept.some((r) => r.key === p.k.raw));
+          const pick =
+            (move.other % 3 === 0 ? undefined : withRow[move.pick % Math.max(1, withRow.length)]) ??
+            free[move.pick % Math.max(1, free.length)];
+
+          if (pick === undefined) {
+            continue;
+          }
+
+          const before = w.notices.length;
+          const text = grantText({
+            id: `walk-grant-${made++}`,
+            key: pick.k.raw,
+            for: PERSON,
+            to: "project-a",
+            as: pick.as,
+            saw: SAW,
+            sentAt: SENT,
+          });
+          expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
+          granted.add(pick.k.raw);
+          connections = connections.filter((c) => c.key !== pick.k.raw);
+          const row = kept.find((r) => r.key === pick.k.raw);
+          const told = w.notices
+            .slice(before)
+            .filter((n) => JSON.stringify(n.news).includes("client.granted"))
+            .map((n) => n.client);
+          // Every tab of the admitted key, and only those, is told once to answer a fresh nonce.
+          expect(told.toSorted()).toEqual([...(row?.clients ?? [])].toSorted());
+          rows = yield* watch();
+          expect(rows).toEqual(kept.filter((r) => r !== row));
+          continue;
+        }
+
+        const repeat = move.kind === "knock" ? connections[move.pick % Math.max(1, connections.length)] : undefined;
+        const p = free[move.pick % Math.max(1, free.length)];
+        let connection = repeat;
+
+        if (connection === undefined) {
+          if (p === undefined) {
+            continue;
+          }
+
+          const tab = `walk-${made++}`;
+          const client = yield* d.connect();
+          const nonce = yield* d.challenge(client);
+          const hello = {
+            versions: [1, 2],
+            has: [],
+            ping: "30s",
+            key: p.k.raw,
+            tab,
+            nonce,
+            platform: "browser",
+            os: "ios",
+            sentAt: SENT,
+            signed: yield* p.k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+          };
+          expect(yield* d.initialize(client, hello, { url: URL, tab, name: p.k.fingerprint })).toMatchObject({
+            _tag: "refused",
+            reason: "not_granted",
+          });
+          connection = { client, key: p.k.raw };
+          connections.push(connection);
+        }
+
+        const label = `label-${move.other % 3}`;
+        const reply = yield* d.knock(
+          connection.client,
+          move.pass === undefined ? { label } : { label, pass: move.pass },
+        );
+        rows = yield* watch();
+
+        if (reply._tag === "refused") {
+          // Only a pruned connection is refused: a fresh tab is the newest pending connection.
+          expect(repeat).toBeDefined();
+          expect(reply).toEqual({ _tag: "refused", reason: "not_waiting" });
+          expect(rows).toEqual(kept);
+          continue;
+        }
+
+        const old = kept.find((r) => r.key === connection.key);
+        const row = rows.find((r) => r.key === connection.key);
+        assert(row);
+        expect(reply).toEqual({ _tag: "ok", result: { code: row.code, until: row.until } });
+
+        if (old !== undefined) {
+          const clients = old.clients.includes(connection.client) ? old.clients : [...old.clients, connection.client];
+          expect(rows).toEqual(kept.map((r) => (r === old ? { ...old, clients, tabs: clients.length } : r)));
+          continue;
+        }
+
+        expect(row.code).toMatch(/^\d{6}$/);
+        expect(rows).toEqual(
+          [
+            ...kept,
+            {
+              key: connection.key,
+              label,
+              where: "test-instance",
+              code: row.code,
+              until: now + ttl,
+              tabs: 1,
+              clients: [connection.client],
+              pass: move.pass ?? null,
+              has: [],
+              as: "window",
+            },
+          ].slice(-most),
+        );
+      }
+
+      return true;
+    }).pipe(Effect.provide(layer));
+
+    if (done) {
+      return;
+    }
+
+    // An old row: the value as a door before ticket 707 wrote it, by hand, then a fresh door.
+    w.db
+      .prepare("UPDATE gateway_state SET value=? WHERE name='waiting'")
+      .run(JSON.stringify({ rows: rows.map(legacyRow), most, ttl }));
+    layer = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
+  }
+});
+
+describe("ticket 707: the gateway steps the waiting machine", () => {
+  it("gateway knocks, closes, grants and expiry agree with the saved waiting value", async () => {
+    // Plant: omit the `accepted` step after an applied grant. The after-grant rows must fail.
+    await fc.assert(
+      fc.asyncProperty(fc.array(DoorMove, { minLength: 4, maxLength: 14, size: "max" }), (moves) =>
+        Effect.runPromise(doorWalk(moves, false).pipe(Effect.provide(TestClock.layer()))),
+      ),
+      runs(100),
+    );
+  });
+  it("old saved rows and every reopen cut keep their deadlines, codes, tabs and reply bytes", async () => {
+    // Plant: reset `until` while decoding. The reopened watch equality must fail.
+    await fc.assert(
+      fc.asyncProperty(fc.array(DoorMove, { minLength: 4, maxLength: 14, size: "max" }), (moves) =>
+        Effect.runPromise(doorWalk(moves, true).pipe(Effect.provide(TestClock.layer()))),
+      ),
+      runs(100),
+    );
+  });
 });
 
 describe("P10 signed membership changes", () => {
@@ -2673,7 +2952,7 @@ describe("P33 signal ids belong to the brain", () => {
       Effect.sync(() => next.shift()!),
     ).pipe(
       Layer.provide(
-        LedgerTransaction.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+        LedgerTransactionSql.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );
   };
@@ -2791,7 +3070,7 @@ describe("P33 signal ids belong to the brain", () => {
                   }),
                 ),
               ).toMatchObject({ _tag: "SigningRefused" });
-              yield* ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+              yield* ProcessManager.use((p) => p.exit(TARGET, CRASHED, brainFrom)).pipe(
                 Effect.provide(processes(w, asBrain, brainSeat)),
               );
               const inbox = yield* entries("watcher:1/inbox");
@@ -2799,13 +3078,13 @@ describe("P33 signal ids belong to the brain", () => {
               expect(inbox[0]).toMatchObject({
                 _tag: "send",
                 by: BRAIN,
-                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed" } },
+                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED } },
               });
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([
-                { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed", to: toWatcher },
+                { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED, to: toWatcher },
               ]);
             }).pipe(w.provide);
           }),

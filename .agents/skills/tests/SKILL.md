@@ -5,9 +5,9 @@ description: Be the test writer for one tea-fabrika ticket, the pipeline step th
 
 # The test writer
 
-You write the laws an approved plan asks for, each with its plant, and see each new one fail for
-the reason the plan gives. The builder then makes them green and may not touch them
-([nobody writes their own exam](../../../docs/direction/nobody-writes-their-own-exam.md)).
+You write the laws an approved plan asks for, prove each can fail with a plant you run once, and
+see each new one fail for the reason the plan gives. The builder then makes them green and may not
+touch them ([nobody writes their own exam](../../../docs/direction/nobody-writes-their-own-exam.md)).
 
 A brief names the ticket, the plan's path, the branch, and what this round is for. This skill holds
 the rest.
@@ -16,12 +16,17 @@ the rest.
 
 1. **Read** `AGENTS.md` (all of it), then the approved plan the brief names, then the code and the
    rows it points to. Say which version you are in: `next/` or today's.
-2. **Write each law with its plant.** Every law uses generated inputs on the real code unless it
-   has one of the four reason labels, not only laws on a machine
+2. **Write each law and plant a break for it once.** Every law uses generated inputs on the real
+   code unless it has one of the four reason labels, not only laws on a machine
    ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
    [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
    - Keep `@demlik/tea/pbt` on a machine's real reducer from its real `init`
      ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).
+   - **A law walks the machine.** Its generator reads the state it is folding and picks the next
+     move from what is possible there, such as a Msg for a dial that exists or an answer to a Cmd
+     that is really waiting. No hand-written lists of cases. The known ways are fast-check's
+     `fc.commands` and tea's `arbGuidedSequence`
+     ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)).
    - For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema,
      or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has
      nothing or to push edge cases. Effect's own tools come first (owner, 2026-11-08), `effect/testing`
@@ -32,6 +37,15 @@ the rest.
      `examples`, with the bug named beside it. A law that is only examples is not done.
    - A fixed test needs one of [the four labels](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)
      and the plan's reason beside the check: `vector:`, `format:`, `pinned:` or `scenario:`.
+     `fabrika/law-shape` in `pnpm lint` flags a `next/` or `.agents/` test that is neither a
+     property nor labeled; whether the label fits is yours to judge.
+   - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
+     law, record the plant and its result, then undo the plant. Commit no plant test. A plant that
+     was not run or not recorded counts as not run, and its law is not done. An old plant test may
+     go, since it is not a law; removing or narrowing a law still waits on the owner
+     ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). A lint rule's own
+     planted lines (`oxlint-plugins/plants.test.ts`, `next/apps/fabrika/src/exam/plant.ts`) are its
+     test inputs and stay.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
    - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
      cell and a property over generated flows. Generate made-up words, keys and passes,
@@ -59,10 +73,12 @@ the rest.
    missing import or a type error in the test is your bug, not a red. Every older law stays green.
 4. **Fix test-side type errors** the build's product edits cause (a `// @ts-expect-error <why>` on a
    case that is invalid on purpose, or a reshaped test that still proves the refusal). Keep every
-   law and plant.
+   law.
 5. **Commit** with the step-commit skill. In a box use `--commit-only`; fetch signs the run.
-6. **Report** each new law with `file:line` and how you saw it fail, anything
-   in the plan you found wrong, and any red that is a sandbox limit.
+6. **Report** each new law with `file:line` and how you saw it fail, each plant you ran for it (the
+   file and line you broke, and the law's result), anything in the plan you found wrong, and any
+   red that is a sandbox limit. Your answer's JSON object lists the plants under `plants`, each
+   `{law, plant, result}` with `result` `red` or `green`, so they land on your field row.
 
 ## Outside your task
 
@@ -91,4 +107,9 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - The builder's uncommitted edits stay exactly as they are.
 - Read, print or copy a key file. Push.
-- Write a law that cannot fail, or one whose plant you did not run.
+- Write a law that cannot fail, or one whose plant you did not run and record. A plant that needs
+  the build's file is written and named in the report as "after build", and runs at review.
+- Hold `done` for a part your box cannot do. Work until every part this box allows is done. A
+  part that needs another step's code, a typecheck or `--changed` is written, named in the report
+  as "after build" or "lead runs it", and does not block `done`. Never send the lane to tests.
+- Commit a plant test.

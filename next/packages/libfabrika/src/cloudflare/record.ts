@@ -1,10 +1,10 @@
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Schema } from "effect";
-import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
 import { type Chain } from "../telemetry/Trace.ts";
+import { cloudflareSql } from "./CloudflareSql.ts";
 import { RecordPart, type RecordShape } from "./objects.ts";
 
 type Part = ReturnType<typeof recordPart>;
@@ -80,7 +80,7 @@ export const RecordPartLive = RecordPart.make(
           limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
         }),
       ),
-    )(env.STAGE).pipe(
+    )(env.INSTANCE).pipe(
       Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
       Effect.map((config) => config.limits?.recordBytes),
       Effect.cached,

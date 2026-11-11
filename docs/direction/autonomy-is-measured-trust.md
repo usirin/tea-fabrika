@@ -58,7 +58,9 @@ const failRate = (merges: readonly MergeRow[], broke: readonly BrokeRow[]) => br
 
 - **M1. A row per merge, written when it merges** (90% sure). The `MergeRow` above, in
   `field/`. What it checked is a fact that exists only at merge time. Write it now, or it is
-  gone (record wide).
+  gone (record wide). Not built: no code writes it and `field/README.md` gives it no file or
+  fields. At the merge today, `catchup.sh` only comments on each ticket it closes with the pull
+  request and its merge commit (`.agents/skills/lead/scripts/catchup.sh:86`).
 - **M2. A row per break, written when it is found** (85% sure). The `BrokeRow` above. The
   `missed` field is what makes a break useful. It is the step to fix.
 - **M3. Change failure rate, by step, derived** (80% sure). Never stored, rebuilt from the
@@ -95,8 +97,10 @@ type AskCount = {
 
 ## What it means for the work
 
-- Every merge an agent makes without a person gets an M1 row, starting today.
-- A break found later gets an M2 row the same day, and a ticket on the step that missed it.
+- Every merge an agent makes without a person is to get an M1 row. None is written yet, so what
+  each merge so far passed is lost (finding 2026-11-10-f24).
+- A break found later is to get an M2 row the same day, and a ticket on the step that missed it.
+  No M2 row is written yet either.
 - The pipeline itself leans the same way: it fixes forward, as in
   [jidoka and andon](./jidoka-and-andon.md). It does not add gates that wait on a person.
 
