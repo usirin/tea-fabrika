@@ -28,6 +28,7 @@ import type { Sql } from "../Sql.ts";
 import { MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
+import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const READER = "connection:t1";
 const PARENT = `in-${A}-41`;
@@ -101,7 +102,7 @@ const onSql = (sql: Sql) =>
   Layer.mergeAll(LedgerSql.layer(sql, { reader: READER }), LedgerTransactionSql.layer(sql)).pipe(Layer.provide(quiet));
 
 const all = (sql: Sql = fresh()) =>
-  Layer.mergeAll(Mailbox.layer, ProcessManager.layer(brain(), ids(A).next), ClientManager.layer(FOUNDER)).pipe(
+  Layer.mergeAll(Mailbox.layer, ProcessManager.layer(brain(), ids(A).next), ClientManagerLedger.layer(FOUNDER)).pipe(
     Layer.provideMerge(onSql(sql)),
   );
 
@@ -429,7 +430,7 @@ describe("p97, member spans", () => {
       const hook: { before: Effect.Effect<void, LedgerError> | null } = {
         before: write(macX).pipe(
           Effect.asVoid,
-          Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
         ),
       };
       const target = macC._tag === "added" ? macC.add.id : "";
@@ -468,7 +469,10 @@ describe("p97, member spans", () => {
         const read = ended("access.read").at(-1);
         expect(read === undefined ? null : tagged(read, "ignored")).toBe(1);
         clean(spans);
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))), Effect.withTracer(tracer));
+      }).pipe(
+        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
+        Effect.withTracer(tracer),
+      );
     }),
     options,
   );
@@ -578,7 +582,7 @@ describe("p97, the tags hold the right names and numbers", () => {
       const target = macC._tag === "added" ? macC.add.id : "";
       let before: Effect.Effect<void, LedgerError> | null = write(macX).pipe(
         Effect.asVoid,
-        Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
       );
       // Mac X's whole write runs just before Mac C's append, as in the race above.
       const racing = Layer.effect(
@@ -610,7 +614,10 @@ describe("p97, the tags hold the right names and numbers", () => {
 
         expect(tagged(ignored, "rev")).toBe(4);
         expect(tagged(ignored, "reason")).toBe("used");
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(racing))), Effect.withTracer(tracer));
+      }).pipe(
+        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(racing))),
+        Effect.withTracer(tracer),
+      );
     }),
     options,
   );
@@ -675,7 +682,10 @@ describe("p97, the tags hold the right names and numbers", () => {
         const reads = ended("access.read");
         expect(reads).toHaveLength(1);
         expect(tagged(reads[0]!, "reason")).toBe(reason);
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))), Effect.withTracer(tracer));
+      }).pipe(
+        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(broken))),
+        Effect.withTracer(tracer),
+      );
     },
     { arbitrary: { seed: 119120, runs: 20 } },
   );

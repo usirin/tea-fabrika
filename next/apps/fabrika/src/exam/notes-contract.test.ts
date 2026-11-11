@@ -23,7 +23,7 @@ import {
   type Refusal,
   type Update,
 } from "@kampus/libfabrika";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
@@ -267,7 +267,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
       };
       const env = Layer.mergeAll(
         ledger,
-        ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+        ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
         SpanSink.layer(sql, { object: process }),
         RecordManager.memory(4 * 1024 * 1024),
         Archive.memory,
