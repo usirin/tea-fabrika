@@ -1260,6 +1260,66 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     );
   });
 
+  // One lane, end to end on the real checker: a signed tests step, main moves, the lead merges main
+  // in (signed as `lead`, or not, or with another commit's link), main may move again, and the next
+  // step's box starts at the lane head with the first step's root saved.
+  const afterLeadMerge = (b: Box, lead: "signed" | "unsigned" | "foreign", movedAgain: boolean) => {
+    b.setup({ operations: [{ path: "src/a.ts", text: "first tests\n" }] });
+    expect(b.run().code).toBe(0);
+    const first = b.fetch();
+    expect(first.code, first.text).toBe(0);
+    const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+    b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+    b.git(b.main, "checkout", "-q", b.branch);
+    b.git(b.main, "merge", "-q", "--no-ff", "-m", "lead merge of main", "main");
+
+    if (lead === "signed") {
+      b.sign(b.main, "lead", "321");
+    } else if (lead === "foreign") {
+      // The signer refuses a key allowed_signers lacks, so the foreign link is the first step's own
+      // valid link, replayed onto the merge: trusted key, wrong trees.
+      const lifted = b.git(b.main, "notes", "--ref=fabrika", "list", `${b.branch}^1`).trim();
+      b.git(b.main, "notes", "--ref=fabrika", "add", "-C", lifted, "HEAD");
+    }
+
+    const merged = b.head(b.main);
+    b.git(b.main, "checkout", "-q", "main");
+
+    if (movedAgain) {
+      b.git(b.main, "update-ref", "refs/remotes/origin/main", b.commit(b.main, "src/old.ts", "main moved again\n"));
+    }
+
+    b.git(b.work, "fetch", "-q", b.main, `${b.branch}:refs/remotes/lane`, "refs/notes/fabrika:refs/notes/fabrika");
+    b.git(b.work, "reset", "-q", "--hard", merged);
+    b.state(merged);
+    appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+    b.setup({ operations: [{ path: "src/a.ts", text: "second tests\n" }] });
+    expect(b.run().code).toBe(0);
+    return b.fetch();
+  };
+
+  // Plants: check from the box base, from the saved root, or without main's merge-base. 13 fetches
+  // on lane p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
+  it("K1 scenario: a lane caught up with main by a signed lead merge passes the next step's fetch", () => {
+    each([false, true], (movedAgain) =>
+      fixture((b) => {
+        const got = afterLeadMerge(b, "signed", movedAgain);
+        expect(got.code, got.text).toBe(0);
+        expect(got.text).not.toMatch(/"_tag":"stuck"/);
+      }),
+    );
+  });
+
+  // Plant: pass any merge commit, or any note that verifies somewhere. The law that must not get
+  // weaker: a merge nobody signed, or one carrying a link made for another commit, stops fetch.
+  it("K1 scenario: an unsigned or foreign lead merge still stops the next step's fetch", () => {
+    each(["unsigned", "foreign"] as const, (lead) =>
+      fixture((b) => {
+        refused(afterLeadMerge(b, lead, false), /commits check failed: (unsigned_commit|unlinked_commit) [0-9a-f]{8}/);
+      }),
+    );
+  });
+
   // Plants: say only "commits check failed"; drop the commit, the step or the count past five.
   // 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
   it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
