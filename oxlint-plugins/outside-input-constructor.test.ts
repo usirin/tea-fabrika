@@ -6,7 +6,7 @@ const file = "next/packages/libfabrika/src/data/id.ts";
 
 describe("P17a, outside input has typed failures", () => {
   it("plants schema aliases and destructured decoder aliases in the door", async () => {
-    const door = "next/packages/libfabrika/src/door/door.ts";
+    const door = "next/packages/libfabrika/src/gateway/Gateway.ts";
     const lines = [
       'import {Schema} from "effect";',
       "declare const raw: unknown, Binding: any;",
@@ -76,15 +76,15 @@ describe("P17a, outside input has typed failures", () => {
   it("covers each named production path and leaves other files alone", async () => {
     const paths = [
       "data/id",
-      "data/log",
-      "coordination/authorization",
-      "door/door",
-      "door/store",
-      "door/nonce",
-      "app/nemesis",
-      "app/chaos-state",
-      "app/runner",
-      "app/entry",
+      "ledger/Log",
+      "access/Authorization",
+      "gateway/Gateway",
+      "gateway/GatewayStore",
+      "gateway/GatewayNonce",
+      "runtime/Nemesis",
+      "runtime/ChaosState",
+      "runtime/Runner",
+      "runtime/Entry",
     ];
     const files = Object.fromEntries(
       paths.map((path) => [
@@ -92,7 +92,7 @@ describe("P17a, outside input has typed failures", () => {
         "declare const raw: unknown, Row: any; Row.make(raw);",
       ]),
     );
-    const other = "next/packages/libfabrika/src/coordination/members.ts";
+    const other = "next/packages/libfabrika/src/access/Access.ts";
     const linted = await plant({
       ...files,
       [other]: "declare const raw: unknown, Row: any; Row.make(raw);",

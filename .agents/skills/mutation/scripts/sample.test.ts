@@ -52,24 +52,37 @@ const parseRange = (range: string) => {
   };
 };
 
-const enclosed = (range: string, candidate: Candidate) => {
-  const { file, start, end } = parseRange(range);
-  return (
-    file === candidate.fileName &&
-    position(candidate.location.start, start) >= 0 &&
-    position(candidate.location.end, end) <= 0
-  );
+type Range = ReturnType<typeof parseRange>;
+
+const enclosed = ({ file, start, end }: Range, candidate: Candidate) =>
+  file === candidate.fileName &&
+  position(candidate.location.start, start) >= 0 &&
+  position(candidate.location.end, end) <= 0;
+
+// The changed lines of each file, so a candidate's check reads only its own span's lines.
+const changedLines = (changed: Changed[]) => {
+  const lines = new Map<string, Set<number>>();
+
+  for (const c of changed) {
+    lines.set(c.file, (lines.get(c.file) ?? new Set()).add(c.line));
+  }
+
+  return (candidate: Candidate) => {
+    const mine = lines.get(candidate.fileName);
+    const { start, end } = candidate.location;
+    return mine !== undefined && [...mine].some((line) => line >= start.line && line <= end.line);
+  };
 };
 
-const isChanged = (candidate: Candidate, changed: Changed[]) =>
-  changed.some(
-    (c) =>
-      c.file === candidate.fileName && c.line >= candidate.location.start.line && c.line <= candidate.location.end.line,
-  );
-
+// Each range is parsed once per report, not once per candidate: parseRange runs a vitest
+// `expect`, and the across-files property's reports hold up to 150 ranges over 470 candidates.
+// Re-parsing per pair made that property take 9.8 s in CI's plain run and pass the 10 s timeout
+// under Stryker's dry run (hourly mutation run, 2026-11-11).
 const checkReport = (report: Report, candidates: Candidate[], changed: Changed[], seed: number, max: number) => {
-  const eligible = candidates.filter((c) => isChanged(c, changed));
-  const selected = candidates.filter((c) => report.ranges.some((r) => enclosed(r, c)));
+  const isChanged = changedLines(changed);
+  const ranges = report.ranges.map(parseRange);
+  const eligible = candidates.filter(isChanged);
+  const selected = candidates.filter((c) => ranges.some((r) => enclosed(r, c)));
   expect(report.seed).toBe(seed);
   expect(report.total).toBe(eligible.length);
   expect(report.selected).toBe(selected.length);
@@ -85,10 +98,10 @@ const checkReport = (report: Report, candidates: Candidate[], changed: Changed[]
       selected: selected.filter((c) => c.fileName === file).length,
     })),
   );
-  expect(selected.every((c) => isChanged(c, changed))).toBe(true);
+  expect(selected.every(isChanged)).toBe(true);
   expect(new Set(report.ranges).size).toBe(report.ranges.length);
 
-  for (const range of report.ranges) {
+  for (const range of ranges) {
     expect(selected.some((c) => enclosed(range, c))).toBe(true);
   }
 

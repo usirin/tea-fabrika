@@ -31,7 +31,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
-import { revokeText } from "@kampus/libfabrika/coordination";
+import { revokeText } from "@kampus/libfabrika/access/Text";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 
 const run = promisify(execFile);

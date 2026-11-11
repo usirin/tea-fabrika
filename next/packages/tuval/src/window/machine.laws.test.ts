@@ -7,13 +7,13 @@
 // - `windowMachineFor(checks)` (A7): the file's one export of a machine, a factory. `checks` is
 //   libfabrika's `ClientChecks`, `{decode?: (pid) => (view) => unknown}`, passed through to the
 //   client. The machine it returns is a tea machine; its ctx is `{layout}`, a `Layout` (desktop/layout.ts). Its model
-//   holds `link` (a `Link`, transport/link.ts) and `client` (an app/client.ts `Client`: `pending`,
+//   holds `link` (a `Link`, transport/Link.ts) and `client` (an runtime/Client.ts `Client`: `pending`,
 //   `written`, `seen`, `views`).
 // - Msgs, by `type`: every `linkMachine` Msg, unchanged, steps the link; `press {pid, m}` reserves a
 //   numbered slot and asks the Cmd `now {n}`; `view {pid, note}` is a view notification; the settle
 //   Msgs tea mints for the Cmd `now {n}`, `now_ok {cmd, value}` and `now_err {cmd, error}`, with
 //   `{letter, sentAt}` as its value; and the answers to the three brain calls, below.
-// - The three brain calls, `send` (process.send), `open` (view.open) and `knock` (door.knock), are
+// - The three brain calls, `send` (process.send), `open` (view.open) and `knock` (gateway.knock), are
 //   writes (A13; tea's run loop folds nothing while a Cmd is unanswered, ADR 0018, so no Cmd waits
 //   for the brain). The window asks no Cmd of those three types. A call is the Cmd
 //   `write {call, id, dial}`: `call` is `{_tag: "send", pid, letter, n, m, sentAt, seen}` (and its
@@ -36,7 +36,7 @@
 //   and `send` for every letter that is ready, in slot order, each once, all in that one step: no
 //   cap. Not online writes no `send`. Leaving online forgets what was opened and sent, so the next
 //   dial starts over; its letters stay in the Model and go out again by its own rules.
-// - `client` moves only by the machine `clientMachineFor(checks)` makes (app/client.ts, plan A5 and
+// - `client` moves only by the machine `clientMachineFor(checks)` makes (runtime/Client.ts, plan A5 and
 //   A7), with the window's own `checks`, stepped by hand as the link is: `press` steps it with
 //   `press {pid, m}`, `now_ok` with `dated {n, ...value}`, a `send_ok` in flight with
 //   `reply {letter, answer}` (the letter its write carried), `seen {rev}` with `read {rev}`,
@@ -360,7 +360,7 @@ const writesIn = (cmds: ReadonlyArray<Cmd>): ReadonlyArray<Call> =>
 /** The key an answer and its write share: the dial and the JSON-RPC id. */
 const wire = (dial: unknown, id: unknown): string => JSON.stringify([dial, id]);
 
-/** The dial whose socket is open in `s`, as `transport/link.ts`'s `socketDial` reads a link. */
+/** The dial whose socket is open in `s`, as `transport/Link.ts`'s `socketDial` reads a link. */
 const openDial = (s: Model): unknown =>
   ["dialing", "waiting_grant", "online"].includes(s.link._tag) ? s.link["dial"] : null;
 
@@ -797,7 +797,7 @@ const PERSIST = "persist: asked once per new grant, never on a reconnect, and an
 // P14's "What P14 records" and "Browser identity": the persistence attempt's boolean result or
 // failure, and a press's send attempts and settlement, are checked client observations the tab
 // keeps until `client.record` acknowledges them. The window asks for each with its `record` Cmd,
-// `{type: "record", record}`, a `ClientRecord` (app/window.ts), as it does for a press today.
+// `{type: "record", record}`, a `ClientRecord` (runtime/Window.ts), as it does for a press today.
 const PERSIST_RECORD = "persist record: each persistence answer is kept once, as granted, refused or failed";
 
 // Round 9 (A8): the reply law also checks `ms`, the duration the send's own answer carries.
@@ -1972,7 +1972,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
   it("the parent steps the link and the client by hand: its link is the link machine's own fold", async () => {
     const m = await machine();
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it
-    const { linkMachine } = (await import("@kampus/libfabrika/transport")) as unknown as {
+    const { linkMachine } = (await import("@kampus/libfabrika/transport/Link")) as unknown as {
       linkMachine: {
         readonly init: (loaded: unknown, ctx: object) => readonly [Model["link"], ReadonlyArray<Cmd>];
       };
@@ -2050,7 +2050,7 @@ describe("window machine: p1, p2, p4 and now, on every fixed layout", () => {
 // one at a time and folds nothing until each settles (tea's ADR 0018), so a brain call asked as a
 // Cmd that waits for its answer holds every Msg behind it, the timers' included: the window sits
 // still. From any state the generated runs reach, an online link leaves `online` within the
-// detection bound, BEAT + BEAT = 10 s (`transport/link.ts`), and a grant wait keeps knocking
+// detection bound, BEAT + BEAT = 10 s (`transport/Link.ts`), and a grant wait keeps knocking
 // without ever being admitted. No pending letter is lost while it hangs. The browser half is
 // `e2e/window-recovery.test.ts`'s "a brain call in flight" cases.
 const DETECTION = 10_000;
@@ -3469,7 +3469,7 @@ describe("window machine plants: each break of a view record is caught by its la
 // or `{_tag: "failed", dial, reason}`. On the online dial a failure sets `failed` with its reason
 // and leaves the rest of the window as it was: the link stays online on that dial and no Cmd ends
 // it, so the socket's own close still reaches the link with its code. The door refuses a removed
-// key's calls and then closes 4003 (`door/door.ts:989`), so a 4003 on that dial after the failure
+// key's calls and then closes 4003 (`gateway/Gateway.ts:972`), so a 4003 on that dial after the failure
 // leaves the link `removed`. The resend timer runs while that read is `failed`; its `resend` for
 // that dial asks the Cmd `read_settings {dial}` once and sets `reading`. No other step asks it,
 // save the step that goes online, at most once and for its own dial: a resend for another dial,
@@ -4055,9 +4055,10 @@ describe("window boot: the person's key settings, through every page, a wait and
         startWindow?: (o: object) => Effect.Effect<{ readonly ready: Effect.Effect<Live, unknown> }, unknown>;
       };
       expect(tuval.startWindow, "@kampus/tuval exports startWindow").toBeTypeOf("function");
-      const { ClientKey, ClientRows, ClientSocket, KeyLine } = yield* Effect.promise(
-        () => import("@kampus/libfabrika/transport"),
+      const { ClientKey, ClientRows, ClientSocket } = yield* Effect.promise(
+        () => import("@kampus/libfabrika/transport/Services"),
       );
+      const { KeyLine } = yield* Effect.promise(() => import("@kampus/libfabrika/transport/Sshsig"));
       const { Id } = yield* Effect.promise(() => import("@kampus/libfabrika"));
       const me = identity();
       const line = Schema.decodeUnknownSync(KeyLine)(me.line);

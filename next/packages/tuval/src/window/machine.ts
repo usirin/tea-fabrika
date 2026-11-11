@@ -10,7 +10,7 @@
 // of the first one still waiting for its time, in slot order. Leaving online forgets both, so the
 // next dial starts over and a letter keeps its id across dials.
 //
-// A brain call (`process.send`, `view.open`, `door.knock`) is a `write` Cmd (plan A13): it settles
+// A brain call (`process.send`, `view.open`, `gateway.knock`) is a `write` Cmd (plan A13): it settles
 // once its frame is handed to the socket, never waiting for the brain, since tea's loop folds
 // nothing while a Cmd is unanswered. Its answer is the socket Sub's Msg, matched by the write's
 // JSON-RPC id and dial against the calls in flight; an answer that matches none does nothing. A
@@ -34,8 +34,8 @@
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { ClientRecord, Keys, ProgramClient, type Rows, Sent } from "@kampus/libfabrika";
-import type { knock } from "@kampus/libfabrika/transport";
-import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport";
+import type { knock } from "@kampus/libfabrika/transport/Link";
+import { Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "@kampus/libfabrika/transport/Link";
 import { Schema } from "effect";
 import { routeKey } from "../desktop/keys.ts";
 import { type Layout, tilesIn } from "../desktop/layout.ts";
@@ -79,7 +79,7 @@ const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 /** One brain call as a write carries it: `process.send` for one ready letter, with the same id
- *  and body every time; `view.open` for one pid; `door.knock` on the dial's socket. */
+ *  and body every time; `view.open` for one pid; `gateway.knock` on the dial's socket. */
 const Call = Schema.TaggedUnion({
   send: {
     pid: Schema.String,
@@ -718,7 +718,7 @@ export const windowMachineFor = (checks: WindowChecks) => {
         const found = answered(s, m, "open");
         return found === null ? [s, []] : [{ ...s, flight: found.rest, trouble: "no_view" }, []];
       },
-      // A knock's answer only ends it: the link's renew timer knocks again, and `door.waiting`
+      // A knock's answer only ends it: the link's renew timer knocks again, and `gateway.waiting`
       // brings its code.
       knock_ok: (s, m) => {
         const found = answered(s, m, "knock");

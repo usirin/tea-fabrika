@@ -266,7 +266,7 @@ describe("Strict Mode and the selector hook", () => {
 // P14, the tab's half of the plan's law "Browser records survive failed delivery until durable
 // acknowledgement, retain safe measurements and are idempotent" (its door half is in
 // src/door-spans.test.ts). The shape this holds the page to: the browser adapter keeps each
-// unacknowledged `ClientRow` (app/client.ts) in IndexedDB, the press row before its letter is sent,
+// unacknowledged `ClientRow` (runtime/Client.ts) in IndexedDB, the press row before its letter is sent,
 // and deletes a row only when `client.record` acknowledges its id. The test reads every IndexedDB
 // store read-only and keeps the values that decode as a `ClientRow`; it assumes no database or
 // store name. The queue is plain data, not a machine (0037's T2): no stored value decides which
@@ -483,7 +483,7 @@ describe("[secrets] private key data and control credentials stay out of every o
 // Review 1, C, [secrets]: the outputs the scenario above skips. scenario: only the real tab and
 // stage hold the IndexedDB client queue (`fabrika-rows` and every other store), the settings error a
 // tab shows, the ledger, span and health rows the stage keeps on disk, the saved test reports and
-// what a screenshot shows; the pure halves are door-spans.test.ts's and node/keybindings.test.ts's
+// what a screenshot shows; the pure halves are door-spans.test.ts's and node/dev/keybindings.test.ts's
 // [secrets] properties. The secrets are the person's throwaway private key body, the stage's control
 // bearer (read from the workerd config the stage served, which Alchemy also writes to the stage's
 // `config` folder), and a made-up pass the person pasted into the key file by mistake. The plant
@@ -535,7 +535,7 @@ describe("[secrets] the client queue, settings errors, ledger, spans, health, re
         }
       })
       .join("\n");
-  /** The stage's control bearer. `node/stage.ts` makes it in memory and hands it to workerd only as
+  /** The stage's control bearer. `node/dev/dev.ts` makes it in memory and hands it to workerd only as
    *  the control entrypoint's props, in the config Alchemy writes to workerd's stdin: it is in no
    *  file, argument or environment of the stage. Alchemy writes that config to `stage.config` too
    *  (`WORKERD_DUMP_CONFIG`, p14.test-support.ts), so it is read there. Never printed. */

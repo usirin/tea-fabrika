@@ -9,14 +9,9 @@
 import { type EffectRun, run } from "@demlik/tea/effect";
 import { useRuntime } from "@demlik/tea/react";
 import { ClientRow, Id, Keys, ProgramClient, Sent, type WindowRegistration } from "@kampus/libfabrika";
-import {
-  ClientKey,
-  ClientRows,
-  ClientSocket,
-  helloText,
-  type Identity,
-  writeSshsig,
-} from "@kampus/libfabrika/transport";
+import { helloText } from "@kampus/libfabrika/transport/Hello";
+import { ClientKey, ClientRows, ClientSocket, type Identity } from "@kampus/libfabrika/transport/Services";
+import { writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Clock, DateTime, Deferred, Effect, Option, Queue, Result, Schema, type Scope, Stream } from "effect";
 import { type ReactNode, StrictMode, useEffect, useRef } from "react";
@@ -338,7 +333,7 @@ export const mount = (element: HTMLElement, props: WindowProps) =>
 
 // --- Booting the window -------------------------------------------------------------------------
 //
-// The wire is P12's as built: a `challenge`, a signed `initialize`, `door.knock` while not granted,
+// The wire is P12's as built: a `challenge`, a signed `initialize`, `gateway.knock` while not granted,
 // `client.granted` to sign a fresh hello on the same socket, text `ping` and `pong`, and JSON-RPC
 // calls for `ledger.read`, `ledger.wait`, `view.open`, `process.send` and `client.record`. A tile
 // names a process by its registered name; each dial resolves it to the live process id. The
@@ -404,7 +399,7 @@ const F = Failure.cases;
 type CallError = typeof F.unreachable.Type | typeof F.unknown.Type;
 const unreachable = F.unreachable.make({});
 
-/** Door reasons that mean "not now": the socket or the brain will be back. */
+/** Gateway reasons that mean "not now": the socket or the brain will be back. */
 const RETRYABLE: ReadonlySet<string> = new Set(["unreachable", "not_granted", "no_hello", "storage"]);
 
 /** A door error's reason as a call's failure: "not now" reasons are retryable. */
@@ -617,7 +612,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
       const c = cmd.call;
       const message =
         c._tag === "knock"
-          ? { method: "door.knock", params: { label: options.label } }
+          ? { method: "gateway.knock", params: { label: options.label } }
           : c._tag === "open"
             ? { method: "view.open", params: { pid: names.get(c.pid) ?? c.pid } }
             : {
@@ -751,7 +746,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         return ws.close(4000, "not admitted");
       }
 
-      const knocked = yield* call("door.knock", { label: options.label }).pipe(
+      const knocked = yield* call("gateway.knock", { label: options.label }).pipe(
         Effect.flatMap((r) => Schema.decodeUnknownEffect(WaitingCode)(r)),
         Effect.option,
       );
@@ -782,7 +777,7 @@ export const startWindow = Effect.fn("window.start")(function* (options: WindowO
         }
 
         Queue.offerUnsafe(work, hello(nonce.nonce).pipe(Effect.ignore));
-      } else if (method === "door.waiting") {
+      } else if (method === "gateway.waiting") {
         const waiting = Option.getOrNull(Schema.decodeUnknownOption(WaitingCode)(params));
 
         if (waiting !== null) {

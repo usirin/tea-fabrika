@@ -8,23 +8,25 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
-import * as C from "@kampus/libfabrika/coordination";
-import {
-  Archive,
-  Doorbell,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  RecordManager,
-  SinkError,
-  SpanSink,
-  type Sql,
-} from "@kampus/libfabrika/data";
+import { Grant } from "@kampus/libfabrika/access/Access";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/SessionManager";
+import { grantText } from "@kampus/libfabrika/access/Text";
+import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
+import { type Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { Door } from "./door.ts";
+import { Gateway } from "./door.ts";
 
 const P1 = "process_0000000000e008000000000000";
 const P2 = "process_0000000000e008000000000001";
@@ -129,7 +131,7 @@ const from = () => ({
 });
 
 const Input = Schema.TaggedUnion({ press: { poison: Schema.Boolean } });
-type DoorOptions = Parameters<typeof Door.layer<typeof Input.Type, never, never, never>>[0];
+type DoorOptions = Parameters<typeof Gateway.layer<typeof Input.Type, never, never, never>>[0];
 type Delivery = { process: string; parent: string; letter: string | undefined };
 
 const policy = {
@@ -153,7 +155,7 @@ const world = () => {
     by: window.sshFingerprint,
     build: "build-a",
   };
-  const owner = C.Writer.cases.person.make({ key: window.fingerprint, for: PERSON });
+  const owner = Writer.cases.person.make({ key: window.fingerprint, for: PERSON });
   const deliveries: Delivery[] = [];
   const alarms: Array<number | null> = [];
   let ids = 0;
@@ -219,10 +221,10 @@ const world = () => {
     return p.sql;
   }, 1024 ** 3);
   const manager = () =>
-    C.ProcessManager.layer(
+    ProcessManager.layer(
       {
-        owner: C.Owner.cases.brain.make({}),
-        recipient: C.Recipient.cases.client.make({ client: "window", session: START }),
+        owner: Owner.cases.brain.make({}),
+        recipient: Recipient.cases.client.make({ client: "window", session: START }),
         by: "SHA256:brain",
       },
       Effect.sync(() => {
@@ -238,7 +240,7 @@ const world = () => {
   const env = () =>
     Layer.mergeAll(
       data(),
-      C.ClientManager.layer(founder).pipe(Layer.provide(data())),
+      ClientManager.layer(founder).pipe(Layer.provide(data())),
       records,
       Archive.memory,
       A.Id.Generator.layer,
@@ -274,19 +276,19 @@ const world = () => {
       Layer.provideMerge(
         Layer.mergeAll(
           A.ProgramLoader.layer({ counter: program }, {}),
-          C.ProcessStore.layer(process.sql, { process: pid }),
-          C.Mailbox.layer,
+          ProcessStore.layer(process.sql, { process: pid }),
+          Mailbox.layer,
           Layer.effect(
             A.CheckedWriter,
             Effect.gen(function* () {
-              const m = yield* C.Mailbox;
+              const m = yield* Mailbox;
               return {
                 append: (i: A.Incoming) => m.send(NAME, i.id, i.envelope.input, { ...from(), parent: i.envelope.id }),
                 commit: () => Effect.die("no writes"),
                 own: () => Effect.die("no writes"),
               };
             }),
-          ).pipe(Layer.provide(C.Mailbox.layer)),
+          ).pipe(Layer.provide(Mailbox.layer)),
           Layer.succeed(A.WatcherManager, { publish: () => Effect.void }),
           Layer.succeed(A.Alarm, {
             set: (at) =>
@@ -305,7 +307,7 @@ const world = () => {
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE door_bindings") &&
+        query.startsWith("UPDATE gateway_bindings") &&
         args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
       ) {
         controls.cutRecorded = false;
@@ -315,7 +317,7 @@ const world = () => {
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE door_bindings") &&
+        query.startsWith("UPDATE gateway_bindings") &&
         args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
       ) {
         controls.cutRetryable = false;
@@ -345,7 +347,7 @@ const world = () => {
     events: { personOnly: [] },
     deliver: (
       pid: string,
-      envelope: C.Envelope<typeof Input.Type>,
+      envelope: Envelope<typeof Input.Type>,
       span: { traceId: string; spanId: string },
       meta?: { id: string; sentAt: string; seen: number },
     ) => {
@@ -366,9 +368,9 @@ const world = () => {
       ).pipe(Effect.provide(runner(pid)));
     },
   });
-  const layer = () => Door.layer(settings()).pipe(Layer.provideMerge(env()));
+  const layer = () => Gateway.layer(settings()).pipe(Layer.provideMerge(env()));
   const online = Effect.fnUntraced(function* (who = window) {
-    const d = yield* Door;
+    const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);
     const tab = "recovery-tab";
@@ -404,9 +406,9 @@ const world = () => {
     other,
     controls,
     steps: () => steps,
-    boot: C.ProcessManager.use((p) =>
+    boot: ProcessManager.use((p) =>
       p.start(
-        C.Start.cases.first.make({
+        Start.cases.first.make({
           id: "first",
           name: NAME,
           code: { program: "counter", hash: "build-a" },
@@ -454,7 +456,10 @@ describe("P34 door recovery", () => {
                 const w = world();
                 const queued = request(false, letter);
                 const binding = () => {
-                  const [row] = w.project.sql.exec("SELECT value FROM door_bindings WHERE letter=?", `${P1}/${letter}`);
+                  const [row] = w.project.sql.exec(
+                    "SELECT value FROM gateway_bindings WHERE letter=?",
+                    `${P1}/${letter}`,
+                  );
                   return Schema.decodeUnknownSync(
                     Schema.fromJsonString(
                       Schema.Struct({
@@ -475,9 +480,11 @@ describe("P34 door recovery", () => {
                   w.controls.cutFlush = state === "recorded";
                   w.controls.cutRetryable = state === "delivered";
                   w.controls.failDelivery = true;
-                  expect(yield* Effect.exit(Door.use((d) => d.route(client, "process.send", queued)))).toMatchObject({
-                    _tag: "Failure",
-                  });
+                  expect(yield* Effect.exit(Gateway.use((d) => d.route(client, "process.send", queued)))).toMatchObject(
+                    {
+                      _tag: "Failure",
+                    },
+                  );
                   expect(binding()).toMatchObject({ process: P1, state: { _tag: state } });
                   expect(w.controls.cuts + w.controls.retryableCuts).toBe(state === "retryable" ? 0 : 1);
                   expect(yield* inbox).toEqual([]);
@@ -494,7 +501,7 @@ describe("P34 door recovery", () => {
                       id: letter,
                       envelope: {
                         id: Schema.decodeUnknownSync(A.Id.InputId)(old),
-                        by: C.Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
+                        by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
                         arrivedAt: 0,
                         input: { type: "press", poison: false },
                       },
@@ -511,8 +518,8 @@ describe("P34 door recovery", () => {
                 w.reopen();
                 yield* Effect.gen(function* () {
                   const client = yield* w.online();
-                  const d = yield* Door;
-                  expect(yield* C.ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+                  const d = yield* Gateway;
+                  expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
                     name: NAME,
                     state: { _tag: "live", process: P2 },
                   });
@@ -545,7 +552,7 @@ describe("P34 door recovery", () => {
                     const signed = yield* Effect.result(
                       d
                         .signer(delivery.parent, P2, "saved")
-                        .pipe(Effect.provideService(C.SignRequest, { id: `write-${letter}` })),
+                        .pipe(Effect.provideService(SignRequest, { id: `write-${letter}` })),
                     );
                     expect({ delivery, signed }).toMatchObject({
                       delivery: { process: P2, letter },
@@ -572,7 +579,7 @@ describe("P34 door recovery", () => {
 
                   expect(
                     yield* Effect.result(
-                      d.signer(old, P2, "saved").pipe(Effect.provideService(C.SignRequest, { id: `old-${letter}` })),
+                      d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
                     ),
                   ).toMatchObject({ _tag: "Failure", failure: { reason: "not_delivered" } });
                 }).pipe(Effect.provide(w.layer()));
@@ -595,7 +602,7 @@ describe("P34 door recovery", () => {
             yield* w.boot;
             const old = yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* Effect.exit(d.route(client, "process.send", request()))).toMatchObject({
                 _tag: "Failure",
               });
@@ -607,12 +614,14 @@ describe("P34 door recovery", () => {
             w.reopen();
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
-              expect(yield* C.ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
+              const d = yield* Gateway;
+              expect(yield* ProcessManager.use((p) => p.resolve(P1))).toMatchObject({
                 name: NAME,
                 state: { _tag: "live", process: P2 },
               });
-              expect(w.project.sql.exec("SELECT id FROM door_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual([]);
+              expect(w.project.sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${P1}/${letter}`)).toEqual(
+                [],
+              );
               expect(yield* d.route(client, "process.send", queued)).toMatchObject({
                 _tag: "ok",
                 result: { _tag: "accepted", pos: 1 },
@@ -621,12 +630,12 @@ describe("P34 door recovery", () => {
               expect(view).toMatchObject({ view: { count: 1 } });
               const delivery = w.deliveries.at(-1)!;
               const oldWrite = yield* Effect.result(
-                d.signer(old, P2, "saved").pipe(Effect.provideService(C.SignRequest, { id: `old-${letter}` })),
+                d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
               );
               const freshWrite = yield* Effect.result(
                 d
                   .signer(delivery.parent, P2, "saved")
-                  .pipe(Effect.provideService(C.SignRequest, { id: `fresh-${letter}` })),
+                  .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
               );
               expect({ delivery, oldWrite, freshWrite }).toMatchObject({
                 delivery: { process: P2, letter },
@@ -679,17 +688,17 @@ describe("P34 door recovery", () => {
             w.controls.cutRetryable = true;
             const old = yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* Effect.exit(d.route(client, "process.send", request(true, letter)))).toMatchObject({
                 _tag: "Failure",
               });
               expect(w.controls.retryableCuts).toBe(1);
               const [binding] = w.project.sql.exec(
-                "SELECT json_extract(value, '$.state._tag') AS state FROM door_bindings WHERE letter=?",
+                "SELECT json_extract(value, '$.state._tag') AS state FROM gateway_bindings WHERE letter=?",
                 `${P1}/${letter}`,
               );
               expect(binding?.state).toBe("delivered");
-              expect(yield* C.ProcessManager.use((p) => p.isLive(P1))).toBe(false);
+              expect(yield* ProcessManager.use((p) => p.isLive(P1))).toBe(false);
               expect(yield* Ledger.use((l) => Stream.runCollect(l.read(`${NAME}/inbox`, 0)))).toEqual([]);
               return w.deliveries[0]!.parent;
             }).pipe(Effect.provide(w.layer()));
@@ -699,20 +708,20 @@ describe("P34 door recovery", () => {
             w.reopen();
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
-              expect(yield* C.ProcessManager.use((p) => p.isLive(P2))).toBe(true);
+              const d = yield* Gateway;
+              expect(yield* ProcessManager.use((p) => p.isLive(P2))).toBe(true);
               expect(yield* d.route(client, "process.send", request(true, letter))).toMatchObject({
                 _tag: "ok",
                 result: { _tag: "accepted" },
               });
               const delivery = w.deliveries.at(-1)!;
               const oldWrite = yield* Effect.result(
-                d.signer(old, P2, "saved").pipe(Effect.provideService(C.SignRequest, { id: `old-${letter}` })),
+                d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: `old-${letter}` })),
               );
               const freshWrite = yield* Effect.result(
                 d
                   .signer(delivery.parent, P2, "saved")
-                  .pipe(Effect.provideService(C.SignRequest, { id: `fresh-${letter}` })),
+                  .pipe(Effect.provideService(SignRequest, { id: `fresh-${letter}` })),
               );
               expect({ delivery, oldWrite, freshWrite }).toMatchObject({
                 delivery: { process: P2, letter, parent: expect.not.stringContaining(old) },
@@ -741,7 +750,7 @@ describe("P34 door recovery", () => {
       yield* w.boot;
       yield* Effect.gen(function* () {
         const client = yield* w.online();
-        const d = yield* Door;
+        const d = yield* Gateway;
         expect(yield* d.route(client, "process.send", request(false, "good"))).toMatchObject({
           _tag: "ok",
           result: { _tag: "accepted", rev: expect.any(Number), pos: 1 },
@@ -765,7 +774,7 @@ describe("P34 door recovery", () => {
             for (let n = 0; n < 3; n++) {
               yield* Effect.gen(function* () {
                 const client = yield* w.online();
-                const d = yield* Door;
+                const d = yield* Gateway;
                 expect(yield* Effect.exit(d.route(client, "process.send", request(true, value)))).toMatchObject(
                   n < 2 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
                 );
@@ -779,7 +788,7 @@ describe("P34 door recovery", () => {
 
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               expect(yield* d.route(client, "process.send", request(true, value))).toMatchObject({
                 _tag: "refused",
                 reason: "dead",
@@ -789,7 +798,7 @@ describe("P34 door recovery", () => {
                 _tag: "refused",
                 reason: "id_reused",
               });
-              const grant = C.Grant.make({
+              const grant = Grant.make({
                 id: "other-caller",
                 key: w.other.raw,
                 for: PERSON,
@@ -805,7 +814,7 @@ describe("P34 door recovery", () => {
                 },
                 sentAt: from().sentAt,
               });
-              const text = C.grantText(grant);
+              const text = grantText(grant);
               expect(yield* d.grant({ text, armored: w.window.sign(text) })).toMatchObject({
                 _tag: "applied",
               });
@@ -834,17 +843,17 @@ describe("P34 door recovery", () => {
             yield* w.boot;
             yield* Effect.gen(function* () {
               const client = yield* w.online();
-              const d = yield* Door;
+              const d = yield* Gateway;
               yield* Effect.exit(d.route(client, "process.send", request(true, value)));
               const old = w.deliveries[0]!.parent;
-              const p = yield* C.ProcessManager;
+              const p = yield* ProcessManager;
 
               if (yield* p.isLive(P1)) {
                 yield* p.exit(P1, "crashed", from());
               }
 
               yield* p.start(
-                C.Start.cases.again.make({
+                Start.cases.again.make({
                   id: "replacement",
                   name: NAME,
                   after: P1,
@@ -860,11 +869,11 @@ describe("P34 door recovery", () => {
               expect(fresh).not.toBe(old);
               expect(
                 yield* Effect.flip(
-                  d.signer(old, P2, "saved").pipe(Effect.provideService(C.SignRequest, { id: "old-queued" })),
+                  d.signer(old, P2, "saved").pipe(Effect.provideService(SignRequest, { id: "old-queued" })),
                 ),
               ).toMatchObject({ reason: "not_delivered" });
               expect(
-                yield* d.signer(fresh, P2, "saved").pipe(Effect.provideService(C.SignRequest, { id: "fresh-write" })),
+                yield* d.signer(fresh, P2, "saved").pipe(Effect.provideService(SignRequest, { id: "fresh-write" })),
               ).toMatchObject({ parent: fresh, by: { key: w.window.fingerprint } });
             }).pipe(Effect.provide(w.layer()));
           }),

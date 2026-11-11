@@ -3,23 +3,20 @@
 import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { ClientRecord, Id } from "@kampus/libfabrika";
-import { ClientManager, grantText, Saw } from "@kampus/libfabrika/coordination";
-import {
-  Archive,
-  Chain,
-  Doorbell,
-  Ledger,
-  LedgerError,
-  LedgerTransaction,
-  type LedgerTurn,
-  RecordManager,
-  SpanSink,
-} from "@kampus/libfabrika/data";
+import { Saw } from "@kampus/libfabrika/access/Access";
+import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import { grantText } from "@kampus/libfabrika/access/Text";
+import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Archive } from "@kampus/libfabrika/telemetry/Archive";
+import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Door } from "./door.ts";
+import { Gateway } from "./door.ts";
 
 const CHECK = { seed: 119120, numRuns: 40, endOnFailure: true };
 const URL = "https://fabrika.test/entry/project-socket";
@@ -175,7 +172,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample, sink: (sql: Sql) => Sql 
 
     return part;
   }, 64 * 1024);
-  const layer = Door.layer({
+  const layer = Gateway.layer({
     sql,
     founder,
     name: "project",
@@ -233,7 +230,7 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
   }
 };
 
-const hello = Effect.fnUntraced(function* (d: typeof Door.Service, k: ReturnType<typeof key>, tab: string) {
+const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnType<typeof key>, tab: string) {
   const client = yield* d.connect(),
     nonce = yield* d.challenge(client);
   return {
@@ -255,7 +252,7 @@ const hello = Effect.fnUntraced(function* (d: typeof Door.Service, k: ReturnType
 });
 
 const online = Effect.fnUntraced(function* (
-  d: typeof Door.Service,
+  d: typeof Gateway.Service,
   w: Effect.Success<ReturnType<typeof fixture>>,
   a: Sample,
 ) {
@@ -275,7 +272,7 @@ const saw = (a: Sample) =>
   });
 
 describe("door partial spans, next/ tracing keep-laws", () => {
-  it("generated unknown and invalid hellos never open door.initialize, before or after founding", async () => {
+  it("generated unknown and invalid hellos never open gateway.initialize, before or after founding", async () => {
     await fc.assert(
       fc.asyncProperty(sample, async (a) =>
         Effect.runPromise(
@@ -283,7 +280,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door,
+                const d = yield* Gateway,
                   tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
 
@@ -319,11 +316,11 @@ describe("door partial spans, next/ tracing keep-laws", () => {
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door,
+                const d = yield* Gateway,
                   tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
                 const h = yield* hello(d, w.window, a.text);
-                w.controls.fail = fail ? "door/hellos" : "";
+                w.controls.fail = fail ? "gateway/hellos" : "";
                 const result = yield* Effect.exit(
                   d
                     .initialize(h.client, h.input, h.trusted)
@@ -333,8 +330,8 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
-                expect(spans.map((s) => s.name)).toEqual(["door.initialize"]);
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
+                expect(spans.map((s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
                 const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
                 const transactions = c.spans.filter((s) => s.name === "ledger.transaction");
@@ -355,7 +352,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 }
 
                 if (!fail) {
-                  const rows = yield* Stream.runCollect((yield* Ledger).read("door/hellos", 0));
+                  const rows = yield* Stream.runCollect((yield* Ledger).read("gateway/hellos", 0));
                   expect(rows).toHaveLength(1);
                   expect(rows[0]!.traceId).toBe(a.traceId);
                 }
@@ -376,7 +373,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door;
+                const d = yield* Gateway;
                 yield* online(d, w, a);
                 const tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
@@ -393,17 +390,17 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   "refused",
                 );
                 expect(c.spans).toEqual([]);
-                w.controls.fail = fail ? "door/members" : "";
+                w.controls.fail = fail ? "gateway/access" : "";
                 const result = yield* Effect.exit(
                   d
                     .grant({ text, armored: w.root.sign(text) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
-                expect(spans.map((s) => s.name)).toEqual(["door.grant"]);
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
+                expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
-                const write = c.spans.find((s) => s.name === "members.write")!;
+                const write = c.spans.find((s) => s.name === "access.write")!;
                 expect(Option.getOrThrow(write.parent).spanId).toBe(spans[0]!.spanId);
               }).pipe(Effect.provide(w.layer));
             }),
@@ -422,21 +419,21 @@ describe("door partial spans, next/ tracing keep-laws", () => {
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door,
+                const d = yield* Gateway,
                   client = yield* online(d, w, a),
                   tracer = yield* Tracer.Tracer,
                   c = capture(tracer);
-                w.controls.fail = fail ? "door/members" : "";
+                w.controls.fail = fail ? "gateway/access" : "";
                 const result = yield* Effect.exit(
                   d
                     .deny(client, { key: w.stranger.raw, saw: saw(a) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("door."));
-                expect(spans.map((s) => s.name)).toEqual(["door.deny"]);
+                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
+                expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
-                const write = c.spans.find((s) => s.name === "members.write")!;
+                const write = c.spans.find((s) => s.name === "access.write")!;
                 expect(write.traceId).toBe(a.traceId);
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
@@ -467,13 +464,13 @@ describe("door partial spans, next/ tracing keep-laws", () => {
               Effect.gen(function* () {
                 const w = yield* fixture(a);
                 yield* Effect.gen(function* () {
-                  const d = yield* Door,
+                  const d = yield* Gateway,
                     client = yield* online(d, w, a),
                     tracer = yield* Tracer.Tracer;
 
                   for (const [index, call] of calls.entries()) {
                     const c = capture(tracer);
-                    w.controls.fail = call === "input_failed" ? "door/inputs" : "";
+                    w.controls.fail = call === "input_failed" ? "gateway/inputs" : "";
                     w.controls.deliveryFails = call === "delivery_failed";
                     const input = {
                       pid: PROCESS,
@@ -494,9 +491,9 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = c.spans.filter((s) => s.name.startsWith("door."));
+                    const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
                     expect(spans.map((s) => s.name)).toEqual(
-                      call === "input_failed" ? ["door.input"] : ["door.input", "door.route"],
+                      call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );
                     checkSpan(spans[0]!, a, call !== "input_failed");
 
@@ -508,7 +505,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       spans[1]!,
                       a,
                       ok,
-                      ok ? { "fab.door.outcome": call === "refused" ? "refused" : "ok" } : {},
+                      ok ? { "fab.gateway.outcome": call === "refused" ? "refused" : "ok" } : {},
                     );
                     expect(
                       spans[1]!.links.map((l) => ({
@@ -540,7 +537,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
 // P14 (ticket 286), the door's half of the plan's law "Browser records survive failed delivery until
 // durable acknowledgement, retain safe measurements and are idempotent" ("What P14 records"). Written
 // before the door's `client.record` route. The shape these laws hold it to:
-// - `route(client, "client.record", {rows})`, `rows` an array of `ClientRow` (app/client.ts), answers
+// - `route(client, "client.record", {rows})`, `rows` an array of `ClientRow` (runtime/Client.ts), answers
 //   `ok {acknowledged}`: the ids of the rows that are durably in the span sink when it returns, each
 //   valid id once, in any order. A row that does not decode as a `ClientRow` is neither acknowledged
 //   nor kept. A sink write that fails acknowledges nothing; the same rows sent again land once.
@@ -701,7 +698,7 @@ describe("P14: client.record keeps a window's rows durably, once, under its admi
               const sink = refusing();
               const w = yield* fixture(a, sink.wrap);
               yield* Effect.gen(function* () {
-                const d = yield* Door;
+                const d = yield* Gateway;
                 const client = yield* online(d, w, a);
                 // Schema-generated record bodies (Effect's Arbitrary over the real ClientRecord).
                 const records = yield* Arbitrary.sampleEffect(Arbitrary.schema(ClientRecord), {
@@ -764,7 +761,7 @@ describe("P14: client.record keeps a window's rows durably, once, under its admi
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door;
+                const d = yield* Gateway;
                 const bare = yield* d.connect();
                 const stranger = yield* hello(d, w.stranger, a.text);
                 yield* d.initialize(stranger.client, stranger.input, stranger.trusted);
@@ -896,7 +893,7 @@ describe("P14 [secrets]: client.record keeps no secret it was handed", () => {
             Effect.gen(function* () {
               const w = yield* fixture(a);
               yield* Effect.gen(function* () {
-                const d = yield* Door;
+                const d = yield* Gateway;
                 const client = yield* online(d, w, a);
                 const records = yield* Arbitrary.sampleEffect(Arbitrary.schema(ClientRecord), {
                   count: ids.length,

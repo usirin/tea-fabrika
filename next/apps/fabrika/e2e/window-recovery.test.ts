@@ -336,7 +336,7 @@ describe("the whole recovery sequence, five times", () => {
 
 // Review 1, A (p17 and p5): a brain call in flight must not hold the window's loop. The brain hangs
 // while a call is out, the hang is held past the 10 s detection bound (BEAT + BEAT,
-// `transport/link.ts`), and the frame must leave `online` within it. scenario: only the built tab on
+// `transport/Link.ts`), and the frame must leave `online` within it. scenario: only the built tab on
 // the real stage shows whether a Cmd handler that waits on the brain holds tea's serial loop; the
 // pure half is the window and link laws' hang law. The press case hangs the real workerd with
 // SIGSTOP. The open and knock cases need the hang to start at one exact call, so Playwright's
@@ -491,18 +491,18 @@ describe("a brain call in flight does not hold the window, five times each (revi
       await saved.holds(30_000);
     });
 
-    it(`scenario: a renewed door.knock whose answer never comes does not hold the grant wait: the grant still takes the tab online (run ${n} of 5)`, async () => {
+    it(`scenario: a renewed gateway.knock whose answer never comes does not hold the grant wait: the grant still takes the tab online (run ${n} of 5)`, async () => {
       const p = await openProfile();
       closers.push(p.close);
       const route = await routed(p.context);
       const tab = await p.tab(stage.url);
       const w = await readWaiting(stage, tab);
-      const knocks = route.sent("door.knock");
+      const knocks = route.sent("gateway.knock");
       // The link knocks again every 30 s while it waits; the brain never answers that one.
-      route.dropAnswer("door.knock");
+      route.dropAnswer("gateway.knock");
       await until(
         "the grant wait to knock again",
-        () => (route.sent("door.knock") > knocks ? true : undefined),
+        () => (route.sent("gateway.knock") > knocks ? true : undefined),
         45_000,
       );
       await pause(DETECTION + SLACK); // the knock is held past the bound

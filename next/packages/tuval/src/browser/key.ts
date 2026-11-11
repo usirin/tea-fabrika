@@ -9,7 +9,8 @@
 // compare-and-set, so a second tab that asks again takes the first one's replacement.
 //
 // It provides transport's `ClientKey` contract; the window consumes it.
-import { ClientKey, type Identity, KeyLine, StoreError } from "@kampus/libfabrika/transport";
+import { ClientKey, type Identity, StoreError } from "@kampus/libfabrika/transport/Services";
+import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import { Effect, Layer, Schema } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 

@@ -17,6 +17,7 @@ import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { Schema } from "effect";
+import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -106,7 +107,7 @@ const importsInFile = (file: string): ReadonlyArray<string> => importsIn(readFil
 
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
-/** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
+/** `@kampus/libfabrika/transport/Wire` is `{name: "@kampus/libfabrika", subpath: "./transport/Wire"}`. */
 const packageAt = (spec: string): { readonly name: string; readonly subpath: string } => {
   const parts = spec.split("/");
   const size = spec.startsWith("@") ? 2 : 1;
@@ -151,6 +152,44 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
   }
 
   return new Map(entries.map(([key, value]) => [key, target(value)]));
+};
+
+/** What an import of a subpath reaches through an `exports` map. */
+type Reached =
+  | { readonly kind: "file"; readonly file: string }
+  | { readonly kind: "refused" }
+  | { readonly kind: "missing" };
+
+/**
+ * Node's rule for a subpath (ticket 477, PR 9): an exact key without a `*` first; else, among the keys
+ * with one `*` that the subpath fits, the one whose part before the `*` is longest, then the longer
+ * key. A `null` target refuses the subpath, so `"./ledger/internal/*": null` beats `"./ledger/*"`. The
+ * `*` of the target takes what the `*` of the key matched.
+ */
+const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string): Reached => {
+  if (map.has(subpath) && !subpath.includes("*")) {
+    const file = map.get(subpath);
+    return file === undefined ? { kind: "refused" } : { kind: "file", file };
+  }
+
+  const [best] = [...map.keys()]
+    .map((key) => ({ key, parts: key.split("*") }))
+    .filter(
+      ({ key, parts }) =>
+        parts.length === 2 &&
+        subpath.length >= key.length &&
+        subpath.startsWith(parts[0] ?? "") &&
+        subpath.endsWith(parts[1] ?? ""),
+    )
+    .sort((a, b) => (b.parts[0] ?? "").length - (a.parts[0] ?? "").length || b.key.length - a.key.length);
+
+  if (best === undefined) {
+    return { kind: "missing" };
+  }
+
+  const file = map.get(best.key);
+  const matched = subpath.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length);
+  return file === undefined ? { kind: "refused" } : { kind: "file", file: file.split("*").join(matched) };
 };
 
 const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
@@ -266,9 +305,18 @@ const importFaults = (next: string, design: Package | undefined = designAt(DESIG
       }
 
       const target = byName.get(name);
+      const reached = target === undefined ? undefined : exportAt(exportMap(target), subpath);
 
-      if (target !== undefined && !exportMap(target).has(subpath)) {
+      if (reached?.kind === "missing") {
         found.push(`${where} imports "${spec}": ${subpath} is not in ${name}'s exports`);
+      }
+
+      if (reached?.kind === "refused") {
+        found.push(`${where} imports "${spec}": ${subpath} is refused by ${name}'s exports`);
+      }
+
+      if (reached?.kind === "file" && !existsSync(reached.file)) {
+        found.push(`${where} imports "${spec}": ${subpath} names no file in ${name}`);
       }
 
       const inApp = pkg.group === "apps" && shown(pkg.dir, file) !== "src/entry/electron-main.ts";
@@ -303,12 +351,48 @@ const FORBIDDEN: ReadonlyArray<{ readonly name: string; readonly test: (spec: st
   { name: "@modelcontextprotocol/*", test: (spec) => spec.startsWith("@modelcontextprotocol/") },
 ];
 
-/** The detail's list, the top level of the library, of tuval and of notes, plus the library's
- *  `/transport`, which a browser tab runs (Tier 1, P7), its `/data`, which names no platform
- *  and which a tab holds a read copy of later (Tier 1, P6), and its `/coordination`, whose names
- *  the menu bar and the door share (Tier 1, P9). Every program's `/window` comes on top. */
+/** The front files the library's old barrels (`/transport`, `/data`, `/coordination`, `/door`) reached.
+ *  A tab runs the transport's (Tier 1, P7) and steps its link (P14), holds a read copy of the data's later (P6), and the menu
+ *  bar and the gateway share the coordination's (P9). The platform variants, `NodeSqlite` and
+ *  `CloudflareSql`, were never in a barrel. */
+const FRONTS: ReadonlyArray<string> = [
+  "telemetry/Archive",
+  "telemetry/RecordPart",
+  "telemetry/Records",
+  "telemetry/Sink",
+  "telemetry/Trace",
+  "ledger/Ledger",
+  "ledger/LedgerTransaction",
+  "ledger/Log",
+  "ledger/Referee",
+  "transport/Answer",
+  "transport/Hello",
+  "transport/Link",
+  "transport/Services",
+  "transport/Sshsig",
+  "transport/Webauthn",
+  "transport/Wire",
+  "access/Access",
+  "access/Authorization",
+  "access/ClientManager",
+  "access/SessionManager",
+  "access/Text",
+  "presence/Connections",
+  "processes/Mailbox",
+  "processes/Process",
+  "processes/ProcessIdGenerator",
+  "processes/ProcessManager",
+  "runtime/ProcessStore",
+  "runtime/RecoveryStore",
+  "gateway/Gateway",
+  "gateway/GatewayNonce",
+  "gateway/GatewayStore",
+];
+
+/** The detail's list, the top level of the library, of tuval and of notes, plus the library's front
+ *  files above. Every program's `/window` comes on top. */
 const BROWSER: Readonly<Record<string, ReadonlyArray<string>>> = {
-  "@kampus/libfabrika": [".", "./transport", "./data", "./coordination", "./door"],
+  "@kampus/libfabrika": [".", ...FRONTS.map((front) => `./${front}`)],
   "@kampus/tuval": [".", "./page", "./browser"],
   "@kampus/notes": ["."],
 };
@@ -320,8 +404,10 @@ const browserEntries = (
     const name = pkg.manifest.name;
     const keys = [...(BROWSER[name] ?? []), ...(pkg.group === "programs" ? ["./window"] : [])];
     return keys.flatMap((key) => {
-      const file = exportMap(pkg).get(key);
-      return file === undefined ? [] : [{ label: key === "." ? name : `${name}${key.slice(1)}`, file }];
+      const reached = exportAt(exportMap(pkg), key);
+      return reached.kind === "file" && existsSync(reached.file)
+        ? [{ label: key === "." ? name : `${name}${key.slice(1)}`, file: reached.file }]
+        : [];
     });
   });
 
@@ -368,9 +454,11 @@ describe("the real next/", () => {
   it("P17a: the public door exists and bundles for a browser", async () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(library).toBeDefined();
-    const entry = exportMap(library!).get("./door");
-    expect(entry, "P17a exports the library door").toBeDefined();
-    expect(await reach(NEXT, "@kampus/libfabrika/door", entry!)).toEqual([]);
+    const entry = exportAt(exportMap(library!), "./gateway/Gateway");
+    expect(entry.kind, "P17a exports the library gateway front").toBe("file");
+    expect(await reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
+      [],
+    );
   });
   it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
@@ -378,6 +466,15 @@ describe("the real next/", () => {
     const entry = exportMap(library!).get(".");
     expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
     expect(await reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
+  });
+  it("P11: every front file the browser check lists is exported and exists, so none is silently skipped", () => {
+    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+    expect(library).toBeDefined();
+    const missing = (BROWSER["@kampus/libfabrika"] ?? []).filter((key) => {
+      const reached = exportAt(exportMap(library!), key);
+      return !(reached.kind === "file" && existsSync(reached.file));
+    });
+    expect(missing).toEqual([]);
   });
   it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
     expect(manifestFaults(NEXT)).toEqual([]);
@@ -418,18 +515,18 @@ describe("planted breaks", () => {
   it("P17a: the door browser check catches a Node import", async () => {
     const tree = plant({
       "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
-        exports: { "./door": "./src/door/index.ts" },
+        exports: { "./gateway/*": "./src/gateway/*.ts", "./gateway/internal/*": null },
       }),
-      "packages/libfabrika/src/door/index.ts": lines('export {readFileSync} from "node:fs";'),
+      "packages/libfabrika/src/gateway/Gateway.ts": lines('export {readFileSync} from "node:fs";'),
     });
     expect(
       (await bundleFaults(tree)).some(
-        (fault) => fault.includes("@kampus/libfabrika/door") && fault.includes("node:fs"),
+        (fault) => fault.includes("@kampus/libfabrika/gateway/Gateway") && fault.includes("node:fs"),
       ),
     ).toBe(true);
   });
   const library = manifest("@kampus/libfabrika", {
-    exports: { ".": "./src/index.ts", "./transport": "./src/transport/index.ts" },
+    exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts", "./transport/internal/*": null },
     dependencies: { effect: "catalog:" },
   });
   const tree = plant({
@@ -438,13 +535,16 @@ describe("planted breaks", () => {
       'import {Effect} from "effect";',
       'import {readFileSync} from "node:fs";',
     ),
-    "packages/libfabrika/src/transport/index.ts": lines('export {wire} from "./wire.ts";'),
+    "packages/libfabrika/src/transport/Wire.ts": lines("export const wire = 1;"),
+    "packages/libfabrika/src/transport/internal/binary.ts": lines("export const binary = 1;"),
     "packages/tuval/package.json": manifest("@kampus/tuval", {
       dependencies: { "@kampus/libfabrika": "workspace:*", "@kampus/fabrika-old": "workspace:*" },
     }),
     "packages/tuval/src/index.ts": lines(
-      'import {wire} from "@kampus/libfabrika/transport";',
-      'import {log} from "@kampus/libfabrika/src/data/log.ts";',
+      'import {wire} from "@kampus/libfabrika/transport/Wire";',
+      'import {binary} from "@kampus/libfabrika/transport/internal/binary";',
+      'import {nope} from "@kampus/libfabrika/transport/Nope";',
+      'import {log} from "@kampus/libfabrika/src/ledger/Log.ts";',
       'import {lane} from "@kampus/pipeline";',
     ),
     "programs/counter/package.json": {
@@ -477,7 +577,9 @@ describe("planted breaks", () => {
   it("fires on each import break, and on nothing else", () => {
     expect([...importFaults(tree)].sort()).toEqual(
       [
-        'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/data/log.ts": ./src/data/log.ts is not in @kampus/libfabrika\'s exports',
+        'packages/tuval/src/index.ts imports "@kampus/libfabrika/src/ledger/Log.ts": ./src/ledger/Log.ts is not in @kampus/libfabrika\'s exports',
+        'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/internal/binary": ./transport/internal/binary is refused by @kampus/libfabrika\'s exports',
+        'packages/tuval/src/index.ts imports "@kampus/libfabrika/transport/Nope": ./transport/Nope names no file in @kampus/libfabrika',
         'packages/tuval/src/index.ts imports "@kampus/pipeline": @kampus/pipeline is not in its package.json',
         'programs/counter/src/index.ts imports "../../../packages/libfabrika/src/index.ts": a relative path out of its package',
         'apps/fabrika/src/brain.ts imports "electron": in an app, only src/entry/electron-main.ts may',
@@ -499,13 +601,13 @@ describe("planted breaks", () => {
   it("fires on a top level that reaches node, cloudflare, MCP or electron", async () => {
     const bundles = plant({
       "packages/libfabrika/package.json": manifest("@kampus/libfabrika", {
-        exports: { ".": "./src/index.ts", "./transport": "./src/transport/index.ts" },
+        exports: { ".": "./src/index.ts", "./transport/*": "./src/transport/*.ts" },
       }),
       "packages/libfabrika/src/index.ts": lines(
         'import {readFileSync} from "node:fs";',
         "export const read = readFileSync;",
       ),
-      "packages/libfabrika/src/transport/index.ts": lines(
+      "packages/libfabrika/src/transport/Wire.ts": lines(
         'import {createHash} from "node:crypto";',
         "export const hash = createHash;",
       ),
@@ -528,7 +630,7 @@ describe("planted breaks", () => {
     expect([...(await bundleFaults(bundles))].sort()).toEqual(
       [
         '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
-        '@kampus/libfabrika/transport reaches node:*: "node:crypto" from packages/libfabrika/src/transport/index.ts',
+        '@kampus/libfabrika/transport/Wire reaches node:*: "node:crypto" from packages/libfabrika/src/transport/Wire.ts',
         '@kampus/notes reaches @modelcontextprotocol/*: "@modelcontextprotocol/server" from programs/notes/src/program.ts',
         '@kampus/notes/window reaches cloudflare:*: "cloudflare:workers" from programs/notes/src/view.ts',
         '@kampus/chaos/window reaches electron: "electron" from programs/chaos/src/index.ts',
@@ -567,7 +669,18 @@ describe("P14: the design package is the one allowed outside package", () => {
     }),
     "programs/notes/src/index.ts": lines("export const notes = 1;"),
   });
-  const design = designAt(join(tree, "design"));
+  // The design package on its own, outside the planted next/, with the files its exports name, since
+  // an export that names no file faults (ticket 477).
+  const design = designAt(
+    join(
+      plant({
+        ...designFiles,
+        "design/src/index.ts": lines("export const color = 1;"),
+        "design/src/tokens.css": ":root {}\n",
+      }),
+      "design",
+    ),
+  );
 
   it("lets a manifest list the design package and no other outside workspace package", () => {
     expect(manifestFaults(tree)).toEqual([
@@ -599,5 +712,92 @@ describe("P14: the design package is the one allowed outside package", () => {
     expect(manifestFaults(other)).toEqual([
       "packages/tuval/package.json: depends on @kampus/fabrika-design-copy, a workspace package outside next/",
     ]);
+  });
+});
+
+// Ticket 477, kind 2 (PR 9): each room has a pair of keys, `"./<room>/*": "./src/<room>/*.ts"` and
+// `"./<room>/internal/*": null`. The exam reads an exports map the way Node does: a pattern key holds
+// one `*`, and `"./ledger/internal/*": null` beats `"./ledger/*"` because its part before the `*` is
+// longer. Fixed seed, as `layers.test.ts` and the lead scripts' laws use.
+describe("a room's front files and its internal/ in the exports map", () => {
+  const options = { seed: 119120, numRuns: 200 };
+  const LIBRARY = "@kampus/libfabrika";
+  const ROOMS = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"] as const;
+  const room = fc.constantFrom(...ROOMS);
+  const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
+  const real = () => {
+    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === LIBRARY);
+    expect(library, "the library is a package of next/").toBeDefined();
+    return library!;
+  };
+
+  // pinned: the pair the plan writes (PR 9), since each room's two keys are written by hand.
+  it("pinned: every room has the pair of keys the plan gives it", () => {
+    const exports = real().manifest.exports;
+    const keys = typeof exports === "object" && exports !== null ? Object.fromEntries(Object.entries(exports)) : {};
+
+    for (const each of ROOMS) {
+      expect(keys[`./${each}/*`], `./${each}/*`).toBe(`./src/${each}/*.ts`);
+      expect(keys[`./${each}/internal/*`], `./${each}/internal/*`).toBeNull();
+    }
+  });
+
+  // Plant: pick the first key that fits, in the map's order, and not the longest. Then a map with
+  // `./ledger/*` before the null key lets `ledger/internal/ledgerStore` through.
+  it("Node's rule: the longest pattern wins, and null refuses, whatever the order of the keys", () => {
+    const sub = fc.tuple(
+      room,
+      fc.constantFrom("front", "internal"),
+      name,
+      fc.shuffledSubarray(["pattern", "null"], { minLength: 2 }),
+    );
+    fc.assert(
+      fc.property(sub, ([each, kind, stem, order]) => {
+        const entries = order.map((key): [string, string | undefined] =>
+          key === "pattern" ? [`./${each}/*`, `/pkg/src/${each}/*.ts`] : [`./${each}/internal/*`, undefined],
+        );
+        const at = kind === "front" ? `./${each}/${stem}` : `./${each}/internal/${stem}`;
+        expect(exportAt(new Map(entries), at)).toEqual(
+          kind === "front" ? { kind: "file", file: `/pkg/src/${each}/${stem}.ts` } : { kind: "refused" },
+        );
+        expect(exportAt(new Map(entries), `./other/${stem}`)).toEqual({ kind: "missing" });
+      }),
+      options,
+    );
+  });
+
+  // The app imports a subpath of the library whose real `exports` is read from the real package. A
+  // front file is reached. An internal file is refused even though it exists, and a name no file has
+  // reaches nothing. Plant: `ledger/internal/ledgerStore` imported from the app, which must fail.
+  it("each room's front files are reached and its internal/ is refused to other packages", () => {
+    fc.assert(
+      fc.property(room, fc.constantFrom("front", "internal", "missing"), name, (each, kind, stem) => {
+        const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
+        const tree = plant({
+          "packages/libfabrika/package.json": manifest(LIBRARY, { exports: real().manifest.exports }),
+          [`packages/libfabrika/src/${each}/internal/${stem}.ts`]: lines("export const inside = 1;"),
+          ...(kind === "missing"
+            ? {}
+            : { [`packages/libfabrika/src/${subpath}.ts`]: lines("export const front = 1;") }),
+          "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
+          "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
+        });
+        const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
+
+        expect(faults).toEqual(
+          kind === "front"
+            ? []
+            : kind === "internal"
+              ? [`./${subpath} is refused by ${LIBRARY}'s exports`]
+              : [`./${subpath} names no file in ${LIBRARY}`],
+        );
+      }),
+      {
+        ...options,
+        numRuns: 60,
+        // pinned: the plan's plant (ticket 477), the ledger's store imported from the app.
+        examples: [["ledger", "internal", "ledgerStore"]],
+      },
+    );
   });
 });

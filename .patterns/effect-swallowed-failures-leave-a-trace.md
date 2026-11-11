@@ -14,7 +14,7 @@ sequenceDiagram
 ```
 
 ```ts
-// next/packages/libfabrika/src/data/ledger-store.ts:252-267 and :301
+// next/packages/libfabrika/src/ledger/internal/ledgerStore.ts:252-267 and :301
 const ring = Effect.fn("ledger.ring")(function* (stream: string, rev: Rev, {to, after}: Ring) {
 	yield* Effect.annotateCurrentSpan({/* stream, to, after, rev */});
 	return yield* Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
@@ -51,7 +51,7 @@ Rules:
 - **Every traced function is `Effect.fn("piece.verb")`,** so the record has a span to sit on
   ([effect-fn for traced functions](../docs/direction/effect-fn-for-traced-functions.md)).
 - **The record keeps content rules.** An error's message rides in the span's failure, never in a tag
-  (`next/packages/libfabrika/src/data/ledger.ts:15`).
+  (`next/packages/libfabrika/src/ledger/Ledger.ts:15`).
 
 clanka, an agent by an Effect core maintainer, takes the log form: where it skips a failed MCP server it writes
 `Effect.logWarning("MCP server failed")` with the server and error as log annotations
@@ -60,7 +60,7 @@ clanka, an agent by an Effect core maintainer, takes the log form: where it skip
 Both forms are in use: `next/` records with spans plus log lines
 ([0024](../.decisions/0024-next-records-with-spans-and-log-lines.md)). Effect's default
 `tracerLogger` writes a log line onto the span it runs in, as an event, and the span sink keeps that
-event in the row (`next/packages/libfabrika/src/data/sink.ts`, `ended`). So a log line sits inside
+event in the row (`next/packages/libfabrika/src/telemetry/Sink.ts`, `ended`). So a log line sits inside
 an `Effect.fn` body or a `withSpan`; outside one it reaches only the console (ticket 453, a lint rule,
 advice first). A log with a cause adds `effect.cause`, the error's text and stack, as an event tag;
 until ticket 454 settles what the sink keeps of it, prefer the span form when the error's text could
@@ -74,9 +74,9 @@ that one propagates, typed ([errors keep their cause](./effect-errors-keep-their
 ## Today's code breaks this
 
 Ticket 444 sweeps it. On main `d48cb774`, in `next/` product code: 7 bare `Effect.ignore` in 4 files
-(`next/packages/libfabrika/src/node/stage.ts:208`, `:237`, `:318`, `:319`, `app/runner.ts:682`,
-`workers/control.ts:93`, `workers/runtime.ts:699`), and 1 finalizer that dies (`node/stage.ts:212`).
-The two `catchCause(() => Effect.void)` in `data/ledger-store.ts:301` and `:414` follow this pattern.
+(`next/packages/libfabrika/src/node/dev/dev.ts:208`, `:237`, `:318`, `:319`, `runtime/Runner.ts:682`,
+`cloudflare/control.ts:93`, `cloudflare/runtime.ts:699`), and 1 finalizer that dies (`node/dev/dev.ts:212`).
+The two `catchCause(() => Effect.void)` in `ledger/internal/ledgerStore.ts:301` and `:414` follow this pattern.
 
 ## Why it is not obvious
 

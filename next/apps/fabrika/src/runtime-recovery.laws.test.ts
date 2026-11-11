@@ -1,4 +1,4 @@
-// P12, next/. The real Project and Process services, Door and runner on SQLite.
+// P12, next/. The real Project and Process services, Gateway and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
@@ -7,8 +7,9 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { counter, counterModel } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
+import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
-import { revokeText, Start } from "@kampus/libfabrika/coordination";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import {
   commitReply,
@@ -492,11 +493,11 @@ const world = (
         );
       },
     },
-    GATEWAY: {
+    CONNECTION: {
       getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }),
     },
     RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    HEALTH: {},
+    MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
@@ -575,7 +576,7 @@ const world = (
   });
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
-    const row = db.prepare("SELECT value FROM stage_descriptors WHERE process=?").get(pid);
+    const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
     return row === undefined ? undefined : JSON.parse(String(row.value)).name;
   };
   /** The storage owner of a process ID, however the runtime keys it. */
@@ -734,7 +735,7 @@ type Observation = {
   readonly fault: Fault;
   readonly name: string;
   readonly firstResolved: boolean;
-  /** Each saved stage_descriptors row, by the name in its descriptor. */
+  /** Each saved dev_descriptors row, by the name in its descriptor. */
   readonly saved: Record<string, { readonly process: string; readonly descriptor: Descriptor }>;
   /** The rows saved before the reopen: the faulted name's descriptor is among them. */
   readonly savedBeforeReopen: Observation["saved"];
@@ -771,7 +772,7 @@ const observe = async (fault: Fault, name: string): Promise<Observation> => {
   const rows = (): Observation["saved"] => {
     const found: Record<string, { process: string; descriptor: Descriptor }> = {};
 
-    for (const row of w.db.prepare("SELECT process, value FROM stage_descriptors").all()) {
+    for (const row of w.db.prepare("SELECT process, value FROM dev_descriptors").all()) {
       const descriptor: Descriptor = JSON.parse(String(row.value));
       found[descriptor.name] = { process: String(row.process), descriptor };
     }

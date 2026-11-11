@@ -286,8 +286,8 @@ describe("P12 real browser protocol", () => {
     expect(first.fingerprint).toBe(second.fingerprint);
     expect(first.first.error.data.reason).toBe("not_granted");
     expect(second.first.error.data.reason).toBe("not_granted");
-    const firstKnock = await rpc(a, "door.knock", { label: "Chromium" });
-    const secondKnock = await rpc(b, "door.knock", { label: "Chromium" });
+    const firstKnock = await rpc(a, "gateway.knock", { label: "Chromium" });
+    const secondKnock = await rpc(b, "gateway.knock", { label: "Chromium" });
     const code = firstKnock.result.code;
     expect(secondKnock.result.code).toBe(code);
     const output = execFileSync(

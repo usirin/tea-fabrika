@@ -2,7 +2,7 @@
 // one scoped native WebSocket per dial, the profile's key, and the client's own rows in IndexedDB.
 // Each provides one of transport's contracts; the window consumes them and decides everything. P18
 // keeps the shared socket for every platform; this is P14's one adapter.
-import { ClientRows, ClientSocket, type SocketEvent } from "@kampus/libfabrika/transport";
+import { ClientRows, ClientSocket, type SocketEvent } from "@kampus/libfabrika/transport/Services";
 import { Effect, Layer, Queue, Stream } from "effect";
 import { openDb, request, transaction } from "./key.ts";
 
