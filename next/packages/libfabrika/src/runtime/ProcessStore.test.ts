@@ -11,6 +11,7 @@ import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { Activity } from "../processes/Process.ts";
@@ -78,7 +79,9 @@ const database = () => {
 };
 
 const data = (sql: Sql) =>
-  Ledger.sql(sql, { reader: "p11-store" }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
+  LedgerSql.layer(sql, { reader: "p11-store" }).pipe(
+    Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+  );
 
 const from: From = {
   by: "SHA256:brain",
