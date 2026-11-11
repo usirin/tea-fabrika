@@ -51,7 +51,8 @@ describe("the exam's pull request", () => {
   const lastEndOf = (ran: Ran, stage: string) =>
     ran.facts.findLastIndex((f) => f.type === "ended" && f.stage === stage);
 
-  it("is reviewed against the plan's own words before the person is asked, and the ask says what the review met", async () => {
+  // scenario: the real lane's exam writer and reviewer run on a temporary git repository.
+  it("scenario: is reviewed against the plan's own words before the person is asked, and the ask says what the review met", async () => {
     const ran = await lane({ title: RULES, picks: YES });
     const said = ran.lines.join("\n");
     expect(ran.lines.at(-1), said).toContain("ended: done");
@@ -62,7 +63,9 @@ describe("the exam's pull request", () => {
     expect(reviewed, said).toBeGreaterThan(-1);
     expect(asked).toBeGreaterThan(reviewed);
     expect(ran.facts[reviewed]).toMatchObject({ met: 1, of: 1 });
-    expect(String(ran.facts[asked]?.what)).toContain("The review met 1 of 1, and the checks passed at");
+    expect(String((ran.facts[asked]?.shows as { what: string } | undefined)?.what)).toContain(
+      "The review met 1 of 1, and the checks passed at",
+    );
     // The review read the criterion code made from the plan's list, never one an agent wrote.
     const review = codexRuns(ran.dir).find((r) => r.step === "review");
     expect(review?.prompt).toContain(`- e1: ${E1}`);

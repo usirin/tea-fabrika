@@ -1,3 +1,4 @@
+import { defineMachine } from "@demlik/tea";
 import { writerOf } from "@kampus/fabrika-old";
 import { TicketNumber } from "@kampus/pipeline/tickets/ticket";
 import { whenOf } from "@tea-fabrika/tracker/window";
@@ -49,6 +50,16 @@ import { type Cap, capOf, capsOf, type Icon, type Piece, type Row, type Section,
 // status region tells a screen reader it came on or went off, and nothing on each part explained;
 // it explains what keyboard focus is on, from the moment it comes on, as well as what the pointer
 // is over; and Escape leaves it, once what lies over the desk has closed.
+
+/**
+ * The asks menu's selection: the one row it shows open, with the shared ask view in it. Pure. The
+ * asks themselves and their count are the host's (asks.ts); the menu only says which row is open.
+ */
+export const asksMenuMachine = defineMachine({
+  types: { model: {} as { selected: string | null }, msg: {} as { type: "select"; key: string } },
+  init: () => [{ selected: null }, []],
+  update: { select: (s, m) => [{ ...s, selected: m.key }, []] },
+});
 
 /** What each program takes and sends, by its inputs' and outputs' names (host/serve.ts). */
 interface Shape {
@@ -292,6 +303,10 @@ export const lineIn = (ws: Workspace): readonly Segment[] => {
  */
 export const asksWord = (n: number): string | null => (n === 0 ? null : `${n} ask${n === 1 ? "s" : ""} you`);
 
+/** The asks list's head: `1 ask · 2 stops`, each count in the singular for one. */
+export const asksHead = (asks: number, stops: number): string =>
+  `${asks} ask${asks === 1 ? "" : "s"} · ${stops} stop${stops === 1 ? "" : "s"}`;
+
 /** A part of the frame that says how a part of the app is, and whether that part is broken. */
 interface Said {
   readonly word: string;
@@ -457,45 +472,46 @@ export const opensOf = (desk: Open | null, ticket: number, tickets: TicketsShown
 export const nowhereNote = (ticket: number): string => `no tile shows #${ticket} · the tracker opens it`;
 
 /**
- * One ask as a row: what it asks, in sentence case; its ticket, title and tile under it; its time
- * at the right. `Approve plan` over `#1 Login fails on Safari · t2`, at `11:13`.
+ * One ask as a row: what it asks, in sentence case; its ticket and title under it; its time at the
+ * right. `Approve plan` over `#1 Login fails on Safari`, at `11:13`. A person's words only: a
+ * tile's id is the desk's own, and Open ticket finds the tile without the row naming it (review 4).
  */
-const askRowOf = (ask: Ask, tile: TileId | undefined, now: number, later: boolean): Row => ({
+const askRowOf = (ask: Ask, now: number, later: boolean): Row => ({
   id: ask.key,
   icon: later ? "later" : ask.kind,
   title: sentence(ask.kind === "stuck" ? `stuck: ${ask.what}` : ask.what),
-  sub: `#${ask.ticket} ${ask.title}${tile === undefined ? "" : ` · ${tile}`}`,
+  sub: `#${ask.ticket} ${ask.title}`,
   side: whenOf(ask.at, now),
   second: later ? { name: "Bring back", cap: "H" } : { name: "Later", cap: "H" },
 });
 
-/** The asks list's sections: the live asks, then the ones set aside, under `Later`, which folds. */
+/**
+ * The asks list's sections: the live asks, then the ones set aside, under `Later`, which folds.
+ * The desk and its tickets no longer change a row: no row names where its ticket is shown.
+ */
 export const asksSections = (
   asks: AsksNow,
-  desk: Open | null,
-  tickets: TicketsShown,
+  _desk: Open | null,
+  _tickets: TicketsShown,
   now: number,
-): readonly Section[] => {
-  const tileOf = (ticket: number) => (desk === null ? undefined : tileOfTicket(desk, ticket, tickets));
-  return [
-    {
-      id: "asks",
-      title: null,
-      fold: false,
-      rows: asks.asks.map((a) => askRowOf(a, tileOf(a.ticket), now, false)),
-    },
-    ...(asks.later.length === 0
-      ? []
-      : [
-          {
-            id: "later",
-            title: "Later",
-            fold: true,
-            rows: asks.later.map((a) => askRowOf(a, tileOf(a.ticket), now, true)),
-          },
-        ]),
-  ];
-};
+): readonly Section[] => [
+  {
+    id: "asks",
+    title: null,
+    fold: false,
+    rows: asks.asks.map((a) => askRowOf(a, now, false)),
+  },
+  ...(asks.later.length === 0
+    ? []
+    : [
+        {
+          id: "later",
+          title: "Later",
+          fold: true,
+          rows: asks.later.map((a) => askRowOf(a, now, true)),
+        },
+      ]),
+];
 
 /**
  * The focused tile, said at the bottom left: its name, what it takes and sends, and its
