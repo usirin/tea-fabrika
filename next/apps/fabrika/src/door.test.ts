@@ -14,6 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { SignRequest } from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
@@ -250,8 +251,12 @@ afterAll(() => {
   rmSync(top, { recursive: true, force: true });
 });
 
+// Each world is a fresh SQLite file, and every door call commits. No law here kills the process
+// mid-write, so the rollback journal stays in memory and no commit waits on the disk. A reopen
+// still reads the same file. This halves the ticket 707 walks, 200 worlds each.
 const open = (path: string) => {
   const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF");
   opened.push(db);
   return db;
 };
@@ -381,7 +386,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "project-a" }).pipe(Layer.provide(quiet));
-  const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+  const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
@@ -397,7 +402,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
     const freshLedger = LedgerSql.layer(storage, { reader: "project-a" }).pipe(Layer.provide(quiet));
-    const freshClients = ClientManager.layer(founder).pipe(Layer.provideMerge(freshLedger));
+    const freshClients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(freshLedger));
     return Gateway.layer({ ...settings, sql: storage }).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
@@ -1842,7 +1847,7 @@ describe("P10 signed membership changes", () => {
                 })),
               ),
             ).pipe(Layer.provide(w.env));
-            const clients = ClientManager.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
+            const clients = ClientManagerLedger.layer(w.founder).pipe(Layer.provideMerge(racedLedger));
             const env = Layer.mergeAll(w.env, clients, Mailbox.layer.pipe(Layer.provide(clients)));
             yield* Effect.gen(function* () {
               const d = yield* Gateway;

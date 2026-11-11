@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-codex-resume-usage-is-thread-total",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "packages/fabrika/src/agents/codex/adapter.ts",
+    "line": 173
+  },
+  "says": "The codex exec adapter reads a turn.completed usage as that turn's whole tokens (whole: true), but on a resumed thread Codex CLI 0.167.0 reports the thread's running total, so every resumed turn counts the earlier turns again.",
+  "proof": "One real codex exec turn (gpt-6-astra, medium) reported input 103785, cached 89728, output 1012. A resume of that thread asked only for one line and a JSON object, ran 6 seconds with 0 tool calls, and reported input 131864, cached 117376, output 1062: 50 more output tokens than the first turn, not a new turn's own count.",
+  "cost": "A field row or a dollar total for any resumed Codex turn is too high by every turn before it on the thread, and grows with each round on the same session.",
+  "head": "62324ccb1d036bd1b86b6d9c2d4e131d4a490603",
+  "ticket": null,
+  "pr": null
+}

@@ -21,6 +21,8 @@ import "./pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
@@ -820,6 +822,42 @@ describe("T321 K1 fetch, today's tooling", () => {
       options,
     );
   }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+
+  // scenario: the exam is the test writer's (nobody-writes-their-own-exam.md), so fetch signs a
+  // tests commit that holds an exam path the plan gives to no step, as stepcommit commits it, and
+  // still refuses one the plan gives to build. 2026-11-11: three tests steps lost their laws to
+  // not_owner on exam paths the plan did not name. Plants: refuse every unlisted path; allow an
+  // exam path the plan gives to another step.
+  it("K1 signs a tests commit with an exam path no plan row names, never one given to build", () => {
+    const exam = ".agents/skills/lead/scripts/fixture.test.ts";
+    each(["unlisted", "build"] as const, (row) =>
+      fixture(
+        (b) => {
+          b.setup({
+            batches: [
+              [
+                { path: "src/a.ts", text: "tests change\n" },
+                { path: exam, text: "a new law\n" },
+              ],
+            ],
+          });
+          expect(b.run().code).toBe(0);
+          const got = b.fetch();
+          const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
+
+          if (row === "unlisted") {
+            expect(got.code, got.text).toBe(0);
+            expect(signs.map((c) => c.head)).toEqual([b.head(b.work)]);
+          } else {
+            refused(got, new RegExp(`not_owner ${exam.replaceAll(".", "\\.")}`));
+            expect(signs).toEqual([]);
+            expect(b.notes()).toBe("");
+          }
+        },
+        [["src/a.ts", "tests"], ...(row === "build" ? [[exam, "build"] as [string, string]] : [])],
+      ),
+    );
+  }, 180_000);
 
   // Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
   it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {
@@ -2098,5 +2136,43 @@ describe("T621 the fixture's git shim, today's tooling", () => {
       ),
       { ...options, examples: [[[["", "a\tb", "c\nd", "-e"], []]]] },
     );
+  });
+});
+
+describe("T614 a box never installs, today's tooling", () => {
+  // scenario: a step that moves the lockfile or a manifest, then runs `pnpm exec`, kept its box's
+  // node_modules. pnpm's default `verifyDepsBeforeRun: install` started an install there, with no
+  // network, that deleted them (ticket 477's boxes layout2-tests4 and layout2-tests6). Real pnpm on
+  // a two-package workspace with no outside dependency, so nothing reaches the network.
+  // Plant: drop `verifyDepsBeforeRun` from pnpm-workspace.yaml (caught: it reads undefined). With
+  // `install` in the temp workspace, pnpm unlinks node_modules/a (checked by hand, 2026-11-11).
+  it("T614 scenario: pnpm exec behind the lockfile warns and leaves node_modules alone", () => {
+    // `pnpm exec vitest` hands its children `pnpm_config_verify_deps_before_run=false`; a box's
+    // shell has no such variable, so the child pnpm reads the setting from the files alone.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^p?npm_config_/i.test(k)));
+    const pnpm = (cwd: string, ...args: string[]) => spawnSync("pnpm", args, { cwd, env, encoding: "utf8" });
+    const setting = pnpm(root, "config", "get", "verifyDepsBeforeRun").stdout.trim();
+    expect(setting).toBe("warn");
+
+    const dir = mkdtempSync(join(tmpdir(), "vd614-"));
+
+    try {
+      // No `packageManager` pin: under the test's fresh home, a pin would fetch pnpm itself.
+      const manifest = (more: object) => JSON.stringify({ name: "root", private: true, ...more });
+      write(join(dir, "pnpm-workspace.yaml"), `packages:\n  - a\nverifyDepsBeforeRun: ${setting}\n`);
+      write(join(dir, "a/package.json"), JSON.stringify({ name: "a", version: "1.0.0" }));
+      write(join(dir, "package.json"), manifest({ dependencies: { a: "workspace:*" } }));
+      expect(pnpm(dir, "install", "--offline").status).toBe(0);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+
+      // The step's change: the manifest no longer matches the lockfile.
+      write(join(dir, "package.json"), manifest({}));
+      const ran = pnpm(dir, "exec", "true");
+      expect(ran.status).toBe(0);
+      expect(`${ran.stdout}${ran.stderr}`).toMatch(/out of sync with your lockfile/);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -5,6 +5,7 @@ import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
+import type * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import {
   type Envelope,
   NotGranted,
@@ -25,6 +26,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
+import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, type Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -219,7 +221,7 @@ const methods: ReadonlySet<string> = new Set([
 
 type Options<A, RNext, RDeliver, RNotify> = {
   readonly sql: Parameters<typeof gatewayStore>[0];
-  readonly founder: Parameters<typeof ClientManager.layer>[0];
+  readonly founder: Parameters<typeof ClientManagerLedger.layer>[0];
   readonly name: string;
   readonly url: string;
   readonly origins: ReadonlyArray<string>;
@@ -246,7 +248,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
     incoming: Incoming,
   ) => Effect.Effect<
     Sent | void,
-    LedgerError | SinkError | SigningRefused | NotGranted | ProgramDown | RunnerError | ProcessError,
+    LedgerError | SinkError | SigningRefused | NotGranted | ProgramDown | RunnerError | ProcessError | RepliesError,
     RDeliver
   >;
   readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
