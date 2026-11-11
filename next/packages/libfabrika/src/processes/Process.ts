@@ -11,12 +11,12 @@ import type { From } from "./Mailbox.ts";
 const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 const PROCESSES = "processes";
 const CLIENTS = "client:";
-/** Names that lead streams this layer or the door already owns. */
-const RESERVED = `(?!(?:${PROCESSES}|door)$)`;
+/** Names that lead streams this layer or the gateway already owns. */
+const RESERVED = `(?!(?:${PROCESSES}|gateway)$)`;
 
 /**
  * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
- * no `client:` lead, so it never meets a client's inbox, and never `processes` or `door`.
+ * no `client:` lead, so it never meets a client's inbox, and never `processes` or `gateway`.
  */
 const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)));
 
@@ -61,7 +61,7 @@ const eventStream = (name: string): string => `${PROCESSES}/${name}`;
 
 /**
  * The one rule for who may write what: only the brain's ProcessManager writes `processes` or any
- * stream under `processes/`, any ProcessEvent case, or any id in the signal id space. The door and
+ * stream under `processes/`, any ProcessEvent case, or any id in the signal id space. The gateway and
  * the mailbox refuse every such write.
  */
 export const brainOnly = (write: { readonly stream: string; readonly id: string; readonly tag: string }): boolean =>
