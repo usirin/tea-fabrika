@@ -6,13 +6,15 @@
 # since its checkout is a throwaway copy. A sandbox links each package's node_modules back to
 # the checkout, and a workspace link in there points at the unmutated package, so a test that
 # reaches a file by its package name (`@tea-fabrika/tracker`) never sees a mutant (ticket 457).
+# BASELINE, when set, names vitest's JSON report of a plain run of the same tests here: the test
+# and hook limit is then limit.ts's answer for it, else the fast check's 10 s (ticket 605).
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
 : "${RELATED:?RELATED must list the test paths}"
 case ${FINAL:-1} in 0|1) ;; *) echo "FINAL must be 0 or 1" >&2; exit 1 ;; esac
 case ${IN_PLACE:-0} in 0) IN_PLACE=false ;; 1) IN_PLACE=true ;; *) echo "IN_PLACE must be 0 or 1" >&2; exit 1 ;; esac
-export T BUILD RELATED IN_PLACE
+export T BUILD RELATED IN_PLACE BASELINE
 exec node --input-type=module -e '
 import {spawn} from "node:child_process";
 import {rmSync} from "node:fs";
@@ -49,14 +51,20 @@ S=packages/pipeline/node_modules/@stryker-mutator
 ranges=$(node .agents/skills/mutation/scripts/sample.ts \
   --build "$BUILD" ${SINCE:+--since "$SINCE"} --seed 119120 --max 150 --report "$M/sample.json")
 [ -n "$ranges" ] || { echo "no mutation ranges selected" >&2; exit 1; }
-# Keep the 10 s limit and the existing nested-Stryker and e2e excludes.
+# The fast check's 10 s limit, raised to fit the slowest plain test here, so one slow law no
+# longer stops the dry run before any mutant (ticket 605). The existing excludes stay.
+TEST_LIMIT=10000
+[ -z "${BASELINE:-}" ] || TEST_LIMIT=$(node .agents/skills/mutation/scripts/limit.ts "$BASELINE")
+case $TEST_LIMIT in ''|*[!0-9]*) echo "limit.ts gave no limit for $BASELINE" >&2; exit 1 ;; esac
+export TEST_LIMIT
 cat > vitest.mutation.config.ts <<'TS'
 import {testConfig as base} from "./vitest.config.ts";
 import {defineConfig} from "vitest/config";
 const include = process.env.RELATED?.split(",").map(p => p.trim()).filter(Boolean);
 if (!include?.length) throw new Error("RELATED must list the test paths");
+const limit = Number(process.env.TEST_LIMIT || 10_000);
 export default defineConfig({...base, test: {...base.test, include, maxWorkers: 1,
-  testTimeout: 10_000, hookTimeout: 10_000,
+  testTimeout: limit, hookTimeout: limit,
 	exclude: [...(base.test?.exclude ?? []), "**/node_modules/**", "**/dist/**",
 		"packages/pipeline/src/stages/mutation/stryker*.test.ts",
 		"packages/pipeline/src/stages/pipeline/{program,github}.test.ts"]}});
