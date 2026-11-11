@@ -26,6 +26,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import packageJson from "../../../../package.json" with { type: "json" };
@@ -34,11 +37,15 @@ import entry from "./mutbox-entry.sh?raw";
 import dockerfile from "./mutbox.Dockerfile?raw";
 import {
   baseNode,
+  bounded,
   buildOwns,
+  CallTimeout,
+  DOCKER_SECONDS,
   droppedFromArmA,
   exitCode,
   imageTag,
   judge,
+  KILL_GRACE_SECONDS,
   LABEL,
   LIMITS,
   mountable,
@@ -52,6 +59,7 @@ import {
   runArgs,
   secondsFor,
   tally,
+  timeoutLine,
 } from "./mutbox.ts";
 
 // Today's lead tooling. The pure parts are properties. The flow runs the real script against a
@@ -1010,6 +1018,96 @@ describe("mutbox gc against a stand-in docker", () => {
     const down = gc({ down: true });
     expect(down.code, down.text).toBe(0);
     expect(down.text).toContain("Docker is not running");
+  });
+});
+
+// 2026-11-10: a `docker ps` in gc never returned, and two lanes sat 1 h 50 min with no agent.
+// The stand-in is a real child process that writes its pid, then waits for one line on stdin.
+// Without that line it never ends by itself.
+// That line comes at `delay` on the test clock, so the child's run time follows the test clock and
+// a 30 s bound costs milliseconds. Plants: drop the bound; time out but leave the child running;
+// fail with something other than CallTimeout; stop a call that answered in time.
+describe("a call past its bound is stopped, and its child with it", () => {
+  const seconds = DOCKER_SECONDS.call;
+  const limit = seconds * 1000;
+  const alive = (pid: number) => spawnSync("kill", ["-0", String(pid)]).status === 0;
+  const readPid = (file: string) =>
+    Effect.sync(() => (existsSync(file) ? Number(readFileSync(file, "utf8").trim()) || 0 : 0));
+  /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
+  const lineAt = (delay: number) =>
+    Stream.fromEffect(
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (delay > now) {
+          yield* Effect.sleep(delay - now);
+        }
+
+        return new TextEncoder().encode("go\n");
+      }),
+    );
+  const called = (delay: number, script: string) =>
+    Effect.gen(function* () {
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), "mutbox-bound-")));
+      made.push(dir);
+      const file = join(dir, "pid");
+      const fiber = yield* bounded("sh", ["-c", script, "sh", file], seconds, lineAt(delay)).pipe(Effect.forkChild);
+      // On the live clock: wait until the child is up and reading, then move the test clock.
+      const pid = yield* readPid(file).pipe(
+        Effect.repeat({ until: (p) => p > 0, schedule: Schedule.spaced("5 millis") }),
+        TestClock.withLive,
+      );
+      yield* TestClock.adjust(delay);
+      const exit = yield* Effect.exit(Fiber.join(fiber));
+      return { exit, pid };
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, TestClock.layer())));
+  // At end of input with no line it hangs, as `exec sleep`, keeping its pid: only a kill ends it.
+  const waits = 'echo $$ > "$1"; read line || exec sleep 600; echo "got $line"';
+
+  it("an answer before the bound is read whole; past it, CallTimeout and no child left", () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.oneof(fc.integer({ min: 0, max: limit - 1 }), fc.integer({ min: limit + 1, max: 10 * limit })),
+        (delay) =>
+          called(delay, waits).pipe(
+            Effect.tap(({ exit, pid }) =>
+              Effect.sync(() => {
+                expect(exit).toStrictEqual(
+                  delay < limit
+                    ? Exit.succeed({ out: "got go\n", err: "", code: 0 })
+                    : Exit.fail(new CallTimeout({ command: `sh -c ${waits}`, seconds })),
+                );
+                expect(alive(pid)).toBe(false);
+              }),
+            ),
+            Effect.asVoid,
+            Effect.runPromise,
+          ),
+      ),
+      { seed: 1110, numRuns: 25 },
+    ));
+
+  // scenario: a hung client that ignores SIGTERM still goes, by SIGKILL after the grace. Its
+  // `sleep` inherits the ignored TERM. This one waits the grace on the real clock.
+  it("scenario: a child that ignores SIGTERM is killed after the grace", () => {
+    const started = Date.now();
+    return called(2 * limit, `trap '' TERM; ${waits}`).pipe(
+      Effect.tap(({ exit, pid }) =>
+        Effect.sync(() => {
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(alive(pid)).toBe(false);
+          expect(Date.now() - started).toBeGreaterThanOrEqual(KILL_GRACE_SECONDS * 1000);
+        }),
+      ),
+      Effect.runPromise,
+    );
+  });
+
+  // format: the line gc prints, after "mutbox gc: ", before it exits 0 and the chain goes on.
+  it("format: the line a timed-out call leaves", () => {
+    expect(timeoutLine(new CallTimeout({ command: "docker ps -aq", seconds: 30 }))).toBe(
+      "docker ps -aq passed its 30 s limit and was stopped",
+    );
   });
 });
 
