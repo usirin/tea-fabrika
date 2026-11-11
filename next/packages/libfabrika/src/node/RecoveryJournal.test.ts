@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Effect, Layer, Schema } from "effect";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { Row } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -58,7 +58,7 @@ const coordination = (sql: Sql, next: Effect.Effect<string>) =>
     Layer.provideMerge(
       Mailbox.layer.pipe(
         Layer.provideMerge(
-          Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransaction.layer(sql)).pipe(
+          Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
             Layer.provide(quiet),
           ),
         ),

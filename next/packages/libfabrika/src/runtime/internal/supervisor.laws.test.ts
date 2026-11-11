@@ -275,17 +275,27 @@ const moves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     }
     case "writing_dead":
       return [{ name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } }, ...stale];
-    case "writing_exit":
+    case "writing_exit": {
+      // The exit lands 0 to 50 ms after the throw, so a wait counted from the throw shows.
+      const late = cell.gap % 51;
       return [
         {
           name: "exit_written",
-          msg: { type: "exit_written", process: j.process, restarts: [...w.restarts], at: w.at, program: PROGRAM },
+          msg: {
+            type: "exit_written",
+            process: j.process,
+            restarts: [...w.restarts],
+            at: w.at + late,
+            program: PROGRAM,
+          },
           apply: () => {
             w.live = false;
+            w.at += late;
           },
         },
         ...stale,
       ];
+    }
     case "writing_down":
       return [{ name: "down_written", msg: { type: "down_written", process: j.recovery.process } }, ...stale];
     case "waiting_recovery":
@@ -614,6 +624,9 @@ describe("P34c slice 2: one saved recovery journal", () => {
           }
 
           if (move.name === "exit_written" && before.journal._tag === "writing_exit") {
+            // Backoff and the brake's deadline count from the exit's time, never the throw's.
+            expect(move.msg.at, "the fold's clock is the exit's").toBe(w.at);
+
             if (before.journal.origin._tag === "manual") {
               expect(after.journal).toMatchObject({ _tag: "waiting_start", timing: { _tag: "immediate" } });
               return;
@@ -621,9 +634,9 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
             const wait = Math.min(p.backoff.minMs * 2 ** Math.min(w.crashes - 1, 53), p.backoff.maxMs);
             const earliest = w.at + wait;
-            const room = roomAt(w.restarts, earliest, p);
+            const opening = roomAt(w.restarts, earliest, p);
 
-            if (room === earliest) {
+            if (opening === earliest) {
               expect(after.journal, `crash ${w.crashes} is inside the budget`).toMatchObject({
                 _tag: "waiting_start",
                 timing: { _tag: "scheduled", until: earliest },
@@ -631,7 +644,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             } else {
               expect(after.journal, `crash ${w.crashes} trips the brake`).toMatchObject({
                 _tag: "writing_down",
-                recovery: { process: before.journal.process, crashes: w.crashes, until: room },
+                recovery: { process: before.journal.process, crashes: w.crashes, until: opening },
               });
             }
           }
@@ -702,6 +715,8 @@ describe("P34c slice 2: one saved recovery journal", () => {
       reuse: fc.integer({ min: 0, max: 7 }).map((n) => n > 0),
       pick: fc.noBias(fc.nat()),
       alive: fc.integer({ min: 0, max: G }),
+      // The exit lands this long after the throw: backoff counts from the exit.
+      exit: fc.integer({ min: 0, max: G }),
       late: fc.integer({ min: 0, max: G }),
       error: fcErrorClass.filter((e) => e.length <= 40),
     });
@@ -718,7 +733,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         const maxMs = minMs + spread;
         let total = 0;
 
-        // Every wait up to the tripping crash, and the most time the tape spends alive or late,
+        // Every wait up to the tripping crash, and the most time the tape spends alive, exiting or late,
         // fit in one window, so the brake must trip on crash intensity + 1.
         for (let n = 0; n <= intensity; n++) {
           total += Math.min(minMs * 2 ** n, maxMs);
@@ -727,7 +742,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         const accepted = Schema.decodeUnknownSync(Policy)({
           maxDeliveries: deliveries,
           intensity,
-          periodMs: total + 2 * intensity * G + 1 + slack,
+          periodMs: total + 3 * intensity * G + 1 + slack,
           backoff: { minMs, maxMs, resetAfterMs: 1_000_000_000 },
         });
         return fc.tuple(fc.constant(accepted), fc.array(Cycle, { minLength: intensity + 1, maxLength: intensity + 1 }));
@@ -777,6 +792,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           }
 
           expect(model.journal._tag).toBe("writing_exit");
+          at += cycle.exit;
           send({ type: "exit_written", process, restarts: [...restarts], at, program: PROGRAM });
           const earliest = at + Math.min(p.backoff.minMs * 2 ** (crashes - 1), p.backoff.maxMs);
 

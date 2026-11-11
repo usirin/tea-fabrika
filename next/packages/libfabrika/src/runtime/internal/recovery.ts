@@ -81,3 +81,5 @@ export const Receipt = Schema.Struct({
       : "a failed delivery keeps its input; an accepted delivery keeps its digest",
   ),
 );
+/** @internal */
+export type Receipt = typeof Receipt.Type;

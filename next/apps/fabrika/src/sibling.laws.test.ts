@@ -57,6 +57,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           const { AlchemyContext } = yield* Effect.promise(() => import("alchemy/AlchemyContext"));
           const { ArtifactStore, createArtifactStore } = yield* Effect.promise(() => import("alchemy/Artifacts"));
           const Interaction = yield* Effect.promise(() => import("alchemy/Interaction"));
+          const { AuthProvidersLive } = yield* Effect.promise(() => import("alchemy/Auth/Registry"));
           const fixture: typeof import("./sibling-objects.test-support.ts") = yield* Effect.promise(
             () => import(pathToFileURL(file).href),
           );
@@ -65,6 +66,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
             { providers: Cloudflare.providers(), state: Alchemy.localState() },
             fixture.Host.pipe(Effect.asVoid, Effect.provide(fixture.default)),
           );
+          // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
           yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
             Effect.asVoid,
             Effect.provide(localState()),
@@ -73,6 +75,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
                 Layer.succeed(AlchemyContext, { dotAlchemy: path.join(home, ".alchemy"), dev: true, adopt: false }),
                 Layer.succeed(ArtifactStore, createArtifactStore()),
                 Interaction.layerNonInteractive(),
+                AuthProvidersLive,
               ),
             ),
           );

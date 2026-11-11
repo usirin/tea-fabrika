@@ -103,7 +103,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
-| `stuck broken_chain` | the branch is behind `main`: merge `main` in, as above |
+| `stuck broken_chain` | after the merge only: the logged links have a gap, or do not reach the head's tree. A branch behind `main` is never `broken_chain` ([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it) |
 
 A pull request that touches no `next/**` and no exam path is "not in scope" and passes.
 
@@ -128,6 +128,9 @@ in a log pull request. `keys` and `base` must be commits on `main` before the sq
 must be on `main`; a keys commit anywhere else counts for nothing, since anyone who can push can make
 one that holds their own key. The check walks them there, and blocks that pull request until they reach
 the squash commit's tree. On `main`, each push walks every squash since P32's, as advice.
+A squash that landed behind `main` passes when the links reach its pull request head's tree and that
+head merged onto `main` gives the squash's tree
+([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it).
 
 ## The pull request that added the check
 

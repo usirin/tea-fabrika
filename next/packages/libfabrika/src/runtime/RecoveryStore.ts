@@ -9,7 +9,9 @@ type Kept = typeof Kept.Type;
 const kept = Schema.decodeUnknownSync(Kept);
 
 /** The saved journal's own schema, given by its caller: the runner passes the machine's. */
-type Journal<S extends Kept> = Schema.Codec<S, unknown> & { readonly fields: Schema.Struct.Fields };
+type Journal<S extends Kept> = Schema.Codec<S, unknown> & {
+  readonly fields: { readonly [x: PropertyKey]: Schema.ConstraintCodec<unknown, unknown> };
+};
 
 type Store<S extends Kept> = {
   readonly load: Effect.Effect<S | null, LedgerError>;

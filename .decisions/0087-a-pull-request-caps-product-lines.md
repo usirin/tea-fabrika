@@ -1,7 +1,7 @@
 ---
 id: 0087
 title: A pull request changes at most 600 lines of product code, a repo setting, and bigger work is a stack of slices cut at plan time, as a trial that advises until it is replayed
-status: accepted
+status: amended-in-part by [0099](0099-no-number-caps-a-pull-request.md)
 date: 2026-11-10
 tags: [size, review, plan, stack, slice, settings, attention, trial, next]
 ---

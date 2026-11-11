@@ -1,12 +1,52 @@
+// Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
+// over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
+import { join } from "node:path";
 import * as fc from "fast-check";
+import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { noNodeFilesystem } from "./no-node-filesystem.ts";
+import { noNodeImports } from "./no-node-imports.ts";
 
 const CODE = "fabrika(no-node-imports)";
 
+// RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+// From the top of the repo, so the rule reads each path as oxlint gives it there.
+const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
+
+/** One case: a file at a path from the top of the repo, and the lines the rule fires on. */
+type Case = { readonly text: string; readonly lines: readonly number[] };
+
+/** In process, RuleTester: the file fires on exactly these lines, or on none. */
+const check = (filename: string, { text: code, lines }: Case) => {
+  tester.run("no-node-imports", noNodeImports, {
+    valid: lines.length === 0 ? [{ code, filename }] : [],
+    invalid:
+      lines.length === 0
+        ? []
+        : [{ code, filename, errors: lines.map((line) => ({ line, message: /Native imports in next\/ need/ })) }],
+  });
+};
+
+/** One oxlint run over every case's files, through the repo's own config. */
+const cli = async (cases: ReadonlyMap<string, Case>) => {
+  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
+  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
+    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  );
+  return result;
+};
+
+/** The path the one oxlint run reads run `n`'s file at: its name gets the number, its folder stays. */
+const numbered = (path: string, n: number) => path.replace(/native/, `native${n}`);
+
 it("every native import form needs a nonempty reason on its own line, in product and exam code", async () => {
-  await fc.assert(
-    fc.asyncProperty(
+  let n = 0;
+  const cases = new Map<string, Case>();
+  fc.assert(
+    fc.property(
       fc.constantFrom(
         "fs",
         "fs/promises",
@@ -23,7 +63,7 @@ it("every native import form needs a nonempty reason on its own line, in product
       ),
       fc.boolean(),
       fc.uuid(),
-      async (name, prefix, reason) => {
+      (name, prefix, reason) => {
         const module = `${prefix ? "node:" : ""}${name}`;
         // Node's prefix-only modules are not bare builtins.
         const native = prefix || !["test", "sqlite"].includes(name);
@@ -77,25 +117,30 @@ it("every native import form needs a nonempty reason on its own line, in product
           line += 7;
         }
 
-        const result = await plant(Object.fromEntries(paths.map((path) => [path, body])));
-
         for (const [i, path] of paths.entries()) {
-          expect(result(CODE, path)).toEqual(native && i < 3 ? expected : []);
+          const one = { text: body, lines: native && i < 3 ? expected : [] };
+          check(path, one);
+          cases.set(numbered(path, n), one);
         }
+
+        n++;
       },
     ),
     { seed: 119120, numRuns: 12 },
   );
+  await cli(cases);
 });
 
 it("multiline imports use the module string's line; strings and neighboring marks grant nothing", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uuid(), async (reason) => {
+  let n = 0;
+  const cases = new Map<string, Case>();
+  const products: string[] = [];
+  fc.assert(
+    fc.property(fc.uuid(), (reason) => {
       const path = "next/apps/fabrika/src/exam/native.ts";
       const product = "next/packages/libfabrika/src/native.ts";
-      const result = await plant({
-        [product]: `import {readFile} from "node:fs"; // edge: ${reason}`,
-        [path]: [
+      const exam = {
+        text: [
           `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
           `import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
           `const fake = "// edge: ${reason}"; const a = require("node:fs");`,
@@ -103,11 +148,25 @@ it("multiline imports use the module string's line; strings and neighboring mark
           'import a from "some-package";',
           'import b from "./fs.ts";',
         ].join("\n"),
+        lines: [6, 7],
+      };
+      const blessed = { text: `import {readFile} from "node:fs"; // edge: ${reason}`, lines: [] };
+      check(path, exam);
+      check(product, blessed);
+      tester.run("no-node-filesystem", noNodeFilesystem, {
+        valid: [{ code: blessed.text, filename: product }],
+        invalid: [],
       });
-      expect(result(CODE, path)).toEqual([6, 7]);
-      expect(result(CODE, product)).toEqual([]);
-      expect(result("fabrika(no-node-filesystem)", product)).toEqual([]);
+      cases.set(numbered(path, n), exam);
+      cases.set(numbered(product, n), blessed);
+      products.push(numbered(product, n));
+      n++;
     }),
     { seed: 119120, numRuns: 5 },
   );
+  const result = await cli(cases);
+
+  for (const product of products) {
+    expect(result("fabrika(no-node-filesystem)", product)).toEqual([]);
+  }
 });

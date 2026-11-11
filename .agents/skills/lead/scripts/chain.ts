@@ -22,13 +22,18 @@
 //                      the lane to build with the command's last lines, no section is a skip
 //   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
+//   typechecking Act   one `pnpm typecheck` of the reviewed head merged with origin/main, on the
+//                      laptop (./flow/typecheck.ts): red sends the lane back with the error lines,
+//                      to tests when every error is in an exam path, else to build, counted as a
+//                      send back (0076); one that cannot run goes on, and the last line says why
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
 //   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
 //                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
 //   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> open -> loosen -> land. Every
+// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> (typecheck) -> open ->
+// loosen -> land. Every
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A lane runs no
 // mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
@@ -40,8 +45,8 @@
 // Effect Schedule (`slotSchedule`); any other refusal parks. Every limit is a Context.Reference with
 // an overridable default (the defaults: a step retried every 5 minutes, 6 times; 3 stucks in a row
 // on one step; 16 steps a lane with no backstop; 20 minutes a host command), and
-// `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS`, `CHAIN_STEPS` and `CHAIN_HOST_MINUTES`
-// override them from outside. Running out of retries is a typed
+// `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS`, `CHAIN_STEPS`, `CHAIN_HOST_MINUTES` and
+// `CHAIN_TYPECHECK_MINUTES` override them from outside. Running out of retries is a typed
 // `RetriesExhausted`, reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0
 // landed, 20 parked (ask), 30 stuck, 2 usage.
 //
@@ -107,7 +112,8 @@ import {
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
-import { wipOf } from "./lane.ts";
+import * as Typecheck from "./flow/typecheck.ts";
+import { stepOf, wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
 /** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
@@ -137,6 +143,11 @@ export const IntensityWithin = Context.Reference<number>("chain/IntensityWithin"
 export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { defaultValue: () => 2 });
 /** Minutes each host command may run (./flow/host.ts says where the default comes from). */
 export const HostMinutes = Context.Reference<number>("chain/HostMinutes", { defaultValue: () => Host.MINUTES });
+
+/** Minutes the typecheck may wait for another, and each of its install and check may run. */
+export const TypecheckMinutes = Context.Reference<number>("chain/TypecheckMinutes", {
+  defaultValue: () => Typecheck.MINUTES,
+});
 
 /** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
 export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
@@ -256,7 +267,9 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
     }
     case "send":
       if (isLaneStep(to)) {
-        return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
+        // A step that sends the lane to itself is not done and not a send: another round of it
+        // only loops (2026-11-11), so judgment reads why, and sends it on or parks it.
+        return to === step ? toJudge : toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
       // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
@@ -373,9 +386,40 @@ export type Facts = {
   readonly head: string;
   readonly round: number;
   readonly heads: Partial<Record<StepName, string>>;
+  /** Every commit on the lane since its root, oldest first, with the step its note names; `null`
+   * when git could not list them. */
+  readonly commits: ReadonlyArray<StepCommit> | null;
   readonly note: string;
   /** The last host step's outcome and head, for a review; `null` for any other step. */
   readonly host: string | null;
+};
+
+/** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
+export type StepCommit = { readonly step: string; readonly sha: string };
+
+/**
+ * What the lane has committed, by step, in short shas. Heads fill only on a done, so a step that
+ * committed and then sent the lane on still shows here (2026-11-11: a lane read "No step has
+ * committed yet." over three partial commits).
+ */
+export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string => {
+  if (commits === null) {
+    return "The lane's step commits could not be read (git rev-list failed).";
+  }
+
+  if (commits.length === 0) {
+    return "No step has committed yet.";
+  }
+
+  const steps = [...new Set(commits.map((c) => c.step))];
+  const by = steps.map(
+    (s) =>
+      `${s} ${commits
+        .filter((c) => c.step === s)
+        .map((c) => c.sha.slice(0, 8))
+        .join(" ")}`,
+  );
+  return `Step commits since the lane left main, oldest first: ${by.join("; ")}.`;
 };
 
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
@@ -389,7 +433,8 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     "---",
     `Lane facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the lane left main at ${short(f.root)}.`,
-    heads.length > 0 ? `Heads so far: ${heads.join(", ")}.` : "No step has committed yet.",
+    committedLine(f.commits),
+    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
     ...(f.note ? [`Last round: ${f.note}`] : []),
   ];
 
@@ -593,7 +638,15 @@ const hostRun = Cmd.make("host_run", {
   err: ["unknown"],
 });
 
+/** The host typecheck of the reviewed head merged with origin/main, before the PR opens. */
+const typecheckRun = Cmd.make("typecheck_run", {
+  input: Schema.Struct({ head: Schema.String }),
+  ok: Typecheck.Verdict,
+  err: ["unknown"],
+});
+
 type Cmds =
+  | ReturnType<typeof typecheckRun>
   | ReturnType<typeof stepRun>
   | ReturnType<typeof judge>
   | ReturnType<typeof prOpen>
@@ -633,6 +686,8 @@ type Lane = {
   readonly window: readonly Mark[];
   /** List-price dollars this chain spent, steps and judgments. */
   readonly dollars: number;
+  /** Why the last host typecheck did not run; `null` when it ran, or has not been reached. */
+  readonly unchecked: string | null;
 };
 
 /**
@@ -656,6 +711,7 @@ type Model =
     }
   | { readonly phase: "hosting"; readonly lane: Lane; readonly note: string }
   | { readonly phase: "judging"; readonly lane: Lane; readonly step: StepName; readonly line: Line }
+  | { readonly phase: "typechecking"; readonly lane: Lane }
   | { readonly phase: "opening"; readonly lane: Lane }
   | { readonly phase: "loosening"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "landing"; readonly lane: Lane; readonly pr: number }
@@ -733,8 +789,9 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits
         ? stopped(lane, backstop)
         : [{ phase: "judging", lane, step, line }, [judge({ step, line, round: lane.round })]];
     }
+    // The host typecheck comes first: the boxes run none.
     case "open":
-      return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+      return [{ phase: "typechecking", lane }, [typecheckRun({ head: lane.head })]];
     default:
       return over(lane, { kind: "ask", reason: move.reason });
   }
@@ -743,9 +800,12 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits
 export const makeMachine = (limits: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
-    cmds: [stepRun, judge, prOpen, loosen, land, hostRun],
+    cmds: [stepRun, judge, typecheckRun, prOpen, loosen, land, hostRun],
     init: (): Step => [
-      { phase: "idle", lane: { round: 0, head: "", hosted: null, heads: {}, stucks: 0, window: [], dollars: 0 } },
+      {
+        phase: "idle",
+        lane: { round: 0, head: "", hosted: null, heads: {}, stucks: 0, window: [], dollars: 0, unchecked: null },
+      },
       [],
     ],
     update: {
@@ -839,6 +899,41 @@ export const makeMachine = (limits: Limits) =>
               reason: `${s.step} ${s.line.outcome}: ${s.line.reason} (the judgment agent failed)`,
             })
           : stay(s),
+      // Green opens the PR. Red is a send back (0076): its mark joins the window, and the step it
+      // names gets the error lines. One that could not run opens the PR and keeps why it did not.
+      typecheck_run_ok: (s, m): Step => {
+        if (s.phase !== "typechecking") {
+          return stay(s);
+        }
+
+        const verdict = m.value;
+
+        if (verdict._tag !== "red") {
+          const unchecked = verdict._tag === "skipped" ? verdict.reason : null;
+          const lane: Lane = { ...s.lane, unchecked };
+          return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+        }
+
+        const window = [...s.lane.window, "send" as const].slice(-limits.intensity.within);
+        const lane: Lane = { ...s.lane, window, unchecked: null };
+        const intensity = intensityStop(lane, limits.intensity);
+
+        if (intensity !== null) {
+          return stopped(lane, intensity);
+        }
+
+        const at = `${lane.head.slice(0, 8)} merged with origin/main`;
+        const said = `the host typecheck of ${at} answered send:${verdict.to}`;
+        return next(lane, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
+      },
+      typecheck_run_err: (s): Step => {
+        if (s.phase !== "typechecking") {
+          return stay(s);
+        }
+
+        const lane: Lane = { ...s.lane, unchecked: "the typecheck threw" };
+        return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+      },
       pr_open_ok: (s, m): Step => {
         if (s.phase !== "opening") {
           return stay(s);
@@ -954,7 +1049,14 @@ or review) and a note of one or two sentences for that step, or answer "park" wi
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
-person is involved, or the same step already failed the same way.
+person is involved, or the same step already failed the same way.${
+  line.outcome.startsWith(`send:${step}:`)
+    ? `
+The ${step} step sent the lane to itself, which chain.ts never runs as one more round. When what it
+lists as left needs another step's code, a typecheck or --changed, send the next step with that
+list in the note. Park when the step itself is not done.`
+    : ""
+}
 
 ---
 The lane's state file, its last lines:
@@ -1061,6 +1163,23 @@ const handlers = (s: Setup) => {
 
     return heads;
   };
+  /** The lane's commits from its root to its head, oldest first, each with its note's step. */
+  const laneCommits = (root: string, head: string): StepCommit[] | null => {
+    if (root === "" || head === "") {
+      return [];
+    }
+
+    const listed = sh("git", ["-C", env.MAIN, "rev-list", "--reverse", `${root}..${head}`]);
+    return listed.code !== 0
+      ? null
+      : listed.out
+          .split("\n")
+          .filter(Boolean)
+          .map((sha) => {
+            const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+            return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
+          });
+  };
   return {
     step_run: (cmd: typeof Run.Type) =>
       Effect.gen(function* () {
@@ -1074,6 +1193,7 @@ const handlers = (s: Setup) => {
           head: lane.head ?? "",
           round,
           heads: headsOf(),
+          commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
           host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
         };
@@ -1252,6 +1372,16 @@ const handlers = (s: Setup) => {
 
         return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
+    typecheck_run: (cmd: { head: string }) =>
+      Effect.gen(function* () {
+        const head = cmd.head || (saved().head ?? "");
+        note(`typecheck: \`pnpm typecheck\` of ${head.slice(0, 8)} merged with origin/main`);
+        const minutes = yield* TypecheckMinutes;
+        const { MAIN: main, BOXES: boxes } = env;
+        const verdict = yield* Typecheck.run({ main, boxes, lane: s.lane, head, minutes });
+        note(`typecheck: ${Typecheck.summary(verdict)}`);
+        return verdict;
+      }).pipe(Effect.provide(NodeServices.layer)),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("pr", null);
@@ -1570,7 +1700,7 @@ export const chainMain = (args: string[], env: Env) =>
       backstop,
     };
     const machine = makeMachine(limits);
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const handle = yield* run(machine, {
       ctx: undefined,
       interpret: handlers({ ...setup, agents }),
@@ -1604,6 +1734,8 @@ export const chainMain = (args: string[], env: Env) =>
         reason: end.end.reason,
         dollars: Math.round(end.lane.dollars * 100) / 100,
         ...(stop === undefined ? {} : { stop }),
+        // Never a silent skip: a typecheck that did not run says so on the last line.
+        ...(end.lane.unchecked === null ? {} : { typecheck: `did not run: ${end.lane.unchecked}` }),
         exit: exitOf(end.end),
       }),
     );
@@ -1663,6 +1795,7 @@ const main = () => {
       overridden(IntensityWithin, "CHAIN_WITHIN"),
       overridden(BackstopTimes, "CHAIN_BACKSTOP"),
       overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
+      overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
     ),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));

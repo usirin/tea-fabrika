@@ -8,7 +8,7 @@
 // commits, signing, pushes and rows stay with the caller
 // (.decisions/0028-the-parent-holds-every-right.md).
 //
-//   const agents = yield* makeStepAgents();            // the provider table, once per process
+//   const agents = yield* makeStepAgents(sessions, main); // the provider table, once per process
 //   const turned = yield* runTurn(agents, {provider: "codex", folder: box, prompt, answer: Answer, ...});
 //   // every update as one JSON line in `events`, the last message in `report`, the typed answer back
 //
@@ -22,9 +22,21 @@ import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import { boxEnv } from "./boxnode.ts";
 
 export const PROVIDERS = ["codex", "codex-read", "claude"] as const;
 export type Provider = (typeof PROVIDERS)[number];
+
+/**
+ * One break a step planted once and undid (.decisions/0093): the law, what it broke (file:line and
+ * how), and `red` when the law failed on it, `green` when the law did not catch it.
+ */
+export const Plant = Schema.Struct({
+  law: Schema.String,
+  plant: Schema.String,
+  result: Schema.Literals(["red", "green"]),
+});
+export type Plant = typeof Plant.Type;
 
 /** The step's typed answer: the five verbs, as one JSON object at the end of its report. */
 export const Answer = Schema.Struct({
@@ -34,8 +46,18 @@ export const Answer = Schema.Struct({
   reason: Schema.String,
   /** A build that needed no commit names the laws it ran green; `null` otherwise. */
   laws: Schema.NullOr(Schema.String),
+  /** Each plant the step ran once, for its field row (0093): the tests step names one per new law. */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 export type Answer = typeof Answer.Type;
+
+/** Where a step may send the lane: any step but itself. A step that needs another round of itself
+ * is not done yet, and a send to itself only loops (2026-11-11, a tests step on Codex). */
+export const sendsFrom = (step: string) => (["tests", "build", "plan"] as const).filter((to) => to !== step);
+
+/** The typed answer one step is offered: `Answer`, with `to` naming only `sendsFrom(step)`. */
+export const answerFor = (step: string) =>
+  Schema.Struct({ ...Answer.fields, to: Schema.NullOr(Schema.Literals(sendsFrom(step))) });
 
 /**
  * The judgment agent's answer: send a lane step again with a note, or park the lane for the lead.
@@ -177,15 +199,19 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
     }
   }).pipe(Effect.provide(nodeServices));
 
-/** The provider table on the ACP rows, the session map and the reaper. One per process. */
-export const makeStepAgents = (sessionsDir: string) =>
+/**
+ * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
+ * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first.
+ */
+export const makeStepAgents = (sessionsDir: string, main: string) =>
   Effect.gen(function* () {
     yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
+    const env = yield* boxEnv(main, process.env);
     const adapters = {
-      codex: yield* acpAdapter({ name: "codex", access: "write" }),
-      "codex-read": yield* acpAdapter({ name: "codex", access: "read" }),
-      claude: yield* acpAdapter("claude"),
+      codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
+      "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
+      claude: yield* acpAdapter("claude", env),
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
   }).pipe(Effect.provide(nodeServices));
@@ -303,6 +329,8 @@ export interface RowAsk {
   readonly spent: Spent;
   /** Lines `redact.sh` scrubbed from the saved files, when it ran. */
   readonly redacted: number | null;
+  /** The plants the step's answer named (0093); left off the row when it named none. */
+  readonly plants?: ReadonlyArray<Plant> | undefined;
 }
 
 /** The turn's list-price dollars: Claude's SDK says its own; a Codex row is priced by the table. */
@@ -355,6 +383,7 @@ const FieldRow = Schema.Struct({
   step: Schema.String,
   billing: Schema.optionalKey(Schema.Literal("subscription")),
   redacted: Schema.optionalKey(Schema.Number),
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 }).pipe(Schema.encodeKeys({ reason: "why" }));
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(FieldRow));
@@ -407,6 +436,7 @@ export const stepRow = (r: RowAsk): string => {
     step: r.step,
     ...(r.provider === "claude" ? {} : { billing: "subscription" as const }),
     ...(r.redacted === null ? {} : { redacted: r.redacted }),
+    ...(r.plants === undefined ? {} : { plants: r.plants }),
   })}\n`;
 };
 
