@@ -5,7 +5,11 @@ import { Console, Effect, FileSystem, Path, Schema } from "effect";
 
 export { check, compile, Row, type Finding } from "@kampus/libfabrika/compiler";
 
-class Unread extends Schema.TaggedError<Unread>()("Unread", { path: Schema.String }) {}
+class Unread extends Schema.TaggedError<Unread>()("Unread", {
+  path: Schema.String,
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
 class Refused extends Schema.TaggedError<Refused>()("Refused", { findings: Schema.Number }) {}
 
 /** `pnpm lint:compiler`: every `.tsx` file in `next/`, tests left out, against the ledger. */
@@ -14,7 +18,7 @@ const lint = Effect.gen(function* () {
   const path = yield* Path.Path;
   const root = path.resolve(import.meta.dirname, "../../../../..");
   const read = (file: string) =>
-    fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => new Unread({ path: file })));
+    fs.readFileString(path.join(root, file)).pipe(Effect.mapError((cause) => new Unread({ path: file, cause })));
   const ledger = yield* read("compiler-ledger.json").pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
   );

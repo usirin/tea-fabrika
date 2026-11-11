@@ -19,7 +19,7 @@ export const recordCall = Effect.fnUntraced(function* (invoke: () => Promise<unk
     // Mapping every reach failure to unreachable still fails the bad_row law.
     Effect.catch((error) =>
       error.reason === "unreachable" || error.reason === "bad_row" || error.reason === "storage"
-        ? Effect.fail(new SinkError({ reason: error.reason, held: 0 }))
+        ? Effect.fail(new SinkError({ reason: error.reason, held: 0, cause: error }))
         : Effect.die(error),
     ),
   );
