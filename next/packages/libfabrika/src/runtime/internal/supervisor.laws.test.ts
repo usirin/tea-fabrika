@@ -669,6 +669,135 @@ describe("P34c slice 2: one saved recovery journal", () => {
     }
   });
 
+  // J8 / p80, the brake's reach, kept from P34: every accepted policy, delivery limits 1 to 32 and
+  // intensity to 44, trips its brake on crash intensity + 1 and never before. Each cycle's moves are
+  // chosen from the journal it is in; the tape picks the letter, the time alive and the error class.
+  // Plant: an unreachable brake, or a down before the window is full.
+  it("J8: every generated policy trips its brake at crash intensity + 1, and a letter goes dead at its limit", () => {
+    const G = 50;
+    const Cycle = fc.record({
+      // Mostly a held letter, so high delivery limits are reached too.
+      reuse: fc.integer({ min: 0, max: 7 }).map((n) => n > 0),
+      pick: fc.noBias(fc.nat()),
+      alive: fc.integer({ min: 0, max: G }),
+      late: fc.integer({ min: 0, max: G }),
+      error: fcErrorClass.filter((e) => e.length <= 40),
+    });
+    const cases = fc
+      .record({
+        deliveries: fc.integer({ min: 1, max: 32 }),
+        extra: fc.integer({ min: 1, max: 12 }),
+        minMs: fc.integer({ min: 1, max: 200 }),
+        spread: fc.integer({ min: 0, max: 800 }),
+        slack: fc.integer({ min: 0, max: 3000 }),
+      })
+      .chain(({ deliveries, extra, minMs, spread, slack }) => {
+        const intensity = deliveries + extra;
+        const maxMs = minMs + spread;
+        let total = 0;
+
+        // Every wait up to the tripping crash, and the most time the tape spends alive or late,
+        // fit in one window, so the brake must trip on crash intensity + 1.
+        for (let n = 0; n <= intensity; n++) {
+          total += Math.min(minMs * 2 ** n, maxMs);
+        }
+
+        const accepted = Schema.decodeUnknownSync(Policy)({
+          maxDeliveries: deliveries,
+          intensity,
+          periodMs: total + 2 * intensity * G + 1 + slack,
+          backoff: { minMs, maxMs, resetAfterMs: 1_000_000_000 },
+        });
+        return fc.tuple(fc.constant(accepted), fc.array(Cycle, { minLength: intensity + 1, maxLength: intensity + 1 }));
+      });
+    const seen = new Set<string>();
+
+    fc.assert(
+      fc.property(cases, ([p, cycles]) => {
+        let model = supervisor.init(null, ctx(p))[0];
+        let at = 0;
+        let pids = 0;
+        let crashes = 0;
+        const restarts: Array<number> = [];
+        const tries = new Map<string, number>();
+        const send = (msg: Msg): Model => {
+          const after = step(model, msg);
+          expect(after, `${msg.type} from ${model.journal._tag} moved the journal`).not.toEqual(model);
+          model = after;
+          return after;
+        };
+
+        for (const cycle of cycles) {
+          // From idle: a letter the fold still holds open, or a new one.
+          const open = [...tries].filter(([, n]) => n < p.maxDeliveries).map(([letter]) => letter);
+          const letter = cycle.reuse && open.length > 0 ? open[cycle.pick % open.length]! : `letter-${tries.size + 1}`;
+          expect(model.journal._tag).toBe("idle");
+          const process = model.journal._tag === "idle" ? model.journal.process : A;
+
+          if (!tries.has(letter)) {
+            send({ type: "received", receipt: receiptFor(letter, process) });
+            tries.set(letter, 0);
+          }
+
+          at += cycle.alive;
+          send({ type: "begin", process, letter, build: model.build, phase: "fresh", at });
+          const seq = model.seq;
+          send({ type: "threw", seq, error: cycle.error, reason: reasonFor("fresh", cycle.error), from: from() });
+          crashes++;
+          tries.set(letter, tries.get(letter)! + 1);
+
+          if (tries.get(letter) === p.maxDeliveries) {
+            expect(model.journal, `letter ${letter} goes dead on try ${p.maxDeliveries}`).toMatchObject({
+              _tag: "writing_dead",
+            });
+            seen.add(`dead:${p.maxDeliveries}`);
+            send({ type: "dead_written", seq });
+          }
+
+          expect(model.journal._tag).toBe("writing_exit");
+          send({ type: "exit_written", process, restarts: [...restarts], at, program: PROGRAM });
+          const earliest = at + Math.min(p.backoff.minMs * 2 ** (crashes - 1), p.backoff.maxMs);
+
+          if (crashes === p.intensity + 1) {
+            // Down holds until the first restart of the full window leaves it, past the window itself.
+            const until = Math.max(earliest, restarts[0]! + p.periodMs + 1);
+            expect(until).toBeGreaterThan(p.periodMs);
+            expect(model.journal, `crash ${crashes} trips the brake`).toMatchObject({
+              _tag: "writing_down",
+              recovery: { process, crashes, until },
+            });
+            seen.add(`brake:${p.intensity}`);
+            return;
+          }
+
+          const j = model.journal;
+          expect(j, `crash ${crashes} of ${p.intensity} restarts`).toMatchObject({
+            _tag: "waiting_start",
+            timing: { _tag: "scheduled", until: earliest },
+          });
+
+          if (j._tag !== "waiting_start" || j.timing._tag !== "scheduled") {
+            return;
+          }
+
+          at = j.timing.until + cycle.late;
+          pids++;
+          send({ type: "started", id: j.request.id, process: pid(pids), at });
+          restarts.push(at);
+          send({ type: "checkpointed", after: process, process: pid(pids), restarts: [...restarts], at });
+        }
+
+        expect.unreachable(`the tape of ${cycles.length} crashes ended before the brake`);
+      }),
+      { seed: SEED, numRuns: RUNS },
+    );
+
+    const brakes = [...seen].filter((s) => s.startsWith("brake:")).map((s) => Number(s.slice(6)));
+    const deads = [...seen].filter((s) => s.startsWith("dead:")).map((s) => Number(s.slice(5)));
+    expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
+    expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);
+  });
+
   // J10. A stale or duplicate completion cannot advance another operation.
   // Plant: apply a completion without checking its identity.
   it("J10: a completion of earlier work, replayed against the current journal, changes nothing", () => {
