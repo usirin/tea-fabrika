@@ -24,10 +24,14 @@ type Steps = {
   readonly init: Code<[loaded: unknown, ctx: unknown], readonly [unknown, ReadonlyArray<unknown>]>;
 };
 
+/** `typeof` says "object": null too, but no function. The null check is a second read, as it was. */
+const isObjectOrNull = (u: unknown): u is object | null => Predicate.isObjectOrArray(u) || Predicate.isNull(u);
+
 const isSteps = (u: unknown): u is Steps =>
   Predicate.isObjectOrArray(u) &&
   Predicate.hasProperty(u, "update") &&
-  Predicate.isObjectOrArray(u.update) &&
+  isObjectOrNull(u.update) &&
+  Predicate.isNotNull(u.update) &&
   Predicate.hasProperty(u, "init") &&
   Predicate.isFunction(u.init);
 
