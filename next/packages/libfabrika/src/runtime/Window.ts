@@ -31,11 +31,12 @@ export type WindowRegistration<P extends AnyProgram, View = unknown> = {
   readonly keys: Readonly<Partial<Record<WindowCommand<P>, ReadonlyArray<string>>>>;
 };
 
-/** Checks a window against its program at compile time, and hands the registration back. */
-export const defineWindow = <P extends AnyProgram, View, const R extends WindowRegistration<P, View>>(
+/** Checks a window against its program at compile time, and hands the registration back. The
+ *  registration is typed as the contract itself, not inferred, so a key row the program lacks is refused. */
+export const defineWindow = <P extends AnyProgram, View>(
   _program: P,
-  registration: R & WindowRegistration<P, View>,
-): R => registration;
+  registration: WindowRegistration<P, View>,
+): WindowRegistration<P, View> => registration;
 
 /** The Msg a key command sends: the input named after the program's dot, with no fields. */
 export const commandMsg = (command: string): { readonly type: string } | null => {
