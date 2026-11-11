@@ -8,18 +8,16 @@
 //   replay reads that saved value back, never the files as they are now.
 // - dev.ts takes the port as `--instance.port` (settings.md S5's words), keeps the founding flags
 //   it has, listens on that port, and stops naming `instance.port` when the port is taken.
-import { type ChildProcess, spawn } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Effect, Exit, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import { heldPort } from "./port.test-support.ts";
 
@@ -177,24 +175,8 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
 });
 
 // Real processes, as stage-wire.test.ts starts them: workerd, sockets and a fresh FABRIKA_HOME.
-const APP = resolve(import.meta.dirname, "..");
-const children: Array<ChildProcess> = [];
-const homes: Array<string> = [];
-const releases: Array<Effect.Effect<void>> = [];
-
-afterEach(async () => {
-  for (const child of children.splice(0)) {
-    child.kill("SIGTERM");
-  }
-
-  for (const folder of homes.splice(0)) {
-    rmSync(folder, { recursive: true, force: true });
-  }
-
-  for (const release of releases.splice(0)) {
-    await Effect.runPromise(release);
-  }
-});
+// Each one, its home and its held port are acquired in the test's scope, which gives them back
+// (decision 0061).
 
 const founding = () => {
   const { publicKey } = generateKeyPairSync("ed25519");
@@ -204,19 +186,20 @@ const founding = () => {
   return { line: `ssh-ed25519 ${blob.toString("base64")}`, raw: raw.toString("base64url") };
 };
 
-const dev = (port: number, extra: NodeJS.ProcessEnv = {}) => {
-  const folder = mkdtempSync(join(tmpdir(), "t664-dev-"));
-  homes.push(folder);
+/** A port nobody else is given while the scope is open. */
+const held = Effect.acquireRelease(heldPort(), (h) => h.release);
+
+/** One dev.ts in its own scoped home, its output collected as it comes. Scope close kills it. */
+const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<string, string>>) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t664-dev-" });
+  const app = path.resolve(import.meta.dirname, "..");
   const key = founding();
-  const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1", ...extra };
-  delete env.TYPESAFE_API_KEY;
-  delete env.FABRIKA_FOREGROUND;
-  delete env.CLOUDFLARE_API_TOKEN;
-  delete env.FABRIKA_INSTANCE_PORT;
-  const child = spawn(
+  const child = yield* ChildProcess.make(
     process.execPath,
     [
-      join(APP, "dev.ts"),
+      path.join(app, "dev.ts"),
       "--instance.port",
       String(port),
       "--name",
@@ -228,52 +211,64 @@ const dev = (port: number, extra: NodeJS.ProcessEnv = {}) => {
       "--window",
       key.raw,
     ],
-    { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      cwd: app,
+      extendEnv: true,
+      env: {
+        FABRIKA_HOME: folder,
+        DO_NOT_TRACK: "1",
+        TYPESAFE_API_KEY: undefined,
+        FABRIKA_FOREGROUND: undefined,
+        CLOUDFLARE_API_TOKEN: undefined,
+        FABRIKA_INSTANCE_PORT: undefined,
+        ...extra,
+      },
+      forceKillAfter: "3 seconds",
+    },
   );
-  children.push(child);
-  let output = "";
-  child.stdout!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
-  child.stderr!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
-  const exited = new Promise<number | null>((done) => child.once("exit", (code) => done(code)));
-  return { child, output: () => output, exited };
-};
-
-const pause = () => new Promise((done) => setTimeout(done, 100));
+  const output = yield* Ref.make("");
+  yield* child.all.pipe(
+    Stream.decodeText(),
+    Stream.runForEach((text) => Ref.update(output, (o) => o + text)),
+    Effect.forkScoped,
+  );
+  return { child, output: Ref.get(output) };
+});
 
 describe("L12, startup uses the selected port, and a taken port stops naming instance.port", () => {
-  it("scenario: one instance on an explicit port, then a second on the same port", async () => {
+  it.live("scenario: one instance on an explicit port, then a second on the same port", () =>
     // scenario: Alchemy's strict port and the kernel's port table are what is under test, so the
     // processes and ports are real ones (plan L12). A secret in an unrelated env field rides along
     // for L14: no printed line may hold it.
-    const held = await Effect.runPromise(heldPort());
-    releases.push(held.release);
-    const word = "sk-T664unrelated/+&secret";
-    const first = dev(held.port, { UNRELATED_TOKEN: word });
-    const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${held.port}`)},"build":`;
+    Effect.gen(function* () {
+      const { port } = yield* held;
+      const word = "sk-T664unrelated/+&secret";
+      const first = yield* dev(port, { UNRELATED_TOKEN: word });
+      const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${port}`)},"build":`;
 
-    for (let n = 0; !first.output().includes(ready); n++) {
-      expect(first.child.exitCode, `dev.ts stopped: ${first.output()}`).toBeNull();
-      expect(n, `no ready line on port ${held.port}: ${first.output()}`).toBeLessThan(1200);
-      await pause();
-    }
-
-    expect((await fetch(`http://127.0.0.1:${held.port}`)).ok).toBe(true);
-
-    const second = dev(held.port, { UNRELATED_TOKEN: word });
-    const code = await second.exited;
-    expect(code).not.toBe(0);
-    expect(second.output()).toContain("instance.port");
-    // It never takes another port in its place.
-    expect(second.output()).not.toContain('{"ready":');
-
-    for (const output of [first.output(), second.output()]) {
-      for (const form of forms(word)) {
-        expect(output).not.toContain(form);
+      for (let n = 0; !(yield* first.output).includes(ready); n++) {
+        expect(yield* first.child.isRunning, `dev.ts stopped: ${yield* first.output}`).toBe(true);
+        expect(n, `no ready line on port ${port}: ${yield* first.output}`).toBeLessThan(1200);
+        yield* Effect.sleep("100 millis");
       }
-    }
-  });
+
+      const answer = yield* HttpClient.get(`http://127.0.0.1:${port}`);
+      expect(answer.status).toBe(200);
+
+      const second = yield* dev(port, { UNRELATED_TOKEN: word });
+      expect(yield* second.child.exitCode).not.toBe(0);
+      // The output stream may still be draining after the exit.
+      yield* Effect.sleep("200 millis");
+      const said = yield* second.output;
+      expect(said).toContain("instance.port");
+      // It never takes another port in its place.
+      expect(said).not.toContain('{"ready":');
+
+      for (const output of [yield* first.output, said]) {
+        for (const form of forms(word)) {
+          expect(output).not.toContain(form);
+        }
+      }
+    }).pipe(Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
+  );
 });

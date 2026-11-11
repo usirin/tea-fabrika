@@ -206,8 +206,15 @@ vi.mock("./exam/compiler.ts", async (original) => ({
   check: () => [],
 }));
 
+// The stage records each start's options, so a law sees the port it was started with.
+const stages = vi.hoisted(() => [] as Array<{ readonly port: number }>);
+
 vi.mock("./local-stage.ts", () => ({
-  localStage: () => Effect.fail({ reason: "test_stage_ready" }),
+  localStage: (_built: unknown, options: { readonly port: number }) =>
+    Effect.suspend(() => {
+      stages.push(options);
+      return Effect.fail({ reason: "test_stage_ready" });
+    }),
 }));
 
 const root = resolve(import.meta.dirname, "../../../..");
@@ -220,7 +227,7 @@ const generated = fc.record({
 
 const boundary = { name: "saved-home", label: "first build", port: 18787 };
 
-const recorded = (folder: string, source: string, text: string, failPublish: boolean) => {
+const recorded = (folder: string, source: string, text: string, failPublish: boolean, unreadable?: string) => {
   const out = join(folder, "build"),
     pending = join(folder, ".fabrika-build-test"),
     backup = `${pending}.old`;
@@ -253,9 +260,18 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     exists: (path) =>
       Effect.sync(() => files.has(path) || [...files.keys()].some((file) => file.startsWith(`${path}/`))),
     readFileString: (path) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         note("read", path);
-        return files.get(path) ?? "";
+        return path === unreadable
+          ? Effect.fail(
+              PlatformError.systemError({
+                module: "FileSystem",
+                method: "readFileString",
+                _tag: "PermissionDenied",
+                pathOrDescriptor: path,
+              }),
+            )
+          : Effect.succeed(files.get(path) ?? "");
       }),
     makeDirectory: (path) =>
       Effect.sync(() => {
@@ -387,12 +403,13 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
           file = join(folder, "stage.json"),
           source = join(folder, "view.tsx");
+        // T664: a port saved by an older start is never a source, so it differs from the default.
         const saved = {
           name: "saved-project",
           person: "person-test",
           founder: "public-test",
           window: choices.savedWindow,
-          port: 18787,
+          port: 18799,
           build: "old",
         };
         const w = recorded(folder, source, "export const view = 1;", false);
@@ -404,8 +421,10 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         writeFileSync(source, "export const view = 1;");
         const argv = process.argv;
         vi.stubEnv("FABRIKA_HOME", folder);
+        vi.stubEnv("FABRIKA_INSTANCE_PORT", undefined);
         cli.layer = w.layer;
         cli.work = undefined;
+        stages.length = 0;
         const overrides = {
           name,
           person: `person-${name}`,
@@ -438,11 +457,16 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             value: { reason: "test_stage_ready" },
           });
           const calls = w.calls.filter(([, path]) => path === folder || path === file);
+          // T664: the port is a setting now, so it leaves the saved state and goes to the stage.
+          const { port: _flag, ...founding } = Object.fromEntries(selected);
+          const { port: _saved, ...kept } = saved;
+          const { port: _override, ...named } = overrides;
           const expected = {
-            ...(choices.saved ? saved : { ...overrides, window: null, port: 18787 }),
-            ...Object.fromEntries(selected),
+            ...(choices.saved ? kept : { ...named, window: null }),
+            ...founding,
             build: "pending",
           };
+          expect(stages.map((stage) => stage.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
             ...(choices.saved ? [["read", file]] : []),
@@ -464,6 +488,91 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
       },
     ),
     { seed: 119120, numRuns: 40 },
+  );
+});
+
+// T664 L11 through dev.ts. In slice 1 dev reads no repo file (the plan's amendment, answer 1),
+// so the version and repo-scope failures stay with Load.test.ts and Files.test.ts.
+const badPort = fc.oneof(
+  fc.integer({ min: 65536, max: 2 ** 30 }).map(String),
+  fc.integer({ min: -(2 ** 30), max: 0 }).map(String),
+  fc.constantFrom("", "port", "18787.5"),
+);
+
+const loadFailures = fc.oneof(
+  fc.record({
+    kind: fc.constant("syntax" as const),
+    body: fc.constantFrom("[instance\nport = 1\n", 'x = "never closed\n', "port = ]\n"),
+  }),
+  fc.record({
+    kind: fc.constant("unknown" as const),
+    body: fc.constantFrom("[nope]\n", "[instance]\nprot = 18800\n", "telemetry = false\n", "stage = 1\n"),
+  }),
+  fc.record({ kind: fc.constant("scope" as const), body: fc.constant('fabrika-version = "0.0.0"\n') }),
+  fc.record({
+    kind: fc.constant("invalid" as const),
+    body: fc
+      .oneof(fc.integer({ min: 65536, max: 2 ** 30 }), fc.integer({ min: -(2 ** 30), max: 0 }))
+      .map((p) => `[instance]\nport = ${p}\n`),
+  }),
+  fc.record({ kind: fc.constant("read" as const), body: fc.constant("") }),
+  fc.record({ kind: fc.constant("flag" as const), body: badPort }),
+  fc.record({ kind: fc.constant("env" as const), body: badPort }),
+);
+
+it("L11: no failed settings load reaches the stage write, the build or the stage, and its cause is kept", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.uuid(), loadFailures, fc.boolean(), async (name, failure, alias) => {
+      const folder = mkdtempSync(join(tmpdir(), "t664-dev-load-")),
+        source = join(folder, "view.tsx"),
+        person = join(folder, "fabrika.toml");
+      const w = recorded(folder, source, "export const view = 1;", false, failure.kind === "read" ? person : undefined);
+
+      if (["syntax", "unknown", "scope", "invalid"].includes(failure.kind)) {
+        w.files.set(person, failure.body);
+      }
+
+      const argv = process.argv;
+      vi.stubEnv("FABRIKA_HOME", folder);
+      vi.stubEnv("FABRIKA_INSTANCE_PORT", failure.kind === "env" ? failure.body : undefined);
+      cli.layer = w.layer;
+      stages.length = 0;
+      process.argv = [
+        process.execPath,
+        "dev.ts",
+        "--child",
+        `--parent=${process.ppid}`,
+        ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
+        ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
+      ];
+
+      try {
+        vi.resetModules();
+        await import("../dev.ts");
+        const exit = await Effect.runPromiseExit(cli.work!);
+        stageFailure(exit, "settings");
+        // The dev edge translates the load's error and keeps it as the cause.
+        expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
+          _tag: "Some",
+          value: {
+            cause: {
+              _tag: "SettingsError",
+              reason: ["flag", "env"].includes(failure.kind) ? "invalid" : failure.kind,
+            },
+          },
+        });
+        // Counted fakes: the build reads its source first, the stage records each start.
+        expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual([]);
+        expect(stages).toEqual([]);
+      } finally {
+        process.argv = argv;
+        cli.layer = undefined;
+        cli.work = undefined;
+        vi.unstubAllEnvs();
+        rmSync(folder, { recursive: true, force: true });
+      }
+    }),
+    { seed: 119120, numRuns: 100 },
   );
 });
 
