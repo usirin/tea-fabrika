@@ -4,7 +4,6 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
@@ -14,6 +13,7 @@ import * as fc from "fast-check";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
+import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -66,7 +66,7 @@ describe("P16 real browser from a copied one-file build", () => {
             browser = await chromium.launch({ headless: true });
             mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-            for (const name of ["@kampus", "@demlik", "effect"]) {
+            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
               symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
             }
 
@@ -92,7 +92,7 @@ describe("P16 real browser from a copied one-file build", () => {
               recursive: true,
               filter: (p) => !p.endsWith(".test.ts"),
             });
-            const file = join(ROOT, "next/packages/libfabrika/src/build.ts");
+            const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
             const api = (await import(pathToFileURL(file).href)) as Build;
             const built = await Effect.runPromise(
@@ -113,20 +113,16 @@ describe("P16 real browser from a copied one-file build", () => {
             cpSync(built.brain, join(alone, "brain.mjs"));
             rmSync(join(home, "dist"), { recursive: true });
             rmSync(pkg, { recursive: true });
-            const listener = createServer();
-            const port = await new Promise<number>((done, fail) => {
-              listener.once("error", fail);
-              listener.listen(0, "127.0.0.1", () => {
-                const at = listener.address();
-                assert(at && typeof at !== "string");
-                listener.close(() => done(at.port));
-              });
-            });
+            // Held in the instance's own scope, opened before the instance, so it is given back after the
+            // instance closes (finalizers run in reverse).
+            const { port } = await Effect.runPromise(
+              Effect.acquireRelease(heldPort(), (held) => held.release).pipe(Effect.provideService(Scope.Scope, scope)),
+            );
             const raw = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
-            const { localStage } = await import("../src/local-stage.ts");
+            const { localInstance } = await import("../src/local-instance.ts");
             const { localState } = await import("alchemy/State/LocalState");
-            const stage = await Effect.runPromise(
-              localStage(
+            const instance = await Effect.runPromise(
+              localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
                 {
                   home,
@@ -150,31 +146,31 @@ describe("P16 real browser from a copied one-file build", () => {
             const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
-            await page.goto(stage.url);
+            await page.goto(instance.url);
 
             for (const [route, asset] of Object.entries(built.assets)) {
-              const response = await page.request.get(stage.url + route);
+              const response = await page.request.get(instance.url + route);
               expect(response.status()).toBe(200);
               expect(response.headers()["content-type"]).toBe(asset.type);
               expect(await response.text()).toBe(asset.body);
               expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
 
               if (asset.type.startsWith("text/css")) {
-                await page.addStyleTag({ url: stage.url + route });
+                await page.addStyleTag({ url: instance.url + route });
               }
             }
 
-            await page.addScriptTag({ url: stage.url + entry[0], type: "module" });
+            await page.addScriptTag({ url: instance.url + entry[0], type: "module" });
             await page.waitForSelector("#p16");
             expect(await page.locator("#p16").textContent()).toBe(text);
             expect(await page.locator("#p16").evaluate((e) => getComputedStyle(e).color)).toBe("rgb(12, 34, 56)");
-            expect((await page.request.get(`${stage.url}/missing.js`)).status()).toBe(404);
+            expect((await page.request.get(`${instance.url}/missing.js`)).status()).toBe(404);
             const planted = await browser.newPage();
             await planted.route("**/*.js", (route) =>
               new URL(route.request().url()).pathname === entry[0] ? route.continue() : route.abort(),
             );
-            await planted.goto(stage.url);
-            await planted.addScriptTag({ url: stage.url + entry[0], type: "module" });
+            await planted.goto(instance.url);
+            await planted.addScriptTag({ url: instance.url + entry[0], type: "module" });
             await expect(planted.evaluate("globalThis.__p16Ready")).rejects.toThrow();
             expect(await planted.locator("#p16").count()).toBe(0);
           } finally {

@@ -1,6 +1,6 @@
 ---
 name: review
-description: Do the one review of a tea-fabrika ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests, build and mutation steps.
+description: Do the one review of a tea-fabrika ticket's whole diff, read-only, against its approved plan and decided notes. Use when a brief says "use the review skill for ticket N", after the tests and build steps.
 ---
 
 # The one review
@@ -39,17 +39,25 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
      A fixed test is fine only when its name starts with one of four labels and it is that kind:
      `vector:`, `format:`, `pinned:` or `scenario:`. A hand-picked example checking a general rule,
-     labeled or not, is a defect. Check that the property or label is present and fits, against the
-     named spec, format, bug or run. Do not reopen each test's merits.
-   - Each law catches its plant. Plant a break yourself where a law looks weak, in your head or in a
-     scratch copy, never in the branch.
+     labeled or not, is a defect. `fabrika/law-shape` in `pnpm lint` flags a test with neither;
+     check that each one fits, against the named spec, format, bug or run. Do not reopen each
+     test's merits.
+   - Each generator on a machine reads the state it is folding and picks the next move from what is
+     possible there. A hand-written list of cases is a defect
+     ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)).
+   - The tests report records a plant and its result for each new law. A law with no recorded plant
+     run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
+     one. Plant a break yourself where a law looks weak, in your head or in a scratch copy, never in
+     the branch.
    - A law moved onto a schema's Arbitrary keeps its old reach.
    - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
      the law generates flows: made-up words, keys and passes, operation orders, refusals and
      failures. Check every named output, including encoded URL forms, and a leak planted in each.
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - Screenshots in the program's `docs/` folder when the plan asks for them, at its layouts.
-   - Anything else the brief names for this round, such as the mutation step's added laws.
+   - Anything else the brief names for this round. A lane has no mutation step
+     ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)); a lane that finished one
+     started before 0066 names its added laws here.
 4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
    n counts blocking classes. Each class lists every affected case. m counts the finding rows in
    this answer.
@@ -60,9 +68,11 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 
    Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
    mention, and never a security hole.
-   Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
-   unchanged. Do not start another review round for it.
+   Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in
+   field/findings/. Do not start another review round for it.
    End with exactly one answer: line, as the last line.
+   It reads `answer: done <why>` when merge-ready, else `answer: send build <why>` (or `send tests`,
+   `send plan`). The verdict is never the answer.
    Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why, and
    [A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
    counts as proof. Other means it is wrong but blocks nothing by the rule in step 3, in this diff

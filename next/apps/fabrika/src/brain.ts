@@ -1,10 +1,11 @@
+import { makeDurableObjectBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
-import type { Activity, From, Start } from "@kampus/libfabrika/coordination";
-import type { Chain } from "@kampus/libfabrika/data";
+import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
+import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
-import { GatewayService } from "@kampus/libfabrika/workers/gateway";
-import { recordContent, recordDelete, recordRead, recordWrite } from "@kampus/libfabrika/workers/record";
+import { ConnectionService } from "@kampus/libfabrika/workers/gateway";
 import {
   processRuntime,
   ProcessService,
@@ -19,7 +20,8 @@ import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { Effect, Redacted } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
-import { gatewayRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
+import { Objects } from "./objects.ts";
+import { connectionRuntime, projectRuntime, settings, type Env } from "./runtime.ts";
 
 export class Project extends DurableObject<Env> {
   readonly runtime = projectRuntime(this.ctx, this.env);
@@ -94,7 +96,7 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.start(request, from)));
   }
 
-  exit(pid: string, reason: string, from: From) {
+  exit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.exit(pid, reason, from)));
   }
@@ -154,7 +156,7 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processStart(request, from)));
   }
 
-  processExit(pid: string, reason: string, from: From) {
+  processExit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
   }
@@ -260,76 +262,53 @@ export class Process extends DurableObject<Env> {
   }
 }
 
-export class Gateway extends DurableObject<Env> {
-  readonly runtime = gatewayRuntime(this.ctx, this.env);
+export class Connection extends DurableObject<Env> {
+  readonly runtime = connectionRuntime(this.ctx, this.env);
 
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Worker fetch returns a Promise
-    return this.runtime.runPromise(GatewayService.use((g) => g.fetch(request)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.fetch(request)));
   }
 
   webSocketMessage(ws: WebSocket, text: string | ArrayBuffer) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(GatewayService.use((g) => g.message(ws, text)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.message(ws, text)));
   }
 
   webSocketClose(ws: WebSocket) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(GatewayService.use((g) => g.close(ws)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws)));
   }
 
   webSocketError(ws: WebSocket) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the WebSocket event enters Effect
-    return this.runtime.runPromise(GatewayService.use((g) => g.close(ws)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.close(ws)));
   }
 
   ring(stream: string, rev: number) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(GatewayService.use((g) => g.ring(stream, rev)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.ring(stream, rev)));
   }
 
   probe(session: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(GatewayService.use((g) => g.probe(session)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.probe(session)));
   }
 
   notify(client: string, news: unknown) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(GatewayService.use((g) => g.notify(client, news)));
+    return this.runtime.runPromise(ConnectionService.use((g) => g.notify(client, news)));
   }
 }
 
-type Rows = Parameters<typeof recordWrite>[4];
+const Bridge = makeDurableObjectBridge(DurableObject, {
+  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
+  entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
+  // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
+  stack: { name: "fabrika", stage: "local" },
+});
 
-export class RecordPart extends DurableObject<Env> {
-  write(chain: Chain, at: number, rows: Rows) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordWrite(this.ctx, s.limits?.recordBytes, chain, at, rows))),
-    );
-  }
-
-  read(chain: Chain, at: number, after: number) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordRead(this.ctx, s.limits?.recordBytes, chain, at, after))),
-    );
-  }
-
-  content(chain: Chain, at: number, id: string) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordContent(this.ctx, s.limits?.recordBytes, chain, at, id))),
-    );
-  }
-
-  deleteContent(chain: Chain, at: number, id: string, by: Parameters<typeof recordDelete>[5]) {
-    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return Effect.runPromise(
-      settings(this.env).pipe(Effect.flatMap((s) => recordDelete(this.ctx, s.limits?.recordBytes, chain, at, id, by))),
-    );
-  }
-}
+export class RecordPart extends Bridge("RecordPart") {}
 
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {

@@ -85,7 +85,9 @@ const valid = (label: string, extra: string) => ({
         {
           name: "chromium",
           if: "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-          run: "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+          run:
+            "sudo sh .github/ci/apt.sh update\n" +
+            "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
         { run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 1" },
         {
@@ -116,6 +118,15 @@ const valid = (label: string, extra: string) => ({
         },
         { run: "node .github/ci/field-check.ts", if: fieldIf, env },
       ],
+    },
+    "ci-required": {
+      needs: ["changes", "field", "check", "e2e", "test", "next"],
+      if: "always()",
+      "timeout-minutes": 5,
+      steps: [
+        { uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci" } },
+        { env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
+      ] as Record<string, unknown>[],
     },
   },
 });
@@ -521,13 +532,64 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.test.steps[1]!.run = lines.join("\n");
     },
   ]),
-  // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
+  // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
   ...(["changes", "field", "check", "test", "next", "e2e"] as const).map((job): [string, (w: Workflow) => void] => [
-    `${job} without a time limit`,
+    `ci-required does not need ${job}`,
     (w) => {
-      Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+      w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
     },
   ]),
+  [
+    "a new job ci-required does not need",
+    (w) => {
+      Object.assign(w.jobs, { lint: { "timeout-minutes": 5, steps: [{ run: "pnpm lint" }] } });
+    },
+  ],
+  ...["!cancelled()", "success()", ""].map((condition): [string, (w: Workflow) => void] => [
+    `ci-required runs only on ${condition || "no condition"}`,
+    (w) => {
+      w.jobs["ci-required"].if = condition;
+    },
+  ]),
+  [
+    "ci-required ignores its failure",
+    (w) => {
+      Object.assign(w.jobs["ci-required"], { "continue-on-error": true });
+    },
+  ],
+  [
+    "ci-required judge ignores its failure",
+    (w) => {
+      Object.assign(w.jobs["ci-required"].steps[1]!, { "continue-on-error": true });
+    },
+  ],
+  [
+    "ci-required bypassed",
+    (w) => {
+      w.jobs["ci-required"].steps[1]!["run"] = "echo pass";
+    },
+  ],
+  [
+    "ci-required reads needs.*.result only",
+    (w) => {
+      w.jobs["ci-required"].steps[1]!["env"] = { NEEDS: `\${{ toJSON(needs.*.result) }}` };
+    },
+  ],
+  [
+    "ci-required second step",
+    (w) => {
+      w.jobs["ci-required"].steps.push({ run: "exit 0" });
+    },
+  ],
+  // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
+  ...(["changes", "field", "check", "test", "next", "e2e", "ci-required"] as const).map(
+    (job): [string, (w: Workflow) => void] => [
+      `${job} without a time limit`,
+      (w) => {
+        Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+      },
+    ],
+  ),
   [
     "a time limit past the default",
     (w) => {

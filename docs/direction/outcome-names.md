@@ -52,6 +52,9 @@ And every outcome has a name written by one grammar:
 { kind: "done", part: true, commit: "d694f6b" }      →   "done:part"
 ```
 
+2026-11-10: in `next/` and `.agents/`, the ask's `who` key is `to`, as `send` says it
+([0081](../../.decisions/0081-no-question-word-names.md)'s amendment). The spelled name does not change.
+
 Code does a `switch` on the data. People, logs, the ledger and a drawing of
 the machine read the name. One function makes the name from the data, so the
 two cannot drift, and the name's pattern is a type, so the compiler refuses a

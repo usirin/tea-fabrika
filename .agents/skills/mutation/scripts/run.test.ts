@@ -1,6 +1,10 @@
 import "./run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./scope.ts?raw";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -27,10 +31,15 @@ if (args[0]?.endsWith("/sample.ts")) {
   process.stdout.write(setup.ranges.join(","));
   process.exit(setup.sampleExit);
 }
+if (args[0]?.endsWith("/limit.ts")) {
+  fs.appendFileSync(path.join(dir, "limit-calls.jsonl"), JSON.stringify(args) + "\n");
+  process.stdout.write(setup.limit?.out ?? "10000\n");
+  process.exit(setup.limit?.exit ?? 0);
+}
 if (args[0]?.endsWith("/core/bin/stryker.js")) {
   const config = JSON.parse(fs.readFileSync(args[2], "utf8"));
   const vitest = fs.readFileSync(path.join(dir, config.vitest.configFile), "utf8");
-  fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest}));
+  fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest, limit: process.env.TEST_LIMIT}));
   if (setup.orphan) {
     const left = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio:"ignore"});
     fs.writeFileSync(path.join(dir, "pids.json"), JSON.stringify([left.pid]));
@@ -42,10 +51,21 @@ if (args[0]?.endsWith("/core/bin/stryker.js")) {
 } else throw new Error("unhandled tool " + args[0]);
 `;
 
-type Setup = { ranges: string[]; sampleExit: number; exit: number; hold: boolean; orphan?: boolean };
+type Setup = {
+  ranges: string[];
+  sampleExit: number;
+  exit: number;
+  hold: boolean;
+  orphan?: boolean;
+  /** What the stand-in limit.ts prints and its exit code. */
+  limit?: { out: string; exit: number };
+};
+
 const defaults: Setup = { ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false };
 
-const fixture = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: string }) => {
+type Inputs = { T?: string; BUILD?: string; RELATED?: string; IN_PLACE?: string; BASELINE?: string };
+
+const fixture = (setup: Setup, inputs: Inputs) => {
   expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
   const dir = mkdtempSync(join(tmpdir(), "mut-command-"));
   const bin = join(dir, "bin"),
@@ -56,7 +76,7 @@ const fixture = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: s
   writeFileSync(join(dir, "tool.cjs"), helper);
   writeFileSync(
     join(bin, "node"),
-    `#!/bin/sh\ncase "$1" in\n*/sample.ts|*/core/bin/stryker.js) exec '${process.execPath}' '${join(dir, "tool.cjs")}' "$@";;\n*) exec '${process.execPath}' "$@";;\nesac\n`,
+    `#!/bin/sh\ncase "$1" in\n*/sample.ts|*/limit.ts|*/core/bin/stryker.js) exec '${process.execPath}' '${join(dir, "tool.cjs")}' "$@";;\n*) exec '${process.execPath}' "$@";;\nesac\n`,
     { mode: 0o755 },
   );
   // nice is blocked in the box. If retained outside it, only this local shim can run.
@@ -70,6 +90,7 @@ const fixture = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: s
   }
 
   writeFileSync(join(dir, ".agents/skills/mutation/scripts/sample.ts"), "// intercepted sampler\n");
+  writeFileSync(join(dir, ".agents/skills/mutation/scripts/limit.ts"), "// intercepted limit\n");
   writeFileSync(
     join(dir, "vitest.config.ts"),
     'export const testConfig = {test: {include: ["all/**/*.test.ts"], exclude: ["keep-me"]}};\nexport default testConfig;\n',
@@ -79,6 +100,7 @@ const fixture = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: s
     temp,
     env: {
       ...process.env,
+      BASELINE: undefined,
       ...inputs,
       PATH: `${bin}:/usr/bin:/bin`,
       TMPDIR: temp,
@@ -100,15 +122,18 @@ type Invocation = {
     incremental: boolean;
     incrementalFile: string;
     coverageAnalysis: string;
+    inPlace: boolean;
     timeoutMS: number;
   };
   vitest: string;
+  /** TEST_LIMIT as Stryker, and so the config it loads, sees it. */
+  limit?: string;
 };
 
 const invoked = (dir: string): Invocation | undefined =>
   existsSync(join(dir, "invoked.json")) ? JSON.parse(readFileSync(join(dir, "invoked.json"), "utf8")) : undefined;
 
-const run = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: string }) => {
+const run = (setup: Setup, inputs: Inputs) => {
   const f = fixture(setup, inputs);
 
   try {
@@ -121,6 +146,7 @@ const run = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: strin
     expect(ran.error).toBeUndefined();
     expect(ran.signal).toBeNull();
     const sample = join(f.dir, "sample-calls.jsonl");
+    const limits = join(f.dir, "limit-calls.jsonl");
     return {
       code: ran.status,
       text: ran.stdout + ran.stderr,
@@ -128,6 +154,12 @@ const run = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: strin
       configLeft: existsSync(join(f.dir, "vitest.mutation.config.ts")),
       samples: existsSync(sample)
         ? readFileSync(sample, "utf8")
+            .trim()
+            .split("\n")
+            .map((s) => JSON.parse(s) as string[])
+        : [],
+      limits: existsSync(limits)
+        ? readFileSync(limits, "utf8")
             .trim()
             .split("\n")
             .map((s) => JSON.parse(s) as string[])
@@ -298,9 +330,58 @@ console.log(JSON.stringify(resolved.test));
             ]),
           );
           expect(got.configLeft).toBe(false);
+          expect(got.limits, "no BASELINE, no limit.ts").toEqual([]);
+          expect(call.limit).toBe("10000");
         },
       ),
       options,
+    );
+  });
+
+  // Plants: keep the fixed 10_000; ignore BASELINE; drop the number check (ticket 605).
+  it("T605 with BASELINE, limit.ts reads it and its number is the test and hook limit", () => {
+    fc.assert(
+      fc.property(
+        fc.stringMatching(/^\/out\/[a-z-]{1,12}\.json$/),
+        fc.integer({ min: 10, max: 60 }).map((s) => s * 1000),
+        (baseline, ms) => {
+          const got = run(
+            { ...defaults, limit: { out: `${ms}\n`, exit: 0 } },
+            { T: "605", BUILD: "abc1234", RELATED: "math.test.ts", BASELINE: baseline },
+          );
+          expect(got.code, got.text).toBe(0);
+          expect(got.limits).toEqual([[".agents/skills/mutation/scripts/limit.ts", baseline]]);
+          expect(got.invocation!.limit).toBe(String(ms));
+          const source = got.invocation!.vitest.replace(/^import .*;\s*$/gm, "").replace("export default", "return");
+          const config = new Function("base", "defineConfig", "process", source)({ test: {} }, (x: unknown) => x, {
+            env: { RELATED: "math.test.ts", TEST_LIMIT: got.invocation!.limit },
+          }) as { test: { testTimeout: number; hookTimeout: number } };
+          expect(config.test.testTimeout).toBe(ms);
+          expect(config.test.hookTimeout).toBe(ms);
+        },
+      ),
+      { seed: 605, numRuns: 8 },
+    );
+  });
+
+  it("T605 a failed limit.ts or one that prints no whole number stops run.sh before Stryker", () => {
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.record({ out: fc.constant("30000\n"), exit: fc.integer({ min: 1, max: 9 }) }),
+          fc.record({ out: fc.constantFrom("", "\n", "30s\n", "3e4\n", "-1\n", "30000 ms\n"), exit: fc.constant(0) }),
+        ),
+        (limit) => {
+          const got = run(
+            { ...defaults, limit },
+            { T: "605", BUILD: "abc1234", RELATED: "math.test.ts", BASELINE: "/out/baseline.json" },
+          );
+          expect(got.code).not.toBe(0);
+          expect(got.invocation, "Stryker must not start").toBeUndefined();
+          expect(got.configLeft).toBe(false);
+        },
+      ),
+      { seed: 605, numRuns: 8 },
     );
   });
 
@@ -330,6 +411,31 @@ console.log(JSON.stringify(resolved.test));
         },
       ),
       { ...options, numRuns: 3 },
+    );
+  });
+
+  // Plants: always in place; never in place; accept any other value as off.
+  it("T457 mutates in place only when IN_PLACE is 1, and refuses any other value before Stryker", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          ticket: fc.integer({ min: 1, max: 9999 }),
+          flag: fc.oneof(
+            fc.constantFrom(undefined, "0", "1"),
+            fc.stringMatching(/^[a-z2-9 *-]{1,4}$/),
+            fc.constantFrom("true", "yes", "01", "-1"),
+          ),
+        }),
+        ({ ticket, flag }) => {
+          const got = run(defaults, { T: `${ticket}`, BUILD: "abc1234", RELATED: "math.test.ts", IN_PLACE: flag });
+
+          // Unset or "0" is off, "1" is on, and anything else stops before Stryker starts.
+          const want = flag === undefined || flag === "0" ? false : flag === "1" ? true : undefined;
+          expect(got.code === 0, got.text).toBe(want !== undefined);
+          expect(got.invocation?.config.inPlace).toBe(want);
+        },
+      ),
+      { ...options, numRuns: 12 },
     );
   });
 

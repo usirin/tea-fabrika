@@ -1,11 +1,21 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.ts?raw";
 import "./mutbox-entry.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
@@ -21,21 +31,33 @@ import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Stream } from "effect";
+import { Effect, Exit, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { NO_SPENT } from "./agents.ts";
+import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
 import {
   agentsDraft,
   agentTail,
+  ownedHead,
   boxChanges,
   caseRenames,
   changedFiles,
@@ -50,13 +72,24 @@ import {
   decide,
   dockerHolder,
   endName,
-  freshBox,
+  FINISH,
+  firstEventAt,
+  freeLane,
+  GC_EVERY,
+  gcDue,
+  holdLane,
   holdsElectron,
+  laneRunning,
   machine,
+  phasesIn,
   reportOf,
   rowOf,
   startedOf,
+  STEPS,
+  Sweep,
+  tailFor,
 } from "./drive.ts";
+import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -96,8 +129,16 @@ const left = fc.array(fc.constantFrom("10 uncommitted files", "2 commits off fab
   maxLength: 2,
 });
 
+type Recorded = { keep: boolean; reason: string; plants?: unknown };
+
 /** The record command the machine ends on, stepping through the backup push when it asks one. */
-const recorded = (report: string, commits: number, held: readonly string[]) => {
+const recorded = (
+  report: string,
+  commits: number,
+  held: readonly string[],
+  typed: Answer | null = null,
+  pushed = true,
+) => {
   const value = {
     head: commits > 0 ? "c".repeat(40) : ask.base,
     commits,
@@ -111,20 +152,20 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
     report,
     problem: null,
   };
-  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
+  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
   } as never);
 
   if (read.phase !== "pushing") {
-    return { state: read, cmd: cmds[0] as { keep: boolean; reason: string } };
+    return { state: read, cmd: cmds[0] as Recorded };
   }
 
   const [state, after] = machine.update.backup_push_ok(read, {
     type: "backup_push_ok",
-    value: { ok: true, detail: "" },
+    value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
-  return { state, cmd: after[0] as { keep: boolean; reason: string } };
+  return { state, cmd: after[0] as Recorded };
 };
 
 describe("drive keeps a box that holds work, today's tooling", () => {
@@ -152,6 +193,29 @@ describe("drive keeps a box that holds work, today's tooling", () => {
         if (held.length === 0) {
           expect(cmd.reason).not.toContain("box kept");
         }
+      }),
+      options,
+    );
+  });
+
+  // 0093: the plants a step's typed answer names reach its record, so its field row, whatever the
+  // outcome. Plants run once, both red: drop them on the backup push; drop them on a failed push.
+  it("records the plants the typed answer names, through a push or a failed one, and none when it names none", () => {
+    const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
+    const typed = fc.record({
+      verb: fc.constantFrom("done", "send", "ask", "skip", "stuck"),
+      reason: fc.string(),
+      plants: fc.option(fc.array(plant, { maxLength: 6 }), { nil: undefined }),
+    });
+    fc.assert(
+      fc.property(typed, fc.nat({ max: 2 }), left, fc.boolean(), (said, commits, held, pushed) => {
+        const to = said.verb === "send" ? "tests" : null;
+        const { plants, ...rest } = said;
+        const answer: Answer = { ...rest, to, laws: "a.test.ts", ...(plants && { plants }) };
+        const { state, cmd } = recorded("", commits, held, answer, pushed);
+        expect(state.phase).toBe("recording");
+        expect(cmd.plants).toEqual(plants);
+        expect("plants" in cmd).toBe(plants !== undefined);
       }),
       options,
     );
@@ -984,44 +1048,19 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 });
 
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
-  const suffixes = [
-    "",
-    "-gitdata",
-    "-mutbox",
-    "-prompt.md",
-    ".md",
-    ".jsonl",
-    ".err",
-    ".log",
-    "-plan.md",
-    "-plan.jsonl",
-  ];
-  // Plants: check only the box folder and prompt, as before; skip a free number; start below n.
-  // p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
+  // Plants: count only the box folders; reuse the highest number taken. p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
-  it("picks the first box number from n up that no older file holds", () => {
-    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...suffixes)));
+  it("property: the next run id is held by no file an older run of that lane and step left", () => {
+    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
-      fc.property(
-        fc.constantFrom("plan", "review", "build"),
-        fc.integer({ min: 1, max: 4 }),
-        left,
-        (step, n, files) => {
-          const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
-          const box = freshBox("p12", step, n, (name) => taken.has(name));
-          const i = Number(box.slice(`p12-${step}`.length));
-          expect(box).toBe(`p12-${step}${i}`);
-          expect(i).toBeGreaterThanOrEqual(n);
+      fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
+        const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
+        const box = RunId.next("p12", step, taken);
 
-          for (const suffix of suffixes) {
-            expect(taken.has(`${box}${suffix}`)).toBe(false);
-          }
-
-          for (let j = n; j < i; j += 1) {
-            expect(suffixes.some((suffix) => taken.has(`p12-${step}${j}${suffix}`))).toBe(true);
-          }
-        },
-      ),
+        for (const suffix of RunId.FILES) {
+          expect(taken.has(`${box}${suffix}`)).toBe(false);
+        }
+      }),
       options,
     );
   });
@@ -1100,6 +1139,78 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
   });
 });
 
+describe("a step is told its owned paths first, today's tooling (ticket 430)", () => {
+  const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+    "plan" | "tests" | "build" | "mutation" | "review"
+  >;
+  const owner = fc.constantFrom("tests", "build", "mutation", "lead");
+  const owners = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.ts$/), owner, { maxKeys: 6 });
+
+  // Plants: list a path another step owns, drop one this step owns, keep mutation off tests' paths,
+  // or tell a plan or review step anything.
+  it("property: lists exactly the paths stepcommit lets the step commit, and asks for any other", () => {
+    fc.assert(
+      fc.property(steps, owners, (step, given) => {
+        const head = ownedHead(step, given);
+
+        if (step === "plan" || step === "review") {
+          expect(head).toBe("");
+          return;
+        }
+
+        const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+        const allowed = Object.keys(given).filter(
+          (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
+        );
+        expect(listed).toEqual(allowed.toSorted());
+        expect(head).toContain("answer ask");
+        expect(head.endsWith("---\n\n")).toBe(true);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: no plan drive can read tells the step nothing", () => {
+    expect(ownedHead("build", null)).toBe("");
+  });
+});
+
+// 2026-11-11: a tests step on Codex answered send tests round after round, listing as unfinished
+// what no tests box can do. Plants: offer a step its own name; keep the static tests | build | plan
+// tail; leave the finish rule out of a boxed step's prompt.
+describe("a step is never offered itself as a send's to, today's tooling", () => {
+  const steps = fc.constantFrom(...STEPS);
+
+  it("property: the tail and the answer schema offer every send target but the step itself", () => {
+    fc.assert(
+      fc.property(steps, (step) => {
+        const offered = ["tests", "build", "plan"].filter((to) => to !== step);
+        expect(sendsFrom(step)).toEqual(offered);
+        expect(tailFor(step)).toContain(`  to:   ${offered.join(" | ")} when the verb is send, else null`);
+        const decode = Schema.decodeUnknownExit(answerFor(step));
+        const answer = (to: string) => ({ verb: "send", to, reason: "r", laws: null });
+        expect(Exit.isFailure(decode(answer(step)))).toBe(true);
+
+        for (const to of offered) {
+          expect(Exit.isSuccess(decode(answer(to)))).toBe(true);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("property: every boxed step's prompt carries the finish rule, and the plan's does not", () => {
+    fc.assert(
+      fc.property(steps, fc.boolean(), (step, electron) => {
+        expect(agentTail({ step, ticket: "1" }, electron).includes(FINISH)).toBe(step !== "plan");
+      }),
+      options,
+    );
+    expect(FINISH).toContain('"after build" or "lead runs it"');
+    expect(FINISH).toContain("does not block `done`");
+  });
+});
+
 describe("drive holds the Electron lock outside the box, today's tooling", () => {
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
@@ -1135,6 +1246,54 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
+  });
+});
+
+describe("one live process drives a lane, today's tooling", () => {
+  // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.
+  // p39s1, 2026-11-11: a second chain started 18 s after the first, and both took p39s1-tests2.
+  it("scenario: the lane is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const lock = join(boxes, "state", "l.lock");
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    const live = process.ppid;
+
+    expect(holdLane(boxes, "l")).toBeNull();
+    expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
+    expect(holdLane(boxes, "l")).toBeNull();
+    writeFileSync(lock, String(live));
+    expect(holdLane(boxes, "l")).toBe(live);
+    freeLane(boxes, "l");
+    expect(readFileSync(lock, "utf8")).toBe(String(live));
+    writeFileSync(lock, String(dead));
+    expect(holdLane(boxes, "l")).toBeNull();
+    freeLane(boxes, "l");
+    const gone = existsSync(lock);
+    rmSync(boxes, { recursive: true, force: true });
+    expect(gone).toBe(false);
+  });
+
+  it("scenario: a step started while another process drives its lane is refused before any box is made", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const boxes = join(dir, "boxes");
+    const brief = join(dir, "brief.md");
+    writeFileSync(brief, "brief");
+    mkdirSync(join(boxes, "state"), { recursive: true });
+    writeFileSync(join(boxes, "state", "l.lock"), String(process.pid));
+    const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "tests", brief], {
+      encoding: "utf8",
+      env: { ...process.env, BOXES: boxes },
+    });
+    const made = readdirSync(boxes);
+    const still = readFileSync(join(boxes, "state", "l.lock"), "utf8");
+    rmSync(dir, { recursive: true, force: true });
+    expect(r.status).toBe(3);
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      outcome: "refused:lane_running",
+      reason: laneRunning("l", process.pid),
+    });
+    expect(made).toEqual(["state"]);
+    expect(still).toBe(String(process.pid));
   });
 });
 
@@ -1392,6 +1551,8 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                     out,
                     "--lock",
                     join(env.BOXES, "state", "docker.lock"),
+                    "--plan",
+                    ask.plan,
                   ],
                 ]);
                 expect(ran.started.length).toBe(1);
@@ -1445,5 +1606,59 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("RELATED=<paths>");
+  });
+});
+
+describe("T673 a step's start is timed and sweeps at most once in 30 minutes, today's tooling", () => {
+  const MIN = 60_000;
+  // Plant: sweep on every start, never sweep on a low or unreadable disk, or skip once the period
+  // passed. The low_disk refusal must always follow a fresh sweep.
+  it("T673 gcDue runs on a low or unreadable disk, with no sweep recorded, or once GC_EVERY passed", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 10 ** 13 }),
+        fc.option(fc.integer({ min: -3 * GC_EVERY, max: 3 * GC_EVERY }), { nil: null }),
+        fc.option(fc.integer({ min: 0, max: 500 }), { nil: null }),
+        (now, ago, free) => {
+          const last = ago === null ? null : now - ago;
+          const due = gcDue(now, last, free);
+          const low = free === null || free < 20;
+          const fresh = ago !== null && ago >= 0 && ago < GC_EVERY;
+          expect(due._tag).toBe(low || !fresh ? "run" : "skip");
+        },
+      ),
+      options,
+    );
+  });
+
+  // vector: the boundary minute and the reason a skip prints.
+  it("T673 vector: a sweep 29 min ago is skipped with its age, one 30 min ago runs", () => {
+    expect(gcDue(100 * MIN, 71 * MIN, 50)).toEqual(
+      Sweep.cases.skip.make({ reason: "the last sweep started 29 min ago" }),
+    );
+    expect(gcDue(100 * MIN, 70 * MIN, 50)._tag).toBe("run");
+    expect(gcDue(100 * MIN, 99 * MIN, 19)).toEqual(Sweep.cases.run.make({ reason: "19 GB free" }));
+  });
+
+  // Plant: drop a phase line, reorder them, or read a line that only starts like one.
+  it("T673 phasesIn reads every phase line box.sh prints, in order, and nothing else", () => {
+    const name = fc.stringMatching(/^[a-z_]{1,12}$/);
+    const noise = fc.constantFrom("", "refused shared_ticket: 1 on x", "phase Bad 1", "phase x 1 more", "stuck y");
+    fc.assert(
+      fc.property(fc.array(fc.tuple(name, fc.nat(), noise)), (parts) => {
+        const text = parts.map(([n, ms, junk]) => `${junk}\nphase ${n} ${ms}`).join("\n");
+        expect(phasesIn(text)).toEqual(parts.map(([n, ms]) => ({ name: n, ms })));
+      }),
+      options,
+    );
+  });
+
+  // format: the first line of an agent's event log, as agents.ts writes it, or none.
+  it("T673 format: firstEventAt reads the first event's time, and null from an empty or untimed log", () => {
+    const line = '{"at":"2026-11-11T08:21:58.342Z","_tag":"started","session":"s"}';
+    expect(firstEventAt(`${line}\n{"at":"2026-11-11T09:00:00.000Z"}\n`)).toBe(Date.parse("2026-11-11T08:21:58.342Z"));
+    expect(firstEventAt("")).toBeNull();
+    expect(firstEventAt("null\n")).toBeNull();
+    expect(firstEventAt('{"_tag":"started"}\n')).toBeNull();
   });
 });

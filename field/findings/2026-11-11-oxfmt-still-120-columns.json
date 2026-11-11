@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-oxfmt-still-120-columns",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".oxfmtrc.json",
+    "line": 9
+  },
+  "says": ".oxfmtrc.json still sets printWidth 120, and its top comment still says 120 columns, while decision 0094 (accepted 2026-11-11) says the formatter's width is 100 columns in the whole repo.",
+  "proof": ".oxfmtrc.json:9 is '\"printWidth\": 120,' and .oxfmtrc.json:1 says '2 spaces, 120 columns'. .decisions/0094-lines-are-100-columns.md:33 says '`.oxfmtrc.json` says `\"printWidth\": 100`'. gh pr list --state open --search printWidth and --search '100 columns' return nothing, so no open pull request carries the change.",
+  "cost": "Every file written or formatted from now on is wrapped at 120, so the one reformat 0094 asks for grows and branches in flight keep producing lines the decision says are too wide.",
+  "head": "0bb25969c3b92c1e148d84446d845a20a00b5368",
+  "ticket": null,
+  "pr": null
+}

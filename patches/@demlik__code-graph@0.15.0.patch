@@ -1,8 +1,75 @@
 diff --git a/dist/index.js b/dist/index.js
-index b81bf353943b40291ef6810324da31fb49234092..d11162d1aea43436e6121c1638962522c02eebc4 100755
+index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af9682ac527aa 100755
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -6501,7 +6501,15 @@ function discoverInFile2(unit) {
+@@ -728,6 +728,35 @@ function inRepoFile(realRoot, resolved) {
+   }
+   return { kind: "file", file: segments.join("/") };
+ }
++// Patched (kamp-us/demlik#915): the file a package's `exports` map gives a specifier, or null.
++// Exact keys first, then `*` patterns (the longest prefix wins, as in Node), each value's string
++// leaves mapped by `toSourcePath`; the first source file that exists is the answer.
++function exportedFile(repoRoot, pkg, specifier) {
++  const manifest = readManifest(repoRoot, pkg.dir);
++  const map = manifest === null ? void 0 : manifest.exports;
++  if (map === void 0 || map === null) return null;
++  const subpath = specifier === pkg.name ? "." : `.${specifier.slice(pkg.name.length)}`;
++  const keyed = typeof map === "object" && !Array.isArray(map) && Object.keys(map).some((key) => key.startsWith("."));
++  const entries = keyed ? Object.entries(map) : [[".", map]];
++  const firstFile = (value, star) => {
++    const leaves = [];
++    stringLeaves(value, leaves);
++    for (const leaf of leaves) {
++      const source = toSourcePath(star === null ? leaf : leaf.replace(/\*/g, star));
++      if (!/\.(ts|tsx)$/.test(source) || source.includes("*")) continue;
++      if (fs5.existsSync(path4.join(repoRoot, pkg.dir, source))) return `${pkg.dir}/${source}`;
++    }
++    return null;
++  };
++  const exact = entries.find(([key]) => key === subpath);
++  if (exact !== void 0) return firstFile(exact[1], null);
++  const patterns = entries.filter(([key]) => key.indexOf("*") !== -1 && matchesPathsKey(key, subpath)).sort((a, b) => b[0].indexOf("*") - a[0].indexOf("*"));
++  const best = patterns[0];
++  if (best === void 0) return null;
++  const star = best[0].indexOf("*");
++  const tail = best[0].length - star - 1;
++  return firstFile(best[1], subpath.slice(star, subpath.length - tail));
++}
+ function createTargetResolver(repoRoot) {
+   const packages = workspacePackages(repoRoot, discoverPackageRoots(repoRoot));
+   const nearest = createNearestTsconfigResolver();
+@@ -752,7 +781,17 @@ function createTargetResolver(repoRoot) {
+   return (fromFile, specifier) => {
+     if (specifier.startsWith(".")) return resolveRelative(repoRoot, fromFile, specifier);
+     const pkg = matchPackage(specifier, packages);
+-    return pkg === void 0 ? resolveBare(fromFile, specifier) : { kind: "package", pkg };
++    if (pkg === void 0) return resolveBare(fromFile, specifier);
++    // Patched (kamp-us/demlik#915, https://github.com/kamp-us/demlik/issues/915): a workspace
++    // package's specifier resolves through its own `exports` map, subpath by subpath, so
++    // `@scope/pkg/door` is the file `./door` names and not the package's one entry file.
++    // An unmatched subpath is `unresolved`, the tool's own kind for an import it cannot place, as
++    // Node refuses a subpath the map does not export (`ERR_PACKAGE_PATH_NOT_EXPORTED`); falling back
++    // to `pkg.entry` is issue 915's bug again. `pkg.entry` stays the answer only for the bare package
++    // name.
++    const file = exportedFile(repoRoot, pkg, specifier);
++    if (file !== null) return { kind: "file", file };
++    return specifier === pkg.name ? { kind: "package", pkg } : { kind: "unresolved", specifier };
+   };
+ }
+ 
+@@ -2124,7 +2163,10 @@ var LayerSchema = z9.object({
+   name: z9.string().min(1),
+   paths: z9.array(z9.string().min(1)).min(1),
+   // Absent: anything below may be imported. Present: only these, so `[]` leaves only the layer itself.
+-  imports: z9.array(z9.string().min(1)).optional()
++  imports: z9.array(z9.string().min(1)).optional(),
++  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): an optional layer.
++  // Rows on one layer share a rank, and an import between two such rows is a break.
++  layer: z9.number().int().optional()
+ }).strict();
+ function importsIssue(layers) {
+   const ranks = new Map(layers.map((layer, rank) => [layer.name, rank]));
+@@ -6501,7 +6543,15 @@ function discoverInFile2(unit) {
    const { syntax, file } = unit;
    const found = syntax.program.body.flatMap((statement) => declaredIn(syntax, statement));
    if (found.length === 0) return [];
@@ -19,3 +86,55 @@ index b81bf353943b40291ef6810324da31fb49234092..d11162d1aea43436e6121c1638962522
    const locals = localExportNames(syntax);
    const isTest = isTestFile(file);
    return withOrdinals(file, found).map(({ found: f, id, joinKey: joinKey2 }) => ({
+@@ -11035,7 +11085,24 @@ function compile(layer, pattern) {
+ }
+ function compileMatchers(layers) {
+   const matchers = [];
+-  layers.forEach((layer, rank) => {
++  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): a row with a `layer`
++  // ranks by it. A smaller rank is a higher layer, so a ranked row's rank is `anchor + (top - layer)`:
++  // a higher layer is a higher rank, equal layers are one rank, and a layer no other row has still
++  // moves the row. `anchor` is the list place of the first ranked row, so rows without an explicit layer above it
++  // keep their place. A row without an explicit layer below it ranks just under the nearest ranked row above it
++  // (that row's rank plus a fraction of its distance down the list): below that layer, above the next
++  // lower one, and apart from every other row without one. With no ranked row, every rank is its place.
++  const anchor = layers.findIndex((l) => l.layer !== void 0);
++  const top = Math.max(...layers.map((l) => l.layer ?? -Infinity));
++  const layerRank = (l) => anchor + (top - l.layer);
++  layers.forEach((layer, index) => {
++    let rank = index;
++    if (layer.layer !== void 0) rank = layerRank(layer);
++    else if (anchor !== -1 && index > anchor) {
++      let above = index;
++      while (layers[above].layer === void 0) above--;
++      rank = layerRank(layers[above]) + (index - above) / (layers.length + 1);
++    }
+     const imports = layer.imports === void 0 ? null : new Set(layer.imports);
+     for (const pattern of layer.paths) {
+       matchers.push(compile({ name: layer.name, rank, imports }, pattern));
+@@ -11052,7 +11119,7 @@ function layerOf(repoRelPath, matchers) {
+   if (winner === void 0) return null;
+   for (const rival of matchers.slice(at + 1)) {
+     if (compareSpecificity(winner.specificity, rival.specificity) !== 0) break;
+-    if (rival.layer.rank !== winner.layer.rank && rival.regex.test(repoRelPath)) {
++    if (rival.layer.name !== winner.layer.name && rival.regex.test(repoRelPath)) {
+       throw new LayerTieError(repoRelPath, [winner.pattern, rival.pattern]);
+     }
+   }
+@@ -11065,6 +11132,7 @@ function directionOf(from, to) {
+ }
+ function ruleBroken(from, to) {
+   if (from.rank > to.rank) return "upward";
++  if (from.rank === to.rank && from.name !== to.name) return "sideways";
+   if (from.rank === to.rank || from.imports === null || from.imports.has(to.name)) return null;
+   return "outside-imports";
+ }
+@@ -11143,7 +11211,7 @@ function analyzeLayers(loaded, repoRoot, rules) {
+   }
+   return {
+     layers: rules.layers.map((l) => l.name),
+-    importsDeclared: rules.layers.some((l) => l.imports !== void 0),
++    importsDeclared: rules.layers.some((l) => l.imports !== void 0 || l.layer !== void 0),
+     filesScanned: loaded.sourceFiles.length,
+     census,
+     violations: sortEdges(violations),

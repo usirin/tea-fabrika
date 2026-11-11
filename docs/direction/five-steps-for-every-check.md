@@ -39,6 +39,8 @@ Every formal check in this repo follows five steps.
      proof.
 3. **Show the check can fail.** Each check has a planted break it must catch,
    run every time ([Every machine has laws](./every-machine-has-laws.md)).
+   *2026-11-11: for the tests step's laws in `next/`, a plant is run once and recorded, not kept
+   ([0093](../../.decisions/0093-laws-walk-plants-run-once.md), a trial).*
 4. **A failure stays a failure.** It is reported with its shortest bad run.
    Nobody loosens the check to make it pass
    ([Nobody writes their own exam](./nobody-writes-their-own-exam.md)).

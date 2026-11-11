@@ -10,7 +10,7 @@ export const oneIdModule: CreateRule = {
 
     return {
       Program(node) {
-        context.report({ node, message: "Delete data/id.ts. The one Id module is src/id.ts." });
+        context.report({ node, message: "Delete data/id.ts. The one Id module is src/Id.ts." });
       },
     };
   },

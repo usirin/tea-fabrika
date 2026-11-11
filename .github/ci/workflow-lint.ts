@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { gated } from "./required.mjs";
 
 export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
 export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
@@ -45,6 +46,10 @@ const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
+// Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
+const chromium =
+  "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
+
 const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
 export const lintWorkflow = (text: string): string[] => {
@@ -79,7 +84,7 @@ export const lintWorkflow = (text: string): string[] => {
 
   require(!("branches" in pr), "all PR bases remain enabled");
 
-  for (const name of ["check", "test", "next", "e2e"]) {
+  for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
     require(needs === "changes" ||
@@ -95,6 +100,21 @@ export const lintWorkflow = (text: string): string[] => {
     const limit = map(job)["timeout-minutes"];
     require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
   }
+
+  // The one required check: it waits on every other job, never skips, and judges them all.
+  const summary = map(jobs["ci-required"]),
+    others = Object.keys(jobs).filter((name) => name !== "ci-required");
+  const needed = Array.isArray(summary["needs"]) ? summary["needs"] : [];
+  require(needed.length === others.length &&
+    others.every((name) => needed.includes(name)), "ci-required needs every other job");
+  require(compact(summary["if"]) === "always()" &&
+    summary["continue-on-error"] === undefined, "ci-required runs after any result and its failure blocks");
+  const judged = steps(summary).filter((s) => "run" in s);
+  require(judged.length === 1 &&
+    judged[0]?.["run"] === "node .github/ci/required.mjs" &&
+    compact(map(judged[0]?.["env"])["NEEDS"]) === "toJSON(needs)" &&
+    !("if" in (judged[0] ?? {})) &&
+    judged[0]?.["continue-on-error"] === undefined, "ci-required judges toJSON(needs) with required.mjs");
 
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
@@ -236,7 +256,7 @@ export const lintWorkflow = (text: string): string[] => {
   const allowed = [
     "pnpm install --frozen-lockfile",
     'pnpm exec vitest run next/ --shard "$SHARD"',
-    "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+    chromium,
     "node next/apps/fabrika/e2e.ts",
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
   ];
@@ -256,10 +276,7 @@ export const lintWorkflow = (text: string): string[] => {
     ), "next passes its six-shard expression without an extra test guard");
 
   for (const [command, condition] of [
-    [
-      "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
-      "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-    ],
+    [chromium, "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
     ["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
     [
       'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',

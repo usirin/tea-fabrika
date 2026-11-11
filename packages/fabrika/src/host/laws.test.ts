@@ -158,9 +158,9 @@ describe("every planted mistake", () => {
     const caught = await Effect.runPromise(
       Effect.forEach(
         names,
-        (name, i) =>
+        (name) =>
           runLaws().pipe(
-            Effect.provide(layerPlanted(join(dir, `planted-${i}.sqlite`), name)),
+            Effect.provide(layerPlanted(name)),
             Effect.scoped,
             // Each on its own clock: one ledger's jumps must not move another's.
             Effect.provide(owned),
