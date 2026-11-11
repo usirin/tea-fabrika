@@ -599,8 +599,10 @@
       // come back as names in next/, tests included. oxlint's own rule (0040) reads declarations and
       // object keys only: a call such as `Math.floor(n)`, a property read, a comment and a string pass,
       // and those stay review work. A conversation room, which 0091 keeps, takes a local
-      // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line.
-      "files": ["next/**"],
+      // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
+      // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`).
+      "files": ["next/**/*"],
       "rules": {
         "eslint/id-denylist": [
           "error",
