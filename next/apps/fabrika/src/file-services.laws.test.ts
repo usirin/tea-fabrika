@@ -197,7 +197,14 @@ vi.mock("@kampus/libfabrika/node/build", async (original) => ({
     Effect.succeed({
       counter: { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
     }),
-  bundle: () => Effect.succeed({ output: [{ type: "chunk", code: "export default {};" }] }),
+  // The tab's call also emits its page, as the real build's tab plugin does (A20).
+  bundle: (_entry: string, _plugins: unknown, options?: { readonly phase?: string }) =>
+    Effect.succeed({
+      output: [
+        { type: "chunk", code: "export default {};" },
+        ...(options?.phase === "tab" ? [{ type: "asset", fileName: "index.html", source: "<!doctype html>" }] : []),
+      ],
+    }),
 }));
 
 vi.mock("./exam/compiler.ts", async (original) => ({
