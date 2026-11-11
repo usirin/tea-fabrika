@@ -234,6 +234,8 @@ const plan = Ask.define("plan", {
 - To be plain about it: the session still reads the person's words into a
   pick. It does not stop a hijacked session from faking a yes. What it gives
   is a visible mark that can be checked later against the session's own log.
+- In `next/`, a person's line in a lane's room is one more place to answer, with `via` naming the
+  room and the line ([0073](../../.decisions/0073-a-lane-has-a-room.md)).
 
 ### The one hash
 
