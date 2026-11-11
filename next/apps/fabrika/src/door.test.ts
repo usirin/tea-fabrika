@@ -359,7 +359,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     url: URL,
     origins: ["https://fabrika.test"],
     versions: [1, 2],
-    location: "test-stage",
+    location: "test-instance",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
     ping: { min: 10_000, max: 60_000 },
@@ -1327,7 +1327,7 @@ describe("P10 door admission and waiting", () => {
           nonce: h.nonce,
           signed: h.hello.signed,
           sentAt: SENT,
-          location: "test-stage",
+          location: "test-instance",
           build: "test-build",
         });
         expect(rows[0]?.by).toBe(w.window.fingerprint);

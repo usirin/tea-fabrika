@@ -274,6 +274,55 @@ A zero-hit scan has no false-alarm percentage denominator. The generated positiv
 negative plants check both sides separately; they cover parameter modifiers, default values,
 instance/static/abstract accessors, decoded key spellings and permitted plain parameters.
 
+### Ticket 681: instance, not stage, in next/
+
+`no-stage-word` holds decision [0080](../.decisions/0080-a-running-copy-is-an-instance.md): in
+`next/`, a running copy of fabrika is an instance. It reads identifiers, decoded string literals,
+template text, JSX text, comments and the file's path below `next/`. A word is a run of letters
+split at case changes, so `localStage`, `StageError`, `STAGE`, `P34_STAGE_DRIVER`, `stage-wire`
+and a `stages/` folder fire, and `backstage`, `stagecoach`, `instance` and `startDev` pass.
+Oxlint's own `id-denylist`, `no-restricted-properties` and `no-restricted-imports` each see one
+of identifiers, properties or imports, never comments, paths and text together, so this is our
+own rule (0040). It has its own `next/**` block in `.oxlintrc.json`, so the two equal rule blocks
+for `next/` and `.agents/` stay equal; `.agents/` and today's version keep their pipeline stages.
+
+An exception is one line under `// oxlint-disable-next-line fabrika/no-stage-word -- <why>`.
+Template text and comments report on each line that holds the word, so one comment allows one
+line. Of an ignore comment, only the reason after `--` is read: the rule name in it never fires,
+and the reason is written without the word, since its own line is not the one it allows. A path
+reports at the file's start, where no comment silences it. There is no autofix, since the rule
+cannot choose `dev` or `instance`, or move a saved name.
+
+What stays, each under its own exception: Alchemy's own `stage` key in `src/brain.ts`, the app's
+deploy call and `sibling.laws.test.ts`, and experiment 238's saved driver name in
+`instance-one-file.test.ts`. The one quote of today's app, "capture stages" in the pinned bytes
+of `exam-paths.json`, sits inside one inline snapshot, a single template where no comment fits
+beside the line. So `commits.test.ts` brackets that one `expect` with `oxlint-disable` and
+`oxlint-enable` for this rule alone; the other lines of that snapshot are held by the snapshot
+itself, which must equal `exam-paths.json` byte for byte.
+
+What it cannot see: JSON and Markdown, such as `package.json`'s export keys, which the review's
+`rg -i stage next/` audit reads; a word built at run time; and a regular expression's pattern.
+
+`no-stage-word.test.ts` runs the real config over generated names (word parts, case, eight
+spellings, up to twelve placements in `.ts` and `.tsx`), with seed 681080 and 12 runs per property. Every
+run holds a retired spelling and its neighbors in the same places, including a fused lowercase
+word around the letters. Further properties place an annotated exception at generated offsets
+beside unannotated uses, and check generated `next/` paths against today's paths, `.agents/`
+and top-level scripts, and `oxlint-plugins/` among absolute, relative and Windows spellings
+of one path. Fixed cases pin escapes, each comment and text form, the Alchemy key, the two kept literals, directives and
+empty files named for the word. Nine plants each turned at least one law red: lowercase
+identifiers only, any property named stage allowed, a whole file excluded, a directive read
+whole or skipped whole, no path check, raw spelling only, no Windows separators, and no split
+at case changes.
+
+The scan on 2026-11-11, main at `0bb25969`, through the real config over all 244 files oxlint
+reads in `next/`: 302 fires in 33 files before the rename. `rg -n -i stage next/` finds 34 files.
+Every line it finds in a linted file fired, and all eight files whose own path holds the word
+fired by path; the 34th file is `package.json`, outside the rule. None was false. After the tests
+step, the exam files show 0 fires; 37 remain in the 9 build-owned files the plan lists. Two of
+those are Alchemy keys that keep their word under an exception; the other 35 are renames.
+
 ### P12 checks in lint
 
 `no-node-filesystem` refuses `fs`, `fs/promises` and `path`, with or without `node:`,

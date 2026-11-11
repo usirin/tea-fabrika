@@ -595,6 +595,15 @@
       }
     },
     {
+      // A running copy of fabrika is an instance in next/, never a stage (0080), in source and
+      // tests alike. Its own block, so the two equal blocks above stay equal: `.agents/` and today's
+      // version keep their pipeline stages.
+      "files": ["next/**"],
+      "rules": {
+        "fabrika/no-stage-word": "error"
+      }
+    },
+    {
       // React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
       // skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
       "files": ["next/**/*.tsx"],

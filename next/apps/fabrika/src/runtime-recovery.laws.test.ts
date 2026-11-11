@@ -365,7 +365,7 @@ const world = (
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
-    STAGE: JSON.stringify({
+    INSTANCE: JSON.stringify({
       name: "project-test",
       person: PERSON,
       founder: key.line,

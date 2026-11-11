@@ -1,4 +1,4 @@
-// P12, next/. The real stage reports each control failure through supplied platform layers.
+// P12, next/. The real instance reports each control failure through supplied platform layers.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,7 +34,7 @@ const deploy = (port: number) => (local: Context.Context<never>) =>
   });
 
 for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as const) {
-  it(`stage ${mode} exit has its exact ControlError reason`, async () => {
+  it(`instance ${mode} exit has its exact ControlError reason`, async () => {
     await fc.assert(
       fc.asyncProperty(fc.uuid(), async (id) => {
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
@@ -80,7 +80,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
   });
 }
 
-it("stage reports start_timeout when deployment never opens the control listener", async () => {
+it("instance reports start_timeout when deployment never opens the control listener", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), async (build) => {
       const home = mkdtempSync(join(tmpdir(), "p12-time-"));
@@ -119,7 +119,7 @@ it("stage reports start_timeout when deployment never opens the control listener
 });
 
 for (const mode of ["exit", "spawn"] as const) {
-  it(`stage returns sample reason to tracing when RSS ${mode} fails and keeps the brain alive`, async () => {
+  it(`instance returns sample reason to tracing when RSS ${mode} fails and keeps the brain alive`, async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 255 }), async (code) => {
         const home = mkdtempSync(join(tmpdir(), "p12-rss-"));
