@@ -4,7 +4,6 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
@@ -14,6 +13,7 @@ import * as fc from "fast-check";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
 import type { Built } from "../src/build.ts";
+import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, ".."),
   ROOT = resolve(APP, "../../..");
@@ -113,15 +113,11 @@ describe("P16 real browser from a copied one-file build", () => {
             cpSync(built.brain, join(alone, "brain.mjs"));
             rmSync(join(home, "dist"), { recursive: true });
             rmSync(pkg, { recursive: true });
-            const listener = createServer();
-            const port = await new Promise<number>((done, fail) => {
-              listener.once("error", fail);
-              listener.listen(0, "127.0.0.1", () => {
-                const at = listener.address();
-                assert(at && typeof at !== "string");
-                listener.close(() => done(at.port));
-              });
-            });
+            // Held in the stage's own scope, opened before the stage, so it is given back after the
+            // stage closes (finalizers run in reverse).
+            const { port } = await Effect.runPromise(
+              Effect.acquireRelease(heldPort(), (held) => held.release).pipe(Effect.provideService(Scope.Scope, scope)),
+            );
             const raw = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
             const { localStage } = await import("../src/local-stage.ts");
             const { localState } = await import("alchemy/State/LocalState");
