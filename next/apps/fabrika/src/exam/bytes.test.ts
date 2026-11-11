@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
-import { bundle, bundlePrograms } from "@kampus/libfabrika/node/build";
+import { bundle, bundlePrograms, hash } from "@kampus/libfabrika/node/build";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -267,6 +267,16 @@ it.effect(
       const page = built.assets["/index.html"]?.body ?? "";
       expect(page).not.toBe("");
       expect(observed.filter(isTab)).toHaveLength(1);
+      // The page stamps the script its own call made: the tab reads that stamp as its build
+      // (`entry/browser.tsx`), so a page that names another script's hash records the wrong build.
+      const script = built.assets["/window.js"];
+      expect(script).toBeDefined();
+      const stamps = (body: string, digest: string) => body.includes(`<meta name="fabrika-build" content="${digest}">`);
+      expect(stamps(page, script!.hash)).toBe(true);
+      // Plant: a page stamped with the hash of an empty script.
+      const other = yield* hash("");
+      expect(other).not.toBe(script!.hash);
+      expect(stamps(page.replace(script!.hash, other), script!.hash)).toBe(false);
       const withPage = (all: ReadonlyArray<Observed>) =>
         all.map((g) => (isTab(g) && !emitted(g).includes(page) ? { ...g, assets: [...g.assets, page] } : g));
       const withoutPage = (all: ReadonlyArray<Observed>) =>
