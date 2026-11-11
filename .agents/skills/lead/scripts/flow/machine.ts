@@ -154,9 +154,9 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
           return stay(s);
         }
 
-        const why =
+        const cause =
           m.error._tag === "StepFailed" ? String(m.error.reason) : `its answer did not parse (${m.error._tag})`;
-        const reason = `${m.cmd.step.name} failed: ${why}`;
+        const reason = `${m.cmd.step.name} failed: ${cause}`;
         const history = closed(s.history, m.at, Outcome.cases.stuck.make({ reason }), null);
         return stay(Model.cases.stuck.make({ flow: s.flow, position: s.position, history, reason }));
       },

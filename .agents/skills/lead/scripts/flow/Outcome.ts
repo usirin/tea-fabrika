@@ -3,9 +3,9 @@
 //
 //   done   the step did its job; the flow goes on to the next step
 //   skip   nothing to do here; the flow goes on, with the reason on record
-//   send   go to the named step of this flow, with why
+//   send   go to the named step of this flow, with the reason
 //   ask    stop and park for the lead, with one question
-//   stuck  stop; something broke, with why
+//   stuck  stop; something broke, with the reason
 
 import { Schema } from "effect";
 

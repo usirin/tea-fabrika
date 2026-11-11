@@ -73,8 +73,8 @@ const flowCommand = Command.make(
     Effect.gen(function* () {
       const flow = yield* load(file);
       const path = yield* Path.Path;
-      const at = Option.isSome(state) ? state.value : path.join(yield* boxes(), "state", `flow-${flow.name}.json`);
-      const model = yield* runFlow(flow, { state: at, resume, lead }).pipe(
+      const saved = Option.isSome(state) ? state.value : path.join(yield* boxes(), "state", `flow-${flow.name}.json`);
+      const model = yield* runFlow(flow, { state: saved, resume, lead }).pipe(
         Effect.catchTag(["StoreFailed", "SubFailed"], (e) =>
           Effect.fail(new Stuck({ reason: `${e._tag}: ${String(e.cause)}` })),
         ),
@@ -82,7 +82,7 @@ const flowCommand = Command.make(
       const end = ending(model);
       const spent = model.history.reduce((sum, a) => sum + (a.spent?.usd ?? 0), 0);
       yield* Console.log(
-        JSON.stringify({ ...end, flow: flow.name, state: at, attempts: model.history.length, usd: spent }),
+        JSON.stringify({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
       );
 
       if (end.outcome === "ask") {

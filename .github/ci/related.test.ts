@@ -18,8 +18,9 @@ const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withF
   .filter((entry) => entry.isFile())
   .map((entry) => relative(root, join(entry.parentPath, entry.name)));
 
+// Any depth under `scripts/`, as vitest.config.ts includes tests there (the flow runner's `flow/`).
 const tree = new Map(
-  files.filter((path) => /\/scripts\/[^/]+$/.test(path)).map((path) => [path, readFileSync(join(root, path), "utf8")]),
+  files.filter((path) => /\/scripts\/.+$/.test(path)).map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
 
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));

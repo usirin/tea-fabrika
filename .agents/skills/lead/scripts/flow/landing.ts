@@ -67,8 +67,10 @@ const Land = Schema.Struct({ dir: Schema.String, branch: Branch.fields.branch, t
 // ---------------------------------------------------------------- what each exit code means
 
 /** A command that passes on 0 and is stuck otherwise. */
-export const passOrStuck = (what: string, ran: Ran): Outcome.Outcome =>
-  ran.code === 0 ? Outcome.done(`${what} passed`) : Outcome.stuck(`${what} exited ${ran.code}: ${tail(ran.output)}`);
+export const passOrStuck = (command: string, ran: Ran): Outcome.Outcome =>
+  ran.code === 0
+    ? Outcome.done(`${command} passed`)
+    : Outcome.stuck(`${command} exited ${ran.code}: ${tail(ran.output)}`);
 
 /** governance.sh only advises and always exits 0: its list is the reason. */
 export const governanceOutcome = (ran: Ran): Outcome.Outcome =>
