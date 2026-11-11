@@ -160,8 +160,13 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   work as one commit through `stepcommit.sh`, with main's own signer, never the box's code.
 - A mutation step's Stryker run happens first, in a container (`mutbox.ts`, 0045): drive runs it on
   the step's start head with the tests the brief names on one line, `RELATED=<paths>`, and with
-  the lane's root as arm a. A brief without that line is a usage error. A run that is stuck
-  (Docker not running, another Docker box, a test that fails there) ends the step
+  the lane's root as arm a. A brief without that line is a usage error. `RELATED` names tests
+  only: the sample already spreads over every changed product file, `.cjs` and `.mjs` included.
+  Name there the base's test a moved or changed law came from: arm a runs only the base tests
+  that pass on the build. A `done` whose reason names `no_arm_a:<cause>` or
+  `no_reach:old_sampler` has `narrowing: "unknown"`: hand-check the laws as for a loosening hit. A
+  run that is stuck (Docker not running, another Docker box, a test that fails there, arm a that
+  was due and failed, no mutant in the plan's build-owned files) ends the step
   `stuck:step_said` with no agent, its reason starting `mutbox:`, and the box is kept. Else the
   agent gets the text of `BOXES/<box>-mutbox/mutbox.json` in its prompt, whole, since its box
   reads nothing outside itself. Mutation's
