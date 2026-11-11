@@ -2987,10 +2987,8 @@ main.program:has(> .view) {
   padding-inline: 0;
 }
 /* The marks are quiet: small words, and a pressed one takes the selected fill, its primary text and
-   an underline, so color is never the only cue (WCAG 1.4.1). The button's root only: Manti's label
-   inside it is `data-scope="button"` too, and a 24px label would hold a pressed fill at the target's
-   height, up against the line above. */
-.ask-marks [data-scope="button"][data-part="root"] {
+   an underline, so color is never the only cue (WCAG 1.4.1). */
+.ask-marks [data-scope="button"] {
   /* A 24px target (WCAG 2.5.8) that takes a text line's height in the flow: the line under the
 	   marks starts where it would under words. */
   min-block-size: 24px;
@@ -3017,6 +3015,14 @@ main.program:has(> .view) {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+/* Manti's label inside the mark is `data-scope="button"` too, so the rule above gives it the 24px
+   target as well. Pressed, the label takes the words' own height and the mark's text, or it would
+   hold the fill at the target's height, up against the line above. */
+.ask-marks [aria-pressed="true"] > [data-part="label"] {
+  min-block-size: 0;
+  margin-block: 0;
+  color: inherit;
 }
 /* The pressed mark's target stays 24px tall (WCAG 2.5.8) around its smaller fill. */
 .ask-marks [data-part="root"][aria-pressed="true"]::before {
