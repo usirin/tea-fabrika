@@ -106,7 +106,7 @@ const stuck = (reason: string, sha: string, more: object = {}) => ({
   ...more,
 });
 
-const ask = (paths: string[]): Answer => ({ _tag: "ask", who: "owner", for: "exam_read", paths });
+const ask = (paths: string[]): Answer => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
 
 const examPaths = fc
   .uniqueArray(filename, { minLength: 1, maxLength: 8 })

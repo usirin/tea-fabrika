@@ -69,7 +69,7 @@ const revoke = (key: string, id: string) =>
       for: person,
       to: "p17",
       sentAt,
-      saw: { label: "Old client", where: "test", how: "panel", check: "touch" },
+      saw: { label: "Old client", location: "test", method: "panel", check: "touch" },
     },
     signed,
   });
@@ -86,8 +86,8 @@ const grant = () =>
       saw: {
         code: "1234",
         label: "Other client",
-        where: "test",
-        how: "compare",
+        location: "test",
+        method: "compare",
         check: "touch",
         has: [],
       },

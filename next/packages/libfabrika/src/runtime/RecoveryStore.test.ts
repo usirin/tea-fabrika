@@ -17,7 +17,7 @@ type Store = {
 
 type Subject = {
   readonly RecoveryStore: Context.Service<Store, Store> & {
-    readonly layer: (sql: Sql, who: { name: string; capacity: number }) => Layer.Layer<Store>;
+    readonly layer: (sql: Sql, options: { name: string; capacity: number }) => Layer.Layer<Store>;
   };
 };
 

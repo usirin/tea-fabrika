@@ -222,7 +222,7 @@ Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md
 | `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime, and `runtimePromise` and `makeRuntimePromise`; `NodeRuntime.runMain` passes | a line under an edge comment | left out |
 | `edge-comment` | an ignore comment naming either rule above that is not `// oxlint-disable-next-line <rule> -- edge: <why>`: another form, another rule named beside them, or no `edge: ` reason | none | on |
 | `no-of` | a declared name `of` or ending in `Of`, a named import of `of`; a module's top-level exported `of` and a use pass (0029) | none | on |
-| `no-why-key` | a statically named `why` key in an object, class or type declaration; use `reason` | none | on |
+| `no-question-word-key` | a quoted, escaped, computed or template key named `where`, `why`, `what`, `who` or `how` in an object, class or type declaration; oxlint's own `eslint/id-denylist` holds the same names written as identifiers (0081) | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` imported or read as a plain member anywhere in `next/`; a store hook's value dropped | none | left out |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
@@ -238,41 +238,58 @@ and `Effect.promise` and the run functions by their written names. P12 adds the 
 check below for Promises passed through helpers. `no-hand-tag` misses `x._tag = "a"`,
 which the plan does not name. Report any miss.
 
-### Ticket 337: reason keys in next/
+### Ticket 682: question words are never names
 
-`no-why-key` checks object fields, shorthand, methods, getters and setters; class fields,
-methods and accessors, including static and abstract declarations; constructor parameter
-properties with access or readonly modifiers, including defaults; and type or interface
-property and method signatures. Effect Schema field maps use the same object syntax. Quoted
-and escaped names, computed string literals and expression-free templates count by their
-decoded value. The match is exactly `why`, including readonly members.
+A question word names the question, not the answer, so `where`, `why`, `what`, `who` and `how`
+are never a key, field, option, parameter or binding in `next/` or `.agents/`, tests included
+([0081](../.decisions/0081-no-question-word-names.md)). Two rules hold it, with the same five
+words in both governed override blocks of `.oxlintrc.json`, and neither offers an autofix, since
+a rule cannot pick the noun for a value and one renamed declaration alone can break its readers.
 
-Reads, destructuring reads, local variables, plain constructor parameters without property
-modifiers, comments, string values and dynamic keys pass.
-`whyNot`, `Why` and `reason` pass. Member assignments, SQL and JSON inside strings need the
-separate sweep audit. Today's paths keep their spelling. There is no autofix, since changing
-one declaration alone can break readers and saved formats. The glossary is not parsed as policy.
+- **oxlint's own `eslint/id-denylist`** (0040) holds every name written as an identifier, escaped
+  identifiers decoded: variables, parameters, rest parameters, defaults, catch and loop bindings,
+  destructured bindings, tuple labels, object keys and shorthand, methods and accessors, class
+  fields, methods and accessors (static, abstract and accessor ones too), constructor parameters
+  with or without modifiers, type and interface members (optional and readonly ones too), Schema
+  field maps and a member assignment such as `row.why = x`. It also reports a read of such a
+  binding. Its diagnostic is oxlint's own, `Identifier 'why' is restricted.`
+- **`no-question-word-key`** holds what the native rule does not decode: a quoted or escaped
+  string key, a computed string key and an expression-free template key, in the same object,
+  class and type declarations. Its diagnostic asks for the noun of the value and names all five
+  words. It no longer checks identifier keys or constructor parameter properties, since the
+  native rule reports those; the generated matrix checks that each line is reported by exactly
+  one of the two.
 
-The tests checkpoint on 2026-11-09 used base and unchanged product head
-`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03`, with the tests changes in this commit.
-The standard wrapper, `node oxlint-plugins/lint.ts next`, scanned the 197 TypeScript files
-under `next/`. It reported 294 `no-why-key` diagnostics across 44 build-owned files.
-Every diagnostic was read against its declaration: 294 useful findings, 0 false findings,
-0 unclassified findings. No tests-owned file has a remaining declaration. Raw output is private
-under `runs/reason337/next-lint.log`. Product still uses `why`, so this is deliberately red.
+What passes: reads such as `a.why` and `a["why"]`, `"why" in a`, an outside key destructured
+into a good local (`const { why: reason } = row`), an import renamed on the way in, dynamic and
+interpolated keys, string values, comments, SQL text, and exact-name neighbors such as `Who`,
+`WHY`, `whyNot` and `whereé`. Neither rule sees an index-signature parameter
+(`[who: string]: T`), a computed member assignment (`a["why"] = x`) or a key built at run time,
+and neither reads shell or Python. Today's paths keep their words. An outside format keeps its
+key at the edge, under an `oxlint-disable-next-line <rule> -- <why>` or an existing
+`agents-ledger.json` entry.
 
-`no-why-key.test.ts` uses generated Unicode names, generated filenames and declaration forms
-through the real config, with seed 119120 and 12 runs per property. Every syntax run includes
-the exact retired key. Fixed format checks pin escaped spellings and the diagnostic.
-The final post-build scan on 2026-11-09 used base
-`9b48d622b5d4cfe54ca6d0a8a53f0ac03d3f2c03` and code head
-`d6f62819a3585252a3bb08a63837029c088934ad`, including review 1's class declaration fixes.
-The same wrapper scanned all 197 TypeScript files under `next/`: 0 `no-why-key`
-diagnostics, 0 useful findings, 0 false findings and 0 unresolved findings. It passed with
-0 blocking findings and 42 advice messages. Raw output is private at the same path above.
-A zero-hit scan has no false-alarm percentage denominator. The generated positive and
-negative plants check both sides separately; they cover parameter modifiers, default values,
-instance/static/abstract accessors, decoded key spellings and permitted plain parameters.
+`no-question-word-key.test.ts` generates, with seed 119120 and 12 runs per property: every
+declaration and binding form for all five words in every run, in every spelling, with a
+generated Unicode key, identifier and near neighbor beside them; the real config at generated
+`next/`, exam, test, test-support and skill paths, and today's paths off; and generated values,
+dynamic keys, outside reads, comments, SQL and neighbors that must pass. Two `format:` checks pin
+the decoded spellings and the diagnostic with no fix. Plants, each run once on 2026-11-11 and
+undone: dropping `how` from the config's list failed the matrix and path laws; skipping literal
+keys failed the matrix, path and both format laws; matching substrings failed the matrix and the
+passing law; turning both rules off for `next/**/*.test.ts` failed the path law; and a partial
+autofix failed all four laws that read the rule's report.
+
+The tests step's scan on 2026-11-11, at base `14513706e` with the tests changes, ran the real
+config over `next/`, `.agents/` and `oxlint-plugins/`. Before the test renames both rules
+reported 446 diagnostics, all from `eslint/id-denylist`; `no-question-word-key` reported 0, since
+no literal-spelled question-word key exists on the tree. After them, 93 remain in 20 files: 89 in
+the 18 product files the ticket's plan gives to the builder, and 4 in tests (`drive.test.ts:207`,
+`box.test.ts:250,1534,1551`) that read today's outside formats and are named in
+`agents-ledger.json` under the old rule's ID, which the build translates. Product still uses the old names, so this is deliberately red.
+
+Ticket 337's earlier rule, `no-why-key`, checked `why` alone; its scans on 2026-11-09 found 294
+diagnostics in 44 build-owned files before its build and 0 after, all read by hand.
 
 ### P12 checks in lint
 

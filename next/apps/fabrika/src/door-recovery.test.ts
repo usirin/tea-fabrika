@@ -371,7 +371,7 @@ const world = () => {
     },
   });
   const layer = () => Gateway.layer(settings()).pipe(Layer.provideMerge(env()));
-  const online = Effect.fnUntraced(function* (who = window) {
+  const online = Effect.fnUntraced(function* (signer = window) {
     const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);
@@ -382,15 +382,15 @@ const world = () => {
         versions: [1],
         has: ["verify", "seal"],
         ping: "30s",
-        key: who.raw,
+        key: signer.raw,
         tab,
         nonce,
         platform: "browser",
         os: "ios",
         sentAt: from().sentAt,
-        signed: who.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+        signed: signer.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
       },
-      { url: URL, tab, name: who.fingerprint },
+      { url: URL, tab, name: signer.fingerprint },
     );
     expect(result._tag, "the test must pass real admission before delivery").toBe("online");
     return client;
@@ -809,8 +809,8 @@ describe("P34 door recovery", () => {
                 saw: {
                   code: "1234",
                   label: "Other browser",
-                  where: "test",
-                  how: "compare",
+                  location: "test",
+                  method: "compare",
                   check: "touch",
                   has: ["verify"],
                 },

@@ -570,7 +570,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error"
       }
@@ -589,7 +592,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error"
       }
@@ -610,7 +616,7 @@
     },
     {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-      // `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
+      // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {

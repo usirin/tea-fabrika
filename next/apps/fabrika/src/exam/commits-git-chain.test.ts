@@ -268,18 +268,18 @@ describe("chain after the merge (p86 and p89)", () => {
       fc.constantFrom({ _tag: "drop" as const, field: "parent" }, { _tag: "drop" as const, field: "traceId" }),
     );
     fc.assert(
-      fc.property(fc.nat(rows.length - 1), change, (at, how) => {
+      fc.property(fc.nat(rows.length - 1), change, (at, mutation) => {
         const bad = structuredClone(rows);
         const link: Record<string, unknown> = bad[at]!.attested[0]!;
 
-        if (how._tag === "cause") {
-          if (!how.keepParent) {
+        if (mutation._tag === "cause") {
+          if (!mutation.keepParent) {
             delete link.parent;
           }
 
-          link.cause = how.cause;
+          link.cause = mutation.cause;
         } else {
-          delete link[how.field];
+          delete link[mutation.field];
         }
 
         log(r, bad);

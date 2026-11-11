@@ -126,8 +126,8 @@ const lines = (text: string) => text.split("\n").filter((line) => line !== "");
 /** A note on one line of the diff, in GitHub's workflow command form. */
 const notice = (edge: Edge) => {
   const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
-  const where = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
-  return `::notice file=${where},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
+  const location = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
+  return `::notice file=${location},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
 
 const ask = (edge: Edge) => `${edge.path}:${edge.line}  ${edge.rules}  ${edge.reason}  [ok] [no]`;

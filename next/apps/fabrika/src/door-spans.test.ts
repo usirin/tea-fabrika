@@ -265,8 +265,8 @@ const saw = (a: Sample) =>
   Saw.make({
     code: a.id,
     label: a.text,
-    where: "test",
-    how: "compare",
+    location: "test",
+    method: "compare",
     check: "touch",
     has: ["verify"],
   });

@@ -382,15 +382,15 @@ const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
   }
 };
 
-const refused = (r: { code: number | null; text: string }, why: RegExp) => {
+const refused = (r: { code: number | null; text: string }, pattern: RegExp) => {
   expect(r.code, r.text).not.toBe(0);
-  expect(r.text).toMatch(why);
+  expect(r.text).toMatch(pattern);
   expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
 
 /** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
-const checkRefused = (r: { code: number | null; text: string }, check: string, why = /.*/) => {
-  refused(r, why);
+const checkRefused = (r: { code: number | null; text: string }, check: string, pattern = /.*/) => {
+  refused(r, pattern);
   expect(r.code, r.text).toBe(3);
   expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
   expect(r.text).not.toMatch(/^stuck /m);
@@ -855,7 +855,7 @@ describe("T321 K1 fetch, today's tooling", () => {
             [2, "", false],
             [2, '{"_tag":"done"}\n', false],
             [0, "not json\n", false],
-            [0, '{"_tag":"ask","who":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
+            [0, '{"_tag":"ask","to":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
           ] as const,
           ([status, output, pass]) =>
             fixture((b) => {
@@ -1273,7 +1273,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     each(["lead", "tests"] as const, (step) =>
       fixture((b) => {
         const stale = JSON.stringify({ _tag: "stuck", reason: "stale_link", sha: "head", step });
-        const ask = JSON.stringify({ _tag: "ask", who: "owner", for: "exam_read", paths: [] });
+        const ask = JSON.stringify({ _tag: "ask", to: "owner", for: "exam_read", paths: [] });
         b.setup({
           operations: [{ path: "src/a.ts", text: "run\n" }],
           check: { status: 1, text: `${stale}\n${ask}\n` },

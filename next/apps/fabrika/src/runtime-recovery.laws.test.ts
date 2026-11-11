@@ -704,7 +704,7 @@ const world = (
           key: key.raw,
           for: PERSON,
           to: "project-test",
-          saw: { label: "fixture", where: "local", how: "command", check: "none" },
+          saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
         expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
@@ -840,7 +840,7 @@ const FLOW_WAIT = 15_000;
 /** The crash that trips P34's decided Worker policy, 5 restarts in 5,000 ms: it goes down, not restarted. */
 const BRAKE = 6;
 
-const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean) => {
+const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
   const end = Date.now() + FLOW_WAIT;
   let last: unknown = null;
 
@@ -859,7 +859,7 @@ const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) =
     await new Promise((done) => setTimeout(done, 20));
   }
 
-  throw new Error(`${what}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
+  throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
 };
 
 const NAME = "poison:1";

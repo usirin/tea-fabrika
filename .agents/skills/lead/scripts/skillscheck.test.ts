@@ -551,26 +551,26 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
         // "removed": review round 1, finding 10, a deleted source dropped its clauses.
         fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill", "removed"),
         fc.constantFrom(" ", "\n"),
-        (where, wrap) => {
+        (mutation, wrap) => {
           for (const [i, [skill, section, check, text]] of clauses.entries()) {
             const got = clauseTree((dir) => {
               let content = skillText(skill, i, wrap);
 
-              if (where === "wrong-section" && section) {
+              if (mutation === "wrong-section" && section) {
                 content += `\n## Elsewhere\n${text}\n`;
               }
 
-              if (where === "fenced") {
+              if (mutation === "fenced") {
                 content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
               }
 
               writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
 
-              if (where === "removed") {
+              if (mutation === "removed") {
                 rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
               }
 
-              if (where === "wrong-skill") {
+              if (mutation === "wrong-skill") {
                 writeFileSync(
                   join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
                   `${skillText(skill === "plan" ? "lead" : "plan")}\n${text}\n`,

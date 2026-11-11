@@ -226,7 +226,7 @@ const flow = async (sample: Flow) => {
     sql = nodeSql(gatewayDb);
   let attached: unknown = Attached.cases.online.make({
     client: "client",
-    who: { key: "public", person: "person-test", as: "agent" },
+    identity: { key: "public", person: "person-test", as: "agent" },
     version: 1,
     waits: [],
     watching: false,

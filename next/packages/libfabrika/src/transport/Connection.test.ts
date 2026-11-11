@@ -38,7 +38,7 @@ const restored = (saved: Saved) => Schema.decodeUnknownSync(Attached)(JSON.parse
 const online = (busy = false, waits: ReadonlyArray<W> = []) =>
   Attached.cases.online.make({
     client: READER,
-    who: { key: "SHA256:test", person: "person-test", as: "window" },
+    identity: { key: "SHA256:test", person: "person-test", as: "window" },
     version: 1,
     waits,
     watching: false,

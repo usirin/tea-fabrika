@@ -158,8 +158,8 @@ const world = Effect.fnUntraced(function* () {
     saw: {
       code: "1234",
       label: "Exam agent",
-      where: "exam",
-      how: "compare",
+      location: "exam",
+      method: "compare",
       check: "touch",
       has: [],
     },
@@ -222,7 +222,7 @@ it.effect.prop(
 
       for (const role of ["person", "window", "agent"]) {
         const { client, result } = yield* w.hello(w.agent, `${role}-${c.name}`, role);
-        expect(result).toMatchObject({ _tag: "online", who: { as: "agent" } });
+        expect(result).toMatchObject({ _tag: "online", identity: { as: "agent" } });
         const req = {
           ...request(c.body),
           letter: `letter_0000000000e00800000000000${role === "person" ? 1 : role === "window" ? 2 : 3}`,
@@ -289,7 +289,7 @@ const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
       to: "p8",
       as: "window",
       sentAt,
-      saw: { code: "1234", label, where: "exam", how: "command", check: "none", has: [] },
+      saw: { code: "1234", label, location: "exam", method: "command", check: "none", has: [] },
     }),
     revoked: revokeText({
       id: "revoke_0000000000e008000000000001",
@@ -297,7 +297,7 @@ const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
       for: person,
       to: "p8",
       sentAt,
-      saw: { label, where: "exam", how: "panel", check: "touch" },
+      saw: { label, location: "exam", method: "panel", check: "touch" },
     }),
     added: addText({
       id: "add_0000000000e008000000000001",
@@ -305,7 +305,7 @@ const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
       to: "p8",
       adds: Adds.cases.person.make({ key: joining.line, window: joining.raw }),
       drops: [],
-      saw: { how: "device", check: "touch", where: label, has: [], typed: false, kept: null, old: null },
+      saw: { method: "device", check: "touch", location: label, has: [], typed: false, kept: null, old: null },
       sentAt,
     }),
   };

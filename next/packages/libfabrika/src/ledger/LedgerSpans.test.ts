@@ -586,7 +586,7 @@ describe("p95, every call is one span, names and numbers only", () => {
     override readonly name = "BellBroke";
   }
   const DIES = "connection:dies";
-  const dying = (how: "inside" | "outside", rang: Array<string>) =>
+  const dying = (location: "inside" | "outside", rang: Array<string>) =>
     Layer.succeed(Doorbell, {
       ring: (to) => {
         if (to !== DIES) {
@@ -596,7 +596,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         }
 
         // "inside": a sync throw inside the ring's Effect. "outside": a throw before any Effect.
-        if (how === "outside") {
+        if (location === "outside") {
           throw new BellBroke("message-marker");
         }
 
@@ -606,9 +606,9 @@ describe("p95, every call is one span, names and numbers only", () => {
       },
     });
 
-  for (const how of ["inside", "outside"] as const) {
+  for (const location of ["inside", "outside"] as const) {
     it.effect(
-      `a ring that dies with a defect (a sync throw ${how} its Effect) leaves the append placed, its span failed with ok false, and the other ring rung`,
+      `a ring that dies with a defect (a sync throw ${location} its Effect) leaves the append placed, its span failed with ok false, and the other ring rung`,
       () => {
         const { tracer, tags, ended, all } = capture();
         const rang: Array<string> = [];
@@ -633,7 +633,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           ]);
           expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
         }).pipe(
-          Effect.provide(Referee.layer(fresh()).pipe(Layer.provide(dying(how, rang)))),
+          Effect.provide(Referee.layer(fresh()).pipe(Layer.provide(dying(location, rang)))),
           Effect.withTracer(tracer),
         );
       },

@@ -35,15 +35,15 @@ const commonExample = {
 describe("P10 passkey records", () => {
   it("p42: added-key records retain command and handwritten observations", () => {
     fc.assert(
-      fc.property(commonArb, text, text, (common, key, where) => {
+      fc.property(commonArb, text, text, (common, key, location) => {
         const add = {
           ...common,
           adds: { _tag: "recovery", key, v: 1 },
           drops: [],
           saw: {
-            how: "sheet",
+            method: "sheet",
             check: "touch",
-            where,
+            location,
             has: [],
             typed: true,
             kept: "hand",
@@ -51,7 +51,7 @@ describe("P10 passkey records", () => {
           },
         };
         expect(Schema.decodeUnknownSync(Add)(add)).toEqual(add);
-        const command = { ...add, saw: { ...add.saw, how: "command", kept: null, typed: false } };
+        const command = { ...add, saw: { ...add.saw, method: "command", kept: null, typed: false } };
         expect(Schema.decodeUnknownSync(Add)(command)).toEqual(command);
       }),
       { seed: 119120, includeErrorInReport: true, examples: [[commonExample, "sheet", "test"]] },

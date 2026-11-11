@@ -120,12 +120,16 @@ const constructor = fc.constantFrom(
 
 const allowed = fc.oneof(
   fc.constantFrom("lint", "type"),
-  fc.tuple(constructor, fc.boolean(), word).map(([name, described, why]) => `fc.${name}${described ? `: ${why}` : ""}`),
+  fc
+    .tuple(constructor, fc.boolean(), word)
+    .map(([name, described, description]) => `fc.${name}${described ? `: ${description}` : ""}`),
   fc
     .tuple(fc.constantFrom("arbMsg", "arbRecordMsg", "arbMsgSequence", "arbGuidedSequence"), fc.boolean(), word)
-    .map(([name, described, why]) => `@demlik/tea/pbt.${name}${described ? `: ${why}` : ""}`),
+    .map(([name, described, description]) => `@demlik/tea/pbt.${name}${described ? `: ${description}` : ""}`),
   fc.tuple(word, word).map(([a, b]) => `Effect Arbitrary: ${a}.${b}`),
-  fc.tuple(fc.constantFrom("vector", "format", "pinned", "scenario"), word).map(([label, why]) => `${label}: ${why}`),
+  fc
+    .tuple(fc.constantFrom("vector", "format", "pinned", "scenario"), word)
+    .map(([label, description]) => `${label}: ${description}`),
 );
 
 const refused = fc.oneof(
@@ -526,16 +530,16 @@ describe("plancheck, today's tooling", () => {
           trail: trailRun,
           after: marks,
           form: fc.constantFrom(...(Object.keys(forms) as Form[])),
-          where: fc.constantFrom(...(Object.keys(place) as Place[])),
+          location: fc.constantFrom(...(Object.keys(place) as Place[])),
           lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
         }),
-        ({ path, ticks, dot, before, lead, dots, trail, after, form, where, lang }) => {
+        ({ path, ticks, dot, before, lead, dots, trail, after, form, location, lang }) => {
           const tick = ticks ? "`" : "";
           // A `./` prefix, or a stripped run: leading `_`/`-`, then leading dots on a path that is
           // not a dotfile (A12 matches a word with its leading dots removed).
           const head = dot ? "./" : `${lead}${path.startsWith(".") ? "" : ".".repeat(dots)}`;
           const token = `${before}${tick}${head}${path}${trail}${tick}${after}`;
-          const body = place[where](forms[form](token, path), lang);
+          const body = place[location](forms[form](token, path), lang);
           const got = check(body);
           expect(got.text, `${body}\n${got.text}`).toContain(`exam path named: ${path}\t`);
         },
@@ -546,13 +550,13 @@ describe("plancheck, today's tooling", () => {
         examples: [
           // pinned: ticket 520 review round 6, a link title. The build-owned cell
           // [package.json](package.json "manifest") was missed by both checks at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "linkSelfTitle", where: "fileCell" }],
+          [{ ...bare, path: "package.json", form: "linkSelfTitle", location: "fileCell" }],
           // pinned: ticket 520 review round 6, a fenced block holding package.json was never
           // listed at bb7d5a09.
-          [{ ...bare, path: "package.json", form: "plain", where: "fence", lang: "sh" }],
+          [{ ...bare, path: "package.json", form: "plain", location: "fence", lang: "sh" }],
           // pinned: ticket 520 amendment A11, underscore emphasis around a path with an inner
           // underscore. _allowed_signers_ was not listed at bb7d5a09.
-          [{ ...bare, path: "allowed_signers", form: "underscore", where: "prose" }],
+          [{ ...bare, path: "allowed_signers", form: "underscore", location: "prose" }],
           // pinned: ticket 520 review round 5, [`package.json`](package.json) in a build-owned
           // cell printed "no exam paths named" at 2e25c4e7.
           [
@@ -563,7 +567,7 @@ describe("plancheck, today's tooling", () => {
               before: "[",
               after: "](package.json)",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           // pinned: ticket 520 review round 7, three cells that printed "no exam paths named" at
@@ -575,7 +579,7 @@ describe("plancheck, today's tooling", () => {
               before: "~~",
               after: "~~",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           [
@@ -585,7 +589,7 @@ describe("plancheck, today's tooling", () => {
               before: "“",
               after: "”",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
           [
@@ -597,7 +601,7 @@ describe("plancheck, today's tooling", () => {
               trail: "--",
               after: ">",
               form: "plain",
-              where: "fileCell",
+              location: "fileCell",
             },
           ],
         ],

@@ -157,13 +157,13 @@ const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
 const SAW = {
   code: SAW_MARK,
   label: SAW_MARK,
-  where: SAW_MARK,
-  how: "compare",
+  location: SAW_MARK,
+  method: "compare",
   check: "touch",
   has: [SAW_MARK],
 } as const;
 
-const TOOK = { label: SAW_MARK, where: SAW_MARK, how: "panel", check: "touch" } as const;
+const TOOK = { label: SAW_MARK, location: SAW_MARK, method: "panel", check: "touch" } as const;
 
 const signed = (signer: string) => ({
   text: `${SIG_MARK} text`,
@@ -186,14 +186,14 @@ const revoked = (signer: string, key: string): MemberEvent => ({
   signed: signed(signer),
 });
 
-const addSaw = (how: "sheet" | "recovery") => ({
-  how,
+const addSaw = (method: "sheet" | "recovery") => ({
+  method,
   check: "touch" as const,
-  where: SAW_MARK,
+  location: SAW_MARK,
   has: [SAW_MARK],
-  typed: how === "sheet",
-  kept: how === "sheet" ? ("print" as const) : null,
-  old: how === "recovery" ? ("lost" as const) : null,
+  typed: method === "sheet",
+  kept: method === "sheet" ? ("print" as const) : null,
+  old: method === "recovery" ? ("lost" as const) : null,
 });
 
 const addedDevice = (signer: string, key: string, window: string, drops: ReadonlyArray<string> = []): MemberEvent => ({

@@ -551,8 +551,8 @@ const world = async (
         const actual = yield* ProcessStore;
         return {
           ...actual,
-          record: (id: string, event: unknown, who: From) =>
-            actual.record(id, event, who).pipe(
+          record: (id: string, event: unknown, from: From) =>
+            actual.record(id, event, from).pipe(
               Effect.flatMap((answer: unknown) => {
                 if (fault.record) {
                   fault.record = false;

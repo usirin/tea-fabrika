@@ -929,7 +929,7 @@ type NotesSnapshot = {
 };
 
 type SaveDetails = {
-  readonly how?: "pause" | "leave" | "done" | "kept";
+  readonly reason?: "pause" | "leave" | "done" | "kept";
   readonly from?: { readonly note: string; readonly version: number };
 };
 
@@ -1009,7 +1009,7 @@ const unchangedNotes = (before: NotesSnapshot, after: NotesSnapshot) => expect(a
 const SaveCases = Arbitrary.schema(
   Schema.Struct({
     body: Body,
-    how: Schema.optionalKey(Schema.Literals(["pause", "leave", "done", "kept"])),
+    reason: Schema.optionalKey(Schema.Literals(["pause", "leave", "done", "kept"])),
     from: Schema.optionalKey(
       Schema.Struct({
         note: Schema.Literals([note, "note_0000000000e008000000000002"]),
@@ -1039,7 +1039,7 @@ it.effect.prop(
       const a = yield* notes(ctx),
         b = requireNotes();
       const details: SaveDetails = {
-        ...(c.how === undefined ? {} : { how: c.how }),
+        ...(c.reason === undefined ? {} : { reason: c.reason }),
         ...(c.from === undefined ? {} : { from: c.from }),
       };
       const sentAt = new Date(c.clock).toISOString();
@@ -1305,7 +1305,7 @@ it.effect("format: not built: P13 / frozen A3 replay/retry/stale and independent
           by: h.by,
           arrivedAt: h.arrivedAt,
           sentAt: h.sentAt,
-          ...(h.how === undefined ? {} : { how: h.how }),
+          ...(h.reason === undefined ? {} : { reason: h.reason }),
           ...(h.from === undefined ? {} : { from: h.from }),
         },
         [
@@ -1313,45 +1313,45 @@ it.effect("format: not built: P13 / frozen A3 replay/retry/stale and independent
             by: "SHA256:fixture-person",
             arrivedAt: 1000,
             sentAt: "2030-01-01T00:00:00Z",
-            how: "pause",
+            reason: "pause",
           },
           {
             by: "SHA256:fixture-person",
             arrivedAt: 1001,
             sentAt: "2020-01-01T00:00:00Z",
-            how: "leave",
+            reason: "leave",
           },
           {
             by: "SHA256:fixture-person",
             arrivedAt: 1002,
             sentAt: "2040-01-01T00:00:00Z",
-            how: "done",
+            reason: "done",
           },
           { by: "SHA256:fixture-agent", arrivedAt: 1003, sentAt: "2010-01-01T00:00:00Z" },
           {
             by: "SHA256:fixture-person",
             arrivedAt: 1004,
             sentAt: "2050-01-01T00:00:00Z",
-            how: "pause",
+            reason: "pause",
           },
           {
             by: "SHA256:fixture-person",
             arrivedAt: 1005,
             sentAt: "2000-01-01T00:00:00Z",
-            how: "kept",
+            reason: "kept",
             from: { note, version: 3 },
           },
           {
             by: "SHA256:fixture-person",
             arrivedAt: 1006,
             sentAt: "2060-01-01T00:00:00Z",
-            how: "done",
+            reason: "done",
           },
           {
             by: "SHA256:fixture-agent",
             arrivedAt: 1007,
             sentAt: "1990-01-01T00:00:00Z",
-            how: "leave",
+            reason: "leave",
           },
         ][i],
       );
@@ -1404,12 +1404,12 @@ it.prop(
       by: writer.key,
       arrivedAt: c.arrivedAt,
       sentAt: new Date(c.clock).toISOString(),
-      how: c.how ?? "kept",
+      reason: c.reason ?? "kept",
       from: c.from ?? { note, version: now },
     };
     savedMetadata(structuredClone(expected), expected);
 
-    for (const field of ["how", "from", "by", "arrivedAt", "sentAt"] as const) {
+    for (const field of ["reason", "from", "by", "arrivedAt", "sentAt"] as const) {
       const missing: Record<string, unknown> = { ...expected };
       delete missing[field];
       expect(() => savedMetadata(missing, expected)).toThrow();

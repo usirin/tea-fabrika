@@ -309,7 +309,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         key: key.raw,
         for: PERSON,
         to: "project-test",
-        saw: { label: "fixture", where: "local", how: "command", check: "none" },
+        saw: { label: "fixture", location: "local", method: "command", check: "none" },
         sentAt: SENT,
       });
       return run(p.grant({ text, armored: key.proof(text) }));
@@ -652,7 +652,7 @@ describe("P12 Connection recording", () => {
         db = new DatabaseSync(":memory:");
       let attached: typeof Attached.Type = Attached.cases.online.make({
         client: letter,
-        who: { key: w.key.fingerprint, person: PERSON, as: "window" },
+        identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
         version: 1,
         waits: [],
         watching: false,

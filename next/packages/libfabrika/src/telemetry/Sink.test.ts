@@ -104,8 +104,8 @@ const traced = <A, E, R>(name: string, attributes: Record<string, unknown>, body
 
 const step = (name: string, attributes: Record<string, unknown> = {}) => traced(name, attributes, Effect.void);
 
-const count = (db: DatabaseSync, table: string, where = "1"): number =>
-  Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`).get()?.["n"]);
+const count = (db: DatabaseSync, table: string, predicate = "1"): number =>
+  Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${predicate}`).get()?.["n"]);
 
 /** Each table and column in a database whose text holds `marker`, as `table.column`. */
 const places = (db: DatabaseSync, marker: string): Array<string> => {

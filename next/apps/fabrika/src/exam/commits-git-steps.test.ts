@@ -202,13 +202,13 @@ describe("person commits between step links (p86b)", () => {
     expect(verifyCommit(r, person)).toBe(0);
     const middle = personLink(r, person);
     expect(middle.from).not.toBe(middle.to);
-    const signedCommit = (parent: string, tree: string, who: "person" | "tests" = "person") =>
+    const signedCommit = (parent: string, tree: string, signer: "person" | "tests" = "person") =>
       r
         .git(
           "-c",
           "gpg.format=ssh",
           "-c",
-          `user.signingkey=${join(KEYS, who)}`,
+          `user.signingkey=${join(KEYS, signer)}`,
           "commit-tree",
           "-S",
           "-p",
