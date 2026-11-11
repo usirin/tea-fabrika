@@ -880,7 +880,7 @@ describe("T321 K2 box start, today's tooling", () => {
   // Plant: inspect only the current branch's links, or block on any branch that shares the
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
-  // Plant: block on an open branch whose only change is field/*.jsonl rows.
+  // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (0090).
   it("K2 refuses a shared ticket only when another live branch carries its links", () => {
     const places = [
       "main",
@@ -893,6 +893,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "different-ticket",
       "inside",
       "field-rows",
+      "field-files",
     ] as const;
     const blocks = new Set(["open-pr", "running-box", "gh-down"]);
     fc.assert(
@@ -907,9 +908,15 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             // Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
-            const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
+            const path =
+              place === "field-rows"
+                ? "field/runs.jsonl"
+                : place === "field-files"
+                  ? "field/runs/2026-11-11-t321-tests1.json"
+                  : "src/a.ts";
+            const rows = place === "field-rows" || place === "field-files";
             const sha = b.commit(b.main, path, `${text}\n`);
-            b.sign(b.main, place === "field-rows" ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
+            b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
 
             if (place === "main" || place === "merged") {
               b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
@@ -921,7 +928,9 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             b.setup({
-              openPrs: ["open-pr", "field-rows"].includes(place) ? ["fabrikalfa/other"] : ["fabrikalfa/unrelated"],
+              openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
+                ? ["fabrikalfa/other"]
+                : ["fabrikalfa/unrelated"],
               ...(place === "gh-down" ? { gh: "down" as const } : {}),
             });
 
@@ -1256,6 +1265,66 @@ describe("T321 review round 1 fixes, today's tooling", () => {
         expect(got.code, got.text).toBe(0);
         const check = b.calls().find((c) => c.cmd === "pnpm" && c.args[0] === "commits" && c.args[1] === "check");
         expect(check?.args[check.args.indexOf("--base") + 1]).toBe(start);
+      }),
+    );
+  });
+
+  // One lane, end to end on the real checker: a signed tests step, main moves, the lead merges main
+  // in (signed as `lead`, or not, or with another commit's link), main may move again, and the next
+  // step's box starts at the lane head with the first step's root saved.
+  const afterLeadMerge = (b: Box, lead: "signed" | "unsigned" | "foreign", movedAgain: boolean) => {
+    b.setup({ operations: [{ path: "src/a.ts", text: "first tests\n" }] });
+    expect(b.run().code).toBe(0);
+    const first = b.fetch();
+    expect(first.code, first.text).toBe(0);
+    const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+    b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+    b.git(b.main, "checkout", "-q", b.branch);
+    b.git(b.main, "merge", "-q", "--no-ff", "-m", "lead merge of main", "main");
+
+    if (lead === "signed") {
+      b.sign(b.main, "lead", "321");
+    } else if (lead === "foreign") {
+      // The signer refuses a key allowed_signers lacks, so the foreign link is the first step's own
+      // valid link, replayed onto the merge: trusted key, wrong trees.
+      const lifted = b.git(b.main, "notes", "--ref=fabrika", "list", `${b.branch}^1`).trim();
+      b.git(b.main, "notes", "--ref=fabrika", "add", "-C", lifted, "HEAD");
+    }
+
+    const merged = b.head(b.main);
+    b.git(b.main, "checkout", "-q", "main");
+
+    if (movedAgain) {
+      b.git(b.main, "update-ref", "refs/remotes/origin/main", b.commit(b.main, "src/old.ts", "main moved again\n"));
+    }
+
+    b.git(b.work, "fetch", "-q", b.main, `${b.branch}:refs/remotes/lane`, "refs/notes/fabrika:refs/notes/fabrika");
+    b.git(b.work, "reset", "-q", "--hard", merged);
+    b.state(merged);
+    appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+    b.setup({ operations: [{ path: "src/a.ts", text: "second tests\n" }] });
+    expect(b.run().code).toBe(0);
+    return b.fetch();
+  };
+
+  // Plants: check from the box base, from the saved root, or without main's merge-base. 13 fetches
+  // on lane p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
+  it("K1 scenario: a lane caught up with main by a signed lead merge passes the next step's fetch", () => {
+    each([false, true], (movedAgain) =>
+      fixture((b) => {
+        const got = afterLeadMerge(b, "signed", movedAgain);
+        expect(got.code, got.text).toBe(0);
+        expect(got.text).not.toMatch(/"_tag":"stuck"/);
+      }),
+    );
+  });
+
+  // Plant: pass any merge commit, or any note that verifies somewhere. The law that must not get
+  // weaker: a merge nobody signed, or one carrying a link made for another commit, stops fetch.
+  it("K1 scenario: an unsigned or foreign lead merge still stops the next step's fetch", () => {
+    each(["unsigned", "foreign"] as const, (lead) =>
+      fixture((b) => {
+        refused(afterLeadMerge(b, lead, false), /commits check failed: (unsigned_commit|unlinked_commit) [0-9a-f]{8}/);
       }),
     );
   });

@@ -440,12 +440,13 @@ def new_box():
             open_heads[0] = set(got.stdout.decode().split())
         if lane in open_heads[0]: return True
         return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
-    # A branch whose change is only field/*.jsonl rows is the lead logging runs, not a lane writing
-    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name,
+    # A branch whose change is only field rows is the lead logging runs, not a lane writing the
+    # ticket (field-rows PR 601 on ticket 276, 2026-11-09): a field/*.jsonl file, or a row file in
+    # field/notes/, field/runs/ or field/findings/ (decision 0090). Judged by its paths, not its name,
     # from where it left main: a lane base on an older main would count main's newer files as its.
     def rows_only(other):
         changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
-        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
+        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl|field/(?:notes|runs|findings)/[^/]+\.json", p) for p in changed)
     # Each branch is walked by the commit the listing printed, never by its name again: the scan
     # takes a minute or more on the main checkout, and a branch deleted meanwhile (a lead's
     # `git branch -D`) would make a walk by name fail the whole start (ticket 567).

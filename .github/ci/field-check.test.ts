@@ -107,6 +107,12 @@ const runFields = [
   "driver_caused",
 ];
 
+// Decision 0090: a new row is its own file, named by its date and a slug, and that name is its id.
+const named = "2026-11-11-a-row";
+const fileOf = (log: "notes" | "runs" | "findings") => `field/${log}/${named}.json`;
+/** A generated row with its own id set to the file name, as a writer saves it. */
+const own = <A extends object>(row: A, key: "id" | "run"): A => ({ ...row, [key]: named });
+
 it("added rows preserve occurrence counts and head line numbers", () => {
   const line = fc.string({ maxLength: 24 }).map((s) => JSON.stringify(s));
   fc.assert(
@@ -247,8 +253,8 @@ it("a run row written before the plan change passes without note", () => {
       Arbitrary.all([Arbitrary.schema(Run), daysBack]),
       ([row, back]) => {
         const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
-        const old = Object.fromEntries(Object.entries({ ...row, date }).filter(([key]) => key !== "note"));
-        const report = checker.checkFile("field/runs.jsonl", "", `${JSON.stringify(old)}\n`);
+        const old = Object.fromEntries(Object.entries(own({ ...row, date }, "run")).filter(([key]) => key !== "note"));
+        const report = checker.checkFile(fileOf("runs"), "", `${JSON.stringify(old)}\n`);
         return report.exitCode === 0 && report.findings.every((f) => f._tag !== "error") && report.added === 1;
       },
       schemaOptions,
@@ -258,13 +264,13 @@ it("a run row written before the plan change passes without note", () => {
 });
 
 it("valid cores pass, each blocking field rejects bad types, optional facts stay unknown", () => {
-  for (const [schema, file, fields] of [
-    [Note, "field/notes.jsonl", noteFields],
-    [Run, "field/runs.jsonl", runFields],
+  for (const [schema, file, fields, key] of [
+    [Note, fileOf("notes"), noteFields, "id"],
+    [Run, fileOf("runs"), runFields, "run"],
   ] as const) {
     const result = Effect.runSync(
       Arbitrary.checkEffect(
-        Arbitrary.schema(schema),
+        Arbitrary.map(Arbitrary.schema(schema), (row) => own(row, key)),
         (row) => {
           const text = JSON.stringify({ ...row, extra: { future: true }, ticket: 342, pr: null });
           const good = checker.checkFile(file, "", `${text}\n`);
@@ -273,7 +279,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
             return bad.exitCode !== 0 && bad.findings.some((f) => f._tag === "error" && f.field === field);
           });
           const required =
-            file === "field/notes.jsonl"
+            key === "id"
               ? ["id", "date", "stage", "kind", "what", "lanes", "fix"]
               : [
                   "date",
@@ -307,7 +313,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
 it("negative and nonfinite counts, missing cores and wrong dates fail without coercion", () => {
   const result = Effect.runSync(
     Arbitrary.checkEffect(
-      Arbitrary.schema(Run),
+      Arbitrary.map(Arbitrary.schema(Run), (row) => own(row, "run")),
       (row) => {
         const errors = [
           ...[
@@ -330,8 +336,8 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
           { ...row, date: "yesterday" },
         ];
         return (
-          errors.every((bad) => checker.checkFile("field/runs.jsonl", "", `${JSON.stringify(bad)}\n`).exitCode !== 0) &&
-          checker.checkFile("field/runs.jsonl", "", JSON.stringify(row).replace(/"tokens":[^,}]*/, '"tokens":1e999'))
+          errors.every((bad) => checker.checkFile(fileOf("runs"), "", `${JSON.stringify(bad)}\n`).exitCode !== 0) &&
+          checker.checkFile(fileOf("runs"), "", JSON.stringify(row).replace(/"tokens":[^,}]*/, '"tokens":1e999'))
             .exitCode !== 0
         );
       },
@@ -347,7 +353,7 @@ it("advice warns with exit zero; errors identify head lines without row content"
       const base = `${Array.from({ length: old }, () => "old malformed row").join("\n")}\n`;
       const marker = `private-${JSON.stringify(payload)}-end\r\n%`;
       const row = {
-        id: "bad id",
+        id: named,
         date: "2026-99-99",
         stage: "new-stage",
         kind: "new-kind",
@@ -355,20 +361,22 @@ it("advice warns with exit zero; errors identify head lines without row content"
         lanes: [42],
         fix: null,
       };
-      const report = checker.checkFile("field/notes.jsonl", base, `${base}${JSON.stringify(row)}\n`);
+      const report = checker.checkFile(fileOf("notes"), "", JSON.stringify(row));
       expect(report.exitCode).toBe(0);
       expect(report.added).toBe(1);
       expect(report.findings.some((f) => f._tag === "warning")).toBe(true);
-      expect(report.findings.every((f) => f.line === old + 1 && f.file === "field/notes.jsonl")).toBe(true);
-      const bad = checker.checkFile(
-        "field/notes.jsonl",
-        base,
-        `${base}${JSON.stringify({ ...row, what: 42 })}\n${marker}\n`,
-      );
+      expect(report.findings.every((f) => f.line === 1 && f.file === fileOf("notes"))).toBe(true);
+      const bad = checker.checkFile(fileOf("notes"), "", JSON.stringify({ ...row, what: 42 }));
       expect(bad.exitCode).not.toBe(0);
-      expect(bad.findings.some((f) => f._tag === "error" && f.line === old + 1 && f.field === "what")).toBe(true);
+      expect(bad.findings.some((f) => f._tag === "error" && f.line === 1 && f.field === "what")).toBe(true);
+      // An old log names the head line of each line added to it, never the line's text.
+      const history = checker.checkFile("field/notes.jsonl", base, `${base}${JSON.stringify(row)}\n${marker}\n`);
+      expect(history.exitCode).not.toBe(0);
+      expect(history.findings.length).toBeGreaterThanOrEqual(2);
+      expect(history.findings[0]?.line).toBe(old + 1);
+      expect(history.findings.every((f) => f._tag === "error" && f.field === "row" && f.line > old)).toBe(true);
 
-      for (const annotation of [...report.annotations, ...bad.annotations]) {
+      for (const annotation of [...report.annotations, ...bad.annotations, ...history.annotations]) {
         expect(annotation).not.toContain(marker);
         expect(annotation).not.toContain(payload.length > 5 ? payload : marker);
         expect(annotation).not.toMatch(/[\r\n]/);
@@ -421,10 +429,8 @@ const Rated = Schema.Struct({
   ticket: Text,
 });
 
-const findings = "field/findings.jsonl";
-
 const errorsOf = (row: unknown) => {
-  const report = checker.checkFile(findings, "", `${JSON.stringify(row)}\n`);
+  const report = checker.checkFile(fileOf("findings"), "", `${JSON.stringify(row)}\n`);
   return {
     exitCode: report.exitCode,
     fields: report.findings.filter((f) => f._tag === "error").map((f) => f.field),
@@ -438,7 +444,8 @@ it("a finding or rated row passes whole, and each core field blocks when wrong o
   for (const schema of [Found, Rated]) {
     const result = Effect.runSync(
       Arbitrary.checkEffect(
-        Arbitrary.schema(schema),
+        // A rating has no id of its own: its file name is enough.
+        Arbitrary.map(Arbitrary.schema(schema), (row) => ("id" in row ? own(row, "id") : row)),
         (row) => {
           const good = errorsOf({ ...row, extra: { future: true } });
           const each = Object.keys(schema.fields).every((field) => {
@@ -463,7 +470,11 @@ it("a finding blocks on a rule outside the closed list, on `at`, and on empty pr
   const blank = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[ \t\n]*$/)));
   const result = Effect.runSync(
     Arbitrary.checkEffect(
-      Arbitrary.all([Arbitrary.schema(Found), Arbitrary.schema(Schema.String), blank]),
+      Arbitrary.all([
+        Arbitrary.map(Arbitrary.schema(Found), (row) => own(row, "id")),
+        Arbitrary.schema(Schema.String),
+        blank,
+      ]),
       ([row, word, empty]) => {
         const open = rules.includes(word) ? `${word}_` : word;
         const place = errorsOf({ ...without(row, "location"), at: row.location });
@@ -489,10 +500,10 @@ it("a finding blocks on a rule outside the closed list, on `at`, and on empty pr
   expect(result._tag).toBe("Passed");
 });
 
-it("a finding's unusual id, sha, references and path only warn, without row content", () => {
+it("a finding's unusual sha, references and path, and a rating's unusual finding, only warn", () => {
   const result = Effect.runSync(
     Arbitrary.checkEffect(
-      Arbitrary.all([Arbitrary.schema(Found), Arbitrary.schema(Rated)]),
+      Arbitrary.all([Arbitrary.map(Arbitrary.schema(Found), (row) => own(row, "id")), Arbitrary.schema(Rated)]),
       ([row, rated]) => {
         const marker = `private-${JSON.stringify(row.proof)}-end`;
         const odd = {
@@ -500,28 +511,155 @@ it("a finding's unusual id, sha, references and path only warn, without row cont
           says: marker,
           proof: marker,
           cost: marker,
-          id: `id ${row.id}`,
           head: `${row.head}z`,
           ticket: "497",
           pr: "pull 703",
           location: { ...row.location, path: `/${row.location.path}` },
         };
-        const text = `${JSON.stringify(odd)}\n${JSON.stringify({ ...rated, finding: odd.id })}\n`;
-        const report = checker.checkFile(findings, "", text);
-        const warned = (line: number) => report.findings.filter((f) => f.line === line).map((f) => f.field);
+        const found = checker.checkFile(fileOf("findings"), "", JSON.stringify(odd));
+        const rating = checker.checkFile(fileOf("findings"), "", JSON.stringify({ ...rated, finding: `id ${row.id}` }));
+        // A rating may point at an old counter id or a new file's name.
+        const pointed = ["2026-11-10-f36", named].map((finding) =>
+          checker.checkFile(fileOf("findings"), "", JSON.stringify({ ...rated, finding, date: "2026-11-11" })),
+        );
+        const warned = (report: typeof found) => report.findings.map((f) => f.field);
         return (
-          report.exitCode === 0 &&
-          report.added === 2 &&
-          report.findings.every((f) => f._tag === "warning") &&
-          ["id", "head", "ticket", "pr", "location"].every((field) => warned(1).includes(field)) &&
-          warned(2).includes("finding") &&
-          report.annotations.every((a) => !a.includes(marker))
+          [found, rating].every((report) => report.exitCode === 0 && report.added === 1) &&
+          [...found.findings, ...rating.findings].every((f) => f._tag === "warning") &&
+          ["head", "ticket", "pr", "location"].every((field) => warned(found).includes(field)) &&
+          warned(rating).includes("finding") &&
+          pointed.every((report) => report.exitCode === 0 && !warned(report).includes("finding")) &&
+          found.annotations.every((a) => !a.includes(marker))
         );
       },
       schemaOptions,
     ),
   );
   expect(result._tag).toBe("Passed");
+});
+
+// Decision 0090, ticket 562: the three old logs are history, and a new row is its own file.
+// Plants caught: an appended line passing its row checks, a misnamed file passing, an id that
+// differs from the file name passing, and an edited or deleted row file passing.
+const oldLog = fc.constantFrom("notes", "runs", "findings");
+const plain = fc.stringMatching(/^[ -~]{0,20}$/);
+
+it("every line added to an old log fails at its head line, and an untouched one passes", () => {
+  fc.assert(
+    fc.property(
+      oldLog,
+      fc.array(plain, { maxLength: 8 }),
+      fc.array(plain, { minLength: 1, maxLength: 4 }),
+      (log, base, extra) => {
+        const file = `field/${log}.jsonl`;
+        const report = checker.checkFile(file, text(base), text([...base, ...extra]));
+        expect(report.exitCode).toBe(1);
+        expect(report.added).toBe(extra.length);
+        expect(report.findings.map((f) => [f._tag, f.field, f.line])).toEqual(
+          extra.map((_, i) => ["error", "row", base.length + i + 1]),
+        );
+        expect(report.annotations.every((a) => a.includes(`field/${log}/<date>-<slug>.json`))).toBe(true);
+        expect(checker.checkFile(file, text(base), text(base))).toMatchObject({ exitCode: 0, added: 0, findings: [] });
+      },
+    ),
+    options,
+  );
+});
+
+const slug = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[a-z0-9]{1,8}(?:-[a-z0-9]{1,8}){0,3}$/)));
+
+it("a row file is named by its date and a slug, and its id is that name", () => {
+  const result = Effect.runSync(
+    Arbitrary.checkEffect(
+      Arbitrary.all([Arbitrary.schema(Note), Arbitrary.schema(Run), slug]),
+      ([note, run, name]) => {
+        const stem = `2026-11-11-${name}`;
+        const errors = (file: string, row: object) =>
+          checker
+            .checkFile(file, "", JSON.stringify(row))
+            .findings.filter((f) => f._tag === "error")
+            .map((f) => f.field);
+        const good = [
+          errors(`field/notes/${stem}.json`, { ...note, id: stem }),
+          errors(`field/runs/${stem}.json`, { ...run, run: stem }),
+        ];
+        const misnamed = [
+          `field/notes/${name}.json`,
+          `field/notes/${stem}X.json`,
+          `field/notes/${stem}.jsonl`,
+          `field/notes/${stem}`,
+          `field/notes/2026-11/${stem}.json`,
+          `field/notes/2026-11-11_${name}.json`,
+        ].map((file) => errors(file, { ...note, id: stem }));
+        return (
+          good.every((fields) => fields.length === 0) &&
+          misnamed.every((fields) => fields.includes("file")) &&
+          errors(`field/notes/${stem}.json`, { ...note, id: `${stem}-x` }).includes("id") &&
+          errors(`field/runs/${stem}.json`, { ...run, run: `${stem}-x` }).includes("run") &&
+          errors(`field/runs/${stem}.json`, without(run, "run")).includes("run")
+        );
+      },
+      schemaOptions,
+    ),
+  );
+  expect(result._tag).toBe("Passed");
+});
+
+it("a row file is never edited or deleted", () => {
+  // The new text is a good row, so only the rule against changing a row can fail it.
+  const good = JSON.stringify({
+    id: named,
+    date: "2026-11-11",
+    stage: "harness",
+    kind: "success",
+    what: "w",
+    lanes: [],
+    fix: null,
+  });
+  fc.assert(
+    fc.property(fc.string({ minLength: 1 }), fc.boolean(), (base, deleted) => {
+      fc.pre(base !== good);
+      const report = checker.checkFile(fileOf("notes"), base, deleted ? "" : good);
+      expect(report.exitCode).toBe(1);
+      expect(report.findings.filter((f) => f._tag === "error").map((f) => f.field)).toEqual(["row"]);
+      expect(checker.checkFile(fileOf("notes"), "", good).exitCode).toBe(0);
+    }),
+    options,
+  );
+});
+
+// vector: which changed paths the field job reads. Old direct .jsonl files and anything in a
+// log's folder, so a misnamed row file is read and fails; nothing else in field/.
+it("the field job reads the old logs and every path in a log's folder", () => {
+  const vectors: Array<[string, boolean]> = [
+    ["field/runs.jsonl", true],
+    ["field/future.jsonl", true],
+    ["field/runs/2026-11-11-t562-tests1.json", true],
+    ["field/findings/2026-11-11-a.json", true],
+    ["field/notes/misnamed.txt", true],
+    ["field/notes/2026-11/2026-11-11-a.json", true],
+    ["field/README.md", false],
+    ["field/other/2026-11-11-a.json", false],
+    ["field/nested/a.jsonl", false],
+    ["tools/field/runs/2026-11-11-a.json", false],
+  ];
+  const paths = vectors.map(([path]) => path);
+  const base = "b".repeat(40),
+    head = "c".repeat(40);
+  const run = (args: string[]) => ({
+    status: 0,
+    stdout:
+      args[0] === "diff"
+        ? `${paths.join("\0")}\0`
+        : args[0] === "ls-tree"
+          ? args[4] === head
+            ? `${paths.join("\0")}\0`
+            : ""
+          : "{}",
+  });
+  expect(checker.readFieldFiles(base, head, "push", run).map((input) => input.file)).toEqual(
+    vectors.filter(([, read]) => read).map(([path]) => path),
+  );
 });
 
 // scenario: lead's real-PR proof, deliberately not a network-dependent local test.

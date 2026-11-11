@@ -178,7 +178,8 @@ counts as proof.
 
 A survivor is this step's own answer and stays in its report, never a finding row. Outside
 means anything else you meet that is wrong.
-Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
+unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 
