@@ -4,6 +4,8 @@ dist
 runs
 # The runs program is code, not a live run's state.
 !/programs/runs/
+# Field run rows are records, one file each (0090), not a live run's state.
+!/field/runs/
 .teahouse
 # Miniflare's cache, left wherever a ledger in Miniflare is started (tsh, the experiments).
 .wrangler
