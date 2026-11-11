@@ -33,7 +33,7 @@ already work against the cloud brain,** which is what "a browser is always a cli
   proposal as it was. Not blocking until its first green.
   Standard runners cost nothing in public repositories, and this one skips typecheck and
   lint, whose results do not depend on the OS. 70% on green by PR A. The doubt is Alchemy's
-  local stage and Worker Loader on Windows, and the job's first run settles it.
+  local instance and Worker Loader on Windows, and the job's first run settles it.
 - **`.gitattributes` with `* text=auto eol=lf`.** The plan's byte-for-byte fixtures break on
   a CRLF checkout. One line, 95%.
 - **One way to stop a brain: the child watches a pipe.** It ends when its stdin ends, on

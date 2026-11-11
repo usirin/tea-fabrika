@@ -322,7 +322,7 @@ const reactCompiler = {
 - **Lean, 85%, still a lean (195, open call 1): Rolldown as a library in `next/build.ts`, with the
   Compiler as the plugin above, for the window and for the Workers.** No Vite dev server and no
   Cloudflare Vite plugin. Why: `build.ts` already calls a bundler from code, and Alchemy bundles
-  Workers with Rolldown, so the local stage and the cloud build with one tool. 195, part 2: PR
+  Workers with Rolldown, so the local instance and the cloud build with one tool. 195, part 2: PR
   223's own end-to-end test passes on a window built this way, in React's production build and in
   its development build with Strict Mode on; the first draw halves, and the window bundle is about
   half the size. Vite wins if the owner wants the dev server's hot reload over the brain's
