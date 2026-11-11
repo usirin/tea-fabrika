@@ -40,9 +40,10 @@ JSON lines: `node .agents/skills/lead/scripts/fieldfile.ts <log> <rows>`, run fr
 repo. It names each file by the rules here, prints each path, and writes nothing if a name is taken
 or missing.
 
-A `step` run from a lane has the lane's run id, such as drive's `t562-tests1`, which has no date.
-Its file puts the row's date in front, `2026-11-11-t562-tests1.json`, and its `run` becomes that
-same name. 0090 left this open; this is the plain reading, used by `fieldfile.ts`, and not decided.
+A `step` run from a lane has the lane's run id, lane + step + n, such as `p39s1-tests2` (lane
+`p39s1`, its 2nd tests run; `RunId.next` in the lead's `runid.ts` makes it), which has no date. Rows
+from before 2026-11-11 have `t<ticket>-<step><n>`, such as `t562-tests1`. Its file puts the row's
+date in front, `2026-11-11-p39s1-tests2.json`, and its `run` becomes that same name. 0090 left this open; this is the plain reading, used by `fieldfile.ts`, and not decided.
 
 One example per log. A file holds one object; the indent is the writer's choice.
 
@@ -53,8 +54,8 @@ One example per log. A file holds one object; the indent is the writer's choice.
  "cause": "two PRs each appended a line", "person": true, "primitive": null, "fix": "one file per row",
  "test": null, "links": []}
 
-// field/runs/2026-11-11-t562-tests1.json, a lane's step row
-{"date": "2026-11-11", "run": "2026-11-11-t562-tests1", "ticket": "usirin/tea-fabrika#562", "pr": null,
+// field/runs/2026-11-11-p39s1-tests2.json, a lane's step row
+{"date": "2026-11-11", "run": "2026-11-11-p39s1-tests2", "ticket": "usirin/tea-fabrika#562", "pr": null,
  "started": "2026-11-11T09:02:10-08:00", "ended": "2026-11-11T09:20:41-08:00", "parent": null,
  "active": null, "role": "hand", "step": "tests", "model": "gpt-6-astra", "effort": "high",
  "outcome": "pass", "why": "drive.ts tests in box t562: done.", "tokens": null, "tools": null,

@@ -102,7 +102,8 @@ export const HostArgs = Schema.Struct({
   /** The lane's approved plan, whose owner rows the step commit checks. */
   plan: Schema.String,
   head: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
-  round: Schema.Int,
+  /** The run's id, `<lane>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
+  name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
   minutes: Schema.Number.check(Schema.isGreaterThan(0)),
 });
@@ -335,7 +336,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
 
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const name = `${a.lane}-host${a.round}`;
+  const name = a.name;
   const log = path.join(a.boxes, `${name}.log`);
   const scripts = path.join(import.meta.dirname, "..");
   yield* fs
@@ -431,7 +432,7 @@ export const outcomeName = (o: Outcome.Outcome): string =>
  * step's: a done step that committed moves the lane's head, so the next step starts from it.
  */
 export const recordInLane = Effect.fn("host.recordInLane")(function* (
-  a: Pick<HostArgs, "boxes" | "lane" | "ticket" | "round" | "head">,
+  a: Pick<HostArgs, "boxes" | "lane" | "name" | "head">,
   hosted: Hosted,
   ended: string,
 ) {
@@ -445,8 +446,8 @@ export const recordInLane = Effect.fn("host.recordInLane")(function* (
   const done = hosted.outcome._tag === "done";
   const entry = {
     step: "host",
-    box: `${a.lane}-host${a.round}`,
-    run: `t${a.ticket}-host${a.round}`,
+    box: a.name,
+    run: a.name,
     from: a.head,
     head: hosted.head,
     outcome: outcomeName(hosted.outcome),
