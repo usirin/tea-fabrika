@@ -27,6 +27,8 @@ import "../../lead/scripts/pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/boxnode.ts?raw";
 import "../../lead/scripts/fieldrow.py?raw";
 import "../../lead/scripts/runplan.sh?raw";
@@ -1346,5 +1348,108 @@ describe("T325 K6 plancheck, today's tooling", () => {
       }),
       { seed: 325, numRuns: 6 },
     );
+  });
+});
+
+// 2026-11-11: a tests step looped on laws its box could never finish: a type law with an fc.
+// generator, test laws with no run count, a Validation section asking for a typecheck. Measured
+// over the saved plans, the kind check hit about 7 false alarms in 15, so all three advise and
+// never change the exit code. Edge cases, each a case below:
+//   kind: `type`, `lint: why`, `Type` and a wrapped `` `fc.array` `` advise; a `type` generator, a
+//         `test` kind, a kind that also names a test, and a table with no kind column do not; both
+//         kind headers (`Kind`, `Lint, type or test?`) are read.
+//   runs: a test row with fc. and no count advises; `200 runs`, `1 run` and `default runs`
+//         anywhere in the row do not; a non-fc generator does not.
+//   validation: `--changed`, `changed tests` and `typecheck` in the Validation section advise,
+//         fenced commands included; a line naming the lead, CI or the host, or saying no, does not;
+//         the same words in another section do not; a legacy plan gets none of the three.
+describe("laws and validation advice, today's tooling", () => {
+  const advice = (text: string) => text.split("\n").filter((l) => l.startsWith("advice: "));
+  const kindHead = fc.constantFrom("Kind", "Lint, type or test?");
+  const row = (kind: string, generator: string, plant = "break it") => ["holds", kind, generator, plant];
+  const kinded = (head: string, rows: string[][]) => table(["Law", head, "Generator", "Plant"], rows);
+  const fcCell = constructor.map((name) => `fc.${name}: generated cases`);
+
+  // Plant: drop the kind check, or let it fail the plan.
+  it("property: a type or lint row with an fc. generator advises, and the exit code stays", () => {
+    const kind = fc.constantFrom("type", "lint", "lint: source ownership", "Type");
+    fc.assert(
+      fc.property(kindHead, kind, fcCell, wrap, (head, k, gen, around) => {
+        const got = check(kinded(head, [row(k, `${around}${gen}${around}`)]));
+        expect(got.code, got.text).toBe(0);
+        expect(advice(got.text), got.text).toEqual([
+          expect.stringMatching(/^advice: line \d+: a (type|lint) law carries an fc\. generator/),
+        ]);
+      }),
+      { seed: 1111, numRuns: 6 },
+    );
+  });
+
+  // Plant: read the kind's first word only, so "type and runtime test" advises.
+  it("vector: a type generator, a test kind, a kind that names a test and a table with no kind column do not advise", () => {
+    const quiet = [
+      kinded("Kind", [row("type", "type")]),
+      kinded("Kind", [row("lint", "lint")]),
+      kinded("Lint, type or test?", [row("test", "fc.record: x", "break it, 100 runs")]),
+      kinded("Kind", [row("Type and runtime test", "fc.array: forged fields, default runs")]),
+      table(["Law", "Generator", "Plant"], [["holds", "fc.record: x", "break it"]]),
+    ];
+
+    for (const body of quiet) {
+      const got = check(body);
+      expect(got.code, got.text).toBe(0);
+      expect(advice(got.text), body).toEqual([]);
+    }
+  });
+
+  // Plant: require the count in the generator cell only, or drop the singular.
+  it("property: a test row with an fc. generator advises unless the row states its runs", () => {
+    const runs = fc.constantFrom("", "200 runs", "1 run", "default runs", "Default runs");
+    const at = fc.constantFrom("generator", "plant");
+    fc.assert(
+      fc.property(kindHead, fcCell, runs, at, (head, gen, count, where) => {
+        const cells =
+          where === "generator" ? row("test", count ? `${gen}, ${count}` : gen) : row("test", gen, `break it ${count}`);
+        const got = check(kinded(head, [cells]));
+        expect(got.code, got.text).toBe(0);
+        expect(advice(got.text).length, got.text).toBe(count === "" ? 1 : 0);
+
+        if (count === "") {
+          expect(advice(got.text)[0]).toContain("states no run count");
+        }
+      }),
+      { seed: 1112, numRuns: 8, examples: [["Kind", "fc.record: x", "", "generator"]] },
+    );
+    expect(advice(check(kinded("Kind", [row("test", "vector: the five verbs")])).text)).toEqual([]);
+  });
+
+  // Plant: read only text outside fences; skip the lead filter; read every section.
+  it("vector: the Validation section advises on --changed, changed tests and typecheck, and nothing else does", () => {
+    const law = kinded("Kind", [row("test", "fc.record: x, 50 runs")]);
+    const told = [
+      "- Run `nice -n 19 pnpm exec vitest run --changed origin/main` once.",
+      "- Run changed tests once, then one typecheck.",
+      "```sh\npnpm typecheck\n```",
+    ];
+    const quiet = [
+      "- The lead runs `--changed` and one typecheck.",
+      "- CI runs typecheck.",
+      "- No `pnpm typecheck` in a box.",
+      "- Run the narrow test file twice.",
+    ];
+
+    for (const said of told) {
+      const got = check(`${law}\n\n## Validation\n\n${said}\n`);
+      expect(got.code, got.text).toBe(0);
+      expect(advice(got.text), said).toEqual([expect.stringContaining("the Validation section tells a boxed step")]);
+    }
+
+    for (const said of quiet) {
+      expect(advice(check(`${law}\n\n## Validation\n\n${said}\n`).text), said).toEqual([]);
+    }
+
+    expect(advice(check(`${law}\n\n## Size\n\n- Run one typecheck.\n`).text)).toEqual([]);
+    const legacy = `${kinded("Kind", [row("type", "fc.record: x")])}\n\n## Validation\n\n- Run one typecheck.\n`;
+    expect(advice(check(legacy, "").text)).toEqual([]);
   });
 });

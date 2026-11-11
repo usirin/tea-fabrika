@@ -26,6 +26,8 @@ import "./pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
@@ -277,7 +279,8 @@ describe("catchup, today's tooling", () => {
               git("update-ref", "refs/remotes/origin/main", "peer");
               git("checkout", "-q", "main");
               const before = git("rev-parse", "HEAD");
-              const got = run({ ...green, merge: true, repo: dir });
+              // 0097: a green head would land without the merge, so its first check read is red.
+              const got = run({ ...green, merge: true, repo: dir, before: "red" });
               expect(got.code, got.text).toBe(conflict ? 1 : 0);
 
               if (conflict) {
@@ -543,7 +546,8 @@ describe("catchup, today's tooling", () => {
         ({ bot, suffix, merge, refused: outcome }) => {
           for (const refused of new Set<Setup["refused"]>(["none", outcome])) {
             const branch = `${bot ? "fabrikalfa" : "person"}/tests-${suffix}`;
-            const got = run({ ...green, branch, merge, refused });
+            // 0097: a green head would land without the merge, so a merging one is red at first.
+            const got = run({ ...green, branch, merge, refused, ...(merge ? { before: "red" as const } : {}) });
             const denied = merge && refused !== "none";
             expect(got.code, got.text).toBe(denied ? 1 : 0);
             const botpush = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/botpush.mjs"));
@@ -561,6 +565,105 @@ describe("catchup, today's tooling", () => {
       ),
       { ...options, numRuns: 8 },
     );
+  });
+});
+
+// 0097: a head that lacks main and is green on every check lands as it is. Any other head catches
+// up as before. `merge: true` is a head that lacks main.
+describe("catchup lands a green head without catching up (0097), today's tooling", () => {
+  const isLook = (c: { cmd: string; args: string[] }) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts");
+  const catchUp = (calls: ReturnType<typeof run>["calls"]) => ({
+    merged: calls.filter((c) => c.cmd === "git" && c.args.includes("merge") && !c.args.includes("merge-base")).length,
+    signed: calls.filter((c) => c.args.includes("sign")).length,
+    pushed: calls.filter(
+      (c) => (c.cmd === "node" && c.args[0]!.endsWith("/botpush.mjs")) || (c.cmd === "git" && c.args[0] === "push"),
+    ).length,
+  });
+  const none = { merged: 0, signed: 0, pushed: 0 };
+
+  // Plants: merge main in anyway; push or sign a green head; skip the lint on the true merge; wait
+  // on the checks again; unpin the squash, the REST merge or the stack's head read.
+  it("0097 property: a green head behind main never merges main in, signs or pushes; it is linted on the true merge and squashed pinned to that head, and a moved head is refused", () => {
+    for (const stack of ["none", "same", "moved"] as const) {
+      fc.assert(
+        fc.property(
+          fc.record({
+            bot: fc.boolean(),
+            behind: fc.boolean(),
+            rest: fc.constantFrom<NonNullable<Setup["rest"]>>("merged", "moved", "refused"),
+          }),
+          ({ bot, behind, rest }) => {
+            const branch = bot ? "fabrikalfa/tests-520" : "person/tests-520";
+            const got = run({ ...green, merge: true, branch, stack, behind, rest });
+            const lands = stack === "same" || (stack === "none" && (!behind || rest === "merged"));
+            expect(got.code, got.text).toBe(lands ? 0 : 1);
+            expect(catchUp(got.calls)).toEqual(none);
+            expect(got.text).toContain(`pr 900: every check is green at ${tip}; it lands without catching up`);
+            // One read of the checks and of the commits run, on the head, and no second wait.
+            expect(reads.map((key) => got.calls.filter((c) => c.key === key).length)).toEqual([1, 1, 1, 1, 1]);
+            expect(got.calls.filter(isLook).map((c) => c.args.slice(1))).toEqual([["900", tip]]);
+            const order = got.calls.map((c) => (isLook(c) ? "look" : c.key));
+            expect(order.lastIndexOf("logs")).toBeLessThan(order.indexOf("look"));
+            expect(order.indexOf("look")).toBeLessThan(order.indexOf("merge"));
+            expect(merges(got.calls)).toHaveLength(1);
+            expect(got.calls.filter((c) => c.key === "oid")).toHaveLength(stack === "none" ? 0 : 1);
+            expect(got.calls.filter((c) => c.key === "stack")).toHaveLength(stack === "same" ? 1 : 0);
+            expect(got.calls.filter((c) => c.key === "rest").map((c) => c.args.at(-1))).toEqual(
+              stack === "none" && behind ? [`sha=${tip}`] : [],
+            );
+            expect(got.calls.flatMap((c) => c.args).filter((a) => /--admin|--auto|bypass/.test(a))).toEqual([]);
+            assertHead(got.calls);
+          },
+        ),
+        { seed: 97, numRuns: 4 },
+      );
+    }
+  });
+
+  // Plants: land a head on a red, running or missing check, or on an untrusted commits run,
+  // without catching up; or let the first look stand in for the wait on the pushed head.
+  it("0097 property: a head with a red, running or missing check, or an untrusted commits run, merges main in, signs, pushes and waits as before", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (bot) => {
+        const branch = bot ? "fabrikalfa/tests-520" : "person/tests-520";
+
+        for (const cause of ["red", "running", "missing", "ticket", "event", "app"] as const) {
+          const early = cause === "red" || cause === "running" || cause === "missing";
+          const got = run({ ...green, merge: true, branch, ...(early ? { before: cause } : { answer: cause }) });
+          expect(got.code, `${cause}\n${got.text}`).toBe(early ? 0 : 1);
+          expect(catchUp(got.calls)).toEqual({ merged: 1, signed: 1, pushed: bot ? 1 : 2 });
+          expect(got.text).toContain("; merging main in");
+          expect(got.text).not.toContain("lands without catching up");
+          // The pushed head is read again: the first look never stands in for the wait.
+          expect(got.calls.filter((c) => c.key === "checks")).toHaveLength(2);
+          expect(got.calls.filter((c) => c.key === "trust")).toHaveLength(early ? 1 : 2);
+          expect(merges(got.calls)).toHaveLength(early ? 1 : 0);
+          assertHead(got.calls);
+        }
+      }),
+      { seed: 97, numRuns: 2 },
+    );
+  });
+
+  // Plant: land a green head whose lint on the true merge is red, or whose merge with main
+  // conflicts (freshmain.ts refuses both: freshmain.test.ts has the conflict's own law).
+  it("0097 scenario: a green head whose true merge freshmain.ts refuses is not landed, and nothing is merged in or pushed", () => {
+    const got = run({ ...green, merge: true, stale: true });
+    expect(got.code, got.text).toBe(1);
+    expect(catchUp(got.calls)).toEqual(none);
+    expect(got.calls.filter(isLook)).toHaveLength(1);
+    expect(merges(got.calls)).toHaveLength(0);
+    expect(got.calls.some((c) => c.key === "rest" || c.key === "stack")).toBe(false);
+    expect(got.text).toContain("pr 900: not merged");
+  });
+
+  // Plant: read a failed first look as "not green" and catch up, or as green and land.
+  it("0097 scenario: a first look whose check read fails three times stops the run with nothing merged in or pushed", () => {
+    const got = run({ ...green, merge: true, failures: [0, 3, 0, 0, 0] });
+    expect(got.code, got.text).toBe(1);
+    expect(catchUp(got.calls)).toEqual(none);
+    expect(got.calls.filter((c) => c.key === "checks")).toHaveLength(3);
+    expect(got.calls.some((c) => isLook(c) || c.key === "merge")).toBe(false);
   });
 });
 
