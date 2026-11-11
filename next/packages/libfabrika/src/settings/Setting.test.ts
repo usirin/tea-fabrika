@@ -61,7 +61,7 @@ const supplied = fc.oneof(
 const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseExit(effect);
 
 describe("L1, a Setting remains a Config", () => {
-  it("a declared setting is a Config value, with its declaration beside it", () => {
+  it("vector: a declared setting is a Config value, with its declaration beside it", () => {
     // vector: one declaration's own fields, read back; the law below generates the behavior.
     expect(Config.isConfig(Declarations.port)).toBe(true);
     expect(Declarations.port.path).toBe("instance.port");
@@ -151,7 +151,7 @@ describe("L3, absence gives the default, and an invalid present value never does
     );
   });
 
-  it("an empty environment and no files give every declared default", async () => {
+  it("vector: an empty environment and no files give every declared default", async () => {
     // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
     const exit = await run(Declarations.all.parse(ConfigProvider.fromUnknown({})));
     expect(Exit.isSuccess(exit)).toBe(true);

@@ -128,26 +128,36 @@ const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "&"))
   .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
 
+/** Where the files hold the secret: nowhere, at an unknown key, or nested under a declared key. */
+const placed = (port: number, word: string) => {
+  const s = JSON.stringify(word);
+  return fc.constantFrom(
+    { person: `[instance]\nport = ${port}\n`, repo: "", refused: false },
+    { person: `[instance]\nport = ${port}\nfounder = ${s}\n`, repo: "", refused: true },
+    { person: `[instance.port]\nfounder = ${s}\n`, repo: "", refused: true },
+    { person: `[instance]\nport = { founder = ${s} }\n`, repo: "", refused: true },
+    { person: `[instance]\nport = [${s}]\n`, repo: "", refused: true },
+    { person: `[instance]\nport = ${port}\n`, repo: `[fabrika-version]\nfounder = ${s}\n`, refused: true },
+    { person: `[instance]\nport = ${port}\n`, repo: `fabrika-version = [${s}]\n`, refused: true },
+  );
+};
+
 describe("L14 [secrets], a start saves and says only declared settings", () => {
-  it("secrets in unrelated env fields, founding input and unknown file fields stay out of the saved start", async () => {
+  it("secrets in unrelated env fields, founding input, unknown file fields and under declared keys stay out of the saved start", async () => {
     await fc.assert(
       fc.asyncProperty(
-        secret,
+        fc
+          .tuple(secret, fc.integer({ min: 1, max: 65535 }))
+          .chain(([word, port]) => fc.tuple(fc.constant(word), fc.constant(port), placed(port, word))),
         fc.constantFrom("FABRIKA_FOUNDER", "FABRIKA_WINDOW", "FABRIKA_PERSON", "FABRIKA_TOKEN", "GITHUB_TOKEN"),
-        fc.boolean(),
-        fc.integer({ min: 1, max: 65535 }),
-        async (word, field, unknownField, port) => {
+        async ([word, _port, place], field) => {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(
               Effect.gen(function* () {
                 const h = yield* home;
                 const fs = yield* FileSystem.FileSystem;
-                yield* fs.writeFileString(
-                  h.places.person.path,
-                  unknownField
-                    ? `[instance]\nport = ${port}\nfounder = ${JSON.stringify(word)}\n`
-                    : `[instance]\nport = ${port}\n`,
-                );
+                yield* fs.writeFileString(h.places.person.path, place.person);
+                yield* fs.writeFileString(h.places.repo.path, place.repo);
                 // The founding facts reach dev.ts as flags; none is a setting, so none is a source.
                 const loaded = yield* Load.load({
                   ...h.places,
@@ -159,7 +169,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
               }),
             ).pipe(Effect.provide(services)),
           );
-          expect(Exit.isSuccess(exit)).toBe(!unknownField);
+          expect(Exit.isSuccess(exit)).toBe(!place.refused);
           const outputs = Exit.isSuccess(exit) ? [exit.value] : [String(exit.cause)];
 
           for (const output of outputs) {

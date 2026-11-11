@@ -132,24 +132,43 @@ const spans = () => {
   return { tracer, text };
 };
 
+/**
+ * Where a file holds the secret: nowhere, at an unknown key, or nested under a declared key, as a
+ * table, an inline table or an array. Both files' declared keys are reached, and the repo's
+ * `fabrika-version` is the one read first. `named` is the key the refusal identifies.
+ */
+const placed = (key: string, word: string) => {
+  const s = JSON.stringify(word);
+  return fc.constantFrom(
+    { person: "[instance]\nport = 18800\n", repo: "", named: undefined },
+    { person: `[instance]\n${key} = ${s}\n`, repo: "", named: `instance.${key}` },
+    { person: `[instance.port]\n${key} = ${s}\n`, repo: "", named: "instance.port" },
+    { person: `instance.port.${key} = ${s}\n`, repo: "", named: "instance.port" },
+    { person: `[instance]\nport = { ${key} = ${s} }\n`, repo: "", named: "instance.port" },
+    { person: `[instance]\nport = [${s}]\n`, repo: "", named: "instance.port" },
+    { person: "", repo: `[fabrika-version]\n${key} = ${s}\n`, named: "fabrika-version" },
+    { person: "", repo: `fabrika-version = { ${key} = ${s} }\n`, named: "fabrika-version" },
+    { person: "", repo: `fabrika-version = [${s}]\n`, named: "fabrika-version" },
+    { person: "", repo: `[instance.port]\n${key} = ${s}\n`, named: "instance.port" },
+  );
+};
+
 describe("L14 [secrets], only declared settings reach values, errors and spans", () => {
-  it("a secret in an unrelated env field, or in an unknown file field, never reaches an output", async () => {
+  it("a secret in an unrelated env field, an unknown file field or under a declared key never reaches an output", async () => {
     await fc.assert(
       fc.asyncProperty(
-        secret,
+        fc
+          .tuple(secret, fc.constantFrom("token", "key", "password"))
+          .chain(([word, key]) => fc.tuple(fc.constant(word), fc.constant(key), placed(key, word))),
         fc.constantFrom("GITHUB_TOKEN", "FABRIKA_TOKEN", "FABRIKA_INSTANCE_TOKEN", "CLOUDFLARE_API_TOKEN"),
-        fc.constantFrom("token", "key", "password"),
-        fc.boolean(),
         fc.integer({ min: 1, max: 65535 }),
-        async (word, field, key, inFile, port) => {
+        async ([word, _key, place], field, port) => {
           const env = { [field]: word, FABRIKA_INSTANCE_PORT: String(port) };
-          // An unknown key holding the secret, in a table the file may hold or in one of its own.
-          const person = inFile ? `[instance]\n${key} = ${JSON.stringify(word)}\n` : "[instance]\nport = 18800\n";
           const { tracer, text } = spans();
           const exit = await Effect.runPromiseExit(
             Effect.gen(function* () {
-              const repo = { file: REPO, document: yield* parse("") };
-              const own = { file: PERSON, document: yield* parse(person) };
+              const repo = { file: REPO, document: yield* parse(place.repo) };
+              const own = { file: PERSON, document: yield* parse(place.person) };
               yield* Files.validate(Declarations.all, { repo, person: own }, { version: "0.0.0" });
               const resolved = yield* Sources.resolve(Declarations.all, {
                 flags: Sources.flags({}),
@@ -164,19 +183,19 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
           const outputs: Array<string> = [text()];
 
           if (Exit.isSuccess(exit)) {
-            expect(inFile).toBe(false);
+            expect(place.named).toBeUndefined();
             outputs.push(JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(exit.value.made)));
             outputs.push(JSON.stringify(exit.value.resolved));
             expect(exit.value.made.values["instance.port"]).toBe(port);
           } else {
-            expect(inFile).toBe(true);
+            expect(place.named).toBeDefined();
             const error = exit.cause.reasons.find((r) => r._tag === "Fail");
             expect(error?._tag === "Fail" ? error.error : undefined).toBeInstanceOf(Files.SettingsError);
             outputs.push(String(exit.cause), JSON.stringify(error?._tag === "Fail" ? error.error : null));
-            // The unknown key is named; its value is not.
+            // The key is named; the value found there is not.
             expect(
               error?._tag === "Fail" && error.error instanceof Files.SettingsError ? error.error.message : "",
-            ).toContain(`instance.${key}`);
+            ).toContain(place.named);
           }
 
           for (const output of outputs) {

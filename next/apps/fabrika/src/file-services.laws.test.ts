@@ -522,56 +522,74 @@ const loadFailures = fc.oneof(
 
 it("L11: no failed settings load reaches the stage write, the build or the stage, and its cause is kept", async () => {
   await fc.assert(
-    fc.asyncProperty(fc.uuid(), loadFailures, fc.boolean(), async (name, failure, alias) => {
-      const folder = mkdtempSync(join(tmpdir(), "t664-dev-load-")),
-        source = join(folder, "view.tsx"),
-        person = join(folder, "fabrika.toml");
-      const w = recorded(folder, source, "export const view = 1;", false, failure.kind === "read" ? person : undefined);
+    fc.asyncProperty(fc.uuid(), loadFailures, fc.boolean(), (name, failure, alias) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            // The temp folder and the process state this law changes are given back by its scope (0061).
+            const folder = yield* Effect.acquireRelease(
+              Effect.sync(() => mkdtempSync(join(tmpdir(), "t664-dev-load-"))),
+              (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+            );
+            const argv = process.argv;
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                process.argv = argv;
+                cli.layer = undefined;
+                cli.work = undefined;
+                vi.unstubAllEnvs();
+              }),
+            );
+            const source = join(folder, "view.tsx"),
+              person = join(folder, "fabrika.toml");
+            const w = recorded(
+              folder,
+              source,
+              "export const view = 1;",
+              false,
+              failure.kind === "read" ? person : undefined,
+            );
 
-      if (["syntax", "unknown", "scope", "invalid"].includes(failure.kind)) {
-        w.files.set(person, failure.body);
-      }
+            if (["syntax", "unknown", "scope", "invalid"].includes(failure.kind)) {
+              w.files.set(person, failure.body);
+            }
 
-      const argv = process.argv;
-      vi.stubEnv("FABRIKA_HOME", folder);
-      vi.stubEnv("FABRIKA_INSTANCE_PORT", failure.kind === "env" ? failure.body : undefined);
-      cli.layer = w.layer;
-      stages.length = 0;
-      process.argv = [
-        process.execPath,
-        "dev.ts",
-        "--child",
-        `--parent=${process.ppid}`,
-        ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
-        ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
-      ];
+            vi.stubEnv("FABRIKA_HOME", folder);
+            vi.stubEnv("FABRIKA_INSTANCE_PORT", failure.kind === "env" ? failure.body : undefined);
+            cli.layer = w.layer;
+            stages.length = 0;
+            process.argv = [
+              process.execPath,
+              "dev.ts",
+              "--child",
+              `--parent=${process.ppid}`,
+              ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
+              ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
+            ];
 
-      try {
-        vi.resetModules();
-        await import("../dev.ts");
-        const exit = await Effect.runPromiseExit(cli.work!);
-        stageFailure(exit, "settings");
-        // The dev edge translates the load's error and keeps it as the cause.
-        expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
-          _tag: "Some",
-          value: {
-            cause: {
-              _tag: "SettingsError",
-              reason: ["flag", "env"].includes(failure.kind) ? "invalid" : failure.kind,
-            },
-          },
-        });
-        // Counted fakes: the build reads its source first, the stage records each start.
-        expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual([]);
-        expect(stages).toEqual([]);
-      } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
-        vi.unstubAllEnvs();
-        rmSync(folder, { recursive: true, force: true });
-      }
-    }),
+            vi.resetModules();
+            yield* Effect.promise(() => import("../dev.ts"));
+            const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
+            stageFailure(exit, "settings");
+            // The dev edge translates the load's error and keeps it as the cause.
+            expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
+              _tag: "Some",
+              value: {
+                cause: {
+                  _tag: "SettingsError",
+                  reason: ["flag", "env"].includes(failure.kind) ? "invalid" : failure.kind,
+                },
+              },
+            });
+            // Counted fakes: the build reads its source first, the stage records each start.
+            expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual(
+              [],
+            );
+            expect(stages).toEqual([]);
+          }),
+        ),
+      ),
+    ),
     { seed: 119120, numRuns: 100 },
   );
 });
