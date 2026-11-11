@@ -195,7 +195,7 @@ vi.mock("@kampus/libfabrika/node/build", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/node/build")>()),
   bundlePrograms: () =>
     Effect.succeed({
-      counter: { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
+      "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
     }),
   bundle: () => Effect.succeed({ output: [{ type: "chunk", code: "export default {};" }] }),
 }));

@@ -77,6 +77,11 @@
       "paths": ["next/packages/libfabrika/src/presence"]
     },
     {
+      "name": "next-packs",
+      "floor": 3,
+      "paths": ["next/packages/libfabrika/src/packs"]
+    },
+    {
       "name": "next-ledger",
       "floor": 2,
       "paths": ["next/packages/libfabrika/src/ledger"]

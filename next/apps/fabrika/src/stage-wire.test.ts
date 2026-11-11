@@ -327,6 +327,8 @@ const counter = async (c: Client) => {
   const rows = await read(c, "processes/counter:1");
   const started = rows.findLast((r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1");
   expect(started, "stage must start the real counter:1").toBeDefined();
+  // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
+  expect(started!.body).toMatchObject({ program: "fabrika/counter" });
   return (started!.body as { process: string }).process;
 };
 

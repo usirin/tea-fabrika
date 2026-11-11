@@ -411,7 +411,7 @@ describe("P16 stack and sealed loader", () => {
             throw Error("unused Worker Loader capability");
           };
           const rpc = {
-            describe: async () => ({ name: "counter", v: 1, writes: {}, inputs: {}, cmds: [] }),
+            describe: async () => ({ name: "fabrika/counter", v: 1, writes: {}, inputs: {}, cmds: [] }),
             fetch: unused,
             connect: unused,
           };
@@ -428,8 +428,16 @@ describe("P16 stack and sealed loader", () => {
             },
             load: unused,
           };
-          const loader = workerLoader(platform, { counter: { hash: hash(source), source } });
-          const loaded = await Effect.runPromise(loader.load("counter", process));
+          // P40, L4: lookups use the whole qualified name. Another pack's `counter` sits beside it
+          // with other code, and the bare short name finds neither.
+          const other = `${source}-other-pack`;
+          const loader = workerLoader(platform, {
+            "fabrika/counter": { hash: hash(source), source },
+            "other/counter": { hash: hash(other), source: other },
+          });
+          const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
+          expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
+          const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
           expect(loaded.hash).toBe(hash(source));
           expect(calls).toEqual([
             {
@@ -657,7 +665,7 @@ describe("P16 copied-file real stage, serial", () => {
                           for (const name of Object.keys(built.programs)) {
                             const program: Loaded = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
 
-                            if (name === "counter") {
+                            if (name === "fabrika/counter") {
                               const counted = await turn(CounterTurn, program, "init", [null]);
                               expect(counted.model).toEqual({ count: 0 });
                               continue;
@@ -757,6 +765,12 @@ describe("P16 copied-file real stage, serial", () => {
                           expect((await b.hello()).error).toBeUndefined();
                           const rows = (await a.call("ledger.read", { stream: "processes/counter:1", after: 0 })).result
                             .entries;
+                          // P40, L4 and L7: the brain's process facts name the qualified code
+                          // under the registered name, before and after the restart.
+                          expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
+                            name: "counter:1",
+                            program: "fabrika/counter",
+                          });
                           const current = rows.findLast((r: any) => r._tag === "started").body.process;
 
                           if (again) {
