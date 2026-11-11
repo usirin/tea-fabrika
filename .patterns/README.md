@@ -40,4 +40,5 @@ Once the table passes about a dozen rows, split it into sections by area.
 | [effect-services-and-layers.md](./effect-services-and-layers.md) | next/ | Adding a service or its Layer, deciding which file a Layer or adapter goes in, or giving an object class its runtime |
 | [effect-state-and-time.md](./effect-state-and-time.md) | next/ host code | Keeping state that changes between calls, adding a limit, reading the time, or writing a retry or a loop that repeats |
 | [effect-swallowed-failures-leave-a-trace.md](./effect-swallowed-failures-leave-a-trace.md) | next/ | Reaching for `Effect.ignore`, a catch-all, or a finalizer |
+| [durable-objects-sleep.md](./durable-objects-sleep.md) | next/ Durable Objects | Adding work, a loop, a timer, a socket, telemetry or saved state to code that runs in a Durable Object |
 | [doc-comments.md](./doc-comments.md) | next/packages | Adding or changing a public export of a library, or its module file |
