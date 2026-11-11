@@ -4,7 +4,7 @@ import { Arbitrary, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
-import { A, BRAIN, brain, first, from, manager, storage, watcher, W } from "./Process.test-support.ts";
+import { A, BRAIN, brain, first, from, INTERRUPTED, manager, storage, watcher, W } from "./Process.test-support.ts";
 import { Activity, canRestart, Dead, ProcessEvent, recoverActivity, State } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
@@ -225,7 +225,7 @@ describe("p80, supplied policy events", () => {
           return Effect.gen(function* () {
             const processes = yield* ProcessManager;
             yield* processes.start(first(), from());
-            yield* processes.exit(A, "interrupted", from());
+            yield* processes.exit(A, INTERRUPTED, from());
             yield* processes.down(A, supplied, from());
             expect(
               store

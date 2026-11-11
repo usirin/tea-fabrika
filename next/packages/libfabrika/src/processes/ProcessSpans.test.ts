@@ -15,6 +15,7 @@ import {
   W,
   again,
   brain,
+  CRASHED,
   first,
   from,
   ids,
@@ -127,7 +128,7 @@ describe("p97, process calls", () => {
         yield* processes.info;
         expect(yield* processes.isLive(A)).toBe(true);
         yield* processes.monitor(ref, A, from());
-        yield* processes.exit(A, "crashed", from());
+        yield* processes.exit(A, CRASHED, from());
         yield* receive(W);
         yield* processes.demonitor(ref, from());
         yield* processes.down(A, { reason: "intensity", crashes: 3, until: 50_000 }, from());
@@ -171,7 +172,7 @@ describe("p97, process calls", () => {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
-          yield* processes.exit(A, "crashed", from());
+          yield* processes.exit(A, CRASHED, from());
           yield* processes.start(again(A), from());
         }).pipe(Effect.provide(manager(store, brain(), ids(A, B).next)));
         const sink = yield* SpanSink;
@@ -216,7 +217,7 @@ describe("p97, process calls", () => {
           yield* ProcessManager.use((p) => p.monitor("one", A, from({ sentAt: monitorSent }))).pipe(
             Effect.provide(manager(store, processCaller(W))),
           );
-          yield* ProcessManager.use((p) => p.exit(A, "crashed", from({ sentAt: exitSent }))).pipe(
+          yield* ProcessManager.use((p) => p.exit(A, CRASHED, from({ sentAt: exitSent }))).pipe(
             Effect.provide(manager(store)),
           );
           yield* TestClock.setTime(now + lag);
@@ -258,7 +259,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
           expect(yield* receive(A)).toHaveLength(1);
           store.fault.after = 0;
           store.fault.error = new Error(MESSAGE, { cause: Redacted.make(SECRET) });
-          yield* Effect.exit(processes.exit(A, "crashed", from()));
+          yield* Effect.exit(processes.exit(A, CRASHED, from()));
           store.fault.after = null;
         }).pipe(Effect.provide(manager(store)));
         yield* SpanSink.use((sink) => sink.flush);
