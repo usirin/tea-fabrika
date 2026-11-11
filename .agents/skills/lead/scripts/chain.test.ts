@@ -42,8 +42,15 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
 import {
+  backstopFrom,
   briefOf,
+  type Budget,
   ChainRecord,
+  estimateIn,
+  type Limits,
+  type Mark,
+  markFrom,
+  stopReason,
   roundsIn,
   exitOf,
   judgedOf,
@@ -65,6 +72,7 @@ import {
   type StepName,
   stepsTable,
 } from "./chain.ts";
+import { FAULTS, faultFrom } from "./drive.ts";
 
 // Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -85,13 +93,23 @@ const outcome = fc.oneof(
   fc.constantFrom("stuck:timeout", "stuck:no_answer", "stuck:crash", "stuck:fetch_failed"),
 );
 
-const line = (o: string, head: string, reason = "why"): Line => ({
+const line = (o: string, head: string, reason = "why", listUsd: number | null = null): Line => ({
   outcome: o,
   head,
   reason,
+  fault: faultFrom(o, reason),
   report: null,
   box: "b",
   exit: 0,
+  listUsd,
+});
+
+/** The machine's limits: 0076's intensity of 3 in 5, and a backstop only when one is given. */
+const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3): Limits => ({
+  maxSteps,
+  maxStucks,
+  intensity: { count: 3, within: 5 },
+  backstop,
 });
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
@@ -325,7 +343,16 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
     fc.assert(
       fc.property(outcome, sha, word, fc.integer({ min: 0, max: 40 }), (o, head, reason, exit) => {
         const out = `keep box x: busy\n${JSON.stringify({ outcome: "plan-only" })}\n${JSON.stringify({ outcome: o, head, reason, report: null, box: "b", exit })}\n`;
-        expect(lineOf(out, 1)).toEqual({ outcome: o, head, reason, report: null, box: "b", exit });
+        expect(lineOf(out, 1)).toEqual({
+          outcome: o,
+          head,
+          reason,
+          fault: faultFrom(o, reason),
+          report: null,
+          box: "b",
+          exit,
+          listUsd: null,
+        });
         expect(lineOf("nothing here\n", 30)).toBeNull();
       }),
       options,
@@ -334,7 +361,7 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
 });
 
 describe("T341 the lane machine, stepped by hand, today's tooling", () => {
-  const machine = makeMachine({ maxSteps: 16, maxStucks: 3 });
+  const machine = makeMachine(limits(16));
   const start = () => {
     const [idle] = machine.init(null, undefined);
     return machine.update.start(idle, { type: "start", step: "tests" });
@@ -530,7 +557,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   });
 
   it("the step cap parks the lane as ask, never loops forever", () => {
-    const small = makeMachine({ maxSteps: 2, maxStucks: 3 });
+    const small = makeMachine(limits(2));
     const [idle] = small.init(null, undefined);
     let [m] = small.update.start(idle, { type: "start", step: "tests" });
     [m] = small.update.step_run_ok(m, {
@@ -546,7 +573,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 });
 
 describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
-  const machine = makeMachine({ maxSteps: 16, maxStucks: 3 });
+  const machine = makeMachine(limits(16));
   // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
   const opened = (pr: number, head: string) => {
     const [idle] = machine.init(null, undefined);
@@ -917,5 +944,278 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
     });
     expect(String(row.why)).toContain("ticket 485");
     expect(Object.keys(row)).toContain("date");
+  });
+});
+
+describe("T675 a lane stops at its budget (0076), today's tooling", () => {
+  const big = 1_000;
+  const stepOn = (limit: Limits) => {
+    const machine = makeMachine(limit);
+    const [idle] = machine.init(null, undefined);
+    return { machine, first: machine.update.start(idle, { type: "start", step: "tests" }) };
+  };
+  const again = JSON.stringify({ _tag: "step", step: "tests", note: "again" });
+
+  // vector: the sort, reason by reason, read from the stuck rows in the boxes folder on 2026-11-11.
+  it("vector: each stuck reason drive writes gets its fault, and an agent's own stuck reads its reason", () => {
+    const cases: readonly (readonly [string, string, "tool" | "work"])[] = [
+      ["stuck:fetch_failed", "fetch: stepcommit: not_owner: a.test.ts", "tool"],
+      ["stuck:agent_failed", "codex contain: Codex's box would need 1188 lines", "tool"],
+      ["stuck:box_failed", "box.sh new: stuck base_not_signed", "tool"],
+      ["stuck:no_answer", "no answer line in the report", "tool"],
+      ["stuck:push_failed", "botpush: rejected", "tool"],
+      ["stuck:record_failed", "redact.sh failed", "tool"],
+      ["stuck:crash", "Error: boom", "tool"],
+      ["stuck:worktree_unreadable", "git worktree list failed", "tool"],
+      ["stuck:RetriesExhausted", "agent_cap: 8 agents", "tool"],
+      ["stuck:step_said", "mutbox: docker_busy: another Docker box is running (pid 4038); one at a time", "tool"],
+      ["stuck:step_said", "both laws test files fail in this sandbox with `listen EPERM 127.0.0.1`", "tool"],
+      ["stuck:step_said", "Network is blocked, so `pnpm patch` could not run", "tool"],
+      ["stuck:step_said", "cannot verify the required typecheck guard because pgrep cannot list processes", "tool"],
+      ["stuck:step_said", "typecheck fails at door.test.ts:2989: string is not assignable to SinkError", "work"],
+      ["stuck:step_said", "approved plan ownership must cover both files before stepcommit can commit them", "work"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; stale_link d1ea03a7 step lead", "tool"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; and 5 more", "tool"],
+      ["stuck:unsigned", "and 5 more", "work"],
+      ["stuck:unsigned", "commits check: build_touched_exam a7ff4ee8 next/apps/fabrika/tsconfig.json", "work"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; build_touched_exam a7ff4ee8 x", "work"],
+      ["stuck:unsigned", "3fda8c62 has no step note", "work"],
+      ["stuck:timeout", "stopped after 60 minutes", "work"],
+      ["stuck:no_commit", "answered done with no commit", "work"],
+      ["stuck:leak", "added lines leak, nothing pushed", "work"],
+      ["stuck:review_committed", "the review left 2 files changed in its box", "work"],
+      ["stuck:something_new", "a stuck name nobody sorted", "work"],
+    ];
+
+    for (const [outcome, reason, fault] of cases) {
+      expect([outcome, reason, faultFrom(outcome, reason)]).toEqual([outcome, reason, fault]);
+    }
+  });
+
+  // Plants: give a send or a done a fault; let a stuck with an odd reason have none.
+  it("property: only a stuck outcome has a fault, and every stuck outcome has one of the two", () => {
+    fc.assert(
+      fc.property(outcome, fc.string({ maxLength: 80 }), (o, reason) => {
+        const fault = faultFrom(o, reason);
+        expect(fault === null).toBe(!o.startsWith("stuck"));
+
+        if (fault !== null) {
+          expect(FAULTS).toContain(fault);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("property: a step's mark is send for a send, its fault for a stuck, and pass for anything else", () => {
+    fc.assert(
+      fc.property(outcome, word, (o, reason) => {
+        const l = line(o, "h", reason);
+        const mark = markFrom(l);
+        const [verb] = o.split(":");
+        expect(mark).toBe(verb === "send" ? "send" : verb === "stuck" ? l.fault : "pass");
+      }),
+      options,
+    );
+  });
+
+  // The steps a run may feed, with the mark each makes. None is a done, so the lane never opens a PR.
+  const fed = fc.constantFrom(
+    { o: "send:tests:step_said", reason: "a law misses a case", mark: "send" as Mark },
+    { o: "send:build:step_said", reason: "a law is red", mark: "send" as Mark },
+    { o: "ask:lead:question", reason: "which form?", mark: "pass" as Mark },
+    { o: "stuck:fetch_failed", reason: "fetch failed", mark: "tool" as Mark },
+    { o: "stuck:step_said", reason: "mutbox: docker_busy: another Docker box", mark: "tool" as Mark },
+    { o: "stuck:no_commit", reason: "answered done with no commit", mark: "work" as Mark },
+  );
+
+  // Plants: count tool stucks; check the window only after a judgment; keep the whole lane, not its
+  // last 5; stop at 2 in 5 or 3 in 6.
+  it("property: the chain stops at the first step where 3 of the last 5 were sent back or stuck on the work, never on tool stucks", () => {
+    fc.assert(
+      fc.property(fc.array(fed, { minLength: 1, maxLength: 30 }), (steps) => {
+        const { machine, first } = stepOn(limits(big, null, big));
+        let [m] = first;
+        const marks: Mark[] = [];
+        const trips = (i: number) =>
+          marks.slice(Math.max(0, i - 4), i + 1).filter((k) => k === "send" || k === "work").length >= 3;
+        const expected = steps.findIndex((_, i) => {
+          marks[i] = steps[i]?.mark ?? "pass";
+          return trips(i);
+        });
+
+        for (const [i, s] of steps.entries()) {
+          expect(m.phase).toBe("stepping");
+          [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line(s.o, "", s.reason) } as never);
+
+          if (i === expected) {
+            expect(m).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+            return;
+          }
+
+          expect(m.phase).not.toBe("over");
+
+          if (m.phase === "judging") {
+            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+          }
+        }
+
+        expect(expected).toBe(-1);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a stop's question holds the counts, the tool stucks it left out and what was spent", () => {
+    const { machine, first } = stepOn(limits(big, null, big));
+    let [m] = first;
+    const run = [
+      line("send:build:step_said", "", "a law is red", 1.5),
+      line("stuck:fetch_failed", "", "fetch failed", 0.5),
+      line("send:tests:step_said", "", "a law misses a case", 2),
+      line("stuck:no_commit", "", "answered done with no commit", 1),
+    ];
+
+    for (const l of run) {
+      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+
+      if (m.phase === "judging") {
+        [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0.25 } } as never);
+      }
+    }
+
+    expect(m.phase).toBe("over");
+
+    if (m.phase === "over") {
+      expect(exitOf(m.end)).toBe(20);
+      expect(m.end.stop).toEqual({
+        _tag: "intensity",
+        count: 3,
+        within: 5,
+        window: ["send", "tool", "send", "work"],
+        steps: 4,
+        dollars: 5.25,
+      });
+      expect(m.end.reason).toBe(
+        "intensity: 3 of the last 4 steps were sent back or stuck on the work (2 sent back, 1 stuck on the work; 1 stuck on a tool, not counted; the limit is 3 in 5). Spent so far: 4 steps, $5.25. Answer redo, cut scope or drop (0076).",
+      );
+    }
+  });
+
+  // Plants: check the backstop after the step starts; count only steps or only dollars; keep MaxSteps
+  // over the backstop.
+  it("property: with a backstop, the chain stops before the next step or judgment once the lane ran its steps or spent its dollars", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 12 }),
+        fc.integer({ min: 1, max: 40 }),
+        fc.array(fc.integer({ min: 0, max: 900 }), { minLength: 1, maxLength: 30 }),
+        (steps, dollars, cents) => {
+          const backstop = { steps, dollars };
+          // MaxSteps of 1 would park at once; with a backstop it does not hold.
+          const { machine, first } = stepOn(limits(1, backstop, big));
+          let [m] = first;
+          let spent = 0;
+
+          for (const [i, c] of cents.entries()) {
+            spent += c / 100;
+            [m] = machine.update.step_run_ok(m, {
+              type: "step_run_ok",
+              value: line("ask:lead:question", "", "which form?", c / 100),
+            } as never);
+            const round = i + 1;
+
+            if (round >= steps || spent >= dollars) {
+              expect(m).toMatchObject({
+                phase: "over",
+                end: { kind: "ask", stop: { _tag: "backstop", passed: round >= steps ? "steps" : "dollars" } },
+              });
+              return;
+            }
+
+            expect(m.phase).toBe("judging");
+            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+            expect(m.phase).toBe("stepping");
+          }
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: an estimate line in steps and dollars is read wherever it sits, and the backstop is twice it", () => {
+    fc.assert(
+      fc.property(
+        fc.array(word, { maxLength: 6 }),
+        fc.array(word, { maxLength: 6 }),
+        fc.integer({ min: 1, max: 200 }),
+        fc.integer({ min: 1, max: 500 }),
+        (before, after, steps, dollars) => {
+          const text = [...before, `Estimate: ${steps} steps, $${dollars}, 70% sure`, ...after].join("\n");
+          expect(estimateIn(text)).toEqual({ steps, dollars });
+          expect(backstopFrom({ steps, dollars }, 2)).toEqual({ steps: 2 * steps, dollars: 2 * dollars });
+          expect(estimateIn([...before, ...after].join("\n"))).toBeNull();
+        },
+      ),
+      options,
+    );
+  });
+
+  // format: the one form the chain reads; a plan in agent hours alone has no estimate for it.
+  it("format: an estimate in hours, or one without steps or dollars, is none", () => {
+    expect(estimateIn("## Size\n\nEstimate: 2 agent hours, 70% sure.")).toBeNull();
+    expect(estimateIn("Estimate: 12 steps, 70% sure.")).toBeNull();
+    expect(estimateIn("Estimate: $15.")).toBeNull();
+    expect(estimateIn("We ran 12 steps for $15 last time.")).toBeNull();
+    expect(estimateIn("estimate 12 steps and $15.50")).toEqual({ steps: 12, dollars: 15.5 });
+  });
+
+  // pinned: chain records on disk from before 0076 carry no fault, no dollars and no stop.
+  it("pinned: a chain record written before 0076 still reads, with no fault and no dollars", () => {
+    const old = {
+      lane: "p14",
+      pr: null,
+      landed: null,
+      steps: [
+        {
+          round: 1,
+          step: "tests",
+          note: "",
+          startedAt: "2026-11-09T23:36:00.000Z",
+          endedAt: "2026-11-09T23:37:00.000Z",
+          line: { outcome: "stuck:fetch_failed", head: "", reason: "fetch failed", report: null, box: "b", exit: 30 },
+          judged: null,
+        },
+      ],
+    };
+    const read = Schema.decodeUnknownSync(ChainRecord)(old);
+    expect(read.steps[0]?.line).toMatchObject({ fault: null, listUsd: null });
+    expect(read.stop).toBeUndefined();
+  });
+
+  it("property: drive's line gives its fault and dollars, and a line without a fault gets one from its outcome", () => {
+    fc.assert(
+      fc.property(outcome, word, fc.option(fc.integer({ min: 0, max: 9_999 })), (o, reason, usd) => {
+        const fault = faultFrom(o, reason);
+        const sent = lineOf(JSON.stringify({ outcome: o, reason, fault, listUsd: usd }), 0);
+        expect(sent).toMatchObject({ fault, listUsd: usd });
+        expect(lineOf(JSON.stringify({ outcome: o, reason }), 0)).toMatchObject({ fault, listUsd: null });
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a backstop's question names the limit it passed and what was spent", () => {
+    expect(
+      stopReason({
+        _tag: "backstop",
+        passed: "dollars",
+        backstop: { steps: 24, dollars: 30 },
+        steps: 9,
+        dollars: 31.4,
+      }),
+    ).toBe(
+      "backstop: the lane reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
+    );
   });
 });
