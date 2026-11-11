@@ -845,6 +845,14 @@ const step = (label: string, body: () => void) => {
 const recoveryHolds = (o: Observation) => {
   step("first info resolves only when healthy", () => expect(o.firstResolved).toBe(o.fault === "healthy"));
   step("each pinned name has one saved descriptor", () => expect(Object.keys(o.saved)).toEqual([...PINNED]));
+  step("each saved row is keyed by its descriptor's id", () => {
+    for (const n of PINNED) {
+      expect(o.saved[n]!.process).toBe(o.saved[n]!.descriptor.id);
+    }
+
+    // Main read the faulted name's row by its id before the reopen, so that row is checked too.
+    expect(o.savedBeforeReopen[o.name]!.process).toBe(o.savedBeforeReopen[o.name]!.descriptor.id);
+  });
   step("the faulted name's descriptor was saved before the reopen", () => {
     const first = o.attempts.find((a) => a.name === o.name);
     expect(o.savedBeforeReopen[o.name]?.descriptor).toEqual(first);
@@ -950,6 +958,21 @@ describe("P12 Project configure recovery", () => {
           attempts: base.attempts.filter((a, i, all) => a.name !== two || i === all.findIndex((b) => b.name === two)),
         },
         "attempts per name",
+      ],
+      // the Project saves counter:2's row under another key after the reopen
+      [
+        "save counter:2's row under another key after the reopen",
+        { ...base, saved: { ...base.saved, [two]: { ...base.saved[two]!, process: two } } },
+        "each saved row is keyed by its descriptor's id",
+      ],
+      // the Project saves the faulted name's row under another key before the reopen
+      [
+        "save the faulted name's row under another key before the reopen",
+        {
+          ...base,
+          savedBeforeReopen: { ...base.savedBeforeReopen, [two]: { ...base.savedBeforeReopen[two]!, process: two } },
+        },
+        "each saved row is keyed by its descriptor's id",
       ],
     ];
 
