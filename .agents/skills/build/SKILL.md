@@ -38,7 +38,8 @@ counts as proof.
 
 Outside means the approved plan does not name it. A red law the plan names is your work, and a
 file you need but may not touch goes in your report (step 6): neither is a finding.
-Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
+unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 

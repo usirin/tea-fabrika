@@ -66,7 +66,7 @@ const answer = [
   "Give every finding in that answer, grouped by class, most serious first.",
   "Name each checked decided note and say where the change follows or breaks it.",
   "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-  "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
+  "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
   "End with exactly one answer: line, as the last line.",
 ];
 

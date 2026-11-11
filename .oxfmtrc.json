@@ -24,7 +24,9 @@
       "options": { "bracketSpacing": true, "trailingComma": "none" }
     }
   ],
+  // A field row file is written once and never edited, so no formatter rewrites it (decision 0090).
   "ignorePatterns": [
+    "field/**",
     "**/fixtures/**",
     "**/experiments/results/**",
     "unreachable-ledger.json",

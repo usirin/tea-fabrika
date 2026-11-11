@@ -1,7 +1,26 @@
 // Today's field records. Cores measured against 437 notes and the last 500 runs
 // by the approved T342 plan. README drift advises; unknown facts stay unknown.
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
+// Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
+// are history. Both hold the same rows, so one schema reads both.
 import { Schema } from "effect";
+
+const Log = Schema.Literals(["notes", "runs", "findings"]);
+export type Log = typeof Log.Type;
+
+/** The log a path holds rows of: its old `.jsonl` file, or anything in its folder. */
+export const logOf = (file: string): Log | null => {
+  const log = /^field\/([^/]+)(?:\.jsonl$|\/)/.exec(file)?.[1];
+  return Schema.is(Log)(log) ? log : null;
+};
+
+/** A row file's name: the date plus a short kebab-case slug, which is the row's id (0090). */
+export const rowName = /^field\/(?:notes|runs|findings)\/(\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*)\.json$/;
+
+/** True for a path in a log's folder, a row file or a misnamed one, never an old `.jsonl` file. */
+export const inFolder = (file: string) => /^field\/(?:notes|runs|findings)\//.test(file);
+
+const dated = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
 const Text = Schema.NullOr(Schema.String);
@@ -121,22 +140,17 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     return [error("row", "expected a JSON object")];
   }
 
-  const found = file === "field/findings.jsonl";
+  const log = logOf(file);
+  const found = log === "findings";
+  // A row file's own id is checked against its name in field-check.ts; a counter's shape is old.
+  const folder = inFolder(file);
 
   if (found && value["_tag"] !== "finding" && value["_tag"] !== "rated") {
     return [error("_tag", "expected finding or rated")];
   }
 
   const schema =
-    file === "field/notes.jsonl"
-      ? Note
-      : file === "field/runs.jsonl"
-        ? Run
-        : found
-          ? value["_tag"] === "rated"
-            ? Rated
-            : Found
-          : null;
+    log === "notes" ? Note : log === "runs" ? Run : found ? (value["_tag"] === "rated" ? Rated : Found) : null;
 
   if (schema === null) {
     return [warning("row", "no detailed schema for this file")];
@@ -158,8 +172,10 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   const findings: Finding[] = [];
 
   if (found) {
-    for (const field of ["id", "finding"]) {
-      if (field in value && !/^\d{4}-\d{2}-\d{2}-f\d{2,}$/.test(String(value[field]))) {
+    for (const field of folder ? ["finding"] : ["id", "finding"]) {
+      const text = String(value[field]);
+
+      if (field in value && !/^\d{4}-\d{2}-\d{2}-f\d{2,}$/.test(text) && !(folder && dated.test(text))) {
         findings.push(warning(field, "unusual record id"));
       }
     }
@@ -175,7 +191,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     }
   }
 
-  const note = file === "field/notes.jsonl";
+  const note = log === "notes";
   const metadata = note
     ? ["cause", "person", "primitive", "test", "links"]
     : ["run", "ticket", "pr", "started", "ended", "parent", "active", "driver_caused", "costUsd", "billed"];
@@ -198,7 +214,12 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 
   const id = note ? "id" : "run";
 
-  if (!found && typeof value[id] === "string" && !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id])) {
+  if (
+    !found &&
+    !folder &&
+    typeof value[id] === "string" &&
+    !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id])
+  ) {
     findings.push(warning(id, "unusual record id"));
   }
 
@@ -230,7 +251,11 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     }
   }
 
-  if (typeof value["parent"] === "string" && !/^\d{4}-\d\d-\d\d-r\d+(?:-c\d+)?$/.test(value["parent"])) {
+  if (
+    typeof value["parent"] === "string" &&
+    !/^\d{4}-\d\d-\d\d-r\d+(?:-c\d+)?$/.test(value["parent"]) &&
+    !dated.test(value["parent"])
+  ) {
     findings.push(warning("parent", "unusual parent reference"));
   }
 
