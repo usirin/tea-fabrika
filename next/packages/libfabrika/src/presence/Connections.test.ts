@@ -129,7 +129,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* Effect.gen(function* () {
           const gateway = yield* Connections;
           yield* gateway.join(world.connection());
-          world.store.sql.exec("UPDATE process_gateways SET session = ?", `invalid:${message}`);
+          world.store.sql.exec("UPDATE process_connections SET session = ?", `invalid:${message}`);
           const result = yield* Effect.result(gateway.online("key-a"));
           expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "bad_row" } });
         }).pipe(Effect.provide(world.layer()));
@@ -320,7 +320,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         yield* gateways.online("key-a");
         yield* gateways.leave("tab-a", A);
 
-        for (const name of ["connections.join", "gateway.online", "connections.probe", "gateway.leave"]) {
+        for (const name of ["connections.join", "connections.online", "connections.probe", "connections.leave"]) {
           expect(
             spans.filter((span) => span.name === name && span.status._tag === "Ended"),
             name,
@@ -328,8 +328,8 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         }
 
         const join = spans.find((span) => span.name === "connections.join")!;
-        expect(join.attributes.get("fab.gateway.client")).toBe("tab-a");
-        expect(join.attributes.get("fab.gateway.session")).toBe(A);
+        expect(join.attributes.get("fab.connection.client")).toBe("tab-a");
+        expect(join.attributes.get("fab.connection.session")).toBe(A);
       }).pipe(Effect.provide(world.layer()), Effect.withTracer(tracer));
     }),
   );

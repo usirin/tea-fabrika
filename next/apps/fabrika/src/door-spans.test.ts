@@ -502,7 +502,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       spans[1]!,
                       a,
                       ok,
-                      ok ? { "fab.door.outcome": call === "refused" ? "refused" : "ok" } : {},
+                      ok ? { "fab.gateway.outcome": call === "refused" ? "refused" : "ok" } : {},
                     );
                     expect(
                       spans[1]!.links.map((l) => ({

@@ -194,7 +194,7 @@ const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
           .prepare(
             table === "gateway_bindings"
               ? "SELECT letter,value FROM gateway_bindings"
-              : "SELECT client,gateway FROM dev_clients",
+              : "SELECT client,connection FROM dev_clients",
           )
           .all(),
       );
@@ -511,7 +511,7 @@ describe("P12 real dev.ts wire", () => {
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
     const connections = savedRows(s.home, "dev_clients").filter((row) =>
-      keys.some((key) => String(row.gateway).includes(encodeURIComponent(key.fingerprint))),
+      keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
     );
     expect(connections).toHaveLength(3);
     const identities = [

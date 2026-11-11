@@ -700,7 +700,7 @@ describe("P12 Connection recording", () => {
                 : gateway.notify(letter, { method: "view.patch", params: {} });
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
+        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
           expect(rows.some((row) => !row.ok)).toBe(true);

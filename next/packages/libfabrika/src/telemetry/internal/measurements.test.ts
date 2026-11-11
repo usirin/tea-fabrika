@@ -151,7 +151,7 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
       const n = ms.length;
       const lags = group.flatMap((s) => (s.lag === null ? [] : [s.lag]));
       return {
-        _tag: "summary",
+        _tag: "metric",
         piece: group[0]?.piece,
         hour: group[0]?.hour,
         count: n,
@@ -211,7 +211,7 @@ describe("p101, measurements in two levels", () => {
 
               const attributes: Record<string, unknown> = {
                 ...(s.lag === undefined ? {} : { "fab.ledger.lag": s.lag }),
-                ...(s.doorLag === undefined ? {} : { "fab.door.lag": s.doorLag }),
+                ...(s.doorLag === undefined ? {} : { "fab.gateway.lag": s.doorLag }),
                 // Keys that are not `.lag`, or `.lag` with no number: never the lag.
                 ...(s.decoy ? { "fab.ledger.flag": 9_999, "fab.lagging": 8_888, "fab.text.lag": "7777" } : {}),
               };
