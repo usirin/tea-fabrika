@@ -51,7 +51,11 @@ export const from = (over: Partial<From> = {}): From => ({
 
 type Caller = { readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type };
 
-export const brain = (): Caller & { readonly by: string } => ({
+/** The brain caller always answers to a client, never to a process. */
+export const brain = (): Caller & {
+  readonly recipient: typeof Recipient.cases.client.Type;
+  readonly by: string;
+} => ({
   owner: Owner.cases.brain.make({}),
   recipient: Recipient.cases.client.make({ client: "window-a", session: X }),
   by: BRAIN,

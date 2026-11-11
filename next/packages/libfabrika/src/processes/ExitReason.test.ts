@@ -85,20 +85,24 @@ function exitTypeErrors(
   calls: ProcessCalls,
   from: Parameters<ProcessCalls["exit"]>[2],
 ) {
-  manager.exit("process_0000000000e008000000000000", { _tag: "crashed", phase: "step", error: "TypeError" }, from);
+  const crash = manager.exit(
+    "process_0000000000e008000000000000",
+    { _tag: "crashed", phase: "step", error: "TypeError" },
+    from,
+  );
   // @ts-expect-error An exit reason is the closed union, not text.
-  manager.exit("process_0000000000e008000000000000", "crashed", from);
-  calls.exit("process_0000000000e008000000000000", { _tag: "shutdown" }, from);
+  const crashText = manager.exit("process_0000000000e008000000000000", "crashed", from);
+  const shutdown = calls.exit("process_0000000000e008000000000000", { _tag: "shutdown" }, from);
   // @ts-expect-error The remote calls keep the same closed union.
-  calls.exit("process_0000000000e008000000000000", "shutdown", from);
+  const shutdownText = calls.exit("process_0000000000e008000000000000", "shutdown", from);
   // @ts-expect-error A crash names its phase.
-  manager.exit("process_0000000000e008000000000000", { _tag: "crashed" }, from);
+  const noPhase = manager.exit("process_0000000000e008000000000000", { _tag: "crashed" }, from);
   // @ts-expect-error noproc is a monitor result, not an exit reason.
-  manager.exit("process_0000000000e008000000000000", { _tag: "noproc" }, from);
+  const noproc = manager.exit("process_0000000000e008000000000000", { _tag: "noproc" }, from);
   const reason: typeof ExitReason.Type = { _tag: "normal" };
   // @ts-expect-error The exported type is the union too.
   const text: typeof ExitReason.Type = "normal";
-  return [reason, text];
+  return [crash, crashText, shutdown, shutdownText, noPhase, noproc, reason, text];
 }
 
 void exitTypeErrors;

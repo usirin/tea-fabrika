@@ -407,9 +407,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           : [];
 
         for (const down of downs) {
-          expect((down as { to: typeof Recipient.Type }).to, "a DOWN reaches only its own recipient").toEqual(
-            Recipient.cases.process.make({ process }),
-          );
+          expect(
+            Predicate.hasProperty(down, "to") ? down.to : undefined,
+            "a DOWN reaches only its own recipient",
+          ).toEqual(Recipient.cases.process.make({ process }));
         }
       }
     }
