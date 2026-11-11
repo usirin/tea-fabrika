@@ -216,7 +216,192 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
         ];
         files["apps/fabrika/src/testing/competing.ts"] =
           `import {BrowserWindow as W} from "electron";\nimport * as E from "electron";\nimport * as P from "playwright";\nimport {launchElectron} from "./electron-launch.ts";\nconst app = await launchElectron({});\n${competing.join("\n")}\n${competingAllowed.join("\n")}`;
+        // Every binding form the rule recognizes (README, "Binding forms"): one plant per line, red at 7aa8ad2f.
+        let count = 0;
+        const u = (prefix: string) => `${prefix}${count++}`;
+        const header = [
+          'import {BrowserWindow as W} from "electron";',
+          'import * as E from "electron";',
+          'import * as P from "playwright";',
+          'import type {ElectronApplication, Page} from "playwright";',
+          'import {launchElectron} from "./electron-launch.ts";',
+          "declare const page: any, cond: any, items: any[], other: any, url: string, risky: () => void;",
+          "const app = await launchElectron({});",
+        ];
+        const evalApp = "app.evaluate((M) => new M.BrowserWindow().focus())";
+        const plants = [
+          // Declarator and assignment patterns.
+          `{ const {BrowserWindow: ${n}} = E; new ${n}().focus(); }`,
+          `{ const {["BrowserWindow"]: ${n}} = E; new ${n}().focus(); }`,
+          `{ const {_electron: {launch: ${n}}} = P; ${n}({}); }`,
+          `{ const [, , ${n}] = W.getAllWindows(); ${n}.focus(); }`,
+          `{ const [, [${n}] = W.getAllWindows()] = W.getAllWindows(); ${n}.focus(); }`,
+          `{ const {BrowserWindow: ${n} = E.BrowserWindow} = P; new ${n}().focus(); }`,
+          `{ const {_electron: ${n} = P._electron} = E; ${n}.launch({}); }`,
+          `{ let ${n}; ({BrowserWindow: ${n} = E.BrowserWindow} = P); new ${n}().focus(); }`,
+          `{ let ${n}; ({_electron: ${n} = P._electron} = E); ${n}.launch({}); }`,
+          `{ let ${n}; [${n} = W.fromId(1)] = []; ${n}.focus(); }`,
+          `{ const [${n} = W.fromId(1)] = other; ${n}.focus(); }`,
+          `{ const {...${n}} = E; new ${n}.BrowserWindow().focus(); }`,
+          `{ let ${n}; ({...${n}} = E); new ${n}.BrowserWindow().focus(); }`,
+          `{ const [...${n}] = W.getAllWindows(); ${n}[0].focus(); }`,
+          `{ let ${n}; [, ...${n}] = W.getAllWindows(); ${n}[0].focus(); }`,
+          // Writes to every binding kind.
+          ...["=", "||=", "??=", "&&="].map((op) => `function ${u("w")}(${n}) { ${n} ${op} new W(); ${n}.focus(); }`),
+          `function ${u("w")}(${n}) { [${n}] = W.getAllWindows(); ${n}.focus(); }`,
+          `function ${u("w")}(${n}) { ({w: ${n} = W.fromId(1)} = {}); ${n}.focus(); }`,
+          `function ${u("w")}(${n}) { [...${n}] = W.getAllWindows(); ${n}[0].focus(); }`,
+          `{ let ${n} = page; ${n} = new W(); ${n}.focus(); }`,
+          `function ${u("w")}() { var ${n}; ${n} = new W(); ${n}.focus(); }`,
+          `function ${u("w")}() { var ${n} = page; ${n} ??= W.fromId(1); ${n}.focus(); }`,
+          `try { risky(); } catch (${n}) { ${n} = new W(); ${n}.focus(); }`,
+          `{ function ${n}() {} ${n} = new W(); ${n}.focus(); }`,
+          `{ class ${n} {} ${n} = new W(); ${n}.focus(); }`,
+          `{ let ${n} = page; const f = () => ${n}.focus(); ${n} = new W(); }`,
+          `{ let ${n} = new W(); const f = () => ${n}.focus(); }`,
+          // Parameters.
+          `((a, ${n} = E.BrowserWindow) => new ${n}().focus());`,
+          `function ${u("p")}(a, ${n} = W.fromId(1)) { ${n}.focus(); }`,
+          `const ${u("t")} = (s: string, app: ElectronApplication) => ${evalApp};`,
+          `function ${u("t")}(s: string, app: ElectronApplication) { ${evalApp}; }`,
+          `const ${u("t")} = function (s: string, app: ElectronApplication) { ${evalApp}; };`,
+          `class ${u("K")} { m(s: string, app: ElectronApplication) { ${evalApp}; } }`,
+          `class ${u("K")} { constructor(s: string, app: ElectronApplication) { ${evalApp}; } }`,
+          `((app: ElectronApplication = other) => ${evalApp});`,
+          `{ const app2: ElectronApplication = other; ${evalApp.replace("app.", "app2.")}; }`,
+          "app.evaluateHandle((M) => new M.BrowserWindow().focus());",
+          `{ const h = await app.browserWindow(page); h.evaluateHandle((${n}) => ${n}.focus()); }`,
+          `{ const h = await app.evaluateHandle((M) => M); h.evaluate((${n}) => ${n}.focus()); }`,
+          `launchElectron({}).then((${n}) => ${n}.evaluate((M) => new M.BrowserWindow().focus()));`,
+          `app.browserWindow(page).then((h) => h.evaluate((${n}) => ${n}.focus()));`,
+          // Loop heads.
+          `for (const ${n} of W.getAllWindows()) { ${n}.focus(); }`,
+          `for await (const ${n} of W.getAllWindows()) { ${n}.focus(); }`,
+          `{ let ${n}; for (${n} of W.getAllWindows()) { ${n}.focus(); } }`,
+          // Array methods on windows.
+          ...["at(0)", "find((x) => x.id === 1)", "findLast((x) => x.id === 1)", "pop()", "shift()"].map(
+            (m) => `W.getAllWindows().${m}?.focus();`,
+          ),
+          ...[
+            "filter(Boolean)",
+            "slice(1)",
+            "toSorted()",
+            "toReversed()",
+            "concat([])",
+            "reverse()",
+            "sort()",
+            "splice(0)",
+            "toSpliced(0)",
+            "with(0, other)",
+            "flat()",
+          ].map((m) => `W.getAllWindows().${m}[0].focus();`),
+          "[...W.getAllWindows()][0].focus();",
+          `{ const ${n} = [...W.getAllWindows(), ...other]; ${n}[0].focus(); }`,
+          ...[
+            "forEach",
+            "map",
+            "filter",
+            "find",
+            "findLast",
+            "findIndex",
+            "findLastIndex",
+            "some",
+            "every",
+            "flatMap",
+          ].map((m) => `W.getAllWindows().${m}((${n}) => ${n}.focus());`),
+          `W.getAllWindows().forEach((a, i, ${n}) => ${n}[0].focus());`,
+          // Expression wrappers.
+          `{ const ${n} = (page, W.fromId(1)); ${n}.focus(); }`,
+          `{ const ${n} = W.fromId(1) satisfies unknown; ${n}.focus(); }`,
+          `{ const ${n} = <unknown>W.fromId(1); ${n}.focus(); }`,
+          `{ const ${n} = W<string>; new ${n}().focus(); }`,
+          `{ const ${n} = (W.fromId(1)); ${n}.focus(); }`,
+          "(W.fromId(1)).focus();",
+          "(W.fromId(1)!.focus)();",
+          `{ const ${n} = W.fromId(1); (${n}?.focus)(); }`,
+          "(P._electron satisfies unknown).launch({});",
+        ];
+        const twins = [
+          `{ const {chromium: ${n} = page.locator("a")} = P; ${n}.focus(); }`,
+          `{ const [${n} = page.locator("a")] = other; ${n}.focus(); }`,
+          `{ const {...${n}} = other; ${n}.focus(); }`,
+          `{ const [...${n}] = items; ${n}[0].focus(); }`,
+          `function ${u("a")}(${n}) { ${n} = page.locator("a"); ${n}.focus(); }`,
+          `function ${u("a")}(${n}) { ${n} = new W(); ${n} = page; ${n}.focus(); }`,
+          `try { risky(); } catch (${n}) { ${n} = page.locator("a"); ${n}.focus(); }`,
+          `{ function ${n}() {} ${n} = page.locator("a"); ${n}.focus(); }`,
+          `{ class ${n} {} ${n} = page.locator("a"); ${n}.focus(); }`,
+          `{ let ${n} = new W(); ${n} = page; const f = () => ${n}.focus(); }`,
+          `((a, ${n} = page.locator("a")) => ${n}.focus());`,
+          `((s: string, pg: Page) => pg.evaluate((el) => el.focus()));`,
+          "page.evaluateHandle((el) => el.focus());",
+          `{ const h = await page.evaluateHandle((M) => M); h.evaluate((${n}) => ${n}.focus()); }`,
+          `fetch(url).then((${n}) => ${n}.focus());`,
+          `page.locator("a").then((${n}) => ${n}.focus());`,
+          `for (const ${n} in W.getAllWindows()) { ${n}.focus(); }`,
+          `for (const ${n} of items) { ${n}.focus(); }`,
+          `for (const ${n} of page.locator("a").all()) { ${n}.focus(); }`,
+          `for await (const ${n} of items) { ${n}.focus(); }`,
+          `{ let ${n}; for (${n} of items) ${n}.focus(); }`,
+          `items.forEach((${n}) => ${n}.focus());`,
+          "items.at(0)?.focus();",
+          "items.filter(Boolean)[0].focus();",
+          "[...items][0].focus();",
+          `page.locator("a").all().then((all) => all[0].focus());`,
+          `{ const ${n} = (page, page.locator("a")); ${n}.focus(); }`,
+          `{ const ${n} = page.locator("a") satisfies unknown; ${n}.focus(); }`,
+          `{ const ${n} = <unknown>page.locator("a"); ${n}.focus(); }`,
+          `{ const ${n} = page<string>; new ${n}().focus(); }`,
+          `(page.locator("a")).focus();`,
+          `(page.locator("a")!.focus)();`,
+          "(other satisfies unknown).launch({});",
+        ];
+        const imports = [
+          'import E = require("electron"); new E.BrowserWindow().focus();',
+          'import {default as E} from "electron"; new E.BrowserWindow().focus();',
+          'import * as P from "playwright"; import L = P._electron; L.launch({});',
+          'import E = require("electron"); import B = E.BrowserWindow; new B().focus();',
+          'import {createRequire} from "node:module"; createRequire(import.meta.url)("electron").BrowserWindow.fromId(1).focus();',
+          'import {createRequire} from "node:module"; const r = createRequire(import.meta.url); r("electron").BrowserWindow.fromId(1).focus();',
+          'import {createRequire as cr} from "module"; const {BrowserWindow: B} = cr(import.meta.url)("electron"); new B().focus();',
+          'import * as M from "node:module"; M.createRequire(import.meta.url)("electron").BrowserWindow.fromId(1).focus();',
+          'import M from "node:module"; const r = M.createRequire(import.meta.url); const E = r("electron"); E.BrowserWindow.fromId(1).focus();',
+          'const {createRequire: cr} = await import("node:module"); cr(import.meta.url)("electron").BrowserWindow.fromId(1).focus();',
+          '(await import("electron")).default.BrowserWindow.fromId(1).focus();',
+          'import {createRequire} from "node:module"; const {_electron: E} = createRequire(import.meta.url)("playwright"); E.launch({});',
+        ];
+        const importTwins = [
+          'import E = require("./local.cjs"); E.BrowserWindow.fromId(1).focus();',
+          'import {default as D} from "./x.ts"; D.BrowserWindow.fromId(1).focus();',
+          'import {createRequire} from "node:module"; createRequire(import.meta.url)("./other.cjs").BrowserWindow.fromId(1).focus();',
+          'import {createRequire} from "node:module"; const r = createRequire(import.meta.url); r("sharp").BrowserWindow.fromId(1).focus();',
+          'import {createRequire} from "./mine.ts"; createRequire(import.meta.url)("electron").BrowserWindow.fromId(1).focus();',
+          'import E = require("playwright"); E.chromium.launch({headless: true});',
+        ];
+        files["apps/fabrika/src/testing/forms.ts"] = [...header, ...plants].join("\n");
+        files["apps/fabrika/src/testing/forms-allowed.ts"] = [...header, ...twins].join("\n");
+
+        for (const [i, text] of imports.entries()) {
+          files[`apps/fabrika/src/testing/import-${i}.ts`] = text;
+        }
+
+        for (const [i, text] of importTwins.entries()) {
+          files[`apps/fabrika/src/testing/import-twin-${i}.ts`] = text;
+        }
+
         const fires = lint(files);
+
+        // One report per plant line, so a lost kind names its row.
+        expect(fires(Code, "apps/fabrika/src/testing/forms.ts")).toEqual(plants.map((_, i) => header.length + i + 1));
+        expect(fires(Code, "apps/fabrika/src/testing/forms-allowed.ts")).toEqual([]);
+
+        for (let i = 0; i < imports.length; i++) {
+          expect(fires(Code, `apps/fabrika/src/testing/import-${i}.ts`), imports[i]).toHaveLength(1);
+        }
+
+        for (let i = 0; i < importTwins.length; i++) {
+          expect(fires(Code, `apps/fabrika/src/testing/import-twin-${i}.ts`), importTwins[i]).toEqual([]);
+        }
 
         expect(fires(Code, "apps/fabrika/src/testing/competing.ts")).toHaveLength(competing.length);
         expect(fires(Code, "apps/fabrika/src/testing/may-not-run-window.ts")).toHaveLength(write.length);

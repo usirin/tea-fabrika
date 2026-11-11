@@ -59,6 +59,48 @@ copy's report still checks native focus. The runtime hook observes ordinary wrap
 setters and native focus events; prototype or native bypasses remain
 outside that claim. Hook behavior and real Electron checks belong to build and lead.
 
+### Binding forms of `e2e-windows`, listed before the code (decision 0040)
+
+Four reviews each found one more binding form, so this is the list of every form oxlint
+1.90.0's AST names, one row each. `infer` returns the **set** of kinds that can reach an
+expression; a kind is only dropped by a plain write that always runs first (see above).
+Each "recognized" row has a native plant in `e2e-windows.test.ts`, red on the rule at
+`7aa8ad2f`, and an allowed twin where one exists. A "named miss" is never planted as
+allowed, since a law that a miss passes would lock the gap in.
+
+| Form | Example | Verdict |
+|---|---|---|
+| Identifier pattern | `const w = new W()` | recognized: kinds of the initializer |
+| Object pattern: renamed, literal-computed, nested keys | `const {BrowserWindow: B} = E`, `const {["BrowserWindow"]: B} = E`, `const {_electron: {launch: L}} = P` | recognized: each key maps the base kinds through `propertyOf`, recursively |
+| Array pattern, holes, nesting | `const [, w] = W.getAllWindows()`, `[, [w] = W.getAllWindows()]` | recognized: elements of a windows value are windows; holes skip |
+| Default on either side | `const {BrowserWindow: B = E.BrowserWindow} = P`, `({_electron: L = P._electron} = E)`, `[w = W.fromId(1)] = []` | recognized: the default's kinds join the value's kinds |
+| Object rest | `const {...rest} = E; new rest.BrowserWindow()` | recognized: rest keeps its base's kinds |
+| Array rest of windows | `const [...ws] = W.getAllWindows(); ws[0].focus()` | recognized: rest of windows is windows |
+| Writes to `let`, `var`, parameter, catch parameter, function name, class name | `function f(w) { w = new W(); w.focus() }` | recognized: every binding kind has a write list; `=`, `\|\|=`, `??=`, `&&=` and destructuring assignment (defaults, rest) add to it |
+| Closure reads | `let w = page; const f = () => w.focus(); w = new W()` | recognized: a read in a closure is placed where the closure starts and also sees every later write |
+| Parameter default, any position | `(a, X = E.BrowserWindow) => new X().focus()` | recognized: the default's kinds join the parameter's |
+| `: ElectronApplication` parameter or declarator, any position | `(name: string, app: ElectronApplication) => ...` in arrows, declarations, expressions, methods | recognized: the annotation gives kind `app`; a default keeps it |
+| `evaluate` and `evaluateHandle` callbacks, on an app and on a handle | `app.evaluateHandle((M) => ...)`, `handle.evaluateHandle((w) => w.focus())` | recognized: first parameter is the Electron module (app) or a window (handle); `app.evaluateHandle(...)` is a handle |
+| `.then` callback of a launch or lookup | `launchElectron({}).then((app) => ...)` | recognized: the first parameter holds the promise's kinds |
+| For-of head, `for await`, bare `for (w of ...)` | `for (const w of W.getAllWindows())` | recognized: the element of windows is a window |
+| For-in key | `for (const k in W.getAllWindows())` | recognized as nothing: the key is a string; allowed |
+| Element methods of windows | `at`, `find`, `findLast`, `pop`, `shift` | recognized: give a window |
+| Array methods of windows | `filter`, `slice`, `toSorted`, `toReversed`, `concat`, `reverse`, `sort`, `splice`, `toSpliced`, `with`, `flat`, array spread `[...ws]` | recognized: give windows |
+| Array callbacks of windows | `forEach`, `map`, `filter`, `find`, `findLast`, `findIndex`, `findLastIndex`, `some`, `every`, `flatMap` | recognized: first parameter is a window, third is windows |
+| Wrappers | sequence (last value), `satisfies`, `<T>x`, `W<T>`, `x as T`, `x!`, `x?.y`, `(x)`, `(x = y)` | recognized: `inner` unwraps each. oxlint 1.90.0 parses with no `ParenthesizedExpression` (checked); the rule unwraps it if it ever appears, and the callee is unwrapped too |
+| Import styles | default, named, namespace, `{default as E}`, `import E = require("electron")`, `import L = P._electron`, `require`, `createRequire(import.meta.url)("electron")`, `const r = createRequire(...)`, `M.createRequire`, dynamic `import()` with `.default` | recognized: `electron`, `playwright` and `node:module` imports give kinds; `createRequire(...)` gives `require` |
+| Return values of local functions, closures and IIFEs | `const w = pick(); w.focus()`, `(() => W.fromId(1))().focus()` | named miss: an unknown helper's return needs a call graph |
+| Class fields, `this.x`, object literal fields, object spread | `this.win = new W()`, `const o = {w}; o.w.focus()` | named miss: object-field transfers need a heap model |
+| Array literal elements, `Promise.all` results | `const [w] = [new W()]`, `const [a] = await Promise.all([...])` | named miss: element-wise tracking of arbitrary arrays |
+| `Array.from`, `.entries()`, `.values()`, `Object.values` of windows | `for (const [, w] of ws.entries())` | named miss: library helpers beyond the listed array methods |
+| `map` results, `reduce` accumulators | `ws.map((w) => w)[0].focus()` | named miss: callback return values |
+| A method pulled off a window, `.call`, `.apply`, `.bind` | `const {focus} = w; focus()`, `w.focus.call(w)` | named miss: reflection |
+| A named function passed as an evaluate callback | `app.evaluate(fn)` | named miss: needs the callee's declaration |
+| Non-literal computed keys and methods | `E[k]`, `w[m]()`, `{[k]: B} = E` | named miss: the name is not in the source |
+| Re-exports and imports through another module | `import {E} from "./electron-reexport.ts"` | named miss: no cross-file analysis |
+| Implicit globals | `w = new W()` with no declaration | named miss: no binding to follow |
+| `execFile` of the Electron binary | see above | named miss: argument strings are not inspected |
+
 ## Effect property data advice
 
 `prefer-schema-arbitrary` is today's tooling for `next/**/*.test.{ts,tsx}`. It asks for Effect data only when a fast-check data constructor has written schema evidence: an `Arbitrary<typeof S.Type>` annotation, a map through `S.make` or `S.cases.x.make`, or a generated binding passed to a named Effect Schema check. Imports, callback scopes and simple aliases are resolved. Nested constructors give one message at the outer constructor. Property runners pass. Names and shared record keys alone prove nothing.

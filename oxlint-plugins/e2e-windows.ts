@@ -12,7 +12,10 @@ type Kind =
   | "app"
   | "handle"
   | "launch"
-  | "auditedLaunch";
+  | "auditedLaunch"
+  | "require"
+  | "createRequire"
+  | "nodeModule";
 
 const key = (node: Node): string | undefined =>
   node.type === "Identifier"
@@ -65,45 +68,201 @@ export const e2eWindows: CreateRule = {
     type Binding = NonNullable<ReturnType<typeof binding>>;
     interface Write {
       readonly at: number;
-      /** The declarator or assignment expression. */
+      /** The declarator, assignment expression, loop or function that writes. */
       readonly node: Node;
       readonly pattern: Node;
       readonly value: Node | null | undefined;
+      /** Each element of `value` is bound, as in a for-of head. */
+      readonly each?: boolean;
+      /** The kinds this write hands to its pattern. */
+      readonly base: (seen: Set<Binding>) => Kind[];
     }
-    /** Declarator and assignment writes of a binding, in source order. */
+    const parentOf = (node: Node): Node | undefined => (node as Node & { parent?: Node }).parent;
+    const within = (inner: readonly [number, number], outer: readonly [number, number]) =>
+      outer[0] <= inner[0] && inner[1] <= outer[1];
+    /** The expression a wrapper passes through: `?.` chains, casts, parentheses and a sequence's last value. */
+    const inner = (node: Node): Node | undefined => {
+      switch (node.type) {
+        case "ChainExpression":
+        case "TSAsExpression":
+        case "TSNonNullExpression":
+        case "TSSatisfiesExpression":
+        case "TSTypeAssertion":
+        case "TSInstantiationExpression":
+        case "ParenthesizedExpression":
+          return node.expression;
+        case "SequenceExpression":
+          return node.expressions.at(-1);
+        default:
+          return undefined;
+      }
+    };
+    const strip = (node: Node): Node => {
+      let at = node;
+
+      for (let next = inner(at); next; next = inner(at)) {
+        at = next;
+      }
+
+      return at;
+    };
+    const propKey = (prop: { key: Node; computed?: boolean }): string | undefined =>
+      prop.computed && prop.key.type === "Identifier" ? undefined : key(prop.key);
+    const lists = {
+      element: ["at", "find", "findLast", "pop", "shift"],
+      array: [
+        "filter",
+        "slice",
+        "toSorted",
+        "toReversed",
+        "concat",
+        "reverse",
+        "sort",
+        "splice",
+        "toSpliced",
+        "with",
+        "flat",
+      ],
+      callback: [
+        "forEach",
+        "map",
+        "filter",
+        "find",
+        "findLast",
+        "findIndex",
+        "findLastIndex",
+        "some",
+        "every",
+        "flatMap",
+      ],
+    };
+    /** The call a function expression is the first argument of, through casts and parentheses. */
+    const callbackOf = (fn: Node) => {
+      let at: Node = fn;
+      let parent = parentOf(at);
+
+      while (
+        parent &&
+        (parent.type === "ParenthesizedExpression" ||
+          parent.type === "TSAsExpression" ||
+          parent.type === "TSSatisfiesExpression" ||
+          parent.type === "TSNonNullExpression" ||
+          parent.type === "TSTypeAssertion")
+      ) {
+        at = parent;
+        parent = parentOf(at);
+      }
+
+      if (parent?.type !== "CallExpression" || parent.arguments[0]?.range[0] !== at.range[0]) {
+        return undefined;
+      }
+
+      const callee = strip(parent.callee);
+      return callee.type === "MemberExpression" ? { callee, method: member(callee) } : undefined;
+    };
+    /** Writes of a binding, in source order: its definitions, then every assignment and for-of head. */
     const writesOf = (variable: Binding): Write[] => {
       const writes: Write[] = [];
-      const def = variable.defs[0];
 
-      if (def?.node.type === "VariableDeclarator") {
-        writes.push({ at: def.node.range[0], node: def.node, pattern: def.node.id, value: def.node.init });
+      for (const def of variable.defs) {
+        if (def.node.type === "VariableDeclarator") {
+          const declarator = def.node;
+          const head = parentOf(parentOf(declarator) ?? declarator);
+          const loop = head?.type === "ForOfStatement" || head?.type === "ForInStatement" ? head : undefined;
+          const each = loop?.type === "ForOfStatement";
+          const from = each ? loop?.right : declarator.init;
+
+          writes.push({
+            at: declarator.range[0],
+            node: declarator,
+            pattern: declarator.id,
+            value: from,
+            each,
+            base: (seen) =>
+              loop?.type === "ForInStatement"
+                ? []
+                : each
+                  ? infer(from, seen).includes("windows")
+                    ? ["window"]
+                    : []
+                  : infer(from, seen),
+          });
+        }
+
+        if (def.type === "Parameter") {
+          const fn = def.node;
+
+          if (
+            fn.type === "ArrowFunctionExpression" ||
+            fn.type === "FunctionExpression" ||
+            fn.type === "FunctionDeclaration"
+          ) {
+            const index = fn.params.findIndex((p) => within(def.name.range, p.range));
+            const param = fn.params[index];
+
+            if (param) {
+              writes.push({
+                at: param.range[0],
+                node: fn,
+                pattern: param.type === "TSParameterProperty" ? param.parameter : param,
+                value: undefined,
+                base: (seen) => paramKinds(fn, index, seen),
+              });
+            }
+          }
+        }
       }
 
       for (const ref of variable.references) {
-        const parent = (ref.identifier as Node & { parent?: Node }).parent;
-        let top: Node | undefined = parent;
+        let child: Node = ref.identifier;
+        let top: Node | undefined = parentOf(child);
 
-        // A destructuring assignment reaches its identifier through array, object and default patterns.
-        while (
-          top &&
-          (top.type === "ArrayPattern" ||
+        // A destructuring write reaches its identifier through array, object, default and rest patterns.
+        while (top) {
+          if (top.type === "Property" && !within(ref.identifier.range, top.value.range)) {
+            top = undefined;
+          } else if (top.type === "AssignmentPattern" && !within(ref.identifier.range, top.left.range)) {
+            top = undefined;
+          } else if (
+            top.type === "ArrayPattern" ||
             top.type === "ObjectPattern" ||
             top.type === "Property" ||
             top.type === "AssignmentPattern" ||
-            top.type === "RestElement")
-        ) {
-          top = (top as Node & { parent?: Node }).parent;
+            top.type === "RestElement"
+          ) {
+            child = top;
+            top = parentOf(top);
+            continue;
+          }
+
+          break;
         }
 
         const target = ref.identifier.range;
 
         if (
           top?.type === "AssignmentExpression" &&
-          top.left.range[0] <= target[0] &&
-          target[1] <= top.left.range[1] &&
+          within(target, top.left.range) &&
           ["=", "||=", "??=", "&&="].includes(top.operator)
         ) {
-          writes.push({ at: top.range[0], node: top, pattern: top.left, value: top.right });
+          const right = top.right;
+          writes.push({
+            at: top.range[0],
+            node: top,
+            pattern: top.left,
+            value: right,
+            base: (seen) => infer(right, seen),
+          });
+        } else if (top?.type === "ForOfStatement" && within(target, top.left.range)) {
+          const right = top.right;
+          writes.push({
+            at: top.left.range[0],
+            node: top,
+            pattern: top.left,
+            value: right,
+            each: true,
+            base: (seen) => (infer(right, seen).includes("windows") ? ["window"] : []),
+          });
         }
       }
 
@@ -114,14 +273,14 @@ export const e2eWindows: CreateRule = {
      * declarator) reached from a statement list that contains the use, through nothing conditional.
      */
     const replaces = (w: Write, use: Node): boolean => {
-      if (w.node.type === "AssignmentExpression" && w.node.operator !== "=") {
+      if (w.each || (w.node.type === "AssignmentExpression" && w.node.operator !== "=")) {
         return false;
       }
 
       let at: Node | undefined = w.node;
 
       while (at) {
-        const parent: Node | undefined = (at as Node & { parent?: Node }).parent;
+        const parent: Node | undefined = parentOf(at);
 
         if (!parent) {
           return false;
@@ -129,7 +288,7 @@ export const e2eWindows: CreateRule = {
 
         if (parent.type === "BlockStatement" || parent.type === "Program" || parent.type === "StaticBlock") {
           // A try block only runs in part when it throws, so it never replaces for a use outside it.
-          return parent.range[0] <= use.range[0] && use.range[1] <= parent.range[1];
+          return within(use.range, parent.range);
         }
 
         if (
@@ -141,6 +300,8 @@ export const e2eWindows: CreateRule = {
           parent.type !== "AwaitExpression" &&
           parent.type !== "TSAsExpression" &&
           parent.type !== "TSNonNullExpression" &&
+          parent.type !== "TSSatisfiesExpression" &&
+          parent.type !== "TSTypeAssertion" &&
           parent.type !== "ParenthesizedExpression"
         ) {
           return false;
@@ -153,23 +314,41 @@ export const e2eWindows: CreateRule = {
     };
     /**
      * The writes a use may see: the last one before it, plus every earlier write back to the nearest
-     * one that always runs. A use ahead of every write sees any of them.
+     * one that always runs. A use ahead of every write sees any. A use inside a closure is placed where
+     * the closure begins, and also sees every write after that, since the closure may run later.
      */
     const reaching = (variable: Binding, use: Node): Write[] => {
       const writes = writesOf(variable);
-      const before = writes.filter((w) => w.at < use.range[0]);
+      const scope = variable.scope.variableScope;
+      let anchor = use;
+
+      while (source.getScope(anchor).variableScope !== scope) {
+        const parent = parentOf(anchor);
+
+        if (!parent) {
+          return writes;
+        }
+
+        if (source.getScope(parent).variableScope === scope) {
+          break;
+        }
+
+        anchor = parent;
+      }
+
+      const before = writes.filter((w) => w.at < anchor.range[0]);
 
       if (!before.length) {
         return writes;
       }
 
-      const seen: Write[] = [];
+      const seen: Write[] = anchor === use ? [] : writes.filter((w) => w.at >= anchor.range[0]);
 
       for (let i = before.length - 1; i >= 0; i--) {
         const w = before[i] as Write;
         seen.push(w);
 
-        if (replaces(w, use)) {
+        if (replaces(w, anchor)) {
           break;
         }
       }
@@ -204,13 +383,19 @@ export const e2eWindows: CreateRule = {
       if (node.type === "ObjectExpression") {
         return node.properties.some((p) =>
           p.type === "Property"
-            ? ["x", "y"].includes(key(p.key) ?? "")
+            ? ["x", "y"].includes(propKey(p) ?? "")
             : p.type === "SpreadElement" && hasPosition(p.argument, seen),
         );
       }
 
-      if (node.type === "TSAsExpression" || node.type === "TSNonNullExpression") {
-        return hasPosition(node.expression, seen);
+      if (node.type === "AssignmentExpression" && node.operator === "=") {
+        return hasPosition(node.right, seen);
+      }
+
+      const next = inner(node);
+
+      if (next) {
+        return hasPosition(next, seen);
       }
 
       if (node.type !== "Identifier") {
@@ -225,11 +410,15 @@ export const e2eWindows: CreateRule = {
 
       seen.add(variable);
       return reaching(variable, node).some(
-        (w) => w.pattern.type === "Identifier" && hasPosition(w.value, new Set(seen)),
+        (w) => w.pattern.type === "Identifier" && !w.each && hasPosition(w.value, new Set(seen)),
       );
     };
     const unique = (kinds: Kind[]): Kind[] => [...new Set(kinds)];
     const propertyOf = (base: Kind, name: string | undefined): Kind | undefined => {
+      if ((base === "electron" || base === "playwright" || base === "nodeModule") && name === "default") {
+        return base;
+      }
+
       if (base === "electron" && name === "BrowserWindow") {
         return "BrowserWindow";
       }
@@ -242,6 +431,10 @@ export const e2eWindows: CreateRule = {
         return "launch";
       }
 
+      if (base === "nodeModule" && name === "createRequire") {
+        return "createRequire";
+      }
+
       if (base === "windows") {
         return "window";
       }
@@ -251,31 +444,119 @@ export const e2eWindows: CreateRule = {
     /** Every kind a property of any base kind can be. */
     const propertyKind = (bases: readonly Kind[], name: string | undefined): Kind[] =>
       unique(bases.flatMap((base) => propertyOf(base, name) ?? []));
-    const patternKind = (pattern: Node, name: string, bases: readonly Kind[]): Kind[] => {
+    /** `: ElectronApplication`, written plainly or through a namespace import. */
+    const typedApp = (pattern: Node): boolean => {
+      const type = pattern.type === "Identifier" ? pattern.typeAnnotation?.typeAnnotation : undefined;
+
+      if (type?.type !== "TSTypeReference") {
+        return false;
+      }
+
+      const name = type.typeName;
+
+      if (name.type === "TSQualifiedName") {
+        return (
+          name.right.name === "ElectronApplication" && binding(name.left as Node)?.defs[0]?.type === "ImportBinding"
+        );
+      }
+
+      const imported = binding(name)?.defs[0];
+      return (
+        imported?.type === "ImportBinding" &&
+        imported.node.type === "ImportSpecifier" &&
+        key(imported.node.imported) === "ElectronApplication"
+      );
+    };
+    /**
+     * The kinds `name` takes inside a pattern whose whole value has the kinds `bases`. A default adds
+     * the default's kinds. Object rest keeps its base; array rest of windows is windows, other items are one.
+     */
+    const patternKind = (pattern: Node, name: string, bases: readonly Kind[], seen: Set<Binding>): Kind[] => {
       if (pattern.type === "Identifier") {
-        return pattern.name === name ? [...bases] : [];
+        return pattern.name === name ? unique([...bases, ...(typedApp(pattern) ? (["app"] as const) : [])]) : [];
       }
 
       if (pattern.type === "AssignmentPattern") {
-        return patternKind(pattern.left, name, bases);
+        return patternKind(pattern.left, name, unique([...bases, ...infer(pattern.right, new Set(seen))]), seen);
+      }
+
+      if (pattern.type === "TSParameterProperty") {
+        return patternKind(pattern.parameter, name, bases, seen);
       }
 
       if (pattern.type === "ObjectPattern") {
         return unique(
           pattern.properties.flatMap((prop) =>
-            prop.type === "Property" ? patternKind(prop.value, name, propertyKind(bases, key(prop.key))) : [],
+            prop.type === "Property"
+              ? patternKind(prop.value, name, propertyKind(bases, propKey(prop)), seen)
+              : prop.type === "RestElement"
+                ? patternKind(prop.argument, name, bases, seen)
+                : [],
           ),
         );
       }
 
-      if (pattern.type === "ArrayPattern" && bases.includes("windows")) {
-        return unique(pattern.elements.flatMap((item) => (item ? patternKind(item, name, ["window"]) : [])));
+      if (pattern.type === "ArrayPattern") {
+        const windows = bases.includes("windows");
+        return unique(
+          pattern.elements.flatMap((item) =>
+            item?.type === "RestElement"
+              ? patternKind(item.argument, name, windows ? ["windows"] : [], seen)
+              : item
+                ? patternKind(item, name, windows ? ["window"] : [], seen)
+                : [],
+          ),
+        );
       }
 
       return [];
     };
     const named = (name: string): Kind[] =>
-      playwright(name) ? ["playwright"] : name === "electron" ? ["electron"] : [];
+      playwright(name)
+        ? ["playwright"]
+        : name === "electron"
+          ? ["electron"]
+          : name === "node:module" || name === "module"
+            ? ["nodeModule"]
+            : [];
+    /** What a function parameter holds: a callback's argument, a typed handle, or its own default. */
+    const paramKinds = (fn: Node, index: number, seen: Set<Binding>): Kind[] => {
+      const call = callbackOf(fn);
+      const owners = call ? infer(call.callee.object, new Set(seen)) : [];
+      const param =
+        fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression" ? fn.params[index] : undefined;
+      const target = param?.type === "AssignmentPattern" ? param.left : param;
+
+      if (index === 0 && (call?.method === "evaluate" || call?.method === "evaluateHandle")) {
+        const passed: Kind[] = [];
+
+        if (owners.includes("handle")) {
+          passed.push("window");
+        }
+
+        // Electron evaluate callbacks expose BrowserWindow explicitly. DOM callbacks do not.
+        if (
+          owners.includes("app") ||
+          (target?.type === "ObjectPattern" &&
+            target.properties.some((p) => p.type === "Property" && propKey(p) === "BrowserWindow"))
+        ) {
+          passed.push("electron");
+        }
+
+        return passed;
+      }
+
+      // A launch result's `.then` callback receives what the promise holds.
+      if (index === 0 && call?.method === "then") {
+        return owners;
+      }
+
+      if (owners.includes("windows") && lists.callback.includes(call?.method ?? "")) {
+        return index === 0 ? ["window"] : index === 2 ? ["windows"] : [];
+      }
+
+      return [];
+    };
     /** The set of every recognized kind that can reach an expression. */
     const infer = (node: Node | null | undefined, seen = new Set<Binding>()): Kind[] => {
       if (!node) {
@@ -290,8 +571,22 @@ export const e2eWindows: CreateRule = {
         return infer(node.argument, seen);
       }
 
-      if (node.type === "ChainExpression" || node.type === "TSAsExpression" || node.type === "TSNonNullExpression") {
-        return infer(node.expression, seen);
+      const next = inner(node);
+
+      if (next) {
+        return infer(next, seen);
+      }
+
+      if (node.type === "AssignmentExpression") {
+        return unique([...infer(node.right, new Set(seen)), ...(node.operator === "=" ? [] : infer(node.left, seen))]);
+      }
+
+      if (node.type === "ArrayExpression") {
+        return node.elements.some(
+          (e) => e?.type === "SpreadElement" && infer(e.argument, new Set(seen)).includes("windows"),
+        )
+          ? ["windows"]
+          : [];
       }
 
       if (node.type === "ImportExpression" && node.source.type === "Literal") {
@@ -308,23 +603,25 @@ export const e2eWindows: CreateRule = {
 
       if (node.type === "CallExpression") {
         const found: Kind[] = [];
+        const callee = strip(node.callee);
+        const callable = infer(callee, new Set(seen));
+        const arg = node.arguments[0];
 
-        if (
-          node.callee.type === "Identifier" &&
-          node.callee.name === "require" &&
-          !binding(node.callee)?.defs.length &&
-          node.arguments[0]?.type === "Literal"
-        ) {
-          return named(String(node.arguments[0].value));
+        if (callable.includes("createRequire")) {
+          found.push("require");
         }
 
-        if (infer(node.callee, new Set(seen)).some((k) => k === "launch" || k === "auditedLaunch")) {
+        if (callable.includes("require") && arg?.type === "Literal") {
+          found.push(...named(String(arg.value)));
+        }
+
+        if (callable.some((k) => k === "launch" || k === "auditedLaunch")) {
           found.push("app");
         }
 
-        if (node.callee.type === "MemberExpression") {
-          const owners = infer(node.callee.object, seen);
-          const method = member(node.callee);
+        if (callee.type === "MemberExpression") {
+          const owners = infer(callee.object, seen);
+          const method = member(callee);
 
           if (owners.includes("BrowserWindow") && method === "getAllWindows") {
             found.push("windows");
@@ -337,8 +634,18 @@ export const e2eWindows: CreateRule = {
             found.push("window");
           }
 
-          if (owners.includes("app") && method === "browserWindow") {
+          if (owners.includes("app") && (method === "browserWindow" || method === "evaluateHandle")) {
             found.push("handle");
+          }
+
+          if (owners.includes("windows")) {
+            if (lists.element.includes(method ?? "")) {
+              found.push("window");
+            }
+
+            if (lists.array.includes(method ?? "")) {
+              found.push("windows");
+            }
           }
         }
 
@@ -351,7 +658,12 @@ export const e2eWindows: CreateRule = {
 
       const variable = binding(node);
 
-      if (!variable || seen.has(variable)) {
+      if (!variable || !variable.defs.length) {
+        // The global `require`, when no scope declares it.
+        return node.name === "require" ? ["require"] : [];
+      }
+
+      if (seen.has(variable)) {
         return [];
       }
 
@@ -365,14 +677,12 @@ export const e2eWindows: CreateRule = {
 
         const from = def.parent.source.value;
         const spec = def.node;
-        const name = spec.type === "ImportSpecifier" ? key(spec.imported) : "*";
+        const imported = spec.type === "ImportSpecifier" ? key(spec.imported) : "*";
+        const name = imported === "default" ? "*" : imported;
 
-        if (from === "electron") {
-          return name === "*" ? ["electron"] : propertyKind(["electron"], name);
-        }
-
-        if (playwright(from)) {
-          return name === "*" ? ["playwright"] : propertyKind(["playwright"], name);
+        if (from === "electron" || playwright(from) || from === "node:module" || from === "module") {
+          const base = named(from);
+          return name === "*" ? base : propertyKind(base, name);
         }
 
         if (from.endsWith("electron-launch.ts") && name === "launchElectron") {
@@ -380,94 +690,55 @@ export const e2eWindows: CreateRule = {
         }
       }
 
-      if (def?.node.type === "VariableDeclarator") {
-        return unique(
-          reaching(variable, node).flatMap((w) => patternKind(w.pattern, node.name, infer(w.value, new Set(seen)))),
-        );
-      }
+      // TS `import E = require("electron")` and `import L = E.BrowserWindow`.
+      if (def?.node.type === "TSImportEqualsDeclaration") {
+        const ref = def.node.moduleReference;
 
-      if (def?.type === "Parameter") {
-        const fn = def.node;
-
-        if (
-          fn.type !== "ArrowFunctionExpression" &&
-          fn.type !== "FunctionExpression" &&
-          fn.type !== "FunctionDeclaration"
-        ) {
+        if (def.node.importKind === "type") {
           return [];
         }
 
-        const param = fn.params[0];
-
-        if (!param) {
-          return [];
+        if (ref.type === "TSExternalModuleReference") {
+          return ref.expression.type === "Literal" ? named(String(ref.expression.value)) : [];
         }
 
-        const parent = fn.parent;
+        if (ref.type === "TSQualifiedName") {
+          const path: string[] = [];
+          let at: Node = ref;
 
-        if (
-          parent?.type === "CallExpression" &&
-          parent.callee.type === "MemberExpression" &&
-          member(parent.callee) === "evaluate"
-        ) {
-          const owners = infer(parent.callee.object, seen);
-          // Electron evaluate callbacks expose BrowserWindow explicitly. DOM callbacks do not.
-          const native =
-            owners.includes("app") ||
-            (param.type === "ObjectPattern" &&
-              param.properties.some((p) => p.type === "Property" && key(p.key) === "BrowserWindow"));
-          const passed: Kind[] = [];
-
-          if (owners.includes("handle")) {
-            passed.push("window");
+          while (at.type === "TSQualifiedName") {
+            path.unshift(at.right.name);
+            at = at.left;
           }
 
-          if (native) {
-            passed.push("electron");
-          }
-
-          return patternKind(param, node.name, passed);
+          return path.reduce<Kind[]>((kinds, step) => propertyKind(kinds, step), infer(at, seen));
         }
 
-        if (
-          param.type === "Identifier" &&
-          param.typeAnnotation?.type === "TSTypeAnnotation" &&
-          param.typeAnnotation.typeAnnotation.type === "TSTypeReference"
-        ) {
-          const type = param.typeAnnotation.typeAnnotation.typeName;
-          const imported = binding(type)?.defs[0];
-
-          if (
-            imported?.type === "ImportBinding" &&
-            imported.node.type === "ImportSpecifier" &&
-            key(imported.node.imported) === "ElectronApplication"
-          ) {
-            return patternKind(param, node.name, ["app"]);
-          }
-        }
+        return infer(ref, seen);
       }
 
-      return [];
+      return unique(
+        reaching(variable, node).flatMap((w) =>
+          patternKind(w.pattern, node.name, w.base(new Set(seen)), new Set(seen)),
+        ),
+      );
     };
     return {
       CallExpression(node) {
-        if (!launcher && infer(node.callee).includes("launch")) {
+        if (!launcher && infer(strip(node.callee)).includes("launch")) {
           context.report({
             node,
             message: "Launch Electron through src/testing/electron-launch.ts inside runE2e.",
           });
         }
 
-        if (
-          !inDrivers ||
-          hook ||
-          node.callee.type !== "MemberExpression" ||
-          !infer(node.callee.object).includes("window")
-        ) {
+        const callee = strip(node.callee);
+
+        if (!inDrivers || hook || callee.type !== "MemberExpression" || !infer(callee.object).includes("window")) {
           return;
         }
 
-        const method = member(node.callee);
+        const method = member(callee);
         const bounds = node.arguments[0];
         const position = method === "setBounds" && hasPosition(bounds);
 
