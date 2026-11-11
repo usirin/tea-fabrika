@@ -78,10 +78,11 @@ const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
   return undefined;
 };
 
+/** The record a group reads, typed as `Config.all` types it, so the two cannot drift apart. */
+export type Values<R extends Record<string, Setting<any>>> = Config.Success<ReturnType<typeof Config.all<R>>>;
+
 /** One Config of the record, with its declarations beside it. Paths are checked as it is made. */
-export const group = <const R extends Record<string, Setting<any>>>(
-  settings: R,
-): Group<{ readonly [K in keyof R]: Config.Success<R[K]> }> => {
+export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>> => {
   const declarations = Object.values(settings);
   const refused = conflict(declarations);
 
