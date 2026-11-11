@@ -129,12 +129,6 @@
   ],
   "allowed": [
     {
-      "from": "packages/pipeline/src/stages/pipeline/lane-harness.ts",
-      "to": "programs/tracker/src/ask-window.tsx",
-      "sites": 1,
-      "reason": "The lane integration tests call the tracker's public person-only answer save. Only tests import this helper; product code keeps the layer order."
-    },
-    {
       "from": "packages/pipeline/src/laws/agent.ts",
       "to": "packages/pipeline/src/laws/explore.ts",
       "sites": 1,

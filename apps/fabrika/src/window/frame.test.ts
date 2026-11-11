@@ -513,7 +513,7 @@ describe("the bottom line and the asks list", () => {
         icon: "ask",
         title: "Approve plan",
         // Review 4: tile ids are not display text. The generated law below forbids them.
-        sub: expect.stringContaining("#7 Login fails"),
+        sub: "#7 Login fails",
         side: "11:13",
         second: { name: "Later", cap: "H" },
       },

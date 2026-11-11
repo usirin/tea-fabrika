@@ -15,12 +15,12 @@ import { fileURLToPath } from "node:url";
 import { Ledger, streams } from "@kampus/fabrika-old";
 import { memoryTracing } from "@kampus/fabrika-old/otel";
 import { fileStorage } from "@kampus/fabrika-old/storage/node";
-import { Author, saveCell, Write } from "@tea-fabrika/tracker";
 import { Clock, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
 import { expect, vi } from "vitest";
 import { memoryLedger } from "../../asks/ledger.ts";
 import type { Polling } from "../../code-host-github.ts";
-import { Answer, Asked } from "../../tickets/ask.ts";
+import { saveAnswer } from "../../tickets/answer.ts";
+import { Answer, Answered, Asked, Via } from "../../tickets/ask.ts";
 import { type Entry, nameOf, picksOf, questionOf, readAnswer } from "../../tickets/ticket.ts";
 import { Tickets, TicketsFailed, ticketsOnLedger } from "../../tickets/tickets.ts";
 import { MutationRunner } from "../mutation/services.ts";
@@ -75,18 +75,15 @@ export const answerAsk = (ticket: number, ask: Asked, pick: string, note = "") =
         : rec.pick === pick
           ? Answer.cases.rec.make({})
           : Answer.cases.against.make({ pick, note: note || `Choose ${pick} instead.` });
-    yield* saveCell({
-      type: "save",
-      id: `answer/${ask.ask}`,
-      next: ticket + 1,
-      write: Schema.decodeUnknownSync(Write)({
-        kind: "answer",
-        ticket,
+    yield* saveAnswer(
+      ticket,
+      Answered.make({
+        type: "answered",
+        format: 1,
         ask: ask.ask,
         answer,
         saw: ask.saw,
-        via: {
-          _tag: "window",
+        via: Via.cases.window.make({
           took: {
             key: answer._tag === "rec" ? "y" : String(ask.shows.picks.findIndex((p) => p.pick === pick) + 1),
             rec: rec._tag === "pick" ? "shown" : rec._tag === "hidden" ? "hidden" : "none",
@@ -94,10 +91,11 @@ export const answerAsk = (ticket: number, ask: Asked, pick: string, note = "") =
             opened: [],
             said: yield* Clock.currentTimeMillis,
           },
-        },
+        }),
       }),
-    });
-  }).pipe(Effect.provideService(Author, { kind: "user", id: "owner" }));
+      { kind: "user", id: "owner" },
+    );
+  });
 
 /**
  * Answers every ask as a person, with `picks[kind]`, until the fiber is stopped. A question it has no
