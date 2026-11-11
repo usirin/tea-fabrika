@@ -2016,7 +2016,8 @@ const lookFocus = async () => {
 
   try {
     // No wider than CI's 1024-wide work area. At 1200, macOS moved the window 1px off the corner in
-    // 1 of 2 runs of the same commit; every window inside the area landed on it. `promptLine`
+    // 1 of 2 runs of the same commit, and we guessed the width was why. Wrong: at 1024 it moved 1px
+    // down too, in 1 of 2 runs, so `size` now waits until the window holds the corner. `promptLine`
     // joins a wrapped burst, so the narrower tiles change nothing the law reads.
     await win.size(1024, 600);
     const page = await app.firstWindow();

@@ -17,8 +17,8 @@ import { corner, quietEnv } from "./src/launch.ts";
 //                   Electron starts
 //   the env         the parent's, less FABRIKA_FOREGROUND (launch.ts, `quietEnv`), so the start
 //                   is quiet and the app hides the window itself before it is ever shown
-//   the size        `size` only: content size, then back to the work area's corner. A test never
-//                   moves a window by hand
+//   the size        `size` only: content size, then back to the work area's corner, until the
+//                   window holds it. A test never moves a window by hand
 //   the watch       loaded into the main process with Electron's `-r`, before the app's own first
 //                   line and so before `ready` and the first window: every OS focus and every
 //                   window shown. `close` fails on any focus, or on a window seen above opacity 0
@@ -94,6 +94,22 @@ const read = (app: ElectronApplication) =>
     windows: BrowserWindow.getAllWindows().map((w) => ({ window: w.id, opacity: w.getOpacity(), ...w.getBounds() })),
   }));
 
+/** The app's first window's bounds, and the work area it sits in, read at one moment. */
+const placement = (app: ElectronApplication) =>
+  app.evaluate(({ BrowserWindow, screen }) => {
+    const [window] = BrowserWindow.getAllWindows();
+
+    if (window === undefined) {
+      throw new Error("no app window to place");
+    }
+
+    return { area: screen.getPrimaryDisplay().workArea, bounds: window.getBounds() };
+  });
+
+/** How long a sized window must hold the corner before `size` answers, and how often it is placed. */
+const SETTLE_MS = 500;
+const PLACINGS = 5;
+
 export const launch = async (options: {
   readonly prefix?: string;
   readonly home?: string;
@@ -116,8 +132,12 @@ export const launch = async (options: {
       throw e;
     });
 
+  // macOS may still move a window after setPosition: on CI, a 1024 by 600 window placed at y 105
+  // ended at y 106 in 2 of 4 runs of the same code. So `size` places it, waits, and answers only
+  // once the window has held the corner of the work area for SETTLE_MS, placing it again each time
+  // it moved. Each move is printed, so a red run says when the OS moved it.
   const size = async (width: number, height: number) => {
-    const bounds = await app.evaluate(
+    await app.evaluate(
       ({ BrowserWindow }, to) => {
         const [window] = BrowserWindow.getAllWindows();
 
@@ -126,15 +146,30 @@ export const launch = async (options: {
         }
 
         window.setContentSize(to.width, to.height);
-        return window.getBounds();
       },
       { width, height },
     );
-    const area = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
-    await app.evaluate(
-      ({ BrowserWindow }, at) => BrowserWindow.getAllWindows()[0]?.setPosition(at.x, at.y),
-      corner(area, bounds),
-    );
+
+    for (let placed = 1; ; placed++) {
+      const { area, bounds } = await placement(app);
+      await app.evaluate(
+        ({ BrowserWindow }, at) => BrowserWindow.getAllWindows()[0]?.setPosition(at.x, at.y),
+        corner(area, bounds),
+      );
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+      const now = await placement(app);
+      const want = corner(now.area, now.bounds);
+
+      if (now.bounds.x === want.x && now.bounds.y === want.y) {
+        return;
+      }
+
+      console.log(`window: ${home}, moved off the corner ${JSON.stringify({ placed, want, ...now })}`);
+
+      if (placed === PLACINGS) {
+        throw new Error(`the test window on ${home} never held the corner: ${JSON.stringify({ want, ...now })}`);
+      }
+    }
   };
 
   const close = async () => {
