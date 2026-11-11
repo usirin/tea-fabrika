@@ -60,8 +60,9 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 18 of Tier 1's 37 rows have merged
-([where we are](./docs/plan/README.md#where-we-are-now)). Everything
+`next/` is on main, and 19 of Tier 1's 39 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
+added P38, [0069](./.decisions/0069-choices-are-settings.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -288,6 +289,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
+- **A choice that fits as a `fabrika.toml` value is one.** Declare it once with its schema and
+  default, so a test sets it as a person does. A plan asks "is this a setting?" of each new choice
+  and says why not (owner, 2026-11-10, [0069](./.decisions/0069-choices-are-settings.md)).
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
