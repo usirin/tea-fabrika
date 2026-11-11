@@ -791,6 +791,8 @@ describe("trusted config files", () => {
         },
         { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
         { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+        { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (0062)" },
+        { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
         {
           "glob": "next/**/tsconfig.json",
           "why": "next/'s type checks, including Node's erasable syntax"
