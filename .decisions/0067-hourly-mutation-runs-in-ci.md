@@ -11,7 +11,7 @@ tags: [mutation, schedule, ci, github-actions, arm64, trial]
 ```mermaid
 flowchart LR
   session["a scheduler session"] --> range["picks base and head"]
-  range --> dispatch["gh workflow run mutation.yml"]
+  range --> dispatch["gh workflow run mutation.yaml"]
   dispatch --> runner["ubuntu-24.04-arm runner"]
   runner --> box["mutation container, linux/arm64"]
   box --> artifact["run artifact"]
@@ -21,7 +21,7 @@ flowchart LR
 
 ```sh
 # each hour, only when main moved since the last run
-gh workflow run mutation.yml -f base=<last run's head> -f head=<main's head>
+gh workflow run mutation.yaml -f base=<last run's head> -f head=<main's head>
 ```
 
 **What this decides:** the hourly mutation run from 0066 moves from the laptop to GitHub CI, and a
@@ -50,7 +50,7 @@ Facts behind it:
 **The hourly mutation run runs in GitHub CI, started by hand with `workflow_dispatch` by a
 scheduler session each hour, never by a push, a pull request or a cron trigger in the workflow.**
 
-- The workflow is `.github/workflows/mutation.yml`, on `ubuntu-24.04-arm`, with two inputs:
+- The workflow is `.github/workflows/mutation.yaml`, on `ubuntu-24.04-arm`, with two inputs:
   `base` and `head`.
 - The scheduler session picks the range: from the last run's head to main's head. An hour with no
   new commits gets no run.
@@ -61,7 +61,7 @@ scheduler session each hour, never by a push, a pull request or a cron trigger i
 
 **Binding constraints:**
 
-- `mutation.yml` has only a `workflow_dispatch` trigger: no `push`, `pull_request` or `schedule`.
+- `mutation.yaml` has only a `workflow_dispatch` trigger: no `push`, `pull_request` or `schedule`.
 - The run changes nothing in the repo. It reads, runs the container and uploads its results.
 
 ## Consequences
@@ -79,3 +79,8 @@ scheduler session each hour, never by a push, a pull request or a cron trigger i
   alarms, with no GitHub Actions shards.
 - Not decided here: whether mutation returns to the pull request's steps, and what happens after
   the trial.
+
+## Amendments
+
+- 2026-11-11: the workflow file's name is corrected to `mutation.yaml`, the file on main. It said
+  `mutation.yml`. No rule changes.
