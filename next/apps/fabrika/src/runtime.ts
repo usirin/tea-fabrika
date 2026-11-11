@@ -7,11 +7,11 @@ import { Gateway } from "./door.ts";
 import { Settings } from "./settings.ts";
 
 export interface Env extends Bindings {
-  readonly STAGE: string;
+  readonly INSTANCE: string;
 }
 
-export const settings = Effect.fn("stage.settings")(function* (env: Env) {
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.STAGE).pipe(
+export const settings = Effect.fn("instance.settings")(function* (env: Env) {
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.INSTANCE).pipe(
     Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
   );
 });

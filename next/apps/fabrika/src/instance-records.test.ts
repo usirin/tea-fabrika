@@ -24,7 +24,7 @@ import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import { recordCall } from "./record-wire.test-support.ts";
 
-// The local stage exposes Promise calls; RecordManager takes Effect calls.
+// The local instance exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
 
 const recordCalls = (stub: {
@@ -103,7 +103,7 @@ const span = (n: number) =>
 
 const world = async (
   test: (
-    stage: any,
+    instance: any,
     key: ReturnType<typeof identity>,
     probe: {
       hits: () => number;
@@ -116,7 +116,7 @@ const world = async (
   process.env.DO_NOT_TRACK = "1";
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
-  const { localStage } = await import("./local-stage.ts");
+  const { localInstance } = await import("./local-instance.ts");
   const home = mkdtempSync(join(tmpdir(), "p12-o-")),
     key = identity();
   const previousHome = process.env.FABRIKA_HOME;
@@ -183,7 +183,7 @@ const world = async (
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        const stage = yield* localStage(built, {
+        const instance = yield* localInstance(built, {
           home,
           name: "p12-records",
           person: PERSON,
@@ -202,13 +202,13 @@ const world = async (
           build: built.build,
         };
         yield* Effect.promise(() =>
-          test(stage, key, {
+          test(instance, key, {
             hits: () => hits,
             from,
             start: async (name, program) => {
               const code = built.programs[program];
               expect(code, `fixture program ${program} must be built`).toBeDefined();
-              const started = await Reflect.get(stage.project("p12-records"), "start")(
+              const started = await Reflect.get(instance.project("p12-records"), "start")(
                 {
                   _tag: "first",
                   id: `start-${name}`,
@@ -230,9 +230,9 @@ const world = async (
     );
   } finally {
     await new Promise<void>((done) => outbound.close(() => done()));
-    // localStage must close before removing its durable files.
+    // localInstance must close before removing its durable files.
     rmSync(home, { recursive: true, force: true });
-    // Last, so the pair stays held until the stage that used its port is gone.
+    // Last, so the pair stays held until the instance that used its port is gone.
     await Effect.runPromise(release);
 
     if (previousHome === undefined) {
@@ -301,9 +301,9 @@ export class Control extends Brain.Control {
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
 
-const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) => {
+const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
-  const socket = new WebSocket(stage.url.replace("http", "ws") + name);
+  const socket = new WebSocket(instance.url.replace("http", "ws") + name);
   const frames: any[] = [];
   let closeCode: number | undefined,
     serial = 0;
@@ -351,7 +351,7 @@ const wire = async (stage: any, key: ReturnType<typeof identity>, tab: string) =
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${stage.url}\n${tab}\n${nonce}`),
+        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
       })
     ).error,
   ).toBeUndefined();
@@ -380,8 +380,8 @@ const workerdPid = () => {
   return matches[0]?.pid ?? 0;
 };
 
-const admitted = async (stage: any, key: ReturnType<typeof identity>, project = "p12-records") => {
-  const p = stage.project(project);
+const admitted = async (instance: any, key: ReturnType<typeof identity>, project = "p12-records") => {
+  const p = instance.project(project);
   const client = await p.connect(),
     nonce = await p.challenge(client),
     tab = "internal-test";
@@ -397,9 +397,9 @@ const admitted = async (stage: any, key: ReturnType<typeof identity>, project = 
       platform: "headless",
       os: "linux",
       sentAt: SENT,
-      signed: key.proof(`fabrika-hello\n${stage.url}\n${tab}\n${nonce}`),
+      signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
     },
-    { url: stage.url, tab, name: key.fingerprint },
+    { url: instance.url, tab, name: key.fingerprint },
   );
   expect(hello._tag).toBe("online");
   return { p, client };
@@ -417,11 +417,11 @@ describe("P12 real object adapters", () => {
   // Outside only. The saved attachment is read through the real object's private test method.
   // Sleep uses real idle time and must prove a new object instance, not merely a delayed ring.
   it("scenario: saved waits survive object sleep, object abort and workerd replacement", async () => {
-    await world(async (stage, key) => {
-      const p = stage.project("p12-records"),
-        { client } = await admitted(stage, key);
+    await world(async (instance, key) => {
+      const p = instance.project("p12-records"),
+        { client } = await admitted(instance, key);
       const pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
-      let c = await wire(stage, key, "wait-recovery");
+      let c = await wire(instance, key, "wait-recovery");
       const gateway = (method: string, ...args: unknown[]) => p.testGateway(c.name, method, args);
       let after = 0;
 
@@ -491,7 +491,7 @@ describe("P12 real object adapters", () => {
 
               for (;;) {
                 try {
-                  c = await wire(stage, key, "wait-recovery");
+                  c = await wire(instance, key, "wait-recovery");
                   break;
                 } catch {
                   await pause();
@@ -545,11 +545,11 @@ describe("P12 real object adapters", () => {
   });
   // Outside only. Hold an actual Process RPC before its inbox append, then kill that object.
   it("scenario: workerd abort closes with 1006; p15 busy plant holds 1012; the stable letter retries once", async () => {
-    await world(async (stage, key) => {
-      const p = stage.project("p12-records"),
+    await world(async (instance, key) => {
+      const p = instance.project("p12-records"),
         pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
-      const process = stage.process(pid),
-        c = await wire(stage, key, "busy-recovery");
+      const process = instance.process(pid),
+        c = await wire(instance, key, "busy-recovery");
       let retry: Awaited<ReturnType<typeof wire>> | undefined;
 
       try {
@@ -578,7 +578,7 @@ describe("P12 real object adapters", () => {
         // workerd abort closes with 1006; "p15 busy plant" in app/gateway.laws.test.ts holds 1012.
         expect([1006, 1012]).toContain(c.closeCode());
         await pending;
-        retry = await wire(stage, key, "busy-recovery");
+        retry = await wire(instance, key, "busy-recovery");
         const first = await retry.call("process.send", params);
         expect(first).toMatchObject({ result: { _tag: "accepted" } });
         expect(await retry.call("process.send", params)).toMatchObject({ result: first.result });
@@ -593,8 +593,8 @@ describe("P12 real object adapters", () => {
     }, true);
   });
   it("scenario: p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
-    await world(async (stage, key) => {
-      const p = stage.project("p12-records");
+    await world(async (instance, key) => {
+      const p = instance.project("p12-records");
       const first = {
         client: "client-1",
         key: key.fingerprint,
@@ -614,15 +614,15 @@ describe("P12 real object adapters", () => {
     });
   });
   it("scenario: P37 object wiring plant: alias every SQL part, omit project, or lose had after a lost reply", async () => {
-    await world(async (stage) => {
+    await world(async (instance) => {
       const chain = { _tag: "spans" } as const;
-      const first = stage.record("project-a", "spans/0");
+      const first = instance.record("project-a", "spans/0");
       const rows = Array.from({ length: 70 }, (_, n) => ({ span: span(n), content: null }));
       let part = 0;
 
       for (const row of rows) {
         for (;;) {
-          const answer = await stage.record("project-a", `spans/${part}`).write(chain, part, [row]);
+          const answer = await instance.record("project-a", `spans/${part}`).write(chain, part, [row]);
 
           if (answer._tag === "written") {
             break;
@@ -635,7 +635,7 @@ describe("P12 real object adapters", () => {
 
       expect(part).toBeGreaterThan(0);
       // Lose a successful write reply and resend it through the real manager.
-      const manager = RecordManager.remote((name) => recordCalls(stage.record("project-a", name)));
+      const manager = RecordManager.remote((name) => recordCalls(instance.record("project-a", name)));
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
@@ -644,17 +644,17 @@ describe("P12 real object adapters", () => {
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
       expect(retry).toMatchObject({ _tag: "rolled", had: [rows[0]!.span.spanId] });
       expect((await first.read(chain, 0, 0)).spans).toEqual(held.spans);
-      await stage.record("project-b", "spans/0").write(chain, 0, [{ span: span(100), content: null }]);
-      expect((await stage.record("project-b", "spans/0").read(chain, 0, 0)).spans.map((r: any) => r.spanId)).toEqual([
-        span(100).spanId,
-      ]);
+      await instance.record("project-b", "spans/0").write(chain, 0, [{ span: span(100), content: null }]);
+      expect((await instance.record("project-b", "spans/0").read(chain, 0, 0)).spans.map((r: any) => r.spanId)).toEqual(
+        [span(100).spanId],
+      );
       expect(found.some((r) => r.spanId === span(100).spanId)).toBe(false);
     });
   });
   it("scenario: R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
-    await world(async (stage) => {
+    await world(async (instance) => {
       const { bucketCalls } = await import("@kampus/libfabrika/workers/runtime");
-      const calls = bucketCalls(stage.bucket);
+      const calls = bucketCalls(instance.bucket);
       const body = new TextEncoder().encode("local measurements archive");
       const expected = createHash("sha256").update(body).digest("hex");
       await calls.put("p12/health.json", body, expected);
@@ -683,7 +683,7 @@ describe("P12 real object adapters", () => {
                 }
               : { put: calls.put, head: async () => ({ sha256: "0".repeat(64) }) },
           );
-          const records = RecordManager.remote((name) => recordCalls(stage.record("p12-records", name)));
+          const records = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
           // P37: a failed archive try deletes nothing and never fails `flush`.
           await expect(
             Effect.runPromise(
@@ -719,8 +719,8 @@ describe("P12 real object adapters", () => {
     });
   });
   it("scenario: recording/content plant: flush before final span, omit failure flush, or trace the sink recursively", async () => {
-    await world(async (stage, key, fixture) => {
-      const { p, client } = await admitted(stage, key);
+    await world(async (instance, key, fixture) => {
+      const { p, client } = await admitted(instance, key);
       const info = await p.info(),
         pid = info.find((i: any) => i.name === "counter:1").process;
       const input = {
@@ -742,7 +742,7 @@ describe("P12 real object adapters", () => {
           m: { type: "throw", body: "private raw frame P12" },
         }),
       ).rejects.toThrow();
-      const manager = RecordManager.remote((name) => recordCalls(stage.record("p12-records", name)));
+      const manager = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
       const collect = (chain: any) =>
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
       const job = await collect({ _tag: "job", process: pid });
@@ -765,8 +765,8 @@ describe("P12 real object adapters", () => {
   it.each(["revoke", "exit"] as const)(
     "scenario: checked writes plant: a receipt cannot authorize a new append after %s",
     async (end) => {
-      await world(async (stage, key, fixture) => {
-        const { p, client } = await admitted(stage, key);
+      await world(async (instance, key, fixture) => {
+        const { p, client } = await admitted(instance, key);
         // Trusted declarations for this process permit the event; the signer is bound to this pid.
         const started = await fixture.start("writer:1", "p12/writer-fixture");
         const pid = started.process;
@@ -835,10 +835,10 @@ describe("P12 real object adapters", () => {
     },
   );
   it("scenario: p79/alarm handoff plant: storage wake keeps pid; durable due delivery has one letter and one Cmd", async () => {
-    await world(async (stage, key, fixture) => {
-      const { p, client } = await admitted(stage, key);
+    await world(async (instance, key, fixture) => {
+      const { p, client } = await admitted(instance, key);
       const start = await fixture.start("timer:1", "p12/timer-fixture");
-      const process = stage.process(start.process);
+      const process = instance.process(start.process);
       expect(
         await routed(p, client, "process.send", {
           pid: start.process,
@@ -868,8 +868,8 @@ describe("P12 real object adapters", () => {
     });
   });
   it("scenario: sealed program plant: external fetch and Project/R2 bindings stay unavailable; unknown program fails", async () => {
-    await world(async (stage, _key, probe) => {
-      const loader = stage.loader;
+    await world(async (instance, _key, probe) => {
+      const loader = instance.loader;
       await expect(loader.load("no-such-program", processId())).rejects.toMatchObject({
         reason: "no_program",
       });

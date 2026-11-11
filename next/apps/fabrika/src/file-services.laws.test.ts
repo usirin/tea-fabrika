@@ -36,13 +36,13 @@ vi.mock("@effect/platform-node", async (original) => {
   };
 });
 
-const stageFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
+const instanceFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
   expect(Cause.hasDies(cause)).toBe(false);
   expect(Cause.findErrorOption(cause)).toMatchObject({
     _tag: "Some",
-    value: { _tag: "StageError", reason },
+    value: { _tag: "InstanceError", reason },
   });
 };
 
@@ -66,7 +66,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
       try {
         vi.resetModules();
         await import("../dev.ts");
-        stageFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
+        instanceFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
         expect(touched).not.toHaveBeenCalled();
       } finally {
         process.argv = argv;
@@ -115,7 +115,7 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
         if (code === 0) {
           expect(Exit.isSuccess(exit)).toBe(true);
         } else {
-          stageFailure(exit, "child_failed");
+          instanceFailure(exit, "child_failed");
         }
 
         expect(commands).toHaveLength(1);
@@ -175,7 +175,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
         try {
           vi.resetModules();
           await import("../dev.ts");
-          stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+          instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
         } finally {
           process.argv = argv;
           cli.layer = undefined;
@@ -206,8 +206,8 @@ vi.mock("./exam/compiler.ts", async (original) => ({
   check: () => [],
 }));
 
-vi.mock("./local-stage.ts", () => ({
-  localStage: () => Effect.fail({ reason: "test_stage_ready" }),
+vi.mock("./local-instance.ts", () => ({
+  localInstance: () => Effect.fail({ reason: "test_instance_ready" }),
 }));
 
 const root = resolve(import.meta.dirname, "../../../..");
@@ -385,7 +385,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
       }),
       async ({ name, port }, choices) => {
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
-          file = join(folder, "stage.json"),
+          file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
         const saved = {
           name: "saved-project",
@@ -435,7 +435,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           const exit = await Effect.runPromiseExit(cli.work!);
           expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
             _tag: "Some",
-            value: { reason: "test_stage_ready" },
+            value: { reason: "test_instance_ready" },
           });
           const calls = w.calls.filter(([, path]) => path === folder || path === file);
           const expected = {
@@ -453,7 +453,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
           const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
           expect(savedAt).toBeLessThan(buildAt);
-          expect(w.paths).toContainEqual([folder, "stage.json"]);
+          expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {
           process.argv = argv;
           cli.layer = undefined;
@@ -487,7 +487,7 @@ it("dev without saved settings reports settings for each missing required value"
       try {
         vi.resetModules();
         await import("../dev.ts");
-        stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+        instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
@@ -536,7 +536,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
   );
 });
 
-it("dev returns StageError for malformed saved settings without writing or building", async () => {
+it("dev returns InstanceError for malformed saved settings without writing or building", async () => {
   const invalid = fc
     .oneof(
       fc.string(),
@@ -554,7 +554,7 @@ it("dev returns StageError for malformed saved settings without writing or build
     fc.asyncProperty(invalid, async (raw) => {
       const folder = mkdtempSync(join(tmpdir(), "p12-settings-fs-")),
         source = join(folder, "view.tsx"),
-        file = join(folder, "stage.json");
+        file = join(folder, "instance.json");
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
       writeFileSync(file, raw);
@@ -575,7 +575,7 @@ it("dev returns StageError for malformed saved settings without writing or build
         expect(Cause.hasFails(cause)).toBe(true);
         expect(Cause.findErrorOption(cause)).toMatchObject({
           _tag: "Some",
-          value: { _tag: "StageError", reason: "settings" },
+          value: { _tag: "InstanceError", reason: "settings" },
         });
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {

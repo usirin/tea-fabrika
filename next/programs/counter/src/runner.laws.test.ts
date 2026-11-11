@@ -9,7 +9,7 @@ import { Id } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
-import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
@@ -210,7 +210,7 @@ describe("p22 real counter in the runner", () => {
           ),
         ),
         Layer.provide(
-          LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+          LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
             Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
           ),
         ),
@@ -342,7 +342,10 @@ const brainFrom = {
   build: "counter-build",
 };
 
-const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer));
+const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(
+  Effect.provide(Id.Generator.layer),
+  Effect.orDie,
+);
 
 const managerLayer = (db: DatabaseSync) =>
   ProcessManager.layer(
@@ -354,7 +357,7 @@ const managerLayer = (db: DatabaseSync) =>
     nextProcess,
   ).pipe(
     Layer.provide(
-      LedgerTransaction.layer(nodeSql(db)).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+      LedgerTransactionSql.layer(nodeSql(db)).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
     ),
   );
 

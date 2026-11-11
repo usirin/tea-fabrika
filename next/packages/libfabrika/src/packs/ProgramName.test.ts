@@ -50,12 +50,12 @@ const side = (n: number): keyof Name => (n % 2 === 0 ? "pack" : "program");
 
 // Moves that keep the current name valid, chosen from what its length still allows.
 const grow = (name: Name, n: number): { name: Name; move: string } => {
-  const room = MAX - text(name).length;
+  const space = MAX - text(name).length;
   const key = side(n);
 
-  if (room > 0 && n % 3 !== 0) {
+  if (space > 0 && n % 3 !== 0) {
     // Fill to the bound now and then, so the 256th character is reached, not only approached.
-    const add = n % 5 === 0 ? room : 1 + (n % Math.min(room, 4));
+    const add = n % 5 === 0 ? space : 1 + (n % Math.min(space, 4));
     const tail = Array.from({ length: add }, (_, i) => pick([...REST], n + i)).join("");
     return { name: { ...name, [key]: name[key] + tail }, move: `grow ${key} by ${add}` };
   }

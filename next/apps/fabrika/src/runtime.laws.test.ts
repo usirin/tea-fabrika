@@ -160,7 +160,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    STAGE: JSON.stringify({
+    INSTANCE: JSON.stringify({
       name: "project-test",
       person: PERSON,
       founder: key.line,
@@ -590,7 +590,7 @@ describe("P12 Project saved and wire readers", () => {
       value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
-  it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+  it("saved instance settings fail through the Project runtime's typed error channel", async () => {
     const encoded = Schema.fromJsonString(Settings);
     const invalid = fc
       .oneof(
@@ -607,7 +607,7 @@ describe("P12 Project saved and wire readers", () => {
           typed(
             await Effect.runPromiseExit(
               Effect.suspend(() => {
-                runtime = projectRuntime(w.ctx, { ...w.env, STAGE: raw });
+                runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
                 return runtime.contextEffect;
               }),
             ),

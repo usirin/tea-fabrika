@@ -103,7 +103,7 @@ afterEach(async () => {
     rmSync(h, { recursive: true, force: true });
   }
 
-  // Last, so the pair stays held until every stage that used its port is gone.
+  // Last, so the pair stays held until every instance that used its port is gone.
   for (const release of ports.splice(0)) {
     await Effect.runPromise(release);
   }
@@ -115,7 +115,7 @@ const unusedPort = async () => {
   return held.port;
 };
 
-const stage = async (saved?: { key: ReturnType<typeof identity>; home: string; port: number }) => {
+const instance = async (saved?: { key: ReturnType<typeof identity>; home: string; port: number }) => {
   readFileSync(join(APP, "dev.ts"), "utf8");
   const key = saved?.key ?? identity();
   const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
@@ -310,7 +310,7 @@ class Client {
   }
 }
 
-const connected = async (s: Awaited<ReturnType<typeof stage>>, tab = "tab-a") => {
+const connected = async (s: Awaited<ReturnType<typeof instance>>, tab = "tab-a") => {
   const client = new Client(s.url, s.key, tab);
   const hello = await Effect.runPromise(client.hello());
   expect(hello.error).toBeUndefined();
@@ -326,7 +326,7 @@ const read = async (client: Client, stream: string, after = 0): Promise<Readonly
 const counter = async (c: Client) => {
   const rows = await read(c, "processes/counter:1");
   const started = rows.findLast((r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1");
-  expect(started, "stage must start the real counter:1").toBeDefined();
+  expect(started, "instance must start the real counter:1").toBeDefined();
   // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
   expect(started!.body).toMatchObject({ program: "fabrika/counter" });
   return (started!.body as { process: string }).process;
@@ -353,21 +353,21 @@ const view = async (c: Client, pid: string) => {
 
 describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
-    const first = await stage(),
+    const first = await instance(),
       c = await connected(first);
     const starts = (await read(c, "gateway/brain")).filter((row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
     first.child.kill("SIGTERM");
     await new Promise<void>((done) => first.child.once("exit", () => done()));
-    const second = await stage(first),
+    const second = await instance(first),
       reopened = await connected(second, "reopened");
     const now = (await read(reopened, "gateway/brain")).filter((row) => row._tag === "started");
     expect(now).toHaveLength(2);
     expect(now[1]!.body).toMatchObject({ after: (starts[0]!.body as { start: string }).start });
   });
   it("scenario: p10 plant: save twice or accept changed content; return the original placing", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
     const first = placing(await send(c, pid, "once"));
@@ -412,7 +412,7 @@ describe("P12 real dev.ts wire", () => {
     expect(await read(c, "counter:1/inbox")).toHaveLength(1);
   });
   it("scenario: p11 plant: reverse or repeat a page, or stop at the first page", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
     const accepted: Array<{ rev: number; pos: number }> = [];
@@ -434,7 +434,7 @@ describe("P12 real dev.ts wire", () => {
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
   });
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s),
       other = await connected(s, "tab-b"),
       pid = await counter(c);
@@ -452,7 +452,7 @@ describe("P12 real dev.ts wire", () => {
     });
   });
   it("scenario: p14 wire plant: drop placing or use global revisions as patch positions", async () => {
-    const s = await stage(),
+    const s = await instance(),
       a = await connected(s),
       b = await connected(s, "tab-b"),
       pid = await counter(a);
@@ -483,7 +483,7 @@ describe("P12 real dev.ts wire", () => {
     expect(await read(a, "counter:1/inbox")).toHaveLength(12);
   });
   it("scenario: unauthenticated connections leave no input or span records", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s);
     expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
     expect((await fetch(s.url, { headers: { origin: "https://foreign.test" } })).status).toBe(403);
@@ -529,7 +529,7 @@ describe("P12 real dev.ts wire", () => {
     expect(await c.ping()).toBe("pong");
   });
   it("scenario: delivery and retry retain the original saved binding and nonzero seen revision", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
     const seen = placing(await send(c, pid, "seed")).rev;
@@ -565,9 +565,9 @@ describe("P12 real dev.ts wire", () => {
     expect(records.result.spans.some((r: any) => r.traceId === row.traceId && r.name.includes("runner"))).toBe(true);
   });
   it("scenario: sealed program plant: unknown programs never fall back to a host import", async () => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s);
-    // The trusted process API is exercised by stage-records, including an outbound probe program.
+    // The trusted process API is exercised by instance-records, including an outbound probe program.
     const pid = Effect.runSync(
       Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
     );
@@ -583,8 +583,8 @@ describe("P12 real dev.ts wire", () => {
       expect(response.error?.data?.reason).toBe("unknown_method");
     }
   });
-  it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the stage child fails", async () => {
-    const s = await stage();
+  it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the instance child fails", async () => {
+    const s = await instance();
     const ready = `${JSON.stringify({ ready: s.url }).slice(0, -1)},"build":`;
 
     for (let n = 0; !s.output().includes(ready); n++) {
@@ -603,7 +603,7 @@ describe("P12 real dev.ts wire", () => {
     delete env.FABRIKA_FOREGROUND;
     delete env.CLOUDFLARE_API_TOKEN;
     const key = identity();
-    // Port 0 is outside the settings range, so the stage child fails before it builds.
+    // Port 0 is outside the settings range, so the instance child fails before it builds.
     const failed = spawn(
       process.execPath,
       [
@@ -628,7 +628,7 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: p13/p81 plant: acknowledge before append or restart twice; retry a killed mid-burst once", async ({
     signal,
   }) => {
-    const s = await stage(),
+    const s = await instance(),
       c = await connected(s),
       pid = await counter(c);
     const first = (await read(c, "gateway/brain")).find((row) => row._tag === "started")!;

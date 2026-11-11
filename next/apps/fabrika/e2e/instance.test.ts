@@ -46,7 +46,7 @@ afterEach(async () => {
     rmSync(h, { recursive: true, force: true });
   }
 
-  // Last, so the pair stays held until the stage that used its port is gone.
+  // Last, so the pair stays held until the instance that used its port is gone.
   for (const release of ports.splice(0)) {
     await Effect.runPromise(release);
   }
@@ -112,7 +112,7 @@ const start = async () => {
   const browser = await chromium.launch({ headless: true });
   browsers.push(browser);
   const context = await browser.newContext();
-  // P12 has no window yet. The driver loads the stage's own plain `/`, only for its real
+  // P12 has no window yet. The driver loads the instance's own plain `/`, only for its real
   // origin: Chromium blocks a WebSocket from a page faked with route.fulfill.
   return { home, key, url, env, child, context, output: () => output };
 };
@@ -276,7 +276,7 @@ const rpc = (page: Page, method: string, params: unknown) =>
   });
 
 describe("P12 real browser protocol", () => {
-  it("scenario: p29 stage plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
+  it("scenario: p29 instance plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
     const s = await start(),
       a = await s.context.newPage(),
       b = await s.context.newPage();
