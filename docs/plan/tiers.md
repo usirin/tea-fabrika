@@ -34,6 +34,11 @@ tier: hands (Tier 4), programs written outside fabrika's own source (Tiers 5 and
 working together (Tiers 2 and 4) and a person starting a program (Tier 2). Those tiers harden it.
 Which tier each slice lands in is not decided yet, so no row below has moved.
 
+*Changed 2026-11-10 by [0078](../../.decisions/0078-agent-and-flow-slices-start-early.md):* two more
+core ideas join that list and get a thin slice in Tier 1: an agent fabrika starts (Tier 5) and a
+flow fabrika runs (Tier 6). Tiers 5 and 6 still build them for real, the full pipeline stays in
+Tier 6, and Tier 1's plan says how thin each is. No row below has moved.
+
 *Changed 2026-11-10 by [0075](../../.decisions/0075-cold-author-checks-outside-programs.md):* each
 tier checks its slice of programs written outside fabrika's source with a cold agent as the author.
 Every place it gets stuck is a gap, and each run is an experiment (ticket 665).

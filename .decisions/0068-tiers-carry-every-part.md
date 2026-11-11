@@ -1,12 +1,12 @@
 ---
 id: 0068
-title: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together and a person starting a program start early, never in a late tier
-status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md)
+title: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together, a person starting a program, an agent fabrika starts and a flow fabrika runs start early, never in a late tier
+status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md), [0078](0078-agent-and-flow-slices-start-early.md)
 date: 2026-11-10
 tags: [tiers, plan, next, hands, programs, packs, pipes, slice, client]
 ---
 
-# 0068: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together and a person starting a program start early, never in a late tier
+# 0068: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together, a person starting a program, an agent fabrika starts and a flow fabrika runs start early, never in a late tier
 
 **What this decides:** a tier is a whole small vehicle across fabrika's core ideas too, not only
 across the five layers, so four core ideas that start late today each get a thin slice in an early
@@ -56,6 +56,8 @@ slice.**
     4's program that starts another.
   - **A person starting a program:** a person can start a program while the app runs, before
     Tier 2's `fabsh`.
+  - *Amended in part 2026-11-10 by [0078](0078-agent-and-flow-slices-start-early.md):* two more
+    join the list, an agent fabrika starts and a flow fabrika runs, each with a slice from Tier 1.
 - The tiers that held these ideas still build them for real: pipes and `fabsh` in Tier 2; the
   queue, claims, leases and a program that starts another in Tier 4; repo programs, packs and the
   lock file in Tiers 5 and 7. They harden and update the slice; they no longer start the idea.
@@ -88,5 +90,6 @@ rest of this file still holds.
 - Not decided here: whether the lead's flow runner becomes a program. Decided for now in
   [0070](0070-flow-runner-stays-a-machine.md): it stays a tea machine.
 - Open, not decided: whether the pipeline itself (Tier 6) and an agent that fabrika starts (Tier 5)
-  are core ideas too.
+  are core ideas too. *Decided 2026-11-10 in [0078](0078-agent-and-flow-slices-start-early.md):*
+  yes, as an agent fabrika starts and a flow fabrika runs.
 - Each of these needs its own plan and the owner's walk.
