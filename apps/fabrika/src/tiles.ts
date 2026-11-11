@@ -1,7 +1,7 @@
-import { type JobsOnHost, Ledger, Traces } from "@kampus/fabrika-old";
+import { type JobsOnHost, Ledger, Traces, memoryStorage, viewOf, readInput, offer } from "@kampus/fabrika-old";
 import { type LineAnswer, LineRefused } from "@kampus/fabrika-old/mcp";
 import { Author, PullRequests, RepoTree } from "@tea-fabrika/tracker";
-import { Context, Effect, Exit, Scope } from "effect";
+import { Context, Effect, Exit, Scope, Stream } from "effect";
 import type { AgentName, DeskMsg } from "./desk/desk.ts";
 import type { Does } from "./desk/keys.ts";
 import type { TileId } from "./desk/layout/index.ts";
@@ -9,8 +9,8 @@ import { deskWords } from "./desk/words.ts";
 import type { SharedHistory } from "./editor/history.ts";
 import type { AgentSessions } from "./host/agent-session.ts";
 import type { JobLines } from "./job-lines.ts";
-import type { ToTerminal } from "./messages.ts";
-import { type Placed, RESET, type Screen, startTsh, type Tsh, type WindowScreen } from "./tsh.ts";
+import { readFromWindow, type ToTerminal, type ToWindow } from "./messages.ts";
+import { appPrograms, type Placed, RESET, type Screen, startTsh, type Tsh, type WindowScreen } from "./tsh.ts";
 
 // The tiles in the host process: one tsh (tsh.ts) per tile the desk opened, as tmux runs one
 // shell per pane. The jobs are the host's: one table for the host process (host/run.ts opens it),
@@ -85,6 +85,8 @@ interface Edge {
 }
 
 interface Tiles {
+  /** Open a real trace beside the existing programs, without starting another shell. */
+  readonly lane: (tile: TileId, ticket: number) => Effect.Effect<string, { why: string }>;
   /**
    * Start the tile's tsh, or show the one that runs on a fresh port. With an agent's name, its tsh
    * runs as that agent, or, when its session cannot be made, the tile says why.
@@ -160,6 +162,7 @@ export const startTiles = (options: {
     const live = new Map<string, Live>();
     /** The agents' tiles whose tsh could not start, and why: no line runs there. */
     const failed = new Map<TileId, string>();
+    const lanes = new Map<number, string>();
     /** Who an agent works for: the person the host's own Author is. */
     const person = author.kind === "user" ? author.id : "for" in author ? author.for : author.id;
 
@@ -282,6 +285,111 @@ export const startTiles = (options: {
       });
 
     const tiles: Tiles = {
+      lane: (tile, number) =>
+        Effect.gen(function* () {
+          const existing = lanes.get(number);
+
+          if (existing !== undefined && live.has(existing)) {
+            return existing;
+          }
+
+          const owner = open.get(tile);
+
+          if (owner === undefined || owner.agent !== null || owner.state !== "open") {
+            return yield* Effect.fail({ why: "The source tile is no longer open" });
+          }
+
+          const entry = appPrograms(ledger, author, pullRequests, traces, repoTree).find(
+            (p) => p.program.name === "trace",
+          );
+
+          if (entry === undefined) {
+            return yield* Effect.fail({ why: "The trace program is unavailable" });
+          }
+
+          const scope = yield* Scope.fork(owner.scope);
+          const id = `trace:${crypto.randomUUID()}`;
+          const running = yield* entry
+            .start({ ticket: number }, {}, { id, storage: memoryStorage() })
+            .pipe(Scope.provide(scope));
+
+          if (running.kind !== "running") {
+            yield* Scope.close(scope, Exit.void);
+            return yield* Effect.fail({ why: "The trace input was refused" });
+          }
+
+          const declared = viewOf(running.run.program);
+          const machine = declared === undefined ? undefined : running.run.machines[declared.machine];
+
+          if (declared === undefined || machine === undefined) {
+            return yield* Effect.fail({ why: "The trace has no window" });
+          }
+
+          const pages = new Set<(m: ToWindow) => void>();
+          let newest: ToWindow | null = null;
+          const screen: WindowScreen = {
+            show: (page) => {
+              pages.add(page);
+
+              if (newest !== null) {
+                page(newest);
+              }
+
+              return () => {
+                pages.delete(page);
+              };
+            },
+            heard: (raw) => {
+              const envelope = readFromWindow(raw);
+
+              if (envelope.kind === "refused") {
+                return envelope;
+              }
+
+              const input = readInput(running.run.program, envelope.msg.msg);
+
+              if (input.kind === "refused") {
+                return input;
+              }
+
+              Effect.runFork(offer(running.run, input.msg.type, input.msg.value));
+              return { kind: "read" };
+            },
+            closed: () => {
+              for (const name of Object.keys(running.run.program.inputs)) {
+                running.close(name);
+              }
+            },
+            kill: running.stop.pipe(Effect.asVoid),
+          };
+          live.set(id, { tile, program: "trace", placed: "foreground", screen });
+          lanes.set(number, id);
+          edge.view(id, screen);
+          yield* machine.changes.pipe(
+            Stream.filter((s) => s !== null),
+            Stream.runForEach((s) =>
+              Effect.sync(() => {
+                newest = { type: "view", program: "trace", data: declared.of(s) };
+
+                for (const page of pages) {
+                  page(newest);
+                }
+              }),
+            ),
+            Effect.ensuring(
+              Effect.sync(() => {
+                lanes.delete(number);
+                over(id);
+              }),
+            ),
+            Effect.forkIn(scope),
+          );
+          cover(
+            tile,
+            [...live].filter(([, one]) => one.tile === tile && one.placed === "foreground").map(([run]) => run),
+          );
+          return id;
+        }),
       // A tsh that cannot start leaves the tile blank, and says why in the host's log. An agent's
       // tile says why on its screen too, and refuses its lines with it.
       open: (tile, agent) =>

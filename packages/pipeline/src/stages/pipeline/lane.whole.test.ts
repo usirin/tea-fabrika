@@ -1,9 +1,20 @@
 import { ATTR } from "@kampus/fabrika-old";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type FactOf } from "../../tickets/ticket.ts";
+import { type FactOf, readAnswer } from "../../tickets/ticket.ts";
 import { nameOf as outcomeName } from "../outcome.ts";
 import { LANE } from "../traced.ts";
-import { YES, TIMED_OUT, KILLED, lane, keptAtStart, onMain, codexRuns, WHOLE, askedFor } from "./lane-harness.ts";
+import {
+  YES,
+  TIMED_OUT,
+  KILLED,
+  lane,
+  keptAtStart,
+  onMain,
+  codexRuns,
+  WHOLE,
+  askedFor,
+  THE_LEAN,
+} from "./lane-harness.ts";
 import { askedFor as kindOfAsk, PICKS } from "./machine.ts";
 
 // A lane, whole, on the local host: every step in order, the checks it runs itself, a person's no,
@@ -57,10 +68,18 @@ describe("a lane, whole", () => {
     }
   });
 
-  it("ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)", async () => {
-    const NOTE = "Looks right to me, go on";
-    const ran = await lane({ picks: YES, notes: { approve: NOTE }, traced: true });
-    expect(ran.stages, ran.lines.join("\n")).toEqual(WHOLE);
+  // scenario: real local step processes write spans while one whole lane changes a temporary repo.
+  it("scenario: ties each ask to its lane's trace, and tags each step's span and each wait's span by name, never with a note (ticket 141, P1 to P3)", async () => {
+    const NOTE = "Please revise the plan before building";
+    const ran = await lane({
+      picks: YES,
+      queues: { approve: ["no", "no", "approve"] },
+      notes: { approve: NOTE },
+      fake: { answers: { plan: [...THE_LEAN.plan, ...THE_LEAN.plan] } },
+      again: [{}, {}],
+      traced: true,
+    });
+    expect(ran.stages, ran.lines.join("\n")).toEqual(["triage", "plan", "plan", ...WHOLE.slice(1)]);
 
     // P1: every ask carries the trace id its lane's `started` facts carry, the one before it.
     let lastTrace: string | undefined;
@@ -141,6 +160,9 @@ describe("a lane, whole", () => {
     const waitSpans = ran.spans.filter((s) => s.name === "wait for the answer");
     const answers = ran.entries.flatMap((e) => (e.fact.type === "answered" ? [{ fact: e.fact, by: e.by.id }] : []));
     expect(answers.length).toBeGreaterThan(0);
+    expect(
+      answers.some(({ fact }) => "format" in fact && fact.answer._tag === "against" && fact.answer.note === NOTE),
+    ).toBe(true);
 
     for (const { fact, by } of answers) {
       const heard = waitSpans.filter(
@@ -150,7 +172,7 @@ describe("a lane, whole", () => {
       const what = kindOfAsk(fact.ask);
       expect(what, fact.ask).not.toBeNull();
       expect(heard[0]?.attributes["tea.ask.for"], fact.ask).toBe(what);
-      expect(heard[0]?.attributes[LANE.pick]).toBe(fact.pick);
+      expect(heard[0]?.attributes[LANE.pick]).toBe(readAnswer(ran.entries, fact)?.pick);
       expect(heard[0]?.attributes[LANE.by]).toBe(by);
     }
 
@@ -186,7 +208,8 @@ describe("a lane, whole", () => {
 
   // Self-fix PR 5: a touched exam is the person's call now, with two picks. The person here leaves
   // it unanswered, so the lane waits on it, and the line ends there.
-  it("keeps nothing of a build that changes a test the writer wrote, and asks the person", async () => {
+  // scenario: a local builder changes an exam file in a real checkout and the lane must refuse it.
+  it("scenario: keeps nothing of a build that changes a test the writer wrote, and asks the person", async () => {
     const ran = await lane({
       title: "[touch-exam] Read names in one form",
       picks: { approve: "approve" },
@@ -196,7 +219,7 @@ describe("a lane, whole", () => {
     expect(ran.names.build).toContain("exam_touched");
     const asked = ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-exam_touched-"));
     expect(asked).toHaveLength(1);
-    expect(asked[0]?.picks).toEqual(PICKS.exam_touched);
+    expect(asked[0]).toMatchObject({ shows: { picks: PICKS.exam_touched.map((pick) => ({ pick })) } });
     expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
     const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
     expect(said.some((body) => body.includes("src/lower.test.ts"))).toBe(true);
@@ -205,7 +228,8 @@ describe("a lane, whole", () => {
   // Self-fix PR 3's whole-lane case, as PR 4 has it: each build leaves a test that fails, so code's
   // checks after the build find the head red three times. No mutation step, no review: it stops at
   // the rounds' question.
-  it("sends a red head back to the builder with the failing test's name, and asks once the rounds are spent", async () => {
+  // scenario: real test commands fail on the local builder's git heads before the lane asks again.
+  it("scenario: sends a red head back to the builder with the failing test's name, and asks once the rounds are spent", async () => {
     const NAME = "src/red.test.ts > a planted red > stays red";
     /** A build's own test that fails, a little different each round so each build changes something. */
     const red = (n: number) => [
@@ -261,7 +285,7 @@ describe("a lane, whole", () => {
     const asked = ran.facts.filter((f) => f.type === "asked");
     const spent = asked.filter((f) => String(f.ask).includes("rounds_spent"));
     expect(spent).toHaveLength(1);
-    expect(spent[0]?.picks).toEqual(["again", "stop"]);
+    expect(spent[0]).toMatchObject({ shows: { picks: [{ pick: "again" }, { pick: "stop" }] } });
     const cost = /\$\d|price unknown/;
     expect(comments.some((c) => c.includes(NAME) && cost.test(c))).toBe(true);
     expect(ran.lines.at(-1)).toContain("ended: stuck:rounds_spent");

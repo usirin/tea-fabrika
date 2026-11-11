@@ -1,7 +1,7 @@
 // One load of fabrika's settings at a process start: read both files, check them whole, resolve
 // the four sources and make the snapshot the process keeps. It returns all of that or one
 // SettingsError, so nothing starts on settings that were not checked.
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Predicate } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
 import * as Snapshot from "../../settings/Snapshot.ts";
@@ -66,5 +66,11 @@ export const load = Effect.fnUntraced(function* (options: {
     repo: Sources.file(repo.file, repo.document),
     person: Sources.file(person.file, person.document),
   });
-  return { values: resolved.values, snapshot: yield* Snapshot.make(Declarations.all, resolved) };
+  // The repo's own minimum, as its file states it, before a flag or the environment overrides it.
+  const minimum = repo.document.value[Declarations.version.path];
+  const context =
+    options.repo === undefined
+      ? {}
+      : { repo: { minimum: Predicate.isString(minimum) ? minimum : Declarations.version.default } };
+  return { values: resolved.values, snapshot: yield* Snapshot.make(Declarations.all, resolved), ...context };
 });

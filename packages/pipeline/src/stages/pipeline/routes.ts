@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { AskFor, askedFor, askedStep, LaneStep, STEPS } from "../../tickets/steps.ts";
 import type { BuildName } from "../build/outcome.ts";
 import type { ExamOutcome } from "../exam/machine.ts";
 import type { MutationName } from "../mutation/outcome.ts";
@@ -12,6 +13,8 @@ import type { MutantsOutcome } from "../test-writer/mutants.ts";
 import type { TestWriterName } from "../test-writer/outcome.ts";
 import { EndOutcome } from "./outcome.ts";
 
+export { AskFor, askedFor, askedStep, LaneStep, STEPS };
+
 // Where the lane goes when a step ends with an outcome (self-fix PR 10 and PR 11). Today's version.
 //
 //   ROUTES[step][name]   one row per name `step` can hand the lane: its stage's names, and the ones
@@ -24,45 +27,6 @@ import { EndOutcome } from "./outcome.ts";
 // A row a step's own run can fix goes to a step, a service's wait, or once: never to a stop. Only the
 // rows a person decides ask, and only `done`, a reason in `FINAL` or a closed ticket ends a lane
 // (docs/direction/jidoka-and-andon.md, experiment 193). The lane reads a row in `after` (./machine.ts).
-
-/** Every step that runs a machine, in the order a ticket meets them. */
-export const STEPS = [
-  "triage",
-  "plan",
-  "exam",
-  "exam_review",
-  "exam_merge",
-  "test_writer",
-  "build",
-  "mutation",
-  "mutants",
-  "review",
-  "push",
-  "merge",
-] as const;
-
-export const LaneStep = Schema.Literals(STEPS);
-export type LaneStep = typeof LaneStep.Type;
-
-/**
- * What the questions are about. `step`: a step that ended on `ask`, and may be run again.
- * `rounds_spent`: the work went back as often as it may, and a person says whether once more.
- * `exam_touched`: a build changed the test writer's files, and a person says which was wrong.
- * `exam_conflict`: main changed the test writer's files while the lane was stopped, and a person says
- * whether the test writer writes them again. `spend`: a step spent its limit, and a person says
- * whether it runs again (jidoka rows 18, 23, 40, 57).
- */
-export const AskFor = Schema.Literals([
-  "approve",
-  "exam_merge",
-  "merge",
-  "step",
-  "rounds_spent",
-  "exam_touched",
-  "exam_conflict",
-  "spend",
-]);
-export type AskFor = typeof AskFor.Type;
 
 /**
  * What a step sent back is handed, besides its plan: the reason it runs again. `names`: the failing
