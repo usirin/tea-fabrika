@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { ClientManager } from "../access/ClientManager.ts";
+import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
@@ -187,7 +187,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
     const env = Layer.mergeAll(
       ledger,
       transaction,
-      ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+      ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
       SpanSink.layer(saved.sql, { object: processes.counter }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,

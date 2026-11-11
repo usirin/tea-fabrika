@@ -28,6 +28,11 @@ field note 2026-11-08-20).
   before it stages anything, and lists them. Do not unstage another step's work: tell the lead.
 - **A build that names an exam path is refused** (exit 3) and nothing is committed. The paths are in
   `exam-paths.json`. Do not work around it: answer `send` to tests with the paths.
+- **Each path must be the step's own in the plan's files table**, or the script refuses with
+  `not_owner: <path>`. One exception: the exam is the test writer's, so a `tests` commit may hold
+  an exam path that no row names. A path the plan gives to another step stays refused, exam path
+  or not. `box.sh fetch --sign` holds the same rule. Both read an exam list the step cannot edit:
+  the script reads the box base's, fetch reads main's.
 - **A `lead` link signs only under a ticket no other branch's open PR holds.** Otherwise it
   refuses (exit 5) and names that PR and branch: the new link would be that ticket's newest, outside
   the PR's chain, and the commits check would read the PR's own lead links as `stale_link`. Sign
