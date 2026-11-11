@@ -250,8 +250,12 @@ afterAll(() => {
   rmSync(top, { recursive: true, force: true });
 });
 
+// Each world is a fresh SQLite file, and every door call commits. No law here kills the process
+// mid-write, so the rollback journal stays in memory and no commit waits on the disk. A reopen
+// still reads the same file. This halves the ticket 707 walks, 200 worlds each.
 const open = (path: string) => {
   const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF");
   opened.push(db);
   return db;
 };
