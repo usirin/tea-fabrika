@@ -94,7 +94,18 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
-import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import {
+  boxTree,
+  boxView,
+  checkHolds,
+  heldRules,
+  laneRoot,
+  lockfileBehind,
+  startHead,
+  stepOf,
+  wipOf,
+  workspaceGlobs,
+} from "./lane.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -572,7 +583,8 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
   }
 };
 
-/** Every file drive keeps for one box, by suffix. A box name is fresh only when none exists. */
+/** Every file drive keeps for one box, by suffix (the tree and its view in `boxTree`'s folder, the
+ * rest beside the boxes). A box name is fresh only when none exists. */
 const BOX_FILES = [
   "",
   "-gitdata",
@@ -912,7 +924,7 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
     "git",
     [
       `--git-dir=${join(env.BOXES, `${box}-gitdata`)}`,
-      `--work-tree=${join(env.BOXES, box)}`,
+      `--work-tree=${boxTree(env.BOXES, box)}`,
       "-c",
       "status.renames=false",
       ...args,
@@ -932,8 +944,8 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
  * file: it reads the box's own data (`boxGit`). Returns what failed, or `null`.
  */
 const gitView = (env: Env, ask: Ask): string | null => {
-  const work = join(env.BOXES, ask.box);
-  const view = join(env.BOXES, `${ask.box}-view`);
+  const work = boxTree(env.BOXES, ask.box);
+  const view = boxView(env.BOXES, ask.box);
   const own = join(view, "worktrees", ask.box);
   const clone = sh("git", ["clone", "-q", "--mirror", "--local", env.MAIN, view]);
 
@@ -952,8 +964,8 @@ const gitView = (env: Env, ask: Ask): string | null => {
 
 /** The view goes when the step ends, and a box that stays gets its own `.git` line back. */
 const dropView = (env: Env, box: string) => {
-  const work = join(env.BOXES, box);
-  rmSync(join(env.BOXES, `${box}-view`), { recursive: true, force: true });
+  const work = boxTree(env.BOXES, box);
+  rmSync(boxView(env.BOXES, box), { recursive: true, force: true });
 
   if (box !== "" && existsSync(join(env.BOXES, `${box}-gitdata`)) && existsSync(work)) {
     writeFileSync(join(work, ".git"), `gitdir: ${join(env.BOXES, `${box}-gitdata`)}\n`);
@@ -1020,7 +1032,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
     return { ...listed, changes: [] as Change[] };
   }
 
-  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
   const old = new Set(moved.map((m) => m.from));
   const changes: Change[] = [
     ...changedFiles(status.out).filter((c) => !old.has(c.path)),
@@ -1068,7 +1080,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   }
 
   try {
-    const box = join(env.BOXES, ask.box);
+    const box = boxTree(env.BOXES, ask.box);
 
     for (const { xy, path, from: old } of changes) {
       const to = join(wt, path);
@@ -1432,7 +1444,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
-          rmSync(join(env.BOXES, ask.box), { recursive: true, force: true });
+          rmSync(boxTree(env.BOXES, ask.box), { recursive: true, force: true });
           rmSync(join(env.BOXES, `${ask.box}-gitdata`), { recursive: true, force: true });
           // Its facts go with it, so no later stepcommit reads a dead box's plan hash.
           rmSync(join(env.BOXES, "state", `${ask.box}.box`), { force: true });
@@ -1494,7 +1506,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
   runTurn(agents, {
     provider: stepProvider(ask.agent, ask.step),
     session: ask.box,
-    folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
+    folder: ask.step === "plan" ? env.MAIN : boxTree(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
     answer: Answer,
@@ -1940,7 +1952,8 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   const box = freshBox(lane, step, (saved?.steps.filter((e) => e.step === step).length ?? 0) + 1, (name) =>
-    existsSync(join(env.BOXES, name)),
+    // A tree and its view sit in BOXES/box, every other file of the box beside the boxes.
+    [join(env.BOXES, name), boxTree(env.BOXES, name)].some((path) => existsSync(path)),
   );
   const n = Number(box.slice(`${lane}-${step}`.length));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
