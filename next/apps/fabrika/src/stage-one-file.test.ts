@@ -8,7 +8,6 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer as httpServer } from "node:http";
 import { syncBuiltinESMExports } from "node:module";
-import { createServer } from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
@@ -18,6 +17,7 @@ import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { heldPort } from "./port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
@@ -58,6 +58,18 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
     await Promise.all(closed);
   }
 };
+
+// Runs `use` on a brain port held for the whole call, so nobody else is given it between two stages
+// on it. The scope gives the port back only after `use`, and every stage it opened, has closed.
+const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
+        return yield* Effect.tryPromise({ try: () => use(held.port), catch: (error) => error });
+      }),
+    ),
+  );
 
 // Change the disposable completed file, then exercise that file on the real stage below.
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
@@ -587,15 +599,6 @@ describe("P16 copied-file real stage, serial", () => {
           const target = `http://127.0.0.1:${port}/probe-${n}`;
           expect((await fetch(target)).ok).toBe(true);
           hits = 0;
-          const listener = createServer();
-          const brainPort = await new Promise<number>((done, fail) => {
-            listener.once("error", fail);
-            listener.listen(0, "127.0.0.1", () => {
-              const at = listener.address();
-              assert(at && typeof at !== "string");
-              listener.close(() => done(at.port));
-            });
-          });
           symlinkSync(join(APP, "node_modules"), join(h, "node_modules"));
           const file = join(h, "sealed.ts");
           writeFileSync(
@@ -623,78 +626,82 @@ describe("P16 copied-file real stage, serial", () => {
           rmSync(join(h, "dist"), { recursive: true });
           rmSync(file);
 
-          for (const mode of ["sealed", "binding", "outbound"] as const) {
-            writeFileSync(
-              join(alone, "brain.mjs"),
-              mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
-            );
-            hits = 0;
-            await afterChildrenStop(() =>
-              Effect.runPromise(
-                Effect.scoped(
-                  Effect.gen(function* () {
-                    const stage = yield* localStage(
-                      { ...built, brain: join(alone, "brain.mjs") },
-                      {
-                        home: h,
-                        name: "p16-isolation",
-                        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-                        founder: key.line,
-                        window: key.raw,
-                        port: brainPort,
-                      },
-                    );
-                    yield* Effect.tryPromise({
-                      try: async () => {
-                        expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+          // The three modes start one stage each on one brain port, held across all three.
+          await onHeldPort(async (brainPort) => {
+            for (const mode of ["sealed", "binding", "outbound"] as const) {
+              writeFileSync(
+                join(alone, "brain.mjs"),
+                mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+              );
+              hits = 0;
+              await afterChildrenStop(() =>
+                Effect.runPromise(
+                  Effect.scoped(
+                    Effect.gen(function* () {
+                      const stage = yield* localStage(
+                        { ...built, brain: join(alone, "brain.mjs") },
+                        {
+                          home: h,
+                          name: "p16-isolation",
+                          person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                          founder: key.line,
+                          window: key.raw,
+                          port: brainPort,
+                        },
+                      );
+                      yield* Effect.tryPromise({
+                        try: async () => {
+                          expect(Object.keys(built.programs).length).toBeGreaterThan(0);
 
-                        for (const name of Object.keys(built.programs)) {
-                          const program: Loaded = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
+                          for (const name of Object.keys(built.programs)) {
+                            const program: Loaded = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
 
-                          if (name === "counter") {
-                            const counted = await turn(CounterTurn, program, "init", [null]);
-                            expect(counted.model).toEqual({ count: 0 });
-                            continue;
-                          }
-
-                          let model = (await turn(SealedTurn, program, "init", [null])).model;
-
-                          // Read until the program's own fetch settles. The test time limit bounds the wait.
-                          while (model.outbound === "pending") {
-                            await new Promise((done) => setTimeout(done, 10));
-                            model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
-                          }
-
-                          const closed = (model: unknown) => assert.deepEqual(model, { keys: [], outbound: "denied" });
-
-                          if (mode === "sealed") {
-                            closed(model);
-                            expect(hits).toBe(0);
-                          } else {
-                            if (mode === "outbound") {
-                              expect(hits).toBeGreaterThan(0);
+                            if (name === "counter") {
+                              const counted = await turn(CounterTurn, program, "init", [null]);
+                              expect(counted.model).toEqual({ count: 0 });
+                              continue;
                             }
 
-                            expect(() => closed(model)).toThrow();
-                            expect(model).toEqual(
-                              mode === "binding"
-                                ? { keys: [`P16_${n}`], outbound: "denied" }
-                                : { keys: [], outbound: "allowed" },
-                            );
+                            let model = (await turn(SealedTurn, program, "init", [null])).model;
+
+                            // Read until the program's own fetch settles. The test time limit bounds the wait.
+                            while (model.outbound === "pending") {
+                              await new Promise((done) => setTimeout(done, 10));
+                              model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
+                            }
+
+                            const closed = (model: unknown) =>
+                              assert.deepEqual(model, { keys: [], outbound: "denied" });
+
+                            if (mode === "sealed") {
+                              closed(model);
+                              expect(hits).toBe(0);
+                            } else {
+                              if (mode === "outbound") {
+                                expect(hits).toBeGreaterThan(0);
+                              }
+
+                              expect(() => closed(model)).toThrow();
+                              expect(model).toEqual(
+                                mode === "binding"
+                                  ? { keys: [`P16_${n}`], outbound: "denied" }
+                                  : { keys: [], outbound: "allowed" },
+                              );
+                            }
                           }
-                        }
-                      },
-                      catch: (error) => new Error("P16 isolation check failed", { cause: error }),
-                    });
-                  }),
-                ).pipe(
-                  Effect.provide(localState()),
-                  Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
+                        },
+                        catch: (error) => new Error("P16 isolation check failed", { cause: error }),
+                      });
+                    }),
+                  ).pipe(
+                    Effect.provide(localState()),
+                    Effect.provide(SecureRandom.layerWebCrypto),
+                    Effect.provide(NodeServices.layer),
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
+          });
         } finally {
           if (probe.listening) {
             await new Promise<void>((done) => probe.close(() => done()));
@@ -720,34 +727,25 @@ describe("P16 copied-file real stage, serial", () => {
           mkdirSync(alone);
           cpSync(built.brain, join(alone, "brain.mjs"));
           rmSync(join(h, "dist"), { recursive: true });
-          const listener = createServer();
-          const port = await new Promise<number>((done, fail) => {
-            listener.once("error", fail);
-            listener.listen(0, "127.0.0.1", () => {
-              const at = listener.address();
-              assert(at && typeof at !== "string");
-              listener.close(() => done(at.port));
-            });
-          });
-          const options = {
+          const options = (port: number) => ({
             home: h,
             name: "p16-stage",
             person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
             founder: key.line,
             window: key.raw,
             port,
-          };
+          });
           const copied = { ...built, brain: join(alone, "brain.mjs") };
           let pid = "",
             first: unknown,
             stamped = "",
             total = 0;
-          const stage = async (again: boolean) =>
+          const stage = async (port: number, again: boolean) =>
             afterChildrenStop(async () =>
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localStage(copied, options);
+                    const runtime = yield* localStage(copied, options(port));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),
@@ -868,8 +866,11 @@ describe("P16 copied-file real stage, serial", () => {
                 ),
               ),
             );
-          await stage(false);
-          await stage(true);
+          // The restart comes back on the same port: held across both starts, never re-asked.
+          await onHeldPort(async (port) => {
+            await stage(port, false);
+            await stage(port, true);
+          });
         },
       ),
       { ...runs, numRuns: 2 },
