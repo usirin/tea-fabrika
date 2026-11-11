@@ -39,6 +39,8 @@ type Journal = Model["journal"];
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+/** A process no fold creates. */
+const FOREIGN = pid(9_999_999_999);
 
 const policy = {
   maxDeliveries: 3,
@@ -480,6 +482,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
         // Every reached state is mutated, so the rare ones (dead work, a checkpoint) are too.
         for (const target of reached) {
+          if ("origin" in target.journal) {
+            seen.add(`${target.journal.origin._tag} ${target.journal._tag}`);
+          }
+
           for (const value of mutations(roundTrip(target), pick)) {
             expect(decodes(value), `mutated ${target.journal._tag} must be refused`).toBe(false);
           }
@@ -496,6 +502,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
       "waiting_recovery",
       "waiting_start",
       "checkpointing",
+      "crash writing_exit",
+      "crash writing_down",
+      "crash waiting_recovery",
+      "crash waiting_start",
+      "crash checkpointing",
+      "manual waiting_start",
     ]) {
       expect(seen.has(tag), `the fold reaches ${tag}`).toBe(true);
     }
@@ -737,6 +749,32 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
   if (journal._tag === "stepping") {
     broken.push({ ...raw, journal: { ...journal, attempt: { ...(journal.attempt as object), seq: 0 } } });
+  }
+
+  // A crash origin names the process its journal replaces; a foreign failure process is refused.
+  const origin = journal.origin as { _tag: string; failure?: object; request?: { id: string; build: string } };
+
+  if (origin?._tag === "crash") {
+    const failure = { ...origin.failure, process: FOREIGN };
+    broken.push({ ...raw, journal: { ...journal, origin: { ...origin, failure } } });
+  }
+
+  // A person's restart starts with its own saved request ID and build.
+  if (journal._tag === "waiting_start" && origin._tag === "manual") {
+    const request = journal.request as { id: string; code: Record<string, unknown> };
+    broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
+    broken.push({
+      ...raw,
+      journal: {
+        ...journal,
+        request: { ...request, code: { ...request.code, hash: `${String(request.code.hash)}:other` } },
+      },
+    });
+  }
+
+  // A checkpoint's successor is never its predecessor.
+  if (journal._tag === "checkpointing") {
+    broken.push({ ...raw, journal: { ...journal, after: journal.process } });
   }
 
   return broken;
