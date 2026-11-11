@@ -85,12 +85,12 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     request_equal: s !== "absent",
     request_changed: s !== "absent",
     take_ok: s === "requested",
-    take_again: s === "assigned",
+    take_again: owned,
     take_other: s !== "absent",
-    take_lacking: s === "requested",
-    out_of_order: s === "requested",
+    take_lacking: s !== "absent",
+    out_of_order: s === "requested" || s === "assigned",
     start_ok: s === "assigned",
-    start_again: s === "started",
+    start_again: s === "started" || s === "finished",
     start_wrong: owned,
     finish_ok: s === "started",
     finish_equal: s === "finished",
@@ -187,10 +187,14 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
     case "out_of_order": {
-      const msgs: ReadonlyArray<Msg> = [
-        { type: "start", execution: cell.execution },
-        { type: "finish", execution: cell.execution, result: cell.result },
-      ];
+      // Before a take nothing may start or finish; an assigned job may not finish, even by its own execution.
+      const msgs: ReadonlyArray<Msg> =
+        world.stage === "assigned"
+          ? [{ type: "finish", execution, result: cell.result }]
+          : [
+              { type: "start", execution: cell.execution },
+              { type: "finish", execution: cell.execution, result: cell.result },
+            ];
       return [choose(msgs, cell.variant), world, refuse("wrong_state")];
     }
     case "start_ok":
@@ -221,9 +225,12 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
   }
 };
 
-const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<Move>) =>
+/** A move, or a move in the one stage it must have been played in. */
+type Done = Move | `${Move}@${Stage}`;
+
+const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<Done>) =>
   it(name, () => {
-    const done = new Set<Move>();
+    const done = new Set<Done>();
     fc.assert(
       fc.property(Tape, (tape) => {
         let model = init();
@@ -242,7 +249,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<M
           const [msg, next, answer] = play(world, tape, cell, move);
           const before = model.state;
           model = step(model, msg);
-          done.add(move);
+          done.add(move).add(`${move}@${world.stage}`);
 
           expect(model.answer._tag, `${move}: the answer`).toBe(answer.answer);
 
@@ -280,12 +287,29 @@ describe("P39 slice 1: the job machine", () => {
   law(
     "L3: only the target key holding every need takes a request, and one execution identity wins",
     [...LIFE, "early", "take_again", "take_other", "take_lacking"],
-    ["take_ok", "take_again", "take_other", "take_lacking", "early"],
+    [
+      "take_ok",
+      "take_other",
+      "early",
+      ...(["assigned", "started", "finished"] as const).flatMap((stage) => [
+        `take_again@${stage}` as const,
+        `take_lacking@${stage}` as const,
+      ]),
+      "take_lacking@requested",
+    ],
   );
   law(
     "L4: a start or a finish needs the saved execution identity, in its order",
     [...LIFE, "start_again", "start_wrong", "finish_wrong", "out_of_order", "early"],
-    ["start_ok", "start_again", "start_wrong", "finish_wrong", "out_of_order"],
+    [
+      "start_ok",
+      "start_again@started",
+      "start_again@finished",
+      "start_wrong",
+      "finish_wrong",
+      "out_of_order@requested",
+      "out_of_order@assigned",
+    ],
   );
   law(
     "L5: an equal terminal retry repeats; a conflicting result never replaces the first",

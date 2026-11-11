@@ -270,6 +270,7 @@ type Move =
   | "finish_equal"
   | "finish_other"
   | "finish_wrong"
+  | "out_of_order"
   | "unknown_id"
   | "bad"
   | "cut_before"
@@ -397,16 +398,17 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     request_equal: any,
     request_changed: any,
     take_ok: requested,
-    take_again: assigned,
+    take_again: owned,
     take_other: any,
-    take_lacking: requested,
+    take_lacking: any,
     start_ok: assigned,
-    start_again: started,
+    start_again: started || finished,
     start_wrong: owned,
     finish_ok: started,
     finish_equal: finished,
     finish_other: finished,
     finish_wrong: owned,
+    out_of_order: requested || assigned,
     unknown_id: true,
     bad: any || fresh,
     cut_before: fresh || requested || assigned || started,
@@ -428,7 +430,10 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 const otherExecution = (execution: string, variant: number): string =>
   choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
 
-const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<Move>, done: Set<Move>) =>
+/** A move, or a move in the one stage of the job it was played on. */
+type Done = Move | `${Move}@${Stage}`;
+
+const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArray<Move>, done: Set<Done>) =>
   Effect.fnUntraced(function* (tape: Tape) {
     const store = yield* open;
     const { sql, fault } = cutting(store.sql);
@@ -468,6 +473,12 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
       const move = choose(options, cell.move);
       const recorded = said(cell);
+      /** The job a move is played on, and the stage it was in then. */
+      const on = (stages: ReadonlyArray<Stage>) => {
+        const saved = choose(at(world, stages), cell.pick);
+        done.add(`${move}@${saved.stage}`);
+        return saved;
+      };
 
       switch (move) {
         case "request_new": {
@@ -506,8 +517,9 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "take_again": {
-          // The take reply was lost: the same key, maybe on a new connection, gets its saved assignment.
-          const saved = choose(at(world, ["assigned"]), cell.pick);
+          // The take reply was lost: the same key, maybe on a new connection, gets its saved assignment,
+          // whether or not the job has started or finished since.
+          const saved = on(["assigned", "started", "finished"]);
           const executor = able(saved, cell);
           const taken = success(yield* jobs((j) => j.take(saved.request.id, executor, recorded)), "a repeated take");
           expect(taken, "a repeated take answers the first assignment").toEqual(saved.taken);
@@ -524,7 +536,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "take_lacking": {
-          const saved = choose(at(world, ["requested"]), cell.pick);
+          const saved = on(["requested", "assigned", "started", "finished"]);
           const missing = choose(saved.request.needs, cell.variant);
           const executor = { ...able(saved, cell), has: CAPABILITIES.filter((c) => c !== missing) };
           refused(
@@ -546,7 +558,8 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           break;
         }
         case "start_again": {
-          const saved = choose(at(world, ["started"]), cell.pick);
+          // A lost start acknowledgement, retried even after the finish: it never moves the job back.
+          const saved = on(["started", "finished"]);
           const execution = saved.execution ?? expect.fail("a started job has an execution");
           const answer = yield* jobs((j) => j.started(saved.request.id, `${execution}`, recorded));
           expect(success(answer, "a repeated start"), "it answers the first start").toEqual(
@@ -563,6 +576,17 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
               ? yield* jobs((j) => j.started(saved.request.id, wrong, recorded))
               : yield* jobs((j) => j.finish(saved.request.id, wrong, cell.result, recorded));
           refused(answer, "an unrelated execution identity", "wrong_execution");
+          break;
+        }
+        case "out_of_order": {
+          // Before a take nothing may start or finish; an assigned job may not finish, even by its own execution.
+          const saved = on(["requested", "assigned"]);
+          const execution = saved.execution ?? "any-execution";
+          const answer =
+            saved.stage === "requested" && cell.variant % 2 === 0
+              ? yield* jobs((j) => j.started(saved.request.id, execution, recorded))
+              : yield* jobs((j) => j.finish(saved.request.id, execution, cell.result, recorded));
+          refused(answer, "a start or a finish out of order", "wrong_state");
           break;
         }
         case "finish_ok": {
@@ -708,13 +732,13 @@ const prop = (
   name: string,
   open: Effect.Effect<Store, never, Scope.Scope>,
   moves: ReadonlyArray<Move>,
-  required: ReadonlyArray<Move>,
+  required: ReadonlyArray<Done>,
 ) =>
   it.effect(
     name,
     () =>
       Effect.gen(function* () {
-        const done = new Set<Move>();
+        const done = new Set<Done>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
@@ -746,13 +770,31 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L3: only the target key holding every need takes a request, and its first execution identity stays",
       open,
       [...LIFE, "take_again", "take_other", "take_lacking"],
-      ["take_ok", "take_again", "take_other", "take_lacking", "reopen"],
+      [
+        "take_ok",
+        "take_other",
+        "reopen",
+        "take_lacking@requested",
+        ...(["assigned", "started", "finished"] as const).flatMap((stage) => [
+          `take_again@${stage}` as const,
+          `take_lacking@${stage}` as const,
+        ]),
+      ],
     );
     prop(
       "L4: a start or a finish needs the saved execution identity",
       open,
-      [...LIFE, "start_again", "start_wrong", "finish_wrong", "unknown_id"],
-      ["start_ok", "start_again", "start_wrong", "finish_wrong", "unknown_id"],
+      [...LIFE, "start_again", "start_wrong", "finish_wrong", "out_of_order", "unknown_id"],
+      [
+        "start_ok",
+        "start_wrong",
+        "finish_wrong",
+        "unknown_id",
+        "start_again@started",
+        "start_again@finished",
+        "out_of_order@requested",
+        "out_of_order@assigned",
+      ],
     );
     prop(
       "L5: an equal terminal retry is harmless; a conflicting result never replaces the first",
