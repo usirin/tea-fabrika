@@ -246,6 +246,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-presence": "coordination",
   // P39: the jobs module is coordination, so it may import data and id and nothing above them.
   "next-jobs": "coordination",
+  "next-packs": "coordination",
   "next-access": "coordination",
   "next-runtime": "app",
   "next-mcp": "mcp",
@@ -1143,6 +1144,7 @@ describe("layers", () => {
       "next-processes": 3,
       "next-presence": 3,
       "next-jobs": 3,
+      "next-packs": 3,
       "next-ledger": 2,
       "next-transport": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
