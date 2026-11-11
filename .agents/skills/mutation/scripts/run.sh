@@ -2,12 +2,17 @@
 # Today's tooling. Run from the repo root with T, BUILD and RELATED set. SINCE, when set, is the
 # commit the sample's diff starts from (the lane's base); else it is BUILD's first parent.
 # FINAL=0 reuses unchanged answers in an intermediate round. The default forces fresh answers.
+# IN_PLACE=1 mutates the checkout itself, not a sandbox copy. Only the mutation container sets it,
+# since its checkout is a throwaway copy. A sandbox links each package's node_modules back to
+# the checkout, and a workspace link in there points at the unmutated package, so a test that
+# reaches a file by its package name (`@tea-fabrika/tracker`) never sees a mutant (ticket 457).
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
 : "${RELATED:?RELATED must list the test paths}"
 case ${FINAL:-1} in 0|1) ;; *) echo "FINAL must be 0 or 1" >&2; exit 1 ;; esac
-export T BUILD RELATED
+case ${IN_PLACE:-0} in 0) IN_PLACE=false ;; 1) IN_PLACE=true ;; *) echo "IN_PLACE must be 0 or 1" >&2; exit 1 ;; esac
+export T BUILD RELATED IN_PLACE
 exec node --input-type=module -e '
 import {spawn} from "node:child_process";
 import {rmSync} from "node:fs";
@@ -61,7 +66,7 @@ TS
 cat > "$M/stryker.json" <<JSON
 {"testRunner": "vitest", "vitest": {"configFile": "vitest.mutation.config.ts", "related": false},
  "plugins": ["$PWD/$S/vitest-runner/dist/src/index.js"], "coverageAnalysis": "perTest",
- "mutate": [$ranges], "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
+ "mutate": [$ranges], "inPlace": $IN_PLACE, "ignoreStatic": true, "timeoutMS": 5000, "concurrency": 1,
  "incremental": true, "incrementalFile": "$M/incremental.json",
  "reporters": ["json", "event-recorder", "progress-append-only"],
  "jsonReporter": {"fileName": "$M/report.json"}, "eventReporter": {"baseDir": "$M/events"},

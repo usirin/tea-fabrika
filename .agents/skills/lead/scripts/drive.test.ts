@@ -1392,6 +1392,8 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                     out,
                     "--lock",
                     join(env.BOXES, "state", "docker.lock"),
+                    "--plan",
+                    ask.plan,
                   ],
                 ]);
                 expect(ran.started.length).toBe(1);

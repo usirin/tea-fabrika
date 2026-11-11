@@ -1385,7 +1385,7 @@ export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: 
   const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
   const text = last?.report ? read(last.report) : null;
   return text === null || !last?.report
-    ? "\n\n---\nThis lane has no mutation report drive can read; say so in your review, and do not look for one outside your box.\n"
+    ? "\n\n---\nThis lane has no mutation report drive can read. Since decision 0066 a lane runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
 
@@ -1471,6 +1471,8 @@ export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: 
   join(env.BOXES, `${ask.box}-mutbox`),
   "--lock",
   dockerLock(env),
+  "--plan",
+  ask.plan,
 ];
 
 /** The one Docker box's lock, as mutbox.ts takes it and drive's start check reads it. */
@@ -1893,7 +1895,9 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   const verdict =
-    step === "review" ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\n" : "";
+    step === "review"
+      ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\nThe verdict is not the answer. The last line is `answer: done <why>` when merge-ready, else `answer: send build <why>`, `send tests` or `send plan`. Never `answer: merge-ready`.\n"
+      : "";
   writeFileSync(
     ask.prompt,
     readFileSync(p.brief, "utf8") +

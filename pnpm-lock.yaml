@@ -396,6 +396,9 @@ importers:
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.157.0
       oxfmt:
         specifier: 'catalog:'
         version: 0.75.0
