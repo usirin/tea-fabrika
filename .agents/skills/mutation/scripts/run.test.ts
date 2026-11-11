@@ -45,7 +45,9 @@ if (args[0]?.endsWith("/core/bin/stryker.js")) {
 type Setup = { ranges: string[]; sampleExit: number; exit: number; hold: boolean; orphan?: boolean };
 const defaults: Setup = { ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false };
 
-const fixture = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: string }) => {
+type Inputs = { T?: string; BUILD?: string; RELATED?: string; IN_PLACE?: string };
+
+const fixture = (setup: Setup, inputs: Inputs) => {
   expect(existsSync(script), "build must extract the executable run.sh").toBe(true);
   const dir = mkdtempSync(join(tmpdir(), "mut-command-"));
   const bin = join(dir, "bin"),
@@ -100,6 +102,7 @@ type Invocation = {
     incremental: boolean;
     incrementalFile: string;
     coverageAnalysis: string;
+    inPlace: boolean;
     timeoutMS: number;
   };
   vitest: string;
@@ -108,7 +111,7 @@ type Invocation = {
 const invoked = (dir: string): Invocation | undefined =>
   existsSync(join(dir, "invoked.json")) ? JSON.parse(readFileSync(join(dir, "invoked.json"), "utf8")) : undefined;
 
-const run = (setup: Setup, inputs: { T?: string; BUILD?: string; RELATED?: string }) => {
+const run = (setup: Setup, inputs: Inputs) => {
   const f = fixture(setup, inputs);
 
   try {
@@ -330,6 +333,31 @@ console.log(JSON.stringify(resolved.test));
         },
       ),
       { ...options, numRuns: 3 },
+    );
+  });
+
+  // Plants: always in place; never in place; accept any other value as off.
+  it("T457 mutates in place only when IN_PLACE is 1, and refuses any other value before Stryker", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          ticket: fc.integer({ min: 1, max: 9999 }),
+          flag: fc.oneof(
+            fc.constantFrom(undefined, "0", "1"),
+            fc.stringMatching(/^[a-z2-9 *-]{1,4}$/),
+            fc.constantFrom("true", "yes", "01", "-1"),
+          ),
+        }),
+        ({ ticket, flag }) => {
+          const got = run(defaults, { T: `${ticket}`, BUILD: "abc1234", RELATED: "math.test.ts", IN_PLACE: flag });
+
+          // Unset or "0" is off, "1" is on, and anything else stops before Stryker starts.
+          const want = flag === undefined || flag === "0" ? false : flag === "1" ? true : undefined;
+          expect(got.code === 0, got.text).toBe(want !== undefined);
+          expect(got.invocation?.config.inPlace).toBe(want);
+        },
+      ),
+      { ...options, numRuns: 12 },
     );
   });
 
