@@ -49,7 +49,9 @@
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
 // files or commits off its branch. DRIVE_MINUTES (default 60) is how long the agent may run
-// before it is stopped and the step is stuck.
+// before it is stopped and the step is stuck. A stuck line, row and state entry carry its `fault`,
+// `tool` or `work`, read from the stuck reason (`faultFrom`, decision 0076); the line also carries
+// the turn's list-price dollars, which the chain's backstop counts.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -81,6 +83,7 @@ import {
   type Agents,
   Answer,
   Ended,
+  listUsd,
   makeStepAgents,
   NO_SPENT,
   type Provider,
@@ -131,6 +134,87 @@ const drive = outcomesOf({
 });
 
 type Outcome = typeof drive.schema.Type;
+
+/** What a stuck step was stuck on (0076): a tool around the work, or the work itself. */
+export const FAULTS = ["tool", "work"] as const;
+export type Fault = (typeof FAULTS)[number];
+type StuckReason = Extract<Outcome, { kind: "stuck" }>["why"];
+
+/**
+ * Each stuck reason drive names, sorted once. A new reason fails the type check until it is sorted
+ * here. A box, an agent harness, a fetch, a read, a push, a signature or a report without an answer
+ * failing is the tooling. A review that changed files, a leak, a done with no commit, a commit that
+ * breaks the commits check and a step that ran out of its minutes are the work. `unsigned` and
+ * `step_said` read their reason too (`faultFrom`).
+ */
+const FAULT: Record<StuckReason, Fault> = {
+  box_failed: "tool",
+  agent_failed: "tool",
+  sign_failed: "tool",
+  timeout: "work",
+  fetch_failed: "tool",
+  read_failed: "tool",
+  record_failed: "tool",
+  review_committed: "work",
+  unsigned: "work",
+  leak: "work",
+  no_answer: "tool",
+  no_commit: "work",
+  push_failed: "tool",
+  step_said: "work",
+};
+
+const isStuckReason = (s: string): s is StuckReason => Object.hasOwn(FAULT, s);
+
+/** The fault as a log line names it, after the outcome: ` (fault: tool)`, or nothing. */
+const faultNote = (outcome: string, reason: string): string => {
+  const fault = faultFrom(outcome, reason);
+  return fault === null ? "" : ` (fault: ${fault})`;
+};
+
+/** Stuck names written outside drive's outcomes: drive's crash and worktree read, the chain's retries. */
+const TOOL_ONLY: readonly string[] = ["crash", "worktree_unreadable", "RetriesExhausted"];
+
+/**
+ * Signs in an agent's own stuck reason that the box or its sandbox stopped it, not the change: a
+ * mutbox stop (Docker, the sampler, its container), a refused syscall, a denied path, no network,
+ * or a process list it may not read. Read from the stuck rows in the boxes folder, 2026-11-11.
+ */
+const TOOL_SIGNS =
+  /^mutbox:|\bEPERM\b|operation not permitted|sandbox|\bdenied\b|network is blocked|\bno network\b|box policy|pgrep|dependency installation is prohibited/i;
+
+/**
+ * The fault of a drive outcome (`stuck:<reason>`) with its reason text, or `null` when the outcome is
+ * not stuck. A commits check that held only stale signing links is the tooling; an agent's own stuck
+ * is the tooling when its reason shows `TOOL_SIGNS`. A stuck name nobody sorted is the work, so a
+ * person sees it.
+ */
+export const faultFrom = (outcome: string, reason: string): Fault | null => {
+  const [verb = "", name = ""] = outcome.split(":");
+
+  if (verb !== "stuck") {
+    return null;
+  }
+
+  if (name === "unsigned") {
+    // `commitsSaid` names the first 5 rules and then "and N more"; the sort reads the ones named.
+    const held = reason
+      .replace(/^commits check: /, "")
+      .split("; ")
+      .filter((h) => !/^and \d+ more$/.test(h));
+    return held.length > 0 && held.every((h) => /^stale_link\b/.test(h)) ? "tool" : "work";
+  }
+
+  if (name === "step_said") {
+    return TOOL_SIGNS.test(reason) ? "tool" : "work";
+  }
+
+  if (isStuckReason(name)) {
+    return FAULT[name];
+  }
+
+  return TOOL_ONLY.includes(name) ? "tool" : "work";
+};
 
 /**
  * The start checks, before any agent runs: box.sh new's, then drive's own (the agent cap, free disk,
@@ -1286,7 +1370,7 @@ const handlers = (env: Env) => {
               model: ask.model,
               effort: ask.effort,
               outcome: rowOf(e.outcome),
-              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}. ${e.reason}`,
+              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
               started: new Date(ask.started),
               ended: new Date(ended),
               spent: e.spent,
@@ -1313,6 +1397,7 @@ const handlers = (env: Env) => {
           head: e.head,
           outcome,
           why: ok ? e.reason : `${e.reason} (${notes.join("; ")})`,
+          fault: faultFrom(outcome, e.reason),
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
           kept: keep,
@@ -1331,7 +1416,7 @@ const handlers = (env: Env) => {
         renameSync(`${state}.tmp`, state);
         appendFileSync(
           join(env.BOXES, "state", `${ask.lane}.md`),
-          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
+          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
@@ -1920,10 +2005,14 @@ export interface DriveLine {
   readonly from: string;
   readonly head: string;
   readonly reason: string;
+  /** A stuck step's fault (0076), else `null`. */
+  readonly fault: Fault | null;
   readonly report: string | null;
   readonly kept: boolean;
   readonly exit: number;
   readonly model: string;
+  /** The agent turn's list-price dollars, `null` for a model with no price. */
+  readonly listUsd: number | null;
 }
 
 /**
@@ -1960,8 +2049,9 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       return yield* Effect.die(`drive stopped in ${end.phase}`);
     }
 
+    const outcome = endName(end.outcome);
     return {
-      outcome: endName(end.outcome),
+      outcome,
       lane: ask.lane,
       step: ask.step,
       agent: ask.agent,
@@ -1969,10 +2059,12 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       from: ask.base,
       head: end.head,
       reason: end.reason,
+      fault: faultFrom(outcome, end.reason),
       report: writtenReport(ask),
       kept: end.kept,
       exit: exitOf(end.outcome),
       model: ask.model,
+      listUsd: listUsd(stepProvider(ask.agent, ask.step), ask.model, end.spent),
     } satisfies DriveLine;
   }).pipe(
     Effect.scoped,
@@ -1995,10 +2087,12 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
         from: ask.base,
         head: ask.base,
         reason: Cause.pretty(cause),
+        fault: "tool",
         report: writtenReport(ask),
         kept: true,
         exit: 30,
         model: ask.model,
+        listUsd: null,
       } satisfies DriveLine),
     ),
   );
@@ -2037,7 +2131,13 @@ const main = () => {
       process.exit(2);
     }
 
-    console.log(JSON.stringify({ outcome: prepared.outcome, reason: prepared.reason }));
+    console.log(
+      JSON.stringify({
+        outcome: prepared.outcome,
+        reason: prepared.reason,
+        fault: faultFrom(prepared.outcome, prepared.reason),
+      }),
+    );
     process.exit(prepared.exit);
   }
 
@@ -2068,6 +2168,7 @@ const main = () => {
             step,
             box: prepared.ask.box,
             reason: Cause.pretty(cause),
+            fault: "tool",
             kept: true,
             exit: 30,
           }),
