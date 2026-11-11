@@ -27,6 +27,17 @@ import { boxEnv } from "./boxnode.ts";
 export const PROVIDERS = ["codex", "codex-read", "claude"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
+/**
+ * One break a step planted once and undid (.decisions/0093): the law, what it broke (file:line and
+ * how), and `red` when the law failed on it, `green` when the law did not catch it.
+ */
+export const Plant = Schema.Struct({
+  law: Schema.String,
+  plant: Schema.String,
+  result: Schema.Literals(["red", "green"]),
+});
+export type Plant = typeof Plant.Type;
+
 /** The step's typed answer: the five verbs, as one JSON object at the end of its report. */
 export const Answer = Schema.Struct({
   verb: Schema.Literals(["done", "send", "ask", "skip", "stuck"]),
@@ -35,6 +46,8 @@ export const Answer = Schema.Struct({
   reason: Schema.String,
   /** A build that needed no commit names the laws it ran green; `null` otherwise. */
   laws: Schema.NullOr(Schema.String),
+  /** Each plant the step ran once, for its field row (0093): the tests step names one per new law. */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 export type Answer = typeof Answer.Type;
 
@@ -308,6 +321,8 @@ export interface RowAsk {
   readonly spent: Spent;
   /** Lines `redact.sh` scrubbed from the saved files, when it ran. */
   readonly redacted: number | null;
+  /** The plants the step's answer named (0093); left off the row when it named none. */
+  readonly plants?: ReadonlyArray<Plant> | undefined;
 }
 
 /** The turn's list-price dollars: Claude's SDK says its own; a Codex row is priced by the table. */
@@ -360,6 +375,7 @@ const FieldRow = Schema.Struct({
   step: Schema.String,
   billing: Schema.optionalKey(Schema.Literal("subscription")),
   redacted: Schema.optionalKey(Schema.Number),
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 }).pipe(Schema.encodeKeys({ reason: "why" }));
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(FieldRow));
@@ -412,6 +428,7 @@ export const stepRow = (r: RowAsk): string => {
     step: r.step,
     ...(r.provider === "claude" ? {} : { billing: "subscription" as const }),
     ...(r.redacted === null ? {} : { redacted: r.redacted }),
+    ...(r.plants === undefined ? {} : { plants: r.plants }),
   })}\n`;
 };
 

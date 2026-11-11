@@ -6,6 +6,7 @@ import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerTransaction } from "./LedgerTransaction.ts";
+import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
@@ -56,7 +57,7 @@ const setup = (
       return backend.exec(query, ...params);
     },
   };
-  const layer = Layer.mergeAll(LedgerSql.layer(sql, { reader: "watcher" }), LedgerTransaction.layer(sql)).pipe(
+  const layer = Layer.mergeAll(LedgerSql.layer(sql, { reader: "watcher" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(Layer.succeed(Doorbell, { ring })),
   );
   return { db, sql, fault, layer };

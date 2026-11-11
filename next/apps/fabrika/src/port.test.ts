@@ -1,5 +1,5 @@
-// next/, the laws of the test port helper. A stage test's port must not be one the OS, or another
-// test process, can be given while the stage is still starting.
+// next/, the laws of the test port helper. An instance test's port must not be one the OS, or another
+// test process, can be given while the instance is still starting.
 import { createServer } from "node:net";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
@@ -45,7 +45,7 @@ it("scenario: a held pair refuses a second taker until it is released", async ()
 });
 
 it("scenario: a released pair is not the next one handed out in the same process", async () => {
-  // scenario: an in-process stage leaves the runtime's 30-second note on its port, so a test
+  // scenario: an in-process instance leaves the runtime's 30-second note on its port, so a test
   // that got the same port right after would be refused.
   const first = await Effect.runPromise(heldPort());
   await Effect.runPromise(first.release);

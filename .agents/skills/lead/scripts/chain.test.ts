@@ -1085,7 +1085,8 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
   it("the last message is the report, its JSON object is the typed answer, and every update is one event line", () =>
     ran(
       Effect.gen(function* () {
-        const said = 'The laws are green.\n{"verb":"done","to":null,"reason":"all green","laws":null}';
+        const plants = [{ law: "a.test.ts:3", plant: "a.ts:9 drops the row", result: "red" }];
+        const said = `The laws are green.\n${JSON.stringify({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
         const { turned, fake, events, report } = yield* turn({
           raws: [
             { _tag: "tool", id: "t1", title: "pnpm test", status: "in_progress" },
@@ -1102,7 +1103,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
           return;
         }
 
-        expect(turned.answer).toEqual({ verb: "done", to: null, reason: "all green", laws: null });
+        expect(turned.answer).toEqual({ verb: "done", to: null, reason: "all green", laws: null, plants });
         expect(turned.spent).toEqual({
           input: 100,
           cached: 40,
@@ -1204,6 +1205,39 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
     });
     expect(String(row.why)).toContain("ticket 485");
     expect(Object.keys(row)).toContain("date");
+  });
+
+  // 0093: a step's plants go from its answer's JSON object to its field row. Plants run once, both
+  // red: stepRow drops `plants`; Answer has no `plants` key.
+  it("the plants a step's answer names decode with it and land on its row whole, and a row with none has no plants key", () => {
+    const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
+    const read = Schema.decodeUnknownSync(Schema.fromJsonString(Answer));
+    fc.assert(
+      fc.property(fc.option(fc.array(plant, { maxLength: 8 }), { nil: undefined }), fc.string(), (plants, reason) => {
+        const answer = read(JSON.stringify({ verb: "done", to: null, reason, laws: null, ...(plants && { plants }) }));
+        expect(answer.plants).toEqual(plants);
+        const row = JSON.parse(
+          stepRow({
+            run: "t1-tests",
+            ticket: "1",
+            step: "tests",
+            provider: "codex",
+            model: "gpt-6-astra",
+            effort: "medium",
+            outcome: "pass",
+            reason,
+            started: new Date("2026-11-09T10:00:00Z"),
+            ended: new Date("2026-11-09T10:30:00Z"),
+            spent,
+            redacted: null,
+            plants: answer.plants,
+          }),
+        ) as Record<string, unknown>;
+        expect(row["plants"]).toEqual(plants);
+        expect("plants" in row).toBe(plants !== undefined);
+      }),
+      options,
+    );
   });
 });
 

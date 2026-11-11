@@ -52,7 +52,7 @@ afterEach(async () => {
     rmSync(h, { recursive: true, force: true });
   }
 
-  // Last, so the pair stays held until the stage that used its port is gone.
+  // Last, so the pair stays held until the instance that used its port is gone.
   for (const release of ports.splice(0)) {
     await Effect.runPromise(release);
   }
@@ -132,7 +132,7 @@ const launch = async (startupGate = false) => {
   if (startupGate) {
     while (!existsSync(join(folder, "starting"))) {
       if (child.exitCode !== null || child.signalCode !== null) {
-        throw new Error("stage ended before startup gate");
+        throw new Error("instance ended before startup gate");
       }
 
       await pause();
@@ -141,8 +141,8 @@ const launch = async (startupGate = false) => {
     return { child, folder, url, output: () => output, observed };
   }
 
-  // Wait for the stage's own ready line, not for the first HTTP answer. workerd answers HTTP
-  // while the stage still makes its startup calls, and a kill in that gap fails the startup.
+  // Wait for the instance's own ready line, not for the first HTTP answer. workerd answers HTTP
+  // while the instance still makes its startup calls, and a kill in that gap fails the startup.
   await new Promise<void>((done, fail) => {
     child.stdout!.on("data", () => {
       if (output.includes('{"ready":')) {
@@ -155,12 +155,12 @@ const launch = async (startupGate = false) => {
   return { child, folder, url, output: () => output, observed };
 };
 
-const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
+const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
   const until = performance.now() + 10_000;
   const details = () =>
-    `excluding=${excluding}, observed=${JSON.stringify(stage.observed)}\nstage output:\n${stage.output()}`;
-  const { brainOutbox } = await import("@kampus/libfabrika/node/local-stage");
-  const outbox = await Effect.runPromise(brainOutbox(stage.folder).pipe(Effect.provide(NodeServices.layer)));
+    `excluding=${excluding}, observed=${JSON.stringify(instance.observed)}\ninstance output:\n${instance.output()}`;
+  const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
+  const outbox = await Effect.runPromise(brainOutbox(instance.folder).pipe(Effect.provide(NodeServices.layer)));
 
   for (;;) {
     const pending = await Effect.runPromise(outbox.pending.pipe(Effect.provide(NodeServices.layer)));
@@ -170,9 +170,9 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
       throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
     }
 
-    if (stage.child.exitCode !== null || stage.child.signalCode !== null) {
+    if (instance.child.exitCode !== null || instance.child.signalCode !== null) {
       throw new Error(
-        `P12 dev.ts exited while waiting for workerd: exitCode=${stage.child.exitCode}, signal=${stage.child.signalCode}\n${details()}`,
+        `P12 dev.ts exited while waiting for workerd: exitCode=${instance.child.exitCode}, signal=${instance.child.signalCode}\n${details()}`,
       );
     }
 
@@ -180,9 +180,9 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
       throw new Error(`P12 workerd did not become ready within 10 seconds\n${details()}`);
     }
 
-    const children = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+    const children = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
     const observation = { at: performance.now(), pids: children.map((row) => row.pid), ready: false };
-    stage.observed.push(observation);
+    instance.observed.push(observation);
 
     if (children.length === 0 || children[0]!.pid === excluding) {
       await pause();
@@ -194,14 +194,14 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
     // Alchemy retries SystemError spawns. A PID in ps may die before it ever listens.
     // Accept it only after HTTP answers and a fresh ps still shows that sole PID.
     try {
-      const response = await fetch(stage.url, { signal: AbortSignal.timeout(250) });
+      const response = await fetch(instance.url, { signal: AbortSignal.timeout(250) });
       observation.ready = response.ok;
       await response.body?.cancel();
     } catch {
       /* Spawn attempt has not reached its listener. */
     }
 
-    const current = tree(stage.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+    const current = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
 
     if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid) {
       return children[0]!.pid;
@@ -213,7 +213,7 @@ const workerd = async (stage: Awaited<ReturnType<typeof launch>>, excluding = 0)
 
 describe("P12 local brain life", () => {
   // Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
-  it("scenario: parent death before listener readiness leaves no stage group", async () => {
+  it("scenario: parent death before listener readiness leaves no instance group", async () => {
     const s = await launch(true);
     const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
     groups.push(leader);
@@ -233,7 +233,7 @@ describe("P12 local brain life", () => {
     await expect(fetch(s.url)).rejects.toThrow();
   });
   // Outside only: cleanup must address the process group after its leader already exited.
-  it("scenario: stage group cleanup still reaches descendants after the leader exits", async () => {
+  it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
     const s = await launch();
     const rows = tree(s.child.pid!),
       leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
@@ -259,7 +259,7 @@ describe("P12 local brain life", () => {
     const pids: Array<number> = [];
     const delays: Array<number> = [];
     const details = () =>
-      `pids=${JSON.stringify(pids)}, delays=${JSON.stringify(delays)}, observed=${JSON.stringify(s.observed)}\nstage output:\n${s.output()}`;
+      `pids=${JSON.stringify(pids)}, delays=${JSON.stringify(delays)}, observed=${JSON.stringify(s.observed)}\ninstance output:\n${s.output()}`;
 
     try {
       for (let n = 0; n < 4; n++) {
@@ -287,12 +287,12 @@ describe("P12 local brain life", () => {
         tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
       ).toEqual([]);
-      const { brainOutbox } = await import("@kampus/libfabrika/node/local-stage");
+      const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
       const read = () =>
         Effect.runPromise(
           Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(Effect.provide(NodeServices.layer)),
         );
-      // The stage writes `braked` after Alchemy stops, with a synced file write. Wait for
+      // The instance writes `braked` after Alchemy stops, with a synced file write. Wait for
       // that row, as `workerd` waits for a pid, and do not read the outbox once and hope.
       const until = performance.now() + 10_000;
       let pending = await read();
