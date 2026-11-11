@@ -117,7 +117,7 @@ build can start.
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
 and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
-`fabrika/no-why-key` rule checks declarations in `next/`, tests included. Use fresh isolated lab
+`fabrika/no-why-key` rule (now `eslint/id-denylist` with `fabrika/no-question-word-key`, 0081) checks declarations in `next/`, tests included. Use fresh isolated lab
 storage for these saved shapes; this change does not migrate old lab stores. Today's version
 keeps `why`. → lands once its steps pass
 

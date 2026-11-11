@@ -324,8 +324,10 @@ describe("each rule refuses what it is there to refuse", () => {
       "rooms",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
-      // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
-      "no-why-key",
+      // Generated no-question-word-key.test.ts and no-wall-clock.test.ts plants run at next/ paths
+      // with the real lint config.
+      "no-question-word-key",
+      "no-wall-clock",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

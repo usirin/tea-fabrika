@@ -330,8 +330,12 @@ describe("eslint/no-restricted-imports: nobody outside a room imports its intern
   // `cloudflare/runtime.ts` imports `../runtime/internal/supervisor.ts`.
   it("fires on an import and on an export-from, in either spelling, for each of the 56 pairs", () => {
     for (const [room, other] of PAIRS) {
-      expect(linted(restricted, front(room, other)), `${room} into ${other}`).toEqual([2, 3, 4, 5, 6, 7]);
-      expect(linted(restricted, inner(room, other)), `${room} into ${other}`).toEqual([2, 3, 4]);
+      // A front file of ledger/ is two layers down for three modules: the last describe's law.
+      const down = other === "ledger" && ["runtime", "access", "gateway"].includes(room);
+      expect(linted(restricted, front(room, other)), `${room} into ${other}`).toEqual(
+        down ? [2, 3, 4, 5, 6, 7, 9] : [2, 3, 4, 5, 6, 7],
+      );
+      expect(linted(restricted, inner(room, other)), `${room} into ${other}`).toEqual(down ? [2, 3, 4, 7] : [2, 3, 4]);
     }
   });
 
@@ -395,6 +399,46 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
   it("takes the right case, with .test, .types.test, .laws.test and .test-support suffixes", () => {
     for (const path of taken) {
       expect(linted(fileCase, path), path).toEqual([]);
+    }
+  });
+});
+
+// scenario: every module and every depth, since the law is a list of paths in the config. 0043, rule
+// 11 and its amendments: the module above never sees what is two layers down, so `runtime/`,
+// `access/` and `gateway/` import no `ledger/`, types and tests included (0062). The override that
+// says so replaces the rooms override's options, so its Radix and `internal/` entries must still hold.
+describe("runtime/, access/ and gateway/ never import ledger/", async () => {
+  const ABOVE = ["runtime", "access", "gateway"] as const;
+  const body = (up: string) =>
+    file(
+      `import {Ledger} from "${up}ledger/Ledger.ts";`, // 2
+      `import type {LedgerError} from "${up}ledger/Ledger.ts";`, // 3
+      `export {Line} from "${up}ledger/Log.ts";`, // 4
+      `import {Sink} from "${up}telemetry/Sink.ts";`, // 5: telemetry is open to every module
+      `import {Mailbox} from "${up}processes/Mailbox.ts";`, // 6
+      `import {store} from "${up}processes/internal/store.ts";`, // 7: another module's internal/
+      'import {cyan} from "@radix-ui/colors";', // 8
+      `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
+    );
+  const refused = ABOVE.flatMap((room) => [
+    [`${SRC}/${room}/Front.ts`, "../"],
+    [`${SRC}/${room}/Front.test.ts`, "../"],
+    [`${SRC}/${room}/internal/front.ts`, "../../"],
+  ]);
+  const taken = (["processes", "presence"] as const).map((room) => [`${SRC}/${room}/Front.ts`, "../"]);
+  const linted = await plant(
+    Object.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])),
+  );
+
+  it("refuses an import or re-export of ledger/, a type too, from each of the three, tests too", () => {
+    for (const [path = ""] of refused) {
+      expect(linted(restricted, path), path).toEqual([2, 3, 4, 7, 8]);
+    }
+  });
+
+  it("leaves the modules the law does not name to their own rows, with the rooms override's bans", () => {
+    for (const [path = ""] of taken) {
+      expect(linted(restricted, path), path).toEqual([7, 8]);
     }
   });
 });

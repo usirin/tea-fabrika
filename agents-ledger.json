@@ -507,63 +507,588 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "exam.push({ glob: \"src/a.ts\", why: \"this fixture's signed tests change\" });"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "const refused = (r: { code: number | null; text: string }, why: RegExp) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const checkRefused = (r: { code: number | null; text: string }, check: string, why = /.*/) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const ask = JSON.stringify({ _tag: \"ask\", who: \"owner\", for: \"exam_read\", paths: [] });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "why: \"recorded fixture result\","
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "why: \"drive.ts mutation fixture row\","
 		},
 		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(step, fc.constantFrom(\"done\", \"skip:step_said\"), word, (s, o, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(step, laneStep, word, (from, to, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(step, word, (s, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(m).toEqual({ _tag: \"park\", reason: why });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "reason: why,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const m = moveOf(s, line(`stuck:${why.replaceAll(\" \", \"_\")}`, \"h\", why), stucks, max);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(laneStep, word, (to, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(laneStep, word, (to, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "value: { text: `answer: send ${to} ${why}` },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "value: { text: `answer: park ${why}` },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(parked).toMatchObject({ phase: \"over\", end: { kind: \"ask\", reason: why } });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(word, fc.integer({ min: 1, max: 9 }), (why, times) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "reason: why,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(step, fc.nat({ max: 20 }), outcome, sha, word, (s, round, o, head, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "note: why,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "judged: { box: \"b\", answer: why },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const [verb, to = \"\", why = \"\"] = line.outcome.split(\":\");"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (why === \"lockfile\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const why = existsSync(errFile)"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const last = (ran.code === 0 ? \"\" : why) || (ran.out.trim().split(\"\\n\").at(-1) ?? \"\");"
+		},
+		{
 			"file": ".agents/skills/lead/scripts/drive.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "for (const what of held) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const why = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "expect(s.outcome).toEqual({ kind: \"skip\", why: \"step_said\" });"
 		},
 		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const why = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(s.outcome).toEqual({ kind: \"ask\", who: \"lead\", for: \"lockfile\" });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(outcome).not.toEqual({ kind: \"ask\", who: \"lead\", for: \"lockfile\" });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const drafted = (step: \"plan\" | \"tests\" | \"build\" | \"mutation\" | \"review\", who: \"codex\" | \"claude\", box: string) =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "agent: who,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, who, name, n) =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.asyncProperty(steps, agent, lane, (step, who, name) =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(count(\"claude\")).toBe(who === \"claude\" ? 1 : 0);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(count(\"codex\") + count(\"codex-read\")).toBe(who === \"codex\" ? 1 : 0);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "(name, reason, detail, how, exit) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "how === \"line\""
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": ": how === \"exit\""
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (how === \"line\") {"
+		},
+		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "const stuck = (why: Extract<Outcome, { kind: \"stuck\" }>[\"why\"], text: string): Judged => ({"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"stuck\", why },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"send\", to: \"tests\", why: \"exam_paths\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "outcome: { kind: \"ask\", who: \"lead\", for: \"lockfile\" },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"send\", to: \"plan\", why: \"plancheck\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "return { outcome: { kind: \"send\", to, why: \"step_said\" }, reason: said.reason };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "return { outcome: { kind: \"ask\", who: \"lead\", for: \"question\" }, reason: said.reason };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "return { outcome: { kind: \"skip\", why: \"step_said\" }, reason: said.reason };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "const outcome: Outcome = { kind: \"stuck\", why: \"record_failed\" };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"stuck\", why: \"record_failed\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
+			"code": "const failed = (what: string, r: { code: number; err: string }) => ({"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "problem: `${what}: ${tail(r.err)}`,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "eslint(id-denylist)",
 			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "let why: string = verdict._tag === \"remove\" ? verdict.reason : \"\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "why += `, HEAD kept at refs/keep/box/${name}`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "why = `would back up to ${verdict.to[0]}`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "why = `backed up to ${pushed}`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "console.log(`${dry ? \"would remove\" : \"removed\"} ${name}: ${why}, ${mb} MB`);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/lane.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "who: fc.constant(\"owner\"),"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/leakgrep.respaced.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "([before, after], at, where, leak, joint) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/leakgrep.respaced.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const spot = where % (tokens.length + 1);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": ".map(([what, line, at]) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (what === \"names\" && t.statements[at] !== undefined) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (what === \"dropped\" && body.length > 1) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "} else if (what === \"added\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const outside = strays.map((what, n): Change => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "switch (what) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "(cut, what, pick, other) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const where = file.indexOf(line);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (what === \"changed\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "file[where] = line.replace(/\\d/, (digit) => `${digit}7`).replace(/^\\}$/, \"} else {\");"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "} else if (what === \"dropped\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "} else if (what === \"doubled\" && line !== \"}\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "(table, lines, pick, what) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (what === \"wrong\" && listed !== undefined) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/movecheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "} else if (what === \"logic\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/mutbox.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const why = (f: FileReach) =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/redact.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(word, fc.constantFrom(\"answer\", \"events\", \"both\"), (value, where) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/redact.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const answer = where === \"events\" ? \"safe\\n\" : `${pem}\\n${exact}\\n`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/redact.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const events = where === \"answer\" ? \"\" : `${JSON.stringify({ type: \"error\", message: `${pem}\\n${exact}` })}\\n`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/redact.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"answer\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/redact.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"events\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/skillscheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "(where, wrap) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/skillscheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"wrong-section\" && section) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/skillscheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"fenced\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/skillscheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"removed\") {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/skillscheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where === \"wrong-skill\") {"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.tuple(constructor, fc.boolean(), word).map(([name, described, why]) => `fc.${name}${described ? `: ${why}` : \"\"}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.tuple(constructor, fc.boolean(), word).map(([name, described, why]) => `fc.${name}${described ? `: ${why}` : \"\"}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": ".map(([name, described, why]) => `@demlik/tea/pbt.${name}${described ? `: ${why}` : \"\"}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": ".map(([name, described, why]) => `@demlik/tea/pbt.${name}${described ? `: ${why}` : \"\"}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.tuple(fc.constantFrom(\"vector\", \"format\", \"pinned\", \"scenario\"), word).map(([label, why]) => `${label}: ${why}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.tuple(fc.constantFrom(\"vector\", \"format\", \"pinned\", \"scenario\"), word).map(([label, why]) => `${label}: ${why}`),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: fc.constantFrom(...(Object.keys(place) as Place[])),"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "({ path, ticks, dot, before, lead, dots, trail, after, form, where, lang }) => {"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const body = place[where](forms[form](token, path), lang);"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "[{ ...bare, path: \"package.json\", form: \"linkSelfTitle\", where: \"fileCell\" }],"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "[{ ...bare, path: \"package.json\", form: \"plain\", where: \"fence\", lang: \"sh\" }],"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "[{ ...bare, path: \"allowed_signers\", form: \"underscore\", where: \"prose\" }],"
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"fileCell\","
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"fileCell\","
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"fileCell\","
+		},
+		{
+			"file": ".agents/skills/plan/scripts/plancheck.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"fileCell\","
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"other\" | \"same\" | \"own-wip\" | \"none\";"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "...([\"other\", \"same\", \"own-wip\", \"none\"] as const).map((where) => ({ ...lead, where })),"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "...([\"other\", \"same\", \"own-wip\", \"none\"] as const).map((where) => ({ ...lead, where })),"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "{ ...lead, where: \"other\", ticket: \"999\" },"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "{ ...lead, where: \"other\", step: \"build\" },"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "{ ...lead, where: \"other\", only: true },"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "each(cases, ({ where, ticket, step, only }) =>"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "if (where !== \"none\") {"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "r.openPr(head[where], ticket);"
+		},
+		{
+			"file": ".agents/skills/step-commit/scripts/stepcommit.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const refused = step === \"lead\" && !only && where === \"other\" && ticket === \"321\";"
 		}
 	]
 }

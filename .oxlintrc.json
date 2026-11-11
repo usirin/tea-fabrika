@@ -570,7 +570,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule sees every name written as a
+        // word; ours sees a key written as a string, which it cannot.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error"
       }
@@ -589,7 +592,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule sees every name written as a
+        // word; ours sees a key written as a string, which it cannot.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error"
       }
@@ -609,8 +615,25 @@
       }
     },
     {
+      // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
+      // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
+      "files": ["next/**/*.ts"],
+      "rules": { "fabrika/no-wall-clock": "error" }
+    },
+    {
+      // A test helper is test code: it may read the clock as a test does.
+      "files": ["next/**/*.test-support.ts"],
+      "rules": { "fabrika/no-wall-clock": "off" }
+    },
+    {
+      // A resource is released by the scope that acquired it, never by an after-hook that a thrown
+      // error or a killed test can skip (0061). Setup hooks stay.
+      "files": ["next/**/*.ts", "next/**/*.tsx"],
+      "rules": { "vitest/no-hooks": ["error", { "allow": ["beforeAll", "beforeEach"] }] }
+    },
+    {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-      // `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
+      // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {
@@ -624,7 +647,8 @@
         "react/immutability": "off",
         "react/display-name": "off",
         "react/purity": "off",
-        "fabrika/no-clock-in-view": "off"
+        "fabrika/no-clock-in-view": "off",
+        "fabrika/no-wall-clock": "off"
       }
     },
     {
@@ -679,6 +703,53 @@
               }
             ],
             "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The module above never sees what is two layers down: `runtime/`, `access/` and `gateway/`
+      // never import `ledger/`, types included, and tests keep the layers too (0043, rule 11 and
+      // its amendments; 0062). What they import today is in `next-ledger.json`. An override replaces
+      // a rule's options, so the rooms override's Radix and `internal/` entries are repeated here.
+      "files": [
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/gateway/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                // A front file of ledger/, PascalCase by the case override below. Its `internal/` is the
+                // `internal/` entry's, so one import is reported once: oxlint reads a `!` in any group
+                // as a pass for every group.
+                "group": ["../ledger/[A-Z]*", "./../ledger/[A-Z]*", "../../ledger/[A-Z]*", "./../../ledger/[A-Z]*"],
+                "message": "runtime/, access/ and gateway/ never import ledger/, two layers down (0043, rule 11): use the service of the module below, in its own words and errors."
+              },
               {
                 "group": ["@radix-ui/colors/*"],
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
