@@ -15,6 +15,7 @@ import {
   X,
   BRAIN,
   CLIENT,
+  CRASHED,
   again,
   brain,
   events,
@@ -102,7 +103,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
     yield* Effect.gen(function* () {
       const p = yield* ProcessManager;
       const after = current[i]!;
-      yield* p.exit(after, "crashed", from());
+      yield* p.exit(after, CRASHED, from());
       const started = yield* p.start(
         Start.cases.again.make({
           id: `restart:${after}`,
@@ -287,7 +288,7 @@ describe("P34 coordination recovery", () => {
               yield* TestClock.setTime(at);
               yield* Effect.gen(function* () {
                 const p = yield* ProcessManager;
-                yield* p.exit(old, "crashed", from());
+                yield* p.exit(old, CRASHED, from());
                 yield* p.start(again(old), from({ sentAt: "1970-01-01T00:00:00Z" }));
               }).pipe(Effect.provide(manager(disk, brain(), next.next)));
               disk.reopen();
@@ -341,7 +342,7 @@ describe("P34 coordination recovery", () => {
             yield* Effect.gen(function* () {
               const p = yield* ProcessManager;
               yield* p.start(first(), from());
-              yield* p.exit(A, value.reason, from());
+              yield* p.exit(A, CRASHED, from());
               yield* p.down(A, value, from());
               expect(p.status, "P34 status must include ended and down processes").toBeTypeOf("function");
               expect(yield* p.status("counter:1")).toMatchObject({
@@ -414,7 +415,7 @@ describe("P34 coordination recovery", () => {
     { generated: ProcessEvent.cases.exited.fields.reason },
     ({ generated }) =>
       Effect.forEach(
-        ["crashed", generated],
+        [CRASHED, generated],
         (value) =>
           Effect.gen(function* () {
             const disk = storage();

@@ -23,8 +23,10 @@
 //
 // The step is a tea machine on the Effect engine:
 //
-//   (before)           box.sh gc, then a refusal when the data volume has under 20 GB free, or
-//                      when a worktree of the main checkout holds the lane's branch
+//   (before)           box.sh gc (at most once in 30 min across starts, always on a nearly full
+//                      disk: gcDue), then a refusal when the data volume has under 20 GB free, or
+//                      when a worktree of the main checkout holds the lane's branch. Each start
+//                      phase's time goes on the step's entry in state/<lane>.json as `phases`
 //   starting   Act     box.sh new, at the lane's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
 //   reading    Gather  collect the tree and sign it, then the commits, their step notes, exam
@@ -77,7 +79,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -372,6 +374,9 @@ type Model =
       readonly kept: boolean;
       readonly spent: Spent;
     };
+
+/** Where the step's machine is; the chain's heartbeat names it. */
+export type DrivePhase = Model["phase"];
 
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
@@ -1163,9 +1168,13 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
   return Started.cases.failed.make({ detail: `box.sh new: ${tail(err)}` });
 };
 
-const handlers = (env: Env) => {
+/** The Cmds' handlers for one step. `started` holds the step's start phases so far; box_new adds
+ * box.sh's own, and record writes them all on the step's entry. */
+const handlers = (env: Env, started: readonly Phase[] = []) => {
   const box = (...args: string[]) => sh("sh", [join(HERE, "box.sh"), ...args]);
   const git = (...args: string[]) => sh("git", ["-C", env.MAIN, "-c", "core.hooksPath=/dev/null", ...args]);
+  let phases = started;
+  let ready: number | null = null;
   return {
     box_new: (cmd: Ask) =>
       Effect.sync(() => {
@@ -1184,6 +1193,8 @@ const handlers = (env: Env) => {
           cmd.lane,
         );
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
+        phases = [...phases, ...phasesIn(r.err)];
+        ready = Date.now();
         const started = startedOf(r.code, r.err);
 
         if (started._tag !== "made") {
@@ -1390,6 +1401,8 @@ const handlers = (env: Env) => {
         const saved = existsSync(state)
           ? (JSON.parse(readFileSync(state, "utf8")) as Lane)
           : { lane: ask.lane, steps: [] };
+        // From the box made to the agent's first event: the harness and the model starting.
+        const first = existsSync(ask.events) ? firstEventAt(readFileSync(ask.events, "utf8")) : null;
         const entry = {
           step: ask.step,
           box: ask.box,
@@ -1403,6 +1416,7 @@ const handlers = (env: Env) => {
           report: writtenReport(ask),
           kept: keep,
           ended,
+          phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],
         };
         const lane: Lane = {
           ...saved,
@@ -1456,6 +1470,44 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
   step === "plan" || text === null
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+
+/** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
+const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
+
+/** The approved plan's owners, read as stepcommit reads them; `null` when there is no plan to read. */
+const planOwners = (env: Env, plan: string) => {
+  if (!existsSync(plan)) {
+    return null;
+  }
+
+  const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+};
+
+/**
+ * The paths the approved plan's files table gives this step, at the top of its prompt. stepcommit
+ * refuses any other path at collect, after the whole turn: on 2026-11-09, 10 of 72 stuck steps were
+ * that `not_owner` (ticket 430). Told first, a step that needs another path asks instead. A
+ * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
+ * (it changes no file) or a lane with no plan drive can read.
+ */
+export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
+  if (step === "plan" || step === "review" || owners === null) {
+    return "";
+  }
+
+  const mine = Object.keys(owners)
+    .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
+    .toSorted();
+  const other =
+    "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
+    "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
+    "git status and check every changed path against this list.\n";
+  return mine.length === 0
+    ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
+    : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
+        `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
+};
 
 /**
  * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
@@ -1669,6 +1721,46 @@ drive.ts reads your report, then one JSON object at its very end (its schema fol
 
 const MIN_FREE_GB = 20;
 
+/** One timed part of a step's start, in ms, kept on the step's entry in state/<lane>.json, so the
+ * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
+const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Number });
+type Phase = typeof Phase.Type;
+
+/** The `phase <name> <ms>` lines box.sh new prints on stderr, in order. */
+export const phasesIn = (text: string): Phase[] =>
+  [...text.matchAll(/^phase ([a-z_]+) (\d+)$/gm)].map((m) => ({ name: m[1] ?? "", ms: Number(m[2]) }));
+
+const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
+
+/** When the agent's event log says it first did anything, in ms; `null` with no timed first line. */
+export const firstEventAt = (events: string): number | null => {
+  const first = Schema.decodeUnknownOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
+  const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
+  return Number.isFinite(at) ? at : null;
+};
+
+/** How long after one sweep a step's start skips box.sh gc. A box is removable only after 2 h idle
+ * (gc's IDLE), so a sweep every 30 min frees a box at most 30 min later; the ticket cites Ramp's
+ * 30-minute rebuild for the same trade. One sweep took about 22 s of reads on 2026-11-11. */
+export const GC_EVERY = 30 * 60_000;
+
+/** Whether a step's start sweeps the boxes (gcDue), and why. */
+export const Sweep = Schema.TaggedUnion({ run: { reason: Schema.String }, skip: { reason: Schema.String } });
+
+/** Whether this start runs box.sh gc: always on a nearly full or unreadable disk, so the low_disk
+ * refusal always follows a fresh sweep; else when no sweep started in the last GC_EVERY. */
+export const gcDue = (now: number, last: number | null, free: number | null): typeof Sweep.Type => {
+  if (free === null || free < MIN_FREE_GB) {
+    return Sweep.cases.run.make({ reason: free === null ? "df could not read the free space" : `${free} GB free` });
+  }
+
+  if (last === null || now - last >= GC_EVERY || now < last) {
+    return Sweep.cases.run.make({ reason: last === null ? "no sweep recorded" : "the last sweep is old" });
+  }
+
+  return Sweep.cases.skip.make({ reason: `the last sweep started ${Math.round((now - last) / 60_000)} min ago` });
+};
+
 /** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
 const freeGb = (path: string): number | null => {
   const r = sh("df", ["-k", path]);
@@ -1793,7 +1885,7 @@ export interface StepArgs {
  * or a start check's refusal (exit 3).
  */
 export const Start = Schema.TaggedUnion({
-  prepared: { ask: Ask, electron: Schema.Boolean },
+  prepared: { ask: Ask, electron: Schema.Boolean, phases: Schema.Array(Phase) },
   refused: { outcome: Schema.String, reason: Schema.String, exit: Schema.Number },
 });
 
@@ -1849,7 +1941,9 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("the branch is fabrikalfa/<name>");
   }
 
+  const fetchStart = Date.now();
   sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
+  const phases: Phase[] = [{ name: "fetch", ms: Date.now() - fetchStart }];
 
   // A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
   if (step === "plan" && p.from !== undefined) {
@@ -1926,17 +2020,34 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
   // Dead boxes filled the disk once (2026-11-09): sweep them, then refuse on a nearly full disk,
   // naming what gc kept and why, so the lead fixes the cause and never asks the owner for space.
-  const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
-    stdio: ["ignore", "pipe", 2],
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  process.stderr.write(gc.stdout ?? "");
-  const free = freeGb(env.BOXES);
+  // The sweep runs at most once in GC_EVERY across all starts, and always on a nearly full disk
+  // (gcDue); its start time is stamped first, so starts beside it skip it (ticket 673).
+  const stamp = join(env.BOXES, "state", "gc.last");
+  const before = freeGb(env.BOXES);
+  const swept = Date.parse(existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : "");
+  const due = gcDue(Date.now(), Number.isFinite(swept) ? swept : null, before);
+  let gcOut = "";
+
+  if (due._tag === "run") {
+    const gcStart = Date.now();
+    writeFileSync(stamp, `${new Date(gcStart).toISOString()}\n`);
+    const gc = spawnSync("sh", [join(HERE, "box.sh"), "gc"], {
+      stdio: ["ignore", "pipe", 2],
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    gcOut = gc.stdout ?? "";
+    process.stderr.write(gcOut);
+    phases.push({ name: "gc", ms: Date.now() - gcStart });
+  } else {
+    process.stderr.write(`box.sh gc skipped: ${due.reason}\n`);
+  }
+
+  const free = due._tag === "run" ? freeGb(env.BOXES) : before;
 
   if (free === null || free < MIN_FREE_GB) {
     const said = free === null ? "df could not read the free space" : `${free} GB free`;
-    const keeps = (gc.stdout ?? "").split("\n").filter((l) => l.startsWith("keep "));
+    const keeps = gcOut.split("\n").filter((l) => l.startsWith("keep "));
     return refusal({
       outcome: endName({ kind: "refused", check: "low_disk" }),
       reason: `${said} on the boxes' volume after box.sh gc; drive needs ${MIN_FREE_GB}; gc kept ${keeps.length}: ${keeps.map((l) => l.slice(5)).join("; ") || "nothing"}`,
@@ -1986,14 +2097,15 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       : "";
   writeFileSync(
     ask.prompt,
-    readFileSync(p.brief, "utf8") +
+    ownedHead(step, planOwners(env, plan)) +
+      readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
       TAIL +
       verdict,
   );
-  return Start.cases.prepared.make({ ask, electron });
+  return Start.cases.prepared.make({ ask, electron, phases });
 };
 
 /** drive's one line: how the step ended, as the chain and a reader of the log take it. */
@@ -2019,12 +2131,20 @@ export interface DriveLine {
 /**
  * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
  * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
- * crash is a `stuck:crash` line, with the box kept.
+ * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
+ * before that phase's work starts.
  */
-export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+export const driveStep = (
+  env: Env,
+  agents: Agents,
+  p: Prepared,
+  onPhase: (phase: DrivePhase) => void = () => {},
+): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
+    const waitStart = Date.now();
+
     if (holdsElectron(ask.step, p.electron)) {
       yield* takeElectron(env);
     }
@@ -2038,11 +2158,13 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
 
     const handle = yield* run(machine, {
       ctx: undefined,
-      interpret: handlers(env),
+      interpret: handlers(env, [...p.phases, { name: "wait", ms: Date.now() - waitStart }]),
       subscribe: { draft: agentsDraft(env, agents) },
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // tea's change notifier fires after each transition and before its first Cmd starts.
+    runtime.subscribe(() => onPhase(runtime.getState().phase));
     yield* runtime.dispatch({ type: "start", ask });
     const end = yield* runtime.done();
 

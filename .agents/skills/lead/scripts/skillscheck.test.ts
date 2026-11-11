@@ -10,7 +10,11 @@ import "./mutbox-entry.sh?raw";
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./skillscheck.sh?raw";
 import "./leakgrep.sh?raw";
 import "./loosening.sh?raw";
@@ -32,6 +36,8 @@ import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
@@ -66,7 +72,7 @@ const answer = [
   "Give every finding in that answer, grouped by class, most serious first.",
   "Name each checked decided note and say where the change follows or breaks it.",
   "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-  "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
+  "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
   "End with exactly one answer: line, as the last line.",
 ];
 

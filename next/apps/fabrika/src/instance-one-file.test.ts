@@ -1,4 +1,4 @@
-// P16, next/. P12's actual workerLoader, stack and localStage contracts, not saved proof JSON.
+// P16, next/. P12's actual workerLoader, stack and localInstance contracts, not saved proof JSON.
 // The door mints each stamped input ID with main's shared Id schema; this file never makes one.
 // Builder contract: the app's `build(options)` (src/build.ts) needs FileSystem and Path and
 // returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
@@ -8,7 +8,6 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer as httpServer } from "node:http";
 import { syncBuiltinESMExports } from "node:module";
-import { createServer } from "node:net";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
@@ -18,6 +17,7 @@ import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { heldPort } from "./port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const homes: string[] = [];
@@ -59,7 +59,20 @@ const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
   }
 };
 
-// Change the disposable completed file, then exercise that file on the real stage below.
+// Runs `use` on a brain port held for the whole call, so nobody else is given it between two instances
+// on it. The scope gives the port back only after `use`, and every instance it opened, has closed.
+const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
+        // A failed assertion in `use` is a defect: the run rejects with it and the test goes red.
+        return yield* Effect.promise(() => use(held.port));
+      }),
+    ),
+  );
+
+// Change the disposable completed file, then exercise that file on the real instance below.
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
   const ranges: Array<{ start: number; end: number }> = [];
@@ -212,6 +225,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
   });
 
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
+  // oxlint-disable-next-line fabrika/no-stage-word -- saved speed-bar results name experiment 238's driver exactly
   assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");
   assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
   assert.equal(bar.base.length, 4);
@@ -342,7 +356,7 @@ describe("P16 stack and sealed loader", () => {
         }
 
         const verify = (call: (typeof calls)[number]) => {
-          expect(call.main, "the stage runs the completed file").toBe(built.brain);
+          expect(call.main, "the instance runs the completed file").toBe(built.brain);
           expect(call.bundle, "no second bundle pass").toBe(false);
 
           for (const [name, value] of Object.entries(call.env)) {
@@ -378,7 +392,7 @@ describe("P16 stack and sealed loader", () => {
           }
         }
 
-        expect(calls.length, "each accepted stage declared one Worker").toBe(accepted);
+        expect(calls.length, "each accepted instance declared one Worker").toBe(accepted);
         vi.doUnmock("alchemy");
         vi.doUnmock("@alchemy.run/cloudflare");
         vi.resetModules();
@@ -513,8 +527,8 @@ class Client {
   }
 }
 
-describe("P16 copied-file real stage, serial", () => {
-  it("shutdown: a stopped child closes before the next stage, including when the prior stage fails", async () => {
+describe("P16 copied-file real instance, serial", () => {
+  it("shutdown: a stopped child closes before the next instance, including when the prior instance fails", async () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
         let closed = false;
@@ -530,24 +544,24 @@ describe("P16 copied-file real stage, serial", () => {
           child.kill("SIGKILL");
 
           if (fail) {
-            throw new Error(`planted stage failure ${value}`);
+            throw new Error(`planted instance failure ${value}`);
           }
 
           return value;
         });
 
         if (fail) {
-          await expect(task).rejects.toThrow(`planted stage failure ${value}`);
+          await expect(task).rejects.toThrow(`planted instance failure ${value}`);
         } else {
           expect(await task).toBe(value);
         }
 
-        expect(closed, "next stage must wait for the real child close event").toBe(true);
+        expect(closed, "next instance must wait for the real child close event").toBe(true);
       }),
       { ...runs, numRuns: 8 },
     );
   });
-  it("isolation plants reach the actual compiled loader policy before a real-stage run", async () => {
+  it("isolation plants reach the actual compiled loader policy before a real-instance run", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
         const h = home(),
@@ -587,15 +601,6 @@ describe("P16 copied-file real stage, serial", () => {
           const target = `http://127.0.0.1:${port}/probe-${n}`;
           expect((await fetch(target)).ok).toBe(true);
           hits = 0;
-          const listener = createServer();
-          const brainPort = await new Promise<number>((done, fail) => {
-            listener.once("error", fail);
-            listener.listen(0, "127.0.0.1", () => {
-              const at = listener.address();
-              assert(at && typeof at !== "string");
-              listener.close(() => done(at.port));
-            });
-          });
           symlinkSync(join(APP, "node_modules"), join(h, "node_modules"));
           const file = join(h, "sealed.ts");
           writeFileSync(
@@ -606,7 +611,7 @@ describe("P16 copied-file real stage, serial", () => {
             `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
           );
           const { build } = await import("./build.ts"),
-            { localStage } = await import("./local-stage.ts"),
+            { localInstance } = await import("./local-instance.ts"),
             { localState } = await import("alchemy/State/LocalState");
           const built = await Effect.runPromise(
             build({
@@ -623,78 +628,82 @@ describe("P16 copied-file real stage, serial", () => {
           rmSync(join(h, "dist"), { recursive: true });
           rmSync(file);
 
-          for (const mode of ["sealed", "binding", "outbound"] as const) {
-            writeFileSync(
-              join(alone, "brain.mjs"),
-              mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
-            );
-            hits = 0;
-            await afterChildrenStop(() =>
-              Effect.runPromise(
-                Effect.scoped(
-                  Effect.gen(function* () {
-                    const stage = yield* localStage(
-                      { ...built, brain: join(alone, "brain.mjs") },
-                      {
-                        home: h,
-                        name: "p16-isolation",
-                        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-                        founder: key.line,
-                        window: key.raw,
-                        port: brainPort,
-                      },
-                    );
-                    yield* Effect.tryPromise({
-                      try: async () => {
-                        expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+          // The three modes start one instance each on one brain port, held across all three.
+          await onHeldPort(async (brainPort) => {
+            for (const mode of ["sealed", "binding", "outbound"] as const) {
+              writeFileSync(
+                join(alone, "brain.mjs"),
+                mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+              );
+              hits = 0;
+              await afterChildrenStop(() =>
+                Effect.runPromise(
+                  Effect.scoped(
+                    Effect.gen(function* () {
+                      const instance = yield* localInstance(
+                        { ...built, brain: join(alone, "brain.mjs") },
+                        {
+                          home: h,
+                          name: "p16-isolation",
+                          person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                          founder: key.line,
+                          window: key.raw,
+                          port: brainPort,
+                        },
+                      );
+                      yield* Effect.tryPromise({
+                        try: async () => {
+                          expect(Object.keys(built.programs).length).toBeGreaterThan(0);
 
-                        for (const name of Object.keys(built.programs)) {
-                          const program: Loaded = await stage.loader.load(name, `probe-${n}-${mode}-${name}`);
+                          for (const name of Object.keys(built.programs)) {
+                            const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
 
-                          if (name === "counter") {
-                            const counted = await turn(CounterTurn, program, "init", [null]);
-                            expect(counted.model).toEqual({ count: 0 });
-                            continue;
-                          }
-
-                          let model = (await turn(SealedTurn, program, "init", [null])).model;
-
-                          // Read until the program's own fetch settles. The test time limit bounds the wait.
-                          while (model.outbound === "pending") {
-                            await new Promise((done) => setTimeout(done, 10));
-                            model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
-                          }
-
-                          const closed = (model: unknown) => assert.deepEqual(model, { keys: [], outbound: "denied" });
-
-                          if (mode === "sealed") {
-                            closed(model);
-                            expect(hits).toBe(0);
-                          } else {
-                            if (mode === "outbound") {
-                              expect(hits).toBeGreaterThan(0);
+                            if (name === "counter") {
+                              const counted = await turn(CounterTurn, program, "init", [null]);
+                              expect(counted.model).toEqual({ count: 0 });
+                              continue;
                             }
 
-                            expect(() => closed(model)).toThrow();
-                            expect(model).toEqual(
-                              mode === "binding"
-                                ? { keys: [`P16_${n}`], outbound: "denied" }
-                                : { keys: [], outbound: "allowed" },
-                            );
+                            let model = (await turn(SealedTurn, program, "init", [null])).model;
+
+                            // Read until the program's own fetch settles. The test time limit bounds the wait.
+                            while (model.outbound === "pending") {
+                              await new Promise((done) => setTimeout(done, 10));
+                              model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
+                            }
+
+                            const closed = (model: unknown) =>
+                              assert.deepEqual(model, { keys: [], outbound: "denied" });
+
+                            if (mode === "sealed") {
+                              closed(model);
+                              expect(hits).toBe(0);
+                            } else {
+                              if (mode === "outbound") {
+                                expect(hits).toBeGreaterThan(0);
+                              }
+
+                              expect(() => closed(model)).toThrow();
+                              expect(model).toEqual(
+                                mode === "binding"
+                                  ? { keys: [`P16_${n}`], outbound: "denied" }
+                                  : { keys: [], outbound: "allowed" },
+                              );
+                            }
                           }
-                        }
-                      },
-                      catch: (error) => new Error("P16 isolation check failed", { cause: error }),
-                    });
-                  }),
-                ).pipe(
-                  Effect.provide(localState()),
-                  Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
+                        },
+                        catch: (error) => new Error("P16 isolation check failed", { cause: error }),
+                      });
+                    }),
+                  ).pipe(
+                    Effect.provide(localState()),
+                    Effect.provide(SecureRandom.layerWebCrypto),
+                    Effect.provide(NodeServices.layer),
+                  ),
                 ),
-              ),
-            );
-          }
+              );
+            }
+          });
         } finally {
           if (probe.listening) {
             await new Promise<void>((done) => probe.close(() => done()));
@@ -712,7 +721,7 @@ describe("P16 copied-file real stage, serial", () => {
           const h = home(),
             key = identity();
           const { build } = await import("./build.ts"),
-            { localStage } = await import("./local-stage.ts");
+            { localInstance } = await import("./local-instance.ts");
           const built = await Effect.runPromise(
             build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
           );
@@ -720,34 +729,25 @@ describe("P16 copied-file real stage, serial", () => {
           mkdirSync(alone);
           cpSync(built.brain, join(alone, "brain.mjs"));
           rmSync(join(h, "dist"), { recursive: true });
-          const listener = createServer();
-          const port = await new Promise<number>((done, fail) => {
-            listener.once("error", fail);
-            listener.listen(0, "127.0.0.1", () => {
-              const at = listener.address();
-              assert(at && typeof at !== "string");
-              listener.close(() => done(at.port));
-            });
-          });
-          const options = {
+          const options = (port: number) => ({
             home: h,
-            name: "p16-stage",
+            name: "p16-instance",
             person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
             founder: key.line,
             window: key.raw,
             port,
-          };
+          });
           const copied = { ...built, brain: join(alone, "brain.mjs") };
           let pid = "",
             first: unknown,
             stamped = "",
             total = 0;
-          const stage = async (again: boolean) =>
+          const instance = async (port: number, again: boolean) =>
             afterChildrenStop(async () =>
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localStage(copied, options);
+                    const runtime = yield* localInstance(copied, options(port));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),
@@ -868,8 +868,11 @@ describe("P16 copied-file real stage, serial", () => {
                 ),
               ),
             );
-          await stage(false);
-          await stage(true);
+          // The restart comes back on the same port: held across both starts, never re-asked.
+          await onHeldPort(async (port) => {
+            await instance(port, false);
+            await instance(port, true);
+          });
         },
       ),
       { ...runs, numRuns: 2 },

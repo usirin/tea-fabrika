@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-no-step-runs-typecheck",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/chain.ts",
+    "line": 366
+  },
+  "says": "A lane's tests, build and review steps all answered and review said done while the branch had TypeScript errors in test files, because no step and no chain.ts host run calls pnpm typecheck: the lane brief tells every step 'No `pnpm typecheck` in a box', and briefOf copies that head into each step's brief.",
+  "proof": "PR 887 (https://github.com/usirin/tea-fabrika/pull/887), head e39356182a988fc14c723a8a1a2f044d887dccc8, run by chain.ts p13b: its body lists review rounds 1 and 2 as send:tests and review3 as done. CI job check (https://github.com/usirin/tea-fabrika/actions/runs/43013151828/job/130497684175) fails in 'Run pnpm typecheck': src/runtime/RunnerRepliesTest.ts(586,43) TS2375 and TS377004 (missing Ledger), and src/runtime/internal/reply.test.ts(31,41) TS2322. All 15 step briefs of the lane (p13b-chain1-tests-brief.md to p13b-chain15-review-brief.md in the boxes folder beside the main checkout) say at line 7: 'No `pnpm typecheck` in a box.' rg -n typecheck over chain.ts, drive.ts, box.sh, lane.ts, land.ts and flow/ finds only drive.ts:2104's tsgo wait, no call that runs it.",
+  "cost": "A lane reaches the pull request and the lead's merge read with red CI; each type error found there costs another tests or build round after the step already said done.",
+  "head": "0bb25969c3b92c1e148d84446d845a20a00b5368",
+  "ticket": "usirin/tea-fabrika#281",
+  "pr": "usirin/tea-fabrika#887"
+}

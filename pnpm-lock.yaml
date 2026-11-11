@@ -405,6 +405,9 @@ importers:
       oxlint:
         specifier: 'catalog:'
         version: 1.90.0
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.9.1
       stylelint:
         specifier: 'catalog:'
         version: 18.0.0

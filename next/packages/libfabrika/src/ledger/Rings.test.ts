@@ -20,9 +20,11 @@ import { Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
+import * as RefereeSql from "./RefereeSql.ts";
 
 // Every ledger is a fresh node:sqlite file in one temp folder, removed after.
 const folder = mkdtempSync(join(tmpdir(), "p6-rings-"));
@@ -64,10 +66,10 @@ const bell = (fails: ReadonlyArray<string> = []) => {
   return { rang, layer };
 };
 
-const onReferee = (sql: Sql, doorbell: Layer.Layer<Doorbell>) => Referee.layer(sql).pipe(Layer.provide(doorbell));
+const onReferee = (sql: Sql, doorbell: Layer.Layer<Doorbell>) => RefereeSql.layer(sql).pipe(Layer.provide(doorbell));
 
 const onLedger = (sql: Sql, doorbell: Layer.Layer<Doorbell>, reader: string) =>
-  Ledger.sql(sql, { reader }).pipe(Layer.provide(doorbell));
+  LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell));
 
 const line = (over: Partial<Line> = {}): Line => ({
   by: "SHA256:writer-a",

@@ -6,8 +6,9 @@ import { Effect, Exit, Layer, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, RecoveryStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
-import { Doorbell, Ledger } from "../ledger/Ledger.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import { Doorbell } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -78,7 +79,7 @@ describe("P12 saved mail recovery", () => {
                   reply: async () => null,
                 });
                 const base = Layer.mergeAll(
-                  Ledger.sql(sql, { reader: PID }).pipe(
+                  LedgerSql.layer(sql, { reader: PID }).pipe(
                     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                   ),
                   RecordManager.memory(1_000_000_000),
@@ -146,7 +147,7 @@ describe("P12 saved mail recovery", () => {
                     ),
                   ),
                   Layer.provide(
-                    LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+                    LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
                       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                     ),
                   ),
@@ -285,7 +286,7 @@ describe("P34 id reuse at the runner", () => {
                     reply: async () => null,
                   });
                   const base = Layer.mergeAll(
-                    Ledger.sql(sql, { reader: PID }).pipe(
+                    LedgerSql.layer(sql, { reader: PID }).pipe(
                       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                     ),
                     RecordManager.memory(1_000_000_000),
@@ -370,7 +371,7 @@ describe("P34 id reuse at the runner", () => {
                       ),
                     ),
                     Layer.provide(
-                      LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+                      LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
                         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
                       ),
                     ),
