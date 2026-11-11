@@ -50,7 +50,8 @@ case "$1" in
 *commits.ts)
   echo "sign $(git rev-parse HEAD) $*" >>"$LAND_CALLS"
   [ "\${LAND_SIGN:-0}" = 0 ] || exit 1
-  git notes --ref=fabrika add -f -m '{"step":"lead"}' HEAD ;;
+  # A note is written by someone: name the fixture, as the real signer's caller has an identity.
+  git -c user.name=Fixture -c user.email=fixture@example.test notes --ref=fabrika add -f -m '{"step":"lead"}' HEAD ;;
 *) echo "unexpected node $*" >>"$LAND_CALLS"; exit 99 ;;
 esac
 `;
@@ -102,6 +103,16 @@ const land = (world: World) => {
       HOME: join(dir, "home"),
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
+      // As on a CI machine (PR 816): git has no identity to guess from this machine's user or
+      // host, and none from the caller's environment, so every git call that writes one names it.
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "user.useConfigOnly",
+      GIT_CONFIG_VALUE_0: "true",
+      GIT_AUTHOR_NAME: undefined,
+      GIT_AUTHOR_EMAIL: undefined,
+      GIT_COMMITTER_NAME: undefined,
+      GIT_COMMITTER_EMAIL: undefined,
+      EMAIL: undefined,
       MAIN: join(dir, "main"),
       BOXES: join(dir, "boxes"),
       REMOTE: join(dir, "origin"),
