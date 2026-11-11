@@ -176,7 +176,7 @@ class ExecutionClient extends Context.Service<
   {
     readonly [K in keyof Execution]: (...args: Parameters<Execution[K]>) => Effect.Effect<unknown, ProgramDown>;
   }
->()("fabrika/ExecutionClient") {
+>()("@kampus/libfabrika/runtime/Execution.ExecutionClient") {
   static make(rpc: ExecutionCalls): ExecutionClient["Service"] {
     return {
       init: (saved) => {

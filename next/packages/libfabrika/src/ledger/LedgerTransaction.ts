@@ -13,4 +13,4 @@ export interface LedgerTurn {
 export class LedgerTransaction extends Context.Service<
   LedgerTransaction,
   { readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError> }
->()("@kampus/libfabrika/LedgerTransaction") {}
+>()("@kampus/libfabrika/ledger/LedgerTransaction") {}

@@ -13,4 +13,4 @@ export class MailWakeupsError extends Schema.TaggedError<MailWakeupsError>()("Ma
 export class MailWakeups extends Context.Service<
   MailWakeups,
   { readonly wake: (name: string) => Effect.Effect<void, MailWakeupsError> }
->()("@kampus/libfabrika/MailWakeups") {}
+>()("@kampus/libfabrika/runtime/MailWakeups") {}

@@ -36,7 +36,7 @@ export class Connections extends Context.Service<
     readonly leave: (client: string, session: string) => Effect.Effect<void, LedgerError>;
     readonly online: (key: string) => Effect.Effect<ReadonlyArray<Online>, LedgerError>;
   }
->()("@kampus/libfabrika/Connections") {
+>()("@kampus/libfabrika/presence/Connections") {
   static readonly layer = <P, A>(sql: Sql, adapter: Adapter<P, A>): Layer.Layer<Connections, never, P | A> =>
     Layer.effect(
       Connections,
