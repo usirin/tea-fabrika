@@ -1,12 +1,12 @@
-// Ticket 477, next/. Decision 0043: a folder in libfabrika's `src/` is a room, one subject.
+// Ticket 477, next/. Decision 0043: a folder in libfabrika's `src/` is a module, one subject.
 //
-// Four laws, the ones no existing rule says (decision 0040). Two more laws of a room are oxlint's
-// own, set in `.oxlintrc.json`: `eslint/no-restricted-imports` refuses another room's `internal/`,
+// Four laws, the ones no existing rule says (decision 0040). Two more laws of a module are oxlint's
+// own, set in `.oxlintrc.json`: `eslint/no-restricted-imports` refuses another module's `internal/`,
 // and `unicorn/filename-case` holds a front file to PascalCase and an `internal/` file to camelCase.
 //
 // The lists come from the config, since they change as the files move:
 //   src      the folder the rule reads, from the top of the repo. Outside it the rule says nothing.
-//   rooms    the folders that are rooms.
+//   modules  the folders that are modules.
 //   folders  the other folders `src/` may hold: the platform folders, and an old folder until the
 //            pull request that empties it.
 //   files    the top files `src/` may hold, by stem: `Id` takes `Id.ts`, `Id.test.ts` and
@@ -14,24 +14,24 @@
 //   values   the top files, by stem, that hold values only.
 // With no options the rule says nothing.
 //
-// 1. No room file re-exports another room's names. A room file is any file under a room, its
+// 1. No module file re-exports another module's names. A module file is any file under a module, its
 //    `internal/` and its tests included. Refused, where the source is a relative path into another
-//    room: `export {a} from`, `export type {A} from`, `export * from`, `export * as a from`, and a
-//    name imported from another room then sent on as `export {a}` or `export default a`.
+//    module: `export {a} from`, `export type {A} from`, `export * from`, `export * as a from`, and a
+//    name imported from another module then sent on as `export {a}` or `export default a`.
 //    Edge cases:
-//    - an import alone passes: who may import whom is the floors' business (`pnpm lint:layers`);
-//    - the room's own names pass, from `./Own.ts` or from its `internal/`;
-//    - the entry file and the platform folders are not rooms, so they may put the rooms together;
-//    - a top file's name (`../Rev.ts`) is no room's, so it passes;
+//    - an import alone passes: who may import whom is the layers' business (`pnpm lint:layers`);
+//    - the module's own names pass, from `./Own.ts` or from its `internal/`;
+//    - the entry file and the platform folders are not modules, so they may put the modules together;
+//    - a top file's name (`../Rev.ts`) is no module's, so it passes;
 //    - a package specifier (`@kampus/libfabrika/...`) is not read: only relative paths are;
 //    - a name given a new binding first (`const b = a; export {b}`) is not followed;
-//    - an import three folders deep into another room's `internal/` (`../../../x/internal/`) is
+//    - an import three folders deep into another module's `internal/` (`../../../x/internal/`) is
 //      reached by no pattern of the `.oxlintrc.json` group, whose longest is `./../../*/internal/**`,
 //      and has no plant: the pull request that first adds a folder inside an `internal/` adds both.
-// 2. `src/` holds only the listed rooms, folders and top files. A name in another case is another
+// 2. `src/` holds only the listed modules, folders and top files. A name in another case is another
 //    name: `Ledger/` is not `ledger/`. It reports at the start of the file.
-// 3. Every export in a room's `internal/` file is `@internal`: the last `/** */` comment before the
-//    export statement holds the tag. Any folder named `internal` under a room counts, at any depth.
+// 3. Every export in a module's `internal/` file is `@internal`: the last `/** */` comment before the
+//    export statement holds the tag. Any folder named `internal` under a module counts, at any depth.
 //    Edge cases:
 //    - a `//` comment or a `/* */` comment is not a doc comment, so its `@internal` does not count;
 //    - a doc comment with no tag does not count;
@@ -48,13 +48,13 @@
 //    - `Schema.Class`, a branded schema, a function, a type and an interface pass;
 //    - an error or service made by a helper under another name is not seen.
 //
-// `rooms.test.ts` plants each of these at its real path, with the repo's own config.
+// `modules.test.ts` plants each of these at its real path, with the repo's own config.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { pathIn } from "./match.ts";
 
 interface Lists {
   readonly src: string;
-  readonly rooms: ReadonlySet<string>;
+  readonly modules: ReadonlySet<string>;
   readonly folders: ReadonlySet<string>;
   readonly files: ReadonlySet<string>;
   readonly values: ReadonlySet<string>;
@@ -79,7 +79,7 @@ const lists = (options: ReadonlyArray<unknown>): Lists | null => {
 
   return {
     src: given.src.replace(/\/+$/, ""),
-    rooms: words("rooms" in given ? given.rooms : []),
+    modules: words("modules" in given ? given.modules : []),
     folders: words("folders" in given ? given.folders : []),
     files: words("files" in given ? given.files : []),
     values: words("values" in given ? given.values : []),
@@ -145,7 +145,7 @@ const held = (root: ReadonlyArray<string>): "an error" | "a service" | null => {
 
 const WORDS = { type: "array", items: { type: "string" }, uniqueItems: true } as const;
 
-export const rooms: CreateRule = {
+export const modules: CreateRule = {
   meta: {
     type: "problem",
     // oxlint refuses options for a rule that has no schema.
@@ -154,12 +154,12 @@ export const rooms: CreateRule = {
         type: "object",
         properties: {
           src: { type: "string" },
-          rooms: WORDS,
+          modules: WORDS,
           folders: WORDS,
           files: WORDS,
           values: WORDS,
         },
-        required: ["src", "rooms", "folders", "files", "values"],
+        required: ["src", "modules", "folders", "files", "values"],
         additionalProperties: false,
       },
     ],
@@ -181,19 +181,19 @@ export const rooms: CreateRule = {
     const [top = "", ...rest] = parts;
     const isTopFile = rest.length === 0;
     const stem = top.split(".")[0] ?? "";
-    const room = !isTopFile && given.rooms.has(top) ? top : null;
-    const isInternal = room !== null && rest.slice(0, -1).includes("internal");
+    const module = !isTopFile && given.modules.has(top) ? top : null;
+    const isInternal = module !== null && rest.slice(0, -1).includes("internal");
     const isValues = isTopFile && given.values.has(stem);
 
-    /** The other room a relative specifier points into, or `null`. */
-    const otherRoom = (specifier: string): string | null => {
-      if (room === null || !specifier.startsWith(".")) {
+    /** The other module a relative specifier points into, or `null`. */
+    const otherModule = (specifier: string): string | null => {
+      if (module === null || !specifier.startsWith(".")) {
         return null;
       }
 
       const [first] = normalize([...parts.slice(0, -1), ...specifier.split("/")]) ?? [];
 
-      return first !== undefined && first !== room && given.rooms.has(first) ? first : null;
+      return first !== undefined && first !== module && given.modules.has(first) ? first : null;
     };
 
     const isTagged = (statement: ESTree.Node): boolean => {
@@ -210,19 +210,19 @@ export const rooms: CreateRule = {
       if (what !== null) {
         context.report({
           node: statement,
-          message: `${top} is a shared name and holds values only (0043, rule 13). This is ${what}: it belongs in the room that owns it.`,
+          message: `${top} is a shared name and holds values only (0043, rule 13). This is ${what}: it belongs in the module that owns it.`,
         });
       }
     };
 
     return {
       Program(program) {
-        if (isTopFile ? !given.files.has(stem) : room === null && !given.folders.has(top)) {
+        if (isTopFile ? !given.files.has(stem) : module === null && !given.folders.has(top)) {
           context.report({
             loc: { start: START, end: START },
             message: isTopFile
-              ? `${given.src}/ holds no top file named ${top} (0043). A shared name is on the rule's list, and anything else goes in its room.`
-              : `${given.src}/ holds no folder named ${top}/ (0043). A file goes in the room of its subject, never a folder by kind.`,
+              ? `${given.src}/ holds no top file named ${top} (0043). A shared name is on the rule's list, and anything else goes in its module.`
+              : `${given.src}/ holds no folder named ${top}/ (0043). A file goes in the module of its subject, never a folder by kind.`,
           });
         }
 
@@ -230,7 +230,7 @@ export const rooms: CreateRule = {
 
         for (const statement of program.body) {
           if (statement.type === "ImportDeclaration") {
-            const other = otherRoom(statement.source.value);
+            const other = otherModule(statement.source.value);
 
             if (other !== null) {
               for (const spec of statement.specifiers) {
@@ -250,18 +250,18 @@ export const rooms: CreateRule = {
             context.report({
               node: statement,
               message:
-                "Every export in a room's internal/ file is @internal (0032, 0043). Put `/** @internal */` above it.",
+                "Every export in a module's internal/ file is @internal (0032, 0043). Put `/** @internal */` above it.",
             });
           }
 
-          if (room !== null && isExport) {
+          if (module !== null && isExport) {
             const other =
               statement.type === "ExportDefaultDeclaration"
                 ? statement.declaration.type === "Identifier"
                   ? fromOther.get(statement.declaration.name)
                   : undefined
                 : statement.source != null
-                  ? otherRoom(statement.source.value)
+                  ? otherModule(statement.source.value)
                   : statement.type === "ExportNamedDeclaration"
                     ? statement.specifiers
                         .map((spec) => (spec.local.type === "Identifier" ? fromOther.get(spec.local.name) : undefined))
@@ -271,7 +271,7 @@ export const rooms: CreateRule = {
             if (other != null) {
               context.report({
                 node: statement,
-                message: `${room}/ re-exports a name of ${other}/. No room re-exports another room's names (0043, rule 8): the caller imports ${other}/'s front file.`,
+                message: `${module}/ re-exports a name of ${other}/. No module re-exports another module's names (0043, rule 8): the caller imports ${other}/'s front file.`,
               });
             }
           }
