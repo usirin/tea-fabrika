@@ -2252,6 +2252,269 @@ const hangLaw =
     return null;
   };
 
+// The grant wait's half of the hang law, as a property (ruled 2026-11-10, tests round 18). From
+// grant waits the real fold reaches, after generated runs, the window hears generated runs of its
+// own timers' ticks, knock answers that answer no knock in flight (another dial's, or an id never
+// written) and other Msgs that do not end the wait (a grant or a close on the wait's own dial would,
+// so those are not drawn). Through every run the wait stays a wait on its dial, never admitted;
+// its link timer is never off; each tick of that timer writes one knock, settled at once, and sets
+// the timer again, since tea fires a timer once per deps value.
+const KNOCKING =
+  "hang: a grant wait with no knock answered keeps knocking on each due tick, never stops while it waits, and is never admitted";
+
+/** One Msg folded by the real update when the window takes it, each write it emits settled at once
+ *  with `write_ok` (and the settle's own Cmds in turn): the state, the writes, and why not when a
+ *  write could not settle. */
+const foldSettled = (
+  m: Machine,
+  s: Model,
+  msg: Msg,
+): { readonly state: Model; readonly writes: ReadonlyArray<Call>; readonly reason: string | null } => {
+  if (!acceptedTypes(m as never, s as never).includes(msg.type)) {
+    return { state: s, writes: [], reason: null };
+  }
+
+  const fold = (from: Model, x: Msg): readonly [Model, ReadonlyArray<Cmd>] =>
+    applyCell(m as never, from as never, x as never) as never;
+  let [state, cmds] = fold(s, msg);
+  const writes: Array<Call> = [];
+
+  for (let depth = 0; cmds.length > 0 && depth < 8; depth++) {
+    const more: Array<Cmd> = [];
+
+    for (const c of cmds) {
+      const call = writesIn([c])[0];
+
+      if (call === undefined) {
+        continue;
+      }
+
+      writes.push(call);
+
+      if (!acceptedTypes(m as never, state as never).includes("write_ok")) {
+        return {
+          state,
+          writes,
+          reason: `the window in ${state.link._tag} takes no write_ok, so its ${call.type} write cannot settle at once (A13)`,
+        };
+      }
+
+      const [settled, next] = fold(state, { type: "write_ok", cmd: c, value: null });
+      state = settled;
+      more.push(...next);
+    }
+
+    cmds = more;
+  }
+
+  return { state, writes, reason: null };
+};
+
+/** Grant waits the real fold reaches: no run, or a generated one, then the Msgs that bring its link
+ *  to a grant wait on its current dial (a close, the retry, the door's `not_granted`). The list's
+ *  own write settles are in the list, so it is replayed as it was drawn. Then its link timer comes
+ *  due up to twice, so some waits start with knocks unanswered. */
+const waits = (m: Machine, layout: Tree, pids: ReadonlyArray<string>) =>
+  fc
+    .tuple(
+      fc.oneof(fc.constant([] as ReadonlyArray<Msg>), lists(m, layout, pids)),
+      fc.record({ fingerprint: word, code: word, until: fc.nat(1000) }),
+      fc.nat(2),
+    )
+    .map(([prefix, door, knocked]) => {
+      let [state] = m.init(null, { layout });
+
+      for (const msg of prefix) {
+        if (acceptedTypes(m as never, state as never).includes(msg.type)) {
+          const out: readonly [Model, ReadonlyArray<Cmd>] = applyCell(
+            m as never,
+            state as never,
+            msg as never,
+          ) as never;
+          state = out[0];
+        }
+      }
+
+      for (let n = 0; n < 4 && state.link._tag !== "waiting_grant"; n++) {
+        const at = state.link["dial"];
+        const toward: Msg | null =
+          state.link._tag === "dialing"
+            ? { type: "not_granted", dial: at, ...door, ms: 0 }
+            : state.link._tag === "online"
+              ? { type: "closed", dial: at, code: 1006, fingerprint: door.fingerprint, ms: 0 }
+              : state.link._tag === "retrying"
+                ? { type: "retry", dial: at, tries: state.link["tries"] }
+                : null;
+
+        if (toward === null) {
+          break;
+        }
+
+        state = foldSettled(m, state, toward).state;
+      }
+
+      // A wait that knocked before: its link timer came due up to twice, its knocks unanswered.
+      for (let n = 0; n < knocked && state.link._tag === "waiting_grant"; n++) {
+        const due = parts(m).timers(state)[0];
+
+        if (due === null || due === undefined) {
+          break;
+        }
+
+        state = foldSettled(m, state, due.msg).state;
+      }
+
+      return { ran: prefix.length, state };
+    })
+    .filter((w) => w.state.link._tag === "waiting_grant");
+
+/** A run the grant wait hears: its timers' ticks, knock answers that answer no knock in flight, and
+ *  every other Msg the window takes, the settings ones included. */
+const knockRuns = (pids: ReadonlyArray<string>) =>
+  fc.array(
+    fc.oneof(
+      { weight: 3, arbitrary: fc.constant({ tick: true } as const) },
+      {
+        weight: 1,
+        arbitrary: fc
+          .tuple(fc.boolean(), fc.boolean(), fc.nat(5))
+          .map(([ok, elsewhere, n]) => ({ knock: { ok, elsewhere, n } }) as const),
+      },
+      {
+        weight: 2,
+        arbitrary: fc
+          .oneof(...(Object.values(cells(pids, { settings: true }).outside) as ReadonlyArray<fc.Arbitrary<Msg>>))
+          .map((msg) => ({ other: msg }) as const),
+      },
+    ),
+    { minLength: 1, maxLength: 24 },
+  );
+
+type KnockEvent =
+  | { readonly tick: true }
+  | { readonly knock: { readonly ok: boolean; readonly elsewhere: boolean; readonly n: number } }
+  | { readonly other: Msg };
+
+/** The knocking law on one wait and one run: null when it holds, else why it does not. */
+const knockLaw = (
+  m: Machine,
+  wait: { readonly ran: number; readonly state: Model },
+  run: ReadonlyArray<KnockEvent>,
+  seen: Record<string, number>,
+): string | null => {
+  const { timers } = parts(m);
+  // The link's timer is the window's first, as the plants above read it.
+  const linkTimer = (s: Model): Timer => timers(s)[0] ?? null;
+  const tick = clock();
+  const dial = wait.state.link["dial"];
+  const knocksAt = Number(wait.state.link["knocks"] ?? 0);
+  let s = wait.state;
+  let knocks = 0;
+  let ticks = 0;
+  const written: Array<Call> = [];
+
+  if (linkTimer(s) === null) {
+    return `a grant wait on dial ${String(dial)} that knocked ${knocksAt} times has no timer, so it never knocks again`;
+  }
+
+  for (const event of run) {
+    let msg: Msg;
+    let due = false;
+
+    if ("tick" in event) {
+      const next = tick(timers(s));
+
+      if (next === null) {
+        return `the grant wait on dial ${String(dial)} sits still: no timer of the window is due after ${knocks} knocks`;
+      }
+
+      msg = next.msg;
+      due = JSON.stringify(next.msg) === JSON.stringify(linkTimer(s)?.msg);
+    } else if ("knock" in event) {
+      const ours = written.filter((c) => c.type === "knock");
+      const past = ours[event.knock.n % Math.max(1, ours.length)];
+      // Another dial's answer to one of this wait's ids, or an answer to an id never written.
+      const [onDial, id] =
+        event.knock.elsewhere && past !== undefined ? [Number(dial) + 1, past.id] : [dial, 1_000_000 + event.knock.n];
+      msg = event.knock.ok
+        ? { type: "knock_ok", id, dial: onDial, value: null, ms: 0 }
+        : { type: "knock_err", id, dial: onDial, error: { _tag: "closed" } };
+      seen["heard a knock answer that answered no knock"] = 1;
+    } else {
+      const o = event.other;
+
+      if ((o.type === "granted" || o.type === "closed") && o["dial"] === dial) {
+        continue;
+      }
+
+      msg = o;
+      seen[o.type === "admitted" && o["dial"] === dial ? "heard admitted on the wait's dial" : "heard another Msg"] = 1;
+    }
+
+    const before = linkTimer(s);
+    const out = foldSettled(m, s, msg);
+
+    if (out.reason !== null) {
+      return out.reason;
+    }
+
+    written.push(...out.writes);
+    const knocked = out.writes.filter((c) => c.type === "knock").length;
+    s = out.state;
+
+    if (s.link._tag !== "waiting_grant" || s.link["dial"] !== dial) {
+      return `${msg.type} took the grant wait on dial ${String(dial)} to ${s.link._tag} on dial ${String(s.link["dial"])} with no knock answered`;
+    }
+
+    if (due) {
+      ticks++;
+
+      if (knocked !== 1) {
+        return `the link's timer came due in the grant wait and wrote ${knocked} knocks, not one`;
+      }
+
+      if (JSON.stringify(linkTimer(s)) === JSON.stringify(before)) {
+        return `the grant wait knocked and set its timer to the same deps, so tea never fires it again`;
+      }
+    }
+
+    knocks += knocked;
+
+    if (linkTimer(s) === null) {
+      return `the grant wait stopped knocking after ${knocks} knocks with none answered: its timer is off`;
+    }
+  }
+
+  if (knocks >= 2) {
+    seen[`knocked again and again with none answered, ${wait.ran === 0 ? "on the first wait" : "after a run"}`] = 1;
+  }
+
+  if (knocksAt > 0 && ticks > 0) {
+    seen["a wait that had knocked before knocked again"] = 1;
+  }
+
+  return null;
+};
+
+/** The knocking law over generated waits and runs: throws with the first run that breaks it. */
+const knocking = (
+  planted: Machine,
+  real: Machine,
+  layout: Tree,
+  pids: ReadonlyArray<string>,
+  seen: Record<string, number>,
+): void =>
+  fc.assert(
+    fc.property(waits(real, layout, pids), knockRuns(pids), (wait, run) => {
+      const why = knockLaw(planted, wait, run, seen);
+
+      if (why !== null) {
+        throw new Error(why);
+      }
+    }),
+    { ...opts, includeErrorInReport: true },
+  );
+
 describe("window machine: a brain call in flight holds no timer (review 1, A)", () => {
   for (const [label, layout, tiles] of LAYOUTS) {
     it(`${HANG} (${label})`, async () => {
@@ -2279,7 +2542,33 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
     });
   }
 
-  it("good thing: a grant wait knocks again and again with its knock unanswered, and is never admitted", async () => {
+  for (const [label, layout, tiles] of LAYOUTS) {
+    it(`${KNOCKING} (${label})`, async () => {
+      const m = await machine();
+      const seen: Record<string, number> = {};
+      knocking(m, m, layout, tiles, seen);
+
+      // Good thing: first waits and waits after a run each knocked again and again with none
+      // answered, a wait that had knocked before knocked again, and the runs heard answers that
+      // answered no knock, `admitted` on the wait's own dial, and other Msgs.
+      const met = Object.keys(seen).sort();
+      expect(met, `the knocking runs met: ${met.join("; ")}`).toEqual(
+        [
+          "a wait that had knocked before knocked again",
+          "heard a knock answer that answered no knock",
+          "heard admitted on the wait's dial",
+          "heard another Msg",
+          "knocked again and again with none answered, after a run",
+          "knocked again and again with none answered, on the first wait",
+        ].sort(),
+      );
+    });
+  }
+
+  it("scenario: the first grant wait a new browser meets knocks again and again with its knock unanswered, and is never admitted", async () => {
+    // reason: scenario, the one wait the browser meets on its first dial (GRANT's `not_granted`),
+    // run through the hang above with the brain silent: it ties the knocking property to the
+    // hang law's own clock, which takes only the window's timers and the writes' settles.
     const m = await machine();
     const [, layout] = LAYOUTS[0] as (typeof LAYOUTS)[number];
     const waiting = after(m, layout, [GRANT[0] as Msg]).state;
@@ -2390,6 +2679,11 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
     const waiting = after(real, layout, [GRANT[0] as Msg]).state;
     const planted = wrapped(real, (out) => out, new Set(["write_ok"]));
     expect(hang(planted, layout, waiting, new Set(), {})).toMatch(/takes no write_ok/);
+
+    // Round 18: the knocking property catches it on every layout's generated waits.
+    for (const [, at, tiles] of LAYOUTS) {
+      expect(() => knocking(planted, real, at, tiles, {})).toThrow(/takes no write_ok/);
+    }
   });
   it("a grant wait that goes quiet once it knocked is caught (hang)", async () => {
     const m = await machine();
@@ -2400,6 +2694,36 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
       (real) => (s) => (s.link._tag === "waiting_grant" && Number(s.link["knocks"] ?? 0) > 0 ? null : real(s)),
     );
     expect(hang(quiet, layout, waiting, new Set(), {})).not.toBeNull();
+
+    // Round 18: the knocking property catches it on every layout's generated waits.
+    for (const [, at, tiles] of LAYOUTS) {
+      expect(() => knocking(quiet, m, at, tiles, {})).toThrow(/stopped knocking|has no timer/);
+    }
+  });
+  it("a grant wait that knocks but sets its timer to the same deps is caught (knocking)", async () => {
+    const real = await machine();
+    // The knock still goes, but the wait keeps its old count, so tea never fires the timer again.
+    const stuck = wrapped(real, ([m, c], state) =>
+      state.link._tag === "waiting_grant" && m.link._tag === "waiting_grant" ? [{ ...m, link: state.link }, c] : [m, c],
+    );
+
+    for (const [, layout, tiles] of LAYOUTS) {
+      expect(() => knocking(stuck, real, layout, tiles, {})).toThrow(/same deps/);
+    }
+  });
+  it("a grant wait admitted on its own timer is caught (knocking)", async () => {
+    const real = await machine();
+    const admits = wrapped(real, ([m, c], state) =>
+      state.link._tag === "waiting_grant" &&
+      m.link._tag === "waiting_grant" &&
+      m.link["knocks"] !== state.link["knocks"]
+        ? [{ ...m, link: { _tag: "online", dial: m.link["dial"], ping: 0, pings: 0 } }, c]
+        : [m, c],
+    );
+
+    for (const [, layout, tiles] of LAYOUTS) {
+      expect(() => knocking(admits, real, layout, tiles, {})).toThrow(/to online/);
+    }
   });
 });
 
