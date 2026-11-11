@@ -222,13 +222,27 @@ export const noOf: CreateRule = {
           check(node.key);
         }
       },
-      MethodDefinition: member,
-      TSAbstractMethodDefinition: member,
-      PropertyDefinition: member,
-      TSAbstractPropertyDefinition: member,
-      AccessorProperty: member,
-      TSAbstractAccessorProperty: member,
-      TSPropertySignature: member,
+      MethodDefinition(node) {
+        member(node);
+      },
+      TSAbstractMethodDefinition(node) {
+        member(node);
+      },
+      PropertyDefinition(node) {
+        member(node);
+      },
+      TSAbstractPropertyDefinition(node) {
+        member(node);
+      },
+      AccessorProperty(node) {
+        member(node);
+      },
+      TSAbstractAccessorProperty(node) {
+        member(node);
+      },
+      TSPropertySignature(node) {
+        member(node);
+      },
       TSMethodSignature(node) {
         member(node);
         params(node);
