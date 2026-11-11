@@ -50,7 +50,9 @@ import {
   type Sql,
   type Writer,
 } from "../coordination/index.ts";
+import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
+import { MailRefusal } from "../processes/ProgramMail.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -65,8 +67,12 @@ import {
 import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy, Recovery, type Supervision } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, type SupervisorMsg } from "./internal/supervisor.ts";
+import { MailDelivery } from "./MailDelivery.ts";
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { Replies, type RepliesError } from "./Replies.ts";
+import * as RepliesSql from "./RepliesSql.ts";
+import { Queued, SendInput } from "./Send.ts";
 
 export { defaultPolicy } from "./internal/supervisor.ts";
 
@@ -99,6 +105,8 @@ const Dispatched = Schema.Struct({
   parent: Schema.NullOr(ParentText),
   traceId: Schema.String,
   build: Schema.String,
+  /** A Send this life owes until it is answered; a replayed letter's Send was the life before's. */
+  mail: Schema.optionalKey(Schema.Literal(true)),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -117,6 +125,11 @@ const RESERVED = new Set([
 const WRITE = "write";
 const WriteCmd = Schema.Struct({ stream: Schema.NonEmptyString, write: Write });
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
+
+/** The Cmd the runner mails itself, as the sender the host bound (P41). */
+const SEND = "send";
+const decodeSendInput = Schema.decodeUnknownResult(SendInput);
+const isRefusal = Schema.is(MailRefusal);
 
 /** Pending deliveries keep their original parent, including one saved before input TypeIDs. */
 const Delivery = Schema.Struct({
@@ -205,6 +218,7 @@ export class ProgramRunner extends Context.Service<
         const recovery = yield* RecoveryStore.pipe(
           Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
         );
+        const replies = yield* Replies.pipe(Effect.provide(RepliesSql.layer(options.recovery.sql, options.recovery)));
         let supervision: Supervision | null = null;
         let woke = false;
         const mailbox = yield* Mailbox;
@@ -213,6 +227,11 @@ export class ProgramRunner extends Context.Service<
         const alarm = yield* Alarm;
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
+        const delivery = yield* Effect.serviceOption(MailDelivery);
+        /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
+        const sending = new Set<string>();
+        let drained: ReadonlyArray<Dispatched> = [];
+        let mailRetry: number | null = null;
         const permit = yield* Semaphore.make(1);
         let live: Live | null = null;
         let alarmAt: number | null | undefined;
@@ -277,7 +296,9 @@ export class ProgramRunner extends Context.Service<
         /** One object alarm: program work is eligible only while live. */
         const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
           const running = supervision === null || supervision.recovery._tag === "live";
-          const until = retryAt ?? waitUntil(supervision);
+          const waited = waitUntil(supervision);
+          const until =
+            retryAt ?? (waited === null || mailRetry === null ? (waited ?? mailRetry) : Math.min(waited, mailRetry));
 
           // Loading supplies the live program's wake; do not clear it before then.
           if (running && live === null && until === null) {
@@ -836,7 +857,9 @@ export class ProgramRunner extends Context.Service<
                   onNone: () => 0,
                   onSome: (letter) => (letter.rev === next.after ? letter.pos : 0),
                 });
-          retry = cmds.filter((cmd) => Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE));
+          retry = cmds.filter(
+            (cmd) => cmd.mail === true || Option.exists(decodeTyped(cmd.cmd), (c) => c.type === WRITE),
+          );
           const woke: Live = {
             loaded,
             model: boot.model,
@@ -907,8 +930,11 @@ export class ProgramRunner extends Context.Service<
               : [],
           );
           let mine = Option.none<History>();
+          const drain: Array<Dispatched> = [];
+          let alive: boolean | undefined;
+          let stop = letters.length;
 
-          for (const letter of letters) {
+          for (const [index, letter] of letters.entries()) {
             const signal = inSignalSpace(letter.id);
 
             if (signal && !signals.has(letter.id)) {
@@ -930,6 +956,17 @@ export class ProgramRunner extends Context.Service<
               (yield* store.placed(letter.id)) !== null ||
               // An earlier life of this name accepted it; an old life's own mail never drives this one.
               (!inRunnerSpace(letter.id) && (yield* store.placedByAny(letter.id)) !== null);
+
+            // A stopped life leaves its ordinary mail, in order, to the life that follows it.
+            if (!accepted) {
+              alive = alive ?? (yield* manager.isLive(process.id));
+
+              if (!alive) {
+                stop = index;
+                break;
+              }
+            }
+
             const input = Option.isSome(down) ? { ...down.value, type: down.value._tag } : letter.m;
             const m = accepted && !own && letter.parent !== null ? stamp(input, letter.parent) : input;
             const folded = accepted
@@ -961,6 +998,7 @@ export class ProgramRunner extends Context.Service<
               cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
             }
 
+            const owed = !accepted || letter.id === options.mine;
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
               cmd,
@@ -968,16 +1006,19 @@ export class ProgramRunner extends Context.Service<
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
+              ...(owed && Option.exists(decodeTyped(cmd), (c) => c.type === SEND) ? { mail: true as const } : {}),
             }));
             cmds = [...cmds, ...dispatched];
 
             if (letter.id === options.mine) {
               mine = Option.some(letter);
               fresh.push(...dispatched);
+            } else if (!accepted) {
+              drain.push(...dispatched);
             }
           }
 
-          const last = letters.at(-1);
+          const last = letters.slice(0, stop).at(-1);
           const next: Live = {
             ...state,
             model,
@@ -988,6 +1029,7 @@ export class ProgramRunner extends Context.Service<
             cmds,
           };
           yield* store.save(checkpoint(next, null), placed);
+          drained = [...drained, ...drain];
           live = next;
           yield* publish(state, next);
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
@@ -1032,10 +1074,12 @@ export class ProgramRunner extends Context.Service<
           return state;
         });
 
-        /** Takes the writes an earlier life left dispatched, to run them once. */
+        /** Takes the writes and sends an earlier life left dispatched, and the Cmds a drain of
+         *  ordinary mail made, to run them once. */
         const takeRetry = () => {
-          const taken = retry.filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
+          const taken = [...retry, ...drained].filter((job) => live?.cmds.some((cmd) => cmd.id === job.id));
           retry = [];
+          drained = [];
           return taken;
         };
 
@@ -1157,6 +1201,41 @@ export class ProgramRunner extends Context.Service<
           return yield* ok(job, answer.success);
         });
 
+        /** The built-in Send, mailed as this life, never as a sender the Cmd claims. A refusal is its
+         *  answer; a storage or wake failure is not, so the Send stays dispatched. */
+        const mail = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeSendInput(job.cmd);
+
+          if (Result.isFailure(input) || !state.loaded.declaration.cmds.includes(SEND) || Option.isNone(delivery)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          const queued = yield* delivery.value
+            .send({
+              command: job.id,
+              source: { name: process.name, process: process.id },
+              to: input.success.to,
+              m: input.success.m,
+              from: yield* from(job.parent, job.traceId),
+            })
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(queued)) {
+            return yield* ok(job, Schema.encodeSync(Queued)(queued.success));
+          }
+
+          const { reason } = queued.failure;
+
+          if (isRefusal(reason)) {
+            return yield* err(job, reason);
+          }
+
+          return yield* new LedgerError({
+            reason: reason === "storage" ? "storage" : "unreachable",
+            message: Cause.pretty(Cause.fail(queued.failure)),
+          });
+        });
+
         /** A handler's Cmd. Only a declared Cmd with a handler runs; its answer is checked. */
         const handle = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const type = cmdType(job);
@@ -1213,7 +1292,12 @@ export class ProgramRunner extends Context.Service<
             return [];
           }
 
-          const m = yield* cmdType(job) === WRITE ? cmdSpan(job, write(state, job)) : handle(state, job);
+          const type = cmdType(job);
+          const m = yield* type === WRITE
+            ? cmdSpan(job, write(state, job))
+            : type === SEND
+              ? cmdSpan(job, mail(state, job))
+              : handle(state, job);
           return yield* permit.withPermit(
             Effect.gen(function* () {
               const answer = `${job.id}/answer`;
@@ -1256,14 +1340,40 @@ export class ProgramRunner extends Context.Service<
           );
         });
 
+        /** Sets the alarm that tries a failed Send or drain again. The permit is held. */
+        const retryLater = Effect.gen(function* () {
+          const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
+          mailRetry = (yield* Clock.currentTimeMillis) + backoff;
+          yield* setAlarm();
+        });
+
+        /** A Send runs once at a time, and only while still dispatched. A failure that is not its
+         *  answer sets the alarm that tries it again. */
+        const sendOnce = (job: Dispatched): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
+          Effect.suspend(() => {
+            if (sending.has(job.id) || live?.cmds.some((cmd) => cmd.id === job.id) !== true) {
+              return Effect.succeed([]);
+            }
+
+            sending.add(job.id);
+            return dispatch(job).pipe(
+              Effect.onError((cause) => (Cause.hasInterrupts(cause) ? Effect.void : permit.withPermit(retryLater))),
+              Effect.ensuring(Effect.sync(() => sending.delete(job.id))),
+            );
+          });
+
         /** Runs Cmds in order, each one's follow-ups before the next. */
         const runAll = Effect.fnUntraced(function* (
           jobs: ReadonlyArray<Dispatched>,
         ): Effect.fn.Return<void, RunnerFailure> {
-          yield* Effect.forEach(jobs, (job) => Effect.flatMap(dispatch(job), runAll), {
-            concurrency: 1,
-            discard: true,
-          });
+          yield* Effect.forEach(
+            jobs,
+            (job) => Effect.flatMap(cmdType(job) === SEND ? sendOnce(job) : dispatch(job), runAll),
+            {
+              concurrency: 1,
+              discard: true,
+            },
+          );
         });
 
         /** One public call: its span, saved writes and recovery under the permit, its Cmds, then
@@ -1376,6 +1486,19 @@ export class ProgramRunner extends Context.Service<
                   }
                 }
 
+                // A program's refusal is terminal: it answers again before any fresh check, and only
+                // for the writer and input it first answered.
+                const terminal = yield* replies.reply(process.name, input.id);
+
+                if (terminal !== null) {
+                  if ((yield* inputDigest(input)) !== terminal.digest) {
+                    return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
+                  }
+
+                  const { _tag: _case, ...reason } = terminal.answer;
+                  return { answer: Sent.cases.refused.make(reason), jobs: [] };
+                }
+
                 return yield* accept(yield* ready(), input);
               }),
             ),
@@ -1386,11 +1509,14 @@ export class ProgramRunner extends Context.Service<
                   return { answer: undefined, jobs: [] };
                 }
 
+                // Any alarm tries again every Send a failure left dispatched.
+                mailRetry = null;
                 const state = yield* ready();
+                const sends = state.cmds.filter((cmd) => cmd.mail === true);
 
                 if (state.wake === null || state.wake > time) {
                   yield* setAlarm();
-                  return { answer: undefined, jobs: [] };
+                  return { answer: undefined, jobs: sends };
                 }
 
                 const id = `${process.id}/due/${time}`;
@@ -1403,8 +1529,13 @@ export class ProgramRunner extends Context.Service<
                 }
 
                 const { fresh } = yield* catchUp(state, { mine: id });
-                return { answer: undefined, jobs: fresh };
-              }),
+                return { answer: undefined, jobs: [...sends, ...fresh] };
+              }).pipe(
+                // A storage failure while draining leaves the alarm that tries it again.
+                Effect.onError((cause) =>
+                  Cause.squash(cause) instanceof LedgerError && !Cause.hasInterrupts(cause) ? retryLater : Effect.void,
+                ),
+              ),
               time,
             ),
           restart: (request: { readonly id: string; readonly build: string }) =>
@@ -1544,7 +1675,25 @@ export class ProgramRunner extends Context.Service<
 
             if (prepared._tag === "refused") {
               const { _tag: _case, ...reason } = prepared;
-              return { answer: Sent.cases.refused.make(reason), jobs: [] };
+              const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
+
+              // A delivery saved before input TypeIDs has no input ID to bind; its refusal stays unsaved.
+              if (Option.isNone(parent)) {
+                return { answer: Sent.cases.refused.make(reason), jobs: [] };
+              }
+
+              // Saved before it is answered: a lost answer's retry reads this first row.
+              const kept = yield* replies.rememberReply({
+                name: process.name,
+                id: input.id,
+                parent: parent.value,
+                by: input.envelope.by.key,
+                for: input.envelope.by.for,
+                digest: yield* inputDigest(input),
+                answer: prepared,
+              });
+              const { _tag: _first, ...first } = kept.answer;
+              return { answer: Sent.cases.refused.make(first), jobs: [] };
             }
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.
@@ -1590,7 +1739,7 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
   reason: Schema.Literals(["bad_input", "bad_client"]),
 }) {}
 
-type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted;
+type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted | RepliesError;
 
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });

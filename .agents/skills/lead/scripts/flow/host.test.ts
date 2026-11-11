@@ -4,11 +4,15 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../botpush.mjs?raw";
 import "../box.sh?raw";
 import "../catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../chain.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../runid.ts?raw";
 import "../clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../drive.ts?raw";
@@ -92,7 +96,7 @@ const args = (commands: ReadonlyArray<string>) => ({
   branch: "fabrikalfa/lane",
   plan: "/nowhere/plan.md",
   head: sha,
-  round: 3,
+  name: "lane-host3",
   commands,
   minutes: 1,
 });
@@ -286,7 +290,7 @@ describe("the lane's state file", () => {
         const state = `${boxes}/state/lane.json`;
         const before = { lane: "lane", ticket: "7", head: sha, steps: [{ step: "build", outcome: "done", head: sha }] };
         yield* fs.writeFileString(state, JSON.stringify(before));
-        const at = { boxes, lane: "lane", ticket: "7", round: 3, head: sha };
+        const at = { boxes, lane: "lane", name: "lane-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
         yield* recordInLane(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;
