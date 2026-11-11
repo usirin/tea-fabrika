@@ -335,58 +335,74 @@ const world = async (trace = TRACE, build = "counter-b") => {
   };
 };
 
+// The L4/L8 world is a scoped resource: its release closes what `world()` opened (0061).
+const opened = Effect.acquireRelease(
+  Effect.promise(() => world()),
+  () =>
+    Effect.promise(async () => {
+      for (const close of closers.splice(0).reverse()) {
+        await close();
+      }
+    }),
+);
+
+// Ways to bend a registered name toward a program identity. Each holds a slash.
+const bends: ReadonlyArray<(name: string) => string> = [
+  () => "fabrika/counter",
+  (name) => `fabrika/${name}`,
+  (name) => `${name}/x`,
+  (name) => name.replace(/[:.]/, "/"),
+];
+
+// The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
+// registered name, or tries a current name bent into a slashed one, which is refused.
+const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<number>) => {
+  const names = ["counter:1"];
+  let refused = 0;
+  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+    { name: "counter:1", program: "fabrika/counter" },
+  ]);
+  const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
+  expect(JSON.stringify(started)).toContain('"fabrika/counter"');
+
+  for (const [i, n] of tape.entries()) {
+    const code = { program: "fabrika/counter", hash: "counter-a" };
+
+    if (i % 2 === 0) {
+      const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
+      await w.run(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name, code }), w.from));
+      names.push(name);
+    } else {
+      const bent = bends[n % bends.length]!(names[Math.floor(n / bends.length) % names.length]!);
+      const result = await w.run(
+        Effect.result(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name: bent, code }), w.from)),
+      );
+      expect(result, `${bent} is refused`).toMatchObject({ _tag: "Failure" });
+      refused++;
+    }
+
+    const info = await w.run(w.p.info);
+    expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
+    expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
+    expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
+  }
+
+  expect(refused).toBeGreaterThan(0);
+};
+
 describe("P40 the core counter's identity in the brain", () => {
   it("L4 and L8: the bootstrap runs fabrika/counter as counter:1, and no start turns a program identity into a registered name", async () => {
-    // Ways to bend a registered name toward a program identity. Each holds a slash.
-    const bends: ReadonlyArray<(name: string) => string> = [
-      () => "fabrika/counter",
-      (name) => `fabrika/${name}`,
-      (name) => `${name}/x`,
-      (name) => name.replace(/[:.]/, "/"),
-    ];
-    // The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
-    // registered name, or tries a current name bent into a slashed one, which is refused.
     await fc.assert(
-      fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), async (tape) => {
-        try {
-          const w = await world();
-          const names = ["counter:1"];
-          let refused = 0;
-          expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
-            { name: "counter:1", program: "fabrika/counter" },
-          ]);
-          const [started] = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-          expect(JSON.stringify(started)).toContain('"fabrika/counter"');
-
-          for (const [i, n] of tape.entries()) {
-            const code = { program: "fabrika/counter", hash: "counter-a" };
-
-            if (i % 2 === 0) {
-              const name = n % 2 === 0 ? `counter:${names.length + 1}` : `tally-${n % 97}.${names.length}`;
-              await w.run(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name, code }), w.from));
-              names.push(name);
-            } else {
-              const bent = bends[n % bends.length]!(names[Math.floor(n / bends.length) % names.length]!);
-              const result = await w.run(
-                Effect.result(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name: bent, code }), w.from)),
-              );
-              expect(result, `${bent} is refused`).toMatchObject({ _tag: "Failure" });
-              refused++;
-            }
-
-            const info = await w.run(w.p.info);
-            expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
-            expect(info.every((p) => p.program === "fabrika/counter")).toBe(true);
-            expect(w.configured.every((d) => d.program === "fabrika/counter" && !d.name.includes("/"))).toBe(true);
-          }
-
-          expect(refused).toBeGreaterThan(0);
-        } finally {
-          for (const close of closers.splice(0).reverse()) {
-            await close();
-          }
-        }
-      }),
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 8 }), (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* opened;
+              yield* Effect.promise(() => walk(w, tape));
+            }),
+          ),
+        ),
+      ),
       { seed: 119120, numRuns: 10 },
     );
   });
