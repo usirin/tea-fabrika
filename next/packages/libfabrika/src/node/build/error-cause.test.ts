@@ -74,7 +74,8 @@ const world = (step: Step, failure: unknown, bad: string) => {
     };
   }
 
-  const program = [{ name: "counter", package: "counter-pkg", export: "program" }];
+  // A program's name is `pack/program` (P40), else the build refuses it before any disk step.
+  const program = [{ name: "demo/counter", package: "counter-pkg", export: "program" }];
   return {
     options: options({ programs: program }),
     disk: disk({
