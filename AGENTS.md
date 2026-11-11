@@ -60,8 +60,10 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 18 of Tier 1's 37 rows have merged
-([where we are](./docs/plan/README.md#where-we-are-now)). Everything
+`next/` is on main, and 19 of Tier 1's 43 rows have merged
+([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
+added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -122,8 +124,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
 - **Every pull request, `next/` or today's, goes through the pipeline's steps:**
-  plan, test writer, build, mutation step, one review, each by its own agent, with
-  laws. Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
+  plan, test writer, build, one review, each by its own agent, with
+  laws. Mutation runs hourly against main and files tickets, never as a step
+  ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)). Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
@@ -140,7 +143,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
   Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
-  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  they are not product work. They skip the plan, tests and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
@@ -153,9 +156,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
   Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
-  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
+  output in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
+  From 0066 the mutation comparison comes from the hourly run on main, after the merge, so at
+  merge the lead reads loosening.sh alone.
   The lead merges any pull request, product code and exam changes included, with `catchup.sh`
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
@@ -164,22 +169,26 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
+- **A pull request changes at most 600 lines of product code** (owner, 2026-11-10, a trial that
+  only advises until replayed): bigger work is a stack of slices the plan cuts, each landing whole
+  with its tests ([0087](./.decisions/0087-a-pull-request-caps-product-lines.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
-  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and mutation shows no law got
+  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
-  subject, with front files and an `internal/` no other room imports, and it re-exports no other
-  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
-  never from its own. A room offers Effect services in its own types and errors, plus the shared
-  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
-  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
-  ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the floors too, with no
-  exemption: a room whose laws need a real database writes them as a suite, read through its
-  module as `SinkTest.suite(nodeSql)`, and the room that owns the driver runs it; a helper two
-  rooms share sits on a floor both may import
+- **In `next/`, a folder of libfabrika is a module, and its rank is a layer,** like rooms on
+  floors, which stays only the analogy ([0091](./.decisions/0091-modules-and-layers.md)). A module
+  holds one subject, with front files and an `internal/` no other module imports, and it re-exports
+  no other module's names. Its layer is one line in `layer-rules.json`: a module imports only from
+  lower layers, never from its own. A module offers Effect services in its own types and errors,
+  plus the shared names beside `Id.ts`: a lower module's error is translated at the service, with
+  its cause kept, and `runtime/` never imports `ledger/`. A new file goes in its module now, before
+  the move lands ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the layers too,
+  with no exemption: a module whose laws need a real database writes them as a suite, read through
+  its namespace as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
+  two modules share sits on a layer both may import
   ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
@@ -285,6 +294,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
+- **A choice that fits as a `fabrika.toml` value is one.** Declare it once with its schema and
+  default, so a test sets it as a person does. A plan asks "is this a setting?" of each new choice
+  and says why not (owner, 2026-11-10, [0069](./.decisions/0069-choices-are-settings.md)).
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
@@ -351,7 +363,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
   goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
-  337). A key does not say again what its parent already says: inside
+  337). No key, field, option or setting is named `where`, `why`, `what`, `who` or `how`: use the
+  noun for the value, such as `location`, `reason`, `scope` or `to` ([0081](./.decisions/0081-no-question-word-names.md)).
+  A key does not say again what its parent already says: inside
   an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
@@ -369,7 +383,7 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
   // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
-  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "ask", to: "owner", for: "approval" }
   { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.

@@ -100,8 +100,9 @@ for source in sorted(sources.iterdir()) if sources.is_dir() else []:
 # that a future reviewer followed them.
 exam = (
     "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
-    "Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.",
-    "The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
+    # 0066: mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
+    "Zero hits from loosening.sh mean no owner read is needed.",
+    "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 )
 review = (
     "Sweep, do not sample. For each law in the plan's table, list every way in: each public call, each cut point, and each saved or binding state. Check each one.",

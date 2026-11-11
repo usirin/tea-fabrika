@@ -26,9 +26,11 @@ from 2026-11-01: finish the pipeline, watch it build a real ticket, then switch 
 3. **Build `next/` now.** The owner approved what [Tier 1](./tier-1.md) builds on 2026-11-01.
    The lead session's agents build it by hand, in
    [37 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each with the steps
-   the pipeline enforces: a plan, tests written first and red, the build, the fast mutation
-   check, one review by a separate agent, and the lead agent's read of the diff, green CI and a
-   leak grep before merge. Each step that goes by hand is logged in `field/`.
+   the pipeline enforces: a plan, tests written first and red, the build, one review by a
+   separate agent, and the lead agent's read of the diff, green CI and a leak grep before merge.
+   Mutation runs hourly against main instead of in each pull request
+   ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)); *it said: the fast mutation
+   check, as a step.* Each step that goes by hand is logged in `field/`.
    [PR 223](https://github.com/usirin/tea-fabrika/pull/223) is read, and each layer lands
    already fixed.
 
@@ -53,7 +55,7 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-**Tier 1, dated 2026-11-09.** 19 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-09.** 19 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, so `next/` is on main now: the exams (P1, P2, P30, P32, P35), the spikes and the
 sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12 and P16,
 with P33, P34 and P37. The local stage, P12, landed today as
@@ -66,6 +68,11 @@ P25, P27a and P36 have tests on their branches and wait for builds; P28's tests 
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
 turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the owner's read.
+*2026-11-10:* the owner added P38 to Tier 1, the foundation for loading settings, so Tier 1 has
+39 rows ([0069](../../.decisions/0069-choices-are-settings.md)); its plan and ticket are to come.
+*2026-11-10:* all six core ideas get their thin slice in Tier 1
+([0088](../../.decisions/0088-six-slices-in-tier-1.md)), so P39 to P42 were added, to be planned,
+and Tier 1 has 43 rows.
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
@@ -190,7 +197,7 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **A live run on a target repository:** inside the run, nothing but ship merges. Once a lane is finished and stuck, what is left is a by-hand change, under the next rule.
 - **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent merges and writes a MergeRow. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead merges product code and exam changes the same way, with `catchup.sh`, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md), owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
 - **Auto-merge on a hand pull request** (owner, 2026-11-08). The repo allows auto-merge and deletes head branches on merge. A hand pull request, never a live run's, gets auto-merge armed once its checks are known to pass, e2e included. `ask owner exam_read` stays a warning, so an agent's pull request that edits the exam can merge before the owner reads it. The owner accepts that, to test the pipeline's own limits. The lead agent never writes "owner read" unless the owner did, and each such merge gets a field note, so what slipped through can be counted.
-- **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; mutation shows no law got narrower; nothing loosens. Zero hits from `loosening.sh` and the mutation arm-a vs arm-b narrowing list show that; the PR writes its removed/replacement mapping table and both outputs. The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
+- **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)). *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
 - **A docs-only pull request that writes down a decision** (owner, 2026-11-09) is opened the turn it is decided and merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows. Code pull requests keep their steps.
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
 - **CI wastes no time** (owner, 2026-11-09). A pull request that changes only field rows runs a seconds-long row schema check instead of the full check job, and each lane carries its own field rows. Then every CI job's time is audited for more cuts. The build is in progress (tracker ticket 342). Ticket 375 (PR A) makes skill prose skip the heavy jobs and runs only the tests a skill script reaches; ticket 376 (PR B) puts next on six machines, built 2026-11-10 as [PR 653](https://github.com/usirin/tea-fabrika/pull/653). *It said: three machines. The approved plan chose six, as the `test` job has, and split the one 248 s test file in four so no machine is held by it.*

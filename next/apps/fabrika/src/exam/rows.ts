@@ -13,11 +13,15 @@
 //     `**`, then more segments with no `*`, then more characters that are not `*` or `/`;
 //   - the tool refuses a file that two rows claim equally. Here that file gets both rows, so the
 //     exam can say so.
+//
+// A row may carry a `floor` (the local patch, demlik issue 913). A room's rank is its floor, so
+// moving a room is one edit and no other room moves. The exam's layers test reads it.
 
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {
   readonly name: string;
   readonly paths: ReadonlyArray<string>;
+  readonly floor?: number;
 }
 
 type Specificity = readonly [segments: number, literal: number, characters: number];

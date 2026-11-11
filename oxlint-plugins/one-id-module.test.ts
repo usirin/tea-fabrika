@@ -13,7 +13,7 @@ it("refuses the retired Id module for generated contents and permits other modul
       ]) {
         const retired = "next/packages/libfabrika/src/data/id.ts";
         const allowed = [
-          "next/packages/libfabrika/src/id.ts",
+          "next/packages/libfabrika/src/Id.ts",
           "next/packages/libfabrika/src/data/id.test.ts",
           "next/packages/libfabrika/src/transport/id.ts",
           "packages/fabrika/src/data/id.ts",
