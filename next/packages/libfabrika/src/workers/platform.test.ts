@@ -60,5 +60,5 @@ it.effect.prop(
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
     }),
-  { fastCheck: { numRuns: 200, seed: 119120 } },
+  { arbitrary: { runs: 200, seed: 119120 } },
 );
