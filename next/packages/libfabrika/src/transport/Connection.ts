@@ -1,5 +1,5 @@
 import { applyCell } from "@demlik/tea";
-import { Effect, Result, Schema, Semaphore } from "effect";
+import { Effect, Predicate, Result, Schema, Semaphore } from "effect";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, Wait } from "./Wire.ts";
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
@@ -10,6 +10,8 @@ const Request = Schema.Struct({
   method: Schema.String,
   params: Schema.Unknown,
 });
+
+const decodeRequest = Schema.decodeUnknownResult(Schema.fromJsonString(Request));
 
 const Read = Schema.Struct({
   stream: Schema.String,
@@ -78,7 +80,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     if (Result.isFailure(answer)) {
       const error = answer.failure;
       const reason =
-        typeof error === "object" && error !== null && "reason" in error && typeof error.reason === "string"
+        Predicate.isObjectOrArray(error) && Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason)
           ? error.reason
           : "unreachable";
       yield* remove(wait, Answer.cases.refused.make({ reason }));
@@ -136,13 +138,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   });
   return {
     frame: Effect.fn("connection.frame")(function* (text: string) {
-      const parsed = Result.try({ try: () => JSON.parse(text), catch: () => null });
-
-      if (Result.isFailure(parsed)) {
-        return;
-      }
-
-      const decoded = Schema.decodeUnknownResult(Request)(parsed.success);
+      const decoded = decodeRequest(text);
 
       if (Result.isFailure(decoded)) {
         return;

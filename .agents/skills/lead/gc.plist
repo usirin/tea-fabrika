@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The box cleanup's timer (decision 0101): a user LaunchAgent that runs one gc sweep every
+  GC_MINUTES. Never loaded from here: `node scripts/gcloop.ts plist` fills each double-braced mark with this
+  laptop's paths, and the lead skill's "Box cleanup on a timer" section installs it.
+  ProcessType Background: launchd gives it low CPU and disk priority, beside gcloop's own nice.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{label}}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{node}}</string>
+    <string>{{script}}</string>
+    <string>sweep</string>
+    <string>--trigger</string>
+    <string>timer</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{main}}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{path}}</string>
+    <key>GC_MINUTES</key>
+    <string>{{minutes}}</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>{{seconds}}</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>{{log}}</string>
+  <key>StandardErrorPath</key>
+  <string>{{log}}</string>
+</dict>
+</plist>

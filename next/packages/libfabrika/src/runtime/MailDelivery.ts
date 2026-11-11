@@ -17,4 +17,4 @@ export type Mail = Delivery;
 export class MailDelivery extends Context.Service<
   MailDelivery,
   { readonly send: (mail: Mail) => Effect.Effect<typeof Queued.Type, MailDeliveryError> }
->()("@kampus/libfabrika/MailDelivery") {}
+>()("@kampus/libfabrika/runtime/MailDelivery") {}

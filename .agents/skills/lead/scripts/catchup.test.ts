@@ -57,6 +57,10 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gcloop.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Beat.ts?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -467,6 +471,13 @@ describe("catchup, today's tooling", () => {
           const looks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts"));
           expect(looks).toHaveLength(answer === "green" ? 1 : 0);
           expect(merges(got.calls)).toHaveLength(lands ? 1 : 0);
+          // 0101: a landed merge kicks one box cleanup sweep, after it lands; a refused one kicks none.
+          const kicks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/gcloop.ts"));
+          expect(kicks.map((c) => c.args.slice(1))).toEqual(lands ? [["kick", "--trigger", "merge"]] : []);
+
+          if (lands) {
+            expect(got.calls.findIndex((c) => c.key === "landed")).toBeLessThan(got.calls.indexOf(kicks[0]!));
+          }
 
           for (const call of merges(got.calls)) {
             expect(call.args).toContain("--squash");

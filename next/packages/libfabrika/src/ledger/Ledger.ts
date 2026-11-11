@@ -21,7 +21,7 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
 export class Doorbell extends Context.Service<
   Doorbell,
   { readonly ring: (to: string, stream: string, rev: Rev) => Effect.Effect<void, LedgerError> }
->()("@kampus/libfabrika/Doorbell") {}
+>()("@kampus/libfabrika/ledger/Ledger.Doorbell") {}
 
 /** What the project object answers across an object call. Its answers are decoded by the caller. */
 export type LedgerCalls = {
@@ -39,4 +39,4 @@ export class Ledger extends Context.Service<
     /** Never blocks: `ready` with the stream's newest rev, or `parked` until a ring. */
     readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>;
   }
->()("@kampus/libfabrika/Ledger") {}
+>()("@kampus/libfabrika/ledger/Ledger") {}

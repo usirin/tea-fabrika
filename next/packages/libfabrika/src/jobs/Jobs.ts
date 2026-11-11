@@ -43,4 +43,4 @@ export class Jobs extends Context.Service<
     ) => Effect.Effect<Receipt, JobsError>;
     readonly read: (id: string) => Effect.Effect<Job, JobsError>;
   }
->()("@kampus/libfabrika/Jobs") {}
+>()("@kampus/libfabrika/jobs/Jobs") {}
