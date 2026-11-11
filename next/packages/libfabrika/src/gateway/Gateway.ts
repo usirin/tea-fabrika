@@ -1,7 +1,8 @@
 import { applyCell } from "@demlik/tea";
 import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import { admitted, foldAccess, MemberEvent, Saw } from "../access/Access.ts";
+import { admitted, MemberEvent, Saw } from "../access/Access.ts";
+import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import {

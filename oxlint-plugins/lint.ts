@@ -11,7 +11,12 @@ import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGER_ROOT, outside, settle } from "./ledger.ts";
 import { scriptReads } from "./script-reads.mjs";
 
-const ADVICE = new Set(["fabrika(no-effect-promise)", "fabrika(no-raw-try-catch)", "fabrika(prefer-schema-arbitrary)"]);
+const ADVICE = new Set([
+  "fabrika(law-shape)",
+  "fabrika(no-effect-promise)",
+  "fabrika(no-raw-try-catch)",
+  "fabrika(prefer-schema-arbitrary)",
+]);
 
 interface Diagnostic {
   readonly code?: string;
