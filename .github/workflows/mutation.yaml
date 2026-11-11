@@ -1,0 +1,158 @@
+name: mutation
+
+# The hourly mutation run on what merged to main (0066), here on a CI runner instead of the laptop.
+# Only a person or a scheduler session starts it, by hand, each hour:
+#
+#   gh workflow run mutation.yaml -f base=<the commit the last run ended at>
+#
+# No push, pull request or cron starts it, and a merge never waits on it. It runs the same command
+# the laptop runs (mutbox.ts, decision 0045): Stryker in a container with `--network none`, the
+# fixed seed 119120 and a sample of at most 150, both set in run.sh. Survivors are its answer, not a
+# failure: the job fails only when the run itself broke (mutbox's `stuck`). It reads, runs the
+# container and uploads its result; it changes nothing in the repo. A one-week trial, like 0066.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: The commit the last run ended at; this run mutates the changed lines of base..head
+        required: true
+        type: string
+      head:
+        description: The commit to mutate up to; empty means main's head when the run starts
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+# One run at a time, and a running one is never cut short: a second dispatch waits its turn.
+concurrency:
+  group: mutation
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    # Main's copy of the workflow and of mutbox.ts, never a branch's.
+    if: github.ref == 'refs/heads/main'
+    # mutbox.ts measured only linux/arm64 (its PLATFORM), and this is the free arm64 runner for a
+    # public repository: 4 CPUs, 16 GB, Docker installed.
+    runs-on: ubuntu-24.04-arm
+    # The image build (pnpm fetch of the whole lockfile) and the install come first, then mutbox's
+    # own 900 s limit on the container with a base. About twice that sum, unmeasured on a runner.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # mutbox.ts fetches the base and the head from this checkout, so it must hold both.
+          fetch-depth: 0
+
+      # The pnpm version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      # For mutbox.ts itself (Effect and oxc-parser); the container installs its own copy offline.
+      - run: pnpm install --frozen-lockfile
+
+      # The tests beside the changed files (0066): for each changed product file, its own
+      # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Product files are
+      # sample.ts's PRODUCT list. A path mutbox.ts's --related would refuse is left out.
+      - id: range
+        env:
+          BASE: ${{ inputs.base }}
+          HEAD: ${{ inputs.head || github.sha }}
+        run: |
+          base=$(git rev-parse --verify "$BASE^{commit}")
+          head=$(git rev-parse --verify "$HEAD^{commit}")
+          plain='^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$'
+          {
+            git diff --name-only --diff-filter=d "$base" "$head" -- \
+              '*.ts' '*.tsx' '*.mts' '*.cts' '*.js' '*.jsx' '*.mjs' '*.cjs' \
+              ':!*.test.*' ':!*.d.ts' ':!*.d.mts' ':!*.d.cts' |
+              while IFS= read -r f; do
+                stem=${f%.*}
+                printf '%s\n' "$stem.test.ts" "$stem.test.tsx"
+              done
+            git diff --name-only --diff-filter=d "$base" "$head" -- '*.test.ts' '*.test.tsx'
+          } | sort -u | grep -E "$plain" | grep -v '/\.\./' |
+            while IFS= read -r t; do
+              if git cat-file -e "$head:$t" 2> /dev/null; then printf '%s\n' "$t"; fi
+            done > "$RUNNER_TEMP/related.txt" || :
+          related=$(paste -sd, "$RUNNER_TEMP/related.txt")
+          printf 'base=%s\nhead=%s\nrelated=%s\n' "$base" "$head" "$related" >> "$GITHUB_OUTPUT"
+          echo "range $base..$head, $(wc -l < "$RUNNER_TEMP/related.txt") related test files"
+
+      # mutbox exits 0 for done (survivors included) and 40 for skip; both pass. 30 is stuck, the
+      # run broke, and fails the job. Its JSON line is in $OUT/mutbox.json either way.
+      - name: mutbox
+        if: steps.range.outputs.related != ''
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD: ${{ steps.range.outputs.head }}
+          RELATED: ${{ steps.range.outputs.related }}
+          OUT: ${{ runner.temp }}/mutbox
+        run: |
+          code=0
+          node .agents/skills/lead/scripts/mutbox.ts run --checkout . --ticket 0 \
+            --build "$HEAD" --base "$BASE" --related "$RELATED" \
+            --out "$OUT" --lock "$RUNNER_TEMP/docker.lock" || code=$?
+          case $code in 0 | 40) exit 0 ;; *) exit "$code" ;; esac
+
+      - name: summary
+        if: ${{ !cancelled() }}
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD: ${{ steps.range.outputs.head }}
+          RELATED: ${{ steps.range.outputs.related }}
+          JSON: ${{ runner.temp }}/mutbox/mutbox.json
+        run: |
+          {
+            echo "## mutation"
+            echo
+            echo "range \`$BASE..$HEAD\`"
+            echo
+            if [ -z "$BASE" ]; then
+              echo "no run: base or head is not a commit on main's history"
+            elif [ -z "$RELATED" ]; then
+              echo "skip: no test beside a changed file, so nothing ran"
+            elif [ ! -s "$JSON" ]; then
+              echo "no result: mutbox wrote no mutbox.json"
+            else
+              jq -r '
+                (.b.counts // {}) as $c
+                | (.sample.selected // 0) as $n
+                | (($c.Killed // 0) + ($c.Timeout // 0) + ($c.Survived // 0)) as $judged
+                | "outcome: \(.outcome) \(.reason)",
+                  "",
+                  "| mutants | killed | timeout | survived | no answer | narrowed | seconds |",
+                  "|---|---|---|---|---|---|---|",
+                  "| \($n) | \($c.Killed // 0) | \($c.Timeout // 0) | \($c.Survived // 0) | \($n - $judged) | \(if (.narrowing | type) == "array" then (.narrowing | length) else (.narrowing // "none") end) | \(.seconds) |",
+                  "",
+                  (.reach // empty),
+                  "",
+                  (.detail | select(. != ""))
+              ' "$JSON"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # One artifact per run, always named `mutbox`: the JSON line, Stryker's reports and samples,
+      # and the logs a stuck reason points at.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutbox
+          path: |
+            ${{ runner.temp }}/mutbox/mutbox.json
+            ${{ runner.temp }}/mutbox/box/*.txt
+            ${{ runner.temp }}/mutbox/box/*.json
+            ${{ runner.temp }}/mutbox/box/a/
+            ${{ runner.temp }}/mutbox/box/b/
+            !${{ runner.temp }}/mutbox/box/*/events
+          if-no-files-found: ignore

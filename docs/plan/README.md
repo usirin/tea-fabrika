@@ -55,7 +55,7 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-**Tier 1, dated 2026-11-09.** 19 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-09.** 19 of [its 39 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, so `next/` is on main now: the exams (P1, P2, P30, P32, P35), the spikes and the
 sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12 and P16,
 with P33, P34 and P37. The local stage, P12, landed today as
@@ -68,6 +68,8 @@ P25, P27a and P36 have tests on their branches and wait for builds; P28's tests 
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
 turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the owner's read.
+*2026-11-10:* the owner added P38 to Tier 1, the foundation for loading settings, so Tier 1 has
+39 rows ([0069](../../.decisions/0069-choices-are-settings.md)); its plan and ticket are to come.
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
