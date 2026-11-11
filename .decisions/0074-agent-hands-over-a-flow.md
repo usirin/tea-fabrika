@@ -1,7 +1,7 @@
 ---
 id: 0074
 title: An agent composes work by handing fabrika a flow as data, which fabrika checks and runs as a recorded process, so the goal is the agent's and the loop stays fabrika's, never a loop held in the agent's context
-status: accepted
+status: amended-in-part by [0082](0082-approvals-is-a-floor-for-every-run.md)
 date: 2026-11-10
 tags: [flow, agent, client, primitives, libfabrika, mcp, door, walls, next]
 ---
@@ -156,6 +156,8 @@ agent's, and the loop stays fabrika's (owner, 2026-11-10).**
     tool per program input. A reading of the makers' pages is running.
   - **What fabrika checks before it runs a handed-over flow, and who must look:** a case of
     [0071](0071-risk-tier-decides-who-looks.md)'s risk tier.
+    *2026-11-10: partly answered by [0082](0082-approvals-is-a-floor-for-every-run.md): a flow with
+    fewer review steps than the repo's `approvals` floor is refused before any step runs.*
   - **The wall for view code an agent wrote,** which runs in a person's window.
   - **How today's primitives are rethought for `next/`.** They live in today's `packages/pipeline`
     and are rethought, not ported ([rethink, do not port](../docs/direction/rethink-do-not-port.md)).
