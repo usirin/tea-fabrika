@@ -38,8 +38,8 @@ const checkTypes = (founder: Input, members: ClientManager["Service"]["members"]
     // @ts-expect-error `person` is required: the founding line names who founded it.
     const lostPerson: Input = noPerson;
     // @ts-expect-error `members` fails only with LedgerError, never another error channel.
-    const otherError: Effect.Effect<Access, string> = members;
-    return [restored, lostBuild, lostBy, lostPerson, otherError];
+    expectTypeOf(members).toExtend<Effect.Effect<Access, string>>();
+    return [restored, lostBuild, lostBy, lostPerson];
   };
   void checkRefusals;
 };
