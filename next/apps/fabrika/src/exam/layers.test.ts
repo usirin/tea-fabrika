@@ -32,9 +32,9 @@ import { type Row, rowsAt } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
-/** The floor of each row that names one, by row name. A row with no `floor` has none here. */
-const floorsByName = (rows: ReadonlyArray<Row>): ReadonlyMap<string, number> =>
-  new Map(rows.flatMap((row) => (row.floor === undefined ? [] : [[row.name, row.floor] as const])));
+/** The layer of each row that names one, by row name. A row with no `layer` has none here. */
+const layersByName = (rows: ReadonlyArray<Row>): ReadonlyMap<string, number> =>
+  new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
 
 // The reader. Each exam file stands alone and carries its own copy, since a shared helper file
 // would export names only tests call, which `pnpm lint:dead` refuses. An import is found by reading
@@ -233,7 +233,7 @@ const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
   [TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
 };
 
-/** The part each of the library's rows in the rule file is, in the table above. Rooms, not old layers. */
+/** The part each of the library's rows in the rule file is, in the table above. Modules, not the old parts. */
 const rowParts: Readonly<Record<string, string>> = {
   "next-shared": "id",
   "next-id-test-support": "id-test-support",
@@ -241,8 +241,11 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-transport": "transport",
   "next-telemetry": "data",
   "next-ledger": "data",
+  "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
   "next-processes": "coordination",
   "next-presence": "coordination",
+  // P39: the jobs module is coordination, so it may import data and id and nothing above them.
+  "next-jobs": "coordination",
   "next-access": "coordination",
   "next-runtime": "app",
   "next-mcp": "mcp",
@@ -251,7 +254,7 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-workers": "workers",
 };
 
-// Files of the runtime room that stay coordination until old PR 13: three import the ledger, which
+// Files of the runtime module that stay coordination until old PR 13: three import the ledger, which
 // the app part may not, and `coordination/index.ts` re-exports names that import it. Each is a prefix
 // of a path below `src/`.
 const stillCoordination: ReadonlyArray<string> = [
@@ -266,7 +269,7 @@ const RuleFile = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       paths: Schema.Array(Schema.String),
-      floor: Schema.optionalKey(Schema.Number),
+      layer: Schema.optionalKey(Schema.Number),
     }),
   ),
 });
@@ -450,7 +453,7 @@ describe("the real next/", () => {
 
 describe("planted breaks", () => {
   it("P17a: the gateway composes lower parts; lower parts cannot import it", () => {
-    // A room and the part the exam reads it as.
+    // A module and the part the exam reads it as.
     const lower = [
       ["runtime", "app"],
       ["processes", "coordination"],
@@ -466,8 +469,8 @@ describe("planted breaks", () => {
         'import {wire} from "../transport/Wire.ts";',
       ),
       ...Object.fromEntries(
-        lower.map(([room]) => [
-          `packages/libfabrika/src/${room}/Up.ts`,
+        lower.map(([module]) => [
+          `packages/libfabrika/src/${module}/Up.ts`,
           lines('import {Gateway} from "../gateway/Gateway.ts";'),
         ]),
       ),
@@ -475,8 +478,8 @@ describe("planted breaks", () => {
     expect([...faults(tree)].sort()).toEqual(
       lower
         .map(
-          ([room, part]) =>
-            `packages/libfabrika/src/${room}/Up.ts imports "../gateway/Gateway.ts": ${part} may not import door`,
+          ([module, part]) =>
+            `packages/libfabrika/src/${module}/Up.ts imports "../gateway/Gateway.ts": ${part} may not import door`,
         )
         .sort(),
     );
@@ -703,10 +706,10 @@ describe("the rule file's rows give a file its part", () => {
   // `stillCoordination` reads as coordination. Rows are named as the real ones, so each maps.
   // Plant: pick the first matching row, in the rule file's order, and not the most specific; or leave
   // the `runtime` row's part out of `rowParts`.
-  it("the part of a path is the part of the room code-graph gives it, for any rows and any path", () => {
+  it("the part of a path is the part of the module code-graph gives it, for any rows and any path", () => {
     const top = SRC.slice(0, -1);
-    const roomFolder = fc.constantFrom("runtime", "internal", "coordination", "ledger", "processes", "gateway");
-    const roomFile = fc.constantFrom(
+    const moduleFolder = fc.constantFrom("runtime", "internal", "coordination", "ledger", "processes", "gateway");
+    const moduleFile = fc.constantFrom(
       "Log.ts",
       "index.ts",
       "ProcessStore.ts",
@@ -714,21 +717,21 @@ describe("the rule file's rows give a file its part", () => {
       "RecoveryStore.test.ts",
       "Runner.ts",
     );
-    const roomPattern = fc
+    const modulePattern = fc
       .tuple(
         fc.array(
-          fc.oneof({ arbitrary: roomFolder, weight: 6 }, { arbitrary: fc.constantFrom("*", "**", "r*"), weight: 1 }),
+          fc.oneof({ arbitrary: moduleFolder, weight: 6 }, { arbitrary: fc.constantFrom("*", "**", "r*"), weight: 1 }),
           { minLength: 0, maxLength: 3 },
         ),
-        fc.option(fc.oneof(roomFile, fc.constantFrom("*.ts", "ProcessStore*", "recovery*")), { nil: undefined }),
+        fc.option(fc.oneof(moduleFile, fc.constantFrom("*.ts", "ProcessStore*", "recovery*")), { nil: undefined }),
       )
       .filter(([folders, last]) => folders.length > 0 || last !== undefined)
       .map(([folders, last]) => [top, ...folders, ...(last === undefined ? [] : [last])].join("/"));
     const named: fc.Arbitrary<ReadonlyArray<Row>> = fc
-      .array(fc.array(roomPattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
+      .array(fc.array(modulePattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
       .map((each) => each.map((paths, n) => ({ name: Object.keys(rowParts)[n] ?? "none", paths })));
     const at = fc
-      .tuple(fc.array(roomFolder, { minLength: 0, maxLength: 3 }), roomFile)
+      .tuple(fc.array(moduleFolder, { minLength: 0, maxLength: 3 }), moduleFile)
       .map(([folders, last]) => [top, ...folders, last].join("/"));
     const partExpected = (given: ReadonlyArray<Row>, path: string): string | null => {
       const rows = expected(given, path);
@@ -794,6 +797,7 @@ describe("the rule file's rows give a file its part", () => {
     expect(rowsAt(REAL, "next/packages/libfabrika/src/gateway/internal/waiting.ts")).toEqual(["next-door"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/cloudflare/runtime.ts")).toEqual(["next-workers"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/telemetry/internal/measurements.ts")).toEqual(["next-telemetry"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/jobs/internal/job.ts")).toEqual(["next-jobs"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/data/index.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
@@ -862,8 +866,8 @@ describe("every library file has exactly one row", () => {
   });
 });
 
-describe("planted breaks in the room folders", () => {
-  // The rule file has a row per room, and the exam maps each row to its part (`rowParts`). Reading
+describe("planted breaks in the module folders", () => {
+  // The rule file has a row per module, and the exam maps each row to its part (`rowParts`). Reading
   // `runtime` as the coordination part is the plant.
   const asCoordination = { ...rowParts, "next-runtime": "coordination" };
   const tree = plant({
@@ -901,14 +905,14 @@ describe("planted breaks in the room folders", () => {
     "packages/libfabrika/src/gateway/internal/waiting.ts": lines('import {wire} from "../../transport/Wire.ts";'),
   });
 
-  // scenario: each line is one named wall of today's table, met in a room folder, since the rooms
+  // scenario: each line is one named wall of today's table, met in a module folder, since the modules
   // must leave every wall standing: the ledger may not import processes, transport may not import
   // the ledger, processes and access may not import the gateway or the runtime, and the runtime may
   // not import the ledger or transport. Three runtime files and `coordination/index.ts` stay
   // coordination, so their ledger imports pass until old PR 13 cuts them.
   // Plant: map `runtime` to the coordination part (`asCoordination`). Then the runner's ledger and
   // transport imports pass, and the tree's faults change.
-  it("scenario: every upward or skipped-part import fires in the room folders, and nothing else", () => {
+  it("scenario: every upward or skipped-part import fires in the module folders, and nothing else", () => {
     const at = (file: string) => `packages/libfabrika/src/${file}`;
     expect([...faults(tree)].sort()).toEqual(
       [
@@ -924,9 +928,9 @@ describe("planted breaks in the room folders", () => {
     expect(faults(tree, REAL, asCoordination)).not.toEqual(faults(tree));
   });
 
-  // scenario: the real rule file claims every room folder, since a move must not land ahead of its
-  // rule file change: a file planted in a room folder always has a row.
-  it("scenario: on the real rule file every room folder has a row", () => {
+  // scenario: the real rule file claims every module folder, since a move must not land ahead of its
+  // rule file change: a file planted in a module folder always has a row.
+  it("scenario: on the real rule file every module folder has a row", () => {
     const unclaimed = faults(tree)
       .filter((fault) => !fault.includes(" imports "))
       .map((fault) => fault.split(": ")[0]);
@@ -1000,10 +1004,10 @@ describe("planted breaks in the room folders", () => {
   });
 });
 
-// Ticket 477, kind 2: the floors. The rule file gives each room a `floor`, and the patched code-graph
-// (demlik issue 913) ranks a row by it: rows on one floor share a rank, and an import between two of
+// Ticket 477, kind 2: the layers. The rule file gives each module a `layer`, and the patched code-graph
+// (demlik issue 913) ranks a row by it: rows on one layer share a rank, and an import between two of
 // them is a break in either direction.
-describe("floors", () => {
+describe("layers", () => {
   const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
   type Edge = `${string} -> ${string} [${"sideways" | "upward"}]`;
 
@@ -1027,12 +1031,12 @@ describe("floors", () => {
   const root = (files: Readonly<Record<string, string>>) =>
     plant({ "package.json": { name: "plant", private: true }, ...files });
 
-  // scenario: a planted tree of four rows on three floors, with one upward, two sideways (one each
+  // scenario: a planted tree of four rows on three layers, with one upward, two sideways (one each
   // way) and two downward imports, since the law is about the tool's answer on a known tree. `mid1`
-  // and `mid2` share floor 1.
-  // Plant: remove the floor code from the patch. The tool then ranks by place in the list, `mid1`
+  // and `mid2` share layer 1.
+  // Plant: remove the layer code from the patch. The tool then ranks by place in the list, `mid1`
   // is above `mid2`, and the sideways imports pass: the second run below is that tool's answer.
-  it("scenario: two rows on one floor share a rank, and an import between them breaks in either direction", () => {
+  it("scenario: two rows on one layer share a rank, and an import between them breaks in either direction", () => {
     const tree = root({
       "p/top/t.ts": lines(
         'import {m} from "../mid1/m.ts";',
@@ -1047,37 +1051,37 @@ describe("floors", () => {
       "p/mid2/n.ts": lines('import {m} from "../mid1/m.ts";', "export const n = m;"),
       "p/low/l.ts": lines("export const l = 1;"),
     });
-    const floors: ReadonlyArray<Row> = [
-      { name: "top", floor: 2, paths: ["p/top"] },
-      { name: "mid1", floor: 1, paths: ["p/mid1"] },
-      { name: "mid2", floor: 1, paths: ["p/mid2"] },
-      { name: "low", floor: 0, paths: ["p/low"] },
+    const layers: ReadonlyArray<Row> = [
+      { name: "top", layer: 2, paths: ["p/top"] },
+      { name: "mid1", layer: 1, paths: ["p/mid1"] },
+      { name: "mid2", layer: 1, paths: ["p/mid2"] },
+      { name: "low", layer: 0, paths: ["p/low"] },
     ];
-    const floored = runTool(tree, floors);
-    expect(floored.edges).toEqual(["mid1 -> mid2 [sideways]", "mid1 -> top [upward]", "mid2 -> mid1 [sideways]"]);
-    expect(floored.summary).toContain("2 down, 2 sideways, 1 UP");
-    expect(floored.status).toBe(1);
+    const ranked = runTool(tree, layers);
+    expect(ranked.edges).toEqual(["mid1 -> mid2 [sideways]", "mid1 -> top [upward]", "mid2 -> mid1 [sideways]"]);
+    expect(ranked.summary).toContain("2 down, 2 sideways, 1 UP");
+    expect(ranked.status).toBe(1);
 
     const listed = runTool(
       tree,
-      floors.map(({ floor: _floor, ...row }) => row),
+      layers.map(({ layer: _layer, ...row }) => row),
     );
     expect(listed.edges).toEqual(["mid1 -> top [upward]", "mid2 -> mid1 [upward]"]);
     expect(listed.summary).toContain("0 sideways");
   });
 
-  // The rule file's rooms on the real file: one probe file per row that has a floor, each importing
-  // the probe of every other row. The tool breaks exactly the imports that do not go down a floor.
-  const SRC_ROWS = REAL.filter((row) => row.floor !== undefined && row.paths.every((p) => p.startsWith(SRC)));
+  // The rule file's modules on the real file: one probe file per row that has a layer, each importing
+  // the probe of every other row. The tool breaks exactly the imports that do not go down a layer.
+  const SRC_ROWS = REAL.filter((row) => row.layer !== undefined && row.paths.every((p) => p.startsWith(SRC)));
   const probe = (row: Row): string => {
     const first = row.paths[0] ?? "";
     return first.endsWith(".ts") ? first : `${first}/Probe.ts`;
   };
   const expectedEdges = (rows: ReadonlyArray<Row>): ReadonlyArray<Edge> => {
-    const floors = floorsByName(rows);
+    const layers = layersByName(rows);
     return SRC_ROWS.flatMap((from) =>
       SRC_ROWS.flatMap((to): ReadonlyArray<Edge> => {
-        const [a, b] = [floors.get(from.name), floors.get(to.name)];
+        const [a, b] = [layers.get(from.name), layers.get(to.name)];
         return from.name === to.name || a === undefined || b === undefined || a > b
           ? []
           : [`${from.name} -> ${to.name} [${a === b ? "sideways" : "upward"}]`];
@@ -1100,9 +1104,9 @@ describe("floors", () => {
     ),
   });
 
-  // scenario: the real rule file, since "no room imports a higher floor or its own floor" is only
-  // true of the rows as written. Every ordered pair of rooms is one planted import.
-  it("scenario: on the real rule file only downward imports between rooms pass", () => {
+  // scenario: the real rule file, since "no module imports a higher layer or its own layer" is only
+  // true of the rows as written. Every ordered pair of modules is one planted import.
+  it("scenario: on the real rule file only downward imports between modules pass", () => {
     const run = runTool(realTree, REAL);
     expect(run.edges).toEqual(expectedEdges(REAL));
     expect(run.edges).not.toContain("next-node -> next-workers [sideways]");
@@ -1111,11 +1115,11 @@ describe("floors", () => {
     expect(run.edges).not.toContain("next-runtime -> next-ledger [upward]");
   });
 
-  // scenario: the plan's plant for "no room imports another room on its own floor". `next-access` is
-  // put on floor 5 beside `next-runtime`: an import from the runtime to access, which went down,
+  // scenario: the plan's plant for "no module imports another module on its own layer". `next-access` is
+  // put on layer 5 beside `next-runtime`: an import from the runtime to access, which went down,
   // must now fail, and no other pair changes.
-  it("scenario: a room put beside the runtime refuses an import from the runtime", () => {
-    const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, floor: 5 } : row));
+  it("scenario: a module put beside the runtime refuses an import from the runtime", () => {
+    const beside = REAL.map((row) => (row.name === "next-access" ? { ...row, layer: 5 } : row));
     const before = runTool(realTree, REAL).edges;
     const after = runTool(realTree, beside);
     expect(after.edges).toEqual(expectedEdges(beside));
@@ -1126,10 +1130,10 @@ describe("floors", () => {
     expect(before.filter((edge) => !after.edges.includes(edge))).toEqual(["next-access -> next-runtime [upward]"]);
   });
 
-  // pinned: the plan's floor table (ticket 477, 0043), since the rows are written by hand and this
-  // is the one place that says which room is on which floor.
-  it("pinned: the rooms are on the floors the plan gives them", () => {
-    expect(Object.fromEntries(floorsByName(REAL))).toEqual({
+  // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and this
+  // is the one place that says which module is on which layer.
+  it("pinned: the modules are on the layers the plan gives them", () => {
+    expect(Object.fromEntries(layersByName(REAL))).toEqual({
       "next-node": 9,
       "next-workers": 8,
       "next-libfabrika-entry": 7,
@@ -1138,16 +1142,18 @@ describe("floors", () => {
       "next-access": 4,
       "next-processes": 3,
       "next-presence": 3,
+      "next-jobs": 3,
       "next-ledger": 2,
       "next-transport": 2,
+      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
       "next-shared": 0,
     });
   });
 
-  // Plant: derive a row's rank from its place in the list, not from its `floor`. Then changing
-  // one floor moves nothing, and the moved row's rank is not the one it was given.
-  it("changing one row's floor moves that room and no other", () => {
+  // Plant: derive a row's rank from its place in the list, not from its `layer`. Then changing
+  // one layer moves nothing, and the moved row's rank is not the one it was given.
+  it("changing one row's layer moves that module and no other", () => {
     const given = fc
       .uniqueArray(fc.constantFrom(...Object.keys(rowParts)), { minLength: 1, maxLength: 10 })
       .chain((names) =>
@@ -1162,19 +1168,19 @@ describe("floors", () => {
         ),
       );
     fc.assert(
-      fc.property(given, ([floors, names, mover, to]) => {
+      fc.property(given, ([layers, names, mover, to]) => {
         const rows: ReadonlyArray<Row> = names.map((name, n) => {
-          const floor = floors[n];
-          return floor === undefined ? { name, paths: [name] } : { name, paths: [name], floor };
+          const layer = layers[n];
+          return layer === undefined ? { name, paths: [name] } : { name, paths: [name], layer };
         });
-        const moved = rows.map((row, n) => (n === mover ? { ...row, floor: to } : row));
-        const before = floorsByName(rows);
-        const after = floorsByName(moved);
+        const moved = rows.map((row, n) => (n === mover ? { ...row, layer: to } : row));
+        const before = layersByName(rows);
+        const after = layersByName(moved);
         const [name = ""] = [names[mover]];
 
         expect(after.get(name)).toBe(to);
         expect([...after].filter(([other]) => other !== name)).toEqual([...before].filter(([other]) => other !== name));
-        // Moving a room does not touch the order of the rows, so no other room's place changed either.
+        // Moving a module does not touch the order of the rows, so no other module's place changed either.
         expect(moved.map((row) => row.name)).toEqual(rows.map((row) => row.name));
       }),
       { ...options, numRuns: 1000 },

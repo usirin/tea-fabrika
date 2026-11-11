@@ -1,4 +1,4 @@
-// P12, next/. Real stage, durable outbox and recording; only platform calls are supplied.
+// P12, next/. Real instance, durable outbox and recording; only platform calls are supplied.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

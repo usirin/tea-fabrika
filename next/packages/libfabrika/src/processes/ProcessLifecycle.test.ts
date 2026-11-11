@@ -15,11 +15,17 @@ import {
   BRAIN,
   brain,
   CODE,
+  copied,
+  CRASHED,
   events,
+  fcExitReason,
   first,
   from,
   ids,
+  KILL,
   manager,
+  NORMAL,
+  SHUTDOWN,
   storage,
   type Storage,
   watcher,
@@ -110,14 +116,15 @@ describe("P33, saved state and process authority", () => {
         crashes: fc.integer({ min: 1, max: 32 }),
         until: fc.integer(),
         build: hash,
+        exit: fcExitReason,
       }),
       [],
-      ({ build, ...policy }) => {
+      ({ build, exit, ...policy }) => {
         const store = storage();
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(undefined, undefined, { ...CODE, hash: build }), from());
-          yield* processes.exit(A, policy.reason, from());
+          yield* processes.exit(A, exit, from());
           const table = new ProcessTable(store.rows(), BRAIN);
           expect(() => table.down(B, policy.reason, brain().owner), "missing child is a typed refusal").not.toThrow();
           expect(table.down(B, policy.reason, brain().owner)).toMatchObject({
@@ -141,20 +148,28 @@ describe("P33, saved state and process authority", () => {
     ),
   );
   it.effect("exit retries ignore fresh caller metadata but refuse a different reason", () =>
-    check(fc.uniqueArray(hash, { minLength: 2, maxLength: 2 }), [], ([reason, other]) => {
-      const store = storage();
-      return Effect.gen(function* () {
-        const processes = yield* ProcessManager;
-        yield* processes.start(first(), from());
-        yield* processes.exit(A, reason!, from());
-        const before = store.rows();
-        const retried = yield* Effect.exit(processes.exit(A, reason!, from({ parent: null, for: "retry-person" })));
-        expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe("Success");
-        const changed = yield* Effect.result(processes.exit(A, other!, from()));
-        expect(changed).toMatchObject({ _tag: "Failure", failure: { reason: "ended" } });
-        expect(store.rows()).toEqual(before);
-      }).pipe(Effect.provide(manager(store)));
-    }),
+    check(
+      fc
+        .tuple(fcExitReason, fcExitReason)
+        .filter(([reason, other]) => JSON.stringify(reason) !== JSON.stringify(other)),
+      [],
+      ([reason, other]) => {
+        const store = storage();
+        return Effect.gen(function* () {
+          const processes = yield* ProcessManager;
+          yield* processes.start(first(), from());
+          yield* processes.exit(A, reason, from());
+          const before = store.rows();
+          const retried = yield* Effect.exit(
+            processes.exit(A, copied(reason), from({ parent: null, for: "retry-person" })),
+          );
+          expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe("Success");
+          const changed = yield* Effect.result(processes.exit(A, other, from()));
+          expect(changed).toMatchObject({ _tag: "Failure", failure: { reason: "ended" } });
+          expect(store.rows()).toEqual(before);
+        }).pipe(Effect.provide(manager(store)));
+      },
+    ),
   );
 });
 
@@ -273,7 +288,7 @@ describe("p79, predecessors and live info", () => {
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
-          yield* processes.exit(A, "crashed", from());
+          yield* processes.exit(A, CRASHED, from());
           const before = store.rows();
           const error = yield* Effect.flip(
             processes.start(again(A, "restart:other", { program, hash: "build-a" }), from()),
@@ -297,7 +312,7 @@ describe("p79, predecessors and live info", () => {
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
-          yield* processes.exit(A, "crashed", from());
+          yield* processes.exit(A, CRASHED, from());
           const answers = yield* Effect.forEach(requests, (id) => Effect.exit(processes.start(again(A, id), from())), {
             concurrency: 2,
           });
@@ -306,7 +321,7 @@ describe("p79, predecessors and live info", () => {
           const live = yield* processes.info;
           expect(live).toHaveLength(1);
           const current = live[0]!;
-          yield* processes.exit(current.process, "crashed", from());
+          yield* processes.exit(current.process, CRASHED, from());
           expect((yield* Effect.flip(processes.start(again(A, "restart:stale"), from()))).reason).toBe("stale");
           expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(1);
         }).pipe(Effect.provide(manager(store)));
@@ -321,11 +336,11 @@ describe("p79, predecessors and live info", () => {
           const processes = yield* ProcessManager;
           yield* processes.start(first(), from());
           yield* processes.start(first("watcher:start", "watcher:1", { program: "watcher", hash: "build-a" }), from());
-          yield* processes.exit(A, "crashed", from());
+          yield* processes.exit(A, CRASHED, from());
           const b = yield* processes.start(again(A, "restart:a", { ...CODE, hash: build }), from());
           expect(b.process).toBe(B);
           expect(yield* processes.start(again(A, "restart:a", { ...CODE, hash: build }), from())).toEqual(b);
-          yield* processes.exit(B, "crashed", from());
+          yield* processes.exit(B, CRASHED, from());
           const x = yield* processes.start(again(B), from());
           expect(x.process).toBe(X);
           const restarts = (yield* events("counter:1")).filter((row) => row._tag === "restarted");
@@ -375,14 +390,14 @@ describe("p79, predecessors and live info", () => {
     }),
   );
   it.effect("plant, overwrite exit reason: the first exact reason is durable and written once", () =>
-    check(fc.string({ minLength: 1, maxLength: 256 }), ["shutdown:requested"], (reason) => {
+    check(fcExitReason, [SHUTDOWN], (reason) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first(), from());
         yield* processes.exit(A, reason, from());
         yield* processes.exit(A, reason, from());
-        yield* Effect.exit(processes.exit(A, "crashed", from()));
+        yield* Effect.exit(processes.exit(A, CRASHED, from()));
         const exits = (yield* events("counter:1")).filter((row) => row._tag === "exited");
         expect(exits.map((row) => row.body)).toEqual([{ process: A, reason, asked: BRAIN }]);
         expect(yield* processes.info).toEqual([]);
@@ -397,7 +412,7 @@ describe("p79, names, parents and replay", () => {
       const store = storage();
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
-        yield* ProcessManager.use((p) => p.exit(A, "normal", from())).pipe(Effect.provide(manager(store)));
+        yield* ProcessManager.use((p) => p.exit(A, NORMAL, from())).pipe(Effect.provide(manager(store)));
         store.reopen();
         const before = store.rows();
 
@@ -430,13 +445,11 @@ describe("p79, names, parents and replay", () => {
         const before = store.rows();
         expect(
           (yield* Effect.flip(
-            ProcessManager.use((p) => p.exit(A, "killed", from({ by }))).pipe(
-              Effect.provide(manager(store, watcher(W))),
-            ),
+            ProcessManager.use((p) => p.exit(A, KILL, from({ by }))).pipe(Effect.provide(manager(store, watcher(W)))),
           )).reason,
         ).toBe("not_parent");
         expect(store.rows()).toEqual(before);
-        yield* ProcessManager.use((p) => p.exit(A, "normal", from())).pipe(Effect.provide(manager(store)));
+        yield* ProcessManager.use((p) => p.exit(A, NORMAL, from())).pipe(Effect.provide(manager(store)));
         expect(
           (yield* Effect.flip(
             ProcessManager.use((p) => p.start(again(A), from({ by }))).pipe(Effect.provide(manager(store, watcher(W)))),
@@ -513,7 +526,7 @@ const lawsFor = (
       expect(yield* live(B)).toBe(false);
     }),
     exited: Effect.gen(function* () {
-      yield* forge("counter:1", { _tag: "exited", process: A, reason: "crashed" });
+      yield* forge("counter:1", { _tag: "exited", process: A, reason: CRASHED });
       expect(yield* live(A)).toBe(true);
     }),
     restarted: Effect.gen(function* () {
@@ -540,7 +553,7 @@ const lawsFor = (
     }),
     monitored: Effect.gen(function* () {
       yield* forge("processes", { _tag: "monitored", ref: "watch:1", process: A, to: toW });
-      yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(Effect.provide(manager(store)));
+      yield* ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(Effect.provide(manager(store)));
       expect(downs()).toEqual([]);
     }),
     demonitored: Effect.gen(function* () {
@@ -548,7 +561,7 @@ const lawsFor = (
         Effect.provide(manager(store, watcher(W))),
       );
       yield* forge("processes", { _tag: "demonitored", ref: "watch:1", to: toW, reason: "canceled" });
-      yield* ProcessManager.use((p) => p.exit(A, "crashed", from())).pipe(Effect.provide(manager(store)));
+      yield* ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(Effect.provide(manager(store)));
       expect(downs()).toHaveLength(1);
     }),
   };

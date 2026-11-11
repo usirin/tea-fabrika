@@ -2,13 +2,14 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
+//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
-// (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
+// (.decisions/0026, 0028). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
+// the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
 // commits them as one signed step commit through stepcommit, with main's own signer. A mutation
@@ -36,7 +37,8 @@
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
-//   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
+//   recording  Act     the field row (with the plants the typed answer named, 0093),
+//                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
 //   over               the outcome
@@ -79,15 +81,18 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
   Answer,
+  answerFor,
+  sendsFrom,
   Ended,
   listUsd,
   makeStepAgents,
   NO_SPENT,
+  Plant,
   type Provider,
   runTurn,
   Spent,
@@ -106,16 +111,30 @@ import {
   wipOf,
   workspaceGlobs,
 } from "./lane.ts";
+import { pgrepAnswer, skipLine } from "./pgrep.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
-const AGENTS = ["codex", "claude"] as const;
+const AGENTS = ["codex", "codex-exec", "claude"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
-/** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
-export const stepProvider = (agent: AgentName, step: StepName): Provider =>
-  agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
+/**
+ * The provider row a step's agent runs on: Codex only reads for a plan or a review. `codex` is
+ * Codex through ACP; `codex-exec` is the installed `codex exec`, plain (./codexexec.ts).
+ */
+export const stepProvider = (agent: AgentName, step: StepName): Provider => {
+  const reads = step === "plan" || step === "review";
+
+  switch (agent) {
+    case "claude":
+      return "claude";
+    case "codex":
+      return reads ? "codex-read" : "codex";
+    case "codex-exec":
+      return reads ? "codex-exec-read" : "codex-exec";
+  }
+};
 
 // ---------------------------------------------------------------- the outcome
 
@@ -344,6 +363,8 @@ const Entry = Schema.Struct({
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
+  /** The plants the step's typed answer named, for the field row (0093). */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 const record = Cmd.make("record", { input: Entry, ok: Done, err: ["unknown"] });
@@ -375,6 +396,7 @@ type Model =
       readonly head: string;
       readonly left: readonly string[];
       readonly spent: Spent;
+      readonly plants: Answer["plants"];
     }
   | {
       readonly phase: "recording" | "over";
@@ -385,6 +407,9 @@ type Model =
       readonly kept: boolean;
       readonly spent: Spent;
     };
+
+/** Where the step's machine is; the chain's heartbeat names it. */
+export type DrivePhase = Model["phase"];
 
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
@@ -627,8 +652,16 @@ type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
- * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly string[] = []): Step => {
+ * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). The
+ * plants the answer named go on the row whatever the outcome: they ran (0093). */
+const recordIt = (
+  ask: Ask,
+  j: Ended,
+  head: string,
+  spent: Spent,
+  left: readonly string[] = [],
+  plants: Answer["plants"] = undefined,
+): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
@@ -639,6 +672,7 @@ const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly
     exit: exitOf(j.outcome),
     keep: kept,
     spent,
+    ...(plants === undefined ? {} : { plants }),
   });
   return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
@@ -723,18 +757,19 @@ export const machine = defineMachine({
 
       const j = decide(s.ask, m.value, s.answer);
       const head = m.value.head ?? s.ask.base;
+      const plants = s.answer?.plants;
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head });
-        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent };
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent, plants };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
-      return recordIt(s.ask, j, head, s.spent, m.value.left);
+      return recordIt(s.ask, j, head, s.spent, m.value.left, plants);
     },
     step_read_err: (s): Step =>
       s.phase === "reading"
-        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent)
+        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent, [], s.answer?.plants)
         : stay(s),
     backup_push_ok: (s, m): Step => {
       if (s.phase !== "pushing") {
@@ -742,13 +777,15 @@ export const machine = defineMachine({
       }
 
       if (!m.value.ok) {
-        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left);
+        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left, s.plants);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left, s.plants);
     },
     backup_push_err: (s): Step =>
-      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left) : stay(s),
+      s.phase === "pushing"
+        ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left, s.plants)
+        : stay(s),
     record_ok: (s, m): Step => {
       if (s.phase !== "recording") {
         return stay(s);
@@ -1396,6 +1433,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               ended: new Date(ended),
               spent: e.spent,
               redacted: Number.isFinite(redacted) ? redacted : null,
+              plants: e.plants,
             }),
           );
         }
@@ -1467,8 +1505,13 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}`;
+  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
 };
+
+/** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
+ * round, listing as unfinished the parts no tests box can do). */
+export const FINISH =
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
@@ -1479,6 +1522,44 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
   step === "plan" || text === null
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+
+/** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
+const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
+
+/** The approved plan's owners, read as stepcommit reads them; `null` when there is no plan to read. */
+const planOwners = (env: Env, plan: string) => {
+  if (!existsSync(plan)) {
+    return null;
+  }
+
+  const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+};
+
+/**
+ * The paths the approved plan's files table gives this step, at the top of its prompt. stepcommit
+ * refuses any other path at collect, after the whole turn: on 2026-11-09, 10 of 72 stuck steps were
+ * that `not_owner` (ticket 430). Told first, a step that needs another path asks instead. A
+ * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
+ * (it changes no file) or a lane with no plan drive can read.
+ */
+export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
+  if (step === "plan" || step === "review" || owners === null) {
+    return "";
+  }
+
+  const mine = Object.keys(owners)
+    .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
+    .toSorted();
+  const other =
+    "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
+    "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
+    "git status and check every changed path against this list.\n";
+  return mine.length === 0
+    ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
+    : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
+        `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
+};
 
 /**
  * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
@@ -1509,7 +1590,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
     folder: ask.step === "plan" ? env.MAIN : boxTree(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
-    answer: Answer,
+    answer: answerFor(ask.step),
     model: ask.model,
     effort: ask.effort,
     minutes: ask.minutes,
@@ -1678,12 +1759,13 @@ type Lane = {
 
 // ---------------------------------------------------------------- the command
 
-const TAIL = `
+/** drive's answer tail for one step: its `to` choices are every step but itself (`sendsFrom`). */
+export const tailFor = (step: StepName) => `
 
 ---
 drive.ts reads your report, then one JSON object at its very end (its schema follows this prompt):
   verb: done | send | ask | skip | stuck
-  to:   tests | build | plan when the verb is send, else null
+  to:   ${sendsFrom(step).join(" | ")} when the verb is send, else null
   reason: one or two sentences: what to tell the next step, the one question for the lead, why there is
         nothing here for this step, or why you are stuck
   laws: for a build that needed no change, because every law is already green at its start, the
@@ -1786,7 +1868,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1892,7 +1974,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--electron is for --agent claude; a Codex box cannot start Electron");
   }
 
-  if (agent === "codex" && p.model !== undefined) {
+  if (agent !== "claude" && p.model !== undefined) {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
@@ -1979,10 +2061,17 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     started: Date.now(),
   };
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
-  const count = (pattern: string) => sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
-  const agents = count("codex-acp/dist/index.js") + count("claude-agent-acp/dist/index.js") + count("^codex exec");
+  // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
+  const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
+    const r = sh("pgrep", ["-f", pattern]);
+    return pgrepAnswer(r.code, r.out);
+  });
+  const refused = counts.some((c) => c._tag === "refused");
+  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
-  if (agents >= 8) {
+  if (refused) {
+    console.error(skipLine("agent cap"));
+  } else if (agents >= 8) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
       reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
@@ -2069,11 +2158,12 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       : "";
   writeFileSync(
     ask.prompt,
-    readFileSync(p.brief, "utf8") +
+    ownedHead(step, planOwners(env, plan)) +
+      readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
-      TAIL +
+      tailFor(step) +
       verdict,
   );
   return Start.cases.prepared.make({ ask, electron, phases });
@@ -2102,9 +2192,15 @@ export interface DriveLine {
 /**
  * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
  * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
- * crash is a `stuck:crash` line, with the box kept.
+ * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
+ * before that phase's work starts.
  */
-export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+export const driveStep = (
+  env: Env,
+  agents: Agents,
+  p: Prepared,
+  onPhase: (phase: DrivePhase) => void = () => {},
+): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
@@ -2115,8 +2211,22 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
+    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
+    // typecheck` still takes its own lock (scripts/typecheck.sh).
     if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
-      while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
+      for (;;) {
+        const r = sh("pgrep", ["-x", "tsgo"]);
+        const tsgo = pgrepAnswer(r.code, r.out);
+
+        if (tsgo._tag === "refused") {
+          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+          break;
+        }
+
+        if (tsgo.count === 0) {
+          break;
+        }
+
         yield* Effect.sleep("20 seconds");
       }
     }
@@ -2128,6 +2238,8 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // tea's change notifier fires after each transition and before its first Cmd starts.
+    runtime.subscribe(() => onPhase(runtime.getState().phase));
     yield* runtime.dispatch({ type: "start", ask });
     const end = yield* runtime.done();
 
@@ -2239,7 +2351,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;

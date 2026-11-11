@@ -538,16 +538,16 @@ describe("P34 interrupted recovery", () => {
     );
   }
 
-  // P12 supplies its real local-stage test driver. This file stays in the tests role's paths.
-  // Set P34_STAGE_DRIVER to that module's file URL on the lead's machine. Its open function
+  // P12 supplies its real local-instance test driver. This file stays in the tests role's paths.
+  // Set P34_INSTANCE_DRIVER to that module's file URL on the lead's machine. Its open function
   // installs P34's trusted failure hook, never a public fault endpoint. waitForRecovery waits
   // for the real object's alarm; evict reconstructs the actual object with its durable storage.
-  // scenario: the optional P12 driver runs real object alarms and reconstruction on the local stage.
-  it.skipIf(!process.env.P34_STAGE_DRIVER)(
-    "scenario: p80 real stage: durable poison, down resends and duplicate alarms survive object reconstruction",
+  // scenario: the optional P12 driver runs real object alarms and reconstruction on the local instance.
+  it.skipIf(!process.env.P34_INSTANCE_DRIVER)(
+    "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };
-      type Stage = {
+      type Instance = {
         send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
         status: Effect.Effect<Status, unknown>;
         evict: Effect.Effect<void, unknown>;
@@ -558,8 +558,8 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
-      const modulePath = process.env.P34_STAGE_DRIVER!;
-      const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Stage, unknown> } = await import(
+      const modulePath = process.env.P34_INSTANCE_DRIVER!;
+      const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );
       await Effect.runPromise(

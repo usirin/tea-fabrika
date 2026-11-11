@@ -51,7 +51,14 @@ const Send = Schema.TaggedStruct(SEND, Sent.fields);
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
-const inbox = (name: string): string => `${name}/inbox`;
+/** A name's inbox stream. */
+export const inbox = (name: string): string => `${name}/inbox`;
+
+/** A letter's line, as `send` writes it, for a writer that appends it inside its own ledger turn. */
+export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.make({ m }));
+
+/** A message as a letter's JSON, or none when it is not JSON. */
+export const letterBody = decodeJson;
 
 /** A `send` entry as its History; any other case is none, and kept in the log (T4). */
 const history = Effect.fnUntraced(function* (entry: Entry) {
@@ -179,7 +186,7 @@ export class Mailbox extends Context.Service<
               return Appended.cases.refused.make({ reason: "bad_line" });
             }
 
-            return yield* ledger.append(inbox(to), id, lineFor(from, Send.make({ m: json.value })));
+            return yield* ledger.append(inbox(to), id, letterLine(from, json.value));
           },
           Effect.tap((answer) => answered(tag, answer)),
           Effect.tapError(failed(tag)),

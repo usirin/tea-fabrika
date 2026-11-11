@@ -6,37 +6,65 @@
 // `no-node-filesystem` and `no-node-imports` plant next/ paths in their own test files.
 // `program-package-layout` reads a program's package.json, so it plants generated program
 // packages under next/programs/ in program-package-layout.test.ts.
+// The planted lines of our own rules also run in process through oxlint's RuleTester, and every
+// plant's file goes through one oxlint run, so the config is still what refuses each one.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { BUILTIN_PLANTS, type Plant } from "./builtin-plants.ts";
+import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
+
+// RuleTester runs each case at once, inside the test that plants it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+// From the top of the repo, so a rule reads each planted path as oxlint gives it there.
+const tester = new RuleTester({ cwd: ROOT });
 
 const plant = mkdtempSync(join(import.meta.dirname, ".plant-"));
 afterAll(() => rmSync(plant, { recursive: true, force: true }));
 // What `./b.laws` must be taken for: a file with one more extension, not a named file.
 writeFileSync(join(plant, "b.laws.ts"), "export const b = 1;\n");
 
-/** The lines `pnpm lint`'s oxlint refuses in this file under one rule's code. */
-const fires = (path: string, code: string): readonly number[] => {
-  const out = spawnSync(OXLINT, ["--format=json", relative(ROOT, path)], {
+type Fire = { readonly code: string; readonly line: number };
+
+/** What `pnpm lint`'s oxlint refuses in each of these files, from one run through the repo's config. */
+const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]> => {
+  const out = spawnSync(OXLINT, ["--format=json", ...paths.map((path) => relative(ROOT, path))], {
     cwd: ROOT,
     encoding: "utf8",
   });
   const report = JSON.parse(out.stdout) as {
     readonly diagnostics: readonly {
       readonly code: string;
+      readonly filename: string;
       readonly labels: readonly { readonly span: { readonly line: number } }[];
     }[];
   };
-  return report.diagnostics
-    .filter((d) => d.code === code)
-    .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-    .sort((a, b) => a - b);
+  const fires = new Map<string, Fire[]>(paths.map((path) => [path, []]));
+
+  for (const d of report.diagnostics) {
+    if (d.labels[0] !== undefined) {
+      fires.get(join(ROOT, d.filename))?.push({ code: d.code, line: d.labels[0].span.line });
+    }
+  }
+
+  return fires;
 };
+
+/** The lines one rule's code refuses, in order. */
+const linesOf = (fires: readonly Fire[], code: string): readonly number[] =>
+  fires
+    .filter((f) => f.code === code)
+    .map((f) => f.line)
+    .sort((a, b) => a - b);
+
+/** The lines `pnpm lint`'s oxlint refuses in this file under one rule's code. */
+const fires = (path: string, code: string): readonly number[] => linesOf(firesIn([path]).get(path)!, code);
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
 
@@ -243,38 +271,76 @@ const PLANTS: readonly Plant[] = [
   },
 ];
 
-const refuses = (p: Plant, name: string) => {
-  const file = join(plant, `${name}-${p.file ?? "planted.ts"}`);
-  writeFileSync(file, `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`);
+/** Each file the describe below plants, written as it is collected, so one oxlint run reads them all. */
+const planted: string[] = [];
+
+const put = (name: string, text: string): string => {
+  const file = join(plant, name);
+  writeFileSync(file, text);
+  planted.push(file);
+  return file;
+};
+
+/** The planted file, its text and the lines its rule must refuse. */
+const write = (p: Plant, name: string) => {
+  const text = `${[...p.prelude, ...p.lines.map(([line]) => line)].join("\n")}\n`;
+  const file = put(`${name}-${p.file ?? "planted.ts"}`, text);
   const want = p.lines.flatMap(([, refused], at) => (refused ? [p.prelude.length + at + 1] : []));
-  expect(fires(file, p.code)).toEqual(want);
+  return { file, text, want };
+};
+
+let linted: ReadonlyMap<string, readonly Fire[]> | undefined;
+
+/** The one oxlint run over every planted file, made by the first test that reads it. */
+const firesInPlanted = (file: string, code: string): readonly number[] =>
+  linesOf((linted ??= firesIn(planted)).get(file)!, code);
+
+/** In process, RuleTester: our own rule refuses exactly the lines it must. */
+const inProcess = (p: Plant, { file, text, want }: ReturnType<typeof write>) => {
+  const rule = fabrika.rules[p.code.replace(/^fabrika\((.*)\)$/, "$1")]!;
+  const filename = relative(ROOT, file);
+  tester.run(p.code, rule, {
+    valid: want.length === 0 ? [{ code: text, filename }] : [],
+    invalid: want.length === 0 ? [] : [{ code: text, filename, errors: want.map((line) => ({ line, message: /\S/ })) }],
+  });
 };
 
 describe("each rule refuses what it is there to refuse", () => {
-  it.each(PLANTS.map((p, i) => [p.code, p, i] as const))("%s", (_code, p, i) => {
-    refuses(p, String(i));
+  const ours = PLANTS.map((p, i) => [p.code, p, write(p, String(i))] as const);
+  const builtIn = BUILTIN_PLANTS.map((p, i) => [p.code, p, write(p, `builtin-${i}`)] as const);
+  const self = put("self.ts", 'import {a} from "./self.ts";\nimport {b} from "./b.laws.ts";\nexport {a, b};\n');
+  const poll = put(
+    "poll.test.ts",
+    `${[
+      'import {expect, it} from "vitest";',
+      'it("a", () => { expect.poll(() => 1).toBe(1); });',
+      'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
+    ].join("\n")}\n`,
+  );
+  const notATest = put(
+    "not-a-test.ts",
+    `declare const it: any, expect: any, x: number;\n${'it("a", () => { if (x > 0) { expect(x).toBe(1); } });'}\n`,
+  );
+
+  it.each(ours)("%s", (_code, p, at) => {
+    if (p.code.startsWith("fabrika(")) {
+      inProcess(p, at);
+    }
+
+    expect(firesInPlanted(at.file, p.code)).toEqual(at.want);
   });
 
-  it.each(BUILTIN_PLANTS.map((p, i) => [p.code, p, i] as const))("built in, on with 0 hits: %s", (_code, p, i) => {
-    refuses(p, `builtin-${i}`);
+  it.each(builtIn)("built in, on with 0 hits: %s", (_code, p, at) => {
+    expect(firesInPlanted(at.file, p.code)).toEqual(at.want);
   });
 
   it("built in, on with 0 hits: import(no-self-import)", () => {
-    const file = join(plant, "self.ts");
-    writeFileSync(file, 'import {a} from "./self.ts";\nimport {b} from "./b.laws.ts";\nexport {a, b};\n');
-    expect(fires(file, "import(no-self-import)")).toEqual([1]);
+    expect(firesInPlanted(self, "import(no-self-import)")).toEqual([1]);
   });
 
   // It reports each line twice, so this one counts lines, not reports.
   it("built in, on with 0 hits: vitest(require-awaited-expect-poll)", () => {
-    const file = join(plant, "poll.test.ts");
-    const lines = [
-      'import {expect, it} from "vitest";',
-      'it("a", () => { expect.poll(() => 1).toBe(1); });',
-      'it("b", async () => { await expect.poll(() => 1).toBe(1); });',
-    ];
-    writeFileSync(file, `${lines.join("\n")}\n`);
-    expect([...new Set(fires(file, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
+    expect([...new Set(firesInPlanted(poll, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
   });
 
   it("each built-in rule is planted once", () => {
@@ -283,10 +349,7 @@ describe("each rule refuses what it is there to refuse", () => {
   });
 
   it("a test file is the only place no-expect-in-if looks", () => {
-    const file = join(plant, "not-a-test.ts");
-    const line = 'it("a", () => { if (x > 0) { expect(x).toBe(1); } });';
-    writeFileSync(file, `declare const it: any, expect: any, x: number;\n${line}\n`);
-    expect(fires(file, "fabrika(no-expect-in-if)")).toEqual([]);
+    expect(firesInPlanted(notATest, "fabrika(no-expect-in-if)")).toEqual([]);
   });
 
   it("the plugin has one planted line or more for every rule it lists", async () => {
@@ -320,12 +383,14 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-ledger-sql",
       "no-node-filesystem",
       "no-node-imports",
-      // libfabrika's rooms are planted at their real paths in rooms.test.ts.
-      "rooms",
+      // libfabrika's modules are planted at their real paths in modules.test.ts.
+      "modules",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
       "no-why-key",
+      // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
+      "no-stage-word",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

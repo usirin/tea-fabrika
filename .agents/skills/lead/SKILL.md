@@ -28,6 +28,12 @@ A brief never prints npm, pnpm or environment settings (owner, 2026-11-08), not 
 step where they come from. A run once printed a token to a local log that way. Name the setting
 and say where it is set; never echo its value. `pnpm config list` and `env` stay out of briefs.
 
+An agent's own worktree gets its own install, as `catchup.sh` does: `pnpm install --offline
+--frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
+Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
+(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), so `pnpm typecheck` fails, and a pnpm run in the
+worktree rewrites the main checkout's install state through the link.
+
 For a stacked lane, put the parent and landing facts in the state file and the brief before the
 first step:
 
@@ -153,7 +159,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the two PR files it is a mid-lane handover to `-wip` |
 | `land.ts run <lane> <ticket>` | the lead session only, in the background: refuses unless the tree is clean and at the ready head, leak-greps the PR body, merges `origin/main` in as the bot (never a rebase), leak-greps the change and each commit, signs each named lead commit and then the merge as lead through main's own signer, pushes with `botpush.mjs`, opens or updates the PR and runs `catchup.sh`. A conflict stops it with each file and the step that owns it in the plan's files table; every refusal before the push puts HEAD and the notes back. It never resolves a conflict and never reads a key |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
+| `catchup.sh <pr> <ticket>` | a head that lacks `main` but is green on every check, commits trusted, lands as it is: no merge, no push, only the lint on its true merge ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md)); any other head: merge `main` in as the bot, sign `lead`, push, check that exact head; then look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
 | `sizecap.ts diff <base> <head>` / `sizecap.ts plan <plan.md>` | 0087's cap as advice: `diff` prints one line with the product lines from the merge base to `<head>` (tests, docs, lock, `linguist-generated` and paths outside `next/`, `apps/`, `programs/` and `packages/` counted apart) against `[review] lines`, default 600, the lower of base and head; `catchup.sh` prints it before it waits on checks. `plan` names each `## Size` slice over the cap, and a plan with no slices whose "Product lines expected" column is over it; `plancheck.sh --draft` prints it. Neither refuses until a replay on merged pull requests lets it block |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs/` row from a Codex run's events, printed for `fieldfile.ts` |
@@ -253,7 +259,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
-  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
+  one; where pgrep cannot list processes, that wait and the agent cap are skipped with one line
+  each (`pgrep.ts`). A box finds the Node the repo pins first on its PATH, with pnpm run on it
+  (`boxnode.ts`), so a brief writes a plain `node` and `pnpm`, never `volta run`. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Run a whole lane with chain.ts
 
@@ -296,8 +304,13 @@ Start it in the background and read the last line only:
 ```sh
 node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 	[--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] \
-	[--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start <step>] &
+	[--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] \
+	[--model sonnet|opus] [--start <step>] &
 ```
+
+`--codex-exec` runs the named steps' Codex as the installed `codex exec`, on your own Codex config
+and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`). `drive.ts` takes
+`--agent codex-exec` for one step.
 
 - **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
   step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
@@ -311,7 +324,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
+  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
+  send back with the error lines: to tests when every error is in an exam path, else to build. One
+  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
+  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
   steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
@@ -450,10 +467,12 @@ visible, and never weaken the rules to hide this message.
    An exam change that is all proper property tests merges without the owner's read (owner,
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
    Then the lead session runs `land.ts run <lane> <ticket>` in the background. It merges main in,
-   signs, pushes and opens or updates the PR as the Scripts table says, then runs `catchup.sh`: it
-   brings the PR up to
-   date, signs only the new merge as `lead`, waits for every check on that exact head (e2e and
-   commits included) and squash-lands it pinned to that head; a PR in a gh stack lands with
+   signs, pushes and opens or updates the PR as the Scripts table says, then runs `catchup.sh`: a
+   head already green on every check lands without catching up, after the lint on its true merge
+   with main ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md));
+   any other head it brings up to
+   date, signs only the new merge as `lead`, and waits for every check on that exact head (e2e and
+   commits included). It squash-lands pinned to that head; a PR in a gh stack lands with
    `gh stack merge <pr> --squash --yes` once its head reads unchanged. Every PR squash-merges, a stacked
    parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
    GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
@@ -482,8 +501,10 @@ visible, and never weaken the rules to hide this message.
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
     own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
-    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
-    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close
+    gets a comment naming the PR and its merge commit (`scripts/catchup.sh:86`). No row per merge
+    is written: that measure is proposed
+    ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 

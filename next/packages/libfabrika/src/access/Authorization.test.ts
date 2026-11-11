@@ -10,7 +10,9 @@ import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -19,6 +21,7 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
+import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 let appendAdmitted: typeof import("./Authorization.ts").appendAdmitted;
 
@@ -121,8 +124,8 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
     },
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
-  const transaction = LedgerTransaction.layer(sql).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
+  const transaction = LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet));
   const observations: Observed[] = [];
   let turns = 0;
   const observed = Layer.effect(
@@ -147,7 +150,7 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
   const layer = Layer.mergeAll(
     ledger,
     observed,
-    ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+    ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
     SpanSink.layer(sql, { object: "process_01m6v5270hetdrt4r8h9vvjwjs" }),
     RecordManager.memory(1024 * 1024),
     Archive.memory,

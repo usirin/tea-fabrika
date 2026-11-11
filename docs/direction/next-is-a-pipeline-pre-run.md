@@ -58,7 +58,10 @@ review.*
 - **A live run on a target repository:** only through the ship stage.
 - **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
   a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
-  and the lead agent reads the diff and runs a leak grep, then merges and writes the `MergeRow`.
+  and the lead agent reads the diff and runs a leak grep, then merges. `catchup.sh` comments on
+  each ticket it closes with the pull request and its merge commit
+  (`.agents/skills/lead/scripts/catchup.sh:86`); the row per merge that note proposes (M1) is
+  not written yet.
   This holds for product code, exam pull requests and exam paths too: the lead merges with
   `catchup.sh` once every step passed and `loosening.sh` shows no real loosening after the lead's
   hand check. The lead reads each new edge comment. Still the owner's: real loosening or removal

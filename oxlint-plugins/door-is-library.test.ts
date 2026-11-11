@@ -29,8 +29,8 @@ describe("P17a, the library owns the door", async () => {
     "next/apps/fabrika/src/brain.ts": "export const wire = () => true;",
   };
   const linted = await plant(files);
-  // The three fronts pass in any of the three retired files. The old barrel's name, a room's
-  // internal file and another room's front do not.
+  // The three fronts pass in any of the three retired files. The old barrel's name, a module's
+  // internal file and another module's front do not.
   it("plants checks, folds, imports and a wrong re-export in each retired file", () => {
     expect(linted(code, "next/apps/fabrika/src/door.ts")).toEqual([4, 5, 6, 7, 8, 9]);
     expect(linted(code, "next/apps/fabrika/src/door-store.ts")).toEqual([2]);

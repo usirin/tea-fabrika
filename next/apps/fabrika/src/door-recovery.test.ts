@@ -9,11 +9,12 @@ import { Machine } from "@demlik/tea/effect";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
 import { Grant } from "@kampus/libfabrika/access/Access";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
-import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
@@ -207,9 +208,10 @@ const world = () => {
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const data = () =>
-    Layer.mergeAll(Ledger.sql(project.sql, { reader: "recovery-test" }), LedgerTransaction.layer(project.sql)).pipe(
-      Layer.provide(quiet),
-    );
+    Layer.mergeAll(
+      LedgerSql.layer(project.sql, { reader: "recovery-test" }),
+      LedgerTransactionSql.layer(project.sql),
+    ).pipe(Layer.provide(quiet));
   const records = RecordManager.sql((name) => {
     let p = partFiles.get(name);
 
@@ -240,7 +242,7 @@ const world = () => {
   const env = () =>
     Layer.mergeAll(
       data(),
-      ClientManager.layer(founder).pipe(Layer.provide(data())),
+      ClientManagerLedger.layer(founder).pipe(Layer.provide(data())),
       records,
       Archive.memory,
       A.Id.Generator.layer,
@@ -849,7 +851,7 @@ describe("P34 door recovery", () => {
               const p = yield* ProcessManager;
 
               if (yield* p.isLive(P1)) {
-                yield* p.exit(P1, "crashed", from());
+                yield* p.exit(P1, { _tag: "crashed", phase: "step", error: "Error" }, from());
               }
 
               yield* p.start(

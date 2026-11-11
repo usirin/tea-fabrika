@@ -5,6 +5,8 @@ import "../../lead/scripts/mutbox-entry.sh?raw";
 import "../../lead/scripts/mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/scope.ts?raw";
@@ -19,7 +21,13 @@ import "../../lead/scripts/keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/boxnode.ts?raw";
 import "../../lead/scripts/fieldrow.py?raw";
 import "../../lead/scripts/runplan.sh?raw";
 import "../../lead/scripts/env.sh?raw";
@@ -33,6 +41,22 @@ import "../../lead/scripts/botpush.mjs?raw";
 import "../../lead/scripts/clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/lane.ts?raw";
+import "../../lead/scripts/catchup.sh?raw";
+import "../../lead/scripts/loosening.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/freshmain.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/Beat.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/Outcome.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/Runners.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/Step.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/typecheck.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/flow/host.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../../../exam-paths.json?raw";
 import { spawnSync } from "node:child_process";
@@ -42,6 +66,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { estimateIn } from "../../lead/scripts/chain.ts";
 
 // Today's tooling. Run each plant in a disposable copy of the script beside this test.
 const script = join(import.meta.dirname, "plancheck.sh");
@@ -166,7 +191,7 @@ describe("plancheck, today's tooling", () => {
         }),
         ({ first, position, approval, fenced, fence }) => {
           const lines = [first, "", "", ""];
-          lines[position] = "Plancheck-Version: 2";
+          lines[position] = "Plancheck-Version: 3";
           const example = "Approved by the lead agent, builds a different plan.";
           const body = complete(
             `${approval ? (fenced ? `${fence}\n${example}\n${fence.slice(0, 3)}` : example) : ""}\n`,
@@ -354,6 +379,8 @@ describe("plancheck, today's tooling", () => {
           marker: fc.constantFrom(
             "",
             "Plancheck-Version: 2",
+            "Plancheck-Version: 3",
+            "Plancheck-Version: 4",
             "Plancheck-Version: 1",
             "Plancheck-Version: TBD",
             "Plancheck-Version:",
@@ -370,7 +397,8 @@ describe("plancheck, today's tooling", () => {
 
           const body = table(["Law", "Generator", "Plant"], rows);
           const got = check(body, marker);
-          const pass = marker === "" || (marker === "Plancheck-Version: 2" && cells.every((c) => c.pass));
+          const known = ["Plancheck-Version: 2", "Plancheck-Version: 3"].includes(marker);
+          const pass = marker === "" || (known && cells.every((c) => c.pass));
           expect(got.code, got.text).toBe(pass ? 0 : 1);
           expect(got.text.split("legacy plan: generator checks skipped").length - 1).toBe(marker === "" ? 1 : 0);
         },
@@ -884,6 +912,8 @@ describe("plancheck, today's tooling", () => {
 // T321 keeps normal saved-plan reads above. New structure checks run at the approval boundary.
 const digest = (body: string) => createHash("sha256").update(Buffer.from(body)).digest("hex");
 
+const estimateLine = "Estimate: 4 steps, $6";
+
 const complete = (extra = "") =>
   [
     "# Today's tooling",
@@ -900,6 +930,7 @@ const complete = (extra = "") =>
     "",
     "## Size",
     "Size: 1 agent hour, 80 lines. Confidence: 85%.",
+    estimateLine,
     "",
     "## What it records",
     "Approval digests and run IDs.",
@@ -912,8 +943,9 @@ const complete = (extra = "") =>
     extra,
   ].join("\n");
 
-const approved = (body: string, note = "the decided note") =>
-  `Approved by the lead agent, builds ${note}; body ${digest(body).slice(0, 12)}\nPlancheck-Version: 2\n${body}`;
+// Version 2 by default: a plan approved before the Estimate line keeps passing.
+const approved = (body: string, note = "the decided note", version = 2) =>
+  `Approved by the lead agent, builds ${note}; body ${digest(body).slice(0, 12)}\nPlancheck-Version: ${version}\n${body}`;
 
 const modeCheck = (text: string, mode: "--draft" | "--approved") => {
   const folder = mkdtempSync(join(tmpdir(), "pc-321-"));
@@ -947,7 +979,7 @@ describe("T686 size advice in the draft check, today's tooling", () => {
           "Size: 1 agent hour, 80 lines. Confidence: 85%.",
           `Size: 1 agent hour. Confidence: 85%.\n\n${listed}`,
         );
-        const ran = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+        const ran = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(ran.code, ran.text).toBe(0);
         const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
         expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
@@ -963,7 +995,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
     fc.assert(
       fc.property(word, fc.constantFrom("```", "~~~"), (title, fence) => {
         const body = complete(`\n${title}\n`);
-        const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+        const good = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(good.code, good.text).toBe(0);
 
         for (const part of [
@@ -980,7 +1012,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           const decoy = part.startsWith("```")
             ? "## Example\n```text\nlate opening block\n```"
             : `${fence}md\n${part}\n${fence}`;
-          const bad = modeCheck(`\nPlancheck-Version: 2\n${without}\n${decoy}\n`, "--draft");
+          const bad = modeCheck(`\nPlancheck-Version: 3\n${without}\n${decoy}\n`, "--draft");
           expect(bad.code, `${part}\n${bad.text}`).toBe(1);
           expect(bad.text).not.toMatch(/usage:|Traceback|cannot read installed/);
         }
@@ -999,7 +1031,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           `1. ${text}? Lean yes, ${percent}%.\n2. Another? Lean no, ${percent}%.`,
         ]) {
           const body = complete().replace("None.", questions);
-          const good = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+          const good = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(good.code, good.text).toBe(0);
         }
 
@@ -1013,7 +1045,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
           complete().replace("None.", `None.\n+ ${text}?`),
           complete().replace("None.", `None.\n${text}, and is it ready?`),
         ]) {
-          const bad = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+          const bad = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(bad.code, bad.text).toBe(1);
         }
       }),
@@ -1039,15 +1071,44 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
                 ? `\n- \`${path}\``
                 : `\nChange \`${path}\` here.`;
           const body = complete(mention);
-          const bad = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+          const bad = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(bad.code, bad.text).toBe(1);
           expect(bad.text).toContain(path);
           const withRow = body.replace("| src/plain.ts | build |", `| src/plain.ts | build |\n| ${path} | tests |`);
-          const good = modeCheck(`\nPlancheck-Version: 2\n${withRow}`, "--draft");
+          const good = modeCheck(`\nPlancheck-Version: 3\n${withRow}`, "--draft");
           expect(good.code, good.text).toBe(0);
         },
       ),
       { seed: 321, numRuns: 6 },
+    );
+  });
+
+  // Plants: let an anchored path, a bare anchor or a note word through as an owner key, or refuse
+  // a plain path, a root file or a folder. stepcommit matches keys to staged paths exactly
+  // (ticket 425, lane t411: `serve.test.ts:162`, `:537` and `new` became keys).
+  it("property: --draft fails a files-table path that is no repo path, naming its row", () => {
+    fc.assert(
+      fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
+        const path = `src/${name}.test.ts`;
+        const at = (cell: string) =>
+          complete().replace("| src/plain.ts | build |", `| src/plain.ts | build |\n| ${cell} | tests |`);
+
+        for (const [cell, key] of [
+          [`\`${path}:${line}\``, `${path}:${line}`],
+          [`\`${path}\`, \`:${line}\``, `:${line}`],
+          [`\`${path}\`, new`, "new"],
+        ] as const) {
+          const bad = modeCheck(`\nPlancheck-Version: 3\n${at(cell)}`, "--draft");
+          expect(bad.code, bad.text).toBe(1);
+          expect(bad.text).toContain(`${key} is not a repo path`);
+        }
+
+        for (const cell of [`\`${path}\``, "`README.md`", `\`src/${name}/\``]) {
+          const good = modeCheck(`\nPlancheck-Version: 3\n${at(cell)}`, "--draft");
+          expect(good.code, `${cell}\n${good.text}`).toBe(0);
+        }
+      }),
+      { seed: 425, numRuns: 3 },
     );
   });
 
@@ -1062,7 +1123,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
         }),
         ({ text, ending, unicode }) => {
           const body = complete(`\n## Amendment 1\n${unicode} ${text}${ending}`);
-          const draft = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+          const draft = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
           expect(draft.code, draft.text).toBe(0);
           expect(draft.text).toContain(digest(body));
           const good = modeCheck(approved(body), "--approved");
@@ -1131,6 +1192,108 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
   });
 });
 
+// The Estimate line, version 3 (.decisions/0076): the plan feeds chain.ts's backstop. Edge cases,
+// listed before the code (0040), each with its case below:
+//   missing                  no Estimate line at all
+//   two                      two lines, both well formed, in Size and in another section
+//   zero, negative           `0 steps`, `-2 steps`, `$0`, `$0.00`
+//   decimal dollars          `$12.50` passes; `2.5 steps` fails
+//   no dollar sign           `Estimate: 4 steps, 6`
+//   in a code block          only inside a fence fails; a fenced copy beside the real line is two
+//   trailing spaces          pass, as a writer cannot see them
+//   not last in Size         a line after it in the Size section fails
+//   old plans                version 2 approved plans keep passing; a version 2 draft is refused
+const drafted = (body: string) => modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
+
+const estimateFaults = {
+  missing: () => complete().replace(`${estimateLine}\n`, ""),
+  two: () => complete().replace("Approval digests and run IDs.", `Approval digests and run IDs.\n${estimateLine}`),
+  zeroSteps: (d: number) => complete().replace(estimateLine, `Estimate: 0 steps, $${d}`),
+  negativeSteps: (n: number, d: number) => complete().replace(estimateLine, `Estimate: -${n} steps, $${d}`),
+  zeroDollars: (n: number) => complete().replace(estimateLine, `Estimate: ${n} steps, $0`),
+  zeroCents: (n: number) => complete().replace(estimateLine, `Estimate: ${n} steps, $0.00`),
+  decimalSteps: (n: number, d: number) => complete().replace(estimateLine, `Estimate: ${n}.5 steps, $${d}`),
+  noDollarSign: (n: number, d: number) => complete().replace(estimateLine, `Estimate: ${n} steps, ${d}`),
+  fencedOnly: (n: number, d: number) =>
+    complete().replace(estimateLine, `\`\`\`text\nEstimate: ${n} steps, $${d}\n\`\`\``),
+  fencedCopy: (n: number, d: number) =>
+    complete().replace(estimateLine, `\`\`\`text\nEstimate: ${n} steps, $${d}\n\`\`\`\n${estimateLine}`),
+  notLast: () => complete().replace(estimateLine, `${estimateLine}\nOne more size note.`),
+};
+
+type EstimateFault = keyof typeof estimateFaults;
+
+describe("plan estimate, today's tooling", () => {
+  // Plant: accept a draft with no Estimate line, or read the line chain.ts's estimateIn reads apart.
+  it("a well-formed Estimate line ending Size passes the draft, and chain.ts reads its numbers", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          steps: fc.integer({ min: 1, max: 60 }),
+          dollars: fc.oneof(
+            fc.integer({ min: 1, max: 200 }).map(String),
+            fc.integer({ min: 1, max: 20_000 }).map((cents) => (cents / 100).toFixed(2)),
+          ),
+          unit: fc.constantFrom("steps", "step"),
+          trailing: fc.string({ unit: fc.constantFrom(" ", "\t"), maxLength: 3 }),
+        }),
+        ({ steps, dollars, unit, trailing }) => {
+          const line = `Estimate: ${steps} ${unit}, $${dollars}${trailing}`;
+          const body = complete().replace(estimateLine, line);
+          const got = drafted(body);
+          expect(got.code, `${line}\n${got.text}`).toBe(0);
+          expect(estimateIn(body)).toEqual({ steps, dollars: Number(dollars) });
+        },
+      ),
+      {
+        seed: 76,
+        numRuns: 12,
+        examples: [
+          // vector: a decimal dollar amount.
+          [{ steps: 12, dollars: "12.50", unit: "steps", trailing: "" }],
+          // vector: trailing spaces a writer cannot see.
+          [{ steps: 4, dollars: "6", unit: "steps", trailing: "   " }],
+        ],
+      },
+    );
+  });
+
+  // Plant: drop any one fault's check; count a fenced line as the estimate; take the first of two.
+  it("a missing, doubled, fenced, misplaced or malformed Estimate line fails with one message", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...(Object.keys(estimateFaults) as EstimateFault[])),
+        fc.integer({ min: 1, max: 40 }),
+        fc.integer({ min: 1, max: 90 }),
+        (fault, n, d) => {
+          const body = estimateFaults[fault](n, d);
+          const got = drafted(body);
+          expect(got.code, `${fault}\n${got.text}`).toBe(1);
+          expect(got.text.match(/^plan estimate: /gm), got.text).toHaveLength(1);
+          const approvedAt3 = modeCheck(approved(body, "the decided note", 3), "--approved");
+          expect(approvedAt3.code, approvedAt3.text).toBe(1);
+          expect(approvedAt3.text).toMatch(/^plan estimate: /m);
+        },
+      ),
+      { seed: 76, numRuns: 22 },
+    );
+  });
+
+  // scenario: plans approved at version 2 have no Estimate line and must keep passing; a draft must
+  // carry version 3, so a writer cannot skip the line by writing the old version.
+  it("scenario: version 2 approved plans keep passing, and a version 2 draft is refused", () => {
+    const old = estimateFaults.missing();
+    const kept = modeCheck(approved(old), "--approved");
+    expect(kept.code, kept.text).toBe(0);
+    expect(kept.text).not.toContain("plan estimate");
+    const saved = handoff(approved(old));
+    expect(saved.code, saved.text).toBe(0);
+    const draft = modeCheck(`\nPlancheck-Version: 2\n${complete()}`, "--draft");
+    expect(draft.code, draft.text).toBe(1);
+    expect(draft.text).toContain("draft: put Plancheck-Version: 3 on line 2");
+  });
+});
+
 describe("T325 K6 plancheck, today's tooling", () => {
   // No domain Schema for draft text. Plant: skip the shared checker or ignore its refusal.
   it("checks every draft addition with leakgrep and preserves clean plans", () => {
@@ -1162,7 +1325,7 @@ describe("T325 K6 plancheck, today's tooling", () => {
           const plan = join(root, "plan.md");
           writeFileSync(
             plan,
-            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 2\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
+            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 3\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\nEstimate: 3 steps, $2\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
           );
           const run = () =>
             spawnSync("sh", [join(scripts, "plan/scripts/plancheck.sh"), ...(draft ? ["--draft"] : []), plan], {
@@ -1185,5 +1348,108 @@ describe("T325 K6 plancheck, today's tooling", () => {
       }),
       { seed: 325, numRuns: 6 },
     );
+  });
+});
+
+// 2026-11-11: a tests step looped on laws its box could never finish: a type law with an fc.
+// generator, test laws with no run count, a Validation section asking for a typecheck. Measured
+// over the saved plans, the kind check hit about 7 false alarms in 15, so all three advise and
+// never change the exit code. Edge cases, each a case below:
+//   kind: `type`, `lint: why`, `Type` and a wrapped `` `fc.array` `` advise; a `type` generator, a
+//         `test` kind, a kind that also names a test, and a table with no kind column do not; both
+//         kind headers (`Kind`, `Lint, type or test?`) are read.
+//   runs: a test row with fc. and no count advises; `200 runs`, `1 run` and `default runs`
+//         anywhere in the row do not; a non-fc generator does not.
+//   validation: `--changed`, `changed tests` and `typecheck` in the Validation section advise,
+//         fenced commands included; a line naming the lead, CI or the host, or saying no, does not;
+//         the same words in another section do not; a legacy plan gets none of the three.
+describe("laws and validation advice, today's tooling", () => {
+  const advice = (text: string) => text.split("\n").filter((l) => l.startsWith("advice: "));
+  const kindHead = fc.constantFrom("Kind", "Lint, type or test?");
+  const row = (kind: string, generator: string, plant = "break it") => ["holds", kind, generator, plant];
+  const kinded = (head: string, rows: string[][]) => table(["Law", head, "Generator", "Plant"], rows);
+  const fcCell = constructor.map((name) => `fc.${name}: generated cases`);
+
+  // Plant: drop the kind check, or let it fail the plan.
+  it("property: a type or lint row with an fc. generator advises, and the exit code stays", () => {
+    const kind = fc.constantFrom("type", "lint", "lint: source ownership", "Type");
+    fc.assert(
+      fc.property(kindHead, kind, fcCell, wrap, (head, k, gen, around) => {
+        const got = check(kinded(head, [row(k, `${around}${gen}${around}`)]));
+        expect(got.code, got.text).toBe(0);
+        expect(advice(got.text), got.text).toEqual([
+          expect.stringMatching(/^advice: line \d+: a (type|lint) law carries an fc\. generator/),
+        ]);
+      }),
+      { seed: 1111, numRuns: 6 },
+    );
+  });
+
+  // Plant: read the kind's first word only, so "type and runtime test" advises.
+  it("vector: a type generator, a test kind, a kind that names a test and a table with no kind column do not advise", () => {
+    const quiet = [
+      kinded("Kind", [row("type", "type")]),
+      kinded("Kind", [row("lint", "lint")]),
+      kinded("Lint, type or test?", [row("test", "fc.record: x", "break it, 100 runs")]),
+      kinded("Kind", [row("Type and runtime test", "fc.array: forged fields, default runs")]),
+      table(["Law", "Generator", "Plant"], [["holds", "fc.record: x", "break it"]]),
+    ];
+
+    for (const body of quiet) {
+      const got = check(body);
+      expect(got.code, got.text).toBe(0);
+      expect(advice(got.text), body).toEqual([]);
+    }
+  });
+
+  // Plant: require the count in the generator cell only, or drop the singular.
+  it("property: a test row with an fc. generator advises unless the row states its runs", () => {
+    const runs = fc.constantFrom("", "200 runs", "1 run", "default runs", "Default runs");
+    const at = fc.constantFrom("generator", "plant");
+    fc.assert(
+      fc.property(kindHead, fcCell, runs, at, (head, gen, count, where) => {
+        const cells =
+          where === "generator" ? row("test", count ? `${gen}, ${count}` : gen) : row("test", gen, `break it ${count}`);
+        const got = check(kinded(head, [cells]));
+        expect(got.code, got.text).toBe(0);
+        expect(advice(got.text).length, got.text).toBe(count === "" ? 1 : 0);
+
+        if (count === "") {
+          expect(advice(got.text)[0]).toContain("states no run count");
+        }
+      }),
+      { seed: 1112, numRuns: 8, examples: [["Kind", "fc.record: x", "", "generator"]] },
+    );
+    expect(advice(check(kinded("Kind", [row("test", "vector: the five verbs")])).text)).toEqual([]);
+  });
+
+  // Plant: read only text outside fences; skip the lead filter; read every section.
+  it("vector: the Validation section advises on --changed, changed tests and typecheck, and nothing else does", () => {
+    const law = kinded("Kind", [row("test", "fc.record: x, 50 runs")]);
+    const told = [
+      "- Run `nice -n 19 pnpm exec vitest run --changed origin/main` once.",
+      "- Run changed tests once, then one typecheck.",
+      "```sh\npnpm typecheck\n```",
+    ];
+    const quiet = [
+      "- The lead runs `--changed` and one typecheck.",
+      "- CI runs typecheck.",
+      "- No `pnpm typecheck` in a box.",
+      "- Run the narrow test file twice.",
+    ];
+
+    for (const said of told) {
+      const got = check(`${law}\n\n## Validation\n\n${said}\n`);
+      expect(got.code, got.text).toBe(0);
+      expect(advice(got.text), said).toEqual([expect.stringContaining("the Validation section tells a boxed step")]);
+    }
+
+    for (const said of quiet) {
+      expect(advice(check(`${law}\n\n## Validation\n\n${said}\n`).text), said).toEqual([]);
+    }
+
+    expect(advice(check(`${law}\n\n## Size\n\n- Run one typecheck.\n`).text)).toEqual([]);
+    const legacy = `${kinded("Kind", [row("type", "fc.record: x")])}\n\n## Validation\n\n- Run one typecheck.\n`;
+    expect(advice(check(legacy, "").text)).toEqual([]);
   });
 });

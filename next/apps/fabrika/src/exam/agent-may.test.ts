@@ -6,11 +6,12 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { addText, Change, grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
-import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
@@ -88,11 +89,11 @@ const world = Effect.fnUntraced(function* () {
       build: "p8",
     };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "p8-agent" }).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "p8-agent" }).pipe(Layer.provide(quiet));
   const env = Layer.mergeAll(
     ledger,
-    LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
-    ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+    LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
+    ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
     SpanSink.layer(sql, { object: pid }),
     RecordManager.memory(4 * 1024 * 1024),
     Archive.memory,

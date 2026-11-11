@@ -4,7 +4,7 @@
 // sheet at once never both hear "you are in". Written before the module (Tier 1, P9, ticket 236).
 //
 // The shape these tests hold the module to, from the plan's "The shape" and flag 6:
-// - `ClientManager.layer(founder & {person})` over a `Ledger`. Building it writes nothing. The first
+// - `ClientManagerLedger.layer(founder & {person})` over a `Ledger`. Building it writes nothing. The first
 //   call on an empty `gateway/access` writes `founded` under the fixed id `founded`, once, by the
 //   key and build the layer was handed. A ledger refusal of it, except `id_reused`, is a
 //   `LedgerError` with its own `reason: "refused"` (not `bad_row`, which means a row that does not
@@ -26,12 +26,14 @@ import { Effect, Layer, References, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
 import type { MemberEvent, Access } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
+import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "connection:t1";
@@ -81,13 +83,13 @@ afterAll(() => {
 });
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-const onSql = (sql: Sql) => Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(quiet));
+const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
 
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
-const clientsOn = (ledger: Layer.Layer<Ledger>, founder: Parameters<typeof ClientManager.layer>[0] = FOUNDER) =>
-  ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+const clientsOn = (ledger: Layer.Layer<Ledger>, founder: Parameters<typeof ClientManagerLedger.layer>[0] = FOUNDER) =>
+  ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
 
-const founderArb: fc.Arbitrary<Parameters<typeof ClientManager.layer>[0]> = fc.record({
+const founderArb: fc.Arbitrary<Parameters<typeof ClientManagerLedger.layer>[0]> = fc.record({
   name: fc.string(),
   keys: fc.uniqueArray(fc.string(), { minLength: 1, maxLength: 5 }),
   window: fc.option(fc.string(), { nil: null }),
@@ -369,7 +371,7 @@ describe("p96, founded is written once, by the first call", () => {
         expect(failed.reason).toBe("storage");
         const refused = yield* Effect.flip(write(granted("pA", key)));
         expect(refused.reason).toBe("storage");
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(broken))));
+      }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(broken))));
     }),
   );
 
@@ -378,7 +380,7 @@ describe("p96, founded is written once, by the first call", () => {
       Effect.gen(function* () {
         const sql = fresh();
         const one = clientsOn(onSql(sql));
-        const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
+        const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
         yield* Effect.all(
           [
             members.pipe(Effect.provide(one)),
@@ -421,11 +423,11 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
     const noBy = { ...base, build: FOUNDER_BUILD };
     const noBuild = { ...base, by: FOUNDER_BY };
     // @ts-expect-error `by` is required: the founding line is signed by a checked key
-    const one = ClientManager.layer(noBy);
+    const one = ClientManagerLedger.layer(noBy);
     // @ts-expect-error `build` is required: the founding line names the code that wrote it
-    const two = ClientManager.layer(noBuild);
+    const two = ClientManagerLedger.layer(noBuild);
     // @ts-expect-error neither can be left out
-    const three = ClientManager.layer(base);
+    const three = ClientManagerLedger.layer(base);
     expect([one, two, three].every(Layer.isLayer)).toBe(true);
   });
 
@@ -452,7 +454,7 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
       (reason) =>
         Effect.gen(function* () {
           const sql = fresh();
-          const layer = ClientManager.layer(FOUNDER).pipe(Layer.provide(refusing(sql, reason)));
+          const layer = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(refusing(sql, reason)));
           const failed = yield* Effect.flip(members.pipe(Effect.provide(layer)));
           expect(failed, reason).toBeInstanceOf(LedgerError);
           expect(failed.reason, reason).toBe("refused");
@@ -470,14 +472,14 @@ describe("p96, founded carries true facts and is never refused quietly", () => {
       // Another load's whole first call lands first, so this one's append hears id_reused.
       const other = members.pipe(
         Effect.asVoid,
-        Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+        Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
       );
       const raced = refusing(sql, "id_reused", other);
       return Effect.gen(function* () {
         expect(view(yield* members)).toEqual(view(foldAccess([FOUNDED])));
         expect(yield* write(granted("pA", key))).toEqual({ _tag: "applied", rev: 2 });
         expect((yield* entries).map((e) => e.id)[0]).toBe("founded");
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
+      }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(raced))));
     }),
   );
 });
@@ -639,7 +641,7 @@ describe("p96, the stolen sheet race", () => {
             }),
           ),
           Effect.asVoid,
-          Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
+          Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)))),
         ),
       };
       return Effect.gen(function* () {
@@ -655,7 +657,7 @@ describe("p96, the stolen sheet race", () => {
         expect(m.keys.get("pA")?.live).toBe(true);
         // Both events are in the log; the fold took only the first.
         expect((yield* entries).map((e) => e.id)).toEqual(["founded", eventId(sheet), eventId(macX), eventId(macC)]);
-      }).pipe(Effect.provide(ClientManager.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
+      }).pipe(Effect.provide(ClientManagerLedger.layer(FOUNDER).pipe(Layer.provideMerge(racing(sql, hook)))));
     }),
   );
 
@@ -668,7 +670,7 @@ describe("p96, the stolen sheet race", () => {
           for (let round = 0; round < 12; round++) {
             const sql = fresh();
             const one = clientsOn(onSql(sql));
-            const two = ClientManager.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
+            const two = ClientManagerLedger.layer(FOUNDER).pipe(Layer.provide(onSql(sql)));
             yield* write(addedSheet("pA", "r1")).pipe(Effect.provide(one));
             const answers = yield* Effect.all(
               [

@@ -4,6 +4,8 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../botpush.mjs?raw";
 import "../box.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -14,6 +16,8 @@ import "../chain.ts?raw";
 import "../clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../pgrep.ts?raw";
 import "../env.sh?raw";
 import "../fieldrow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -36,7 +40,13 @@ import "../sizecap.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./Outcome.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./Beat.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./Runners.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./typecheck.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../mutation/scripts/limit.ts?raw";
 import "../../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../../mutation/scripts/sample.ts?raw";
@@ -49,6 +59,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { repoNode } from "../boxnode.ts";
 import {
   changedPaths,
   commandArgv,
@@ -58,7 +69,6 @@ import {
   hostEnv,
   lastHost,
   recordInLane,
-  repoNode,
   runCommands,
   runners,
 } from "./host.ts";

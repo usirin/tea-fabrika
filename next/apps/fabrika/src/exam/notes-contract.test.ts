@@ -23,10 +23,11 @@ import {
   type Refusal,
   type Update,
 } from "@kampus/libfabrika";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
-import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
@@ -147,7 +148,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
   );
   const sql = nodeSql(db);
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Layer.mergeAll(Ledger.sql(sql, { reader: "p8" }), LedgerTransaction.layer(sql)).pipe(
+  const ledger = Layer.mergeAll(LedgerSql.layer(sql, { reader: "p8" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(quiet),
   );
   let nextProcess = 0;
@@ -266,7 +267,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
       };
       const env = Layer.mergeAll(
         ledger,
-        ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+        ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
         SpanSink.layer(sql, { object: process }),
         RecordManager.memory(4 * 1024 * 1024),
         Archive.memory,
