@@ -1,6 +1,7 @@
 import { Context, Effect } from "effect";
 import { LedgerError } from "../data/index.ts";
-import type { GatewayBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
+import type { GatewayBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
+import type { RecordShape } from "./objects.ts";
 
 type Client<S> = {
   readonly [K in keyof S]: S[K] extends (...args: infer A) => infer B
@@ -190,25 +191,9 @@ export class GatewayClient extends Context.Service<
   }
 }
 
-export class RecordClient extends Context.Service<
-  RecordClient,
-  Client<Omit<RecordBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/RecordClient") {
-  static make(stub: RecordBinding): RecordClient["Service"] {
-    return {
-      write: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Record write RPC enters Effect
-        Effect.tryPromise({ try: () => stub.write(...args), catch: unreachable }),
-      read: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Record read RPC enters Effect
-        Effect.tryPromise({ try: () => stub.read(...args), catch: unreachable }),
-      content: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Record content RPC enters Effect
-        Effect.tryPromise({ try: () => stub.content(...args), catch: unreachable }),
-      deleteContent: (...args) =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Record deleteContent RPC enters Effect
-        Effect.tryPromise({ try: () => stub.deleteContent(...args), catch: unreachable }),
-    };
+export class RecordClient extends Context.Service<RecordClient, RecordShape>()("fabrika/RecordClient") {
+  static make(stub: RecordShape): RecordClient["Service"] {
+    return stub;
   }
 }
 

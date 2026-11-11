@@ -65,7 +65,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
       }
     },
     platform: "browser" as const,
-    external: ["cloudflare:workers"],
+    external: options.phase === "brain" ? ["cloudflare:workers", /^node:/] : ["cloudflare:workers"],
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };

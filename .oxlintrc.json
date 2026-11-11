@@ -395,6 +395,43 @@
   },
   "overrides": [
     {
+      // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
+      "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "os",
+                "importNames": ["homedir"]
+              },
+              {
+                "name": "node:fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "fs",
+                "importNames": ["lstat", "lstatSync", "realpath", "realpathSync", "readlink", "readlinkSync"]
+              },
+              {
+                "name": "node:fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "fs/promises",
+                "importNames": ["lstat", "realpath", "readlink"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["apps/fabrika/src/host/settings.laws.test.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
@@ -488,6 +525,25 @@
       // takes a string) and kept from then on as a WebCrypto key that cannot be exported.
       "files": ["packages/fabrika/src/host/signer.ts"],
       "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
+      // Our own source exports by name, never by default (0058). A default the platform loads, a
+      // Cloudflare Worker's, is an inline edge on its one line, never an override here.
+      "files": ["next/**", "packages/**", "programs/**", "apps/**"],
+      "rules": { "import/no-default-export": "error" }
+    },
+    {
+      // Tooling and config a tool loads by its default stay out of 0058. Only these: a platform
+      // edge in our source is never listed here. `fixtures/` is in `ignorePatterns`, and
+      // `oxlint-plugins/` and the top level's configs sit outside the globs above.
+      "files": [
+        "**/vitest.config.ts",
+        "**/rslib.config.ts",
+        "**/stylelint.config.ts",
+        "**/alchemy.run.ts",
+        "**/scripts/**"
+      ],
+      "rules": { "import/no-default-export": "off" }
     },
     {
       // The new version's exam rules (Tier 1, P2). They block from the start, and their fires on PR
@@ -664,6 +720,26 @@
         "next/packages/libfabrika/src/runtime/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
+    },
+    {
+      // T502: object names must not load their implementations. Type imports erase at build time.
+      // Last, so it replaces the libfabrika rooms override's options for this one file; "**" with the
+      // Alchemy negations also covers that override's Radix and internal/ bans.
+      "files": ["next/packages/libfabrika/src/workers/objects.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**", "!alchemy", "!alchemy/**", "!@alchemy.run", "!@alchemy.run/**"],
+                "allowTypeImports": true,
+                "message": "Object contracts import only Alchemy values and erased types."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

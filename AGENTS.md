@@ -111,6 +111,13 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
+- **In `next/`, a resource is acquired in a scope.** A child process, a test window, a database,
+  a file handle, a socket, a temp folder, a timer or a subscription is opened with
+  `Effect.acquireRelease` and offered as a `Layer` or a scoped Effect, so the scope gives it back.
+  No `try/finally` and no `afterEach` that releases it, and no "remember to close" in prose. A
+  raw handle from the platform is wrapped once, at the edge. A process killed with SIGKILL runs no
+  finalizer, so a resource that must not outlive it needs a guard outside the process too
+  ([0061](./.decisions/0061-resources-are-acquired-in-a-scope.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
@@ -169,7 +176,11 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   never from its own. A room offers Effect services in its own types and errors, plus the shared
   names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
   `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
-  ([0043](./.decisions/0043-rooms-on-floors.md)).
+  ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the floors too, with no
+  exemption: a room whose laws need a real database writes them as a suite, read through its
+  module as `SinkTest.suite(nodeSql)`, and the room that owns the driver runs it; a helper two
+  rooms share sits on a floor both may import
+  ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
@@ -332,8 +343,10 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service that holds many is named in the plural, as
-  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
-  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`. Test tooling follows the same
+  names: a test helper or shared suite is read through its module, as Effect writes
+  `SqlEventLogServerUnencryptedStorageTest.suite(...)`, so `SinkTest.suite(nodeSql)`, never a bare
+  `sinkSuite(...)` ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code

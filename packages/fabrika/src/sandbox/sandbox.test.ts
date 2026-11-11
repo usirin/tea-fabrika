@@ -238,9 +238,10 @@ describe.skipIf(!osRuns)("the os sandbox's fence", () => {
     expect(readFileSync(join(copy, "code.txt"), "utf8")).toBe("the commit\n");
   });
 
-  // The repository's own files are not the sandbox's. On CI, as on most laptops, it is under home.
-  const file = join(import.meta.dirname, "..", "..", "..", "..", "package.json");
-  it.skipIf(!file.startsWith(homedir()))("mounting nothing, reads no file under home", async () => {
+  // scenario: a private file under the test HOME; plant: allow home reads.
+  it("scenario: mounting nothing reads no file under home", async () => {
+    const file = join(process.env.HOME!, "sandbox-private.txt");
+    writeFileSync(file, "private fixture");
     expect(existsSync(file)).toBe(true);
     const exit = await run("os", sh(`cat ${file}`));
 

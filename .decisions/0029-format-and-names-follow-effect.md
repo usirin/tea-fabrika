@@ -1,12 +1,12 @@
 ---
 id: 0029
-title: The repo formats code as Effect does, oxfmt stays, Module.of is allowed and a service that holds many has a plural name
+title: The repo formats code as Effect does, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
 status: amended-in-part by [0039](0039-keep-semicolons-and-es5-commas.md)
 date: 2026-11-09
 tags: [style, format, oxfmt, names, of, services, effect, next]
 ---
 
-# 0029: The repo formats code as Effect does, oxfmt stays, Module.of is allowed and a service that holds many has a plural name
+# 0029: The repo formats code as Effect does, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
 
 **What this decides:** the owner closed most of
 [0023](0023-next-follows-effects-code-style.md)'s open differences toward Effect: the format
@@ -93,3 +93,12 @@ Binding constraints:
 
 - 2026-11-09: `func-style: declaration` stays off; arrow consts are fine, as Effect writes them
   (7,693 hits when tried; owner's call). The format sweep, ticket 466, changed no lint rule.
+- 2026-11-10: test tooling follows these names too (owner). A test helper, a test-support file and a
+  shared test suite are named as Effect names its own, and read through their module, never as a bare
+  camel-case function: `SinkTest.suite(nodeSql)` under `import * as SinkTest`. Effect does it in
+  `packages/effect/test/unstable/eventlog/SqlEventLogServerUnencryptedStorageTest.ts`, which exports
+  `suite`, and `packages/sql/sqlite-node/test/SqlEventLogServerUnencrypted.test.ts` calls it as
+  `SqlEventLogServerUnencryptedStorageTest.suite("sql-sqlite-node", SqliteClient.layer({ filename: ":memory:" }))`
+  (Effect-TS/effect-smol, main). `make` stays Effect's word for building a value; a suite registers
+  tests, so it is `suite`. Not decided here: whether shared suites are how lower rooms test against
+  a database. That call is still open (ticket 640).

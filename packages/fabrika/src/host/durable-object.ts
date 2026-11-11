@@ -715,6 +715,7 @@ const objectOf = (url: URL): string | null => url.pathname.split("/")[1] || null
  * Plain HTTP for processes that cannot hold an RPC stub: every request goes to its object, whose
  * `fetch` is the door. The Worker itself reads nothing and calls no method.
  */
+// oxlint-disable-next-line import/no-default-export -- edge: Cloudflare loads a Worker from its default export
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const name = objectOf(new URL(req.url));
