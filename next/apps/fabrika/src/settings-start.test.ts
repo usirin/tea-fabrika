@@ -184,7 +184,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
   });
 });
 
-// Real processes, as stage-wire.test.ts starts them: workerd, sockets and a fresh FABRIKA_HOME.
+// Real processes, as instance-wire.test.ts starts them: workerd, sockets and a fresh FABRIKA_HOME.
 // Each one, its home and its held port are acquired in the test's scope, which gives them back
 // (decision 0061).
 

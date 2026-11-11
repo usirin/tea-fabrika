@@ -36,13 +36,13 @@ vi.mock("@effect/platform-node", async (original) => {
   };
 });
 
-const stageFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
+const instanceFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
   expect(Cause.hasDies(cause)).toBe(false);
   expect(Cause.findErrorOption(cause)).toMatchObject({
     _tag: "Some",
-    value: { _tag: "StageError", reason },
+    value: { _tag: "InstanceError", reason },
   });
 };
 
@@ -66,7 +66,7 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
       try {
         vi.resetModules();
         await import("../dev.ts");
-        stageFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
+        instanceFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
         expect(touched).not.toHaveBeenCalled();
       } finally {
         process.argv = argv;
@@ -115,7 +115,7 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
         if (code === 0) {
           expect(Exit.isSuccess(exit)).toBe(true);
         } else {
-          stageFailure(exit, "child_failed");
+          instanceFailure(exit, "child_failed");
         }
 
         expect(commands).toHaveLength(1);
@@ -175,7 +175,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
         try {
           vi.resetModules();
           await import("../dev.ts");
-          stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+          instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
         } finally {
           process.argv = argv;
           cli.layer = undefined;
@@ -206,14 +206,14 @@ vi.mock("./exam/compiler.ts", async (original) => ({
   check: () => [],
 }));
 
-// The stage records each start's options, so a law sees the port it was started with.
-const stages = vi.hoisted(() => [] as Array<{ readonly port: number }>);
+// The instance records each start's options, so a law sees the port it was started with.
+const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
 
-vi.mock("./local-stage.ts", () => ({
-  localStage: (_built: unknown, options: { readonly port: number }) =>
+vi.mock("./local-instance.ts", () => ({
+  localInstance: (_built: unknown, options: { readonly port: number }) =>
     Effect.suspend(() => {
-      stages.push(options);
-      return Effect.fail({ reason: "test_stage_ready" });
+      instances.push(options);
+      return Effect.fail({ reason: "test_instance_ready" });
     }),
 }));
 
@@ -401,7 +401,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
       }),
       async ({ name, port }, choices) => {
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
-          file = join(folder, "stage.json"),
+          file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
         // T664: a port saved by an older start is never a source, so it differs from the default.
         const saved = {
@@ -424,7 +424,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         vi.stubEnv("FABRIKA_INSTANCE_PORT", undefined);
         cli.layer = w.layer;
         cli.work = undefined;
-        stages.length = 0;
+        instances.length = 0;
         const overrides = {
           name,
           person: `person-${name}`,
@@ -454,10 +454,10 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           const exit = await Effect.runPromiseExit(cli.work!);
           expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
             _tag: "Some",
-            value: { reason: "test_stage_ready" },
+            value: { reason: "test_instance_ready" },
           });
           const calls = w.calls.filter(([, path]) => path === folder || path === file);
-          // T664: the port is a setting now, so it leaves the saved state and goes to the stage.
+          // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
           const { port: _flag, ...founding } = Object.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
           const { port: _override, ...named } = overrides;
@@ -466,7 +466,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             ...founding,
             build: "pending",
           };
-          expect(stages.map((stage) => stage.port)).toEqual([choices.port ? port : 18787]);
+          expect(instances.map((instance) => instance.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
             ...(choices.saved ? [["read", file]] : []),
@@ -477,7 +477,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
           const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
           expect(savedAt).toBeLessThan(buildAt);
-          expect(w.paths).toContainEqual([folder, "stage.json"]);
+          expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {
           process.argv = argv;
           cli.layer = undefined;
@@ -506,6 +506,7 @@ const loadFailures = fc.oneof(
   }),
   fc.record({
     kind: fc.constant("unknown" as const),
+    // oxlint-disable-next-line fabrika/no-stage-word -- the old top-level word is a key no file may hold
     body: fc.constantFrom("[nope]\n", "[instance]\nprot = 18800\n", "telemetry = false\n", "stage = 1\n"),
   }),
   fc.record({ kind: fc.constant("scope" as const), body: fc.constant('fabrika-version = "0.0.0"\n') }),
@@ -520,7 +521,7 @@ const loadFailures = fc.oneof(
   fc.record({ kind: fc.constant("env" as const), body: badPort }),
 );
 
-it("L11: no failed settings load reaches the stage write, the build or the stage, and its cause is kept", async () => {
+it("L11: no failed settings load reaches the instance write, the build or the instance, and its cause is kept", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), loadFailures, fc.boolean(), (name, failure, alias) =>
       Effect.runPromise(
@@ -557,7 +558,7 @@ it("L11: no failed settings load reaches the stage write, the build or the stage
             vi.stubEnv("FABRIKA_HOME", folder);
             vi.stubEnv("FABRIKA_INSTANCE_PORT", failure.kind === "env" ? failure.body : undefined);
             cli.layer = w.layer;
-            stages.length = 0;
+            instances.length = 0;
             process.argv = [
               process.execPath,
               "dev.ts",
@@ -570,7 +571,7 @@ it("L11: no failed settings load reaches the stage write, the build or the stage
             vi.resetModules();
             yield* Effect.promise(() => import("../dev.ts"));
             const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
-            stageFailure(exit, "settings");
+            instanceFailure(exit, "settings");
             // The dev edge translates the load's error and keeps it as the cause.
             expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
               _tag: "Some",
@@ -581,11 +582,11 @@ it("L11: no failed settings load reaches the stage write, the build or the stage
                 },
               },
             });
-            // Counted fakes: the build reads its source first, the stage records each start.
+            // Counted fakes: the build reads its source first, the instance records each start.
             expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual(
               [],
             );
-            expect(stages).toEqual([]);
+            expect(instances).toEqual([]);
           }),
         ),
       ),
@@ -614,7 +615,7 @@ it("dev without saved settings reports settings for each missing required value"
       try {
         vi.resetModules();
         await import("../dev.ts");
-        stageFailure(await Effect.runPromiseExit(cli.work!), "settings");
+        instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
@@ -663,7 +664,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
   );
 });
 
-it("dev returns StageError for malformed saved settings without writing or building", async () => {
+it("dev returns InstanceError for malformed saved settings without writing or building", async () => {
   const invalid = fc
     .oneof(
       fc.string(),
@@ -681,7 +682,7 @@ it("dev returns StageError for malformed saved settings without writing or build
     fc.asyncProperty(invalid, async (raw) => {
       const folder = mkdtempSync(join(tmpdir(), "p12-settings-fs-")),
         source = join(folder, "view.tsx"),
-        file = join(folder, "stage.json");
+        file = join(folder, "instance.json");
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
       writeFileSync(file, raw);
@@ -702,7 +703,7 @@ it("dev returns StageError for malformed saved settings without writing or build
         expect(Cause.hasFails(cause)).toBe(true);
         expect(Cause.findErrorOption(cause)).toMatchObject({
           _tag: "Some",
-          value: { _tag: "StageError", reason: "settings" },
+          value: { _tag: "InstanceError", reason: "settings" },
         });
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {

@@ -5,13 +5,19 @@ flowchart LR
   caller["a file that yields Ledger"] --> contract["ledger/Ledger.ts: the contract"]
   sql["ledger/LedgerSql.ts: layer"] --> contract
   remote["ledger/LedgerRemote.ts: layer"] --> contract
-  sql --> referee["ledger/Referee.ts"]
-  referee --> store["ledger/internal/ledgerStore.ts: SQL"]
+  sql --> referee["ledger/Referee.ts: the contract"]
+  sql --> refereeSql["ledger/RefereeSql.ts: layer"]
+  refereeSql --> referee
+  refereeSql --> store["ledger/internal/ledgerStore.ts: SQL"]
+  transactionSql["ledger/LedgerTransactionSql.ts: layer"] --> transaction["ledger/LedgerTransaction.ts: the contract"]
+  transactionSql --> store
   sql --> pages["ledger/internal/ledgerPages.ts"]
   remote --> pages
   remote --> trace["ledger/internal/ledgerTrace.ts"]
   runtime["cloudflare/runtime.ts"] -- "LedgerSql.layer / LedgerRemote.layer" --> sql
   runtime --> remote
+  runtime -- "RefereeSql.layer / LedgerTransactionSql.layer" --> refereeSql
+  runtime --> transactionSql
   brain["Project (Durable Object class)"] -- "ManagedRuntime.make" --> runtime
 ```
 
@@ -26,7 +32,7 @@ export class Ledger extends Context.Service<
   }
 >()("@kampus/libfabrika/Ledger") {}
 
-// next/packages/libfabrika/src/ledger/LedgerSql.ts:11-22: one implementation, a sibling file.
+// next/packages/libfabrika/src/ledger/LedgerSql.ts:12-23: one implementation, a sibling file.
 export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
   Layer.effect(
     Ledger,
@@ -38,10 +44,14 @@ export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Laye
         wait: (stream, after) => referee.wait(stream, after, caller.reader),
       };
     }),
-  ).pipe(Layer.provide(Referee.layer(sql)));
+  ).pipe(Layer.provide(RefereeSql.layer(sql)));
 
-// next/packages/libfabrika/src/cloudflare/runtime.ts:337 and :738: callers read it by its module.
-LedgerSql.layer(sql, { reader: `project:${name}` }),
+// next/packages/libfabrika/src/cloudflare/runtime.ts:338-342 and :740: callers read each by its module.
+const ledgerLayer = Layer.mergeAll(
+  LedgerSql.layer(sql, { reader: `project:${name}` }),
+  LedgerTransactionSql.layer(sql),
+  RefereeSql.layer(sql),
+).pipe(Layer.provide(bell));
 const ledger = LedgerRemote.layer(stub, { reader: saved.id });
 ```
 
@@ -53,8 +63,10 @@ It imports `Effect`, `Stream`, `Rev` and the log types as types only (`:6-8`), s
 of it holds `effect` and this one file, never `Referee` or the SQL store.
 
 Each Layer is its own sibling file, named for the service and the variant, exporting `layer`, as
-Effect writes `NodeFileSystem.layer`. `LedgerSql.layer` (`ledger/LedgerSql.ts:11`) yields `Referee`
-and provides `Referee.layer(sql)`. `LedgerRemote.layer` (`ledger/LedgerRemote.ts:13`) wraps a
+Effect writes `NodeFileSystem.layer`. `LedgerSql.layer` (`ledger/LedgerSql.ts:12`) yields `Referee`
+and provides `RefereeSql.layer(sql)`. `RefereeSql.layer` (`ledger/RefereeSql.ts:8`) and
+`LedgerTransactionSql.layer` (`ledger/LedgerTransactionSql.ts:8`) each build the store on the same
+`Sql` with the `Doorbell` they yield, as their static layers did. `LedgerRemote.layer` (`ledger/LedgerRemote.ts:13`) wraps a
 Promise stub at the service boundary, so no caller sees a Promise. Code both layers share sits under
 `internal/`: `pages` (`ledger/internal/ledgerPages.ts:9`) and the span keys `STREAM` and `tag`
 (`ledger/internal/ledgerTrace.ts:5-7`). A Layer asks for what it needs with `yield*` and is
@@ -78,7 +90,7 @@ Rules:
   Object's storage into our `Sql`, is `next/packages/libfabrika/src/cloudflare/CloudflareSql.ts:3`.
 - **Compose, never build.** No `Layer.build` then `Context.get` then `Effect.provideContext` on each
   call: that is what `Layer.provide` does. A service that needs another captures it once with
-  `yield*` in its own Layer (`ledger/LedgerSql.ts:15`).
+  `yield*` in its own Layer (`ledger/LedgerSql.ts:16`).
 - **Ordered setup is `Layer.unwrap`.** When a Layer depends on a value read first (settings, a
   saved descriptor), read it in an Effect and return the Layer from it
   (`next/apps/fabrika/src/runtime.ts:20`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
@@ -99,17 +111,15 @@ Every service and every runtime in `next/`. Stops at tea: a program's state live
 
 ## Services awaiting their slice
 
-`Ledger` is the one service converted so far (ticket 702, slice 1). The rest still carry static
-layers, and each moves in its own slice. A search of `next/packages/libfabrika/src` outside tests
-finds 22 static Layer members, for example `Referee.layer` (`ledger/Referee.ts:18`),
-`LedgerTransaction.layer` (`ledger/LedgerTransaction.ts:18`), `Mailbox.layer`
-(`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
-(`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1604`). `Referee` and
-`LedgerTransaction` are slice 3. The Node adapter,
+`Ledger` (ticket 702, slice 1), `Referee` and `LedgerTransaction` (ticket 723, slice 3) are
+converted so far. The rest still carry static layers, and each moves in its own slice. A search of
+`next/packages/libfabrika/src` outside tests finds 20 static Layer members, for example
+`Mailbox.layer` (`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
+(`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1622`). The Node adapter,
 `next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
 code follows this doc now.
 
-`Layer.build` is still used in product code: `cloudflare/runtime.ts:353` and `:743`,
+`Layer.build` is still used in product code: `cloudflare/runtime.ts:355` and `:745`,
 `cloudflare/connection.ts:18` and `node/dev/dev-recording.ts:31`, each followed by
 `Effect.provideContext` (ticket 442).
 
@@ -122,6 +132,12 @@ loaded 255 modules and kept 82 before this split; it loads 248 and keeps 66 afte
 libfabrika file but itself. The build step's unminified chunk, region comments included, went from
 624,432 to 460,076 bytes (ticket 702, rolldown 1.2.13). The plan's own count, taken another way,
 was 469,820 before and 278,245 for the contract in memory.
+
+`Referee.ts` and `LedgerTransaction.ts` had the same cost: each imported the store for its static
+layer, and `Referee.ts` re-exported the span helpers. Bundled alone for a browser, each loaded 256
+modules and kept 80, among them `ledgerStore.ts` and `ledgerTrace.ts`. As contracts each loads 248
+and keeps 15, with no libfabrika file but itself (ticket 723, rolldown 1.2.13, measured with the
+bundle exam's load hook and output module list).
 
 `Layer.build` plus `provideContext` works and passes every law, and it looks like control. It costs
 in reading: each call site must remember to provide, and a forgotten one is a missing-service defect

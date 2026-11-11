@@ -1,17 +1,17 @@
-// T502 PR 2, next/. Records through the normal local stage control socket.
+// T502 PR 2, next/. Records through the normal local instance control socket.
 import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
-import { localStage } from "./local-stage.ts";
+import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const Failure = Schema.Struct({ reason: Schema.String });
 
 export const recordCall = Effect.fnUntraced(function* (invoke: () => Promise<unknown>) {
-  // oxlint-disable-next-line fabrika/no-promises -- edge: the local stage record proxy exposes Promise-returning stub calls
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance record proxy exposes Promise-returning stub calls
   return yield* Effect.tryPromise({
     try: invoke,
     catch: (cause: unknown) => Schema.decodeUnknownSync(Failure)(cause),
@@ -55,7 +55,7 @@ export const recordWire = Effect.fnUntraced(
         }
       }),
     );
-    return yield* localStage(built, {
+    return yield* localInstance(built, {
       home,
       name: "record-law",
       person: "person_01m6v5270hf3c8x2q7w9z4k5mn",

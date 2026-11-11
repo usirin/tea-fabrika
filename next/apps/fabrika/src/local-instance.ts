@@ -24,7 +24,7 @@ const portTaken = (cause: Cause.Cause<unknown>) =>
   // Edge: a refusal that reached us only as text, its structure gone, is known by the runtime's words.
   /AddressInUse|EADDRINUSE|already in use/.test(Cause.pretty(cause));
 
-export const localStage = Effect.fn("brain.localStage")(function* (
+export const localInstance = Effect.fn("brain.localInstance")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
   options: Omit<import("./settings.ts").Settings, "build"> & { readonly home: string },
 ) {
@@ -34,7 +34,7 @@ export const localStage = Effect.fn("brain.localStage")(function* (
   // oxlint-disable-next-line fabrika/no-promises -- edge: load Alchemy only after disabling its telemetry
   const { startDev } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
-    try: () => import("./stage.ts"),
+    try: () => import("./instance.ts"),
     catch: () => new BrainError({ reason: "storage" }),
   });
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-l3-burst-wraps-with-sf-mono",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "apps/fabrika/e2e.ts",
+    "line": 1998
+  },
+  "says": "L3 reads only the burst's last row, so it fails when the 65-cell line wraps in a 63-column tile, as with SF Mono; finding 2026-11-10-f58902 names hiding the window as the cause, which is wrong.",
+  "proof": "Host probe, 5 runs per mode: at window width 1200, L3 failed 5 of 5 visible and 5 of 5 hidden; at width 1400 it passed 5 of 5 in every mode; all 60 keydowns landed in t2 in every run. With the check reading the prompt line with wraps undone, a planted lost key showed t2's rows as a 63-character row ending 'focusstaysrigh' and then 't', so the line does wrap at 1200, and the unplanted check passed 3 of 3 at widths 1200 and 1400, visible and hidden.",
+  "cost": "A lead on a laptop with SF Mono cannot run the e2e past L3, and blames the hidden window for it.",
+  "head": "8b689c1325bc18a9662a73a5e31ad795852621e6",
+  "ticket": null,
+  "pr": null
+}
