@@ -317,7 +317,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
+  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
+  send back with the error lines: to tests when every error is in an exam path, else to build. One
+  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
+  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
   steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
