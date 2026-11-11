@@ -19,6 +19,7 @@ import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabri
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
@@ -383,7 +384,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
     clients,
-    LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
+    LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
     Mailbox.layer.pipe(Layer.provide(clients)),
     SpanSink.layer(sql, { object: START }),
     records,
@@ -399,7 +400,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
       Layer.provideMerge(
         Layer.mergeAll(
           freshClients,
-          LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
+          LedgerTransactionSql.layer(storage).pipe(Layer.provide(quiet)),
           Mailbox.layer.pipe(Layer.provide(freshClients)),
           SpanSink.layer(storage, { object: START }),
           records,
@@ -2945,7 +2946,7 @@ describe("P33 signal ids belong to the brain", () => {
       Effect.sync(() => next.shift()!),
     ).pipe(
       Layer.provide(
-        LedgerTransaction.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+        LedgerTransactionSql.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );
   };

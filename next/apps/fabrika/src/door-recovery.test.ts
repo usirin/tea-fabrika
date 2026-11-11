@@ -14,7 +14,7 @@ import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/Se
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
-import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
@@ -210,7 +210,7 @@ const world = () => {
   const data = () =>
     Layer.mergeAll(
       LedgerSql.layer(project.sql, { reader: "recovery-test" }),
-      LedgerTransaction.layer(project.sql),
+      LedgerTransactionSql.layer(project.sql),
     ).pipe(Layer.provide(quiet));
   const records = RecordManager.sql((name) => {
     let p = partFiles.get(name);
