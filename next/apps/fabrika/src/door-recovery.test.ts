@@ -851,7 +851,7 @@ describe("P34 door recovery", () => {
               const p = yield* ProcessManager;
 
               if (yield* p.isLive(P1)) {
-                yield* p.exit(P1, "crashed", from());
+                yield* p.exit(P1, { _tag: "crashed", phase: "step", error: "Error" }, from());
               }
 
               yield* p.start(
