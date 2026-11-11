@@ -11,7 +11,11 @@ blog post 10 (deleted from main; see the tag `archive/2026-11-09`); the first co
 *Added 2026-11-10: a choice that makes sense as a value here must be one, in both versions and in
 `next/` now ([0069](../../.decisions/0069-choices-are-settings.md)). This note's limits on what a
 setting may be still hold. The foundation for loading settings in `next/` moved from Tier 5 to
-Tier 1 by 0069. Repo programs and packs do not move with it.*
+Tier 1 by 0069. 0069 does not move repo programs or packs; 0068, below, gives programs written
+outside a thin slice.*
+
+*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
+outside fabrika's own source get a thin slice before Tier 5; its shape is not decided yet.
 
 ## Where the files live (2026-10-30)
 
