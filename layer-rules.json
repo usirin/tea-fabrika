@@ -87,6 +87,11 @@
       "paths": ["next/packages/libfabrika/src/transport"]
     },
     {
+      "name": "next-settings",
+      "floor": 2,
+      "paths": ["next/packages/libfabrika/src/settings"]
+    },
+    {
       "name": "next-telemetry",
       "floor": 1,
       "paths": ["next/packages/libfabrika/src/telemetry"]

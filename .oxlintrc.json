@@ -630,6 +630,78 @@
       }
     },
     {
+      // T664, L15: outside libfabrika, nothing in next/ imports the TOML parser, and no program or
+      // window chooses the TOML adapter. libfabrika's own rule is in the rooms override below,
+      // which replaces this one there.
+      "files": ["next/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // T664, L15: start code in next/apps selects the settings Layers, the TOML adapter included.
+      "files": ["next/apps/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
       // another room's names, `src/` holds only what is listed here, every export in an `internal/`
       // file is `@internal`, and the `values` files hold no service and no error. `folders` also
@@ -639,18 +711,123 @@
       // Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
       // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
       // so the Radix entry of the base rule is repeated here.
+      //
+      // T664, L15: TOML is read only through the settings module's `Toml` service. Only
+      // `settings/TomlParser.ts` imports the parser, and only the settings module and its Node
+      // loader under `node/settings/` take that adapter; the two overrides after this one say so.
       "files": ["next/packages/libfabrika/src/**"],
       "rules": {
         "fabrika/rooms": [
           "error",
           {
             "src": "next/packages/libfabrika/src",
-            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"],
+            "rooms": [
+              "telemetry",
+              "ledger",
+              "transport",
+              "settings",
+              "processes",
+              "presence",
+              "access",
+              "runtime",
+              "gateway"
+            ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
             "values": ["ProcessId", "Sql", "Rev"]
           }
         ],
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // T664, L15: the settings module and its Node loader take the TOML adapter. It comes after the
+      // libfabrika rooms override, so it replaces that rule's options here, and repeats the rest.
+      "files": ["next/packages/libfabrika/src/settings/**", "next/packages/libfabrika/src/node/settings/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // T664, L15: the adapter itself is the one file that imports the parser.
+      "files": ["next/packages/libfabrika/src/settings/TomlParser.ts"],
+      "rules": {
         "eslint/no-restricted-imports": [
           "error",
           {
@@ -692,7 +869,8 @@
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
-        "next/packages/libfabrika/src/gateway/**"
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/settings/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -706,7 +884,8 @@
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
-        "next/packages/libfabrika/src/gateway/internal/**"
+        "next/packages/libfabrika/src/gateway/internal/**",
+        "next/packages/libfabrika/src/settings/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },
