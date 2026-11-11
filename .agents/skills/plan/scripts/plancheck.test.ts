@@ -6,6 +6,8 @@ import "../../lead/scripts/mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./plancheck.sh?raw";
 import "../../lead/scripts/leakgrep.sh?raw";
 import "../../step-commit/scripts/exam.py?raw";
