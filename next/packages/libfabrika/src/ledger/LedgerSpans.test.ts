@@ -23,6 +23,8 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
+import * as LedgerRemote from "./LedgerRemote.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
@@ -62,7 +64,7 @@ const failing = (fails: string) =>
   });
 
 const onSql = (sql: Sql, doorbell: Layer.Layer<Doorbell> = quiet) =>
-  Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(doorbell));
+  LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell));
 
 const BODY = "body-marker-7c1d";
 const SENT = "sent-marker-2026-11-07T21:10:01.204Z";
@@ -327,7 +329,10 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(texts.filter((text) => text.includes(BODY) || text.includes("sent-marker"))).toEqual([]);
           expect(texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
           expect(texts.filter((text) => text.length > MOST).map((text) => text.length)).toEqual([]);
-        }).pipe(Effect.provide(Ledger.sql(fresh(), { reader }).pipe(Layer.provide(quiet))), Effect.withTracer(tracer)),
+        }).pipe(
+          Effect.provide(LedgerSql.layer(fresh(), { reader }).pipe(Layer.provide(quiet))),
+          Effect.withTracer(tracer),
+        ),
       );
     };
     await fc.assert(fc.asyncProperty(names, run), {
@@ -398,7 +403,10 @@ describe("p95, every call is one span, names and numbers only", () => {
         const read = one("ledger.read");
         heldShort(read, STREAM, stream);
         heldShort(read, tag("reader"), reader);
-      }).pipe(Effect.provide(Ledger.sql(fresh(), { reader }).pipe(Layer.provide(quiet))), Effect.withTracer(tracer));
+      }).pipe(
+        Effect.provide(LedgerSql.layer(fresh(), { reader }).pipe(Layer.provide(quiet))),
+        Effect.withTracer(tracer),
+      );
       // The caller's side: `Ledger.remote`'s `ledger.call` span takes the stream and the reader too.
       const { tracer: callTracer, tags: callTags } = capture();
       const stub: LedgerCalls = {
@@ -418,7 +426,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           heldShort(call, STREAM, stream);
           heldShort(call, tag("reader"), reader);
         }
-      }).pipe(Effect.provide(Ledger.remote(stub, { reader })), Effect.withTracer(callTracer));
+      }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader })), Effect.withTracer(callTracer));
       return Effect.runPromise(Effect.andThen(referee, remote));
     };
     await fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: 30 });
@@ -681,7 +689,7 @@ describe("p95, every call is one span, names and numbers only", () => {
               expect.arrayContaining(["read"]),
               expect.arrayContaining(["wait"]),
             ]);
-          }).pipe(Effect.provide(Ledger.remote(stub, { reader: READER })), Effect.withTracer(tracer));
+          }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
       ),

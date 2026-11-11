@@ -6,6 +6,7 @@
 // is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
 // held in memory and tried again at each later `end`, and the next `flush` fails the step with
 // `storage`: let it crash. The sink's own calls end no span.
+import { applyCell } from "@demlik/tea";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Result, Schema, Tracer } from "effect";
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
@@ -18,12 +19,12 @@ import {
   writeHealth,
   writeSize,
 } from "./internal/measurements.ts";
+import { type Ended, held, machine } from "./internal/sink.ts";
 import { RecordManager } from "./Records.ts";
 import {
   Chain,
   chainName,
   errorClass,
-  type Measurements,
   OBJECT,
   PROCESS,
   SinkError,
@@ -60,14 +61,6 @@ const decodeUnsent = Schema.decodeUnknownSync(Unsent);
 const encodeChain = Schema.encodeSync(Schema.fromJsonString(Chain));
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(SpanRow));
 const decodePart = Schema.decodeUnknownSync(Schema.Struct({ part: Schema.Int }));
-
-/** What one ended span writes: its health row and its unsent row, worked out before any write. */
-type Ended = {
-  readonly health: Measurements;
-  readonly chain: Chain;
-  readonly row: SpanRow;
-  readonly content: string | null;
-};
 
 /** Tags as a row keeps them: strings (cut at 128), finite numbers, booleans, and `Redacted` as
  *  `"<redacted>"`. Anything else is dropped, and counted. */
@@ -228,12 +221,9 @@ export class SpanSink extends Context.Service<
 
 const make = (sql: Sql, who: { readonly object: string }) => {
   let ready = false;
-  /** Spans whose write met a full disk, oldest first, tried again at each later `end`. */
-  let held: ReadonlyArray<Ended> = [];
-  /** Whether a write failed since the last flush. */
-  let failed = false;
-  /** The newest hour this process has rolled up and sized. Memory only: a wake checks once more. */
-  let checked = Number.NEGATIVE_INFINITY;
+  /** Spans held after a full disk, a failure owed to the next flush, and the newest hour sized.
+   *  Changed only by what `applyCell` returns. Memory only: a wake checks once more. */
+  let state = machine.init(null, {})[0];
 
   /** Runs `step` as one atomic step, with the tables made first on first use. */
   const atomic = <A>(step: () => A): A =>
@@ -262,12 +252,12 @@ const make = (sql: Sql, who: { readonly object: string }) => {
   /** Lands the held spans and `more` in one step, then rolls up closed hours before `now`. A span's
    *  `end` also writes this hour's size row. A throw keeps every span held. */
   const commit = (more: ReadonlyArray<Ended>, now: number, sized: boolean): Result.Result<void, unknown> => {
-    const batch = [...held, ...more];
     const hour = hourStart(now);
+    const { checked } = state;
     const done = Result.try({
       try: () =>
         atomic(() => {
-          for (const one of batch) {
+          for (const one of [...held(state), ...more]) {
             land(one);
           }
 
@@ -281,18 +271,11 @@ const make = (sql: Sql, who: { readonly object: string }) => {
         }),
       catch: (error) => error,
     });
-
-    if (Result.isFailure(done)) {
-      held = batch;
-      failed = true;
-    } else {
-      held = [];
-
-      if (sized && hour > checked) {
-        checked = hour;
-      }
-    }
-
+    state = applyCell(
+      machine,
+      state,
+      Result.isFailure(done) ? { type: "commit_failed", more } : { type: "committed", hour, sized },
+    )[0];
     return done;
   };
 
@@ -356,9 +339,11 @@ const make = (sql: Sql, who: { readonly object: string }) => {
   });
 
   const flush = Effect.gen(function* () {
-    if (failed || held.length > 0) {
-      failed = false;
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held.length }));
+    const before = state;
+    state = applyCell(machine, state, { type: "flush_checked" })[0];
+
+    if (before._tag !== "clean") {
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
     }
 
     const records = yield* RecordManager;
@@ -390,7 +375,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
     if (Result.isFailure(done)) {
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held.length }));
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length }));
     }
 
     return yield* attempt(() => readSummaries(sql, from, to));
