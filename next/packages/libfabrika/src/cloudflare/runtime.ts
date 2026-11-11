@@ -15,6 +15,7 @@ import {
 import { Base64, Base64Url } from "effect/encoding";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
+import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SigningRefused, Writer, type Session } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -92,7 +93,7 @@ export interface BrainOptions {
 
 export interface ProjectDoorOptions {
   readonly sql: Sql;
-  readonly founder: Parameters<typeof ClientManager.layer>[0];
+  readonly founder: Parameters<typeof ClientManagerLedger.layer>[0];
   readonly turn: Semaphore.Semaphore;
   readonly write: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly policy: (process: string) => Effect.Effect<{ inputs: Array<string>; events: Array<string> }, LedgerError>;
@@ -343,7 +344,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   ).pipe(Layer.provide(bell));
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
   const managers = Layer.mergeAll(
-    ClientManager.layer(founder),
+    ClientManagerLedger.layer(founder),
     ProcessManager.layer(
       {
         by,

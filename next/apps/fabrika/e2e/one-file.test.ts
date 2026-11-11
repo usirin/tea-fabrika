@@ -232,6 +232,26 @@ const trace = process.env.P14_E2E_TRACE;
 
 class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
 
+class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+
+const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
+
+/** Fails once this worker is told to stop: a signal, or its vitest parent gone. vitest's main process
+ *  exits at once on SIGTERM or SIGINT and its worker dies with it, so no scope would close. Raced
+ *  against the fixture, this closes the scope first, as `NodeRuntime.runMain` does for a main. */
+const stopped = Effect.callback<never, Stopped>((resume) => {
+  const stops = STOPS.map((reason) => {
+    const stop = () => resume(Effect.fail(new Stopped({ reason })));
+    process.once(reason, stop);
+    return () => process.off(reason, stop);
+  });
+  return Effect.sync(() => {
+    for (const off of stops) {
+      off();
+    }
+  });
+});
+
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
@@ -411,7 +431,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             // input the program accepts from it, presses its button, then installs the stepped view.
             await fc.assert(
               fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
-                let step = program.init(undefined);
+                let step = program.init(null);
                 assert(step._tag === "stepped");
                 await render(step.view);
                 const start = (await pressed()).length;
@@ -446,7 +466,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             );
           });
         }),
-      ),
+      ).pipe(Effect.raceFirst(stopped)),
     );
     expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
   });
