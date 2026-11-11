@@ -4,7 +4,7 @@
 // is published until every bundle and the Compiler check pass; a failure keeps the last good file.
 // Disk and paths go through Effect's FileSystem and Path, which the caller provides.
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "./app/built.ts";
 import { check, compile, Row } from "./compiler.ts";
@@ -230,6 +230,30 @@ const asset = (type: AssetType, body: string) =>
     Effect.mapError(fail("bundle")),
   );
 
+const PAGE = "index.html";
+
+const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
+  output
+    .filter((o) => o.type === "chunk")
+    .map((o) => o.code)
+    .join("\n");
+
+// The tab's page is an asset of the tab's own call, so the call that made the script made the page.
+const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
+  name: "fabrika-tab-page",
+  generateBundle(_options, output) {
+    const emit = hash(tabScript(Object.values(output))).pipe(
+      Effect.flatMap((build) =>
+        Effect.sync(() => {
+          this.emitFile({ type: "asset", fileName: PAGE, source: page(styles, build) });
+        }),
+      ),
+    );
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
+    return Effect.runPromiseWith(Context.empty())(emit);
+  },
+});
+
 // The tab's script, one ES module with React's production build, and its page.
 const tabAssets = Effect.fn("build.tab")(function* (
   tab: NonNullable<Options["tab"]>,
@@ -237,23 +261,24 @@ const tabAssets = Effect.fn("build.tab")(function* (
   cwd: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const output = yield* bundle(tab.entry, [...plugins, browserOnly], {
+  const styles = yield* Effect.forEach(tab.styles, (file) => fs.readFileString(file), { concurrency: 1 }).pipe(
+    Effect.mapError(fail("read")),
+  );
+  const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",
     cwd,
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
     minify: true,
   });
-  const script = output.output
-    .filter((o) => o.type === "chunk")
-    .map((o) => o.code)
-    .join("\n");
-  const styles = yield* Effect.forEach(tab.styles, (file) => fs.readFileString(file), { concurrency: 1 }).pipe(
-    Effect.mapError(fail("read")),
-  );
-  const js = yield* asset("text/javascript; charset=utf-8", script);
+  const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
+
+  if (html === undefined || typeof html.source !== "string") {
+    return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
+  }
+
   return {
-    "/window.js": js,
-    "/index.html": yield* asset("text/html; charset=utf-8", page(styles, js.hash)),
+    "/window.js": yield* asset("text/javascript; charset=utf-8", tabScript(output.output)),
+    "/index.html": yield* asset("text/html; charset=utf-8", html.source),
   };
 });
 
