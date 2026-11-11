@@ -35,8 +35,9 @@ const Saved = Settings.mapFields(({ port, ...fields }) => ({ ...fields, port: Sc
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
   Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
 
+// The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
-  ...settings,
+  settings,
   child: Flag.Boolean("child").pipe(Flag.withDefault(false)),
   parent: Flag.String("parent").pipe(Flag.withDefault(undefined)),
   name: Flag.String("name").pipe(Flag.withDefault(undefined)),
@@ -92,7 +93,7 @@ const command = Command.make("dev", flags, (options) => {
         // it reads no repo file.
         const loaded = yield* Load.load({
           person,
-          flags: present(declarations.map((d) => [d.path, options[d.path]])),
+          flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
           env: present(declarations.map((d) => [d.env, process.env[d.env]])),
           version: VERSION,
         }).pipe(

@@ -44,9 +44,9 @@ export const localStage = Effect.fn("brain.localStage")(function* (
     catch: () => new BrainError({ reason: "storage" }),
   });
   // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
-  return yield* startDev(built, options).pipe(
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.catchCause((cause) =>
+  const started = startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
+  return yield* started.pipe(
+    Effect.catchCause((cause): Effect.Effect<never, PortError | Effect.Error<typeof started>> =>
       portTaken(cause)
         ? Effect.fail(
             new PortError({
