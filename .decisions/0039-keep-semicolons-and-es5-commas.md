@@ -1,7 +1,7 @@
 ---
 id: 0039
 title: The repo keeps semicolons and trailing commas, function parameters and call arguments included
-status: accepted
+status: amended-in-part by [0094](0094-lines-are-100-columns.md)
 date: 2026-11-09
 tags: [style, format, oxfmt, semicolons, trailing-commas, effect]
 ---
