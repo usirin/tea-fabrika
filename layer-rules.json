@@ -130,9 +130,9 @@
   "allowed": [
     {
       "from": "packages/pipeline/src/stages/pipeline/lane-harness.ts",
-      "to": "programs/tracker/src/github.ts",
+      "to": "programs/tracker/src/ask-window.tsx",
       "sites": 1,
-      "reason": "The lane integration tests call the tracker's public person-only answer save through `@tea-fabrika/tracker`, which the gate reads as the package's github.ts. Only tests import this helper; product code keeps the layer order."
+      "reason": "The lane integration tests call the tracker's public person-only answer save. Only tests import this helper; product code keeps the layer order."
     },
     {
       "from": "packages/pipeline/src/laws/agent.ts",

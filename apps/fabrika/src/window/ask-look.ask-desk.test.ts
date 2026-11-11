@@ -471,6 +471,7 @@ describe("shot S10: the card keeps its 8px corners, focused or not", () => {
     stylesHold((generated) => {
       const chain = PLACES[place] as Chain;
 
+      // pinned: shot S10's square card on focus; the three fixed states run beside the generated one.
       for (const state of [{}, { focus: true }, { focus: true, focusVisible: true }, generated]) {
         const radius = winner([...chain, { ...CARD, ...state }], CORNERS)?.value;
         expect(["var(--r-lg)", "8px"], `${JSON.stringify(state)}: ${radius}`).toContain(radius);
