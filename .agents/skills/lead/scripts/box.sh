@@ -618,7 +618,11 @@ def fetch_box():
                 exam = call([sys.executable, str(here / "../../step-commit/scripts/exam.py"), str(main / "exam-paths.json"), *paths])
                 if exam.returncode not in (0, 1): refuse("exam list unreadable")
                 if step == "build" and exam.returncode: refuse("build exam paths " + sha)
+                # The exam is the test writer's: a tests commit may hold an exam path the plan gives
+                # to no step (exam.py prints "path<TAB>glob" per hit), as stepcommit allows.
+                hits = {l.rsplit(b"\t", 1)[0].decode() for l in exam.stdout.splitlines() if b"\t" in l} if step == "tests" and exam.returncode == 1 else set()
                 for p in paths:
+                    if owner_of(owners, p) is None and p in hits: continue
                     if owner_of(owners, p) != step and not (step == "mutation" and owner_of(owners, p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
                 candidates.append(sha)
             # All candidates pass before any note is made. HEAD and index belong to a private gitdir.
