@@ -2,6 +2,7 @@
 // every window script, chunk and stylesheet, and the brain that carries them all as text. Nothing
 // is published until every bundle and the Compiler check pass; a failure keeps the last good file.
 // Disk and paths go through Effect's FileSystem and Path, which the caller provides.
+import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "./app/built.ts";
@@ -337,9 +338,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       ).pipe(Effect.flatMap((o) => collect(o.output)))
     : {};
   const tables = yield* Tables.makeEffect({ programs, assets }).pipe(Effect.mapError(fail("table")));
-  const output = yield* bundle(options.entry, [compiler, embed(tables)], {
+  const output = yield* bundle(options.entry, [compiler, embed(tables), unreachableChunksPlugin()], {
     phase: "brain",
     cwd: root,
+    define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
   const brain = output.output
     .filter((o) => o.type === "chunk")

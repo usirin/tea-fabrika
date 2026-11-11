@@ -10,14 +10,16 @@ import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.sha
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // The other 103 rows are measured medians, including zero-second files.
+  // 110 rows: four split estimates, four build rows from CI run 42922102030 (A9 and A10),
+  // and 102 measured medians, including zero-second files.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-    "next/apps/fabrika/src/build.test.ts": 21.0,
+    "next/apps/fabrika/src/build.test.ts": 39.9,
     "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
     "next/apps/fabrika/src/door-spans.test.ts": 2.8,
     "next/apps/fabrika/src/door.test.ts": 17.2,
     "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": 11.0,
+    "next/apps/fabrika/src/exam/bytes.test.ts": 4.9,
     "next/apps/fabrika/src/exam/clock.test.ts": 0.0,
     "next/apps/fabrika/src/exam/commits-git-chain.test.ts": 61.9,
     "next/apps/fabrika/src/exam/commits-git-person.test.ts": 61.9,
@@ -62,6 +64,8 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/packages/libfabrika/src/app/runner.test.ts": 41.2,
     "next/packages/libfabrika/src/app/state.test.ts": 0.1,
     "next/packages/libfabrika/src/app/supervisor.laws.test.ts": 0.1,
+    "next/packages/libfabrika/src/build-assets.test.ts": 48.6,
+    "next/packages/libfabrika/src/build-one-file.test.ts": 11.0,
     "next/packages/libfabrika/src/coordination/authorization.test.ts": 16.4,
     "next/packages/libfabrika/src/coordination/client-manager.test.ts": 13.0,
     "next/packages/libfabrika/src/coordination/gateway-manager.test.ts": 2.5,
@@ -196,6 +200,19 @@ it("vector: the four catchup files carry their times from PR 770's CI run", () =
     [".agents/skills/lead/scripts/catchup.cleanup.test.ts", 124.1],
     [".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts", 175.7],
     [".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts", 163.6],
+  ] as const) {
+    expect.soft(measured[path], path).toBe(seconds);
+  }
+});
+
+it("vector: the four build files carry their times from CI run 42922102030", () => {
+  // T502, next/ (A9, A10): one time each from run 42922102030, on 2909594e, rounded to one decimal.
+  // Plant: drop these rows, so all four count 1 s and the heavy build files can stack on one machine.
+  for (const [path, seconds] of [
+    ["next/apps/fabrika/src/build.test.ts", 39.9],
+    ["next/apps/fabrika/src/exam/bytes.test.ts", 4.9],
+    ["next/packages/libfabrika/src/build-assets.test.ts", 48.6],
+    ["next/packages/libfabrika/src/build-one-file.test.ts", 11.0],
   ] as const) {
     expect.soft(measured[path], path).toBe(seconds);
   }

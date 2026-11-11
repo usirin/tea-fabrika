@@ -19,6 +19,19 @@ import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import { recordCall } from "./record-wire.test-support.ts";
+
+// The local stage exposes Promise calls; RecordManager takes Effect calls.
+type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
+
+const recordCalls = (stub: {
+  [K in keyof RecordCalls]: (...args: Parameters<RecordCalls[K]>) => Promise<unknown>;
+}): RecordCalls => ({
+  write: (...args) => recordCall(() => stub.write(...args)),
+  read: (...args) => recordCall(() => stub.read(...args)),
+  content: (...args) => recordCall(() => stub.content(...args)),
+  deleteContent: (...args) => recordCall(() => stub.deleteContent(...args)),
+});
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
@@ -619,7 +632,7 @@ describe("P12 real object adapters", () => {
 
       expect(part).toBeGreaterThan(0);
       // Lose a successful write reply and resend it through the real manager.
-      const manager = RecordManager.remote((name) => stage.record("project-a", name));
+      const manager = RecordManager.remote((name) => recordCalls(stage.record("project-a", name)));
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
@@ -667,7 +680,7 @@ describe("P12 real object adapters", () => {
                 }
               : { put: calls.put, head: async () => ({ sha256: "0".repeat(64) }) },
           );
-          const records = RecordManager.remote((name) => stage.record("p12-records", name));
+          const records = RecordManager.remote((name) => recordCalls(stage.record("p12-records", name)));
           // P37: a failed archive try deletes nothing and never fails `flush`.
           await expect(
             Effect.runPromise(
@@ -726,7 +739,7 @@ describe("P12 real object adapters", () => {
           m: { type: "throw", body: "private raw frame P12" },
         }),
       ).rejects.toThrow();
-      const manager = RecordManager.remote((name) => stage.record("p12-records", name));
+      const manager = RecordManager.remote((name) => recordCalls(stage.record("p12-records", name)));
       const collect = (chain: any) =>
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
       const job = await collect({ _tag: "job", process: pid });

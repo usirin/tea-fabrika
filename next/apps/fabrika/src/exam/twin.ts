@@ -260,7 +260,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     // Worker is implemented by overloads, and its provider registration is still independent evidence.
     return found || registered(file, symbol);
   });
-  const scan = (file: string, body: string): Array<Finding> => {
+  const scan = (file: string, body: string, contract?: string): Array<Finding> => {
     const ast = tree(file, body),
       found: Array<Finding> = [];
     const cloud = new Set<string>(),
@@ -397,6 +397,129 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       checkRoot(node.callee);
 
+      if (["Worker", "Workers.Worker"].includes(parts.join("."))) {
+        const props = unwrap(node.arguments[1]);
+        const key = (p: Tree) => (p?.computed ? null : (p?.key?.name ?? p?.key?.value));
+        const literalKeys = (object: Tree): boolean => {
+          if (object?.type !== "ObjectExpression") {
+            report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
+            return false;
+          }
+
+          const keys = new Set<string>();
+          let valid = true;
+
+          for (const property of object.properties) {
+            const name = key(property);
+
+            if (property.type !== "Property" || name == null) {
+              report(property, "unsupported-case: indirect class-name binding");
+              valid = false;
+            } else if (keys.has(String(name))) {
+              report(property, `unsupported-case: duplicate key ${name}`);
+              valid = false;
+            } else {
+              keys.add(String(name));
+            }
+          }
+
+          return valid;
+        };
+        const env = props?.properties?.find((p: Tree) => key(p) === "env");
+
+        let hostedNames: Array<string> = [];
+        let hostName: string | undefined;
+
+        try {
+          if (contract === undefined) {
+            throw new Error("missing host contract");
+          }
+
+          const contracts: Array<Tree> = [];
+          nodes(tree("objects.ts", contract), (declaration) => {
+            if (declaration.type === "ClassDeclaration" && declaration.id?.name === "Brain") {
+              contracts.push(declaration.superClass);
+            }
+          });
+
+          if (contracts.length !== 1 || !contracts[0]) {
+            throw new Error("missing Brain contract");
+          }
+
+          const host = contracts[0].arguments?.[0];
+
+          if (host?.type !== "Literal" || typeof host.value !== "string") {
+            throw new Error("unsupported host name");
+          }
+
+          hostName = host.value;
+          const shape = contracts[0].callee?.typeArguments?.params?.[2];
+
+          if (!shape) {
+            throw new Error("missing hosted objects");
+          }
+
+          const types = shape.type === "TSUnionType" ? shape.types : [shape];
+          hostedNames = types.map((type: Tree) => {
+            if (type.type !== "TSTypeReference" || type.typeName?.type !== "Identifier" || type.typeArguments) {
+              throw new Error("unsupported host contract");
+            }
+
+            return type.typeName.name;
+          });
+        } catch {
+          report(env ?? node, "unsupported-case: cannot read host contract");
+        }
+
+        const workerName = node.arguments[0];
+
+        if (workerName?.type !== "Literal" || typeof workerName.value !== "string") {
+          report(node, "unsupported-case: Worker name is not a string literal");
+        } else if (workerName.value === hostName) {
+          if (!literalKeys(props)) {
+            return;
+          }
+
+          const bindings = env === undefined ? { type: "ObjectExpression", properties: [] } : unwrap(env.value);
+
+          if (literalKeys(bindings)) {
+            const objects = new Map<string, string>();
+
+            for (const binding of bindings.properties) {
+              if (binding.type !== "Property" || key(binding) === null) {
+                report(binding, "unsupported-case: indirect class-name binding");
+                continue;
+              }
+
+              const value = unwrap(binding.value);
+              const called = member(value?.callee)?.split(".") ?? [];
+              const first = called[0];
+              const imported = first === undefined ? undefined : named.get(first);
+              const target = first && cloud.has(first) ? called.slice(1).join(".") : imported;
+
+              if (
+                value?.type === "CallExpression" &&
+                ["DurableObject", "Workers.DurableObject"].includes(target ?? "")
+              ) {
+                const name = value.arguments[0];
+
+                if (name?.type !== "Literal" || typeof name.value !== "string") {
+                  report(binding, "unsupported-case: dynamic class-name binding");
+                } else {
+                  objects.set(String(key(binding)), name.value);
+                }
+              }
+            }
+
+            for (const hosted of hostedNames) {
+              if (objects.get(hosted) !== hosted) {
+                report(env ?? node, `unsupported-case: missing class-name binding ${hosted}`);
+              }
+            }
+          }
+        }
+      }
+
       if (["providers", "localState"].includes(parts.join("."))) {
         return;
       }
@@ -518,7 +641,11 @@ export const scanner = Effect.gen(function* () {
 const lint = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const scan = yield* scanner;
-  const findings = scan(file, yield* fs.readFileString(file));
+  const path = yield* Path.Path;
+  const contract = yield* fs
+    .readFileString(path.resolve(import.meta.dirname, "../../../../packages/libfabrika/src/workers/objects.ts"))
+    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const findings = scan(file, yield* fs.readFileString(file), contract);
 
   for (const f of findings) {
     yield* Console.error(`${f.file}:${f.line} ${f.reason}`);

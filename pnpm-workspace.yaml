@@ -159,6 +159,9 @@ patchedDependencies:
   # brain's workerd soon after a start, and after the three-replacement brake too. The patch
   # passes on only a bundle whose hash differs. Drop this when Alchemy compares the bundle
   # before it serves again (https://github.com/alchemy-run/alchemy/issues/3214).
+  # Also loads WorkerAsyncBindings lazily in Worker's onCreate, so a runtime bundle does not
+  # walk Alchemy's local and deploy graph. Drop this when Alchemy loads it lazily
+  # (https://github.com/alchemy-run/alchemy/issues/3227).
   '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 minimumReleaseAgeExclude:

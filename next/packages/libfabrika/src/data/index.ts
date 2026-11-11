@@ -15,3 +15,4 @@ export { type Sql, type SqlValue } from "../Sql.ts";
 export { SinkError, SpanSink } from "./sink.ts";
 export { ProcessId } from "../ProcessId.ts";
 export { Archived, Chain, Content, Health, Rolled, Size, SpanRow, Summary, Tag, short } from "./trace.ts";
+export { partName } from "./trace.ts";

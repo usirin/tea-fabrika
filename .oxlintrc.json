@@ -720,6 +720,26 @@
         "next/packages/libfabrika/src/runtime/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
+    },
+    {
+      // T502: object names must not load their implementations. Type imports erase at build time.
+      // Last, so it replaces the libfabrika rooms override's options for this one file; "**" with the
+      // Alchemy negations also covers that override's Radix and internal/ bans.
+      "files": ["next/packages/libfabrika/src/workers/objects.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**", "!alchemy", "!alchemy/**", "!@alchemy.run", "!@alchemy.run/**"],
+                "allowTypeImports": true,
+                "message": "Object contracts import only Alchemy values and erased types."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

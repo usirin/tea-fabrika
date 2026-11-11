@@ -69,7 +69,7 @@ const fixture = (value: string, count = 1) => {
   writeFileSync(join(home, "package.json"), '{"type":"module"}');
   mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-  for (const name of ["effect", "@demlik", "@kampus"]) {
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
     symlinkSync(join(ROOT, "next/apps/fabrika/node_modules", name), join(home, "node_modules", name), "dir");
   }
 
