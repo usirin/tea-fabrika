@@ -1,20 +1,16 @@
-import { Ledger, MEMBERS, namesOf, type Row, streams, type Writer, writerText } from "@kampus/fabrika-old";
+import { Ledger, MEMBERS, namesOf, streams, type Writer, writerText } from "@kampus/fabrika-old";
 import { readFacts } from "@kampus/pipeline/asks/ledger";
 import { foldLedger } from "@kampus/pipeline/asks/rules";
+import { saveAnswer, TRIES, timelineOf } from "@kampus/pipeline/tickets/answer";
 import { AREAS, type AreaEntry, areasOf, readAreaRow } from "@kampus/pipeline/tickets/area";
 import { questionLine, sealAsk } from "@kampus/pipeline/tickets/ask";
 import { askedFor, askedStep, LaneStep } from "@kampus/pipeline/tickets/steps";
 import {
-  type AnswerRefusal,
   type Entry,
-  alreadyAnswered,
-  answerRefused,
   closedAsks,
   factsOf,
-  fold,
   mayWrite,
   nameOf,
-  readAnswer,
   readRow,
   writtenDuring,
 } from "@kampus/pipeline/tickets/ticket";
@@ -44,9 +40,6 @@ export class Author extends Context.Service<Author, Writer>()("@tea-fabrika/trac
 
 /** Rows read per call. */
 const PAGE = 500;
-
-/** The most numbers a new ticket passes over before it gives up: each one was taken. */
-const TRIES = 1000;
 
 /** The ledger did not answer: the tag a cell fails with, and why in words. */
 const unreachable = (e: { readonly message: string }) => ({
@@ -145,15 +138,6 @@ const claim = (next: number, writer: string) =>
     return yield* Effect.fail(refused(`${TRIES} ticket numbers from ${next}: every one was taken`));
   });
 
-/** Ticket `n`'s timeline, folded from its inbox's rows, so a fact that does not fit is kept out. */
-const timelineOf = (n: number, rows: readonly Row[]): readonly Entry[] => {
-  const entries = rows.flatMap((row) => {
-    const read = readRow(row);
-    return read.kind === "entry" ? [read.entry] : [];
-  });
-  return fold([], entries).tickets.find((t) => t.number === n)?.timeline ?? [];
-};
-
 /** The areas' inbox. */
 const AREAS_INBOX = streams(AREAS).inbox;
 
@@ -251,59 +235,7 @@ const saveTicket = (cmd: ReturnType<typeof save>, write: TicketWrite) =>
     const inbox = streams(nameOf(ticket)).inbox;
 
     if (fact.type === "answered") {
-      for (let tries = 0; tries < TRIES; tries++) {
-        const rows = yield* ledger.readStream(inbox, 0, -1);
-        const timeline = timelineOf(ticket, rows);
-        const landed = factsOf(timeline, "answered").find((a) => a.ask === fact.ask);
-
-        if (landed !== undefined) {
-          // The same pick again is one answer: a retry, or a second click. Another pick lost the race.
-          const won = readAnswer(timeline, landed)?.pick;
-
-          if (won === undefined || won === readAnswer(timeline, fact)?.pick) {
-            return { ticket };
-          }
-
-          return yield* Effect.fail(refusal(alreadyAnswered(won)));
-        }
-
-        const now = yield* Clock.currentTimeMillis;
-        const ask = factsOf(timeline, "asked").find((a) => a.ask === fact.ask);
-        const why: AnswerRefusal | null =
-          "format" in fact
-            ? answerRefused(timeline, fact, now)
-            : ask === undefined
-              ? "The ask is missing"
-              : "format" in ask
-                ? "The ask needs an exact display answer"
-                : factsOf(timeline, "withdrawn").some((w) => w.ask === ask.ask)
-                  ? "The ask was withdrawn"
-                  : !ask.picks.includes(fact.pick)
-                    ? "The answer is not offered"
-                    : null;
-
-        if (why !== null) {
-          return yield* Effect.fail(refusal(why));
-        }
-
-        const wrote = yield* ledger
-          .append(inbox, rows.at(-1)?.rev ?? 0, {
-            id: `answer/${fact.ask}`,
-            kind: "answered",
-            writer,
-            data: fact,
-          })
-          .pipe(
-            Effect.as(true),
-            Effect.catchTag("Stale", () => Effect.succeed(false)),
-          );
-
-        if (wrote) {
-          return { ticket };
-        }
-      }
-
-      return yield* Effect.fail(refusal("The question kept changing. Try again." satisfies AnswerRefusal));
+      return yield* saveAnswer(ticket, fact, author);
     }
 
     // A comment names the run live as it is written, read off the ticket's own facts.
