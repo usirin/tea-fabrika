@@ -64,11 +64,44 @@ export const Supervision = Schema.Struct({
 }).check(
   Schema.makeFilter((s) => {
     const j = s.journal;
+
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
+    if (j._tag === "writing_dead") {
+      return (
+        s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
+        "dead work keeps its terminal receipt"
+      );
+    }
+
+    if (j._tag === "checkpointing" && j.after === j.process) {
+      return "a checkpoint's successor is not its predecessor";
+    }
+
+    // The process this journal replaces, which a crash origin's failure must name.
+    const replaced =
+      j._tag === "writing_exit"
+        ? j.process
+        : j._tag === "writing_down" || j._tag === "waiting_recovery"
+          ? j.recovery.process
+          : j._tag === "waiting_start"
+            ? j.request.after
+            : j._tag === "checkpointing"
+              ? j.after
+              : null;
+
+    if (replaced === null || !("origin" in j)) {
+      return true;
+    }
+
+    if (j.origin._tag === "crash") {
+      return j.origin.failure.process === replaced || "a crash origin names the process it replaces";
+    }
+
+    // A person's restart starts with its own saved request ID and build.
     return (
-      j._tag !== "writing_dead" ||
-      s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
-      "dead work keeps its terminal receipt"
+      j._tag !== "waiting_start" ||
+      (j.request.id === j.origin.request.id && j.request.code.hash === j.origin.request.build) ||
+      "a person's restart starts with its saved request"
     );
   }),
 );
