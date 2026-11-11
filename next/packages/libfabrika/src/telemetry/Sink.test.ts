@@ -23,7 +23,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -943,4 +943,133 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
     }).pipe(Effect.provide(world(sql)));
   });
+});
+
+// T705 (0037, 0046): the held and failed flags become one machine, and the public calls keep their
+// behavior. The walk reads what the calls so far have done before it picks the next one (0093);
+// the history it keeps is of spans ended, commits that landed and flushes tried, never the machine.
+const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }));
+const Call = Schema.Struct({ pick: Nat, word: Schema.String.check(Schema.isMaxLength(64)) });
+
+type Call = typeof Call.Type;
+type Public = "end" | "end_fails" | "flush" | "summaries" | "summaries_fail";
+
+/** What the calls so far did: spans held in memory, a failure no flush has reported yet, rows in
+ *  `unsent`, and every span ended, by its `fab.n` and word. */
+type Seen = {
+  readonly held: ReadonlyArray<number>;
+  readonly unreported: boolean;
+  readonly unsent: number;
+  readonly ended: ReadonlyArray<readonly [number, string]>;
+};
+
+/** Calls possible from here, weighted so held spans meet blocked flushes before and after a commit
+ *  lands them, and a failure with nothing held meets both a commit and a flush. */
+const callsFrom = (seen: Seen): ReadonlyArray<Public> => {
+  if (seen.held.length > 0) {
+    return ["flush", "end", "flush", "end_fails", "summaries", "summaries_fail", "end"];
+  }
+
+  if (seen.unreported) {
+    return ["end", "flush", "summaries", "end_fails", "flush"];
+  }
+
+  return ["end_fails", "end", "flush", "summaries_fail", "end", "summaries"];
+};
+
+describe("T705, the sink's public calls keep their order through one machine", () => {
+  it.effect.prop(
+    "calls match the transition table: end stays synchronous, a failed commit keeps every span " +
+      "for its retry, and a blocked flush sends nothing",
+    { calls: Arbitrary.array(Arbitrary.schema(Call), { minLength: 1, maxLength: 40 }) },
+    ({ calls }) => {
+      const { db, sql: real } = home();
+      const { sql, arm } = filling(real);
+      return Effect.gen(function* () {
+        const services = yield* Effect.context<SpanSink>();
+        /** Ends one span outside any fiber: its rows are there the moment `runSync` returns. */
+        const end = (n: number, word: string, fails: boolean) => {
+          arm(fails ? 1 : 0);
+          const exit = Effect.runSyncExit(
+            step("runner.step", { "fab.n": n, "fab.word": word }).pipe(Effect.provideContext(services)),
+          );
+          arm(0);
+          expect(Exit.isSuccess(exit), "end never fails the fiber").toBe(true);
+        };
+        const sent = () => recorded(spans).pipe(Effect.map((rows) => rows.length));
+        end(-1, "warm", false);
+        let seen: Seen = { held: [], unreported: false, unsent: 1, ended: [[-1, "warm"]] };
+
+        for (const [n, { pick, word }] of calls.entries()) {
+          const options = callsFrom(seen);
+          const call = options[pick % options.length] ?? "flush";
+
+          if (call === "end" || call === "end_fails") {
+            end(n, word, call === "end_fails");
+            const ended = [...seen.ended, [n, word] as const];
+            seen =
+              call === "end_fails"
+                ? { ...seen, held: [...seen.held, n], unreported: true, ended }
+                : { ...seen, held: [], unsent: seen.unsent + seen.held.length + 1, ended };
+            expect(count(db, "unsent"), `unsent right after ${call}`).toBe(seen.unsent);
+          } else if (call === "flush") {
+            const before = yield* sent();
+            const exit = yield* Effect.exit(flush);
+
+            if (seen.held.length > 0 || seen.unreported) {
+              expect(
+                Exit.isFailure(exit) ? Cause.squash(exit.cause) : exit,
+                "a held span or an unreported failure blocks the flush",
+              ).toEqual(new SinkError({ reason: "storage", held: seen.held.length }));
+              expect(yield* sent(), "a blocked flush sends nothing").toBe(before);
+              seen = { ...seen, unreported: false };
+            } else {
+              expect(Exit.isSuccess(exit) ? exit.value : Cause.squash(exit.cause)).toEqual({
+                sent: seen.unsent,
+              });
+              expect(yield* sent()).toBe(before + seen.unsent);
+              seen = { ...seen, unsent: 0 };
+            }
+
+            expect(count(db, "unsent")).toBe(seen.unsent);
+          } else {
+            arm(call === "summaries_fail" ? 1 : 0);
+            const exit = yield* Effect.exit(SpanSink.use((sink) => sink.summaries(0, 1)));
+            arm(0);
+
+            if (call === "summaries_fail") {
+              expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : exit).toEqual(
+                new SinkError({ reason: "storage", held: seen.held.length }),
+              );
+              seen = { ...seen, unreported: true };
+            } else {
+              expect(Exit.isSuccess(exit), "a summaries commit lands the held spans").toBe(true);
+              seen = { ...seen, held: [], unsent: seen.unsent + seen.held.length };
+            }
+
+            expect(count(db, "unsent")).toBe(seen.unsent);
+          }
+        }
+
+        // Recovery: one more span lands every held one, and the flushes after it send them all.
+        end(calls.length, "last", false);
+        const owed = yield* Effect.exit(flush);
+        expect(Exit.isFailure(owed), "only an unreported failure fails the flush after").toBe(seen.unreported);
+
+        if (Exit.isFailure(owed)) {
+          expect(Cause.squash(owed.cause)).toEqual(new SinkError({ reason: "storage", held: 0 }));
+          yield* flush;
+        }
+
+        const rows = yield* recorded(spans);
+        const byN = (x: readonly [number, string], y: readonly [number, string]) => x[0] - y[0];
+        expect(
+          rows.map((row) => [Number(row.attributes["fab.n"]), String(row.attributes["fab.word"])] as const).sort(byN),
+          "every ended span reaches its record once, with its own payload",
+        ).toEqual([...seen.ended, [calls.length, "last"] as const].sort(byN));
+        expect(count(db, "unsent")).toBe(0);
+      }).pipe(Effect.provide(world(sql)));
+    },
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
 });
