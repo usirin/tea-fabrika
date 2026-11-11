@@ -907,7 +907,8 @@ describe("P34 runner supervision", () => {
                   );
                   // The program is live, so no recovery deadline remains. Earlier down
                   // exits above checked the other side of the same earliest-deadline law.
-                  expect(recovery?.recovery._tag ?? "live").toBe("live");
+                  // P34c slice 2: a live program with no deadline is an idle journal.
+                  expect(recovery?.journal._tag ?? "idle").toBe("idle");
                   expect(
                     yield* ProcessManager.use((p) => p.isLive(path === "wake" ? A : PIDS[crashes]!)).pipe(
                       Effect.provide(w.manager()),
