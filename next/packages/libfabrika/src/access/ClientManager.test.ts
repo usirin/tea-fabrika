@@ -26,6 +26,7 @@ import { Effect, Layer, References, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -81,7 +82,7 @@ afterAll(() => {
 });
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-const onSql = (sql: Sql) => Ledger.sql(sql, { reader: READER }).pipe(Layer.provide(quiet));
+const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
 
 /** A ClientManager and the Ledger beneath it, so a test can read what was written. */
 const clientsOn = (ledger: Layer.Layer<Ledger>, founder: Parameters<typeof ClientManager.layer>[0] = FOUNDER) =>

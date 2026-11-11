@@ -9,6 +9,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "./Ledger.ts";
+import * as LedgerRemote from "./LedgerRemote.ts";
 import { fromHere, lineFor, TraceId } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
@@ -102,7 +103,7 @@ describe("T246, fromHere", () => {
         }).pipe(
           Effect.withSpan("notes.save"),
           Effect.withParentSpan(Tracer.externalSpan({ traceId, spanId: "00f067aa0ba902b7" })),
-          Effect.provide(Ledger.remote(calls, { reader: "connection:t1" })),
+          Effect.provide(LedgerRemote.layer(calls, { reader: "connection:t1" })),
         );
         const [entry, ...rest] = yield* referee.read("notes:1", 0, "connection:t1");
         expect(rest).toEqual([]);
