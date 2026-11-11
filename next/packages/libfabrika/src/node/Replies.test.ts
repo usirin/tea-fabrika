@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -38,7 +39,7 @@ const files = Effect.gen(function* () {
 const services = (inbox: Sql, manager: Sql) =>
   Layer.mergeAll(
     // The runner reads its inbox's ledger too, so the context keeps it beside the mailbox.
-    Mailbox.layer.pipe(Layer.provideMerge(Ledger.sql(inbox, { reader: SESSION }).pipe(Layer.provide(quiet)))),
+    Mailbox.layer.pipe(Layer.provideMerge(LedgerSql.layer(inbox, { reader: SESSION }).pipe(Layer.provide(quiet)))),
     ProcessManager.layer(
       {
         by: BRAIN,
