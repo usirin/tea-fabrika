@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "yaml": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

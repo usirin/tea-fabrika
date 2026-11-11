@@ -15,7 +15,11 @@ import "./chain.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
 import "./catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./freshmain.ts?raw";
@@ -1280,6 +1284,31 @@ describe("T675 a lane stops at its budget (0076), today's tooling", () => {
     for (const [outcome, reason, fault] of cases) {
       expect([outcome, reason, faultFrom(outcome, reason)]).toEqual([outcome, reason, fault]);
     }
+  });
+
+  // The holds a commits check names, as `commitsSaid` writes them, and the tail's count walked across
+  // each digit boundary (0, 1, 9, 10, 11, 99, 100) and past it. Ticket 724: no law had a tail of 10 or
+  // more, so reading only one digit there would count a pure stale-link hold against the budget.
+  const hold = fc.record({
+    rule: fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link"),
+    sha: fc.stringMatching(/^[0-9a-f]{8}$/),
+    step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
+  });
+  const tail = fc.option(fc.oneof(fc.constantFrom(0, 1, 9, 10, 11, 99, 100), fc.nat({ max: 100_000 })), {
+    nil: undefined,
+  });
+
+  it("property: a commits check is the tooling exactly when every hold it names is a stale link, whatever its tail", () => {
+    fc.assert(
+      fc.property(fc.array(hold, { minLength: 1, maxLength: 5 }), tail, (holds, more) => {
+        const named = holds.map((h) => `${h.rule} ${h.sha}${h.step === undefined ? "" : ` step ${h.step}`}`);
+        const said = [...named, ...(more === undefined ? [] : [`and ${more} more`])];
+        const reason = `commits check: ${said.join("; ")}`;
+        const fault = holds.every((h) => h.rule === "stale_link") ? "tool" : "work";
+        expect([reason, faultFrom("stuck:unsigned", reason)]).toEqual([reason, fault]);
+      }),
+      options,
+    );
   });
 
   // Plants: give a send or a done a fault; let a stuck with an odd reason have none.
