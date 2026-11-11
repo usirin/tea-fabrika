@@ -508,6 +508,9 @@ describe("P34 door recovery", () => {
                 yield* A.ProgramRunner.use((r) => r.restart({ id: `replace-${letter}`, build: "build-a" })).pipe(
                   Effect.provide(w.runner(P1)),
                 );
+                // The Worker's exit retires the old process's door sessions after it records the exit
+                // (workers/runtime.ts, `exit`); this world does the same, so an ended pid refuses a record.
+                yield* Door.use((d) => d.retire(P1)).pipe(Effect.provide(w.layer()));
                 w.reopen();
                 yield* Effect.gen(function* () {
                   const client = yield* w.online();
@@ -539,7 +542,13 @@ describe("P34 door recovery", () => {
 
                   if (holds) {
                     expect(rows).toEqual(before);
-                    expect(binding()).toMatchObject({ id: old, process: P1 });
+                    // The held letter's answer is its first placing, read from the inbox row, and it settles
+                    // the binding on its old pid, though that pid exited and its sessions are retired.
+                    expect(yield* d.route(client, "process.send", queued)).toMatchObject({
+                      _tag: "ok",
+                      result: { _tag: "accepted", rev: before[0]!.rev, pos: before[0]!.pos },
+                    });
+                    expect(binding()).toMatchObject({ id: old, process: P1, state: { _tag: "settled" } });
                   } else {
                     const delivery = w.deliveries.at(-1)!;
                     const signed = yield* Effect.result(

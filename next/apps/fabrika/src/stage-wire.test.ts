@@ -2,18 +2,20 @@
 // Every wire law starts the real dev.ts, never a raw Miniflare substitute.
 // CLI fixture contract: --name, --person, --founder (public SSH line), --window (public raw key),
 // and the plan's --port. These are bootstrap settings, never a public signing capability.
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Entry, PAGE } from "@kampus/libfabrika/data";
-import { Effect, Schema } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { Deferred, Effect, Fiber, Schema } from "effect";
+import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import { killWorkerd } from "./workerd.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -85,12 +87,14 @@ const homes: Array<string> = [];
 const ports: Array<Effect.Effect<void>> = [];
 const sockets: Array<WebSocket> = [];
 
-afterEach(async () => {
-  for (const ws of sockets.splice(0)) {
-    ws.close();
-  }
+// What one stage holds: its dev.ts children, its homes and its held ports. The older cases share one
+// set that `afterEach` gives back; a case written with `Effect.acquireRelease` owns its own.
+type Held = { children: Array<ChildProcess>; homes: Array<string>; ports: Array<Effect.Effect<void>> };
 
-  for (const child of children.splice(0)) {
+const shared: Held = { children, homes, ports };
+
+const giveBack = async (held: Held) => {
+  for (const child of held.children.splice(0)) {
     if (child.exitCode !== null || child.signalCode !== null) {
       continue;
     }
@@ -99,28 +103,38 @@ afterEach(async () => {
     await new Promise<void>((done) => child.once("exit", () => done()));
   }
 
-  for (const h of homes.splice(0)) {
+  for (const h of held.homes.splice(0)) {
     rmSync(h, { recursive: true, force: true });
   }
 
   // Last, so the pair stays held until every stage that used its port is gone.
-  for (const release of ports.splice(0)) {
+  for (const release of held.ports.splice(0)) {
     await Effect.runPromise(release);
   }
-});
-
-const unusedPort = async () => {
-  const held = await Effect.runPromise(heldPort());
-  ports.push(held.release);
-  return held.port;
 };
 
-const stage = async (saved?: { key: ReturnType<typeof identity>; home: string; port: number }) => {
+afterEach(async () => {
+  for (const ws of sockets.splice(0)) {
+    ws.close();
+  }
+
+  await giveBack(shared);
+});
+
+const unusedPort = async (held: Held) => {
+  const port = await Effect.runPromise(heldPort());
+  held.ports.push(port.release);
+  return port.port;
+};
+
+type Saved = { key: ReturnType<typeof identity>; home: string; port: number };
+
+const launch = async (held: Held, saved?: Saved) => {
   readFileSync(join(APP, "dev.ts"), "utf8");
   const key = saved?.key ?? identity();
   const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
-  homes.push(home);
-  const port = saved?.port ?? (await unusedPort());
+  held.homes.push(home);
+  const port = saved?.port ?? (await unusedPort(held));
   const url = `http://127.0.0.1:${port}`;
   const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
   delete env.TYPESAFE_API_KEY;
@@ -143,7 +157,7 @@ const stage = async (saved?: { key: ReturnType<typeof identity>; home: string; p
     ],
     { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
   );
-  children.push(child);
+  held.children.push(child);
   let output = "";
   child.stdout!.on("data", (b: Buffer) => {
     output += b.toString();
@@ -172,6 +186,8 @@ const stage = async (saved?: { key: ReturnType<typeof identity>; home: string; p
 
   return { key, url, home, child, port, output: () => output };
 };
+
+const stage = (saved?: Saved) => launch(shared, saved);
 
 // Read only the named public metadata tables. Never inspect general storage or key rows.
 const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
@@ -348,6 +364,112 @@ const view = async (c: Client, pid: string) => {
   expect(response.error).toBeUndefined();
   return response.result as { rev: number; view: { count: number } };
 };
+
+type Staged = Awaited<ReturnType<typeof stage>>;
+type Placing = { rev: number; pos: number };
+
+const range = (n: number) => Array.from({ length: n }, (_, at) => at);
+
+/** A real dev.ts of its own, with its home and port, given back when the test's scope closes. */
+const staged = Effect.acquireRelease(
+  Effect.gen(function* () {
+    const held: Held = { children: [], homes: [], ports: [] };
+    const s = yield* Effect.promise(() => launch(held)).pipe(
+      Effect.onError(() => Effect.promise(() => giveBack(held))),
+    );
+    return { s, held };
+  }),
+  ({ held }) => Effect.promise(() => giveBack(held)),
+).pipe(Effect.map(({ s }) => s));
+
+/** A signed-in socket on `s`, closed when the test's scope closes. */
+const client = (s: Staged, tab: string) =>
+  Effect.acquireRelease(
+    Effect.promise(() => connected(s, tab)),
+    (c) => Effect.sync(() => c.close()),
+  );
+
+/** The same, once workerd is back: tries a new socket until the hello is answered. */
+const reconnected = (s: Staged, tab: string) =>
+  Effect.acquireRelease(
+    Effect.promise(async (signal) => {
+      for (;;) {
+        signal.throwIfAborted();
+
+        try {
+          return await connected(s, tab);
+        } catch {
+          await pause();
+        }
+      }
+    }),
+    (c) => Effect.sync(() => c.close()),
+  );
+
+const sendPlaced = (c: Client, pid: string, letter: string) =>
+  Effect.promise(async () => placing(await send(c, pid, letter)));
+
+/** A send settles as accepted, or as cut by the kill (the socket closed before its answer). Nothing else. */
+type Settled = { _tag: "accepted"; placing: Placing } | { _tag: "cut" };
+
+const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.Deferred<void>) =>
+  Effect.promise(async (): Promise<Settled> => {
+    const reply = await send(c, pid, letter).then(
+      (r) => r,
+      (error: unknown) => {
+        if (error instanceof Error && error.message === "wire closed before answer") {
+          return null;
+        }
+
+        throw error;
+      },
+    );
+    return reply === null ? { _tag: "cut" } : { _tag: "accepted", placing: placing(reply) };
+  }).pipe(Effect.tap((settled) => (settled._tag === "accepted" ? Deferred.succeed(answered, undefined) : Effect.void)));
+
+/** Waits, with `ledger.wait` after the last rev seen and never a clock, for a `restarted {after}` row. */
+const restartedAfter = (c: Client, stream: string, after: string) =>
+  Effect.promise(async (signal) => {
+    let seen = 0;
+
+    for (;;) {
+      signal.throwIfAborted();
+      const rows = await read(c, stream, seen);
+      const hit = rows.find((row) => row._tag === "restarted" && (row.body as { after?: string }).after === after);
+
+      if (hit !== undefined) {
+        return hit;
+      }
+
+      if (rows.length > 0) {
+        seen = rows.at(-1)!.rev;
+      } else {
+        const waited = await c.call("ledger.wait", { stream, after: seen });
+
+        if (waited.error !== undefined) {
+          throw new Error(`waiting on ${stream}: ${waited.error.message}`);
+        }
+      }
+    }
+  });
+
+const restartedRows = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((row) => row._tag === "restarted");
+
+const crashStarts = (c: Client, firstStart: string) =>
+  Effect.promise(async (signal) => {
+    // Replacement events arrive on the outbox's periodic flush, after traffic can recover.
+    // The test's time limit bounds this wait.
+    for (;;) {
+      signal.throwIfAborted();
+      const starts = (await read(c, "door/brain")).filter((r) => r._tag === "started");
+
+      if (starts.some((row) => (row.body as { after: string | null }).after === firstStart)) {
+        return starts;
+      }
+
+      await pause();
+    }
+  });
 
 describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
@@ -623,89 +745,108 @@ describe("P12 real dev.ts wire", () => {
     const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
     expect(code).not.toBe(0);
   });
-  it("scenario: p13/p81 plant: acknowledge before append or restart twice; retry a killed mid-burst once", async ({
-    signal,
-  }) => {
-    const s = await stage(),
-      c = await connected(s),
-      pid = await counter(c);
-    const first = (await read(c, "door/brain")).find((row) => row._tag === "started")!;
-    const firstStart = (first.body as { start: string }).start;
-    const accepted = new Map<string, { rev: number; pos: number }>();
-    const pending = Array.from({ length: 20 }, (_, n) => {
-      const id = `kill-${n}`;
-      return send(c, pid, id)
-        .then((r) => {
-          accepted.set(id, placing(r));
-        })
-        .catch(() => undefined);
-    });
-    await pause(30);
-    const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }).split("\n");
-    const descendants = new Set([s.child.pid!]);
+  it.effect(
+    "scenario: p13/p81 plant (acknowledge before append, restart on an idle marker, restart twice): workerd killed between steps loses nothing, restarts no process and keeps its pid",
+    () =>
+      // scenario reason: the only real dev.ts and real workerd with a real SIGKILL at a moment no step runs:
+      // each answer follows its step's `idle` write, so the kill misses every step (ticket 646).
+      Effect.gen(function* () {
+        const s = yield* staged;
+        const c = yield* client(s, "tab-a");
+        const pid = yield* Effect.promise(() => counter(c));
+        const firstStart = (yield* Effect.promise(() => read(c, "door/brain"))).find((row) => row._tag === "started")!;
+        const accepted = new Map<string, Placing>();
+        yield* Effect.forEach(
+          range(10),
+          (n) =>
+            sendPlaced(c, pid, `kill-${n}`).pipe(Effect.tap((p) => Effect.sync(() => accepted.set(`kill-${n}`, p)))),
+          { concurrency: "unbounded" },
+        );
+        yield* killWorkerd(s.child.pid!);
+        const resumed = yield* reconnected(s, "after-crash");
 
-    for (let round = 0; round < rows.length; round++) {
-      for (const row of rows) {
-        const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
+        for (const n of range(20)) {
+          const id = `kill-${n}`,
+            now = yield* sendPlaced(resumed, pid, id);
 
-        if (m && descendants.has(Number(m[2]))) {
-          descendants.add(Number(m[1]));
+          if (accepted.has(id)) {
+            expect(now).toEqual(accepted.get(id));
+          }
         }
-      }
-    }
 
-    const workerd = rows
-      .filter((row) => /\/workerd(?:\s|$)/.test(row))
-      .map((row) => Number(row.trim().split(/\s+/)[0]))
-      .filter((p) => descendants.has(p));
-    expect(workerd).toHaveLength(1);
-    process.kill(workerd[0]!, "SIGKILL");
-    await Promise.all(pending);
-    let resumed: Client | undefined;
+        const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
+        expect(inbox).toHaveLength(20);
+        expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
+        expect((yield* Effect.promise(() => view(resumed, pid))).view.count).toBe(20);
+        expect(yield* Effect.promise(() => counter(resumed))).toBe(pid);
+        // The kill missed every step, so no process restarted.
+        expect(restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1")))).toEqual([]);
+        const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
+        expect(starts).toHaveLength(2);
+        expect(starts[1]!.body).toMatchObject({
+          after: (firstStart.body as { start: string }).start,
+          build: expect.any(String),
+          reason: "crash",
+        });
+      }),
+  );
+  it.effect(
+    "scenario: p13/p81 plant (refuse a live name, resend on any error, acknowledge before append): workerd killed mid-burst at an uncontrolled moment loses nothing",
+    () =>
+      // scenario reason: the only real-workerd kill with letters part way through the door and the runner.
+      // The kill lands when the first answer of a 20-letter burst arrives, so where it cuts is not
+      // controlled; the law is the invariants below, which hold wherever it lands (ticket 646).
+      Effect.gen(function* () {
+        const s = yield* staged;
+        const c = yield* client(s, "tab-a");
+        const pid = yield* Effect.promise(() => counter(c));
+        const answered = yield* Deferred.make<void>();
+        const fibers = yield* Effect.forEach(
+          range(20),
+          (n) => Effect.forkScoped(sendSettled(c, pid, `kill-${n}`, answered)),
+          {
+            concurrency: 1,
+          },
+        );
+        yield* Deferred.await(answered);
+        yield* killWorkerd(s.child.pid!);
+        const before = yield* Effect.forEach(fibers, Fiber.join, { concurrency: "unbounded" });
+        const resumed = yield* reconnected(s, "after-crash");
+        const refused: Array<string> = [];
 
-    for (;;) {
-      try {
-        resumed = await connected(s, "after-crash");
-        break;
-      } catch {
-        await pause();
-      }
-    }
+        for (const n of range(20)) {
+          const id = `kill-${n}`;
+          let reply = yield* Effect.promise(() => send(resumed, pid, id));
 
-    for (let n = 0; n < 20; n++) {
-      const id = `kill-${n}`,
-        now = placing(await send(resumed, pid, id));
+          if (reply.error !== undefined) {
+            // A refusal is the name restarting; its resend waits for the fact that says so.
+            expect(refused, "at most one letter meets a refusal").toEqual([]);
+            expect(reply.error.data?.reason).toBe("unreachable");
+            refused.push(id);
+            yield* restartedAfter(resumed, "processes/counter:1", pid);
+            reply = yield* Effect.promise(() => send(resumed, pid, id));
+          }
 
-      if (accepted.has(id)) {
-        expect(now).toEqual(accepted.get(id));
-      }
-    }
+          const now = placing(reply);
+          const was = before[n]!;
 
-    const inbox = await read(resumed, "counter:1/inbox");
-    expect(inbox).toHaveLength(20);
-    expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
-    expect((await view(resumed, pid)).view.count).toBe(20);
-    expect(await counter(resumed)).toBe(pid);
-    let starts: Entry[] = [];
+          if (was._tag === "accepted") {
+            expect(now).toEqual(was.placing);
+          }
+        }
 
-    // Replacement events arrive on the outbox's periodic flush, after traffic can recover.
-    // The enclosing test's existing timeout bounds this wait.
-    for (;;) {
-      signal.throwIfAborted();
-      starts = (await read(resumed, "door/brain")).filter((r) => r._tag === "started");
-
-      if (starts.some((row) => (row.body as { after: string | null }).after === firstStart)) {
-        break;
-      }
-
-      await pause();
-    }
-
-    expect(starts).toHaveLength(2);
-    expect(starts[1]!.body).toMatchObject({
-      after: firstStart,
-      build: expect.any(String),
-      reason: "crash",
-    });
-  });
+        const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
+        expect(inbox).toHaveLength(20);
+        expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
+        expect((yield* Effect.promise(() => view(resumed, pid))).view.count).toBe(20);
+        const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
+          (row) => (row.body as { after?: string }).after === pid,
+        );
+        // A refusal waited for its fact above. However the kill landed, no more than one restart follows it.
+        expect(restarted.length).toBeLessThanOrEqual(1);
+        expect(yield* Effect.promise(() => counter(resumed))).toBe(
+          restarted.length === 0 ? pid : (restarted[0]!.body as { process: string }).process,
+        );
+      }),
+  );
 });
