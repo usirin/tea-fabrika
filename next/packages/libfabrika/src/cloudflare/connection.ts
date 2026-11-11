@@ -235,7 +235,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 export class ConnectionService extends Context.Service<
   ConnectionService,
   Effect.Success<ReturnType<typeof gatewayLogic>>
->()("fabrika/Connection") {}
+>()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
   Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));

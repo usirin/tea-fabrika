@@ -33,7 +33,7 @@ export class RecoveryStore extends Context.Service<
     readonly input: (letter: string) => Effect.Effect<Schema.Json | null, LedgerError>;
     readonly receipt: (letter: string) => Effect.Effect<Supervision["receipts"][number] | null, LedgerError>;
   }
->()("@kampus/libfabrika/RecoveryStore") {
+>()("@kampus/libfabrika/runtime/RecoveryStore") {
   static readonly layer = (
     sql: Sql,
     who: { readonly name: string; readonly capacity: number },

@@ -2,7 +2,7 @@
 // A program gets no sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
-import { Effect, Option, Result, Schema, type SchemaIssue } from "effect";
+import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries } from "./internal/recovery.ts";
 
@@ -13,7 +13,7 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
 /** A schema a program declares. It decodes and encodes without services. */
 type Declared = Schema.Codec<unknown, unknown>;
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
-const isCode = <F>(u: unknown): u is F => typeof u === "function";
+const isCode = <F>(u: unknown): u is F => Predicate.isFunction(u);
 
 const code = <F>(expected: string) => Schema.declare((u: unknown): u is F => isCode<F>(u), { expected });
 
@@ -25,13 +25,11 @@ type Steps = {
 };
 
 const isSteps = (u: unknown): u is Steps =>
-  typeof u === "object" &&
-  u !== null &&
-  "update" in u &&
-  typeof u.update === "object" &&
-  u.update !== null &&
-  "init" in u &&
-  typeof u.init === "function";
+  Predicate.isObjectOrArray(u) &&
+  Predicate.hasProperty(u, "update") &&
+  Predicate.isObjectOrArray(u.update) &&
+  Predicate.hasProperty(u, "init") &&
+  Predicate.isFunction(u.init);
 
 const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
 
@@ -294,9 +292,8 @@ const typedProgram = <T extends ProgramMachine, V extends Schema.Json, I, O, W>(
   Schema.declare(
     (u): u is Program<T, V, I, O, W> =>
       Result.isSuccess(decodeDeclaration(u)) &&
-      typeof u === "object" &&
-      u !== null &&
-      "machine" in u &&
+      Predicate.isObjectOrArray(u) &&
+      Predicate.hasProperty(u, "machine") &&
       u.machine === spec.machine,
     { expected: "the checked program" },
   );
@@ -395,7 +392,7 @@ const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
-  typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "type") && Predicate.isString(u.type);
 
 const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.some(u) : Option.none());
 
@@ -431,23 +428,25 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   const type = typed.value.type;
   const def = defs.find((d) => d.okType === type || d.errType === type);
 
-  if (def === undefined || typeof msg !== "object" || msg === null) {
+  if (def === undefined || !Predicate.isObjectOrArray(msg)) {
     return Option.none();
   }
 
-  const cmd = "cmd" in msg ? msg.cmd : undefined;
+  const cmd = Predicate.hasProperty(msg, "cmd") ? msg.cmd : undefined;
   const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
 
-  if (!sameCmd || !("at" in msg) || typeof msg.at !== "number") {
+  if (!sameCmd || !Predicate.hasProperty(msg, "at") || !Predicate.isNumber(msg.at)) {
     return Option.some(false);
   }
 
   if (type === def.okType) {
-    return Option.some("value" in msg && accepts(def.schema.ok, msg.value));
+    return Option.some(Predicate.hasProperty(msg, "value") && accepts(def.schema.ok, msg.value));
   }
 
-  const error = "error" in msg ? msg.error : undefined;
-  return Option.some(typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string");
+  const error = Predicate.hasProperty(msg, "error") ? msg.error : undefined;
+  return Option.some(
+    Predicate.isObjectOrArray(error) && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag),
+  );
 };
 
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {

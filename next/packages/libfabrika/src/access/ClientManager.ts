@@ -110,7 +110,7 @@ export class ClientManager extends Context.Service<
     readonly members: Effect.Effect<Access, LedgerError>;
     readonly write: (event: MemberEvent, from: From) => Effect.Effect<Written, LedgerError>;
   }
->()("@kampus/libfabrika/ClientManager") {
+>()("@kampus/libfabrika/access/ClientManager") {
   /** Building it writes nothing. The first call on an empty `gateway/access` writes `founded` under
    *  the fixed id `founded`, inside that call's error channel, so the referee keeps it once (p20). */
   static readonly layer = (

@@ -64,7 +64,7 @@ export class ProcessManager extends Context.Service<
     readonly receive: (process: string, after: Rev) => Stream.Stream<Letter, Failure>;
     readonly down: (process: string, policy: Policy, from: From) => Effect.Effect<void, Failure>;
   }
->()("@kampus/libfabrika/ProcessManager") {
+>()("@kampus/libfabrika/processes/ProcessManager") {
   static readonly layer = (
     caller: Wiring,
     nextId: Effect.Effect<string>,
