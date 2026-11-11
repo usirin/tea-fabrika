@@ -253,6 +253,9 @@ export const askDesk = async (tools: Tools) => {
   let failedTicket = 130;
   const shot = async (page: Page, state: string, layout: string, look: string) => {
     const file = `${state}-${layout}-${look}.png`;
+    // Round 30, law 4: a press leaves the pointer on what it pressed, and its hover look is not the
+    // state being shot. Park the pointer off the ticket tile first.
+    await parkPointer(page);
     // Manti fades the buttons' colors, so a shot straight after a state change catches them
     // mid-fade. Wait (at most ~2 s) until the ask box's buttons show equal computed colors on
     // two reads and none has a running finite animation or transition. Only the box's buttons
@@ -300,6 +303,7 @@ export const askDesk = async (tools: Tools) => {
       }
     }
 
+    await calmTile(`${state}-${layout}-${look}`, page);
     await page.screenshot({ path: join(dir, file) });
     captured.push(file);
   };
@@ -576,6 +580,17 @@ export const askDesk = async (tools: Tools) => {
           await blindLine(`blind-${layout}-${look}`, box(page));
         }
 
+        // Round 30, laws 2 and 3 on the blind ask, whose hint wraps the piece at side and 2x2:
+        // Needed me, then Agent could work it out, then clear, so the ask is left unmarked.
+        const blindUnmarked = await markPlace(box(page));
+
+        for (const name of ["Needed me", "Agent could work it out"]) {
+          await button(box(page), name).click();
+          await marksHold(`blind, ${name}, ${layout}-${look}`, box(page), blindUnmarked, true);
+        }
+
+        await button(box(page), "Agent could work it out").click();
+        await marksHold(`blind, clear, ${layout}-${look}`, box(page), blindUnmarked, false);
         await inspectBar(page, box(page));
         await inspectCard(page, box(page));
         // Today's asks menu, drawn with the shared ask view.
@@ -803,6 +818,8 @@ export const askDesk = async (tools: Tools) => {
         await inspectBar(page, box(page));
         await inFlow("P23 E: the note opens under the bar in normal flow", box(page), box(page).getByRole("textbox"));
 
+        const unmarked = await markPlace(box(page));
+
         for (const [name, state] of [
           ["Needed me", "needed-true"],
           ["Agent could work it out", "needed-false"],
@@ -810,9 +827,11 @@ export const askDesk = async (tools: Tools) => {
           await button(box(page), name).click();
           await shot(page, state, layout, look);
           await takeRecReads(`${state}-${layout}-${look}`, box(page));
+          await marksHold(`${state}-${layout}-${look}`, box(page), unmarked, true);
         }
 
         await button(box(page), "Agent could work it out").click();
+        await marksHold(`needed-clear-${layout}-${look}`, box(page), unmarked, false);
         await box(page).getByRole("textbox").focus();
         await page.keyboard.press("Escape");
         check("P17 d: the marks stay after Escape", (await marksIn(box(page))) === 2);
@@ -1598,17 +1617,237 @@ const inTile = async (when: string, where: Locator, status: "saving" | "failed")
           inside: at.height > 0 && at.top >= port.top - 1 && at.bottom <= port.bottom + 1,
         };
       };
-      return [
-        measure("Your turn line", turn),
-        measure(which === "saving" ? "Saving your answer line" : "Not saved line", line),
-        ...(retry === null ? [] : [measure("Try again", retry)]),
-      ];
+      // Round 30, law 1: in failed-save, every button the bar draws (Try again, Send no and Cancel
+      // included) lies inside the same area. A button drawn with no box (the folded evidence) is not.
+      const buttons =
+        which === "failed"
+          ? [...root.querySelectorAll('[data-scope="button"]')]
+              .filter((b) => b.getClientRects().length > 0)
+              .map((b) => measure(`button ${(b.textContent ?? "").trim()}`, b))
+          : [];
+      return {
+        lines: [
+          measure("Your turn line", turn),
+          measure(which === "saving" ? "Saving your answer line" : "Not saved line", line),
+          ...(retry === null ? [] : [measure("Try again", retry)]),
+        ],
+        buttons,
+      };
     }, status);
   await until(
     `P23 11-09, ${when}: the Your turn line and the save status lie inside the tile's scroll area`,
     read,
-    (seen) => seen.every((part) => part.inside),
+    (seen) => seen.lines.every((part) => part.inside),
   );
+
+  if (status === "failed") {
+    await until(
+      `P23 11-10 law 1, ${when}: every button in the bar lies inside the tile's scroll area, with the Your turn and Not saved lines`,
+      read,
+      (seen) =>
+        seen.lines.every((part) => part.inside) && seen.buttons.length > 0 && seen.buttons.every((b) => b.inside),
+    );
+  }
+};
+
+/**
+ * Round 30, law 4: before a shot, the pointer rests off the ticket tile, on the first window corner
+ * that is in neither the tile nor the asks menu. The menu is left alone: a pointer over a row is
+ * not the state being shot either.
+ */
+const parkPointer = async (page: Page) => {
+  const spot = await page.evaluate(() => {
+    const corners = [
+      [2, 2],
+      [innerWidth - 3, 2],
+      [2, innerHeight - 3],
+      [innerWidth - 3, innerHeight - 3],
+    ] as const;
+    return (
+      corners.find(([x, y]) => {
+        const at = document.elementFromPoint(x, y);
+        return at !== null && at.closest('[data-tile="t1"], #pop-asks') === null;
+      }) ?? null
+    );
+  });
+  check("P23 11-10 law 4: a window corner lies off the ticket tile, for the pointer", spot !== null);
+
+  if (spot !== null) {
+    await page.mouse.move(spot[0], spot[1]);
+  }
+};
+
+/**
+ * Round 30, law 4, at each shot: nothing inside the ticket tile matches :hover or :active, and
+ * every mark with aria-pressed="false" paints the bar's background under it. What paints is the
+ * first background, going up from the element, that is not fully clear.
+ */
+const calmTile = async (when: string, page: Page) => {
+  const tile = page.locator('[data-tile="t1"]');
+
+  if ((await tile.count()) === 0) {
+    return;
+  }
+
+  await until(
+    `P23 11-10 law 4, ${when}: nothing in the ticket tile is hovered or active, and an unpressed mark has the bar's background`,
+    () =>
+      tile.evaluate((root) => {
+        const clear = (c: string) => c === "transparent" || /rgba\(.*,\s*0\)$/.test(c);
+        const paint = (element: Element | null) => {
+          for (let at = element; at !== null; at = at.parentElement) {
+            const color = getComputedStyle(at).backgroundColor;
+
+            if (!clear(color)) {
+              return color;
+            }
+          }
+
+          return null;
+        };
+        const marks = [
+          ...root.querySelectorAll('[role="group"][aria-label="Did this need you?"] [aria-pressed="false"]'),
+        ].map((mark) => {
+          const bar = mark.closest('section[aria-label^="ask: "]');
+          return {
+            mark: (mark.textContent ?? "").trim(),
+            own: paint(mark),
+            bar: paint(bar),
+          };
+        });
+        return {
+          hovered: [...root.querySelectorAll(":hover")].map((e) => `${e.tagName}.${e.className}`),
+          active: [...root.querySelectorAll(":active")].map((e) => `${e.tagName}.${e.className}`),
+          marks,
+        };
+      }),
+    (seen) => seen.hovered.length === 0 && seen.active.length === 0 && seen.marks.every((m) => m.own === m.bar),
+  );
+};
+
+/**
+ * Round 30, laws 2 and 3: where the "Did this need you?" piece sits, read from the real window.
+ * - top: the top of its "Did this need you?" words; lefts: each mark's left edge;
+ * - shares: the words share a line with the rec words' (or blind hint's) last line;
+ * - pressed: a pressed mark's painted box (its border box grown by its box-shadow spread) against
+ *   the nearest line box above it and the next row's box under it. A line or row is any text line or
+ *   button, field or pick in the bar outside the marks pair, whose middle is above the mark's top or
+ *   under its bottom. `--s-1` is read from computed style, never written as a number here.
+ */
+const markPlace = (where: Locator) =>
+  where.evaluate((root) => {
+    const group = root.querySelector('[role="group"][aria-label="Did this need you?"]');
+    const words = group?.querySelector('[aria-hidden="true"]') ?? null;
+    const marks = group === null ? [] : [...group.querySelectorAll("[aria-pressed]")];
+    const lines = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return [...range.getClientRects()].filter((r) => r.width > 0);
+    };
+    const recLast = lines(root.querySelector(".ask-recwords") ?? root).at(-1) ?? null;
+    const wordsFirst = words === null ? null : (lines(words)[0] ?? null);
+    const probe = document.createElement("div");
+    probe.style.blockSize = "var(--s-1)";
+    root.append(probe);
+    const s1 = Number.parseFloat(getComputedStyle(probe).blockSize);
+    probe.remove();
+    const pressedMark = marks.find((m) => m.getAttribute("aria-pressed") === "true") ?? null;
+    let pressed = null;
+
+    if (pressedMark !== null) {
+      const at = pressedMark.getBoundingClientRect();
+      // box-shadow reads as "color x y blur spread" per shadow, the color dropped; inset paints inside.
+      const shadows = getComputedStyle(pressedMark).boxShadow;
+      let up = 0;
+      let down = 0;
+
+      if (shadows !== "none") {
+        for (const one of shadows.split(/,(?![^(]*\))/)) {
+          if (/\binset\b/.test(one)) {
+            continue;
+          }
+
+          const [, y = 0, , spread = 0] = (one.replaceAll(/[a-z-]+\([^)]*\)/gi, "").match(/-?[\d.]+px/g) ?? []).map(
+            (n) => Number.parseFloat(n),
+          );
+          up = Math.max(up, spread - y);
+          down = Math.max(down, spread + y);
+        }
+      }
+
+      const painted = { top: at.top - up, bottom: at.bottom + down };
+      const pair = pressedMark.closest(".ask-mark-pair") ?? pressedMark;
+      const boxes: DOMRect[] = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if ((node.textContent ?? "").trim() === "" || pair.contains(node)) {
+          continue;
+        }
+
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        boxes.push(...[...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0));
+      }
+
+      for (const element of root.querySelectorAll('[data-scope="button"], textarea, input')) {
+        if (!pair.contains(element) && element.getClientRects().length > 0) {
+          boxes.push(element.getBoundingClientRect());
+        }
+      }
+
+      const middle = (r: DOMRect) => (r.top + r.bottom) / 2;
+      const above = boxes.filter((r) => middle(r) < at.top).map((r) => r.bottom);
+      const below = boxes.filter((r) => middle(r) > at.bottom).map((r) => r.top);
+      pressed = {
+        mark: (pressedMark.textContent ?? "").trim(),
+        painted,
+        lineAbove: above.length === 0 ? null : Math.max(...above),
+        rowBelow: below.length === 0 ? null : Math.min(...below),
+      };
+    }
+
+    return {
+      s1,
+      top: wordsFirst?.top ?? null,
+      lefts: marks.map((m) => m.getBoundingClientRect().left),
+      shares:
+        recLast !== null && wordsFirst !== null && wordsFirst.top < recLast.bottom && recLast.top < wordsFirst.bottom,
+      pressed,
+    };
+  });
+
+/** Round 30, laws 2 and 3 after a press or a clear, against the piece's unmarked place. */
+const marksHold = async (
+  when: string,
+  where: Locator,
+  unmarked: Awaited<ReturnType<typeof markPlace>>,
+  press: boolean,
+) => {
+  const near = (a: number | null, b: number | null) => a !== null && b !== null && Math.abs(a - b) <= 1;
+  await until(
+    `P17 11-10 law 2, ${when}: a press or a clear never moves the marks piece`,
+    () => markPlace(where),
+    (now) =>
+      near(now.top, unmarked.top) &&
+      now.lefts.length === unmarked.lefts.length &&
+      now.lefts.length > 0 &&
+      now.lefts.every((left, i) => near(left, unmarked.lefts[i] ?? null)) &&
+      (!unmarked.shares || now.shares),
+  );
+
+  if (press) {
+    await until(
+      `P17 11-10 law 3, ${when}: a pressed mark's fill keeps --s-1 from the line above and the row below`,
+      () => markPlace(where),
+      (now) =>
+        now.pressed !== null &&
+        Number.isFinite(now.s1) &&
+        now.s1 > 0 &&
+        (now.pressed.lineAbove === null || now.pressed.painted.top - now.pressed.lineAbove >= now.s1 - 0.5) &&
+        (now.pressed.rowBelow === null || now.pressed.rowBelow - now.pressed.painted.bottom >= now.s1 - 0.5),
+    );
+  }
 };
 
 /**
