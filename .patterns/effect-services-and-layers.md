@@ -91,6 +91,16 @@ Rules:
 - **Compose, never build.** No `Layer.build` then `Context.get` then `Effect.provideContext` on each
   call: that is what `Layer.provide` does. A service that needs another captures it once with
   `yield*` in its own Layer (`ledger/LedgerSql.ts:16`).
+- **Never provide inside a layer body.** A layer lists what it needs in its type and yields it. An
+  `Effect.provide(X.layer(...))` inside the `Effect.gen` hides the need and builds the dependency
+  where the caller cannot replace it. `LedgerSql.layer` yields `Referee` in the body (`:16`) and
+  composes `RefereeSql.layer(sql)` outside it, on the returned Layer (`:23`): the body only asks,
+  and the wiring is one `Layer.provide` a reader sees at the end. Effect's own cluster code does the same: `entityManager`'s `make` takes its
+  `storage` in its options and the caller picks it
+  (`effect/src/cluster/internal/entityManager.ts:141-145`).
+- **A needed service is in the type, never found at run time.** `Effect.serviceOption(X)` is for a
+  service that is truly optional. One that a path needs goes in the layer's requirements, so a
+  missing one is a type error, not an `Effect.die` or an `Option.getOrThrow` deep in a call.
 - **Ordered setup is `Layer.unwrap`.** When a Layer depends on a value read first (settings, a
   saved descriptor), read it in an Effect and return the Layer from it
   (`next/apps/fabrika/src/runtime.ts:20`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
@@ -119,9 +129,16 @@ converted alongside ClientManager (ticket 731) so far. The rest still carry stat
 `next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
 code follows this doc now.
 
-`Layer.build` is still used in product code: `cloudflare/runtime.ts:355` and `:745`,
+`Layer.build` is still used in product code: `cloudflare/runtime.ts:357` and `:752`,
 `cloudflare/connection.ts:18` and `node/dev/dev-recording.ts:31`, each followed by
 `Effect.provideContext` (ticket 442).
+
+A layer still provides inside its own body in `next/packages/libfabrika/src/runtime/Runner.ts:218-221`:
+`RecoveryStore` and `Replies` are built from `RecoveryStore.layer(...)` and `RepliesSql.layer(...)`
+in the body, so they are missing from the layer's requirements (`:206-209`). The same file finds
+`SessionManager` at run time with `Effect.serviceOption` (`:229`), then `Effect.die` (`:1169`) or
+`Option.getOrThrow` (`:1174`) when a caused write needs it. `runtime/Built.ts:16` provides
+`Digest.layerWebCrypto` inside `hash`, the same shape at function size.
 
 ## Why it is not obvious
 

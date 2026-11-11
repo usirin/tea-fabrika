@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { YES, type Ran, TIMED_OUT, made, lane, onMain, codexRuns, WHOLE } from "./lane-harness.ts";
+import { YES, type Ran, TIMED_OUT, made, lane, onMain, codexRuns, WHOLE, answeredWith } from "./lane-harness.ts";
 
 // A lane, on what a real agent might answer: errors in mid-stream, a last message that does not fit,
 // and odd files. The shared setup is in ./lane-harness.ts. Today's version.
@@ -213,7 +213,8 @@ describe("a lane, on what a real agent might answer", () => {
   });
 
   // P6, and P27: its `stop` lands nothing with or without a guard, so what is on offer is the point.
-  it("every review row unseen goes to the person with the reviewer's reason, nothing lands on it, and nothing on offer lets it through", async () => {
+  // scenario: a local reviewer process returns unseen rows; the real git remote must stay unchanged.
+  it("scenario: every review row unseen goes to the person with the reviewer's reason, nothing lands on it, and nothing on offer lets it through", async () => {
     const REASON = "The fixture run is elsewhere, so nothing here could show it.";
     const ran = await lane({
       within: 50,
@@ -224,21 +225,24 @@ describe("a lane, on what a real agent might answer", () => {
     expect(ran.names.review).toContain('"ask"');
     const asked = askedOf(ran).filter((f) => String(f.ask).startsWith("a-step"));
     expect(asked).toHaveLength(1);
-    expect(asked[0]?.picks).toEqual(["again", "stop"]);
+    expect(asked[0]).toMatchObject({ shows: { picks: [{ pick: "again" }, { pick: "stop" }] } });
     const said = ran.facts.filter((f) => f.type === "commented").map((f) => String(f.body));
-    expect([String(asked[0]?.what), ...said].some((text) => text.includes(REASON))).toBe(true);
+    expect(
+      [String((asked[0]?.shows as { what: string } | undefined)?.what), ...said].some((text) => text.includes(REASON)),
+    ).toBe(true);
     expect(onMain(ran.remote, "src/lower.ts")).toBeNull();
   });
 
   // P27: a lane saved with `go_on` on offer, picked. What stops it is ship's guard, not the question.
-  it("a lane saved asking with go_on on offer, and picked, opens its pull request and ends stuck: nothing lands", async () => {
+  // scenario: one saved lane resumes across real local processes and a temporary git remote.
+  it("scenario: a lane saved asking with go_on on offer, and picked, opens its pull request and ends stuck: nothing lands", async () => {
     const ran = await lane({
       within: 50,
       picks: { ...YES, step: "go_on" },
       fake: { unseen: "The fixture run is elsewhere, so nothing here could show it." },
       savedAsking: { at: /asks: (?!Do you approve)/, offers: ["again", "go_on", "stop"] },
     });
-    expect(ran.facts.filter((f) => f.type === "answered" && f.pick === "go_on")).toHaveLength(1);
+    expect(answeredWith(ran, "go_on")).toHaveLength(1);
     expect(ran.lines).not.toContain(TIMED_OUT);
     expect(ran.names.merge).toContain("reviews_unknown");
     expect(ran.lines.at(-1)).toContain("stuck");

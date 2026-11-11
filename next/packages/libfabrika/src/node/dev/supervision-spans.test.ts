@@ -12,7 +12,7 @@ import { A, B, W, X, brain, data, first, from, ids, read, storage } from "../../
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../../runtime/Entry.ts";
 import { workerExecution } from "../../runtime/Execution.ts";
 import { RecoveryStore } from "../../runtime/RecoveryStore.ts";
-import { type Descriptor, ProgramRunner } from "../../runtime/Runner.ts";
+import { type Descriptor, ProgramRunner, Supervision } from "../../runtime/Runner.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
@@ -249,7 +249,9 @@ for (const adapter of ["node", "worker"] as const) {
               }
 
               const receipt = yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
-                Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
+                Effect.provide(
+                  RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
+                ),
               );
               const dead = yield* read(`${A}/dead`);
               const events = yield* read(`processes/${NAME}`);
@@ -300,7 +302,9 @@ for (const adapter of ["node", "worker"] as const) {
               expect(w.sink.sql.exec("SELECT * FROM measurements")).toEqual(measurements);
               expect(
                 yield* RecoveryStore.use((s) => s.receipt(w.input.id)).pipe(
-                  Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
+                  Effect.provide(
+                    RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }),
+                  ),
                 ),
               ).toEqual(receipt);
               expect(yield* read(`${A}/dead`)).toEqual(dead);

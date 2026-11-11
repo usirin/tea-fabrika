@@ -3,7 +3,7 @@
 // (law p21, p97). An inbox is the stream `<name>/inbox` on P6's ledger.
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
-import { Appended, type Entry, type Line, lineFor } from "../ledger/Log.ts";
+import { Appended, type Entry, Line, lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
@@ -15,6 +15,7 @@ export class RunnerMail extends Context.Service<RunnerMail, { readonly process: 
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
  *  case and body, so a writer can leave none out (p92). */
+export const From = Line.mapFields(({ _tag, body: _body, ...fields }) => fields);
 export type From = Omit<Line, "_tag" | "body">;
 
 /** A letter as it comes out of an inbox: what was asked, by whom, for whom, and where it sits. */

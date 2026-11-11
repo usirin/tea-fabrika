@@ -17,6 +17,7 @@
 
 // agents: our own interface to a coding agent (experiment 156). Its adapters are on subpaths.
 export * as Agent from "./agents/agent.ts";
+export { hash } from "./hash.ts";
 // host: programs under registered names on one ledger.
 export * as Call from "./host/call.ts";
 export * from "./host/dead-letters.ts";
