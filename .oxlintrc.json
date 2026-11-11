@@ -683,11 +683,17 @@
       // and those stay review work. A conversation room, which 0091 keeps, takes a local
       // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`).
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
+      // override replaces a rule's whole list, so this one repeats the five question words (0081).
       "files": ["next/**/*"],
       "rules": {
         "eslint/id-denylist": [
           "error",
+          "where",
+          "why",
+          "what",
+          "who",
+          "how",
           "room",
           "rooms",
           "Room",
@@ -834,6 +840,7 @@
               "processes",
               "presence",
               "jobs",
+              "packs",
               "access",
               "runtime",
               "gateway"

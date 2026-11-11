@@ -16,7 +16,7 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const PROJECT = "p34-workers";
-const PROGRAM = "poison-fixture";
+const PROGRAM = "p34/poison-fixture";
 // The fixture declares its own limit; the Worker's default policy says 3.
 const LIMIT = 2;
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.

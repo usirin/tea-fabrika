@@ -155,8 +155,8 @@ const world = async (
       'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
       'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
     ].join("\n");
-    writeFileSync(writer, `${common}\nexport const program = {...declaration,name:"writer-fixture"};`);
-    writeFileSync(timer, `${common}\nexport const program = {...declaration,name:"timer-fixture"};`);
+    writeFileSync(writer, `${common}\nexport const program = {...declaration,name:"p12/writer-fixture"};`);
+    writeFileSync(timer, `${common}\nexport const program = {...declaration,name:"p12/timer-fixture"};`);
     writeFileSync(
       sealed,
       [
@@ -167,13 +167,13 @@ const world = async (
         "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
         'const Msg = Schema.Struct({type: Schema.Literal("read")});',
         "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
-        'export const program = {name:"sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
+        'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
       ].join("\n"),
     );
     const built = await Effect.runPromise(
       build({
         out: join(home, "dist"),
-        programs: { "writer-fixture": writer, "timer-fixture": timer, "sealed-fixture": sealed },
+        programs: { "p12/writer-fixture": writer, "p12/timer-fixture": timer, "p12/sealed-fixture": sealed },
       }).pipe(Effect.provide(NodeServices.layer)),
     );
 
@@ -733,7 +733,7 @@ describe("P12 real object adapters", () => {
       };
       const accepted = await routed(p, client, "process.send", input);
       expect(accepted).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-      const broken = await fixture.start("broken:1", "writer-fixture");
+      const broken = await fixture.start("broken:1", "p12/writer-fixture");
       await expect(
         routed(p, client, "process.send", {
           ...input,
@@ -768,7 +768,7 @@ describe("P12 real object adapters", () => {
       await world(async (instance, key, fixture) => {
         const { p, client } = await admitted(instance, key);
         // Trusted declarations for this process permit the event; the signer is bound to this pid.
-        const started = await fixture.start("writer:1", "writer-fixture");
+        const started = await fixture.start("writer:1", "p12/writer-fixture");
         const pid = started.process;
         const delivered = await routed(p, client, "process.send", {
           pid,
@@ -837,7 +837,7 @@ describe("P12 real object adapters", () => {
   it("scenario: p79/alarm handoff plant: storage wake keeps pid; durable due delivery has one letter and one Cmd", async () => {
     await world(async (instance, key, fixture) => {
       const { p, client } = await admitted(instance, key);
-      const start = await fixture.start("timer:1", "timer-fixture");
+      const start = await fixture.start("timer:1", "p12/timer-fixture");
       const process = instance.process(start.process);
       expect(
         await routed(p, client, "process.send", {
@@ -873,10 +873,10 @@ describe("P12 real object adapters", () => {
       await expect(loader.load("no-such-program", processId())).rejects.toMatchObject({
         reason: "no_program",
       });
-      const sealed = await loader.load("sealed-fixture", processId());
+      const sealed = await loader.load("p12/sealed-fixture", processId());
       expect((await sealed.init(null)).view).toEqual({ bindings: [], outbound: "blocked" });
       expect(probe.hits()).toBe(0);
-      const counter = await loader.load("counter", processId());
+      const counter = await loader.load("fabrika/counter", processId());
       expect(await counter.init(null)).toMatchObject({ _tag: "stepped", view: { count: 0 } });
       expect(await counter.step({ count: 0 }, { type: "inc" })).toMatchObject({
         _tag: "stepped",

@@ -191,7 +191,7 @@ const refusedBuild = async (home: string) => {
     root: home,
     out: join(home, "dist"),
     entry: join(home, "brain.ts"),
-    programs: [{ name: "css", package: "@p16/css", export: "program" }],
+    programs: [{ name: "p16/css", package: "@p16/css", export: "program" }],
     files: [],
     ledger: [],
     chaos: false,

@@ -86,8 +86,10 @@ only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`,
 `Sql` adapter moves to `cloudflare/`; slice 1 merged as
 [PR 891](https://github.com/usirin/tea-fabrika/pull/891). Its slice 3 (ticket 723) is being built:
 `Referee.ts` and `LedgerTransaction.ts` hold only their contracts, and their layers are
-`RefereeSql.ts` and `LedgerTransactionSql.ts`. No Tier 1 row changes. → the lead lands each slice once its
-steps pass
+`RefereeSql.ts` and `LedgerTransactionSql.ts`. No Tier 1 row changes. P40, programs written outside
+fabrika's own source (ticket 715), is planned in 4 slices; slice 1, the core counter built and run as
+`fabrika/counter`, is being built, and P40 stays open until its cold-author check passes. → the lead
+lands each slice once its steps pass
 
 *2026-11-09:* the local instance, P12, landed as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too
