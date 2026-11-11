@@ -26,6 +26,28 @@ index fe5b925cdc0b3ee2efd7302d4ac5fca2c6c8f65b..006f3d5ea5b7f1d0e8854a57e99b4ebb
  }));
  //# sourceMappingURL=shared.js.map
 \ No newline at end of file
+diff --git a/lib/Workers/Worker.js b/lib/Workers/Worker.js
+index a1dd2ed19b2ea24fa676fc2777a55bf27a8e7300..c8d7eaf79eee3da776c1dff5f62d32b4aedaebc7 100644
+--- a/lib/Workers/Worker.js
++++ b/lib/Workers/Worker.js
+@@ -9,7 +9,6 @@ import path from "pathe";
+ import { CloudflareEnvironment } from "../CloudflareEnvironment.js";
+ import {} from "./Assets.js";
+ import { Request } from "./Request.js";
+-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.js";
+ import { transformWorkerDomainProps } from "./WorkerDomainDns.js";
+ import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.js";
+ import { makeWorkerRuntimeContext, } from "./WorkerRuntimeContext.js";
+@@ -1296,7 +1295,8 @@ const withDeclarationRef = (platform) => {
+ export const Worker = withDeclarationRef(Platform(WorkerTypeId, {
+     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+     // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+-    onCreate: (resource, props) => bindWorkerAsyncBindings(resource, props ?? {}),
++    // Lazy runtime binding import fix: https://github.com/alchemy-run/alchemy/issues/3227
++    onCreate: (resource, props) => globalThis.__ALCHEMY_RUNTIME__ ? Effect.void : Effect.flatMap(Effect.promise(() => import("./WorkerAsyncBindings.js")), (m) => m.bindWorkerAsyncBindings(resource, props ?? {})),
+     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+     // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+     // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
 diff --git a/src/Workers/Sources/shared.ts b/src/Workers/Sources/shared.ts
 index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753eb8b9f45 100644
 --- a/src/Workers/Sources/shared.ts
@@ -70,45 +92,25 @@ index e2bcbf92d457e941be805aa1c09ded1a3f6a1bfd..b0bd6d23c61f9a3731529b829a3d8753
 +      );
      }),
    );
-diff --git a/lib/Workers/Worker.js b/lib/Workers/Worker.js
---- a/lib/Workers/Worker.js
-+++ b/lib/Workers/Worker.js
-@@ -9,7 +9,6 @@
- import { CloudflareEnvironment } from "../CloudflareEnvironment.js";
- import {} from "./Assets.js";
- import { Request } from "./Request.js";
--import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.js";
- import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.js";
- import { makeWorkerRuntimeContext, } from "./WorkerRuntimeContext.js";
- export * from "./WorkerRuntime.js";
-@@ -1196,7 +1195,8 @@
-  */
- export const Worker = Platform(WorkerTypeId, {
-     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
--    onCreate: (resource, props) => bindWorkerAsyncBindings(resource, props),
-+    // Lazy runtime binding import fix: https://github.com/alchemy-run/alchemy/issues/3227
-+    onCreate: (resource, props) => globalThis.__ALCHEMY_RUNTIME__ ? Effect.void : Effect.flatMap(Effect.promise(() => import("./WorkerAsyncBindings.js")), (m) => m.bindWorkerAsyncBindings(resource, props)),
-     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-     transformProps: (_id, props) => Effect.sync(() => globalThis.__ALCHEMY_RUNTIME__ || typeof props.main !== "string"
-         ? props
 diff --git a/src/Workers/Worker.ts b/src/Workers/Worker.ts
+index 595abbec028d6e7a1e7e035d33946e478ec5e959..06eb11d5f97d2a3a7596a49183e378de0630a3c3 100644
 --- a/src/Workers/Worker.ts
 +++ b/src/Workers/Worker.ts
-@@ -43,7 +43,6 @@
+@@ -45,7 +45,6 @@ import { Request } from "./Request.ts";
  import type { ModuleRule } from "./Sources/Prebuilt.ts";
  import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
  import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 -import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
- import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
- import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
- import {
-@@ -2741,7 +2740,8 @@
-   WorkerTypeId,
-   {
-     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
--    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
-+    // Lazy runtime binding import fix: https://github.com/alchemy-run/alchemy/issues/3227
-+    onCreate: (resource, props) => globalThis.__ALCHEMY_RUNTIME__ ? Effect.void : Effect.flatMap(Effect.promise(() => import("./WorkerAsyncBindings.ts")), (m) => m.bindWorkerAsyncBindings(resource as Worker, props)),
-     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-     transformProps: (_id, props) =>
-       Effect.sync(() =>
+ import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+ import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
+ import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
+@@ -3013,7 +3012,8 @@ export const Worker: ResourceClassLike<Worker> & {
+     {
+       // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+       // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+-      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
++      // Lazy runtime binding import fix: https://github.com/alchemy-run/alchemy/issues/3227
++      onCreate: (resource, props) => globalThis.__ALCHEMY_RUNTIME__ ? Effect.void : Effect.flatMap(Effect.promise(() => import("./WorkerAsyncBindings.ts")), (m) => m.bindWorkerAsyncBindings(resource as Worker, props ?? {})),
+       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+       // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+       // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +

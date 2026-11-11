@@ -1,0 +1,15 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-access-write-reason-untested",
+  "date": "2026-11-11",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": { "path": "next/packages/libfabrika/src/access/ClientManager.ts", "line": 216 },
+  "says": "No law reads the error `reason` span tag on access.write. Removing its `Effect.tapError(... annotateCurrentSpan(tag(\"reason\"), error.reason))` fails nothing, on main (ClientManager.ts:216) as on ticket 731's branch, where the line now sits in ClientManagerLedger.ts:183. The same annotation on access.read is covered.",
+  "proof": "Deleted line 183 of access/ClientManagerLedger.ts (the access.write reason tapError). `pnpm exec vitest run --maxWorkers=1` printed `Tests 14 passed (14)` for access/AccessSpans.test.ts, `Tests 11 passed (11)` for runtime/EffectFunctions.test.ts and `Tests 20 passed (20)` for access/ClientManager.test.ts. Control: deleting the access.read reason tapError (line 190) made AccessSpans.test.ts print `Tests 1 failed | 13 passed (14)`. File restored by copy after each plant.",
+  "cost": "A failed membership write can lose its error reason in telemetry with every check green, so a person reading the span cannot tell why the write failed.",
+  "head": "31ec67bcabcf408c4fd8ecbbd7bb96080a17ff72",
+  "ticket": "usirin/tea-fabrika#731",
+  "pr": null
+}

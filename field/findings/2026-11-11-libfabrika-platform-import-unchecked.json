@@ -1,0 +1,15 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-libfabrika-platform-import-unchecked",
+  "date": "2026-11-11",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": { "path": "next/packages/libfabrika/src/access/ClientManagerLedger.ts", "line": 1 },
+  "says": "A platform import in a libfabrika module file that no browser entry loads fails no check. The only platform-name lint, fabrika/program-package-layout, reads next/programs/ alone, and libfabrika's one guard is the browser-bundle exam in deps.test.ts, which never loads ClientManagerLedger. Closing it needs 0042's lint rule (ticket 506) or a change to an existing exam.",
+  "proof": "Planted `import \"cloudflare:workers\";` as line 1 of access/ClientManagerLedger.ts. `pnpm exec vitest run --maxWorkers=1 apps/fabrika/src/exam/deps.test.ts` printed `Tests 16 passed (16)`; `apps/fabrika/src/exam/client-manager-contract.test.ts` printed `Tests 1 passed (1)`; `pnpm lint` exited 0. Control: the same line planted in access/ClientManager.ts made deps.test.ts print `Tests 3 failed | 13 passed (16)` (P17a, P11 and the browser top-level bundle). File restored by copy after each plant.",
+  "cost": "A Node, Cloudflare or other platform import can land in any libfabrika implementation sibling unnoticed, against 0042 and 0091, until some browser entry happens to load that file.",
+  "head": "31ec67bcabcf408c4fd8ecbbd7bb96080a17ff72",
+  "ticket": "usirin/tea-fabrika#731",
+  "pr": null
+}
