@@ -161,6 +161,8 @@ type World = {
   readonly negative: Set<string>;
   /** Responders some restart replaced, whose saved model starts again. */
   readonly restarted: Set<Pair>;
+  /** The ref whose answer letter was already in its requester's inbox when its responder stopped. */
+  readonly answeredAtStop: Map<Pair, string>;
   /** Delivery IDs of the mail the walk forged as another program. */
   readonly forgedIds: Set<string>;
   forged: number;
@@ -340,6 +342,7 @@ const walk = (
       background: [],
       negative: new Set(),
       restarted: new Set(),
+      answeredAtStop: new Map(),
       forgedIds: new Set(),
       forged: 0,
       n: 0,
@@ -513,6 +516,15 @@ const walk = (
 
           if (world.stalled.has(k)) {
             world.background.push(yield* Effect.forkChild(work.pipe(Effect.result)));
+
+            // The fork is only scheduled: let it run until its start letter lands, before the stalled wake.
+            for (let turn = 0; turn < 1000; turn++) {
+              if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
+                break;
+              }
+
+              yield* Effect.yieldNow;
+            }
           } else {
             yield* call(work, `${requesterName(k)}'s start`);
           }
@@ -603,6 +615,15 @@ const walk = (
             pairs.filter((p) => !world.stopped.has(p)),
             cell.pick,
           );
+          const current = world.current.get(k)?.ref;
+          const reached = (yield* bodies(requesterName(k))).some(
+            (b) => b.type === "answer" && b.ref === current && !world.forgedIds.has(b.id),
+          );
+
+          if (current !== undefined && reached) {
+            world.answeredAtStop.set(k, current);
+          }
+
           const status = yield* inContext(ProcessManager.use((p) => p.status(responderName(k))));
           yield* inContext(ProcessManager.use((p) => p.exit(status.state.process, SHUTDOWN, brainFrom()))).pipe(
             Effect.result,
@@ -695,7 +716,10 @@ const walk = (
       } else if (current.value < 0) {
         expect(state, "the responder refused it: no business answer is invented").toEqual(waiting);
       } else if (world.stopped.has(k)) {
-        expect(state, "L6: a stopped recipient keeps the letter and is not started by a send").toEqual(waiting);
+        // An answer already in the requester's inbox before the stop is still its answer.
+        expect(state, "L6: a stopped recipient keeps the letter and is not started by a send").toEqual(
+          world.answeredAtStop.get(k) === current.ref ? answered : waiting,
+        );
         const status = yield* inContext(ProcessManager.use((p) => p.status(responderName(k))));
         expect(status.state._tag, "L6: a send never restarts a stopped application").toBe("ended");
       } else {
