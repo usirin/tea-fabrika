@@ -15,6 +15,9 @@ git config core.bare false
 git reset -q --hard refs/heads/build
 pnpm install --offline --frozen-lockfile > /out/install.txt 2>&1 || exit 70
 export TMPDIR=/tmp
+# Stryker mutates /repo itself: a sandbox copy would reach other packages' unmutated files
+# through their node_modules links (ticket 457). /repo is this container's own throwaway copy.
+export IN_PLACE=1
 set -f
 IFS=,
 set -- $RELATED
@@ -33,6 +36,8 @@ arm() {
 		[ ! -e "/tmp/mut-$2/$f" ] || cp -R "/tmp/mut-$2/$f" "/out/$1/"
 	done
 	echo "$code" > "/out/$1/exit"
+	# A run stopped at its cap may leave a mutated file behind; the next arm starts clean.
+	git reset -q --hard refs/heads/build
 }
 
 # With a base, the sample is the lane's own lines, base..build, not the build commit's alone: a

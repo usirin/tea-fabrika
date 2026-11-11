@@ -54,7 +54,11 @@ samples the lane and not main (ticket 568); with none, it is the build commit ag
 `RELATED=<paths>`, which `drive.ts` reads. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
-The executable inside the container is `scripts/run.sh`, from the build commit.
+The executable inside the container is `scripts/run.sh`, from the build commit. There it mutates
+the container's own copy in place (`IN_PLACE=1`): Stryker's sandbox links each package's
+`node_modules` back to the checkout, so a test that reaches a file by its package name, such as
+`@tea-fabrika/tracker`, loaded the unmutated file, and a lane read 0 kills of 61 (ticket 457).
+A lane built before that fix samples with the old `run.sh` until it merges main.
 
 **The run happens in a container, never on the host and never in an agent's sandbox**
 ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)). Stryker starts a logging
