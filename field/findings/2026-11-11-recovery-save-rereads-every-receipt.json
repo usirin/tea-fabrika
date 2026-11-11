@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-recovery-save-rereads-every-receipt",
+  "date": "2026-11-11",
+  "by": "experiment-258",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
+    "line": 118
+  },
+  "says": "In next/, each RecoveryStore save loops over every receipt the process ever kept and runs one SELECT per receipt, so a runner that takes n inputs reads about n squared over 2 rows, and each input gets slower as the process ages, with or without program mail.",
+  "proof": "Experiment 258's script (branch fabrikalfa/exp-pipes-on-mail), a producer runner with no Send taking 300 person inputs on node:sqlite: 'SELECT value FROM process_receipts WHERE name=? AND letter=?' returned 270,600 rows, against 4,804 for the next query. At 1,000 inputs (5 runs) the whole run read 3.04 million rows, and an input in the last tenth took 30.0 ms against 3.9 ms in the first tenth.",
+  "cost": "Any chatty program in next/ slows down linearly with its age: 1,000 inputs take about 16 s instead of about 4 s, and a Durable Object pays the reads as rows read and as CPU time per request.",
+  "head": "808e954eba880cb28ffffdd282275009017552a9",
+  "ticket": null,
+  "pr": "usirin/tea-fabrika#929"
+}

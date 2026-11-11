@@ -88,15 +88,16 @@ describe("P11 real counter laws", () => {
           Effect.promise(async () => {
             const { counter } = await import("./program.ts");
             const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+            // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
             expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
-              name: "counter",
+              name: "fabrika/counter",
               state: { v: 1 },
               writes: {},
             });
             const p = Effect.runSync(
               Effect.gen(function* () {
-                return (yield* (yield* ProgramLoader).load("counter")).stepper;
-              }).pipe(Effect.provide(ProgramLoader.layer({ counter }, {}))),
+                return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;
+              }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {}))),
             );
             const boot = p.init(null);
             expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });

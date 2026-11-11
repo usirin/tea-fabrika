@@ -82,6 +82,11 @@
       "paths": ["next/packages/libfabrika/src/jobs"]
     },
     {
+      "name": "next-packs",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/packs"]
+    },
+    {
       "name": "next-ledger",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ledger"]

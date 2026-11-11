@@ -1971,11 +1971,6 @@
 			"code": "import { lineFor, valueFor } from \"../../ledger/Log.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/telemetry/RecordPart.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterAll(() => rmSync(home, { recursive: true, force: true }));"
-		},
-		{
 			"file": "next/packages/libfabrika/src/telemetry/Records.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
