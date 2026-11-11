@@ -8,6 +8,11 @@ blog post 10 (deleted from main; see the tag `archive/2026-11-09`); the first co
 `.fabrika/programs` are Tier 5 and packs are Tier 7, both proposed
 ([the tiers](../plan/tiers.md)).*
 
+*Added 2026-11-10: a choice that makes sense as a value here must be one, in both versions and in
+`next/` now ([0069](../../.decisions/0069-choices-are-settings.md)). This note's limits on what a
+setting may be still hold. The foundation for loading settings in `next/` moved from Tier 5 to
+Tier 1 by 0069. Repo programs and packs do not move with it.*
+
 ## Where the files live (2026-10-30)
 
 Decided: the repo's file moves into a `.fabrika/` folder, and a person's own
