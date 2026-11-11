@@ -28,6 +28,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { wipOf } from "./lane.ts";
+import { GC_SECONDS } from "./mutbox.ts";
 
 const HOUR = 3_600_000;
 export const IDLE = 2 * HOUR;
@@ -605,14 +606,20 @@ const main = () => {
   }
 
   // The mutation container's leftovers (0045): a container a dead run left, and images over a
-  // week old. mutbox.ts knows which are safe to remove, and keeps a live run's.
+  // week old. mutbox.ts knows which are safe to remove, and keeps a live run's. Each of its Docker
+  // calls has its own bound; GC_SECONDS is a second guard, so a hung Docker never holds the chain
+  // (2026-11-10: a `docker ps` here never returned, and two lanes sat 1 h 50 min).
   if (!dry) {
     const swept = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "mutbox.ts"), "gc", "--lock", join(env.BOXES, "state", "docker.lock")],
-      { encoding: "utf8" },
+      { encoding: "utf8", timeout: GC_SECONDS * 1000 },
     );
     process.stdout.write(swept.stdout ?? "");
+
+    if (swept.error !== undefined) {
+      console.log(`mutbox gc: stopped after ${GC_SECONDS} s (${swept.error.message}); the rest waits for the next gc`);
+    }
   }
 
   console.log(
