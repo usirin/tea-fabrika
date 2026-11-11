@@ -123,7 +123,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
 - **Every pull request, `next/` or today's, goes through the pipeline's steps:**
   plan, test writer, build, one review, each by its own agent, with
-  laws. Mutation is no step: it runs hourly against main and files tickets
+  laws. Mutation runs hourly against main and files tickets, never as a step
   ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)). Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
@@ -168,7 +168,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
   `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
-  narrower (the hourly mutation run files any narrowing it finds later, 0066). A change that loosens or removes a law still waits on the owner
+  narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
 - **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
