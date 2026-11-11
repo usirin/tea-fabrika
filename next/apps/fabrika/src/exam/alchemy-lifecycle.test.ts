@@ -82,14 +82,14 @@ const spawned = () => {
 describe("P12 Alchemy lifecycle patch", () => {
   it("format: the installed lifecycle patch registration matches its locked hash", () => {
     const workspace = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
-    const registration = /^ {2}['"]?@alchemy\.run\/cloudflare-runtime@2\.0\.0-beta\.84['"]?: (.+)$/m.exec(workspace);
+    const registration = /^ {2}['"]?@alchemy\.run\/cloudflare-runtime@2\.0\.0-beta\.85['"]?: (.+)$/m.exec(workspace);
     expect(registration, "the lifecycle patch must survive a clean pnpm install").not.toBeNull();
     expect(existsSync(join(ROOT, registration![1]!))).toBe(true);
     const hash = createHash("sha256")
       .update(readFileSync(join(ROOT, registration![1]!)))
       .digest("hex");
     expect(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8")).toContain(
-      `'@alchemy.run/cloudflare-runtime@2.0.0-beta.84': ${hash}`,
+      `'@alchemy.run/cloudflare-runtime@2.0.0-beta.85': ${hash}`,
     );
   });
 

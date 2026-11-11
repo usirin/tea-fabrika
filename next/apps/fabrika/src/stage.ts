@@ -1,6 +1,7 @@
 import { startDev as start } from "@kampus/libfabrika/node/stage";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
+import { AuthProvidersLive } from "alchemy/Auth/Registry";
 import { deploy } from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import { localState } from "alchemy/State/LocalState";
@@ -24,6 +25,7 @@ export const startDev = Effect.fn("stage.startDev")(function* (
       }),
       Layer.succeed(ArtifactStore, createArtifactStore()),
       Interaction.layerNonInteractive(),
+      AuthProvidersLive,
     );
     return deploy({ stack: stack(built, config, local), stage: "local", dev: true, scope }).pipe(
       Effect.provide(localState()),

@@ -57,6 +57,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           const { AlchemyContext } = yield* Effect.promise(() => import("alchemy/AlchemyContext"));
           const { ArtifactStore, createArtifactStore } = yield* Effect.promise(() => import("alchemy/Artifacts"));
           const Interaction = yield* Effect.promise(() => import("alchemy/Interaction"));
+          const { AuthProvidersLive } = yield* Effect.promise(() => import("alchemy/Auth/Registry"));
           const fixture: typeof import("./sibling-objects.test-support.ts") = yield* Effect.promise(
             () => import(pathToFileURL(file).href),
           );
@@ -73,6 +74,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
                 Layer.succeed(AlchemyContext, { dotAlchemy: path.join(home, ".alchemy"), dev: true, adopt: false }),
                 Layer.succeed(ArtifactStore, createArtifactStore()),
                 Interaction.layerNonInteractive(),
+                AuthProvidersLive,
               ),
             ),
           );
