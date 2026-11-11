@@ -15,6 +15,7 @@ import { ConnectionService, connectionRuntime } from "../../cloudflare/connectio
 import { control } from "../../cloudflare/control.ts";
 import type { Env } from "../../cloudflare/runtime.ts";
 import { Doorbell, Ledger } from "../../ledger/Ledger.ts";
+import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import { lineFor } from "../../ledger/Log.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -123,7 +124,7 @@ const flow = async (sample: Flow) => {
   const outputs: Outputs = { spans: [], logs: [], journal: [], measurements: [], outbox: [] };
   const journalDb = new DatabaseSync(":memory:");
   const journal = ManagedRuntime.make(
-    Ledger.sql(nodeSql(journalDb), { reader: "secret-test" }).pipe(
+    LedgerSql.layer(nodeSql(journalDb), { reader: "secret-test" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     ),
   );

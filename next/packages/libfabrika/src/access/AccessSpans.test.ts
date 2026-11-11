@@ -17,6 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Schema, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -96,7 +97,7 @@ afterAll(() => {
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 const onSql = (sql: Sql) =>
-  Layer.mergeAll(Ledger.sql(sql, { reader: READER }), LedgerTransaction.layer(sql)).pipe(Layer.provide(quiet));
+  Layer.mergeAll(LedgerSql.layer(sql, { reader: READER }), LedgerTransaction.layer(sql)).pipe(Layer.provide(quiet));
 
 const all = (sql: Sql = fresh()) =>
   Layer.mergeAll(Mailbox.layer, ProcessManager.layer(brain(), ids(A).next), ClientManager.layer(FOUNDER)).pipe(

@@ -5,6 +5,7 @@ import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
@@ -32,7 +33,7 @@ const world = () => {
   opened.push(db);
   return Mailbox.layer.pipe(
     Layer.provideMerge(
-      Ledger.sql(nodeSql(db), { reader: "p11-history" }).pipe(
+      LedgerSql.layer(nodeSql(db), { reader: "p11-history" }).pipe(
         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
       ),
     ),

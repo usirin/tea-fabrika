@@ -10,6 +10,7 @@ import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -121,7 +122,7 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
     },
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
   const transaction = LedgerTransaction.layer(sql).pipe(Layer.provide(quiet));
   const observations: Observed[] = [];
   let turns = 0;
