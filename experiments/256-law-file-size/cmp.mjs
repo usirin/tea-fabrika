@@ -1,0 +1,10 @@
+import { readFileSync } from "node:fs";
+const load = (p) => new Map(Object.values(JSON.parse(readFileSync(p, "utf8")).files).flatMap((f) => f.mutants).map((m) => [`${m.location.start.line}:${m.location.start.column}-${m.location.end.line}:${m.location.end.column} ${m.mutatorName} ${m.replacement}`, m]));
+const a = load(process.argv[2]), b = load(process.argv[3]);
+const killed = (m) => m && (m.status === "Killed" || m.status === "Timeout" || m.status === "RuntimeError");
+const src = readFileSync("next/packages/tuval/src/window/machine.ts", "utf8").split("\n");
+const only = (x, y, label) => { const out = [...x].filter(([k, m]) => killed(m) && !killed(y.get(k))); console.log(`\n${label}: ${out.length}`); for (const [k, m] of out) console.log(`L${m.location.start.line} ${m.mutatorName} ${(y.get(k)?.status) ?? "missing"} | ${JSON.stringify((m.replacement ?? "").slice(0, 70))} | ${src[m.location.start.line - 1].trim().slice(0, 90)}`); };
+console.log("same keys", [...a.keys()].filter((k) => b.has(k)).length, "of", a.size, b.size);
+only(a, b, "killed by A only"); only(b, a, "killed by B only");
+const both = [...a].filter(([k, m]) => !killed(m) && !killed(b.get(k)));
+console.log(`\nlive in both: ${both.length}`); for (const [k, m] of both) console.log(`L${m.location.start.line} ${m.mutatorName} ${m.status}/${b.get(k)?.status} | ${JSON.stringify((m.replacement ?? "").slice(0, 60))} | ${src[m.location.start.line - 1].trim().slice(0, 80)}`);
