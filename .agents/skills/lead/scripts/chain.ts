@@ -113,7 +113,7 @@ import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import * as Typecheck from "./flow/typecheck.ts";
-import { wipOf } from "./lane.ts";
+import { stepOf, wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
 /** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
@@ -267,7 +267,9 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
     }
     case "send":
       if (isLaneStep(to)) {
-        return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
+        // A step that sends the lane to itself is not done and not a send: another round of it
+        // only loops (2026-11-11), so judgment reads why, and sends it on or parks it.
+        return to === step ? toJudge : toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
       // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
@@ -384,9 +386,40 @@ export type Facts = {
   readonly head: string;
   readonly round: number;
   readonly heads: Partial<Record<StepName, string>>;
+  /** Every commit on the lane since its root, oldest first, with the step its note names; `null`
+   * when git could not list them. */
+  readonly commits: ReadonlyArray<StepCommit> | null;
   readonly note: string;
   /** The last host step's outcome and head, for a review; `null` for any other step. */
   readonly host: string | null;
+};
+
+/** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
+export type StepCommit = { readonly step: string; readonly sha: string };
+
+/**
+ * What the lane has committed, by step, in short shas. Heads fill only on a done, so a step that
+ * committed and then sent the lane on still shows here (2026-11-11: a lane read "No step has
+ * committed yet." over three partial commits).
+ */
+export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string => {
+  if (commits === null) {
+    return "The lane's step commits could not be read (git rev-list failed).";
+  }
+
+  if (commits.length === 0) {
+    return "No step has committed yet.";
+  }
+
+  const steps = [...new Set(commits.map((c) => c.step))];
+  const by = steps.map(
+    (s) =>
+      `${s} ${commits
+        .filter((c) => c.step === s)
+        .map((c) => c.sha.slice(0, 8))
+        .join(" ")}`,
+  );
+  return `Step commits since the lane left main, oldest first: ${by.join("; ")}.`;
 };
 
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
@@ -400,7 +433,8 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     "---",
     `Lane facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the lane left main at ${short(f.root)}.`,
-    heads.length > 0 ? `Heads so far: ${heads.join(", ")}.` : "No step has committed yet.",
+    committedLine(f.commits),
+    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
     ...(f.note ? [`Last round: ${f.note}`] : []),
   ];
 
@@ -1015,7 +1049,14 @@ or review) and a note of one or two sentences for that step, or answer "park" wi
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
-person is involved, or the same step already failed the same way.
+person is involved, or the same step already failed the same way.${
+  line.outcome.startsWith(`send:${step}:`)
+    ? `
+The ${step} step sent the lane to itself, which chain.ts never runs as one more round. When what it
+lists as left needs another step's code, a typecheck or --changed, send the next step with that
+list in the note. Park when the step itself is not done.`
+    : ""
+}
 
 ---
 The lane's state file, its last lines:
@@ -1122,6 +1163,23 @@ const handlers = (s: Setup) => {
 
     return heads;
   };
+  /** The lane's commits from its root to its head, oldest first, each with its note's step. */
+  const laneCommits = (root: string, head: string): StepCommit[] | null => {
+    if (root === "" || head === "") {
+      return [];
+    }
+
+    const listed = sh("git", ["-C", env.MAIN, "rev-list", "--reverse", `${root}..${head}`]);
+    return listed.code !== 0
+      ? null
+      : listed.out
+          .split("\n")
+          .filter(Boolean)
+          .map((sha) => {
+            const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+            return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
+          });
+  };
   return {
     step_run: (cmd: typeof Run.Type) =>
       Effect.gen(function* () {
@@ -1135,6 +1193,7 @@ const handlers = (s: Setup) => {
           head: lane.head ?? "",
           round,
           heads: headsOf(),
+          commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
           host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
         };
