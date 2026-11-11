@@ -45,7 +45,7 @@ const messages = lifecycle.map(
 
 const message = messages.chain((msgs) => fc.constantFrom(...msgs));
 
-describe("P12 stage machine laws", () => {
+describe("P12 instance machine laws", () => {
   it("p88 plant: missing start or stop transition cannot finish a normal life", async () => {
     const { brainLife } = await import("./BrainLife.ts");
     fc.assert(
@@ -92,7 +92,7 @@ describe("P12 stage machine laws", () => {
     );
   });
   // Pin p81's replacement-after-stop plant; generated events also cover the restart brake.
-  it("pinned: p81 replacement-after-stop, a braked or cleanly stopped stage must never launch a replacement", async () => {
+  it("pinned: p81 replacement-after-stop, a braked or cleanly stopped instance must never launch a replacement", async () => {
     const { brainLife } = await import("./BrainLife.ts");
     propertyInvariant(
       brainLife,

@@ -326,6 +326,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "program-package-layout",
       // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
       "no-why-key",
+      // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
+      "no-stage-word",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

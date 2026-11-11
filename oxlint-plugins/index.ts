@@ -26,6 +26,7 @@ import { noPromises } from "./no-promises.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noStageWord } from "./no-stage-word.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWhyKey } from "./no-why-key.ts";
@@ -65,6 +66,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-stage-word": noStageWord,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
     "no-why-key": noWhyKey,

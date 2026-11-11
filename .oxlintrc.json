@@ -572,13 +572,16 @@
         "fabrika/no-of": "error",
         "fabrika/no-why-key": "error",
         "fabrika/no-hand-tag": "error",
-        "fabrika/one-store-hook": "error"
+        "fabrika/one-store-hook": "error",
+        "fabrika/no-stage-word": "error"
       }
     },
     {
       // Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
       // habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
       // shrinks. This rule block is the `next/**` block above, repeated: change both together.
+      // `fabrika/no-stage-word` reads only `next/` paths (0080), so lead tooling keeps the word
+      // for today's pipeline steps.
       "files": [".agents/**/*.ts", ".agents/**/*.mjs"],
       "rules": {
         "fabrika/no-promises": "error",
@@ -591,7 +594,8 @@
         "fabrika/no-of": "error",
         "fabrika/no-why-key": "error",
         "fabrika/no-hand-tag": "error",
-        "fabrika/one-store-hook": "error"
+        "fabrika/one-store-hook": "error",
+        "fabrika/no-stage-word": "error"
       }
     },
     {

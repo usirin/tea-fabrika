@@ -199,7 +199,7 @@ them. The desktop has a note of its own. Config for every layer is one
     and Thanos keeps raw, 5-minute and 1-hour copies, each with its own
     retention flag ([compactor](https://thanos.io/tip/components/compact.md/)).
     The 2-week raw window is a guess the first real month settles (75%).
-  - **The same on both stages.** Our own records, read by our own programs
+  - **The same on both instances.** Our own records, read by our own programs
     (`trace`, `ps`, later a dashboard program), on the laptop and on
     Cloudflare alike. Alchemy's local stage has no trace viewer. Cloudflare's
     own tracing is a second opinion, on the cloud only.
@@ -356,7 +356,7 @@ What local Miniflare gives us, from our own experiments:
 measured (a keystroke-echo test would measure it). JSON-RPC's weight per
 message is not measured. ~~How a browser gets its grant is open (lean: a QR code
 from the Mac).~~ *Settled for `next/` by [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built:* the
-menu bar's row, Approve and a finger, on both stages; QR is in Tier 7. The owner already picked
+menu bar's row, Approve and a finger, on both instances; QR is in Tier 7. The owner already picked
 two pieces of it: the menu bar in the first slice, and keeping the one-time link. Background browser tabs slow their timers, which may make a tab
 look away.
 
