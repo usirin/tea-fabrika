@@ -5,7 +5,11 @@ import "./mutbox-entry.sh?raw";
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 // Declare script reads for Vitest's affected walk, including transitive calls.
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
@@ -13,7 +17,13 @@ import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
@@ -26,6 +36,8 @@ import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -72,7 +84,8 @@ type Setup = {
   /** Head branches of the open PRs the fake gh lists; `gh: "down"` makes it fail. */
   openPrs?: string[];
   gh?: "down";
-  /** A ref the fake git deletes just before the first `rev-list`, as a lead's `git branch -D` mid-scan. */
+  /** A ref the fake git deletes just before the scan's first walk of a branch (its `diff --no-renames`),
+   * as a lead's `git branch -D` mid-scan. */
   dropOnWalk?: string;
 };
 
@@ -109,7 +122,7 @@ if (cmd === "nice") finish(run(args[2],args.slice(3)));
 if (cmd === "git") {
   let cwd=process.cwd();
   for(let i=0;i<args.length;i++) if(args[i]==="-C") cwd=path.resolve(cwd,args[++i]);
-  if(setup.dropOnWalk && args.includes("rev-list") && !fs.existsSync(path.join(dir,"dropped"))) {
+  if(setup.dropOnWalk && args.includes("diff") && args.includes("--no-renames") && !fs.existsSync(path.join(dir,"dropped"))) {
     fs.writeFileSync(path.join(dir,"dropped"),""); run("/usr/bin/git",["-C",cwd,"update-ref","-d",setup.dropOnWalk]);
   }
   if(process.env.T321_FETCH==="1" && cwd===path.join(dir,"boxes/one")) {
@@ -768,6 +781,42 @@ describe("T321 K1 fetch, today's tooling", () => {
     );
   }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
 
+  // scenario: the exam is the test writer's (nobody-writes-their-own-exam.md), so fetch signs a
+  // tests commit that holds an exam path the plan gives to no step, as stepcommit commits it, and
+  // still refuses one the plan gives to build. 2026-11-11: three tests steps lost their laws to
+  // not_owner on exam paths the plan did not name. Plants: refuse every unlisted path; allow an
+  // exam path the plan gives to another step.
+  it("K1 signs a tests commit with an exam path no plan row names, never one given to build", () => {
+    const exam = ".agents/skills/lead/scripts/fixture.test.ts";
+    each(["unlisted", "build"] as const, (row) =>
+      fixture(
+        (b) => {
+          b.setup({
+            batches: [
+              [
+                { path: "src/a.ts", text: "tests change\n" },
+                { path: exam, text: "a new law\n" },
+              ],
+            ],
+          });
+          expect(b.run().code).toBe(0);
+          const got = b.fetch();
+          const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
+
+          if (row === "unlisted") {
+            expect(got.code, got.text).toBe(0);
+            expect(signs.map((c) => c.head)).toEqual([b.head(b.work)]);
+          } else {
+            refused(got, new RegExp(`not_owner ${exam.replaceAll(".", "\\.")}`));
+            expect(signs).toEqual([]);
+            expect(b.notes()).toBe("");
+          }
+        },
+        [["src/a.ts", "tests"], ...(row === "build" ? [[exam, "build"] as [string, string]] : [])],
+      ),
+    );
+  }, 180_000);
+
   // Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
   it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {
     fc.assert(
@@ -880,7 +929,7 @@ describe("T321 K2 box start, today's tooling", () => {
   // Plant: inspect only the current branch's links, or block on any branch that shares the
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
-  // Plant: block on an open branch whose only change is field/*.jsonl rows.
+  // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (0090).
   it("K2 refuses a shared ticket only when another live branch carries its links", () => {
     const places = [
       "main",
@@ -893,6 +942,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "different-ticket",
       "inside",
       "field-rows",
+      "field-files",
     ] as const;
     const blocks = new Set(["open-pr", "running-box", "gh-down"]);
     fc.assert(
@@ -907,9 +957,15 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             // Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
-            const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
+            const path =
+              place === "field-rows"
+                ? "field/runs.jsonl"
+                : place === "field-files"
+                  ? "field/runs/2026-11-11-t321-tests1.json"
+                  : "src/a.ts";
+            const rows = place === "field-rows" || place === "field-files";
             const sha = b.commit(b.main, path, `${text}\n`);
-            b.sign(b.main, place === "field-rows" ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
+            b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
 
             if (place === "main" || place === "merged") {
               b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
@@ -921,7 +977,9 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             b.setup({
-              openPrs: ["open-pr", "field-rows"].includes(place) ? ["fabrikalfa/other"] : ["fabrikalfa/unrelated"],
+              openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
+                ? ["fabrikalfa/other"]
+                : ["fabrikalfa/unrelated"],
               ...(place === "gh-down" ? { gh: "down" as const } : {}),
             });
 
@@ -961,12 +1019,14 @@ describe("T321 K2 box start, today's tooling", () => {
 
   // Plant: walk each branch by its name again after listing it (box.sh before ticket 567). A branch
   // deleted during the scan then fails the start as "stuck base commit walk failed" with no reason,
-  // as layout-tests3 and layout-tests6 did on 2026-11-10.
+  // as layout-tests3 and layout-tests6 did on 2026-11-10. Both branches carry the ticket, so the scan
+  // walks both, and neither is live.
   it("K2 scenario: a branch deleted while the shared-ticket scan runs does not fail the start", () => {
     fixture((b) => {
       for (const name of ["fabrikalfa/aa-first", "fabrikalfa/zz-gone"]) {
         b.git(b.main, "checkout", "-q", "-b", name, b.base);
         b.commit(b.main, "src/b.ts", `${name}\n`);
+        b.sign(b.main, "tests", "321");
       }
 
       b.git(b.main, "checkout", "-q", "main");
@@ -974,6 +1034,48 @@ describe("T321 K2 box start, today's tooling", () => {
       const got = b.new();
       expect(existsSync(join(b.dir, "dropped")), "the fake git deleted the branch mid-scan").toBe(true);
       expect(got.code, got.text).toBe(0);
+    });
+  });
+
+  // Plant: read only each branch tip's note, walk each branch with its own rev-list again, or list
+  // every branch when no link is found (ticket 673: the per-branch walk took 128 s on 1,655
+  // branches). A link two commits under a live branch's tip still blocks, a malformed note and a
+  // note on another ticket count for nothing, and the scan asks git for the branches once.
+  it("K2 scenario: the batched scan finds a link under a live branch's tip in one branch listing", () => {
+    fixture((b) => {
+      b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/noise", b.base);
+      b.commit(b.main, "src/c.ts", "noise\n");
+      b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "not json {", "HEAD");
+      b.commit(b.main, "src/d.ts", "other ticket\n");
+      b.sign(b.main, "tests", "322");
+      b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other", b.base);
+      b.commit(b.main, "src/a.ts", "linked\n");
+      b.sign(b.main, "tests", "321");
+      b.commit(b.main, "src/e.ts", "after one\n");
+      b.commit(b.main, "src/f.ts", "after two\n");
+      b.git(b.main, "checkout", "-q", "main");
+      b.setup({ openPrs: ["fabrikalfa/other", "fabrikalfa/noise"] });
+      const got = b.new();
+      checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
+      const listings = b.calls().filter((c) => c.cmd === "git" && c.args.some((a) => a.startsWith("--contains=")));
+      expect(listings.length).toBe(1);
+      expect(b.calls().some((c) => c.cmd === "git" && c.args.includes("rev-list"))).toBe(false);
+    });
+  });
+
+  // format: box.sh new prints one `phase <name> <ms>` line per start phase, which drive reads from
+  // the box's log (ticket 673).
+  it("K2 format: a made box prints its start phases in order", () => {
+    fixture((b) => {
+      b.setup({ openPrs: [] });
+      const got = b.new();
+      expect(got.code, got.text).toBe(0);
+      expect([...got.text.matchAll(/^phase ([a-z_]+) \d+$/gm)].map((m) => m[1])).toEqual([
+        "box_plancheck_fetch",
+        "box_scan",
+        "box_clone",
+        "box_install",
+      ]);
     });
   });
 
@@ -1256,6 +1358,66 @@ describe("T321 review round 1 fixes, today's tooling", () => {
         expect(got.code, got.text).toBe(0);
         const check = b.calls().find((c) => c.cmd === "pnpm" && c.args[0] === "commits" && c.args[1] === "check");
         expect(check?.args[check.args.indexOf("--base") + 1]).toBe(start);
+      }),
+    );
+  });
+
+  // One lane, end to end on the real checker: a signed tests step, main moves, the lead merges main
+  // in (signed as `lead`, or not, or with another commit's link), main may move again, and the next
+  // step's box starts at the lane head with the first step's root saved.
+  const afterLeadMerge = (b: Box, lead: "signed" | "unsigned" | "foreign", movedAgain: boolean) => {
+    b.setup({ operations: [{ path: "src/a.ts", text: "first tests\n" }] });
+    expect(b.run().code).toBe(0);
+    const first = b.fetch();
+    expect(first.code, first.text).toBe(0);
+    const moved = b.commit(b.main, "src/b.ts", "main moved\n");
+    b.git(b.main, "update-ref", "refs/remotes/origin/main", moved);
+    b.git(b.main, "checkout", "-q", b.branch);
+    b.git(b.main, "merge", "-q", "--no-ff", "-m", "lead merge of main", "main");
+
+    if (lead === "signed") {
+      b.sign(b.main, "lead", "321");
+    } else if (lead === "foreign") {
+      // The signer refuses a key allowed_signers lacks, so the foreign link is the first step's own
+      // valid link, replayed onto the merge: trusted key, wrong trees.
+      const lifted = b.git(b.main, "notes", "--ref=fabrika", "list", `${b.branch}^1`).trim();
+      b.git(b.main, "notes", "--ref=fabrika", "add", "-C", lifted, "HEAD");
+    }
+
+    const merged = b.head(b.main);
+    b.git(b.main, "checkout", "-q", "main");
+
+    if (movedAgain) {
+      b.git(b.main, "update-ref", "refs/remotes/origin/main", b.commit(b.main, "src/old.ts", "main moved again\n"));
+    }
+
+    b.git(b.work, "fetch", "-q", b.main, `${b.branch}:refs/remotes/lane`, "refs/notes/fabrika:refs/notes/fabrika");
+    b.git(b.work, "reset", "-q", "--hard", merged);
+    b.state(merged);
+    appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+    b.setup({ operations: [{ path: "src/a.ts", text: "second tests\n" }] });
+    expect(b.run().code).toBe(0);
+    return b.fetch();
+  };
+
+  // Plants: check from the box base, from the saved root, or without main's merge-base. 13 fetches
+  // on lane p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
+  it("K1 scenario: a lane caught up with main by a signed lead merge passes the next step's fetch", () => {
+    each([false, true], (movedAgain) =>
+      fixture((b) => {
+        const got = afterLeadMerge(b, "signed", movedAgain);
+        expect(got.code, got.text).toBe(0);
+        expect(got.text).not.toMatch(/"_tag":"stuck"/);
+      }),
+    );
+  });
+
+  // Plant: pass any merge commit, or any note that verifies somewhere. The law that must not get
+  // weaker: a merge nobody signed, or one carrying a link made for another commit, stops fetch.
+  it("K1 scenario: an unsigned or foreign lead merge still stops the next step's fetch", () => {
+    each(["unsigned", "foreign"] as const, (lead) =>
+      fixture((b) => {
+        refused(afterLeadMerge(b, lead, false), /commits check failed: (unsigned_commit|unlinked_commit) [0-9a-f]{8}/);
       }),
     );
   });
@@ -1765,4 +1927,42 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
       );
     },
   );
+});
+
+describe("T614 a box never installs, today's tooling", () => {
+  // scenario: a step that moves the lockfile or a manifest, then runs `pnpm exec`, kept its box's
+  // node_modules. pnpm's default `verifyDepsBeforeRun: install` started an install there, with no
+  // network, that deleted them (ticket 477's boxes layout2-tests4 and layout2-tests6). Real pnpm on
+  // a two-package workspace with no outside dependency, so nothing reaches the network.
+  // Plant: drop `verifyDepsBeforeRun` from pnpm-workspace.yaml (caught: it reads undefined). With
+  // `install` in the temp workspace, pnpm unlinks node_modules/a (checked by hand, 2026-11-11).
+  it("T614 scenario: pnpm exec behind the lockfile warns and leaves node_modules alone", () => {
+    // `pnpm exec vitest` hands its children `pnpm_config_verify_deps_before_run=false`; a box's
+    // shell has no such variable, so the child pnpm reads the setting from the files alone.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^p?npm_config_/i.test(k)));
+    const pnpm = (cwd: string, ...args: string[]) => spawnSync("pnpm", args, { cwd, env, encoding: "utf8" });
+    const setting = pnpm(root, "config", "get", "verifyDepsBeforeRun").stdout.trim();
+    expect(setting).toBe("warn");
+
+    const dir = mkdtempSync(join(tmpdir(), "vd614-"));
+
+    try {
+      // No `packageManager` pin: under the test's fresh home, a pin would fetch pnpm itself.
+      const manifest = (more: object) => JSON.stringify({ name: "root", private: true, ...more });
+      write(join(dir, "pnpm-workspace.yaml"), `packages:\n  - a\nverifyDepsBeforeRun: ${setting}\n`);
+      write(join(dir, "a/package.json"), JSON.stringify({ name: "a", version: "1.0.0" }));
+      write(join(dir, "package.json"), manifest({ dependencies: { a: "workspace:*" } }));
+      expect(pnpm(dir, "install", "--offline").status).toBe(0);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+
+      // The step's change: the manifest no longer matches the lockfile.
+      write(join(dir, "package.json"), manifest({}));
+      const ran = pnpm(dir, "exec", "true");
+      expect(ran.status).toBe(0);
+      expect(`${ran.stdout}${ran.stderr}`).toMatch(/out of sync with your lockfile/);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

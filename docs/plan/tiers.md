@@ -7,7 +7,7 @@ Tier 1 is committed. It started 2026-11-05 with its exam. *Changed 2026-11-05 by
 longer waits on today's pipeline, which is paused. Tier 1 is built now by the lead
 session's agents, by hand, with the pipeline's steps for each pull request, in
 [37 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
-([where we are](./README.md#where-we-are-now)). As of 2026-11-09, 18 rows are on main, P12 the last of them; where the rest stand is in [the plan's state](./README.md#where-we-are-now). *It said: P1 to P4 and P5 done.* *It said: today's pipeline finishes first
+([where we are](./README.md#where-we-are-now)). As of 2026-11-11, 20 of its 43 rows are on main, plus P17a, half of P17, with P8 the last of them (*it said, as of 2026-11-09: 18 rows, P12 the last*); where the rest stand is in [the plan's state](./README.md#where-we-are-now). *It said: P1 to P4 and P5 done.* *It said: today's pipeline finishes first
 and builds ticket 117, then Tier 1's plan goes through the planner and the pipeline builds
 its tickets.* A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds,
 not its breakdown.
@@ -27,6 +27,32 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 
 Tier 1 comes from [its plan](./tier-1.md). Tiers 2 to 7 are a first sorting, and they
 will change. So is splitting the old Tier 4 into hands and agents, which makes seven.
+
+*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* each tier carries and
+updates a working slice of every core idea. Four start late today and get a thin slice in an earlier
+tier: hands (Tier 4), programs written outside fabrika's own source (Tiers 5 and 7), programs
+working together (Tiers 2 and 4) and a person starting a program (Tier 2). Those tiers harden it.
+*Changed 2026-11-10 by [0088](../../.decisions/0088-six-slices-in-tier-1.md):* each of the four lands
+in Tier 1. *It said: which tier each slice lands in is not decided yet, so no row below has moved.*
+
+*Changed 2026-11-10 by [0078](../../.decisions/0078-agent-and-flow-slices-start-early.md):* two more
+core ideas join that list and get a thin slice in Tier 1: an agent fabrika starts (Tier 5) and a
+flow fabrika runs (Tier 6). Tiers 5 and 6 still build them for real, the full pipeline stays in
+Tier 6, and Tier 1's plan says how thin each is. No row below has moved.
+
+*Changed 2026-11-10 by [0075](../../.decisions/0075-cold-author-checks-outside-programs.md):* each
+tier checks its slice of programs written outside fabrika's source with a cold agent as the author.
+Every place it gets stuck is a gap, and each run is an experiment (ticket 665).
+
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* every program is in
+a pack, so Tier 5's repo programs are a pack in the repo's `.fabrika/packs/<name>/`, not
+`.fabrika/programs`. The tier each lands in does not move, so no row below has moved.
+
+*Changed 2026-11-10 by [0088](../../.decisions/0088-six-slices-in-tier-1.md):* all six core ideas get
+their thin slice in Tier 1, each as small as it can be and still work, with no stub. The four from
+0068 are Tier 1 rows P39 to P42, to be planned; the outside programs slice builds 0083 and 0084 in
+small, a repo's own pack listed by a `./` path. The tiers named above still build each for real, so
+no row below has moved. Each slice's size, the order and whether Tier 1 splits are not decided.
 
 | Tier | Transport | Data | Coordination | App | Desktop (Tuval) |
 |---|---|---|---|---|---|

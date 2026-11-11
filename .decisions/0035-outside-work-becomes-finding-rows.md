@@ -1,7 +1,7 @@
 ---
 id: 0035
 title: An agent that finds work outside its task writes one finding row and keeps going, never a fix, a ticket or only a mention
-status: amended-in-part by [0036](0036-a-flaky-test-is-fixed.md)
+status: amended-in-part by [0036](0036-a-flaky-test-is-fixed.md), [0090](0090-each-field-row-is-a-file.md)
 date: 2026-11-09
 tags: [findings, field, agents, tickets, rating, noise, review]
 ---

@@ -1,17 +1,27 @@
 ---
 name: mutation
-description: Run the fast mutation check for one tea-fabrika ticket with StrykerJS, changed lines first, in five minutes per pull request. Survivors advise and never hold the pull request. Use when a brief says "use the mutation skill for ticket N", after the build's laws pass.
+description: Run the hourly mutation check on what merged to tea-fabrika's main with StrykerJS, changed lines first, and file each real gap as a tracker ticket. It is no step of a pull request (decision 0066). Use when a brief says "use the mutation skill" for the hourly run, or for a lane parked inside its mutation step before 0066.
 ---
 
-# The mutation step
+# The mutation run
 
-You run the fast check on the product files the build changed, as
-[fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md) decides: changed lines
-first, five minutes for the whole pull request, survivors as advice. As the ticket's test writer you
-may kill a real survivor with a law. You change test files only.
+Mutation is no step of a pull request
+([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). It runs once an hour against
+main, on the changed lines of what merged since the last run, in the container, with the tests
+beside the changed files. No new merge, no run. A merge never waits on it.
 
-A brief names the ticket, the branch, and the build commit or files to mutate. This skill holds the
-rest.
+- **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
+  real gap as one tracker ticket per file, at most three a day, with its category
+  ([below](#a-gaps-category)), and counts noise without filing it.
+  A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
+  counts: sampled, killed, survived, real, noise, tickets, minutes, and each real gap's category.
+- **A lane parked inside its mutation step before 0066** finishes it with the steps below, as the
+  ticket's test writer, test files only; then the lane goes on to review.
+
+A brief names the ticket or the merged range, and the build commit or files to mutate. This skill
+holds the rest. The fast check's settings are
+[fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md)'s: changed lines
+first, five minutes, survivors as advice.
 
 Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
 
@@ -39,7 +49,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    the commit. If the five minutes ran out, say
    how many lines and mutants it did not reach. That is reported, and the pull request goes on.
    Name every test the report lists under `excluded` or `skipped`, with its reason: those did not
-   run. Give the report's `narrowing` list as the arm a against arm b comparison.
+   run. Give the report's `narrowing` list as the arm a against arm b comparison. Quote its
+   `reach` line, "the sample reached N of M changed files", with the files it names.
    When the sampler selects no mutation ranges, because the diff has no product lines, commit
    nothing and end with `answer: skip <why>`; review takes that row in place of a mutation run.
 
@@ -51,7 +62,13 @@ on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an 
 With a base, the sample is the pull request's own lines, `base..build`, so a tip that merged main
 samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
-`RELATED=<paths>`, which `drive.ts` reads. Ticket 520's proof uses
+`RELATED=<paths>`, which `drive.ts` reads. They are the tests that run, never the files mutated:
+the sample is drawn from every changed product file in the diff (`PRODUCT` in `scope.ts`: `.ts`,
+`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`; of `.agents/`, only
+`chain.ts`, `drive.ts` and the lead's `flow/` folder, 0089), each file's cheapest
+range first, round-robin, so every changed file gets a mutant before any gets a second (ticket
+655). For arm a, name the base's test file a moved or changed law came from too: arm a runs only
+the related tests the base has. `--plan` is the approved plan; drive passes it. Ticket 520's proof uses
 `.agents/skills/mutation/scripts/sample.test.ts`, the new TypeScript sampler's adjacent laws.
 This does not grade plancheck's shell or Python. Those rely on properties and planted breaks.
 The executable inside the container is `scripts/run.sh`, from the build commit. There it mutates
@@ -76,12 +93,23 @@ node .agents/skills/lead/scripts/mutbox.ts run --checkout . --ticket 520 --build
 It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no product line) or
 `stuck`. Docker missing or stopped is `stuck`. It is never run on the host instead.
 
-- `excluded` names each related test left out before the run, with why: a test that imports
-  Electron or a browser driver needs a display, and the container has none. `skipped` names each
+- `excluded` names each related test left out before the run, with why: a test that loads
+  Electron or a browser driver needs a display, and the container has none. That is read from its
+  parsed imports, so a lint rule's test whose planted strings name Electron still runs. `skipped` names each
   test that skipped itself inside the container. Neither ran. A test that fails there before any
   mutant makes the run `stuck`, naming it.
 - `b` is the branch's own tests. `a` is the same sample against the base's tests, and `narrowing`
-  the mutants `a` kills that `b` lets live.
+  the mutants `a` kills that `b` lets live. `reach` is the line "the sample reached N of M changed
+  files", naming each file with zero mutants.
+- Arm a first runs the base's related tests on the build and keeps only the files that pass,
+  since Stryker stops at a failing test in its dry run; `armA.dropped` names each one left out
+  and why.
+- A run never passes silently. A known gap is `done` with the gap in its reason and `narrowing:
+  "unknown"`: `no_arm_a:base_has_none` or `no_arm_a:none_pass` (arm a had nothing to run), and
+  `no_reach:old_sampler` (the build's `sample.ts` predates per-file reach). Say so in the report;
+  the lead hand-checks the laws as for a loosening hit. Arm a that was due and gave no clean
+  answer is `stuck` `arm_a_failed`, and a sample that reached none of the plan's build-owned files
+  with a mutant on their changed lines is `stuck` `no_build_reach`.
 
 - `<out>/box/b/report.json` holds every answer when Stryker finished. When the cap stopped it,
   `mutbox.ts` reads `events/*-onMutantTested.json`, one file per mutant as it came: that is what it
@@ -89,6 +117,66 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
   (`left`) separate from selected mutants not tested before the cap.
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
+
+## The hourly run, in CI
+
+The hourly run on main ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)) runs in
+GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. Nothing starts it but a
+hand dispatch: no push, pull request or cron. It runs the command above with `--ticket 0`, the
+range's base as arm a, and the tests beside the changed files as `--related`.
+
+1. **Start it** with the commit the last run ended at. `head` is main's head unless you give one:
+
+   ```sh
+   gh workflow run mutation.yaml -f base=<sha>
+   ```
+
+2. **Find it.** The newest row is yours; a second dispatch waits until the first ends:
+
+   ```sh
+   gh run list --workflow mutation.yaml --limit 1 --json databaseId,status,conclusion,headSha
+   gh run watch <id> --exit-status
+   ```
+
+3. **Read it.** The job summary has the range and the counts. The whole answer is the artifact
+   `mutbox`, with `mutbox.json` at its top:
+
+   ```sh
+   gh run download <id> --name mutbox --dir <folder>
+   ```
+
+A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
+run's base is the `build` in this run's `mutbox.json`.
+
+`scripts/heartbeat.ts` exits 1 when a merge on main has waited more than two hours for a passing
+run: the scheduler session stopped dispatching, or every run since failed. It starts no run, and
+nothing runs it on a schedule yet.
+
+Each arm's test and hook limit is the fast check's 10 s, raised to three times the slowest test or
+file set-up in that arm's plain run in the box, and at most 60 s (`scripts/limit.ts`, ticket 605).
+A fixed 10 s stopped the dry run on one slow law, and then no mutant ran.
+
+## A gap's category
+
+Each real gap the hourly run files gets one category
+([0077](../../../.decisions/0077-mutation-gaps-carry-a-category.md)). The tracker tickets are the
+record: keep no other file. No script holds this yet, so do these steps by hand.
+
+1. **Pick one category** by the test that is missing. The mutator is a hint, not the rule. The
+   closed list is in 0077's table: `error_branch`, `boundary`, `condition`, `return_value`,
+   `call_order`, `fallback`, `other`. A gap that fits none is `other`; never coin a new word.
+2. **File the gap** with the title `mutation gap (<category>): <file>`. The body names each
+   mutant's line, mutator and change.
+3. **Count.** Skip this for `other`. List `tracker_query` `{status: "all", find: "mutation gap
+   (<category>)"}` and `{status: "all", find: "tests step: catch <category> gaps"}`. Count the gap
+   tickets filed after the newest tests-step ticket of that category, or all of them if there is
+   none.
+4. **At two or more,** if that tests-step ticket is still open, comment the new gap on it.
+   Otherwise file one ticket, `tests step: catch <category> gaps`, naming the gaps. It asks, in
+   order, for a code check that would have caught the category (a lint rule, a plancheck rule, a
+   test helper), else a row the plan's laws table must carry, and skill prose only if neither can
+   hold it. It is not one of the three gap tickets a day.
+5. **One gap alone** changes nothing but its own test.
 
 ## Outside your task
 
@@ -99,7 +187,8 @@ counts as proof.
 
 A survivor is this step's own answer and stays in its report, never a finding row. Outside
 means anything else you meet that is wrong.
-Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
+unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 

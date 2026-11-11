@@ -219,6 +219,8 @@ known and building them shows what the stages can be made of.
 
 - **Where the guarded list lives:** in `.github/CODEOWNERS`, or in
   `fabrika.toml` beside `[test_writer] includes`.
+  *2026-11-10: for who must look at a change, in fabrika's own settings, never the code host's
+  file ([0079](../../.decisions/0079-size-counts-governed-paths-name-who.md)).*
 - **How many ratings before a rule may block,** from
   [every finding is rated](./every-finding-is-rated.md).
 - **Whose clock Poll uses:** the ledger's alarm, or each program's own, as

@@ -6,8 +6,13 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
-import { Mailbox, Owner, ProcessManager, Recipient, Start, Writer } from "@kampus/libfabrika/coordination";
-import { Doorbell, Ledger, LedgerTransaction } from "@kampus/libfabrika/data";
+import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, Layer, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
@@ -130,7 +135,7 @@ describe("p22 real counter in the runner", () => {
   it("plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter", async () => {
     const { counter } = await import("./program.ts");
     const A: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-    const C = await import("@kampus/libfabrika/coordination");
+    const C = await import("@kampus/libfabrika/runtime/ProcessStore");
     let ledgerDb = new DatabaseSync(join(folder, "ledger.db"));
     opened.push(ledgerDb);
     let storeDb = new DatabaseSync(join(folder, "process.db"));
@@ -141,7 +146,7 @@ describe("p22 real counter in the runner", () => {
     const seen = new Map<string, { rev: number; view: unknown }>();
     const expected = Schema.Struct({ count: Schema.Int });
     const data = () =>
-      Ledger.sql(nodeSql(ledgerDb), { reader: "counter-law" }).pipe(
+      LedgerSql.layer(nodeSql(ledgerDb), { reader: "counter-law" }).pipe(
         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
       );
     const layer = () => {
@@ -203,7 +208,7 @@ describe("p22 real counter in the runner", () => {
           ),
         ),
         Layer.provide(
-          LedgerTransaction.layer(nodeSql(managerDb)).pipe(
+          LedgerTransactionSql.layer(nodeSql(managerDb)).pipe(
             Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
           ),
         ),

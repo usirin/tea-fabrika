@@ -8,7 +8,7 @@ it.effect.prop(
   { module: Schema.Literals(["./runtime.ts", "./record.ts", "effect", "node:fs"]) },
   ({ module }) =>
     Effect.gen(function* () {
-      const file = "next/packages/libfabrika/src/workers/objects.ts";
+      const file = "next/packages/libfabrika/src/cloudflare/objects.ts";
       const fires = yield* Effect.promise(() =>
         plant({
           [file]: [

@@ -305,7 +305,7 @@ PY
 fi
 here=$(cd "$(dirname "$0")" && pwd -P)
 exec python3 - "$here" "$@" <<'PY'
-import contextlib, datetime, fcntl, hashlib, json, os, pathlib, re, signal, subprocess, sys, tempfile, uuid
+import contextlib, datetime, fcntl, hashlib, json, os, pathlib, re, signal, subprocess, sys, tempfile, time, uuid
 here = pathlib.Path(sys.argv[1])
 main, boxes = pathlib.Path(os.environ["MAIN"]), pathlib.Path(os.environ["BOXES"])
 args = sys.argv[2:]
@@ -403,6 +403,11 @@ def rows(state=None):
     lane = (state or {}).get("lane")
     paths = [state_dir / (name + ".rows.jsonl")] + ([boxes / (lane + "-rows.jsonl")] if lane else [])
     return [json.loads(l) for p in paths if p.exists() for l in p.read_text().splitlines() if l]
+# One `phase <name> <ms>` line on stderr per start phase, its time since the last one, so drive
+# records where a start's time goes (ticket 673). drive reads them from the box's log.
+marked = [time.monotonic()]
+def mark(phase):
+    now = time.monotonic(); print(f"phase {phase} {round((now - marked[0]) * 1000)}", file=sys.stderr); marked[0] = now
 def new_box():
     if len(args) < 2: refuse("new needs base and branch")
     base, branch = args[:2]; ticket, plan, root, lane = flag("--ticket"), flag("--plan"), flag("--root"), flag("--lane")
@@ -440,23 +445,45 @@ def new_box():
             open_heads[0] = set(got.stdout.decode().split())
         if lane in open_heads[0]: return True
         return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
-    # A branch whose change is only field/*.jsonl rows is the lead logging runs, not a lane writing
-    # the ticket (field-rows PR 601 on ticket 276, 2026-11-09). Judged by its paths, not its name,
+    # A branch whose change is only field rows is the lead logging runs, not a lane writing the
+    # ticket (field-rows PR 601 on ticket 276, 2026-11-09): a field/*.jsonl file, or a row file in
+    # field/notes/, field/runs/ or field/findings/ (decision 0090). Judged by its paths, not its name,
     # from where it left main: a lane base on an older main would count main's newer files as its.
     def rows_only(other):
         changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()
-        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl", p) for p in changed)
-    # Each branch is walked by the commit the listing printed, never by its name again: the scan
-    # takes a minute or more on the main checkout, and a branch deleted meanwhile (a lead's
-    # `git branch -D`) would make a walk by name fail the whole start (ticket 567).
-    for line in must(git("for-each-ref", "--format=%(objectname) %(refname:short)", "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines():
+        return bool(changed) and all(re.fullmatch(r"field/[^/]+\.jsonl|field/(?:notes|runs|findings)/[^/]+\.json", p) for p in changed)
+    # The commits whose step note names this ticket, read in two git calls: every note's blob, then
+    # all of them at once. Walking each branch and reading each commit's note one call at a time
+    # took 128 s and 8,243 git calls over 1,655 branches on 2026-11-11 (ticket 673).
+    mark("box_plancheck_fetch")
+    links = []
+    listed = [l.split() for l in must(git("notes", "--ref=fabrika", "list"), "note list failed").splitlines()]
+    if listed:
+        blobs = git("cat-file", "--batch", input="".join(blob + "\n" for blob, _ in listed).encode())
+        if blobs.returncode: refuse("note read failed")
+        out, at = blobs.stdout, 0
+        for _, commit in listed:
+            nl = out.find(b"\n", at); said = out[at:nl].split()
+            if nl < 0 or len(said) != 3 or said[1] != b"blob": refuse("note read failed")
+            size = int(said[2]); text = out[nl + 1:nl + 1 + size]; at = nl + 2 + size
+            try: note = json.loads(text)
+            except (ValueError, UnicodeError): continue
+            if isinstance(note, dict) and note.get("ticket") == ticket: links.append(commit)
+    # Only links this lane's base lacks: an older branch of the same lane, already merged into the
+    # base, is history, not another lane holding the ticket. Exit 1 is "not an ancestor"; any other
+    # failure is a note on a commit this checkout lacks, which no branch here can hold.
+    fresh = [c for c in links if git("merge-base", "--is-ancestor", c, head).returncode == 1]
+    # The branches holding any of those links: one listing, each branch then judged by the commit it
+    # printed, never by its name again, so a branch deleted meanwhile (a lead's `git branch -D`)
+    # cannot fail the whole start (ticket 567). With no link, the listing would print every branch.
+    holders = must(git("for-each-ref", "--format=%(objectname) %(refname:short)", *["--contains=" + c for c in fresh], "refs/heads/", "refs/remotes/origin/"), "branch lookup failed").splitlines() if fresh else []
+    for line in holders:
         tip, other = line.split(" ", 1)
         # The branch itself and its own backup copy (<branch>-wip) are not other branches.
         if other in (branch, "origin/" + branch, branch + "-wip", "origin/" + branch + "-wip", "main", "origin/main", "origin/HEAD"): continue
-        # Only links this lane's base lacks: an older branch of the same lane, already merged into
-        # the base, is history, not another lane holding the ticket.
-        if any(isinstance(n, dict) and n.get("ticket") == ticket for n in map(read_note, commits(head, tip))) and not rows_only(tip) and live(other):
+        if not rows_only(tip) and live(other):
             refuse_check("shared_ticket", ticket + " on " + other)
+    mark("box_scan")
     must(git("clone", "-q", "--no-checkout", "--reference", str(main), "--separate-git-dir=" + str(gitdata), os.environ["REMOTE"], str(work)), "box clone failed")
     edge = ["--git-dir=" + str(gitdata), "--work-tree=" + str(work)]
     must(git(*edge, "fetch", "-q", str(main), head + ":refs/heads/" + branch), "box base fetch failed")
@@ -464,8 +491,10 @@ def new_box():
     # An absent notes ref is fine. Any existing note is copied as one immutable JSON value.
     if git("rev-parse", "--verify", "refs/notes/fabrika").returncode == 0:
         must(git(*edge, "fetch", "-q", str(main), "refs/notes/fabrika:refs/notes/fabrika"), "box notes fetch failed")
+    mark("box_clone")
     installed = subprocess.run(["nice", "-n", "15", "pnpm", "install", "--silent"], cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if installed.returncode: refuse("box install failed")
+    mark("box_install")
     facts_new = {"ticket": ticket, "branch": branch, "base": head, "parent": parent, "children": "none", "plan": plan, "plan-sha256": digest}
     # The lane's root: where it left main. Order and the commits check read the whole lane from
     # here, so a later step's box still sees the earlier steps' links.
@@ -589,7 +618,11 @@ def fetch_box():
                 exam = call([sys.executable, str(here / "../../step-commit/scripts/exam.py"), str(main / "exam-paths.json"), *paths])
                 if exam.returncode not in (0, 1): refuse("exam list unreadable")
                 if step == "build" and exam.returncode: refuse("build exam paths " + sha)
+                # The exam is the test writer's: a tests commit may hold an exam path the plan gives
+                # to no step (exam.py prints "path<TAB>glob" per hit), as stepcommit allows.
+                hits = {l.rsplit(b"\t", 1)[0].decode() for l in exam.stdout.splitlines() if b"\t" in l} if step == "tests" and exam.returncode == 1 else set()
                 for p in paths:
+                    if owner_of(owners, p) is None and p in hits: continue
                     if owner_of(owners, p) != step and not (step == "mutation" and owner_of(owners, p) == "tests"): refuse("not_owner " + p + " in " + sha[:8])
                 candidates.append(sha)
             # All candidates pass before any note is made. HEAD and index belong to a private gitdir.

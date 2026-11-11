@@ -6,16 +6,13 @@
     },
     {
       "name": "next-node",
-      "paths": [
-        "next/packages/libfabrika/src/node",
-        "next/packages/libfabrika/src/build.ts",
-        "next/packages/libfabrika/src/compiler.ts",
-        "next/packages/libfabrika/src/build-modules.d.ts"
-      ]
+      "layer": 9,
+      "paths": ["next/packages/libfabrika/src/node"]
     },
     {
       "name": "next-workers",
-      "paths": ["next/packages/libfabrika/src/workers"]
+      "layer": 8,
+      "paths": ["next/packages/libfabrika/src/cloudflare"]
     },
     {
       "name": "next-programs",
@@ -43,6 +40,7 @@
     },
     {
       "name": "next-libfabrika-entry",
+      "layer": 7,
       "paths": ["next/packages/libfabrika/src/index.ts"]
     },
     {
@@ -51,32 +49,67 @@
     },
     {
       "name": "next-door",
-      "paths": ["next/packages/libfabrika/src/door"]
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/gateway"]
     },
     {
-      "name": "next-app",
-      "paths": ["next/packages/libfabrika/src/app", "next/packages/libfabrika/src/testing.ts"]
+      "name": "next-runtime",
+      "layer": 5,
+      "paths": [
+        "next/packages/libfabrika/src/runtime",
+        "next/packages/libfabrika/src/Testing.ts",
+        "next/packages/libfabrika/src/coordination/index.ts"
+      ]
     },
     {
-      "name": "next-coordination",
-      "paths": ["next/packages/libfabrika/src/coordination"]
+      "name": "next-access",
+      "layer": 4,
+      "paths": ["next/packages/libfabrika/src/access"]
     },
     {
-      "name": "next-data",
-      "paths": ["next/packages/libfabrika/src/data"]
+      "name": "next-processes",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/processes"]
+    },
+    {
+      "name": "next-presence",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/presence"]
+    },
+    {
+      "name": "next-jobs",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/jobs"]
+    },
+    {
+      "name": "next-ledger",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/ledger"]
     },
     {
       "name": "next-transport",
+      "layer": 2,
       "paths": ["next/packages/libfabrika/src/transport"]
     },
     {
-      "name": "next-id-test-support",
-      "paths": ["next/packages/libfabrika/src/id.test-support.ts"]
+      "name": "next-settings",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/settings"]
     },
     {
-      "name": "next-id",
+      "name": "next-telemetry",
+      "layer": 1,
+      "paths": ["next/packages/libfabrika/src/telemetry"]
+    },
+    {
+      "name": "next-id-test-support",
+      "paths": ["next/packages/libfabrika/src/Id.test-support.ts"]
+    },
+    {
+      "name": "next-shared",
+      "layer": 0,
       "paths": [
-        "next/packages/libfabrika/src/id.ts",
+        "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts"
@@ -331,6 +364,42 @@
       "to": "packages/pipeline/src/laws/world/search.ts",
       "sites": 1,
       "reason": "The old pipeline, on our own search engine. It leaves when the old pipeline is deleted (property-tests-not-our-own-search.md)."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/RecordPart.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/Records.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/Sink.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
+    },
+    {
+      "from": "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts",
+      "to": "next/packages/libfabrika/src/ledger/NodeSqlite.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: This test opens a real SQLite database through the Node driver in ledger/NodeSqlite.ts, which sits on a higher layer. Ticket 641 turns the database laws into a suite that takes a Sql maker, so this test stops importing the driver."
+    },
+    {
+      "from": "next/packages/libfabrika/src/presence/Connections.test.ts",
+      "to": "next/packages/libfabrika/src/processes/Process.test-support.ts",
+      "sites": 1,
+      "reason": "until ticket 641, 2026-11-10: this test reaches for storage() in processes/Process.test-support.ts, which is another module on the same layer. Ticket 641 moves storage() down beside the ledger test support."
     }
   ]
 }

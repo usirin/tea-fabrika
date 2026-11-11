@@ -162,6 +162,25 @@ const screen = async (page: Page, id: string) => {
 
 const lastRow = (text: string) => text.split("\n").at(-1) ?? "";
 
+/**
+ * The prompt's line as typed, with soft wraps undone: from the last row that starts with the prompt
+ * to the end of the screen, joined. Every row but the last must be as wide as the first, since a
+ * soft wrap fills its row; a shorter one is a hard break, and the line is then not one line.
+ */
+const promptLine = (text: string): string | null => {
+  const rows = text.split("\n");
+  const start = rows.findLastIndex((row) => row.startsWith("tsh$"));
+
+  if (start < 0) {
+    return null;
+  }
+
+  const line = rows.slice(start);
+  const width = line[0]?.length ?? 0;
+  const full = line.slice(0, -1).every((row) => row.length === width);
+  return full && (line.at(-1)?.length ?? 0) <= width ? line.join("") : null;
+};
+
 /** The tiles drawn now, in reading order. */
 const tiles = (page: Page) =>
   page.locator("[data-tile]").evaluateAll((all) => all.map((t) => t.getAttribute("data-tile")));
@@ -1992,10 +2011,13 @@ const lookFocus = async () => {
       await Promise.all([page.emulateMedia({ colorScheme: look }), page.keyboard.type(burst, { delay: 1 })]);
       const rows = await until(
         `L3: the burst echoed after switching to ${look}`,
-        async () => ({
-          left: lastRow(await screen(page, "t1")),
-          right: lastRow(await screen(page, "t2")),
-        }),
+        async () => {
+          const [t1, t2] = [await screen(page, "t1"), await screen(page, "t2")];
+          // The last rows ride along: a failure shows what was joined, so a wrap never reads as a
+          // lost key.
+          const tail = { t1: t1.split("\n").slice(-3), t2: t2.split("\n").slice(-3) };
+          return { left: promptLine(t1), right: promptLine(t2), tail };
+        },
         (seen) => seen.left !== "tsh$" || seen.right === `tsh$ ${burst}`,
       );
       check(`L3: the left prompt stays empty in ${look}`, rows.left === "tsh$", rows);

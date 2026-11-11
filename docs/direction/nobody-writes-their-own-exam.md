@@ -23,6 +23,8 @@ if (touched.length > 0)
   checked against.** The checks are the exam. The builder only sits it.
 - **The exam is:**
   - a machine's laws, and the planted mistakes that show each law can fail;
+    *2026-11-11: in `next/` a plant is run once and recorded, not committed
+    ([0093](../../.decisions/0093-laws-walk-plants-run-once.md), a trial).*
   - the checker itself (`explore.ts`) and its settings, such as the depth;
   - a ticket's criteria (already ruled in
     [Done is per criterion](./done-is-per-criterion.md));

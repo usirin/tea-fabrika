@@ -1,7 +1,7 @@
 ---
 id: 0055
 title: A room's own error is named by the service that fails, one per service, so processes/ has MailboxError and ProcessManagerError and keeps ProcessError as its refusal
-status: accepted
+status: amended-in-part by [0091](0091-modules-and-layers.md)
 date: 2026-11-10
 tags: [errors, services, rooms, processes, mailbox, process-manager, cause, libfabrika, next]
 ---
@@ -10,6 +10,8 @@ tags: [errors, services, rooms, processes, mailbox, process-manager, cause, libf
 
 **What this decides:** in `next/`, each service fails with an error named after it, so one room may
 hold several error types, one per service.
+
+A room is now a module, names only; every rule here holds ([0091](0091-modules-and-layers.md)).
 
 ```mermaid
 flowchart LR

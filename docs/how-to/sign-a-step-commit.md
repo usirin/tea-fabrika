@@ -52,7 +52,8 @@ git config --global commit.gpgsign true
 Your commits need no step note. The check verifies their Git signature against the base's person
 keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
 A person's signed commit is itself a link, from its parent's tree to its own. After the squash, the
-lead writes it in `field/runs.jsonl` as a row with `step: "person"`, as for every other link.
+lead writes it as a row with `step: "person"`, as for every other link
+([a step's links](../../field/README.md#a-steps-links)).
 Squash drops the person's signature, so this verification runs on the pull request's commits.
 
 ## A step signs
@@ -84,7 +85,8 @@ It fetches the remote notes into `refs/notes/fabrika-origin`, merges them in, pu
 pushed after the branch starts no new run: re-run the job.
 
 **Catch up by merging `main` in, never by rebasing.** A rebased commit's note no longer fits its
-trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead signs it:
+trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead session signs it,
+most often through `land.ts run` or `catchup.sh` (a lane agent stops at `land.ts ready`, ticket 652):
 
 ```sh
 git merge --no-edit origin/main
@@ -96,12 +98,12 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | Answer | What to do |
 |---|---|
 | `done` | nothing: every commit has a valid step note or person signature, and no exam path changed |
-| `ask exam_read` | send the owner one line with the paths; merge after the yes, and note it in the `MergeRow` |
+| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note ([tier 1](../plan/tier-1.md)) |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
-| `stuck broken_chain` | the branch is behind `main`: merge `main` in, as above |
+| `stuck broken_chain` | after the merge only: the logged links have a gap, or do not reach the head's tree. A branch behind `main` is never `broken_chain` ([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it) |
 
 A pull request that touches no `next/**` and no exam path is "not in scope" and passes.
 
@@ -116,7 +118,8 @@ gh run list --workflow commits.yaml --commit <head sha> --json conclusion,event
 
 There must be exactly one `pull_request_target` run, with conclusion `success`. None, two, or any
 other conclusion is red. The lead also checks that the ticket the check printed is the pull request's
-tracker ticket, and writes it in the `MergeRow`.
+tracker ticket. No row per merge records it yet: that measure is proposed
+([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), M1).
 
 ## After the merge
 
@@ -125,6 +128,9 @@ in a log pull request. `keys` and `base` must be commits on `main` before the sq
 must be on `main`; a keys commit anywhere else counts for nothing, since anyone who can push can make
 one that holds their own key. The check walks them there, and blocks that pull request until they reach
 the squash commit's tree. On `main`, each push walks every squash since P32's, as advice.
+A squash that landed behind `main` passes when the links reach its pull request head's tree and that
+head merged onto `main` gives the squash's tree
+([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it).
 
 ## The pull request that added the check
 

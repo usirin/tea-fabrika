@@ -4,7 +4,12 @@
 //
 //   node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>]
 //                 [--plan <approved plan>] [--claude tests,build] [--electron tests,build]
-//                 [--model sonnet|opus] [--start tests|build|mutation|review]
+//                 [--codex-exec tests,build,review] [--model sonnet|opus]
+//                 [--start tests|build|mutation|review]
+//
+// `--codex-exec` names the steps whose Codex runs as the installed `codex exec`, plainly, on the
+// user's own Codex config (./codexexec.ts), in place of Codex through ACP. `--claude` wins a step
+// both name. The judgment agent stays on the ACP row.
 //
 // The lane is a tea machine on the Effect engine. Each step runs drive.ts's pieces in this
 // process (`prepare`, then `driveStep`: one box, one agent turn, the reads, the push, the row),
@@ -17,35 +22,67 @@
 //
 //   stepping   Act     drive's prepare and driveStep, the brief cut from the lane brief's section
 //                      plus the lane's facts (heads, round, what the last step said)
+//   hosting    Act     the host step (./flow/host.ts) before a review of a head it has not run at:
+//                      the brief's `## host` commands on the laptop, outside any box; a fail sends
+//                      the lane to build with the command's last lines, no section is a skip
 //   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
+//   typechecking Act   one `pnpm typecheck` of the reviewed head merged with origin/main, on the
+//                      laptop (./flow/typecheck.ts): red sends the lane back with the error lines,
+//                      to tests when every error is in an exam path, else to build, counted as a
+//                      send back (0076); one that cannot run goes on, and the last line says why
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
 //   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
 //                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
 //   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> mutation -> review -> open -> loosen -> land. A send goes
-// to the step it names; a send to plan parks, since only the lead approves a plan. A lockfile ask
+// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> (typecheck) -> open ->
+// loosen -> land. Every
+// review runs at a head the host step ran at: a review whose head it has not seen runs it first,
+// and that round counts against `MaxSteps`. A lane runs no
+// mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
+// stays for a lane parked inside its mutation step before 0066: it runs that one step, then goes on
+// to review, so nothing in flight is stranded. No move ever names mutation: a send to it, or to
+// plan, parks (only the lead approves a plan). A send goes to the lane step it names. A lockfile ask
 // parks too: the lead refreshes it outside the box. Any other ask, and any stuck, goes to the
 // judgment agent. A start refusal for a full laptop (agent_cap, low_disk) is retried on one named
 // Effect Schedule (`slotSchedule`); any other refusal parks. Every limit is a Context.Reference with
 // an overridable default (the defaults: a step retried every 5 minutes, 6 times; 3 stucks in a row
-// on one step; 16 steps a lane), and `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS` and
-// `CHAIN_STEPS` override them from outside. Running out of retries is a typed `RetriesExhausted`,
-// reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0 landed, 20 parked
-// (ask), 30 stuck, 2 usage.
+// on one step; 16 steps a lane with no backstop; 20 minutes a host command), and
+// `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS`, `CHAIN_STEPS`, `CHAIN_HOST_MINUTES` and
+// `CHAIN_TYPECHECK_MINUTES` override them from outside. Running out of retries is a typed
+// `RetriesExhausted`, reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0
+// landed, 20 parked (ask), 30 stuck, 2 usage.
+//
+// The lane's budget (.decisions/0076). Every stuck step carries its fault, `tool` or `work`
+// (drive's `faultFrom`). The machine keeps the marks of the lane's last 5 steps; when 3 of them were
+// sent back or stuck on the work, it stops with an ask that holds the counts: redo, cut scope or
+// drop. A tool stuck is marked and never counted. The backstop is twice the estimate a line such
+// as `Estimate: 12 steps, $15` gives in the approved plan, else in the lane brief; at its steps or
+// its dollars the chain stops the same way, before the next step or judgment. With no estimate, one
+// printed line says so and `MaxSteps` holds. `CHAIN_INTENSITY`, `CHAIN_WITHIN` and `CHAIN_BACKSTOP`
+// override the 3, the 5 and the 2. The stop, its rule and what was spent, goes in the chain record.
+// A host step is a step here too: its round counts toward the backstop and `MaxSteps`, and its
+// mark joins the window (a send to build is a send back; a stuck is a tool stuck, never counted).
+// No agent sees these numbers. The window counts this process's steps: a lane started again after
+// a person's answer starts a fresh window. The tool budget shared by all lanes is not built here.
 //
 // Each step's record is a Schema value (`StepRecord`) written to `state/<lane>-chain.json` before
 // the step starts and again when it ends, so a resume (`--start <step>`) needs nothing in memory.
+// While the lane runs, the record also holds its heartbeat (./flow/Beat.ts, ticket 685): the phase
+// the chain is in, since when, and when an agent last wrote, written on each phase change and every
+// 30 seconds, so a status page tells a lane at work from one blocked in a hung call.
 // The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
 // (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
 //
 // The lane brief is one Markdown file. Its text before the first `## ` heading goes to every step.
-// Then one section per step, `## tests`, `## build`, `## mutation`, `## review`, and `## pr`, the
-// pull request's description (its first line is the title). drive appends its own answer tail.
+// Then one section per step, `## tests`, `## build`, `## review`, and `## pr`, the pull request's
+// description (its first line is the title). An optional `## host` names the host step's commands
+// in a fenced block, one per line; a `## host` that names none is a usage error. An older brief's `## mutation` is accepted and not run,
+// unless the lane starts at mutation, which needs it. drive appends its own answer tail.
 
 import { spawn } from "node:child_process";
 import {
@@ -62,15 +99,37 @@ import {
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
+import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
-import { type Agents, Judgment, makeStepAgents, runTurn, stepRow } from "./agents.ts";
-import { driveStep, type Env, loadEnv, MUTATION_AGENT, prepare, sh } from "./drive.ts";
-import { wipOf } from "./lane.ts";
+import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
+import {
+  type AgentName,
+  type DrivePhase,
+  driveStep,
+  type Env,
+  FAULTS,
+  type Fault,
+  faultFrom,
+  loadEnv,
+  MUTATION_AGENT,
+  prepare,
+  sh,
+} from "./drive.ts";
+import * as Beat from "./flow/Beat.ts";
+import * as Host from "./flow/host.ts";
+import * as Outcome from "./flow/Outcome.ts";
+import * as Typecheck from "./flow/typecheck.ts";
+import { stepOf, wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
+/** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
 export const STEPS = ["tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
+/** A lane's steps, in order (0066). A move names only these, so no move reaches mutation. */
+export const LANE_STEPS = ["tests", "build", "review"] as const;
+export type LaneStep = (typeof LANE_STEPS)[number];
+const isLaneStep = (s: string): s is LaneStep => (LANE_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits
 
@@ -80,8 +139,21 @@ export const WaitMinutes = Context.Reference<number>("chain/WaitMinutes", { defa
 export const MaxWaits = Context.Reference<number>("chain/MaxWaits", { defaultValue: () => 6 });
 /** Stucks in a row on one step before the lane parks without asking. */
 export const MaxStucks = Context.Reference<number>("chain/MaxStucks", { defaultValue: () => 3 });
-/** Steps a lane may run before it parks. */
+/** Steps a lane may run before it parks, when its plan and brief give no estimate for a backstop. */
 export const MaxSteps = Context.Reference<number>("chain/MaxSteps", { defaultValue: () => 16 });
+/** The lane's intensity (0076): this many sends or work stucks... */
+export const IntensityCount = Context.Reference<number>("chain/IntensityCount", { defaultValue: () => 3 });
+/** ...within this many of its last steps stop the chain and ask a person. */
+export const IntensityWithin = Context.Reference<number>("chain/IntensityWithin", { defaultValue: () => 5 });
+/** The backstop is this many times the estimate the plan or the lane brief gives (0076). */
+export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { defaultValue: () => 2 });
+/** Minutes each host command may run (./flow/host.ts says where the default comes from). */
+export const HostMinutes = Context.Reference<number>("chain/HostMinutes", { defaultValue: () => Host.MINUTES });
+
+/** Minutes the typecheck may wait for another, and each of its install and check may run. */
+export const TypecheckMinutes = Context.Reference<number>("chain/TypecheckMinutes", {
+  defaultValue: () => Typecheck.MINUTES,
+});
 
 /** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
 export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
@@ -112,12 +184,18 @@ export type Line = {
   readonly outcome: string;
   readonly head: string;
   readonly reason: string;
+  /** A stuck step's fault, `tool` or `work` (0076); `null` for any other outcome. */
+  readonly fault: Fault | null;
   readonly report: string | null;
   readonly box: string;
   readonly exit: number;
+  /** The step's list-price dollars, `null` when none were priced. */
+  readonly listUsd: number | null;
 };
 
 const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const FaultS = Schema.Literals(FAULTS);
+const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
@@ -135,13 +213,17 @@ export const lineOf = (out: string, exit: number): Line | null => {
     }
 
     const o = d as Record<string, unknown>;
+    const outcome = str(o.outcome);
+    const reason = str(o.reason);
     return {
-      outcome: str(o.outcome),
+      outcome,
       head: str(o.head),
-      reason: str(o.reason),
+      reason,
+      fault: isFault(o.fault) ? o.fault : faultFrom(outcome, reason),
       report: typeof o.report === "string" ? o.report : null,
       box: str(o.box),
       exit: typeof o.exit === "number" ? o.exit : exit,
+      listUsd: typeof o.listUsd === "number" ? o.listUsd : null,
     };
   }
 
@@ -152,21 +234,24 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
 /** The next move after a step's outcome, as data. */
 export const Move = Schema.TaggedUnion({
-  step: { step: Schema.Literals(STEPS), note: Schema.String },
+  step: { step: Schema.Literals(LANE_STEPS), note: Schema.String },
   judge: {},
   open: {},
   park: { reason: Schema.String },
 });
 export type Move = typeof Move.Type;
-const toStep = (step: StepName, note: string) => Move.cases.step.make({ step, note });
+const toStep = (step: LaneStep, note: string) => Move.cases.step.make({ step, note });
 const toPark = (reason: string) => Move.cases.park.make({ reason });
 const toJudge = Move.cases.judge.make({});
 const toOpen = Move.cases.open.make({});
 
-/** The step a done answer hands to, or `null` at the end of the chain. */
-const after: Record<StepName, StepName | null> = {
+/**
+ * The step a done answer hands to, or `null` at the end of the chain. Build hands to review (0066);
+ * a mutation step, run only by `--start mutation`, hands to review too.
+ */
+const after: Record<StepName, LaneStep | null> = {
   tests: "build",
-  build: "mutation",
+  build: "review",
   mutation: "review",
   review: null,
 };
@@ -180,19 +265,21 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
   const [verb, to = "", why = ""] = line.outcome.split(":");
 
   switch (verb) {
-    case "done": {
+    case "done":
+    case "skip": {
+      // A skip is nothing here for this step: on to the next, with the why on record.
       const next = after[step];
       return next === null ? toOpen : toStep(next, "");
     }
-    case "skip":
-      // Nothing here for this step: on to the next, with the why on record.
-      return after[step] === null ? toOpen : toStep(after[step] ?? "review", "");
     case "send":
-      if (isStep(to)) {
-        return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
+      if (isLaneStep(to)) {
+        // A step that sends the lane to itself is not done and not a send: another round of it
+        // only loops (2026-11-11), so judgment reads why, and sends it on or parks it.
+        return to === step ? toJudge : toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
-      return toPark(`${step} sent the lane to ${to}: ${line.reason}`);
+      // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
+      return toPark(`${step} sent the lane to ${to}, which is not a lane step: ${line.reason}`);
     case "ask":
       if (why === "lockfile") {
         return toPark(line.reason);
@@ -206,6 +293,7 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
   }
 };
 
+// An older answer may still name mutation; it reads as a send that names no lane step, so it parks.
 const JUDGED = /^[`*\s]*answer:\s*(send\s+(tests|build|mutation|review)|park)\b[`*\s]*(.*)$/i;
 
 /** A judgment: a step to run again with a note, or a park for the lead. */
@@ -222,7 +310,7 @@ export const moveFrom = (text: string): Judged => {
   try {
     const d = JSON.parse(text) as Judged;
 
-    if (d._tag === "step" && isStep(d.step)) {
+    if (d._tag === "step" && isLaneStep(d.step)) {
       return toStep(d.step, String(d.note ?? ""));
     }
 
@@ -246,7 +334,7 @@ export const judgedOf = (text: string): Judged => {
     const note = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
     const to = m[2]?.toLowerCase() ?? "";
 
-    if (isStep(to)) {
+    if (isLaneStep(to)) {
       return toStep(to, `the lead's judgment: ${note}`);
     }
 
@@ -288,6 +376,13 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   return { head: head.join("\n").trim(), sections };
 };
 
+/**
+ * The sections a lane brief lacks for a lane started at `start`: every lane step's and `pr`. A
+ * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
+ */
+export const lacks = (lane: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
+  [...LANE_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !lane.sections[k]);
+
 /** What one step is told about the lane: the brief's shared head, its section and the facts. */
 export type Facts = {
   readonly ticket: string;
@@ -297,7 +392,40 @@ export type Facts = {
   readonly head: string;
   readonly round: number;
   readonly heads: Partial<Record<StepName, string>>;
+  /** Every commit on the lane since its root, oldest first, with the step its note names; `null`
+   * when git could not list them. */
+  readonly commits: ReadonlyArray<StepCommit> | null;
   readonly note: string;
+  /** The last host step's outcome and head, for a review; `null` for any other step. */
+  readonly host: string | null;
+};
+
+/** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
+export type StepCommit = { readonly step: string; readonly sha: string };
+
+/**
+ * What the lane has committed, by step, in short shas. Heads fill only on a done, so a step that
+ * committed and then sent the lane on still shows here (2026-11-11: a lane read "No step has
+ * committed yet." over three partial commits).
+ */
+export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string => {
+  if (commits === null) {
+    return "The lane's step commits could not be read (git rev-list failed).";
+  }
+
+  if (commits.length === 0) {
+    return "No step has committed yet.";
+  }
+
+  const steps = [...new Set(commits.map((c) => c.step))];
+  const by = steps.map(
+    (s) =>
+      `${s} ${commits
+        .filter((c) => c.step === s)
+        .map((c) => c.sha.slice(0, 8))
+        .join(" ")}`,
+  );
+  return `Step commits since the lane left main, oldest first: ${by.join("; ")}.`;
 };
 
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
@@ -311,7 +439,8 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     "---",
     `Lane facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the lane left main at ${short(f.root)}.`,
-    heads.length > 0 ? `Heads so far: ${heads.join(", ")}.` : "No step has committed yet.",
+    committedLine(f.commits),
+    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
     ...(f.note ? [`Last round: ${f.note}`] : []),
   ];
 
@@ -319,6 +448,13 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipOf(f.branch)} at ${f.head}`);
   }
 
+  if (step === "review" && f.host !== null) {
+    lines.push(
+      `Host run, by chain.ts on the laptop outside any box (the brief's \`## host\` commands, e2e laws and shots): ${f.host}`,
+    );
+  }
+
+  // Only a lane started at mutation, parked inside that step before 0066, gets here.
   if (step === "mutation") {
     lines.push(
       `T=${f.ticket}, BUILD=${short(f.heads.build ?? f.head)} (the newest build commit; the mutation sampler diffs it against its parent).`,
@@ -326,6 +462,87 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
   }
 
   return `${lines.join("\n")}\n`;
+};
+
+// ---------------------------------------------------------------- the budget
+
+/**
+ * How one step ended, as the lane's intensity counts it (0076): `pass` (done, skip or ask), `send`
+ * (sent back), `work` (stuck on the work) or `tool` (stuck on a tool, never counted against the lane).
+ */
+export const MARKS = ["pass", "send", "work", "tool"] as const;
+export type Mark = (typeof MARKS)[number];
+
+export const markFrom = (line: Line): Mark => {
+  const [verb] = line.outcome.split(":");
+  return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
+};
+
+/** The marks the intensity counts against the lane: sends and work stucks. */
+const counted = (window: readonly Mark[]) => ({
+  sends: window.filter((m) => m === "send").length,
+  work: window.filter((m) => m === "work").length,
+});
+
+/** A lane's size in steps and dollars: the estimate a plan or brief gives, or the backstop from it. */
+const Budget = Schema.Struct({ steps: Schema.Number, dollars: Schema.Number });
+export type Budget = typeof Budget.Type;
+
+/**
+ * The estimate in a plan or lane brief: the first line that says `estimate` and then `<n> steps`
+ * and `$<d>`, as in `Estimate: 12 steps, $15`. An estimate in agent hours alone is none.
+ */
+export const estimateIn = (text: string): Budget | null => {
+  for (const line of text.split("\n")) {
+    const m = /\bestimate\b.*?\b(\d+)\s+steps?\b.*?\$\s?(\d+(?:\.\d+)?)/i.exec(line);
+    const steps = Number(m?.[1]);
+    const dollars = Number(m?.[2]);
+
+    if (m !== null && steps > 0 && dollars > 0) {
+      return { steps, dollars };
+    }
+  }
+
+  return null;
+};
+
+/** The backstop: `times` the estimate, steps rounded up. */
+export const backstopFrom = (estimate: Budget, times: number): Budget => ({
+  steps: Math.ceil(estimate.steps * times),
+  dollars: estimate.dollars * times,
+});
+
+/** Why the chain stopped to ask a person to redo, cut scope or drop (0076), kept in its record. */
+export const Stop = Schema.TaggedUnion({
+  intensity: {
+    count: Schema.Number,
+    within: Schema.Number,
+    window: Schema.Array(Schema.Literals(MARKS)),
+    steps: Schema.Number,
+    dollars: Schema.Number,
+  },
+  backstop: {
+    passed: Schema.Literals(["steps", "dollars"]),
+    backstop: Budget,
+    steps: Schema.Number,
+    dollars: Schema.Number,
+  },
+});
+export type Stop = typeof Stop.Type;
+
+/** The stop's question, with its counts, for the lead. */
+export const stopReason = (stop: Stop): string => {
+  const spent = `Spent so far: ${stop.steps} steps, $${stop.dollars.toFixed(2)}.`;
+  const ask = "Answer redo, cut scope or drop (0076).";
+
+  if (stop._tag === "intensity") {
+    const { sends, work } = counted(stop.window);
+    const tools = stop.window.filter((m) => m === "tool").length;
+    return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
+  }
+
+  const limit = stop.passed === "steps" ? `${stop.backstop.steps} steps` : `$${stop.backstop.dollars.toFixed(2)}`;
+  return `backstop: the lane reached ${limit}, its backstop (${stop.backstop.steps} steps, $${stop.backstop.dollars.toFixed(2)}). ${spent} ${ask}`;
 };
 
 // ---------------------------------------------------------------- the machine
@@ -336,13 +553,24 @@ const Run = Schema.Struct({
   round: Schema.Number,
 });
 
-const LineS = Schema.Struct({
+const lineFields = {
   outcome: Schema.String,
   head: Schema.String,
   reason: Schema.String,
+  fault: Schema.NullOr(FaultS),
   report: Schema.NullOr(Schema.String),
   box: Schema.String,
   exit: Schema.Number,
+  listUsd: Schema.NullOr(Schema.Number),
+};
+
+const LineS = Schema.Struct(lineFields);
+
+// `fault` and `listUsd` came with 0076: a record written before them reads them as null.
+const SavedLine = Schema.Struct({
+  ...lineFields,
+  fault: lineFields.fault.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  listUsd: lineFields.listUsd.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 
 const Done = Schema.Struct({ ok: Schema.Boolean, detail: Schema.String });
@@ -352,11 +580,11 @@ const stepRun = Cmd.make("step_run", { input: Run, ok: LineS, err: ["RetriesExha
 /** One step's record, saved before it starts (`line` null) and again when it ends. */
 export const StepRecord = Schema.Struct({
   round: Schema.Number,
-  step: Schema.Literals(STEPS),
+  step: Schema.Literals([...STEPS, "host"]),
   note: Schema.String,
   startedAt: Schema.String,
   endedAt: Schema.NullOr(Schema.String),
-  line: Schema.NullOr(LineS),
+  line: Schema.NullOr(SavedLine),
   /** The judgment agent's box and answer after this step, when one was asked. */
   judged: Schema.NullOr(Schema.Struct({ box: Schema.String, answer: Schema.String })),
 });
@@ -368,6 +596,10 @@ export const ChainRecord = Schema.Struct({
   pr: Schema.NullOr(Schema.Number),
   landed: Schema.NullOr(Schema.String),
   steps: Schema.Array(StepRecord),
+  /** Why the chain last stopped to ask a person (0076), when it did. */
+  stop: Schema.optionalKey(Stop),
+  /** The heartbeat while the chain runs (./flow/Beat.ts); gone once the lane ends. */
+  beat: Schema.optionalKey(Beat.Beat),
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
@@ -379,7 +611,7 @@ export const roundsIn = (record: ChainRecord): number => record.steps.reduce((mo
 
 const judge = Cmd.make("judge", {
   input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Number }),
-  ok: Schema.Struct({ text: Schema.String }),
+  ok: Schema.Struct({ text: Schema.String, listUsd: Schema.NullOr(Schema.Number) }),
   err: ["unknown"],
 });
 
@@ -401,15 +633,35 @@ const land = Cmd.make("land", {
   err: ["unknown"],
 });
 
+/** The host step at the lane's head (`""` for a lane started at review: the state file's head). */
+const hostRun = Cmd.make("host_run", {
+  input: Schema.Struct({ round: Schema.Number, head: Schema.String }),
+  ok: Schema.Struct({
+    outcome: Schema.Literals(["done", "skip", "send", "ask", "stuck"]),
+    head: Schema.String,
+    reason: Schema.String,
+  }),
+  err: ["unknown"],
+});
+
+/** The host typecheck of the reviewed head merged with origin/main, before the PR opens. */
+const typecheckRun = Cmd.make("typecheck_run", {
+  input: Schema.Struct({ head: Schema.String }),
+  ok: Typecheck.Verdict,
+  err: ["unknown"],
+});
+
 type Cmds =
+  | ReturnType<typeof typecheckRun>
   | ReturnType<typeof stepRun>
   | ReturnType<typeof judge>
   | ReturnType<typeof prOpen>
   | ReturnType<typeof loosen>
-  | ReturnType<typeof land>;
+  | ReturnType<typeof land>
+  | ReturnType<typeof hostRun>;
 
-/** How the lane ends: landed, parked for the lead, or stuck. */
-export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string };
+/** How the lane ends: landed, parked for the lead, or stuck; a stop of 0076 says which rule fired. */
+export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string; readonly stop?: Stop };
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
 
 /**
@@ -432,12 +684,28 @@ export const looseningEnd = (pr: number, ran: { readonly code: number; readonly 
 type Lane = {
   readonly round: number;
   readonly head: string;
+  /** The head the host step last passed or skipped at; `null` before it ran. */
+  readonly hosted: string | null;
   readonly heads: Partial<Record<StepName, string>>;
   readonly stucks: number;
+  /** The last steps' marks, at most `intensity.within` of them (0076). */
+  readonly window: readonly Mark[];
+  /** List-price dollars this chain spent, steps and judgments. */
+  readonly dollars: number;
+  /** Why the last host typecheck did not run; `null` when it ran, or has not been reached. */
+  readonly unchecked: string | null;
 };
 
-/** The limits the machine reads, from the References, once at start. */
-export type Limits = { readonly maxSteps: number; readonly maxStucks: number };
+/**
+ * The limits the machine reads, from the References, once at start. With a backstop, its steps
+ * take `maxSteps`'s place; with none (no estimate), `maxSteps` holds.
+ */
+export type Limits = {
+  readonly maxSteps: number;
+  readonly maxStucks: number;
+  readonly intensity: { readonly count: number; readonly within: number };
+  readonly backstop: Budget | null;
+};
 
 type Model =
   | { readonly phase: "idle"; readonly lane: Lane }
@@ -447,7 +715,9 @@ type Model =
       readonly step: StepName;
       readonly note: string;
     }
+  | { readonly phase: "hosting"; readonly lane: Lane; readonly note: string }
   | { readonly phase: "judging"; readonly lane: Lane; readonly step: StepName; readonly line: Line }
+  | { readonly phase: "typechecking"; readonly lane: Lane }
   | { readonly phase: "opening"; readonly lane: Lane }
   | { readonly phase: "loosening"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "landing"; readonly lane: Lane; readonly pr: number }
@@ -458,6 +728,27 @@ type Step = readonly [Model, readonly Cmds[]];
 
 const stay = (s: Model): Step => [s, []];
 const over = (lane: Lane, end: End): Step => [{ phase: "over", lane, end }, []];
+const stopped = (lane: Lane, stop: Stop): Step => over(lane, { kind: "ask", reason: stopReason(stop), stop });
+
+/** The intensity, pure: the window holds `count` sends or work stucks (0076). */
+const intensityStop = (lane: Lane, { count, within }: Limits["intensity"]): Stop | null => {
+  const { sends, work } = counted(lane.window);
+  return sends + work >= count
+    ? Stop.cases.intensity.make({ count, within, window: lane.window, steps: lane.round, dollars: lane.dollars })
+    : null;
+};
+
+/** The backstop, pure: the lane ran its steps or spent its dollars (0076). */
+const backstopStop = (lane: Lane, backstop: Budget | null): Stop | null => {
+  if (backstop === null) {
+    return null;
+  }
+
+  const passed = lane.round >= backstop.steps ? "steps" : lane.dollars >= backstop.dollars ? "dollars" : null;
+  return passed === null
+    ? null
+    : Stop.cases.backstop.make({ passed, backstop, steps: lane.round, dollars: lane.dollars });
+};
 
 const runStep = (lane: Lane, step: StepName, note: string): Step => {
   const round = lane.round + 1;
@@ -466,31 +757,102 @@ const runStep = (lane: Lane, step: StepName, note: string): Step => {
   return [{ phase: "stepping", lane: next, step, note }, [asked]];
 };
 
-/** Take a move: a step, the judgment agent, the pull request or a park. */
-const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): Step => {
-  if (move._tag === "step" && lane.round >= max) {
-    return over(lane, { kind: "ask", reason: `${max} steps ran (MaxSteps); the lane parks` });
+/** The host step before a review; it holds the review's note until it ends. */
+const runHost = (lane: Lane, note: string): Step => {
+  const round = lane.round + 1;
+  return [{ phase: "hosting", lane: { ...lane, round }, note }, [hostRun({ round, head: lane.head })]];
+};
+
+/**
+ * A lane step, after the budget's check: the backstop, or with none `MaxSteps`, may stop the lane
+ * first. A review at a head the host step has not run at hosts first, as one more step.
+ */
+const next = (lane: Lane, step: LaneStep, note: string, limits: Limits): Step => {
+  const backstop = backstopStop(lane, limits.backstop);
+
+  if (backstop !== null) {
+    return stopped(lane, backstop);
   }
 
+  if (limits.backstop === null && lane.round >= limits.maxSteps) {
+    return over(lane, { kind: "ask", reason: `${limits.maxSteps} steps ran (MaxSteps); the lane parks` });
+  }
+
+  return step === "review" && lane.hosted !== lane.head ? runHost(lane, note) : runStep(lane, step, note);
+};
+
+/**
+ * Take a move: a step, the judgment agent, the pull request or a park. Before a step or a judgment,
+ * the backstop, or with none `MaxSteps` for a step, may stop the lane.
+ */
+const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits): Step => {
   switch (move._tag) {
     case "step":
-      return runStep(lane, move.step, move.note);
-    case "judge":
-      return [{ phase: "judging", lane, step, line }, [judge({ step, line, round: lane.round })]];
+      return next(lane, move.step, move.note, limits);
+    case "judge": {
+      const backstop = backstopStop(lane, limits.backstop);
+      return backstop !== null
+        ? stopped(lane, backstop)
+        : [{ phase: "judging", lane, step, line }, [judge({ step, line, round: lane.round })]];
+    }
+    // The host typecheck comes first: the boxes run none.
     case "open":
-      return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+      return [{ phase: "typechecking", lane }, [typecheckRun({ head: lane.head })]];
     default:
       return over(lane, { kind: "ask", reason: move.reason });
   }
 };
 
-export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
+export const makeMachine = (limits: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
-    cmds: [stepRun, judge, prOpen, loosen, land],
-    init: (): Step => [{ phase: "idle", lane: { round: 0, head: "", heads: {}, stucks: 0 } }, []],
+    cmds: [stepRun, judge, typecheckRun, prOpen, loosen, land, hostRun],
+    init: (): Step => [
+      {
+        phase: "idle",
+        lane: { round: 0, head: "", hosted: null, heads: {}, stucks: 0, window: [], dollars: 0, unchecked: null },
+      },
+      [],
+    ],
     update: {
-      start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
+      start: (s, m): Step => {
+        if (s.phase !== "idle") {
+          return stay(s);
+        }
+
+        return m.step === "review" ? runHost(s.lane, "") : runStep(s.lane, m.step, "");
+      },
+      // Done or skip: review, at the head the host step ran at. A send goes to build with the
+      // command's last lines, as a red check would; a stuck ends the lane.
+      host_run_ok: (s, m): Step => {
+        if (s.phase !== "hosting") {
+          return stay(s);
+        }
+
+        const { outcome, head, reason } = m.value;
+        // 0076: the host step's mark joins the window like any step's. A send to build is a send
+        // back; a stuck is the tool's (git, the signer, the push), never counted against the lane.
+        const mark: Mark = outcome === "send" ? "send" : outcome === "stuck" ? "tool" : "pass";
+        const lane: Lane = { ...s.lane, window: [...s.lane.window, mark].slice(-limits.intensity.within) };
+        const intensity = intensityStop(lane, limits.intensity);
+
+        if (intensity !== null) {
+          return stopped(lane, intensity);
+        }
+
+        if (outcome === "done" || outcome === "skip") {
+          const at = head || lane.head;
+          return next({ ...lane, head: at, hosted: at }, "review", s.note, limits);
+        }
+
+        if (outcome === "send") {
+          return next(lane, "build", `host answered send:build: ${reason}`, limits);
+        }
+
+        return over(lane, { kind: outcome === "ask" ? "ask" : "stuck", reason: `host: ${reason}` });
+      },
+      host_run_err: (s): Step =>
+        s.phase === "hosting" ? over(s.lane, { kind: "stuck", reason: "the host step threw" }) : stay(s),
       step_run_ok: (s, m): Step => {
         if (s.phase !== "stepping") {
           return stay(s);
@@ -504,8 +866,17 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           head: accepted && line.head ? line.head : s.lane.head,
           heads: verb === "done" && line.head ? { ...s.lane.heads, [s.step]: line.head } : s.lane.heads,
           stucks: verb === "stuck" ? s.lane.stucks + 1 : 0,
+          window: [...s.lane.window, markFrom(line)].slice(-limits.intensity.within),
+          dollars: s.lane.dollars + (line.listUsd ?? 0),
         };
-        return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, maxStucks), maxSteps);
+        // 0076: the window is checked before any move, so a tripped lane starts nothing more.
+        const intensity = intensityStop(lane, limits.intensity);
+
+        if (intensity !== null) {
+          return stopped(lane, intensity);
+        }
+
+        return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, limits.maxStucks), limits);
       },
       // A typed RetriesExhausted (the slot schedule ran out) or any other failure: stuck, with why.
       step_run_err: (s, m): Step =>
@@ -524,7 +895,8 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
         }
 
         const move = moveFrom(m.value.text);
-        return take(s.lane, s.step, s.line, move, maxSteps);
+        const lane = { ...s.lane, dollars: s.lane.dollars + (m.value.listUsd ?? 0) };
+        return take(lane, s.step, s.line, move, limits);
       },
       judge_err: (s): Step =>
         s.phase === "judging"
@@ -533,6 +905,41 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
               reason: `${s.step} ${s.line.outcome}: ${s.line.reason} (the judgment agent failed)`,
             })
           : stay(s),
+      // Green opens the PR. Red is a send back (0076): its mark joins the window, and the step it
+      // names gets the error lines. One that could not run opens the PR and keeps why it did not.
+      typecheck_run_ok: (s, m): Step => {
+        if (s.phase !== "typechecking") {
+          return stay(s);
+        }
+
+        const verdict = m.value;
+
+        if (verdict._tag !== "red") {
+          const unchecked = verdict._tag === "skipped" ? verdict.reason : null;
+          const lane: Lane = { ...s.lane, unchecked };
+          return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+        }
+
+        const window = [...s.lane.window, "send" as const].slice(-limits.intensity.within);
+        const lane: Lane = { ...s.lane, window, unchecked: null };
+        const intensity = intensityStop(lane, limits.intensity);
+
+        if (intensity !== null) {
+          return stopped(lane, intensity);
+        }
+
+        const at = `${lane.head.slice(0, 8)} merged with origin/main`;
+        const said = `the host typecheck of ${at} answered send:${verdict.to}`;
+        return next(lane, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
+      },
+      typecheck_run_err: (s): Step => {
+        if (s.phase !== "typechecking") {
+          return stay(s);
+        }
+
+        const lane: Lane = { ...s.lane, unchecked: "the typecheck threw" };
+        return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+      },
       pr_open_ok: (s, m): Step => {
         if (s.phase !== "opening") {
           return stay(s);
@@ -626,8 +1033,13 @@ type Setup = {
   readonly plan: string;
   readonly brief: ReturnType<typeof sectionsOf>;
   readonly claude: ReadonlySet<StepName>;
+  /** Steps whose Codex runs as plain `codex exec` (`--codex-exec`). */
+  readonly exec: ReadonlySet<StepName>;
   readonly electron: ReadonlySet<StepName>;
   readonly model: string;
+  /** The `## host` section's commands; none skips the host step. */
+  readonly host: ReadonlyArray<string>;
+  readonly beats: Beats;
 };
 
 /** The last `n` lines of a file, or a line saying it is not there. */
@@ -640,12 +1052,19 @@ answered ${line.outcome}: ${line.reason}
 You read; you change no file and start nothing. Your row only reads this repo and nothing beside
 it, so the lane's state file and the step's report follow below. Read what you need in this repo.
 Before you park a question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then
-answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build, mutation
+answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build
 or review) and a note of one or two sentences for that step, or answer "park" with step null and
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
-person is involved, or the same step already failed the same way.
+person is involved, or the same step already failed the same way.${
+  line.outcome.startsWith(`send:${step}:`)
+    ? `
+The ${step} step sent the lane to itself, which chain.ts never runs as one more round. When what it
+lists as left needs another step's code, a typecheck or --changed, send the next step with that
+list in the note. Park when the step itself is not done.`
+    : ""
+}
 
 ---
 The lane's state file, its last lines:
@@ -657,6 +1076,65 @@ The ${step} step's report:
 
 ${report}
 `;
+
+/** The chain record, a Schema value read and written whole: what a resume needs is on disk. */
+const chainFile = (path: string, lane: string) => {
+  const readRecord = (): ChainRecord =>
+    existsSync(path)
+      ? Schema.decodeUnknownSync(ChainRecord)(JSON.parse(readFileSync(path, "utf8")))
+      : { lane, pr: null, landed: null, steps: [] };
+  const writeRecord = (r: ChainRecord) => {
+    const text = JSON.stringify(Schema.encodeSync(ChainRecord)(r), null, "\t");
+    writeFileSync(`${path}.tmp`, `${text}\n`);
+    renameSync(`${path}.tmp`, path);
+  };
+  return { readRecord, writeRecord };
+};
+
+/** drive.ts's machine phase as a beat's; `null` where the chain names the phase itself. */
+const beatPhase = {
+  idle: null,
+  starting: "box",
+  drafting: "agent",
+  reading: "collect",
+  pushing: "commit",
+  recording: "cleanup",
+  over: null,
+} as const satisfies Record<DrivePhase, Beat.Phase | null>;
+
+/** When a file was last written, or `null` when it is not there. */
+const writtenAt = (path: string | null): Date | null =>
+  path !== null && existsSync(path) ? statSync(path).mtime : null;
+
+/**
+ * The lane's heartbeat in its chain record (./flow/Beat.ts). `enter` names a new phase and, for a
+ * phase with an agent, the event log that agent appends to; `tick` writes the beat again; `clear`
+ * drops it when the lane ends. The record on disk holds the beat; only the log's path is in memory.
+ */
+const beating = (file: ReturnType<typeof chainFile>) => {
+  let events: string | null = null;
+  const write = (beat: Beat.Beat) => file.writeRecord({ ...file.readRecord(), beat });
+  const enter = (phase: Beat.Phase, log: string | null) => {
+    events = log;
+    const now = new Date();
+    const entered = Beat.enter(file.readRecord().beat ?? null, phase, now);
+    write(Beat.tick(entered, now, writtenAt(events)));
+  };
+  const tick = () => {
+    const beat = file.readRecord().beat;
+
+    if (beat !== undefined) {
+      write(Beat.tick(beat, new Date(), writtenAt(events)));
+    }
+  };
+  const clear = () => {
+    const { beat: _, ...rest } = file.readRecord();
+    file.writeRecord(rest);
+  };
+  return { enter, tick, clear };
+};
+
+type Beats = ReturnType<typeof beating>;
 
 const handlers = (s: Setup) => {
   const { env } = s;
@@ -670,16 +1148,7 @@ const handlers = (s: Setup) => {
     root?: string;
     steps: { step: string; outcome: string; head: string }[];
   } => (existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { steps: [] });
-  // The chain record, a Schema value read and written whole: what a resume needs is on disk.
-  const readRecord = (): ChainRecord =>
-    existsSync(chainState)
-      ? Schema.decodeUnknownSync(ChainRecord)(JSON.parse(readFileSync(chainState, "utf8")))
-      : { lane: s.lane, pr: null, landed: null, steps: [] };
-  const writeRecord = (r: ChainRecord) => {
-    const text = JSON.stringify(Schema.encodeSync(ChainRecord)(r), null, "\t");
-    writeFileSync(`${chainState}.tmp`, `${text}\n`);
-    renameSync(`${chainState}.tmp`, chainState);
-  };
+  const { readRecord, writeRecord } = chainFile(chainState, s.lane);
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
     const r = readRecord();
@@ -702,6 +1171,23 @@ const handlers = (s: Setup) => {
 
     return heads;
   };
+  /** The lane's commits from its root to its head, oldest first, each with its note's step. */
+  const laneCommits = (root: string, head: string): StepCommit[] | null => {
+    if (root === "" || head === "") {
+      return [];
+    }
+
+    const listed = sh("git", ["-C", env.MAIN, "rev-list", "--reverse", `${root}..${head}`]);
+    return listed.code !== 0
+      ? null
+      : listed.out
+          .split("\n")
+          .filter(Boolean)
+          .map((sha) => {
+            const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+            return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
+          });
+  };
   return {
     step_run: (cmd: typeof Run.Type) =>
       Effect.gen(function* () {
@@ -715,13 +1201,17 @@ const handlers = (s: Setup) => {
           head: lane.head ?? "",
           round,
           heads: headsOf(),
+          commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
+          host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
         };
         const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
-        // draft runs is `mutationDraft` there. The chain names no other fact about that step.
-        const claude = (cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
+        // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
+        // runs it only for a lane started at mutation (0066).
+        const agent = stepAgent(cmd.step, s.claude, s.exec);
+        const claude = agent === "claude";
         const entry: StepRecord = {
           round,
           step: cmd.step,
@@ -732,19 +1222,19 @@ const handlers = (s: Setup) => {
           judged: null,
         };
         saveStep(entry);
-        note(
-          `round ${round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
-        );
+        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note ? ` (${cmd.note})` : ""}`);
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
         // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
         // A slot refusal is a typed failure the schedule retries.
         const once = Effect.gen(function* () {
+          // prepare runs box.sh gc and the start checks in this thread: a hung one stops the beat.
+          s.beats.enter("cleanup", null);
           const prepared = prepare(env, {
             lane: s.lane,
             step: cmd.step,
             brief,
-            agent: claude ? "claude" : "codex",
+            agent,
             model: claude ? s.model : undefined,
             electron: claude && s.electron.has(cmd.step),
             ticket: s.ticket,
@@ -757,6 +1247,7 @@ const handlers = (s: Setup) => {
 
             if (check !== null) {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
+              s.beats.enter("wait", null);
               return yield* Effect.fail(new SlotRefused({ check, reason: prepared.reason }));
             }
 
@@ -764,20 +1255,32 @@ const handlers = (s: Setup) => {
               outcome: prepared.outcome,
               head: "",
               reason: prepared.reason,
+              fault: faultFrom(prepared.outcome, prepared.reason),
               report: null,
               box: "",
               exit: prepared.exit,
+              listUsd: null,
             } satisfies Line;
           }
 
-          const ran = yield* driveStep(env, s.agents, prepared);
+          const events = prepared.ask.events;
+          s.beats.enter("wait", events);
+          const ran = yield* driveStep(env, s.agents, prepared, (phase) => {
+            const named = beatPhase[phase];
+
+            if (named !== null) {
+              s.beats.enter(named, events);
+            }
+          });
           return {
             outcome: ran.outcome,
             head: ran.head,
             reason: ran.reason,
+            fault: ran.fault,
             report: ran.report,
             box: ran.box,
             exit: ran.exit,
+            listUsd: ran.listUsd,
           } satisfies Line;
         });
         const line = yield* once.pipe(
@@ -800,9 +1303,11 @@ const handlers = (s: Setup) => {
                   outcome: `stuck:${e._tag}`,
                   head: "",
                   reason: e.reason,
+                  fault: faultFrom(`stuck:${e._tag}`, e.reason),
                   report: null,
                   box: "",
                   exit: 30,
+                  listUsd: null,
                 },
               });
               note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
@@ -824,6 +1329,7 @@ const handlers = (s: Setup) => {
         const box = `${s.lane}-judge${earlier + cmd.round}`;
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
+        s.beats.enter("judge", at(".jsonl"));
         const started = new Date();
         // One turn in the main checkout on the row that only reads (Codex's read-only profile):
         // the judgment cannot change the checkout, by the harness and not by a promise. That row
@@ -871,10 +1377,21 @@ const handlers = (s: Setup) => {
           saveStep({ ...last, judged: { box, answer } });
         }
 
-        return { text: JSON.stringify(move) };
+        return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
+    typecheck_run: (cmd: { head: string }) =>
+      Effect.gen(function* () {
+        const head = cmd.head || (saved().head ?? "");
+        note(`typecheck: \`pnpm typecheck\` of ${head.slice(0, 8)} merged with origin/main`);
+        const minutes = yield* TypecheckMinutes;
+        const { MAIN: main, BOXES: boxes } = env;
+        const verdict = yield* Typecheck.run({ main, boxes, lane: s.lane, head, minutes });
+        note(`typecheck: ${Typecheck.summary(verdict)}`);
+        return verdict;
+      }).pipe(Effect.provide(NodeServices.layer)),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
+        s.beats.enter("pr", null);
         const title = (s.brief.sections.pr ?? "")
           .split("\n")[0]
           ?.replace(/^#+\s*/, "")
@@ -916,7 +1433,11 @@ const handlers = (s: Setup) => {
           "",
           "## Steps",
           "",
-          `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (Codex in a box, or Claude for ${["mutation", ...s.claude].join(", ")}); the lead agent wrote no step's work. Steps and dollars:`,
+          `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (${providers(
+            saved().steps.map((e) => e.step),
+            s.claude,
+            s.exec,
+          )}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
         ].join("\n");
@@ -952,6 +1473,7 @@ const handlers = (s: Setup) => {
     // as a comment before anything lands (0014); a comment that fails is exit 2, never a pass.
     loosen: (cmd: { pr: number; head: string }) =>
       Effect.sync(() => {
+        s.beats.enter("loosening", null);
         sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
         const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
 
@@ -985,9 +1507,62 @@ const handlers = (s: Setup) => {
 
         return { code: ran.code, text };
       }),
+    host_run: (cmd: { round: number; head: string }) =>
+      Effect.gen(function* () {
+        const round = earlier + cmd.round;
+        const head = cmd.head || (saved().head ?? "");
+        const entry: StepRecord = {
+          round,
+          step: "host",
+          note: "",
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+          line: null,
+          judged: null,
+        };
+        saveStep(entry);
+        s.beats.enter("host", null);
+        note(`round ${round}: starting host at ${head.slice(0, 8)} (${s.host.length} commands)`);
+        const args = {
+          main: env.MAIN,
+          boxes: env.BOXES,
+          lane: s.lane,
+          ticket: s.ticket,
+          branch: s.branch,
+          plan: s.plan,
+          head,
+          round,
+          commands: s.host,
+          minutes: yield* HostMinutes,
+        };
+        const hosted = yield* Host.host(args).pipe(
+          Effect.catchTag("StepFailed", (e) =>
+            Effect.succeed({ outcome: Outcome.stuck(e.reason), head, log: null } satisfies Host.Hosted),
+          ),
+        );
+        const ended = new Date().toISOString();
+        yield* Host.recordInLane(args, hosted, ended).pipe(
+          Effect.catch((e) => Effect.sync(() => note(`round ${round}: host could not write the state file: ${e}`))),
+        );
+        const line: Line = {
+          outcome: Host.outcomeName(hosted.outcome),
+          head: hosted.head,
+          reason: hosted.outcome.reason,
+          report: hosted.log,
+          box: `${s.lane}-host${round}`,
+          exit: hosted.outcome._tag === "stuck" ? 30 : 0,
+          // A host stuck is the tool's (git, the signer, the push); the host step runs no agent.
+          fault: hosted.outcome._tag === "stuck" ? "tool" : null,
+          listUsd: null,
+        };
+        saveStep({ ...entry, endedAt: ended, line });
+        note(`round ${round}: host ${line.outcome}, head ${hosted.head.slice(0, 8)}: ${line.reason.slice(0, 200)}`);
+        return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
+      }).pipe(Effect.provide(NodeServices.layer)),
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
         note(`catchup.sh ${cmd.pr} ${s.ticket}`);
+        s.beats.enter("land", null);
         const size = existsSync(errFile) ? statSync(errFile).size : 0;
         const ran = yield* spawnEffect("sh", [join(HERE, "catchup.sh"), String(cmd.pr), s.ticket], {
           errFile,
@@ -1003,6 +1578,33 @@ const handlers = (s: Setup) => {
       }),
   };
 };
+
+/**
+ * Which agent ran the lane's steps, for the PR body. It names only steps the lane ran, so a lane
+ * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
+ */
+export const providers = (
+  ran: readonly string[],
+  claude: ReadonlySet<StepName>,
+  exec: ReadonlySet<StepName> = new Set(),
+): string => {
+  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+  const onExec = on("codex-exec");
+  const onClaude = on("claude");
+  return [
+    "Codex in a box",
+    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
+    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
+  ].join(", ");
+};
+
+/**
+ * Which agent a step runs on: mutation on drive's `MUTATION_AGENT`; else Claude for a step
+ * `--claude` names, plain `codex exec` for one `--codex-exec` names, and Codex through ACP for the
+ * rest. `--claude` wins a step both name.
+ */
+export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
+  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
 
 /** One table row per step the lane ran, with its list-price dollars from the rows file. */
 export const stepsTable = (
@@ -1056,7 +1658,7 @@ export const chainMain = (args: string[], env: Env) =>
 
     if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(briefPath)) {
       console.error(
-        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start tests|build|mutation|review]",
+        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] [--model sonnet|opus] [--start tests|build|mutation|review]",
       );
       process.exit(2);
     }
@@ -1083,14 +1685,26 @@ export const chainMain = (args: string[], env: Env) =>
     }
 
     const brief = sectionsOf(readFileSync(briefPath, "utf8"));
-    const missing = [...STEPS, "pr"].filter((k) => !brief.sections[k]);
+    const missing = lacks(brief, start);
 
     if (missing.length > 0) {
       console.error(`chain.ts: the lane brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);
       process.exit(2);
     }
 
+    const host = Host.hostCommands(brief.sections.host);
+
+    if (brief.sections.host !== undefined && host.length === 0) {
+      console.error("chain.ts: the lane brief's `## host` names no command in a fenced block");
+      process.exit(2);
+    }
+
+    const record = chainFile(join(env.BOXES, "state", `${lane}-chain.json`), lane);
+    const beats = beating(record);
+    // A beat left by a process that died is not this one's: its phase must not lend its `since`.
+    beats.clear();
     const setup: Omit<Setup, "agents"> = {
+      beats,
       env,
       lane,
       ticket,
@@ -1098,23 +1712,42 @@ export const chainMain = (args: string[], env: Env) =>
       plan,
       brief,
       claude: stepSet(flag(args, "--claude")),
+      exec: stepSet(flag(args, "--codex-exec")),
       electron: stepSet(flag(args, "--electron")),
       model: flag(args, "--model") ?? "sonnet",
+      host,
     };
-    const limits: Limits = { maxSteps: yield* MaxSteps, maxStucks: yield* MaxStucks };
+    const backstop = yield* backstopFor(plan, briefPath);
+    const limits: Limits = {
+      maxSteps: yield* MaxSteps,
+      maxStucks: yield* MaxStucks,
+      intensity: { count: yield* IntensityCount, within: yield* IntensityWithin },
+      backstop,
+    };
     const machine = makeMachine(limits);
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const handle = yield* run(machine, {
       ctx: undefined,
       interpret: handlers({ ...setup, agents }),
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // The beat between phase changes; it stops with this scope, or with a call that blocks.
+    const every = Schedule.spaced(Duration.millis(Beat.EVERY));
+    yield* Effect.sync(beats.tick).pipe(Effect.repeat(every), Effect.forkScoped);
     yield* runtime.dispatch({ type: "start", step: start });
     const end = yield* runtime.done();
 
     if (end.phase !== "over") {
       return yield* Effect.die(`chain stopped in ${end.phase}`);
+    }
+
+    const { stop } = end.end;
+    beats.clear();
+
+    // The stop goes in the chain record with the rule that fired and what was spent (0076).
+    if (stop !== undefined) {
+      record.writeRecord({ ...record.readRecord(), stop });
     }
 
     console.log(
@@ -1124,10 +1757,42 @@ export const chainMain = (args: string[], env: Env) =>
         rounds: end.lane.round,
         head: end.lane.head,
         reason: end.end.reason,
+        dollars: Math.round(end.lane.dollars * 100) / 100,
+        ...(stop === undefined ? {} : { stop }),
+        // Never a silent skip: a typecheck that did not run says so on the last line.
+        ...(end.lane.unchecked === null ? {} : { typecheck: `did not run: ${end.lane.unchecked}` }),
         exit: exitOf(end.end),
       }),
     );
     return end.end;
+  });
+
+/**
+ * The lane's backstop: `BackstopTimes` the estimate in the approved plan, else in the lane brief.
+ * With none, one printed line says the backstop is skipped and `MaxSteps` holds. The numbers go to
+ * stderr only, never into a step's brief or the state file a judgment reads (0076).
+ */
+const backstopFor = (plan: string, brief: string) =>
+  Effect.gen(function* () {
+    const times = yield* BackstopTimes;
+    const maxSteps = yield* MaxSteps;
+    const found = [plan, brief].flatMap((path) => {
+      const estimate = existsSync(path) ? estimateIn(readFileSync(path, "utf8")) : null;
+      return estimate === null ? [] : [{ path, estimate }];
+    })[0];
+
+    if (found === undefined) {
+      console.error(
+        `chain.ts: no estimate in steps and dollars in ${plan} or ${brief}; the backstop is skipped, and MaxSteps (${maxSteps}) holds`,
+      );
+      return null;
+    }
+
+    const backstop = backstopFrom(found.estimate, times);
+    console.error(
+      `chain.ts: backstop ${backstop.steps} steps, $${backstop.dollars.toFixed(2)}: ${times} times the estimate in ${found.path}`,
+    );
+    return backstop;
   });
 
 /** A limit's override from the environment, when set and a number. */
@@ -1151,6 +1816,11 @@ const main = () => {
       overridden(MaxWaits, "CHAIN_WAITS"),
       overridden(MaxStucks, "CHAIN_STUCKS"),
       overridden(MaxSteps, "CHAIN_STEPS"),
+      overridden(IntensityCount, "CHAIN_INTENSITY"),
+      overridden(IntensityWithin, "CHAIN_WITHIN"),
+      overridden(BackstopTimes, "CHAIN_BACKSTOP"),
+      overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
+      overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
     ),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));

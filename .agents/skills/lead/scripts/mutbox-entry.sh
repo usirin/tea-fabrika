@@ -27,11 +27,12 @@ unset IFS
 node_modules/.bin/vitest run --maxWorkers=1 --reporter=json --outputFile=/out/baseline.json "$@" \
 	> /out/baseline.txt 2>&1 || exit 71
 
-# arm <name> <ticket>: one run.sh round, its files copied to /out/<name>.
+# arm <name> <ticket> <baseline>: one run.sh round, its files copied to /out/<name>. The baseline is
+# the plain run of the arm's own tests here, which sets its test limit (ticket 605).
 arm() {
 	mkdir -p "/out/$1"
 	code=0
-	T=$2 sh .agents/skills/mutation/scripts/run.sh > "/out/$1/run.txt" 2>&1 || code=$?
+	BASELINE=$3 T=$2 sh .agents/skills/mutation/scripts/run.sh > "/out/$1/run.txt" 2>&1 || code=$?
 	for f in report.json sample.json log.txt events; do
 		[ ! -e "/tmp/mut-$2/$f" ] || cp -R "/tmp/mut-$2/$f" "/out/$1/"
 	done
@@ -45,11 +46,13 @@ arm() {
 if git rev-parse -q --verify refs/heads/base > /dev/null; then
 	export SINCE=refs/heads/base
 fi
-arm b "$T"
+arm b "$T" /out/baseline.json
 b=$(cat /out/b/exit)
 
 # Arm a: the same sample against the related tests as the base has them. A test the base lacks
-# is left out of that arm.
+# is left out of that arm. Stryker stops when a test fails in its dry run, so arm a first runs the
+# base's tests on the build and keeps only the files that pass; /out/a-kept names them, and
+# /out/a-baseline.json says why the rest were dropped (ticket 655).
 if git rev-parse -q --verify refs/heads/base > /dev/null; then
 	kept=
 	for f in "$@"; do
@@ -58,8 +61,21 @@ if git rev-parse -q --verify refs/heads/base > /dev/null; then
 			kept="$kept${kept:+,}$f"
 		fi
 	done
+	passing=
 	if [ -n "$kept" ]; then
-		RELATED=$kept arm a "${T}a"
+		IFS=,
+		set -- $kept
+		unset IFS
+		node_modules/.bin/vitest run --maxWorkers=1 --reporter=json --outputFile=/out/a-baseline.json "$@" \
+			> /out/a-baseline.txt 2>&1 || :
+		passing=$(node -e '
+const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+process.stdout.write(r.testResults.filter((t) => t.status === "passed").map((t) => t.name.replace(/^\/repo\//, "")).join(","));
+' /out/a-baseline.json 2> /dev/null) || passing=
+	fi
+	printf '%s\n' "$passing" > /out/a-kept
+	if [ -n "$passing" ]; then
+		RELATED=$passing arm a "${T}a" /out/a-baseline.json
 	fi
 fi
 exit "$b"

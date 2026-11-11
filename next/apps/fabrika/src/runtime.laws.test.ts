@@ -1,4 +1,4 @@
-// P12, next/. Project and Gateway use their real composition and SQLite services.
+// P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
+import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
+import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
-import { revokeText, SigningRefused, Start, type From } from "@kampus/libfabrika/coordination";
-import type { SpanRow } from "@kampus/libfabrika/data";
+import { type From } from "@kampus/libfabrika/processes/Mailbox";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Attached } from "@kampus/libfabrika/transport";
-import { GatewayService, gatewayRuntime } from "@kampus/libfabrika/workers/gateway";
+import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Attached } from "@kampus/libfabrika/transport/Wire";
+import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
@@ -156,7 +159,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    STAGE: JSON.stringify({
+    INSTANCE: JSON.stringify({
       name: "project-test",
       person: PERSON,
       founder: key.line,
@@ -181,7 +184,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         };
       },
     },
-    GATEWAY: {
+    CONNECTION: {
       getByName: () => ({ ring: () => onRing(), notify: async () => {}, probe: async () => 42 }),
     },
     RECORD: {
@@ -192,7 +195,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
         },
       }),
     },
-    HEALTH: {},
+    MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => ({
@@ -343,7 +346,7 @@ describe("P12 Project authority", () => {
     await w.run(
       w.p.brain(event).pipe(Effect.withParentSpan(Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" }))),
     );
-    const [row] = await w.run(w.p.read("door/brain", 0, "audit"));
+    const [row] = await w.run(w.p.read("gateway/brain", 0, "audit"));
     const { _tag, ...body } = event;
     expect(row).toMatchObject({ traceId: trace, id: write, _tag, body });
   });
@@ -351,7 +354,7 @@ describe("P12 Project authority", () => {
     const w = await world(trace, build);
     const first = w.p.boot;
     const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-    await w.run(w.p.exit(first.process, "normal", w.from));
+    await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
     const configured = w.configured.length;
     const reopened = await w.reopen();
     expect(reopened.boot).toEqual(first);
@@ -378,7 +381,7 @@ describe("P12 Project authority", () => {
     const result = await w.run(Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")));
     expect(result).toMatchObject({ _tag: "Success", value: { by: { _tag: "person" } } });
     // The saved delivery is independent evidence of the declaration used at admission.
-    const saved = w.db.prepare("SELECT saved FROM door_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
+    const saved = w.db.prepare("SELECT saved FROM gateway_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
     expect(JSON.parse(String(saved!.saved))).toMatchObject({
       input: { personOnly: true, process: pid },
     });
@@ -455,7 +458,7 @@ describe("P12 Project authority", () => {
       } else if (operation === "start") {
         await w.start();
       } else if (operation === "exit") {
-        await w.run(w.p.exit(pid, "normal", w.from));
+        await w.run(w.p.exit(pid, { _tag: "normal" }, w.from));
       } else {
         await w.send(pid, "inc", letter);
         await w.run(w.p.inbox(pid, w.received[0]!));
@@ -513,7 +516,7 @@ describe("P12 Project saved and wire readers", () => {
       value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
-  it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+  it("saved instance settings fail through the Project runtime's typed error channel", async () => {
     const encoded = Schema.fromJsonString(Settings);
     const invalid = fc
       .oneof(
@@ -530,7 +533,7 @@ describe("P12 Project saved and wire readers", () => {
           typed(
             await Effect.runPromiseExit(
               Effect.suspend(() => {
-                runtime = projectRuntime(w.ctx, { ...w.env, STAGE: raw });
+                runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
                 return runtime.contextEffect;
               }),
             ),
@@ -568,7 +571,7 @@ describe("P12 Project saved and wire readers", () => {
               typed(await w.run(Effect.exit(w.p.own(pid, "invalid-event", "events", raw))));
             } else {
               w.db
-                .prepare("UPDATE stage_descriptors SET value=?, pending=? WHERE process=?")
+                .prepare("UPDATE dev_descriptors SET value=?, pending=? WHERE process=?")
                 .run(JSON.stringify(raw), reader === "pending descriptor" ? 1 : 0, pid);
               const exit =
                 reader === "pending descriptor"
@@ -620,7 +623,7 @@ describe("P12 WebCrypto failures", () => {
             } else {
               // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
               const bucket = { put } as unknown as R2Bucket;
-              await expect(bucketCalls(bucket).put("health", body, "0".repeat(64))).rejects.toMatchObject({
+              await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
                 _tag: "LedgerError",
                 reason: "crypto",
               });
@@ -642,7 +645,7 @@ describe("P12 WebCrypto failures", () => {
   }
 });
 
-describe("P12 Gateway recording", () => {
+describe("P12 Connection recording", () => {
   for (const operation of ["ring", "probe", "close", "notify"] as const) {
     law(`an authenticated ${operation} records through the project's sink`, async ({ letter, rev }) => {
       const w = await world(),
@@ -667,7 +670,7 @@ describe("P12 Gateway recording", () => {
         },
         close: () => {},
       };
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Connection
       const ctx = {
         id: { name: "gateway-test" },
         storage: storage(db),
@@ -682,10 +685,10 @@ describe("P12 Gateway recording", () => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
       const config = await Effect.runPromise(settings(w.env));
-      const runtime = gatewayRuntime(ctx, { ...w.env, PROJECT: project }, config);
+      const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
 
       try {
-        const gateway = await runtime.runPromise(GatewayService),
+        const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
         const action: Effect.Effect<unknown, unknown> =
           operation === "ring"
@@ -697,7 +700,7 @@ describe("P12 Gateway recording", () => {
                 : gateway.notify(letter, { method: "view.patch", params: {} });
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `gateway.${operation}`)).toBe(true);
+        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
           expect(rows.some((row) => !row.ok)).toBe(true);

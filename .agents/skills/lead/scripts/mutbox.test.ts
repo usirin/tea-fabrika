@@ -1,10 +1,46 @@
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
+// mutbox.ts reads the plan's owners through plancheck.sh, so its laws run when that or what it reads changes.
+import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
+import "../../step-commit/scripts/exam.py?raw";
+import "../../step-commit/scripts/stepcommit.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./botpush.mjs?raw";
+import "./box.sh?raw";
+import "./clauderow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+import "./env.sh?raw";
+import "./fieldrow.py?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gc.ts?raw";
+import "./keepruns.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./lane.ts?raw";
+import "./leakgrep.sh?raw";
+import "./redact.sh?raw";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import packageJson from "../../../../package.json" with { type: "json" };
@@ -13,20 +49,29 @@ import entry from "./mutbox-entry.sh?raw";
 import dockerfile from "./mutbox.Dockerfile?raw";
 import {
   baseNode,
+  bounded,
+  buildOwns,
+  CallTimeout,
+  DOCKER_SECONDS,
+  droppedFromArmA,
   exitCode,
   imageTag,
   judge,
+  KILL_GRACE_SECONDS,
   LABEL,
   LIMITS,
   mountable,
   narrowed,
+  narrowingUnknown,
   needsHost,
   OWNER,
   parseRelated,
   pnpmVersion,
+  reachLine,
   runArgs,
   secondsFor,
   tally,
+  timeoutLine,
 } from "./mutbox.ts";
 
 // Today's lead tooling. The pure parts are properties. The flow runs the real script against a
@@ -149,19 +194,49 @@ describe("mutbox, the pure parts", () => {
     );
   });
 
-  // Plant: answer null for every source, so a window test is counted as run.
-  it("a test that imports Electron or a browser driver needs the host; no other test does", () => {
+  // Plants: answer null for every source, so a window test is counted as run; match the text
+  // `from "electron"` anywhere, so a plant string counts (the old regex, ticket 655); count a
+  // type-only import; miss `require` or `import()`.
+  it("a test that loads Electron or a browser driver needs the host; a plant string or a type import does not", () => {
+    const loader = fc.constantFrom(
+      (m: string, q: string) => `import {x} from ${q}${m}${q};\n`,
+      (m: string, q: string) => `import ${q}${m}${q};\n`,
+      (m: string, q: string) => `const x = await import(${q}${m}${q});\n`,
+      (m: string, q: string) => `const x = require(${q}${m}${q});\n`,
+      (m: string, q: string) => `export * from ${q}${m}${q};\n`,
+    );
+    const inert = fc.constantFrom(
+      (m: string, q: string) => `import type {X} from ${q}${m}${q};\n`,
+      (m: string, q: string) => `const plant = \`import {app} from ${q}${m}${q}; app.quit();\`;\n`,
+      (m: string) => `const plant = 'import {app} from "${m}"';\n`,
+      (m: string, q: string) => `// import {app} from ${q}${m}${q};\n`,
+    );
     fc.assert(
       fc.property(
         fc.constantFrom("electron", "playwright", "@playwright/test"),
         fc.constantFrom('"', "'"),
         fc.constantFrom("vitest", "./electron.ts", "effect", "node:net"),
-        (name, quote, other) => {
-          expect(needsHost(`import {x} from ${quote}${name}${quote};\n`)).toMatch(/no display/);
-          expect(needsHost(`import {x} from ${quote}${other}${quote};\n`)).toBeNull();
+        loader,
+        inert,
+        (name, quote, other, load, quiet) => {
+          expect(needsHost("a.test.ts", load(name, quote))).toMatch(/no display/);
+          expect(needsHost("a.test.ts", load(other, quote))).toBeNull();
+          expect(needsHost("a.test.ts", `import {it} from "vitest";\n${quiet(name, quote)}`)).toBeNull();
         },
       ),
-      options,
+      {
+        ...options,
+        // pinned: lane t389's oxlint-plugins/e2e-windows.test.ts, left out though it opens no window.
+        examples: [
+          [
+            "electron",
+            '"',
+            "vitest",
+            (m, q) => `import {x} from ${q}${m}${q};\n`,
+            (m) => `const p = \`import {BrowserWindow as W} from "${m}";\`;\n`,
+          ],
+        ],
+      },
     );
   });
 
@@ -220,9 +295,10 @@ describe("mutbox, the pure parts", () => {
         fc.option(fc.array(fc.constant("src/a.ts:1:0-1:5"), { maxLength: 2 }), { nil: null }),
         fc.option(fc.array(row, { maxLength: 6 }), { nil: null }),
         (exit, ranges, rows) => {
-          const sample = ranges === null ? null : { seed: 119120, ranges, total: 2, selected: 2, left: 0 };
+          const files = [{ file: "src/a.ts", total: 2, selected: 2 }];
+          const sample = ranges === null ? null : { seed: 119120, ranges, total: 2, selected: 2, left: 0, files };
           const b = rows === null ? null : tally(exit, "report", rows, 2);
-          const got = judge({ exit, sample, b, failed: ["a.test.ts: fails"] });
+          const got = judge({ exit, sample, b, failed: ["a.test.ts: fails"], base: null, owners: null });
           expect(exitCode(got.outcome)).toBe({ done: 0, skip: 40, stuck: 30 }[got.outcome]);
 
           if (got.outcome === "done") {
@@ -248,7 +324,156 @@ describe("mutbox, the pure parts", () => {
       options,
     );
   });
+
+  // Lane t389, 2026-11-10: five rounds read done with no arm a, and with the hook, the launcher
+  // and the rule unreached. A gap the run knows about is a done that names it, with narrowing
+  // unknown; only an unexpected arm a or an unreached build file is stuck. Plants, each one: make
+  // no_reach or no_arm_a stuck; drop a gap from the reason; read none_pass as base_has_none; drop
+  // the arm_a_failed or no_build_reach check; count a build file with no mutant on its changed
+  // lines as missed; read folder owners by the shortest row; call narrowing known with a gap.
+  it("property: a known gap is a done that names it, and an unexpected arm a or an unreached build file is stuck", () => {
+    const reach = fc.array(
+      fc.record({
+        file: fc.constantFrom("src/a.ts", "src/b.cjs", "lib/c.ts", "lib/x/d.ts"),
+        total: fc.nat({ max: 3 }),
+        selected: fc.nat({ max: 3 }),
+      }),
+      { maxLength: 4 },
+    );
+    const owner = fc.constantFrom("build", "tests", "lead");
+    const owners = fc.option(
+      fc.record({ "src/a.ts": owner, "src/b.cjs": owner, "lib/": owner, "lib/x/": owner }, { requiredKeys: [] }),
+      { nil: null },
+    );
+    const arm = fc.option(
+      fc.constantFrom(0, 1, 124).map((exit) => tally(exit, "report", [], 2)),
+      { nil: null },
+    );
+    const base = fc.option(
+      fc
+        .record({ a: arm, has: fc.nat({ max: 2 }), drop: fc.nat({ max: 2 }) })
+        .map(({ a, has, drop }) => ({ a, has, kept: Math.max(0, has - drop) })),
+      { nil: null },
+    );
+    fc.assert(
+      fc.property(fc.option(reach, { nil: undefined }), base, owners, (files, base, owners) => {
+        const sample = { seed: 119120, ranges: ["src/a.ts:1:0-1:5"], total: 2, selected: 2, left: 0, files };
+        const b = tally(0, "report", [{ ...killedRow }], 2);
+        const got = judge({ exit: 0, sample, b, failed: [], base, owners });
+        const owns = (file: string) => {
+          const map: Record<string, string> = owners ?? {};
+          const key =
+            file in map
+              ? file
+              : Object.keys(map)
+                  .filter((k) => k.endsWith("/") && file.startsWith(k))
+                  .sort((x, y) => y.length - x.length)[0];
+          return key !== undefined && map[key] === "build";
+        };
+        const owned = (files ?? []).filter((f) => f.total > 0 && owns(f.file));
+        const stuck =
+          base !== null && base.kept > 0 && (base.a === null || ![0, 124].includes(base.a.exit))
+            ? "arm_a_failed"
+            : owned.length > 0 && owned.every((f) => f.selected === 0)
+              ? "no_build_reach"
+              : null;
+        const gaps = [
+          ...(files === undefined ? ["no_reach:old_sampler"] : []),
+          ...(base !== null && base.kept === 0
+            ? [base.has === 0 ? "no_arm_a:base_has_none" : "no_arm_a:none_pass"]
+            : []),
+        ];
+
+        const unknown = stuck === null && gaps.length > 0;
+        expect({
+          outcome: got.outcome,
+          reason: got.reason,
+          unknown: narrowingUnknown(got.reason),
+          said: got.detail.includes("narrowing is unknown"),
+          named: stuck !== "no_build_reach" || got.detail.includes(owned[0]?.file ?? ""),
+          empty: got.detail === "",
+        }).toEqual({
+          outcome: stuck === null ? "done" : "stuck",
+          reason: stuck ?? gaps.join(","),
+          unknown,
+          said: unknown,
+          named: true,
+          empty: stuck === null && gaps.length === 0,
+        });
+      }),
+      {
+        ...options,
+        examples: [
+          // pinned: lane t389's build owned electron-hook.d.cts, a file no mutant can ever reach.
+          [[{ file: "src/b.cjs", total: 0, selected: 0 }], null, { "src/b.cjs": "build" }],
+          // pinned: lane t389's base had none of its related tests.
+          [[{ file: "src/a.ts", total: 1, selected: 1 }], { a: null, has: 0, kept: 0 }, null],
+          // pinned: t502b's base tests failed on the build, so none passed.
+          [[{ file: "src/a.ts", total: 1, selected: 1 }], { a: null, has: 2, kept: 0 }, null],
+        ],
+      },
+    );
+  });
+
+  // Plants: keep a failing base test; name a missing file as failing; drop the failing test's name.
+  it("property: arm a leaves out exactly the related tests not kept, each with why", () => {
+    const paths = ["src/a.test.ts", "src/b.test.ts", "src/c.test.ts", "src/d.test.ts"];
+    fc.assert(
+      fc.property(
+        fc.subarray(paths),
+        fc.func(fc.boolean()),
+        fc.string({ minLength: 1, maxLength: 8 }),
+        (onBase, passes, name) => {
+          const kept = onBase.filter((p) => passes(p));
+          const baseline = {
+            testResults: onBase.map((p) => ({
+              name: `/repo/${p}`,
+              assertionResults: [{ fullName: `${name} ${p}`, status: kept.includes(p) ? "passed" : "failed" }],
+            })),
+          };
+          const dropped = droppedFromArmA(paths, onBase, kept, baseline);
+          expect(dropped.map((d) => d.path)).toEqual(paths.filter((p) => !kept.includes(p)));
+
+          for (const d of dropped) {
+            expect(d.reason).toBe(
+              onBase.includes(d.path)
+                ? `its base version fails on the build: ${name} ${d.path}`
+                : "the base has no such file",
+            );
+          }
+        },
+      ),
+      options,
+    );
+  });
+
+  // format: the line the report gains, read by the lead and the mutation agent.
+  it("format: the reach line counts the changed files with a mutant and names each without one", () => {
+    expect(
+      reachLine([
+        { file: "a.ts", total: 4, selected: 2 },
+        { file: "b.cjs", total: 3, selected: 0 },
+        { file: "index.ts", total: 0, selected: 0 },
+      ]),
+    ).toBe(
+      "the sample reached 1 of 3 changed files; zero mutants in b.cjs (3 mutants on its changed lines, none selected), index.ts (no mutant on its changed lines)",
+    );
+    expect(reachLine([{ file: "a.ts", total: 1, selected: 1 }])).toBe("the sample reached 1 of 1 changed files");
+    expect(buildOwns({ "lib/": "tests", "lib/x/": "build" }, "lib/x/d.ts")).toBe(true);
+    expect(buildOwns({ "lib/": "build", "lib/x/d.ts": "tests" }, "lib/x/d.ts")).toBe(false);
+  });
 });
+
+const killedRow = {
+  file: "src/a.ts",
+  line: 1,
+  column: 0,
+  endLine: 1,
+  endColumn: 4,
+  mutator: "BooleanLiteral",
+  replacement: "false",
+  status: "Killed",
+};
 
 // The stand-in docker: it writes every call to calls.log and plays the container from container.sh.
 const DOCKER = `#!/bin/sh
@@ -279,7 +504,17 @@ const mutant = (status: string, line: number) => ({
 const DONE = `
 mkdir -p "$OUT/b"
 echo 0 > "$OUT/b/exit"
-echo '${JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-1:4"], total: 2, selected: 2, left: 0 })}' > "$OUT/b/sample.json"
+echo '${JSON.stringify({
+  seed: 119120,
+  ranges: ["src/a.ts:1:0-1:4"],
+  total: 2,
+  selected: 2,
+  left: 0,
+  files: [
+    { file: "src/a.ts", total: 2, selected: 2 },
+    { file: "src/b.cjs", total: 3, selected: 0 },
+  ],
+})}' > "$OUT/b/sample.json"
 echo '${JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("Killed", 1), mutant("Survived", 2)] } } })}' > "$OUT/b/report.json"
 echo '${JSON.stringify({
   testResults: [
@@ -309,6 +544,10 @@ type Setup = {
   seconds?: number;
   lockfile?: string;
   outName?: string;
+  /** Flags after the fixed ones, such as `--plan` or `--base`, from the test folder and the build. */
+  args?: (at: { dir: string; build: string }) => string[];
+  /** Files written into the test folder, beside the checkout, before the run. */
+  files?: Record<string, string>;
 };
 
 /** A real git checkout with two commits, a stand-in docker, and one run of the real script. */
@@ -377,6 +616,10 @@ const run = (setup: Setup = {}) => {
     writeFileSync(join(fake, "leftover"), `${setup.leftover}\n`);
   }
 
+  for (const [path, text] of Object.entries(setup.files ?? {})) {
+    writeFileSync(join(dir, path), text);
+  }
+
   const started = Date.now();
   const ran = spawnSync(
     process.execPath,
@@ -396,6 +639,7 @@ const run = (setup: Setup = {}) => {
       "--lock",
       lock,
       ...(setup.seconds === undefined ? [] : ["--seconds", String(setup.seconds)]),
+      ...(setup.args?.({ dir, build }) ?? []),
     ],
     {
       encoding: "utf8",
@@ -451,6 +695,8 @@ describe("mutbox, the run against a stand-in docker", () => {
       excluded: [],
       skipped: ["src/a.test.ts: on a Mac only (skipped)"],
       usage: { memoryPeakBytes: 1000, cpuSeconds: 2.5 },
+      reach:
+        "the sample reached 1 of 2 changed files; zero mutants in src/b.cjs (3 mutants on its changed lines, none selected)",
       b: { exit: 0, from: "report", tested: 2, counts: { Killed: 1, Survived: 1 } },
       a: null,
       narrowing: null,
@@ -596,6 +842,58 @@ describe("mutbox, the run against a stand-in docker", () => {
     }
   });
 
+  // scenario: lane t389 read done five times with its build's files unreached and no arm a.
+  // Plants: skip the plan read; drop the no_build_reach check; make no_arm_a stuck; leave
+  // narrowing null or armA out; drop the arm_a_failed check.
+  it("scenario: a build file with no mutant is stuck, no passing base test is a done with narrowing unknown", () => {
+    const plan = (file: string) => `# Plan\n\n| File | Owner step |\n| --- | --- |\n| \`${file}\` | build |\n`;
+    const missed = run({
+      files: { "plan.md": plan("src/b.cjs") },
+      args: ({ dir }) => ["--plan", join(dir, "plan.md")],
+    });
+    expect(missed.code, missed.text).toBe(30);
+    expect(missed.summary).toMatchObject({ outcome: "stuck", reason: "no_build_reach" });
+    expect(missed.summary.detail).toContain("src/b.cjs");
+    expect(missed.summary.reach).toContain("1 of 2 changed files");
+
+    const reached = run({
+      files: { "plan.md": plan("src/a.ts") },
+      args: ({ dir }) => ["--plan", join(dir, "plan.md")],
+    });
+    expect(reached.code, reached.text).toBe(0);
+    expect(reached.summary).toMatchObject({ outcome: "done", reason: "" });
+
+    const unread = run({ args: ({ dir }) => ["--plan", join(dir, "no-such-plan.md")] });
+    expect(unread.summary).toMatchObject({ outcome: "stuck", reason: "bad_plan" });
+    expect(unread.ranContainer).toBe(false);
+
+    // The base has src/a.test.ts, and its one test fails on the build: dropped, so no arm a ran.
+    const failing = JSON.stringify({
+      testResults: [{ name: "/repo/src/a.test.ts", assertionResults: [{ fullName: "adds", status: "failed" }] }],
+    });
+    const none = run({
+      run: `${DONE}\necho '${failing}' > "$OUT/a-baseline.json"\necho > "$OUT/a-kept"\n`,
+      args: ({ build }) => ["--base", `${build}^`],
+    });
+    expect(none.code, none.text).toBe(0);
+    expect(none.summary).toMatchObject({
+      outcome: "done",
+      reason: "no_arm_a:none_pass",
+      a: null,
+      narrowing: "unknown",
+      armA: { dropped: [{ path: "src/a.test.ts", reason: "its base version fails on the build: adds" }] },
+    });
+    expect(none.line).toContain("no_arm_a:none_pass");
+
+    // A kept base test and no arm a answer is not a known state.
+    const lost = run({
+      run: `${DONE}\necho src/a.test.ts > "$OUT/a-kept"\n`,
+      args: ({ build }) => ["--base", `${build}^`],
+    });
+    expect(lost.code, lost.text).toBe(30);
+    expect(lost.summary).toMatchObject({ outcome: "stuck", reason: "arm_a_failed", armA: { dropped: [] } });
+  });
+
   // Plant: follow a link the container planted, and read a file from outside the output folder.
   it("a link planted in the output is never read through", () => {
     const got = run({
@@ -671,7 +969,7 @@ describe("mutbox, the run against a stand-in docker", () => {
   it("when the five minutes ran out, what Stryker kept in its events is the report", () => {
     const tested = (n: number, status: string) => JSON.stringify({ ...mutant(status, n), fileName: "/repo/src/a.ts" });
     const got = run({
-      run: `mkdir -p "$OUT/b/events"\necho 124 > "$OUT/b/exit"\necho '${JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-9:4"], total: 5, selected: 5, left: 0 })}' > "$OUT/b/sample.json"\necho '${tested(1, "Killed")}' > "$OUT/b/events/00002-onMutantTested.json"\necho '${tested(2, "Survived")}' > "$OUT/b/events/00003-onMutantTested.json"\necho '{}' > "$OUT/b/events/00000-onDryRunCompleted.json"\nexit 124\n`,
+      run: `mkdir -p "$OUT/b/events"\necho 124 > "$OUT/b/exit"\necho '${JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-9:4"], total: 5, selected: 5, left: 0, files: [{ file: "src/a.ts", total: 5, selected: 5 }] })}' > "$OUT/b/sample.json"\necho '${tested(1, "Killed")}' > "$OUT/b/events/00002-onMutantTested.json"\necho '${tested(2, "Survived")}' > "$OUT/b/events/00003-onMutantTested.json"\necho '{}' > "$OUT/b/events/00000-onDryRunCompleted.json"\nexit 124\n`,
     });
     expect(got.code, got.text).toBe(0);
     expect(got.summary).toMatchObject({
@@ -732,6 +1030,96 @@ describe("mutbox gc against a stand-in docker", () => {
     const down = gc({ down: true });
     expect(down.code, down.text).toBe(0);
     expect(down.text).toContain("Docker is not running");
+  });
+});
+
+// 2026-11-10: a `docker ps` in gc never returned, and two lanes sat 1 h 50 min with no agent.
+// The stand-in is a real child process that writes its pid, then waits for one line on stdin.
+// Without that line it never ends by itself.
+// That line comes at `delay` on the test clock, so the child's run time follows the test clock and
+// a 30 s bound costs milliseconds. Plants: drop the bound; time out but leave the child running;
+// fail with something other than CallTimeout; stop a call that answered in time.
+describe("a call past its bound is stopped, and its child with it", () => {
+  const seconds = DOCKER_SECONDS.call;
+  const limit = seconds * 1000;
+  const alive = (pid: number) => spawnSync("kill", ["-0", String(pid)]).status === 0;
+  const readPid = (file: string) =>
+    Effect.sync(() => (existsSync(file) ? Number(readFileSync(file, "utf8").trim()) || 0 : 0));
+  /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
+  const lineAt = (delay: number) =>
+    Stream.fromEffect(
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (delay > now) {
+          yield* Effect.sleep(delay - now);
+        }
+
+        return new TextEncoder().encode("go\n");
+      }),
+    );
+  const called = (delay: number, script: string) =>
+    Effect.gen(function* () {
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), "mutbox-bound-")));
+      made.push(dir);
+      const file = join(dir, "pid");
+      const fiber = yield* bounded("sh", ["-c", script, "sh", file], seconds, lineAt(delay)).pipe(Effect.forkChild);
+      // On the live clock: wait until the child is up and reading, then move the test clock.
+      const pid = yield* readPid(file).pipe(
+        Effect.repeat({ until: (p) => p > 0, schedule: Schedule.spaced("5 millis") }),
+        TestClock.withLive,
+      );
+      yield* TestClock.adjust(delay);
+      const exit = yield* Effect.exit(Fiber.join(fiber));
+      return { exit, pid };
+    }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, TestClock.layer())));
+  // At end of input with no line it hangs, as `exec sleep`, keeping its pid: only a kill ends it.
+  const waits = 'echo $$ > "$1"; read line || exec sleep 600; echo "got $line"';
+
+  it("an answer before the bound is read whole; past it, CallTimeout and no child left", () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.oneof(fc.integer({ min: 0, max: limit - 1 }), fc.integer({ min: limit + 1, max: 10 * limit })),
+        (delay) =>
+          called(delay, waits).pipe(
+            Effect.tap(({ exit, pid }) =>
+              Effect.sync(() => {
+                expect(exit).toStrictEqual(
+                  delay < limit
+                    ? Exit.succeed({ out: "got go\n", err: "", code: 0 })
+                    : Exit.fail(new CallTimeout({ command: `sh -c ${waits}`, seconds })),
+                );
+                expect(alive(pid)).toBe(false);
+              }),
+            ),
+            Effect.asVoid,
+            Effect.runPromise,
+          ),
+      ),
+      { seed: 1110, numRuns: 25 },
+    ));
+
+  // scenario: a hung client that ignores SIGTERM still goes, by SIGKILL after the grace. Its
+  // `sleep` inherits the ignored TERM. This one waits the grace on the real clock.
+  it("scenario: a child that ignores SIGTERM is killed after the grace", () => {
+    const started = Date.now();
+    return called(2 * limit, `trap '' TERM; ${waits}`).pipe(
+      Effect.tap(({ exit, pid }) =>
+        Effect.sync(() => {
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(alive(pid)).toBe(false);
+          expect(Date.now() - started).toBeGreaterThanOrEqual(KILL_GRACE_SECONDS * 1000);
+        }),
+      ),
+      Effect.runPromise,
+    );
+  });
+
+  // format: the line gc prints, after "mutbox gc: ", before it exits 0 and the chain goes on.
+  it("format: the line a timed-out call leaves", () => {
+    expect(timeoutLine(new CallTimeout({ command: "docker ps -aq", seconds: 30 }))).toBe(
+      "docker ps -aq passed its 30 s limit and was stopped",
+    );
   });
 });
 
