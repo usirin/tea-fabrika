@@ -249,10 +249,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   is in `reason`), 30 stuck, 40 skip (`answer: skip <why>`: nothing here for the step, such as a
   mutation step whose diff has no product lines; its field row says `skip`, which review's order
   check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
-  `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
-  `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
-  out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a mutation step
-  while another run holds the one Docker box), or a `box.sh new` start check
+  `refused:<check>`: `agent_cap` (12 agents running, 0012: Codex boxes plus Claude steps drive
+  started), `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's
+  branch checked out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a
+  mutation step while another run holds the one Docker box), or a `box.sh new` start check
   (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
   step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
