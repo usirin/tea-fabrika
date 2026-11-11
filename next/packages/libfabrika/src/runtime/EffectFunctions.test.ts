@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, fromHere, type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -262,7 +263,7 @@ describe("T285, ledger tracing keep-laws", () => {
               }).pipe(
                 request,
                 Effect.withParentSpan(Tracer.externalSpan(ctx)),
-                Effect.provide(Ledger.sql(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))),
+                Effect.provide(LedgerSql.layer(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))),
                 Effect.provideService(
                   Clock.Clock,
                   clock(() => 100_000),
@@ -333,7 +334,7 @@ describe("T285, ledger tracing keep-laws", () => {
                 request,
                 Effect.withParentSpan(Tracer.externalSpan(ctx)),
                 Effect.withTracer(c.tracer),
-                Effect.provide(Ledger.sql(d.sql, { reader: a.reader }).pipe(Layer.provide(bell))),
+                Effect.provide(LedgerSql.layer(d.sql, { reader: a.reader }).pipe(Layer.provide(bell))),
               ),
             );
           } finally {
@@ -385,7 +386,7 @@ describe("T285, ledger tracing keep-laws", () => {
                 request,
                 Effect.withParentSpan(Tracer.externalSpan(ctx)),
                 Effect.withTracer(c.tracer),
-                Effect.provide(Ledger.sql(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))),
+                Effect.provide(LedgerSql.layer(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))),
               ),
             );
           } finally {
@@ -416,7 +417,7 @@ describe("T285, coordination tracing keep-laws", () => {
             person: PERSON,
             by: a.by,
             build: a.build,
-          }).pipe(Layer.provide(Ledger.sql(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))));
+          }).pipe(Layer.provide(LedgerSql.layer(d.sql, { reader: a.reader }).pipe(Layer.provide(quiet))));
 
           try {
             await Effect.runPromise(
@@ -844,7 +845,7 @@ const runnerWorld = (
   const writer = { process: PROCESS };
   const owner = Writer.cases.person.make({ key: a.key, for: PERSON });
   const base = Layer.mergeAll(
-    Ledger.sql(data.sql, { reader: "runner-test" }).pipe(Layer.provide(quiet)),
+    LedgerSql.layer(data.sql, { reader: "runner-test" }).pipe(Layer.provide(quiet)),
     SessionManager.layer(sessions.sql, () => Effect.succeed(owner), {
       input: () => false,
       event: () => false,

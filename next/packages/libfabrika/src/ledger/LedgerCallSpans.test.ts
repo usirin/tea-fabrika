@@ -4,6 +4,7 @@ import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
+import * as LedgerRemote from "./LedgerRemote.ts";
 import { Appended, Entry, Line, PAGE, Waited } from "./Log.ts";
 
 const CHECK = { seed: 119120, numRuns: 40 };
@@ -122,7 +123,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
                 expect(yield* ledger.wait(c.stream, rows.length)).toEqual(wait);
               }
             }).pipe(
-              Effect.provide(Ledger.remote(stub, { reader })),
+              Effect.provide(LedgerRemote.layer(stub, { reader })),
               Effect.withParentSpan(Tracer.externalSpan(parent)),
               Effect.withTracer(tracer),
             ),
@@ -196,7 +197,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
                       : ledger.append(stream, "id", line(parent.traceId, "body"));
                 return yield* Effect.exit(operation);
               }).pipe(
-                Effect.provide(Ledger.remote(stub, { reader })),
+                Effect.provide(LedgerRemote.layer(stub, { reader })),
                 Effect.withParentSpan(Tracer.externalSpan(parent)),
                 Effect.withTracer(tracer),
               ),

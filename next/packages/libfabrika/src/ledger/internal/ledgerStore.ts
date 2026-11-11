@@ -15,6 +15,7 @@ import { LedgerError } from "../Ledger.ts";
 import type { LedgerTurn } from "../LedgerTransaction.ts";
 import { Appended, Entry, Line, PAGE, Row, Waited } from "../Log.ts";
 import type { Referee } from "../Referee.ts";
+import { STREAM, tag } from "./ledgerTrace.ts";
 
 /** Cloudflare's row limit, so node:sqlite answers what workerd would (flag 13). */
 const MOST_BYTES = 2_000_000;
@@ -31,14 +32,10 @@ const TABLES = [
 		"to" TEXT NOT NULL, stream TEXT NOT NULL, after INTEGER NOT NULL, PRIMARY KEY ("to", stream))`,
 ];
 
-/** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.ledger.*` for the rest. */
-/** @internal */
-export const STREAM = "messaging.destination.name";
+/** Span tag keys past `STREAM` and `tag`: OpenTelemetry's messaging and error names. */
 const ID = "messaging.message.id";
 const OPERATION = "messaging.operation.type";
 const ERROR = "error.type";
-/** @internal */
-export const tag = (name: string): string => `fab.ledger.${name}`;
 
 /** A waiter to ring, as the rings table holds it. */
 const Ring = Schema.Struct({ to: Schema.String, after: Rev });

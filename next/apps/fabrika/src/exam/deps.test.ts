@@ -429,6 +429,42 @@ const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
   return all.flat();
 };
 
+/** What a browser bundle of `file` loads, and what its output keeps, each relative to `next`. Tree
+ *  shaking drops a module from the output, never from the loaded list. A bundle that fails throws. */
+const bundleContents = async (
+  next: string,
+  file: string,
+): Promise<{ readonly loaded: ReadonlyArray<string>; readonly output: ReadonlyArray<string> }> => {
+  const loaded: Array<string> = [];
+  const watch: Plugin = {
+    name: "loaded",
+    load(id) {
+      loaded.push(shown(next, id));
+      return null;
+    },
+  };
+  const bundle = await rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [watch] });
+
+  try {
+    const { output } = await bundle.generate({ format: "esm" });
+    const kept = output.flatMap((chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+    return { loaded, output: kept.map((id) => shown(next, id)) };
+  } finally {
+    await bundle.close();
+  }
+};
+
+/** The Ledger contract's implementation: its two layers, their helpers, the referee and its store
+ *  (ticket 702's plan: `Ledger.ts` imports neither implementation, nor either helper, nor `Referee`). */
+const LEDGER_IMPLEMENTATION: ReadonlyArray<string> = [
+  "packages/libfabrika/src/ledger/LedgerSql.ts",
+  "packages/libfabrika/src/ledger/LedgerRemote.ts",
+  "packages/libfabrika/src/ledger/Referee.ts",
+  "packages/libfabrika/src/ledger/internal/ledgerStore.ts",
+  "packages/libfabrika/src/ledger/internal/ledgerPages.ts",
+  "packages/libfabrika/src/ledger/internal/ledgerTrace.ts",
+];
+
 describe("the real next/", () => {
   it("P17a: the public door exists and bundles for a browser", async () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
@@ -455,6 +491,23 @@ describe("the real next/", () => {
     });
     expect(missing).toEqual([]);
   });
+  // pinned: one named public contract (0095, ticket 702). Bundled alone for a browser, the Ledger
+  // contract loads none of its implementation, so a tab that yields `Ledger` never carries SQL.
+  // The entry must exist and the bundle must build: a missing entry or a failed bundle is red.
+  it("pinned: contract only Ledger reaches no store", async () => {
+    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+    expect(library).toBeDefined();
+    const entry = exportAt(exportMap(library!), "./ledger/Ledger");
+    expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
+    const file = entry.kind === "file" ? entry.file : "";
+    expect(existsSync(file), "the Ledger contract file exists").toBe(true);
+    const { loaded, output } = await bundleContents(NEXT, file);
+    expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
+    expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
+    expect(loaded.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+    expect(output.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+  });
+
   it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
     expect(manifestFaults(NEXT)).toEqual([]);
   });
