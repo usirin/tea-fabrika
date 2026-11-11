@@ -175,9 +175,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
-- **A pull request changes at most 600 lines of product code** (owner, 2026-11-10, a trial that
-  only advises until replayed): bigger work is a stack of slices the plan cuts, each landing whole
-  with its tests ([0087](./.decisions/0087-a-pull-request-caps-product-lines.md)).
+- **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
+  slices, each landing whole with its tests, by what works on its own and never to fit a count
+  ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
   `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
