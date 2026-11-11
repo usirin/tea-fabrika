@@ -5,7 +5,8 @@
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { expect } from "vitest";
-import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import { LedgerError } from "../data/index.ts";
+import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
 class WireFault extends Error {
   override name = "WireFault";
@@ -59,6 +60,48 @@ it.effect.prop(
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// `rejected` turns that message back into the thrown class for a failed span. Plants: rebuild every
+// error, rebuild a message with no `<class>: `, or keep the `<class>: ` prefix in the rebuilt text.
+it.effect.prop(
+  "rejected rebuilds an unreachable LedgerError's `<class>: <text>` as an error of that class and text",
+  {
+    name: Schema.Literals(["", "Error", "TypeError", "WireFault", "string", "object"]),
+    text: Schema.String,
+  },
+  ({ name, text }) =>
+    Effect.sync(() => {
+      const thrown = rejected(new LedgerError({ reason: "unreachable", message: `${name}: ${text}` }));
+      expect(thrown).toBeInstanceOf(Error);
+      expect(thrown).not.toBeInstanceOf(LedgerError);
+      expect(Reflect.get(Object(thrown), "name")).toBe(name);
+      expect(Reflect.get(Object(thrown), "message")).toBe(text);
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+it.effect.prop(
+  "rejected keeps any other error as it is",
+  {
+    reason: Schema.Literals(["bad_row", "storage", "refused", "crypto"]),
+    text: Schema.String.check(Schema.isMinLength(1)),
+  },
+  ({ reason, text }) =>
+    Effect.sync(() => {
+      const others = [
+        new LedgerError({ reason, message: `Error: ${text}` }),
+        new LedgerError({ reason }),
+        new LedgerError({ reason: "unreachable" }),
+        new LedgerError({ reason: "unreachable", message: text.replaceAll(": ", "") }),
+        new Error(`Error: ${text}`),
+      ];
+
+      for (const error of others) {
+        expect(rejected(error)).toBe(error);
+      }
     }),
   { arbitrary: { runs: 200, seed: 119120 } },
 );
