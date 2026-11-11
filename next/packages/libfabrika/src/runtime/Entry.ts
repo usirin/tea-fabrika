@@ -68,6 +68,9 @@ export type Loaded = {
 /** The one Cmd that only the chaos program may run (P17, P27). */
 const CHAOS_ONLY: Readonly<Record<string, string>> = { fire: "chaos" };
 
+/** The Cmd the runner performs itself (P41): no caller-supplied handler ever runs it. */
+const BUILT_IN = new Set(["send"]);
+
 export class ProgramLoader extends Context.Service<
   ProgramLoader,
   { readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown> }
@@ -113,7 +116,7 @@ export class ProgramLoader extends Context.Service<
                 const owner = CHAOS_ONLY[cmd];
                 const run = Object.hasOwn(handlers, cmd) ? handlers[cmd] : undefined;
 
-                if (run === undefined || (owner !== undefined && owner !== name)) {
+                if (run === undefined || BUILT_IN.has(cmd) || (owner !== undefined && owner !== name)) {
                   return Option.none();
                 }
 

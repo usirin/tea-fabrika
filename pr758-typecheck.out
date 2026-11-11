@@ -1,0 +1,52 @@
+$ sh scripts/typecheck.sh
+[WARN] This project requires Node.js 26.13.0. Your current Node.js is v22.22.3
+typescript skipped because its hash matches the replacement.
+[WARN] This project requires Node.js 26.13.0. Your current Node.js is v22.22.3
+next/packages/libfabrika typecheck$ tsc --noEmit -p .
+.github/ci typecheck$ tsc --noEmit -p .
+.agents typecheck$ tsc --noEmit -p .
+oxlint-plugins typecheck$ tsc --noEmit -p .
+.github/ci typecheck: Done
+packages/fabrika typecheck$ tsc --noEmit -p .
+oxlint-plugins typecheck: Done
+packages/fabrika-design typecheck$ tsc --noEmit -p .
+.agents typecheck: Done
+packages/promises typecheck$ tsc --noEmit -p .
+next/packages/libfabrika typecheck: Done
+next/programs/counter typecheck$ tsc --noEmit -p .
+packages/fabrika-design typecheck: Done
+packages/promises typecheck: Done
+packages/fabrika typecheck: Done
+docs/tutorials/agents typecheck$ tsc --noEmit -p .
+docs/tutorials/two-hosts typecheck$ tsc --noEmit -p .
+packages/ledger-server typecheck$ tsc --noEmit -p .
+next/programs/counter typecheck: Done
+packages/pipeline typecheck$ tsc --noEmit -p .
+packages/ledger-server typecheck: Done
+programs/counter typecheck$ tsc --noEmit -p .
+docs/tutorials/agents typecheck: Done
+next/apps/fabrika typecheck$ tsc --noEmit -p .
+docs/tutorials/two-hosts typecheck: Done
+programs/counter typecheck: Done
+next/apps/fabrika typecheck: Done
+packages/pipeline typecheck: Done
+programs/experiment typecheck$ tsc --noEmit -p .
+programs/experiments typecheck$ tsc --noEmit -p .
+programs/pipeline typecheck$ tsc --noEmit -p .
+programs/compare typecheck$ tsc --noEmit -p .
+programs/experiment typecheck: Done
+programs/tracker typecheck$ tsc --noEmit -p .
+programs/experiments typecheck: Done
+programs/compare typecheck: Done
+programs/markdown typecheck$ tsc --noEmit -p .
+programs/markdown typecheck: Done
+programs/pipeline typecheck: Done
+programs/tracker typecheck: Done
+programs/map typecheck$ tsc --noEmit -p .
+programs/trace typecheck$ tsc --noEmit -p .
+programs/ticket typecheck$ tsc --noEmit -p .
+programs/ticket typecheck: Done
+programs/map typecheck: Done
+programs/trace typecheck: Done
+apps/fabrika typecheck$ tsc --noEmit -p .
+apps/fabrika typecheck: Done

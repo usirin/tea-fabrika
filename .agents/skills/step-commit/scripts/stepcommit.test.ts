@@ -25,6 +25,8 @@ import "../../lead/scripts/pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../lead/scripts/boxnode.ts?raw";
 import "../../lead/scripts/fieldrow.py?raw";
 import "../../lead/scripts/runplan.sh?raw";
@@ -413,6 +415,132 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         );
       }),
       options,
+    );
+  });
+
+  // The exam is the test writer's (nobody-writes-their-own-exam.md): a tests commit takes an exam
+  // path the plan gives to no step. 2026-11-11: three tests steps lost their laws to not_owner on a
+  // renamed test file, a fixture test and .oxlintrc.json the plan did not name.
+  // Plants: allow every unlisted path; allow an exam path the plan gives to build or lead, or one
+  // under another step's / row; allow it for build, lead or mutation; check build's owner first.
+  it("K4 a tests commit takes an exam path the plan gives to no step, and nothing else of another's", () => {
+    const exam = [
+      (name: string) => `.agents/skills/${name}/scripts/${name}.test.ts`,
+      (name: string) => `next/${name}/${name}.test.ts`,
+      (name: string) => `fixtures/next/${name}.json`,
+      () => ".oxlintrc.json",
+    ];
+    const plain = [(name: string) => `src/${name}-unknown.ts`, (name: string) => `next/${name}/${name}.ts`];
+    type Row = "none" | "tests" | "build" | "lead" | "build-folder";
+    fc.assert(
+      fc.property(
+        word,
+        fc.boolean(),
+        fc.nat(3),
+        fc.constantFrom<Row>("none", "tests", "build", "lead", "build-folder"),
+        fc.constantFrom<Owner>("tests", "build", "lead", "mutation"),
+        (name, isExam, pick, row, step) => {
+          const path = isExam ? exam[pick % exam.length]!(name) : plain[pick % plain.length]!(name);
+          const rows: Array<[string, string]> = [["src/owned.ts", "tests"]];
+
+          if (row === "build-folder") {
+            rows.push([path.slice(0, path.lastIndexOf("/") + 1) || "src/", "build"]);
+          } else if (row !== "none") {
+            rows.push([path, row]);
+          }
+
+          withRepo(rows, (r) => {
+            r.changed(path, path.endsWith(".json") ? "[]\n" : 'export const value = "changed";\n');
+            const got = r.commit(step, [path]);
+            const owner = row === "build-folder" && path.includes("/") ? "build" : row;
+            const allowed =
+              owner === step ||
+              (step === "mutation" && owner === "tests") ||
+              (step === "tests" && owner === "none" && isExam);
+            // The build's exam refusal (exit 3) comes before any owner check.
+            const code = step === "build" && isExam ? 3 : allowed ? 0 : 1;
+            expect(
+              {
+                code: got.code,
+                head: r.git("rev-parse", "HEAD").trim() === r.base ? "base" : "new",
+                notOwner: got.text.includes(`not_owner: ${path}`),
+                signs: r.signs().length,
+              },
+              got.text,
+            ).toEqual({ code, head: code ? "base" : "new", notOwner: code === 1, signs: code ? 0 : 1 });
+            expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").includes(path)).toBe(!code);
+          });
+        },
+      ),
+      // pinned: each refusal and the one new yes, so a sample can never skip them: unlisted exam
+      // path as tests (yes), as build (exit 3), as lead and mutation (no); an exam path the plan
+      // gives to build or lead, or under build's / row, as tests (no); an unlisted plain path as tests.
+      {
+        ...options,
+        numRuns: 6,
+        examples: [
+          ["one", true, 0, "none", "tests"],
+          ["one", true, 3, "none", "tests"],
+          ["one", true, 0, "none", "build"],
+          ["one", true, 1, "none", "lead"],
+          ["one", true, 2, "none", "mutation"],
+          ["one", true, 0, "build", "tests"],
+          ["one", true, 1, "lead", "tests"],
+          ["one", true, 0, "build-folder", "tests"],
+          ["one", false, 0, "none", "tests"],
+        ],
+      },
+    );
+  }, 180_000);
+
+  // scenario: what the new yes must not open. A deletion is checked as any other path, so a
+  // deleted unlisted exam path commits as tests and stays refused when the plan gives it to build.
+  // The exam list is the box base's, so a list widened in an earlier commit or in the same one
+  // takes no product path. Plants: skip deletions; read the checkout's or HEAD's exam-paths.json.
+  it("scenario: a deleted unlisted exam path commits as tests, and a widened exam list takes nothing", () => {
+    const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
+    const widened = (r: Repo) => {
+      const list = JSON.parse(readFileSync(join(r.repo, "exam-paths.json"), "utf8"));
+      r.changed("exam-paths.json", `${JSON.stringify([...list, { ...list[0], glob: "src/**" }])}\n`);
+    };
+    each(["delete", "delete-build", "widened-before", "widened-same"] as const, (kind) =>
+      withRepo(kind === "delete-build" ? [[fixture, "build"]] : [["src/owned.ts", "tests"]], (r) => {
+        let paths = [fixture];
+
+        if (kind === "delete" || kind === "delete-build") {
+          rmSync(join(r.repo, fixture));
+        } else {
+          widened(r);
+
+          if (kind === "widened-before") {
+            r.git("commit", "-q", "-am", "an earlier lane commit widens the exam");
+            paths = ["src/new-unknown.ts"];
+          } else {
+            paths = ["exam-paths.json", "src/new-unknown.ts"];
+          }
+
+          r.changed("src/new-unknown.ts");
+        }
+
+        const head = r.git("rev-parse", "HEAD").trim();
+        const got = r.commit("tests", paths);
+        const ok = kind === "delete";
+        expect(
+          {
+            code: got.code,
+            moved: r.git("rev-parse", "HEAD").trim() !== head,
+            notOwner: got.text.match(/not_owner: (\S+)/)?.[1] ?? null,
+            signs: r.signs().length,
+          },
+          got.text,
+        ).toEqual({
+          code: ok ? 0 : 1,
+          moved: ok,
+          notOwner: ok ? null : kind === "delete-build" ? fixture : "src/new-unknown.ts",
+          signs: ok ? 1 : 0,
+        });
+        expect(r.git("show", "--format=", "--name-status", "HEAD").trim() === `D\t${fixture}`).toBe(ok);
+      }),
     );
   });
 

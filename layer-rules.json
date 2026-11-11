@@ -77,6 +77,11 @@
       "paths": ["next/packages/libfabrika/src/presence"]
     },
     {
+      "name": "next-jobs",
+      "layer": 3,
+      "paths": ["next/packages/libfabrika/src/jobs"]
+    },
+    {
       "name": "next-ledger",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/ledger"]
@@ -85,6 +90,11 @@
       "name": "next-transport",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/transport"]
+    },
+    {
+      "name": "next-settings",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/settings"]
     },
     {
       "name": "next-telemetry",

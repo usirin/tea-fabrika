@@ -2,13 +2,14 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
+//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
-// (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
+// (.decisions/0026, 0028). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
+// the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
 // commits them as one signed step commit through stepcommit, with main's own signer. A mutation
@@ -104,12 +105,25 @@ import { pgrepAnswer, skipLine } from "./pgrep.ts";
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
-const AGENTS = ["codex", "claude"] as const;
+const AGENTS = ["codex", "codex-exec", "claude"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
-/** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
-export const stepProvider = (agent: AgentName, step: StepName): Provider =>
-  agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
+/**
+ * The provider row a step's agent runs on: Codex only reads for a plan or a review. `codex` is
+ * Codex through ACP; `codex-exec` is the installed `codex exec`, plain (./codexexec.ts).
+ */
+export const stepProvider = (agent: AgentName, step: StepName): Provider => {
+  const reads = step === "plan" || step === "review";
+
+  switch (agent) {
+    case "claude":
+      return "claude";
+    case "codex":
+      return reads ? "codex-read" : "codex";
+    case "codex-exec":
+      return reads ? "codex-exec-read" : "codex-exec";
+  }
+};
 
 // ---------------------------------------------------------------- the outcome
 
@@ -1820,7 +1834,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1926,7 +1940,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--electron is for --agent claude; a Codex box cannot start Electron");
   }
 
-  if (agent === "codex" && p.model !== undefined) {
+  if (agent !== "claude" && p.model !== undefined) {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 

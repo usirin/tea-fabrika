@@ -19,6 +19,8 @@ import "./pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./catchup.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -93,10 +95,11 @@ import {
   slotRefusal,
   slotSchedule,
   STEPS,
+  stepAgent,
   type StepName,
   stepsTable,
 } from "./chain.ts";
-import { FAULTS, faultFrom } from "./drive.ts";
+import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 
 // Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -999,6 +1002,41 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     expect(rows).toHaveLength(5);
     expect(rows[2]).toContain("| tests | l-tests1 | done |");
     expect(rows.at(-1)).toBe("| total | | | 0.00 |");
+  });
+
+  it("property: --claude wins a step, --codex-exec comes next, ACP Codex is the rest, and mutation stays on its agent", () => {
+    fc.assert(
+      fc.property(fc.constantFrom(...STEPS), fc.subarray([...STEPS]), fc.subarray([...STEPS]), (step, claude, exec) => {
+        const agent = stepAgent(step, new Set(claude), new Set(exec));
+        const want =
+          step === "mutation"
+            ? MUTATION_AGENT
+            : claude.includes(step)
+              ? "claude"
+              : exec.includes(step)
+                ? "codex-exec"
+                : "codex";
+        expect(agent).toBe(want);
+        // Of the chain's steps only the review reads without writing, as on ACP Codex.
+        const reads = step === "review";
+        expect(stepProvider("codex-exec", step)).toBe(reads ? "codex-exec-read" : "codex-exec");
+        expect(stepProvider("codex", step)).toBe(reads ? "codex-read" : "codex");
+      }),
+      options,
+    );
+  });
+
+  it("property: the body names plain codex exec only for steps the lane ran on it", () => {
+    fc.assert(
+      fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude, exec) => {
+        const text = providers(ran, new Set(claude), new Set(exec));
+        const onExec = STEPS.filter(
+          (s) => s !== "mutation" && ran.includes(s) && exec.includes(s) && !claude.includes(s),
+        );
+        expect(text.includes("plain codex exec")).toBe(onExec.length > 0);
+      }),
+      options,
+    );
   });
 
   // 0066: a lane that ran no mutation step claims none. Plants: always name mutation; name a

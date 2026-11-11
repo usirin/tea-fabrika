@@ -112,8 +112,8 @@ Every service and every runtime in `next/`. Stops at tea: a program's state live
 ## Services awaiting their slice
 
 `Ledger` (ticket 702, slice 1), `Referee` and `LedgerTransaction` (ticket 723, slice 3) are
-converted so far. The rest still carry static layers, and each moves in its own slice. A search of
-`next/packages/libfabrika/src` outside tests finds 20 static Layer members, for example
+converted alongside ClientManager (ticket 731) so far. The rest still carry static layers, and each moves in its own slice. A search of
+`next/packages/libfabrika/src` outside tests finds 19 static Layer members, for example
 `Mailbox.layer` (`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
 (`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1622`). The Node adapter,
 `next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
@@ -142,6 +142,17 @@ bundle exam's load hook and output module list).
 `Layer.build` plus `provideContext` works and passes every law, and it looks like control. It costs
 in reading: each call site must remember to provide, and a forgotten one is a missing-service defect
 at run time, not a type error.
+
+ClientManager keeps Founder, Written and its explicit service type in
+`next/packages/libfabrika/src/access/ClientManager.ts:9`. Its ledger implementation is
+`access/ClientManagerLedger.ts:83`, consumed as `ClientManagerLedger.layer(founder)`.
+Building captures Ledger without writing; founding, replay and write spans retain their timing.
+Gateway imports the sibling only as a type for its founder argument.
+
+Ticket 731's direct browser contract bundle loads **259** modules and keeps **79**, matching
+the approved sketch, against the plan's baseline **265/86** (Rolldown 1.2.13).
+The bundle exam inspects both loaded and kept ids for ClientManagerLedger, AccessFold,
+Referee, RefereeSql, LedgerTransactionSql and ledgerStore.
 
 ## Holds it
 
