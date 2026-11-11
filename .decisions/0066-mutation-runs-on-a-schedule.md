@@ -1,7 +1,7 @@
 ---
 id: 0066
 title: Mutation testing leaves the pull request's steps and runs hourly against main, with its findings filed as tickets
-status: amended-in-part by [0067](0067-hourly-mutation-runs-in-ci.md), [0077](0077-mutation-gaps-carry-a-category.md)
+status: amended-in-part by [0067](0067-hourly-mutation-runs-in-ci.md), [0077](0077-mutation-gaps-carry-a-category.md), [0089](0089-mutation-covers-lane-code.md)
 date: 2026-11-10
 tags: [mutation, steps, schedule, merge, exam, loosening, tracker]
 ---
@@ -77,6 +77,8 @@ and its narrowing list change. The rest of 0014 holds.
   started by hand each hour. The rest of this list holds.
 - Changed by [0077](0077-mutation-gaps-carry-a-category.md): each real gap's ticket carries a
   category, and a second gap of one category files one ticket against the tests step.
+- Changed by [0089](0089-mutation-covers-lane-code.md): of the lead tooling, the run tests only
+  the code that runs lanes (`chain.ts`, `drive.ts` and the flow runner).
 
 **Binding constraints:**
 

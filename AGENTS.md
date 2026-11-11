@@ -60,9 +60,10 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 19 of Tier 1's 39 rows have merged
+`next/` is on main, and 19 of Tier 1's 43 rows have merged
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
-added P38, [0069](./.decisions/0069-choices-are-settings.md)). Everything
+added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -168,6 +169,9 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
+- **A pull request changes at most 600 lines of product code** (owner, 2026-11-10, a trial that
+  only advises until replayed): bigger work is a stack of slices the plan cuts, each landing whole
+  with its tests ([0087](./.decisions/0087-a-pull-request-caps-product-lines.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
   `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
@@ -358,8 +362,8 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
   goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
-  337). No key, field, option or setting is named `where`, `why` or `what`: use the noun for the
-  value, such as `location`, `reason` or `scope` ([0081](./.decisions/0081-no-question-word-names.md)).
+  337). No key, field, option or setting is named `where`, `why`, `what`, `who` or `how`: use the
+  noun for the value, such as `location`, `reason`, `scope` or `to` ([0081](./.decisions/0081-no-question-word-names.md)).
   A key does not say again what its parent already says: inside
   an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
@@ -378,7 +382,7 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
   // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
-  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "ask", to: "owner", for: "approval" }
   { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.

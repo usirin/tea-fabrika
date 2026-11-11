@@ -123,6 +123,7 @@ trial (owner, 2026-11-10).**
   - The size cuts, and the count of people for each cut.
     *2026-11-10: [0082](0082-approvals-is-a-floor-for-every-run.md) names the base count, the repo
     setting `approvals`, a floor no run goes under; size moves the count from there.*
+    *2026-11-10, later: 0082's amendment renames that setting `review.human-approvals`.*
   - How the settings name a governed path's owners. That is a design for the settings study and
     Tier 1's row P38 ([the Tier 1 plan](../docs/plan/tier-1.md#the-pull-requests-one-at-a-time)).
   - Whether today's `[ship] approval = codeowners` stays as one option.
