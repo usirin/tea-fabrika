@@ -1,9 +1,10 @@
 // The one-file build (Tier 1, P12 and P16): every selected program as a sealed Worker Loader module,
-// every window script, chunk and stylesheet, and the brain that carries them all as text. Nothing
-// is published until every bundle and the Compiler check pass; a failure keeps the last good file.
+// every window script, chunk and stylesheet, the tab's script and page (P14), and the brain that
+// carries them all as text. Nothing is published until every bundle and the Compiler check pass; a
+// failure keeps the last good file.
 // Disk and paths go through Effect's FileSystem and Path, which the caller provides.
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
 import { bundle, bundlePrograms } from "./bundle.ts";
@@ -35,6 +36,9 @@ export type Options = {
   /** The Compiler ledger. Read from `<root>/compiler-ledger.json` when absent. */
   readonly ledger?: ReadonlyArray<Row>;
   readonly chaos: boolean;
+  /** The tab's window (P14): its entry module, built as one script at `/window.js`, and its
+   *  stylesheets in the order the page at `/index.html` applies them. Without it neither route exists. */
+  readonly tab?: { readonly entry: string; readonly styles: ReadonlyArray<string> };
 };
 
 /** The module the brain imports its tables from (`build-modules.d.ts`). */
@@ -177,6 +181,106 @@ const embed = (tables: Tables): Plugin => {
     },
   };
 };
+
+/** Effect probes for Node's `async_hooks` through `globalThis.process`, which a tab never has. The
+ *  probe is dead in a browser, so the tab's bundle drops it and names no Node module. */
+const NODE_PROBE = 'globalThis.process?.getBuiltinModule?.("node:async_hooks")';
+
+const browserOnly: Plugin = {
+  name: "fabrika-browser-only",
+  transform(code, id) {
+    if (id.includes("/effect/dist/") && code.includes(NODE_PROBE)) {
+      return { code: code.replace(NODE_PROBE, "undefined") };
+    }
+  },
+};
+
+/** Text that cannot end the element it sits in. */
+const inert = (text: string): string => text.replaceAll("</", "<\\/");
+
+/** Text that cannot leave the attribute it sits in. */
+const attribute = (text: string): string =>
+  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+
+/** The tab's page: every stylesheet embedded in order, and the script at `/window.js`, which `build`
+ *  names for the rows the tab records. No other request: the icon is empty. */
+const page = (styles: ReadonlyArray<string>, build: string): string =>
+  [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<meta name="color-scheme" content="light dark">',
+    `<meta name="fabrika-build" content="${attribute(build)}">`,
+    "<title>fabrika</title>",
+    '<link rel="icon" href="data:,">',
+    ...styles.map((css) => `<style>${inert(css)}</style>`),
+    "</head>",
+    "<body>",
+    '<div id="root"></div>',
+    '<script type="module" src="/window.js"></script>',
+    "</body>",
+    "</html>",
+  ].join("\n");
+
+const asset = (type: AssetType, body: string) =>
+  hash(body).pipe(
+    Effect.flatMap((digest) => Asset.makeEffect({ hash: digest, type, body })),
+    Effect.mapError(fail("bundle")),
+  );
+
+const PAGE = "index.html";
+
+const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
+  output
+    .filter((o) => o.type === "chunk")
+    .map((o) => o.code)
+    .join("\n");
+
+// The tab's page is an asset of the tab's own call, so the call that made the script made the page.
+const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
+  name: "fabrika-tab-page",
+  generateBundle(_options, output) {
+    const emit = hash(tabScript(Object.values(output))).pipe(
+      Effect.flatMap((build) =>
+        Effect.sync(() => {
+          this.emitFile({ type: "asset", fileName: PAGE, source: page(styles, build) });
+        }),
+      ),
+    );
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
+    return Effect.runPromiseWith(Context.empty())(emit);
+  },
+});
+
+// The tab's script, one ES module with React's production build, and its page.
+const tabAssets = Effect.fn("build.tab")(function* (
+  tab: NonNullable<Options["tab"]>,
+  plugins: Array<Plugin>,
+  cwd: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const styles = yield* Effect.forEach(tab.styles, (file) => fs.readFileString(file), { concurrency: 1 }).pipe(
+    Effect.mapError(fail("read")),
+  );
+  const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
+    phase: "tab",
+    cwd,
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    minify: true,
+  });
+  const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
+
+  if (html === undefined || typeof html.source !== "string") {
+    return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
+  }
+
+  return {
+    "/window.js": yield* asset("text/javascript; charset=utf-8", tabScript(output.output)),
+    "/index.html": yield* asset("text/html; charset=utf-8", html.source),
+  };
+});
 
 const recorded = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   work.pipe(
@@ -325,7 +429,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
   };
-  const assets = Object.keys(windows).length
+  const assets: Record<string, Asset> = Object.keys(windows).length
     ? yield* bundle(
         Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
         [entries, compiler, stylesheets(context, path)],
@@ -337,6 +441,17 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
         },
       ).pipe(Effect.flatMap((o) => collect(o.output)))
     : {};
+
+  if (options.tab !== undefined) {
+    for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
+      if (Object.hasOwn(assets, route)) {
+        return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+      }
+
+      assets[route] = file;
+    }
+  }
+
   const tables = yield* Tables.makeEffect({ programs, assets }).pipe(Effect.mapError(fail("table")));
   const output = yield* bundle(options.entry, [compiler, embed(tables), unreachableChunksPlugin()], {
     phase: "brain",

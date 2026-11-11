@@ -1,5 +1,5 @@
 // The tables one built brain file carries (P16): each program's compiled source with its hash, and
-// each window script, chunk and stylesheet with its route. The Node build assembles them and the
+// each window script, chunk, stylesheet and tab page with its route. The Node build assembles them and the
 // Worker adapters serve them; both read these shapes from here, so nothing here needs a platform.
 import { Effect, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
@@ -36,7 +36,12 @@ const hashed = <S extends Schema.Struct<{ readonly hash: typeof Hash }>>(
 export const BuiltProgram = hashed(Schema.Struct({ hash: Hash, source: Schema.String }), (p) => p.source);
 export type BuiltProgram = typeof BuiltProgram.Type;
 
-export const AssetType = Schema.Literals(["text/javascript; charset=utf-8", "text/css; charset=utf-8"]);
+// A tab's page (P14) is served at `/` from `/index.html`.
+export const AssetType = Schema.Literals([
+  "text/javascript; charset=utf-8",
+  "text/css; charset=utf-8",
+  "text/html; charset=utf-8",
+]);
 export type AssetType = typeof AssetType.Type;
 
 export const Asset = hashed(Schema.Struct({ hash: Hash, type: AssetType, body: Schema.String }), (a) => a.body);
