@@ -186,8 +186,16 @@ const embed = (tables: Tables): Plugin => {
  *  probe is dead in a browser, so the tab's bundle drops it and names no Node module. */
 const NODE_PROBE = 'globalThis.process?.getBuiltinModule?.("node:async_hooks")';
 
+/** A module a tab has no way to load: Node's or the Workers runtime's. */
+const PLATFORM = /^(?:node|cloudflare):/;
+
 const browserOnly: Plugin = {
   name: "fabrika-browser-only",
+  resolveId(id) {
+    if (PLATFORM.test(id)) {
+      this.error(`the tab reaches ${id}, which a browser cannot load`);
+    }
+  },
   transform(code, id) {
     if (id.includes("/effect/dist/") && code.includes(NODE_PROBE)) {
       return { code: code.replace(NODE_PROBE, "undefined") };
@@ -261,8 +269,12 @@ const tabAssets = Effect.fn("build.tab")(function* (
   cwd: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const styles = yield* Effect.forEach(tab.styles, (file) => fs.readFileString(file), { concurrency: 1 }).pipe(
-    Effect.mapError(fail("read")),
+  // A listed file that cannot be read fails as a read; then the window's own CSS check inlines its
+  // local `@import`s and refuses any local file it names.
+  const styles = yield* Effect.forEach(
+    tab.styles,
+    (file) => fs.readFileString(file).pipe(Effect.mapError(fail("read")), Effect.andThen(inlineStylesheet(file))),
+    { concurrency: 1 },
   );
   const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",

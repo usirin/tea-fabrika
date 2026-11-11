@@ -65,7 +65,13 @@ export const bundle = Effect.fn("build.bundle")(function* (
       }
     },
     platform: "browser" as const,
-    external: options.phase === "brain" ? ["cloudflare:workers", /^node:/] : ["cloudflare:workers"],
+    // A tab names no platform module, so nothing is external there: its build refuses one.
+    external:
+      options.phase === "brain"
+        ? ["cloudflare:workers", /^node:/]
+        : options.phase === "tab"
+          ? []
+          : ["cloudflare:workers"],
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };
