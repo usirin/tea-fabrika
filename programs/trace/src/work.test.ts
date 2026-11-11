@@ -96,17 +96,65 @@ describe("every cost path is counted, and nothing else (L2)", () => {
     );
   });
 
-  it("a LINEAR method costs its receiver's length", () => {
+  // The plan's LINEAR list, written out here and not imported, so a key the counter drops or
+  // misspells (its wrap skips a name that is not a function) costs 0 here and goes red. Each call
+  // touches every element: the callbacks never stop early. `concat`, `flat` and `flatMap` add their
+  // result's length (GROWS). `splice`, `shift` and `unshift` change the length, so their charge is
+  // the length before the call: after it, it would be 0, k - 1 and k + 3.
+  const LINEAR: Readonly<Record<string, readonly [args: readonly unknown[], cost: (k: number) => number]>> = {
+    concat: [[], (k) => 2 * k],
+    slice: [[], (k) => k],
+    splice: [[0], (k) => k],
+    includes: [[1], (k) => k],
+    indexOf: [[1], (k) => k],
+    lastIndexOf: [[1], (k) => k],
+    filter: [[() => true], (k) => k],
+    map: [[() => 0], (k) => k],
+    find: [[() => false], (k) => k],
+    findIndex: [[() => false], (k) => k],
+    findLast: [[() => false], (k) => k],
+    findLastIndex: [[() => false], (k) => k],
+    some: [[() => false], (k) => k],
+    every: [[() => true], (k) => k],
+    forEach: [[() => undefined], (k) => k],
+    reduce: [[(a: number) => a, 0], (k) => k],
+    reduceRight: [[(a: number) => a, 0], (k) => k],
+    join: [[], (k) => k],
+    sort: [[(a: number, b: number) => a - b], (k) => k],
+    toSorted: [[], (k) => k],
+    toSpliced: [[0, 1], (k) => k],
+    toReversed: [[], (k) => k],
+    reverse: [[], (k) => k],
+    with: [[0, 1], (k) => k],
+    flat: [[], (k) => 2 * k],
+    flatMap: [[(x: number) => [x, x]], (k) => 3 * k],
+    fill: [[1], (k) => k],
+    copyWithin: [[0, 1], (k) => k],
+    shift: [[], (k) => k],
+    unshift: [[1, 2, 3], (k) => k],
+  };
+
+  it("scenario: the list here names 30 real Array.prototype methods", () => {
+    const keys = Object.keys(LINEAR);
+    expect(keys).toHaveLength(30);
+    expect(keys.filter((key) => typeof Reflect.get(Array.prototype, key) !== "function")).toEqual([]);
+  });
+
+  it("every LINEAR method costs its receiver's length before the call, and GROWS adds its result's", () => {
     fc.assert(
-      fc.property(sizes, fc.constantFrom("includes", "indexOf", "slice", "join", "toReversed"), (k, key) => {
-        const xs = filled(k);
-        expect(workOf(() => Reflect.apply(Reflect.get(xs, key), xs, [1]))).toBe(k);
+      fc.property(fc.integer({ min: 1, max: 2_000 }), (k) => {
+        // Each method on its own fresh array: sort, splice and the rest change their receiver.
+        const charged = Object.entries(LINEAR).map(([key, [args, cost]]) => {
+          const xs = filled(k);
+          return [key, workOf(() => Reflect.apply(Reflect.get(xs, key), xs, args)), cost(k)] as const;
+        });
+        expect(charged.filter(([, work, cost]) => work !== cost)).toEqual([]);
       }),
       runs,
     );
   });
 
-  it("concat, flat and flatMap also cost their result's length", () => {
+  it("concat and flat also cost what their arguments or elements hold", () => {
     fc.assert(
       fc.property(sizes, (k) => {
         const xs = filled(k);
