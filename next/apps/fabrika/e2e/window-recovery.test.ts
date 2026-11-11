@@ -7,6 +7,8 @@
 //     --testTimeout=120000 --hookTimeout=120000 window-recovery.test.ts
 // Each kill is its own case, run five times; "the whole sequence" runs them all in one stage life,
 // five times. `held restart` here is a second kill while the first restart is still being held back.
+// Every test here is a scenario: a real workerd kill, a stage-parent kill, a held restart, a hung brain
+// and a full stop/start need OS processes, real Chromium and the saved test home.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";

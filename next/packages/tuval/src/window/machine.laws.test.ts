@@ -2289,7 +2289,7 @@ describe("window machine: a brain call in flight holds no timer (review 1, A)", 
     expect(seen).toHaveProperty(["a grant wait kept knocking with a knock in flight"]);
   });
 
-  it("a write settles at once: its ok is the frame handed over, never the brain's answer (A13)", async () => {
+  it("format: a write settles at once: its ok is the frame handed over, never the brain's answer (A13)", async () => {
     // reason: format, the `write` Cmd's settle is what tea folds right after its handler returns; a
     // write whose ok were a `Sent` or a view would be a Cmd that waits for the brain.
     // oxlint-disable-next-line fabrika/no-type-assertions -- the module is loaded by import() so a missing one is a red test; the cast names the shape the plan gives it

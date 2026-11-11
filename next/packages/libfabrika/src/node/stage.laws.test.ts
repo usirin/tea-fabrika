@@ -310,7 +310,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 // P14's "Layout and key tables": a stage given the commands reads the person's `keybindings.toml`
 // under its home and hands the checked table to the brain through the trusted `settings` call,
 // read by `stage:<name>` from the file. Mutation (seed 119120) found no Node law for this handoff.
-it("a stage given key commands hands the checked key file to the brain's settings call", async () => {
+it("scenario: a stage given key commands hands the checked key file to the brain's settings call", async () => {
   const home = mkdtempSync(join(tmpdir(), "p14-keys-"));
   const commands = ["counter.inc", "counter.dec", "counter.reset"];
   const file = `[keys]\n"counter.inc" = ["a"]\n"counter.reset" = []\n`;

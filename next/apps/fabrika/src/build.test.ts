@@ -377,7 +377,9 @@ describe("P14 browser build", () => {
   const pageRules = (page: string): unknown =>
     parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
 
-  it("the brain carries the page and the script in its tables, with Manti's styles, then the tokens, then Tuval's", async () => {
+  // scenario: one real app build through Rolldown, the Compiler and lightningcss on the repo's own
+  // entry and stylesheets; its output is fixed by those real files, so there is nothing to generate.
+  it("scenario: the brain carries the page and the script in its tables, with Manti's styles, then the tokens, then Tuval's", async () => {
     const { build } = await import("./build.ts");
     const out = join(home(), "dist");
     const built = await runNode(build({ out }));
