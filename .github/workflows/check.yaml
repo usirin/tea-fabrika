@@ -241,25 +241,14 @@ jobs:
       # 24.04 restricts by default (its README says so). On CI its tests never skip.
       # The image has none of the five (image 20261101.360 installs all of them new).
       # The runner's Azure mirror sometimes stops answering, and apt then waits with no end: 32 min
-      # on pull request 696, with the image's own apt limits set (Acquire::Retries 1, a 15 s
-      # timeout; actions/runner-images issue 14594). So each apt command gets a wall-clock limit
-      # and three tries; the cause is outside this repo (decision 0036). In 432 green jobs the
-      # step took at most 246 s; in the six slowest, `update` fetched in at most 16 s and `install`
-      # in at most 237 s.
+      # on pull request 696, over an hour on 2026-11-11 (actions/runner-images issue 14594). apt.sh
+      # gives each try a wall-clock limit and, after a failed try, drops the Azure mirror from the
+      # image's mirror list, so the next try asks archive.ubuntu.com first. Its comment holds the
+      # measured limits; the cause is outside this repo (decision 0036).
       - name: apt packages
         timeout-minutes: 12
         run: |
-          bounded() {
-            limit=$1
-            shift
-            for try in 1 2 3; do
-              sudo timeout --kill-after=10 "$limit" apt-get "$@" && return 0
-              echo "::warning::apt-get $1 failed or passed ${limit} s, try $try of 3"
-            done
-            return 1
-          }
-          bounded 60 update
-          bounded 300 install -y --no-install-recommends expect zsh bubblewrap socat ripgrep
+          sudo sh .github/ci/apt.sh install expect zsh bubblewrap socat ripgrep
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - run: pnpm install --frozen-lockfile
@@ -339,9 +328,13 @@ jobs:
       - run: pnpm exec vitest run next/ --shard "$SHARD"
         env:
           SHARD: ${{ matrix.shard }}/6
+      # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
+      # that answers, the same way as the test job's apt step.
       - name: chromium
         if: matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''
-        run: pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
+        run: |
+          sudo sh .github/ci/apt.sh update
+          pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       - run: node next/apps/fabrika/e2e.ts
         if: matrix.shard == 1
       # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner

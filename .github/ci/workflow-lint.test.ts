@@ -85,7 +85,9 @@ const valid = (label: string, extra: string) => ({
         {
           name: "chromium",
           if: "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-          run: "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+          run:
+            "sudo sh .github/ci/apt.sh update\n" +
+            "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n",
         },
         { run: "node next/apps/fabrika/e2e.ts", if: "matrix.shard == 1" },
         {
