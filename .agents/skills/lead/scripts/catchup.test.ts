@@ -5,6 +5,8 @@ import "./mutbox-entry.sh?raw";
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/scope.ts?raw";
@@ -18,7 +20,11 @@ import "./keepruns.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -30,6 +36,8 @@ import "./lane.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./freshmain.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
@@ -394,7 +402,7 @@ describe("catchup, today's tooling", () => {
       expect(got.code, got.text).toBe(stale ? 1 : 0);
       const looks = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts"));
       expect(looks.map((c) => c.args.slice(1))).toEqual([["900", tip]]);
-      const order = got.calls.map((c) => (c.cmd === "node" ? "look" : c.key));
+      const order = got.calls.map((c) => (c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts") ? "look" : c.key));
       const landing = order.filter((key) => key === "merge" || key === "stack");
       expect(landing).toEqual(stale ? [] : stack === "same" ? ["merge", "stack"] : ["merge"]);
       expect(order.lastIndexOf("logs")).toBeLessThan(order.indexOf("look"));
@@ -408,7 +416,19 @@ describe("catchup, today's tooling", () => {
 
     // A check that never came back green never reaches the look.
     const red = run({ ...green, answer: "red" });
-    expect(red.calls.some((c) => c.cmd === "node")).toBe(false);
+    expect(red.calls.some((c) => c.cmd === "node" && c.args[0]!.endsWith("/freshmain.ts"))).toBe(false);
+  });
+
+  // Plants: drop the size line; let a failed size count stop the merge; count against another head.
+  it("T686 scenario: the size line prints once, for the checked head against main, and a size count that fails stops nothing (0087 advises)", () => {
+    for (const fails of [false, true]) {
+      // The stub's sizecap fails whenever `stale` is set; the look then refuses the merge on its own.
+      const got = run({ ...green, stale: fails });
+      const sized = got.calls.filter((c) => c.cmd === "node" && c.args[0]!.endsWith("/sizecap.ts"));
+      expect(sized.map((c) => c.args.slice(1))).toEqual([["diff", "origin/main", tip]]);
+      expect(got.text).toContain(fails ? "pr 900: size not counted" : "pr 900: size: 7 product lines");
+      expect(got.text).not.toContain("unhandled node command");
+    }
   });
 
   // Plants: drop the BEHIND branch; merge behind without the sha pin or with another one; add

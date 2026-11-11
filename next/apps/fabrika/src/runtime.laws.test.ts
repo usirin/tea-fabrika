@@ -159,7 +159,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    STAGE: JSON.stringify({
+    INSTANCE: JSON.stringify({
       name: "project-test",
       person: PERSON,
       founder: key.line,
@@ -354,7 +354,7 @@ describe("P12 Project authority", () => {
     const w = await world(trace, build);
     const first = w.p.boot;
     const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-    await w.run(w.p.exit(first.process, "normal", w.from));
+    await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
     const configured = w.configured.length;
     const reopened = await w.reopen();
     expect(reopened.boot).toEqual(first);
@@ -458,7 +458,7 @@ describe("P12 Project authority", () => {
       } else if (operation === "start") {
         await w.start();
       } else if (operation === "exit") {
-        await w.run(w.p.exit(pid, "normal", w.from));
+        await w.run(w.p.exit(pid, { _tag: "normal" }, w.from));
       } else {
         await w.send(pid, "inc", letter);
         await w.run(w.p.inbox(pid, w.received[0]!));
@@ -516,7 +516,7 @@ describe("P12 Project saved and wire readers", () => {
       value: { _tag: "LedgerError", reason: "bad_row" },
     });
   };
-  it("saved stage settings fail through the Project runtime's typed error channel", async () => {
+  it("saved instance settings fail through the Project runtime's typed error channel", async () => {
     const encoded = Schema.fromJsonString(Settings);
     const invalid = fc
       .oneof(
@@ -533,7 +533,7 @@ describe("P12 Project saved and wire readers", () => {
           typed(
             await Effect.runPromiseExit(
               Effect.suspend(() => {
-                runtime = projectRuntime(w.ctx, { ...w.env, STAGE: raw });
+                runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
                 return runtime.contextEffect;
               }),
             ),

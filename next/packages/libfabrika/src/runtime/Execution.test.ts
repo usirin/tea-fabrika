@@ -1,5 +1,5 @@
 // P12, next/. An Effect adapter must never put a Promise where P11 expects a checked Step.
-// These use a production RPC client interface. The real Worker Loader is checked by stage-wire.
+// These use a production RPC client interface. The real Worker Loader is checked by instance-wire.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";

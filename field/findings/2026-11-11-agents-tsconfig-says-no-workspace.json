@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-agents-tsconfig-says-no-workspace",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/tsconfig.json",
+    "line": 3
+  },
+  "says": "The comment in .agents/tsconfig.json says '.agents/ is no workspace package', but pnpm-workspace.yaml lists .agents as one and .agents/package.json gives it its own typecheck script.",
+  "proof": ".agents/tsconfig.json:3-4: '`.agents/` is no workspace package: its imports resolve from the root's own dependencies.' pnpm-workspace.yaml lists '- .agents' under packages, with the comment 'the skills and the lead's own scripts, type-checked here (ticket 486)'. pnpm -r ls --depth -1 --json prints a package whose path ends in /.agents.",
+  "cost": "A reader of the tsconfig is told the wrong thing about how .agents/ is built and may treat it as outside pnpm's workspace when changing its dependencies or scripts.",
+  "head": "0bb25969c3b92c1e148d84446d845a20a00b5368",
+  "ticket": null,
+  "pr": null
+}

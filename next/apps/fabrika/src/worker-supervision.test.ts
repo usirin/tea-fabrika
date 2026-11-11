@@ -1,9 +1,8 @@
 // Ticket 402 (P34 on the Worker path), next/. Outside only: real workerd, sockets, object storage,
-// alarms and the private local stage capability, set up the way P12's stage-records test is.
-// No directly constructed runner and no raw Miniflare instance stand in for the stage.
+// alarms and the private local instance capability, set up the way P12's instance-records test is.
+// No directly constructed runner and no raw Miniflare stands in for the instance.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -11,6 +10,7 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
+import { heldPort } from "./port.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -78,7 +78,7 @@ const poisonSource = [
   `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
 ].join("\n");
 
-type Stage = any;
+type Instance = any;
 
 type Fixture = {
   readonly from: From;
@@ -86,11 +86,11 @@ type Fixture = {
   readonly start: (name: string) => Promise<string>;
 };
 
-const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise<void>) => {
+const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>) => {
   process.env.DO_NOT_TRACK = "1";
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
-  const { localStage } = await import("./local-stage.ts");
+  const { localInstance } = await import("./local-instance.ts");
   // A short home: a socket path has a 103-byte limit.
   const home = mkdtempSync(join(tmpdir(), "p34w-")),
     key = identity();
@@ -98,18 +98,6 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
   process.env.FABRIKA_HOME = home;
 
   try {
-    const listener = createServer();
-    await new Promise<void>((done, fail) => {
-      listener.once("error", fail);
-      listener.listen(0, "127.0.0.1", done);
-    });
-    const at = listener.address();
-
-    if (at === null || typeof at === "string") {
-      throw new Error("no TCP port");
-    }
-
-    await new Promise<void>((done) => listener.close(() => done()));
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
     const poison = join(home, "poison.ts");
     writeFileSync(poison, poisonSource);
@@ -120,7 +108,9 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
     expect(code, "the fixture program must be built").toBeDefined();
     await Effect.runPromise(
       Effect.gen(function* () {
-        const stage = yield* localStage(built, {
+        // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
+        const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+        const instance = yield* localInstance(built, {
           home,
           name: PROJECT,
           person: PERSON,
@@ -138,11 +128,11 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
           build: built.build,
         };
         yield* Effect.promise(() =>
-          test(stage, key, {
+          test(instance, key, {
             from,
             hash: code!.hash,
             start: async (name) => {
-              const started = await Reflect.get(stage.project(PROJECT), "start")(
+              const started = await Reflect.get(instance.project(PROJECT), "start")(
                 {
                   _tag: "first",
                   id: `start-${name}`,
@@ -163,7 +153,7 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
       ),
     );
   } finally {
-    // localStage closed with its scope before its durable files go.
+    // localInstance closed with its scope before its durable files go.
     rmSync(home, { recursive: true, force: true });
 
     if (previousHome === undefined) {
@@ -200,9 +190,9 @@ const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) =
 };
 
 /** A real WebSocket client at the door, initialized with a signed hello. */
-const wire = async (stage: Stage, key: Key, tab: string) => {
+const wire = async (instance: Instance, key: Key, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
-  const socket = new WebSocket(stage.url.replace("http", "ws") + name);
+  const socket = new WebSocket(instance.url.replace("http", "ws") + name);
   const frames: any[] = [];
   let closeCode: number | undefined,
     serial = 0;
@@ -254,24 +244,24 @@ const wire = async (stage: Stage, key: Key, tab: string) => {
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${stage.url}\n${tab}\n${nonce}`),
+        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
       })
     ).error,
   ).toBeUndefined();
   return { call, close: () => socket.close() };
 };
 
-const facts = async (stage: Stage, stream: string) =>
-  ((await stage.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+const facts = async (instance: Instance, stream: string) =>
+  ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
     ...row.body,
     _tag: row._tag,
   }));
 
-const restarts = async (stage: Stage, name: string) =>
-  (await facts(stage, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
+const restarts = async (instance: Instance, name: string) =>
+  (await facts(instance, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
 
-const livePid = async (stage: Stage, name: string): Promise<string | undefined> =>
-  ((await stage.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
+  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
 
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
   pid,
@@ -297,34 +287,34 @@ const healthy = async (
 };
 
 describe("ticket 402: P34 supervision on the real Worker path", () => {
-  // scenario: ticket 402, recovery through the real local stage. A fixed case: it checks platform
+  // scenario: ticket 402, recovery through the real local instance. A fixed case: it checks platform
   // composition, object storage, Worker RPC and real alarms, which generated Node laws cannot.
   it("scenario: ticket 402 plant (omit recovery options, fresh storage per successor, old writer pid): poison mail reaches dead, refuses its sender, restarts and accepts healthy mail", async () => {
-    await world(async (stage, key, fixture) => {
+    await world(async (instance, key, fixture) => {
       const name = "poison:1";
       const first = await fixture.start(name);
-      const c = await wire(stage, key, "supervision");
+      const c = await wire(instance, key, "supervision");
 
       try {
         // 1. The first throw fails delivery. It is not accepted and writes no dead row.
         const poison = send(first, "poison", "throw");
         const one = await c.call("process.send", poison);
         expect(one.result?._tag, "a throwing step is never accepted").not.toBe("accepted");
-        expect(await facts(stage, `${first}/dead`)).toEqual([]);
+        expect(await facts(instance, `${first}/dead`)).toEqual([]);
 
         // 2. The real alarm restarts it: one restarted fact naming the old ID and a new live ID.
         const [restarted] = await until(
           "one restarted fact after the first throw",
-          () => restarts(stage, name),
+          () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
         expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
         expect(second).not.toBe(first);
-        expect(await restarts(stage, name)).toHaveLength(1);
+        expect(await restarts(instance, name)).toHaveLength(1);
         await until(
           "the successor is the live process",
-          () => livePid(stage, name),
+          () => livePid(instance, name),
           (pid) => pid === second,
         );
 
@@ -335,7 +325,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(two).toMatchObject({ error: { data: { reason: "dead" } } });
         const dead = await until(
           "one dead row on the failing process's stream",
-          () => facts(stage, `${second}/dead`),
+          () => facts(instance, `${second}/dead`),
           (rows) => rows.length >= 1,
         );
         expect(dead).toEqual([
@@ -353,17 +343,17 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
             asked: expect.stringMatching(/^SHA256:/),
           },
         ]);
-        expect(await facts(stage, `${first}/dead`)).toEqual([]);
+        expect(await facts(instance, `${first}/dead`)).toEqual([]);
         // A further resend gives the same answer without another step or dead row.
         expect(await c.call("process.send", poison)).toMatchObject({
           error: { data: { reason: "dead" } },
         });
-        expect(await facts(stage, `${second}/dead`)).toHaveLength(1);
+        expect(await facts(instance, `${second}/dead`)).toHaveLength(1);
 
         // 5. The next alarm finishes recovery. The new live ID accepts a healthy letter.
         const rows = await until(
           "a second restarted fact after the dead letter",
-          () => restarts(stage, name),
+          () => restarts(instance, name),
           (found) => found.length >= 2,
         );
         expect(rows[1]).toMatchObject({ _tag: "restarted", after: second, name });
@@ -371,15 +361,15 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(new Set([first, second, third]).size).toBe(3);
         await until(
           "the third process is live",
-          () => livePid(stage, name),
+          () => livePid(instance, name),
           (pid) => pid === third,
         );
         const accepted = await healthy(c, third, "healthy");
         expect(accepted.count).toBe(1);
-        const inbox = (await facts(stage, `${name}/inbox`)).length;
+        const inbox = (await facts(instance, `${name}/inbox`)).length;
 
         // Abort and reopen the object: counts and accepted history survive.
-        await stage
+        await instance
           .process(third)
           .abort()
           .catch(() => undefined);
@@ -392,10 +382,10 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(await c.call("view.open", { pid: third })).toMatchObject({
           result: { view: { count: 1 } },
         });
-        expect(await facts(stage, `${second}/dead`)).toHaveLength(1);
-        expect(await facts(stage, `${name}/inbox`)).toHaveLength(inbox);
-        expect(await restarts(stage, name)).toHaveLength(2);
-        expect(await livePid(stage, name)).toBe(third);
+        expect(await facts(instance, `${second}/dead`)).toHaveLength(1);
+        expect(await facts(instance, `${name}/inbox`)).toHaveLength(inbox);
+        expect(await restarts(instance, name)).toHaveLength(2);
+        expect(await livePid(instance, name)).toBe(third);
       } finally {
         c.close();
       }
@@ -404,10 +394,10 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 
   // scenario: ticket 402 tests the complete trusted Process RPC chain and its saved request.
   it("scenario: ticket 402 plant (omit one handoff, init in the loader box, repeat the start): trusted restart through the Process binding starts the new init once per request ID", async () => {
-    await world(async (stage, key, fixture) => {
+    await world(async (instance, key, fixture) => {
       const name = "restart:1";
       const first = await fixture.start(name);
-      const c = await wire(stage, key, "restart");
+      const c = await wire(instance, key, "restart");
 
       try {
         // Change the model, so the re-folded state is visible.
@@ -416,10 +406,10 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           result: { view: { count: 1 } },
         });
         const request = { id: "restart-1", build: fixture.hash };
-        await stage.process(first).restart(request);
+        await instance.process(first).restart(request);
         const [restarted] = await until(
           "one restarted fact after a trusted restart",
-          () => restarts(stage, name),
+          () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
@@ -427,7 +417,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(second).not.toBe(first);
         await until(
           "the restarted process is live",
-          () => livePid(stage, name),
+          () => livePid(instance, name),
           (pid) => pid === second,
         );
         // The new init re-folds the accepted letter (P34, runner-supervision.test.ts), then a
@@ -437,11 +427,11 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         });
         await healthy(c, second, "after-restart");
         // Repeating the request ID makes no second replacement.
-        await stage.process(second).restart(request);
-        await stage.process(first).restart(request);
+        await instance.process(second).restart(request);
+        await instance.process(first).restart(request);
         await pause(1_500);
-        expect(await restarts(stage, name)).toHaveLength(1);
-        expect(await livePid(stage, name)).toBe(second);
+        expect(await restarts(instance, name)).toHaveLength(1);
+        expect(await livePid(instance, name)).toBe(second);
         expect(await c.call("view.open", { pid: second })).toMatchObject({
           result: { view: { count: 2 } },
         });
@@ -454,20 +444,20 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
   // scenario: workerd eviction must exercise the actual stored marker. The marker is written
   // through Process.activity, which syncs storage, and the platform abort cuts just before the step.
   it("scenario: ticket 402 plant (ignore the marker, use a timer fiber, count one attempt twice): a saved stepping marker becomes one interrupted recovery after a platform abort", async () => {
-    await world(async (stage, key, fixture) => {
+    await world(async (instance, key, fixture) => {
       const name = "abort:1";
       const first = await fixture.start(name);
-      const c = await wire(stage, key, "abort");
+      const c = await wire(instance, key, "abort");
 
       try {
         await healthy(c, first, "before-abort");
-        await stage.process(first).activity({
+        await instance.process(first).activity({
           _tag: "stepping",
           process: first,
           letter: "cut",
           build: fixture.hash,
         });
-        await stage
+        await instance
           .process(first)
           .abort()
           .catch(() => undefined);
@@ -475,7 +465,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         await c.call("view.open", { pid: first });
         const [restarted] = await until(
           "one restarted fact after the interrupted step",
-          () => restarts(stage, name),
+          () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
@@ -483,20 +473,20 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(second).not.toBe(first);
         await until(
           "the successor is live",
-          () => livePid(stage, name),
+          () => livePid(instance, name),
           (pid) => pid === second,
         );
         await healthy(c, second, "after-abort");
         // Aborting again does not count the same interrupted attempt twice.
-        await stage
+        await instance
           .process(second)
           .abort()
           .catch(() => undefined);
         await c.call("view.open", { pid: second });
         await pause(1_500);
-        expect(await restarts(stage, name)).toHaveLength(1);
-        expect(await livePid(stage, name)).toBe(second);
-        expect(await facts(stage, `${first}/dead`)).toEqual([]);
+        expect(await restarts(instance, name)).toHaveLength(1);
+        expect(await livePid(instance, name)).toBe(second);
+        expect(await facts(instance, `${first}/dead`)).toEqual([]);
       } finally {
         c.close();
       }

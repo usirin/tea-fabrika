@@ -20,6 +20,8 @@
 #   - just before the squash it looks at main once more: when main moved after the checks,
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
 #     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
+#   - prints sizecap.ts's one line, the product lines against 0087's cap, before it waits on the
+#     checks. It is advice: it never stops a merge until a replay lets it block
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
@@ -364,6 +366,9 @@ if ! git merge-base --is-ancestor origin/main HEAD; then
 	esac
 fi
 rmdir "$LOCK"; held=no
+# 0087's cap: one line with the pull request's product lines against `[review] lines`. Advice only
+# until the replay on merged pull requests lets it block; it never stops a merge.
+if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
 # Wait for every check on this exact sha, up to an hour. A skipped job (no code changed) is done.
 need="check e2e commits"
 # The clock is read after every answer and before a green one can break out to the merge.

@@ -1,63 +1,107 @@
-# A service is a `Context.Service`; Layers compose once, at the edge
+# A service file holds its contract; each Layer is a sibling file, composed once at the edge
 
 ```mermaid
-flowchart TD
-  object["Project (Durable Object class)"] -- "readonly runtime" --> managed["ManagedRuntime.make"]
-  managed --> unwrap["Layer.unwrap(settings(env))"]
-  unwrap --> project["projectLayer(ctx, env, config)"]
-  project -- "Layer.provide" --> ledger["Ledger.sql / Ledger.remote"]
-  ledger -- "Layer.provide" --> referee["Referee.layer(sql)"]
-  object -- "this.runtime.runPromise(ProjectService.use(...))" --> managed
+flowchart LR
+  caller["a file that yields Ledger"] --> contract["ledger/Ledger.ts: the contract"]
+  sql["ledger/LedgerSql.ts: layer"] --> contract
+  remote["ledger/LedgerRemote.ts: layer"] --> contract
+  sql --> referee["ledger/Referee.ts: the contract"]
+  sql --> refereeSql["ledger/RefereeSql.ts: layer"]
+  refereeSql --> referee
+  refereeSql --> store["ledger/internal/ledgerStore.ts: SQL"]
+  transactionSql["ledger/LedgerTransactionSql.ts: layer"] --> transaction["ledger/LedgerTransaction.ts: the contract"]
+  transactionSql --> store
+  sql --> pages["ledger/internal/ledgerPages.ts"]
+  remote --> pages
+  remote --> trace["ledger/internal/ledgerTrace.ts"]
+  runtime["cloudflare/runtime.ts"] -- "LedgerSql.layer / LedgerRemote.layer" --> sql
+  runtime --> remote
+  runtime -- "RefereeSql.layer / LedgerTransactionSql.layer" --> refereeSql
+  runtime --> transactionSql
+  brain["Project (Durable Object class)"] -- "ManagedRuntime.make" --> runtime
 ```
 
 ```ts
-// next/apps/fabrika/src/runtime.ts:12-23: settings are decoded once, then pick the Layer.
-export const settings = Effect.fn("stage.settings")(function* (env: Env) {
-	return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.STAGE).pipe(/* ... */);
-});
-export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
-	ManagedRuntime.make(Layer.unwrap(settings(env).pipe(Effect.map((config) => projectLayer(ctx, env, {config /* ... */})))));
+// next/packages/libfabrika/src/ledger/Ledger.ts:33-42: the contract, its type written out.
+export class Ledger extends Context.Service<
+  Ledger,
+  {
+    readonly append: (stream: string, id: string, line: Line) => Effect.Effect<Appended, LedgerError>;
+    readonly read: (stream: string, after: Rev) => Stream.Stream<Entry, LedgerError>;
+    readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>;
+  }
+>()("@kampus/libfabrika/Ledger") {}
 
-// next/apps/fabrika/src/brain.ts:30-33: the object class holds one runtime and hands off in one line.
-readonly runtime = projectRuntime(this.ctx, this.env);
-target(name: string, code: string) {
-	return this.runtime.runPromise(ProjectService.use((p) => p.target(name, code)));
-}
+// next/packages/libfabrika/src/ledger/LedgerSql.ts:12-23: one implementation, a sibling file.
+export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
+  Layer.effect(
+    Ledger,
+    Effect.gen(function* () {
+      const referee = yield* Referee;
+      return {
+        append: referee.append,
+        read: (stream, after) => pages(after, (from) => referee.read(stream, from, caller.reader)),
+        wait: (stream, after) => referee.wait(stream, after, caller.reader),
+      };
+    }),
+  ).pipe(Layer.provide(RefereeSql.layer(sql)));
+
+// next/packages/libfabrika/src/cloudflare/runtime.ts:338-342 and :740: callers read each by its module.
+const ledgerLayer = Layer.mergeAll(
+  LedgerSql.layer(sql, { reader: `project:${name}` }),
+  LedgerTransactionSql.layer(sql),
+  RefereeSql.layer(sql),
+).pipe(Layer.provide(bell));
+const ledger = LedgerRemote.layer(stub, { reader: saved.id });
 ```
 
-A service is a class that extends `Context.Service`, with its Layers as statics. A Layer asks for what
-it needs with `yield*` and is composed with `Layer.provide` and `Layer.mergeAll`. The whole graph is
-provided once, at the edge: on workerd, one `ManagedRuntime` per object instance, built from the
-object's Layer; on Node, `NodeRuntime.runMain` (`next/apps/fabrika/grant.ts:111`). Inside, nothing
-builds a Layer by hand or provides services per call.
+A service is a class that extends `Context.Service`, with its type written out. Its file holds the
+contract and nothing that runs: the class, its own error, and the types and small ports it speaks
+in. `next/packages/libfabrika/src/ledger/Ledger.ts` is the model: `LedgerError` (`:10-18`), the
+`Doorbell` port (`:21-24`), the `LedgerCalls` platform port (`:27-31`) and `Ledger` (`:33-42`).
+It imports `Effect`, `Stream`, `Rev` and the log types as types only (`:6-8`), so a browser bundle
+of it holds `effect` and this one file, never `Referee` or the SQL store.
 
-`next/packages/libfabrika/src/data/ledger.ts:49-110` is the model: one shape, two statics. `Ledger.sql`
-is a `Layer.effect` that yields `Referee` and provides `Referee.layer(sql)` (`:64-75`). `Ledger.remote`
-wraps a Promise stub at the service boundary, so no caller sees a Promise (`:79-110`).
+Each Layer is its own sibling file, named for the service and the variant, exporting `layer`, as
+Effect writes `NodeFileSystem.layer`. `LedgerSql.layer` (`ledger/LedgerSql.ts:12`) yields `Referee`
+and provides `RefereeSql.layer(sql)`. `RefereeSql.layer` (`ledger/RefereeSql.ts:8`) and
+`LedgerTransactionSql.layer` (`ledger/LedgerTransactionSql.ts:8`) each build the store on the same
+`Sql` with the `Doorbell` they yield, as their static layers did. `LedgerRemote.layer` (`ledger/LedgerRemote.ts:13`) wraps a
+Promise stub at the service boundary, so no caller sees a Promise. Code both layers share sits under
+`internal/`: `pages` (`ledger/internal/ledgerPages.ts:9`) and the span keys `STREAM` and `tag`
+(`ledger/internal/ledgerTrace.ts:5-7`). A Layer asks for what it needs with `yield*` and is
+composed with `Layer.provide` and `Layer.mergeAll`. The whole graph is provided once, at the edge:
+on workerd, one `ManagedRuntime` per object instance (`next/apps/fabrika/src/runtime.ts:19-23`,
+held at `next/apps/fabrika/src/brain.ts:26`); on Node, `NodeRuntime.runMain`
+(`next/apps/fabrika/grant.ts:129`).
 
 Rules:
 
 - **Define with `Context.Service`.** Never `Context.Tag` or `GenericTag` (`fabrika/no-context-tag`).
-  The key names the package and path, `@kampus/libfabrika/<path>/<Name>` (Effect's own advice,
-  `node_modules/effect/AGENTS.md`, "Context.Service"). Today two styles live side by side
-  (`@kampus/libfabrika/Ledger`, `fabrika/Project`); which one wins is ticket 438's `deterministicKeys` call.
-- **Inferred shape: use `make`.** When the shape comes from the implementation, write
-  `Context.Service<X>()("key", {make: Effect.gen(...)})` and `static layer = Layer.effect(this, this.make)`.
-  Effect 4.1.2 infers the shape from `make` (`node_modules/effect/src/Context.ts:320-334`). Not
-  `Context.Service<X, Effect.Success<ReturnType<typeof logic>>>`.
-- **Explicit shape when the shape is the contract,** as `Ledger` and `Mailbox` do.
+  The key names the package and path, `@kampus/libfabrika/<Name>` (Effect's own advice,
+  `node_modules/effect/AGENTS.md`, "Context.Service"). Which key style wins is ticket 438's
+  `deterministicKeys` call.
+- **Write the service's type out.** The contract is the type, so it is never inferred from an
+  implementation: no `make` option and no `Effect.Success<ReturnType<...>>` shape.
+- **No static layer on a service class.** A layer is a sibling file read through its module:
+  `import * as LedgerSql from "./LedgerSql.ts"`, then `LedgerSql.layer(...)`. A memory or test layer
+  is a sibling too.
+- **A platform's adapter lives in its platform's folder.** `cloudflareSql`, which turns a Durable
+  Object's storage into our `Sql`, is `next/packages/libfabrika/src/cloudflare/CloudflareSql.ts:3`.
 - **Compose, never build.** No `Layer.build` then `Context.get` then `Effect.provideContext` on each
   call: that is what `Layer.provide` does. A service that needs another captures it once with
-  `yield*` in its own Layer.
+  `yield*` in its own Layer (`ledger/LedgerSql.ts:16`).
 - **Ordered setup is `Layer.unwrap`.** When a Layer depends on a value read first (settings, a
-  saved descriptor), read it in an Effect and return the Layer from it (`runtime.ts:19`,
-  `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
+  saved descriptor), read it in an Effect and return the Layer from it
+  (`next/apps/fabrika/src/runtime.ts:20`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
 - **Config at the edge.** On workerd the platform's config is a binding, so `env.STAGE` is decoded
-  once with Schema. On Node it is `Config`; never mix `process.env.X ??` with `Config` on one line.
+  once with Schema (`next/apps/fabrika/src/runtime.ts:13-17`). On Node it is `Config`; never mix
+  `process.env.X ??` with `Config` on one line.
 - **A resource lives in a Layer.** `Effect.acquireRelease` inside `Layer.effect`, so teardown runs
   when the runtime is disposed (`ai-docs/src/01_effect/05_resources/10_acquire-release.ts`).
 - **The object class stays thin.** Every method is one `this.runtime.runPromise(...)` under an edge
-  comment ([an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
+  comment (`next/apps/fabrika/src/brain.ts:28-31`,
+  [an object class stays thin](../docs/direction/object-classes-stay-thin.md)). A bare
   `Effect.runPromise` there gets none of the runtime's Layers, tracer included.
 
 ## Where it applies
@@ -65,41 +109,62 @@ Rules:
 Every service and every runtime in `next/`. Stops at tea: a program's state lives in its tea machine
 ([Elm first](../docs/direction/elm-first.md)); a service is what the host gives that machine.
 
-## Today's code breaks this
+## Services awaiting their slice
 
-Ticket 442 sweeps it. On main `d48cb774`, in `next/` product code: 4 `Layer.build` in 3 files
-(`next/packages/libfabrika/src/workers/runtime.ts:325`, `:667`, `workers/gateway.ts:28`,
-`node/stage-recording.ts:29`), followed by 23 `Effect.provideContext` in 7 files (for example
-`workers/runtime.ts:710-746`); 5 `Effect.Success<ReturnType<...>>` shapes (`workers/runtime.ts:634-637`,
-`:754-757`, `workers/gateway.ts:218-220`, `door/door.ts:1381`); 2 bare `Effect.runPromise` in an object
-class (`next/apps/fabrika/src/brain.ts:148`, `:152`); and `next/apps/fabrika/dev.ts:46` mixes
-`process.env` with `Config`.
+`Ledger` (ticket 702, slice 1), `Referee` and `LedgerTransaction` (ticket 723, slice 3) are
+converted so far. The rest still carry static layers, and each moves in its own slice. A search of
+`next/packages/libfabrika/src` outside tests finds 20 static Layer members, for example
+`Mailbox.layer` (`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
+(`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1622`). The Node adapter,
+`next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
+code follows this doc now.
+
+`Layer.build` is still used in product code: `cloudflare/runtime.ts:355` and `:745`,
+`cloudflare/connection.ts:18` and `node/dev/dev-recording.ts:31`, each followed by
+`Effect.provideContext` (ticket 442).
 
 ## Why it is not obvious
 
+`node_modules/effect/AGENTS.md` teaches a static layer on the service class as the default. Written
+that way, importing the `Ledger` tag also loaded `Referee` and the 451-line SQL store, and
+`Ledger.ts` and `Referee.ts` imported each other. Bundled alone for a browser, the contract file
+loaded 255 modules and kept 82 before this split; it loads 248 and keeps 66 after, with no
+libfabrika file but itself. The build step's unminified chunk, region comments included, went from
+624,432 to 460,076 bytes (ticket 702, rolldown 1.2.13). The plan's own count, taken another way,
+was 469,820 before and 278,245 for the contract in memory.
+
+`Referee.ts` and `LedgerTransaction.ts` had the same cost: each imported the store for its static
+layer, and `Referee.ts` re-exported the span helpers. Bundled alone for a browser, each loaded 256
+modules and kept 80, among them `ledgerStore.ts` and `ledgerTrace.ts`. As contracts each loads 248
+and keeps 15, with no libfabrika file but itself (ticket 723, rolldown 1.2.13, measured with the
+bundle exam's load hook and output module list).
+
 `Layer.build` plus `provideContext` works and passes every law, and it looks like control. It costs
 in reading: each call site must remember to provide, and a forgotten one is a missing-service defect
-at run time, not a type error. The hand-written `Effect.Success<ReturnType<...>>` is a reinvention of
-the `make` option most agents do not know Effect 4 has.
+at run time, not a type error.
 
 ## Holds it
 
-- Lint, on: `fabrika/no-context-tag` (`.oxlintrc.json:20`); `fabrika/no-effect-run-outside-edge` and
-  `fabrika/edge-comment` in `next/` (`.oxlintrc.json:345-346`).
-- Effect diagnostics, 0 hits and free to turn on: `leakingRequirements`,
-  `missingEffectServiceDependency`. `multipleEffectProvide`: 1 product hit
-  (`next/apps/fabrika/src/stage.ts:29`). `deterministicKeys`: 105 hits, the owner's pick.
-  `processEnvInEffect`: advise only, since each hit is an edge. Ticket 438.
-- `Layer.build` outside tests: no rule. A custom oxlint rule could ban it; not built.
+- Bundle exam: `pinned: contract only Ledger reaches no store` in
+  `next/apps/fabrika/src/exam/deps.test.ts` bundles `Ledger.ts` alone and fails if any Ledger layer,
+  helper, `Referee` or the store is loaded or kept.
+- Type test: `next/packages/libfabrika/src/ledger/Ledger.types.test.ts` holds the written-out
+  service type, both layer types and the absence of `Ledger.sql` and `Ledger.remote`.
+- Lint, on: `fabrika/no-context-tag` (`.oxlintrc.json:28`); `fabrika/no-effect-run-outside-edge` and
+  `fabrika/edge-comment` in `next/` (`.oxlintrc.json:569-570`). `no-restricted-imports` keeps a
+  module's `internal/` private, and `layer-rules.json` keeps `ledger/` from importing `cloudflare/`.
+- Not yet a check: a lint rule that a `Context.Service` class has no static that returns a `Layer`
+  ([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) names it as later work).
 
 ## Decision
 
-[Build on Effect; let types be inferred](../docs/direction/build-on-effect.md); [an object class
-stays thin](../docs/direction/object-classes-stay-thin.md). Credit: kamp-us/phoenix's
+[0095: a service file holds only its
+contract](../.decisions/0095-a-service-file-holds-only-its-contract.md), which departs from
+`node_modules/effect/AGENTS.md`'s static layer; [an object class stays
+thin](../docs/direction/object-classes-stay-thin.md). Credit: kamp-us/phoenix's
 [effect-context-service.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-context-service.md)
 (class form, wrap a Promise client at the service boundary) and
 [effect-layer-composition.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-layer-composition.md)
-(`provide` against `provideMerge`, never build a Layer per call, one runtime built at init). Phoenix
-uses explicit shapes only; on 4.1.2 the `make` option fits `next/`'s inferred services better.
+(`provide` against `provideMerge`, never build a Layer per call, one runtime built at init).
 
 > Derived from `effect@4.1.2`; re-verify on pin bump.

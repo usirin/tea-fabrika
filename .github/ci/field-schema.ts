@@ -41,6 +41,9 @@ const Note = Schema.Struct({
   links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+/** One plant a step ran once (0093): the law, the break, and `red` if the law caught it, else `green`. */
+const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
+
 const Run = Schema.Struct({
   date: Day,
   role: Schema.String,
@@ -64,6 +67,7 @@ const Run = Schema.Struct({
   cachedTokens: Schema.optionalKey(Count),
   outputTokens: Schema.optionalKey(Count),
   driver_caused: Schema.optionalKey(Schema.Boolean),
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 // A finding and its rating (decision 0035). The fields table is field/README.md, "A finding".

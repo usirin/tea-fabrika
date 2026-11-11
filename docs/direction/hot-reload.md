@@ -201,7 +201,7 @@ decodes it. A mode in that model stays with its window, or goes to null with a l
 
 ## Where it is off
 
-- **A cloud stage never watches files.** New code reaches it only by a deploy the owner said yes
+- **A cloud instance never watches files.** New code reaches it only by a deploy the owner said yes
   to, after `alchemy plan`. The swap is the same (H1). Since 2026-10-30, Cloudflare defers a
   Durable Object's code update for up to 300 s and keeps its storage and hibernated sockets
   ([changelog](https://developers.cloudflare.com/changelog/post/2026-10-30-durable-objects-deferred-code-updates/)),

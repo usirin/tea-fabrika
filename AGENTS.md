@@ -424,7 +424,7 @@ pnpm test
 
 All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
-patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The two advice rules print and do not fail it (`oxlint-plugins/README.md`).
+patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The four advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
@@ -515,7 +515,8 @@ brief carries these caps. Each one came from a laptop that became unusable.
   about 8 cores, so small jobs add up.
 - "Under load" means at most 12 code agents, one `pnpm typecheck` at a time across all of
   them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
-  the wait, so that loop never ends), one Electron test app at a time, and one Docker
+  the wait, so that loop never ends; in a step's box, where `pgrep` cannot list processes, skip
+  the wait: `pnpm typecheck` takes its own lock, `scripts/typecheck.sh`), one Electron test app at a time, and one Docker
   box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
   with 3 code agents running, the load average sat near 5.5 with 45 GB free. Raised to 5 the
   same day, the owner asking again, with 4 running and the load near 9. Two type checks at

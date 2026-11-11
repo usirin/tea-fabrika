@@ -2,7 +2,7 @@ import { Effect, Option, Schema } from "effect";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 export type { ProgramSource } from "../runtime/Execution.ts";
-export { cloudflareSql } from "../ledger/CloudflareSql.ts";
+export { cloudflareSql } from "./CloudflareSql.ts";
 export { fetch, serveAsset } from "./fetch.ts";
 
 type Calls = Rpc.WorkerEntrypointBranded &

@@ -36,7 +36,8 @@
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
-//   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
+//   recording  Act     the field row (with the plants the typed answer named, 0093),
+//                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
 //   over               the outcome
@@ -79,7 +80,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -88,6 +89,7 @@ import {
   listUsd,
   makeStepAgents,
   NO_SPENT,
+  Plant,
   type Provider,
   runTurn,
   Spent,
@@ -95,6 +97,7 @@ import {
   type Turned,
 } from "./agents.ts";
 import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import { pgrepAnswer, skipLine } from "./pgrep.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -333,6 +336,8 @@ const Entry = Schema.Struct({
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
+  /** The plants the step's typed answer named, for the field row (0093). */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 const record = Cmd.make("record", { input: Entry, ok: Done, err: ["unknown"] });
@@ -364,6 +369,7 @@ type Model =
       readonly head: string;
       readonly left: readonly string[];
       readonly spent: Spent;
+      readonly plants: Answer["plants"];
     }
   | {
       readonly phase: "recording" | "over";
@@ -374,6 +380,9 @@ type Model =
       readonly kept: boolean;
       readonly spent: Spent;
     };
+
+/** Where the step's machine is; the chain's heartbeat names it. */
+export type DrivePhase = Model["phase"];
 
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
@@ -615,8 +624,16 @@ type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
- * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly string[] = []): Step => {
+ * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). The
+ * plants the answer named go on the row whatever the outcome: they ran (0093). */
+const recordIt = (
+  ask: Ask,
+  j: Ended,
+  head: string,
+  spent: Spent,
+  left: readonly string[] = [],
+  plants: Answer["plants"] = undefined,
+): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
@@ -627,6 +644,7 @@ const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly
     exit: exitOf(j.outcome),
     keep: kept,
     spent,
+    ...(plants === undefined ? {} : { plants }),
   });
   return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
@@ -711,18 +729,19 @@ export const machine = defineMachine({
 
       const j = decide(s.ask, m.value, s.answer);
       const head = m.value.head ?? s.ask.base;
+      const plants = s.answer?.plants;
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head });
-        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent };
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent, plants };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
-      return recordIt(s.ask, j, head, s.spent, m.value.left);
+      return recordIt(s.ask, j, head, s.spent, m.value.left, plants);
     },
     step_read_err: (s): Step =>
       s.phase === "reading"
-        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent)
+        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent, [], s.answer?.plants)
         : stay(s),
     backup_push_ok: (s, m): Step => {
       if (s.phase !== "pushing") {
@@ -730,13 +749,15 @@ export const machine = defineMachine({
       }
 
       if (!m.value.ok) {
-        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left);
+        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left, s.plants);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left, s.plants);
     },
     backup_push_err: (s): Step =>
-      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left) : stay(s),
+      s.phase === "pushing"
+        ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left, s.plants)
+        : stay(s),
     record_ok: (s, m): Step => {
       if (s.phase !== "recording") {
         return stay(s);
@@ -1384,6 +1405,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               ended: new Date(ended),
               spent: e.spent,
               redacted: Number.isFinite(redacted) ? redacted : null,
+              plants: e.plants,
             }),
           );
         }
@@ -1467,6 +1489,44 @@ export const planTail = (step: StepName, path: string, text: string | null) =>
   step === "plan" || text === null
     ? ""
     : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+
+/** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
+const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
+
+/** The approved plan's owners, read as stepcommit reads them; `null` when there is no plan to read. */
+const planOwners = (env: Env, plan: string) => {
+  if (!existsSync(plan)) {
+    return null;
+  }
+
+  const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+};
+
+/**
+ * The paths the approved plan's files table gives this step, at the top of its prompt. stepcommit
+ * refuses any other path at collect, after the whole turn: on 2026-11-09, 10 of 72 stuck steps were
+ * that `not_owner` (ticket 430). Told first, a step that needs another path asks instead. A
+ * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
+ * (it changes no file) or a lane with no plan drive can read.
+ */
+export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
+  if (step === "plan" || step === "review" || owners === null) {
+    return "";
+  }
+
+  const mine = Object.keys(owners)
+    .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
+    .toSorted();
+  const other =
+    "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
+    "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
+    "git status and check every changed path against this list.\n";
+  return mine.length === 0
+    ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
+    : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
+        `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
+};
 
 /**
  * The lane's newest mutation report, whole, for a review: the review reads it (the review skill,
@@ -1966,10 +2026,17 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     started: Date.now(),
   };
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
-  const count = (pattern: string) => sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
-  const agents = count("codex-acp/dist/index.js") + count("claude-agent-acp/dist/index.js") + count("^codex exec");
+  // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
+  const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
+    const r = sh("pgrep", ["-f", pattern]);
+    return pgrepAnswer(r.code, r.out);
+  });
+  const refused = counts.some((c) => c._tag === "refused");
+  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
-  if (agents >= 8) {
+  if (refused) {
+    console.error(skipLine("agent cap"));
+  } else if (agents >= 8) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
       reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
@@ -2056,7 +2123,8 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       : "";
   writeFileSync(
     ask.prompt,
-    readFileSync(p.brief, "utf8") +
+    ownedHead(step, planOwners(env, plan)) +
+      readFileSync(p.brief, "utf8") +
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
@@ -2089,9 +2157,15 @@ export interface DriveLine {
 /**
  * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
  * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
- * crash is a `stuck:crash` line, with the box kept.
+ * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
+ * before that phase's work starts.
  */
-export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+export const driveStep = (
+  env: Env,
+  agents: Agents,
+  p: Prepared,
+  onPhase: (phase: DrivePhase) => void = () => {},
+): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
@@ -2102,8 +2176,22 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
+    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
+    // typecheck` still takes its own lock (scripts/typecheck.sh).
     if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
-      while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
+      for (;;) {
+        const r = sh("pgrep", ["-x", "tsgo"]);
+        const tsgo = pgrepAnswer(r.code, r.out);
+
+        if (tsgo._tag === "refused") {
+          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+          break;
+        }
+
+        if (tsgo.count === 0) {
+          break;
+        }
+
         yield* Effect.sleep("20 seconds");
       }
     }
@@ -2115,6 +2203,8 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // tea's change notifier fires after each transition and before its first Cmd starts.
+    runtime.subscribe(() => onPhase(runtime.getState().phase));
     yield* runtime.dispatch({ type: "start", ask });
     const end = yield* runtime.done();
 
@@ -2226,7 +2316,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;
