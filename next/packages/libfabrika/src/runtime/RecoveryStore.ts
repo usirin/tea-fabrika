@@ -1,10 +1,14 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { type Sql } from "../Sql.ts";
-import { Receipt, Supervision } from "./internal/recovery.ts";
+import { Receipt } from "./internal/recovery.ts";
+import { Supervision } from "./internal/supervisor.ts";
 
-const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Supervision));
-const encode = Schema.encodeUnknownSync(Schema.fromJsonString(Supervision));
+// The journal row keeps its receipts apart, so it is read whole only once they are merged back.
+const Row = Schema.fromJsonString(Schema.Struct(Supervision.fields));
+const decode = Schema.decodeUnknownSync(Row);
+const encode = Schema.encodeUnknownSync(Row);
+const check = Schema.decodeUnknownSync(Supervision);
 const decodeReceipt = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt));
 const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
 
@@ -81,7 +85,7 @@ export class RecoveryStore extends Context.Service<
         receipts.set(receipt.letter, receipt);
       }
 
-      return { ...saved, receipts: [...receipts.values()] };
+      return check({ ...saved, receipts: [...receipts.values()] });
     });
     const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
       return yield* stored(() => {
@@ -97,7 +101,7 @@ export class RecoveryStore extends Context.Service<
     });
     const save = (value: unknown) =>
       stored(() => {
-        const saved = Schema.decodeUnknownSync(Supervision)(value);
+        const saved = check(value);
 
         if (saved.name !== who.name) {
           throw new LedgerError({ reason: "bad_row" });
