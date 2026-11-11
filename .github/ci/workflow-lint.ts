@@ -1,8 +1,16 @@
 // Today's CI, serving both versions. Static workflow shape belongs in lint.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+
+export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
+export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
+export const inLaneStep = (path: string) => path.includes(LANE_FILTER);
+
+const testFiles = globSync("packages/pipeline/**/*.test.ts", {
+  cwd: fileURLToPath(new URL("../../", import.meta.url)),
+});
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -165,13 +173,40 @@ export const lintWorkflow = (text: string): string[] => {
     scripts = commands(test);
   require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
   const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(runs.length === 3, "today has changed, forced and main test commands");
+  require(runs.length === 5, "today has five test commands, including two lane commands");
+  const testSteps = steps(test);
+  const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
+  const rest = testSteps.find((s) => s["name"] === "test");
+  const times = testSteps.find((s) => s["name"] === "shard times");
+  const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
+  const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
+  require(restRuns.length === 3 &&
+    restRuns.every((line) => line.includes(`--exclude '${LANE_GLOB}'`)), "L1: every rest command excludes lane files");
+  require(laneRuns.length === 2 &&
+    laneRuns.every(
+      (line) =>
+        line.startsWith(`pnpm exec vitest run ${LANE_FILTER} `) &&
+        line.includes('--shard "$SHARD"') &&
+        /--maxWorkers=1(?:\s|$)/.test(line) &&
+        line.includes("--passWithNoTests") &&
+        line.includes("--exclude 'next/**'"),
+    ) &&
+    laneRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
+      1, "L2: lane commands run one file at a time on PR and main");
+  require(lane !== undefined &&
+    rest !== undefined &&
+    times !== undefined &&
+    testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
+    testSteps.indexOf(rest) < testSteps.indexOf(times) &&
+    compact(rest["if"]) === "!cancelled()" &&
+    compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
+  require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
 
   for (const line of runs) {
     require(/--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line), "every today command excludes next/**");
   }
 
-  const changed = runs.find((line) => line.includes("--changed"));
+  const changed = restRuns.find((line) => line.includes("--changed"));
   require(changed !== undefined &&
     changed.includes('--changed "$BASE"') &&
     changed.includes('--shard "$SHARD"') &&

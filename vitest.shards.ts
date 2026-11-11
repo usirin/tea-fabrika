@@ -10,24 +10,28 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
 /**
  * Seconds per file from the repo root: medians of today's test-file times in CI runs
  * 42579837468, 42573088027 and 42571265116, rounded to one decimal.
- * box, stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
+ * The 18 lane rows use PR 757 runs 42850162592, 42853075395 and 42855774180,
+ * one file at a time. The 12 refreshed rows use main runs 42803733957, 42807559589
+ * and 42801440878. box, boxrm, loosening and program-package-layout come from PR 757's check
+ * run 42874119130, attempts 5 to 14 (a median of 10).
+ * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
  * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
  * The four build files (build.test.ts, build-assets.test.ts, build-one-file.test.ts, exam/bytes.test.ts) are one time each from CI run 42922102030, rounded to one decimal.
  * A file not measured counts 1 s.
  */
 export const measured: Record<string, number> = {
-  ".agents/skills/lead/scripts/box.test.ts": 485.3,
+  ".agents/skills/lead/scripts/box.test.ts": 348.7,
   ".agents/skills/lead/scripts/catchup.cleanup.test.ts": 124.1,
   ".agents/skills/lead/scripts/catchup.nested-storage-checkout.test.ts": 175.7,
   ".agents/skills/lead/scripts/catchup.nested-storage-driver.test.ts": 163.6,
   ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
   ".agents/skills/lead/scripts/gc.test.ts": 0.1,
   ".agents/skills/lead/scripts/redact.test.ts": 7.2,
-  ".agents/skills/lead/scripts/skillscheck.test.ts": 1.8,
+  ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,
   ".agents/skills/mutation/scripts/run.test.ts": 5.8,
   ".agents/skills/mutation/scripts/sample.test.ts": 0.5,
-  ".agents/skills/plan/scripts/plancheck.test.ts": 59.1,
+  ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
   ".agents/skills/step-commit/scripts/stepcommit.test.ts": 18.2,
   "apps/fabrika/src/asks.laws.test.ts": 1.8,
   "apps/fabrika/src/asks.test.ts": 0.0,
@@ -221,7 +225,7 @@ export const measured: Record<string, number> = {
   "oxlint-plugins/exact-versions.test.ts": 7.1,
   "oxlint-plugins/one-id-module.test.ts": 9.0,
   "oxlint-plugins/outside-input-constructor.test.ts": 1.1,
-  "oxlint-plugins/plants.test.ts": 14.2,
+  "oxlint-plugins/plants.test.ts": 48.2,
   "oxlint-plugins/stylelint.test.ts": 6.9,
   "packages/fabrika-design/src/build/contrast.test.ts": 0.0,
   "packages/fabrika-design/src/build/schema.test.ts": 0.1,
@@ -264,7 +268,7 @@ export const measured: Record<string, number> = {
   "packages/fabrika/src/host/door-wire.test.ts": 2.1,
   "packages/fabrika/src/host/door.laws.test.ts": 123.0,
   "packages/fabrika/src/host/door.test.ts": 0.6,
-  "packages/fabrika/src/host/fence.laws.test.ts": 86.0,
+  "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
   "packages/fabrika/src/host/host-machine.laws.test.ts": 47.4,
   "packages/fabrika/src/host/host.test.ts": 4.3,
   "packages/fabrika/src/host/http.test.ts": 0.0,
@@ -424,24 +428,24 @@ export const measured: Record<string, number> = {
   "packages/pipeline/src/stages/pipeline/hosts.test.ts": 3.0,
   "packages/pipeline/src/stages/pipeline/key.test.ts": 0.1,
   "packages/pipeline/src/stages/pipeline/lane-fixture.test.ts": 0.7,
-  [`${LANE}.asked.test.ts`]: 136.9,
-  [`${LANE}.decided.let-through.test.ts`]: 110.8,
-  [`${LANE}.decided.test.ts`]: 113.5,
-  [`${LANE}.decided.words.test.ts`]: 69.0,
-  [`${LANE}.exam-pull.person-pushes.test.ts`]: 91.0,
-  [`${LANE}.exam-pull.redo-on-main.test.ts`]: 106.3,
-  [`${LANE}.exam-pull.test.ts`]: 114.1,
-  [`${LANE}.exam-side-tree.test.ts`]: 18.3,
-  [`${LANE}.github.heads.test.ts`]: 139.6,
-  [`${LANE}.github.test.ts`]: 120.1,
-  [`${LANE}.leaves-behind.test.ts`]: 48.2,
-  [`${LANE}.might-answer.test.ts`]: 129.8,
-  [`${LANE}.rubrics.test.ts`]: 50.1,
-  [`${LANE}.test-writer.test.ts`]: 88.0,
-  [`${LANE}.typed-again.merge-and-old-saves.test.ts`]: 102.9,
-  [`${LANE}.typed-again.test.ts`]: 112.2,
-  [`${LANE}.whole.races.test.ts`]: 59.8,
-  [`${LANE}.whole.test.ts`]: 142.7,
+  [`${LANE}.asked.test.ts`]: 114.4,
+  [`${LANE}.decided.let-through.test.ts`]: 92.0,
+  [`${LANE}.decided.test.ts`]: 107.8,
+  [`${LANE}.decided.words.test.ts`]: 53.0,
+  [`${LANE}.exam-pull.person-pushes.test.ts`]: 67.3,
+  [`${LANE}.exam-pull.redo-on-main.test.ts`]: 89.5,
+  [`${LANE}.exam-pull.test.ts`]: 83.0,
+  [`${LANE}.exam-side-tree.test.ts`]: 17.5,
+  [`${LANE}.github.heads.test.ts`]: 99.4,
+  [`${LANE}.github.test.ts`]: 81.9,
+  [`${LANE}.leaves-behind.test.ts`]: 47.3,
+  [`${LANE}.might-answer.test.ts`]: 104.4,
+  [`${LANE}.rubrics.test.ts`]: 40.4,
+  [`${LANE}.test-writer.test.ts`]: 73.8,
+  [`${LANE}.typed-again.merge-and-old-saves.test.ts`]: 84.3,
+  [`${LANE}.typed-again.test.ts`]: 93.1,
+  [`${LANE}.whole.races.test.ts`]: 43.5,
+  [`${LANE}.whole.test.ts`]: 83.4,
   "packages/pipeline/src/stages/pipeline/machine.laws.test.ts": 0.7,
   "packages/pipeline/src/stages/pipeline/machine.test.ts": 0.0,
   "packages/pipeline/src/stages/pipeline/program.format.test.ts": 20.8,
@@ -560,6 +564,13 @@ export const measured: Record<string, number> = {
   "programs/tracker/src/ticket.test.ts": 0.0,
   "programs/tracker/src/tracker.test.ts": 3.2,
   "programs/tracker/src/window.test.ts": 0.0,
+  ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+  ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
+  "scripts/caps.test.ts": 108.5,
+  "oxlint-plugins/padding-line-between-statements.test.ts": 44.7,
+  ".agents/skills/lead/scripts/leakgrep.test.ts": 34.2,
+  ".agents/skills/lead/scripts/mutbox.test.ts": 34.0,
+  "oxlint-plugins/program-package-layout.test.ts": 80.3,
   "vitest.shards.test.ts": 0.3,
 };
 
@@ -571,11 +582,12 @@ export const measured: Record<string, number> = {
 export const assign = (
   files: readonly { readonly path: string; readonly seconds: number }[],
   count: number,
+  start: readonly number[] = [],
 ): number[] => {
   const order = files
     .map((file, at) => ({ ...file, at }))
     .toSorted((x, y) => y.seconds - x.seconds || (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
-  const load = Array.from({ length: count }, () => 0);
+  const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 
   for (const file of order) {
@@ -585,6 +597,25 @@ export const assign = (
   }
 
   return machines;
+};
+
+/** Workers used by the rest step on each CI machine. */
+export const WORKERS = 3;
+
+export const wall = (seconds: readonly number[]): number =>
+  Math.max(0, ...seconds, seconds.reduce((sum, value) => sum + value, 0) / WORKERS);
+
+const inLaneStep = (path: string) => path.includes(`${LANE}.`);
+
+/** Estimated rest-step wall time, excluding next/ and the separate lane step. */
+export const restLoads = (count: number): number[] => {
+  const files = Object.entries(measured)
+    .filter(([path]) => !path.startsWith("next/") && !inLaneStep(path))
+    .map(([path, seconds]) => ({ path, seconds }));
+  const machines = assign(files, count);
+  return Array.from({ length: count }, (_, machine) =>
+    wall(files.filter((_, i) => machines[i] === machine).map((file) => file.seconds)),
+  );
 };
 
 /** vitest's own sequencer, with only `shard` changed: it keeps this machine's files of `assign`. */
@@ -603,6 +634,7 @@ export class Shards extends BaseSequencer {
         return { path, seconds: measured[path] ?? 1 };
       }),
       shard.count,
+      files.every((spec) => inLaneStep(relative(root, spec.moduleId))) ? restLoads(shard.count) : [],
     );
     return files.filter((_, i) => machines[i] === shard.index - 1);
   }

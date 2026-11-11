@@ -141,6 +141,9 @@ patchedDependencies:
   # package cannot load. The patch is the fix alchemy already merged
   # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.
   alchemy@2.0.0-beta.84: patches/alchemy@2.0.0-beta.84.patch
+  # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
+  # first shrink, not while generating (sampleFromValidatedShrink already is). Drop at the release that has it.
+  effect@4.1.2: patches/effect@4.1.2.patch
   # Manti's type files name each relative import without its `.js`, which only a bundler's
   # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`
   # (`./components` becomes `./components/index.js`) and changes no code. Drop it when Manti
