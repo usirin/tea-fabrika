@@ -31,7 +31,7 @@ import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } f
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { Appended, type Entry, InputId, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox, type From } from "../processes/Mailbox.ts";
@@ -782,7 +782,7 @@ const world = async (
       Layer.provide(
         Layer.mergeAll(
           LedgerSql.layer(managerDisk.sql, { reader: "p11-manager" }),
-          LedgerTransaction.layer(managerDisk.sql),
+          LedgerTransactionSql.layer(managerDisk.sql),
         ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );

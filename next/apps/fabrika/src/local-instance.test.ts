@@ -13,7 +13,7 @@ import { vi } from "vitest";
 
 // P12, next/. Exercise startDev twice with one real home. Deployment and HTTP are fake.
 // The link law skips only the flush-to-disk waits. The outbox's own law in
-// next/packages/libfabrika/src/node/local-stage.test.ts pins the sync calls and their order.
+// next/packages/libfabrika/src/node/dev/local-dev.test.ts pins the sync calls and their order.
 vi.mock("../alchemy.run.ts", () => ({
   stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
 }));
@@ -81,7 +81,7 @@ afterEach(() => {
 it("a later dev command links its first start to the last runtime in that home", async () => {
   await fc.assert(
     fc.asyncProperty(fc.tuple(fc.string({ minLength: 1 }), fc.string({ minLength: 1 })), async (builds) => {
-      const { startDev } = await import("./stage.ts");
+      const { startDev } = await import("./instance.ts");
       const folder = home();
       vi.stubEnv("FABRIKA_HOME", folder);
       const events: Array<typeof BrainEvent.Type> = [];
@@ -125,7 +125,7 @@ it("a later dev command links its first start to the last runtime in that home",
   );
 });
 
-it("stage readiness waits for the started event to reach the ledger", async () => {
+it("instance readiness waits for the started event to reach the ledger", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), async (build) => {
       const folder = home();
@@ -147,7 +147,7 @@ it("stage readiness waits for the started event to reach the ledger", async () =
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
-      const { startDev } = await import("./stage.ts");
+      const { startDev } = await import("./instance.ts");
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {

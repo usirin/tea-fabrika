@@ -780,6 +780,8 @@ describe("printed lines", () => {
 describe("trusted config files", () => {
   // format: pin every byte of the trusted list, including all previously protected rows and reasons.
   it("format: exam-paths.json bytes", () => {
+    // A snapshot is one template, so no comment fits beside the one line that quotes today's app.
+    // oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words
     expect(readFileSync(join(ROOT, "exam-paths.json"), "utf8")).toMatchInlineSnapshot(`
       "[
         { "glob": "exam-paths.json", "why": "this list: dropping a row is changing the exam" },
@@ -799,7 +801,7 @@ describe("trusted config files", () => {
         { "glob": "next/packages/libfabrika/src/Id.test-support.ts", "why": "the generated ID fixtures" },
         {
           "glob": "next/apps/fabrika/src/port.test-support.ts",
-          "why": "the port a stage test hands to dev.ts"
+          "why": "the port an instance test hands to dev.ts"
         },
         { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
         { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
@@ -861,6 +863,7 @@ describe("trusted config files", () => {
       ]
       "
     `);
+    // oxlint-enable fabrika/no-stage-word
   });
   // format: pin workflow events, permissions, checkout flags, env and commands byte for byte.
   it("format: commits workflow bytes", () => {
