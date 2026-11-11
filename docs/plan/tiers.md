@@ -7,7 +7,7 @@ Tier 1 is committed. It started 2026-11-05 with its exam. *Changed 2026-11-05 by
 longer waits on today's pipeline, which is paused. Tier 1 is built now by the lead
 session's agents, by hand, with the pipeline's steps for each pull request, in
 [37 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time)
-([where we are](./README.md#where-we-are-now)). As of 2026-11-09, 18 rows are on main, P12 the last of them; where the rest stand is in [the plan's state](./README.md#where-we-are-now). *It said: P1 to P4 and P5 done.* *It said: today's pipeline finishes first
+([where we are](./README.md#where-we-are-now)). As of 2026-11-11, 20 of its 43 rows are on main, plus P17a, half of P17, with P8 the last of them (*it said, as of 2026-11-09: 18 rows, P12 the last*); where the rest stand is in [the plan's state](./README.md#where-we-are-now). *It said: P1 to P4 and P5 done.* *It said: today's pipeline finishes first
 and builds ticket 117, then Tier 1's plan goes through the planner and the pipeline builds
 its tickets.* A tier is a project. The approval of 2026-11-01 covers what Tier 1 builds,
 not its breakdown.
