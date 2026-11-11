@@ -63,9 +63,9 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    // Absent: anything below may be imported. Present: only these, so `[]` leaves only the layer itself.
 -  imports: z9.array(z9.string().min(1)).optional()
 +  imports: z9.array(z9.string().min(1)).optional(),
-+  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): an optional floor.
-+  // Rows on one floor share a rank, and an import between two such rows is a break.
-+  floor: z9.number().int().optional()
++  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): an optional layer.
++  // Rows on one layer share a rank, and an import between two such rows is a break.
++  layer: z9.number().int().optional()
  }).strict();
  function importsIssue(layers) {
    const ranks = new Map(layers.map((layer, rank) => [layer.name, rank]));
@@ -91,23 +91,23 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
  function compileMatchers(layers) {
    const matchers = [];
 -  layers.forEach((layer, rank) => {
-+  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): a row with a `floor`
-+  // ranks by it. A smaller rank is a higher layer, so a floored row's rank is `anchor + (top - floor)`:
-+  // a higher floor is a higher rank, equal floors are one rank, and a floor no other row has still
-+  // moves the row. `anchor` is the list place of the first floored row, so unfloored rows above it
-+  // keep their place. An unfloored row below it ranks just under the nearest floored row above it
-+  // (that row's rank plus a fraction of its distance down the list): below that floor, above the next
-+  // lower one, and apart from every other unfloored row. With no floored row, every rank is its place.
-+  const anchor = layers.findIndex((l) => l.floor !== void 0);
-+  const top = Math.max(...layers.map((l) => l.floor ?? -Infinity));
-+  const floorRank = (l) => anchor + (top - l.floor);
++  // Patched (kamp-us/demlik#913, https://github.com/kamp-us/demlik/issues/913): a row with a `layer`
++  // ranks by it. A smaller rank is a higher layer, so a ranked row's rank is `anchor + (top - layer)`:
++  // a higher layer is a higher rank, equal layers are one rank, and a layer no other row has still
++  // moves the row. `anchor` is the list place of the first ranked row, so rows without an explicit layer above it
++  // keep their place. A row without an explicit layer below it ranks just under the nearest ranked row above it
++  // (that row's rank plus a fraction of its distance down the list): below that layer, above the next
++  // lower one, and apart from every other row without one. With no ranked row, every rank is its place.
++  const anchor = layers.findIndex((l) => l.layer !== void 0);
++  const top = Math.max(...layers.map((l) => l.layer ?? -Infinity));
++  const layerRank = (l) => anchor + (top - l.layer);
 +  layers.forEach((layer, index) => {
 +    let rank = index;
-+    if (layer.floor !== void 0) rank = floorRank(layer);
++    if (layer.layer !== void 0) rank = layerRank(layer);
 +    else if (anchor !== -1 && index > anchor) {
 +      let above = index;
-+      while (layers[above].floor === void 0) above--;
-+      rank = floorRank(layers[above]) + (index - above) / (layers.length + 1);
++      while (layers[above].layer === void 0) above--;
++      rank = layerRank(layers[above]) + (index - above) / (layers.length + 1);
 +    }
      const imports = layer.imports === void 0 ? null : new Set(layer.imports);
      for (const pattern of layer.paths) {
@@ -134,7 +134,7 @@ index b81bf353943b40291ef6810324da31fb49234092..22b7860aaf9c1067838ffc342a0af968
    return {
      layers: rules.layers.map((l) => l.name),
 -    importsDeclared: rules.layers.some((l) => l.imports !== void 0),
-+    importsDeclared: rules.layers.some((l) => l.imports !== void 0 || l.floor !== void 0),
++    importsDeclared: rules.layers.some((l) => l.imports !== void 0 || l.layer !== void 0),
      filesScanned: loaded.sourceFiles.length,
      census,
      violations: sortEdges(violations),
