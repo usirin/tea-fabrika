@@ -729,6 +729,14 @@
           }
         ]
       }
+    },
+    {
+      // Ticket 649, L6: trace's speed laws count work through the built-ins
+      // (programs/trace/src/work.test-support.ts), which cannot see a hand index loop. This catches
+      // the plain one that only reads `a[i]`. A `while` loop, or an index loop that does arithmetic
+      // on `i`, slips past both, and that gap is accepted (0065).
+      "files": ["programs/trace/src/**/*.ts"],
+      "rules": { "typescript/prefer-for-of": "error" }
     }
   ]
 }
