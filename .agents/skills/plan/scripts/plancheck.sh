@@ -10,7 +10,7 @@
 # step other than tests. Version 2 checks the generator grammar on laws tables (a "plant" column).
 # Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
-# `package.json`.
+# `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit.
 set -eu
 draft=0
 case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --owners-json) draft=owners; shift;; esac
@@ -20,6 +20,11 @@ plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 cd "$here/../../../.."
 if [ "$draft" != owners ]; then
     sh "$here/../../lead/scripts/leakgrep.sh" --text "$plan" >&2
+fi
+# Draft mode also prints 0087's size advice: each slice over `[review] lines`. It never fails the
+# check until a replay on merged pull requests lets it block.
+if [ "$draft" = 1 ]; then
+    node "$here/../../lead/scripts/sizecap.ts" plan "$plan" || echo "size: not checked"
 fi
 python3 - "$plan" "$here/../../step-commit/scripts/exam.py" "$draft" <<'PY'
 import hashlib, json, re, subprocess, sys
