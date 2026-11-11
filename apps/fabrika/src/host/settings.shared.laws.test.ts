@@ -58,8 +58,10 @@ const worker = (folder: string) => {
       }
     }
   });
+  // No count of tries or wall-clock cap: a worker's answer takes as long as the machine's load makes
+  // it (0036, 0052). A worker that never answers ends at the test's own timeout.
   const next = async () => {
-    for (let i = 0; i < 500; i++) {
+    while (true) {
       const line = lines.shift();
 
       if (line !== undefined) {
@@ -72,8 +74,6 @@ const worker = (folder: string) => {
 
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-
-    throw new Error(`settings worker did not answer: ${failure}`);
   };
   return {
     next,

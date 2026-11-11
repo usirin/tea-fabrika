@@ -42,7 +42,8 @@ try {
     const request = JSON.parse(line);
 
     if (request.type === "watch") {
-      for (let i = 0; i < 500; i++) {
+      // No cap on tries: how soon the watch answers depends on load (0036, 0052); the parent test ends it.
+      while (true) {
         const keys = watched.latest?.keys.rows;
 
         if (

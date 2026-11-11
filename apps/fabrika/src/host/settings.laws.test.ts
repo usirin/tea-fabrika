@@ -17,10 +17,14 @@ import {
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { type Setting, settingsFile } from "./settings.ts";
+import { type Setting, settingsSaves } from "./settings.ts";
 
 // Today's version. No disk, OS watch, or real sleep. @effect/vitest is not a dependency
 // of today's app; use its installed fast-check with a fresh TestClock per generated run.
+// The reader is settingsSaves, the one product reads (host/keybindings.ts). It answers for each save
+// burst, the same text included, where ticket 553's settingsFile answered only a new text. The laws
+// below are about what is heard and when, so `got`, `at` and `logs` drop an answer equal to the one
+// before it, with its log row; the per-burst claim has its own law, L5b.
 const runs = { seed: 119120, numRuns: 20, endOnFailure: true };
 const name = "keybindings.toml";
 const file = `/settings/${name}`;
@@ -67,6 +71,9 @@ const start = Effect.fnUntraced(function* (ready = true) {
   const got: Setting<string>[] = [];
   const at: number[] = [];
   const logs: Record<string, unknown>[] = [];
+  /** Every answer and every log row, repeats included. */
+  const every: Setting<string>[] = [];
+  const everyLog: Record<string, unknown>[] = [];
   const backend = FileSystem.WatchBackend.of({
     register: (_path, _stat, options) =>
       Option.some(
@@ -115,11 +122,18 @@ const start = Effect.fnUntraced(function* (ready = true) {
     });
   });
   const fs = yield* make.pipe(Effect.provideService(FileSystem.WatchBackend, backend));
-  yield* settingsFile("/settings", name, Result.succeed).pipe(
+  yield* settingsSaves("/settings", name, Result.succeed).pipe(
     Stream.runForEach((answer) =>
       Effect.gen(function* () {
-        at.push(yield* Clock.currentTimeMillis);
-        got.push(answer);
+        const index = every.length;
+        const again = index > 0 && Equal.equals(every[index - 1], answer);
+        every.push(answer);
+
+        if (!again) {
+          at.push(yield* Clock.currentTimeMillis);
+          got.push(answer);
+          logs.push(everyLog[index]!);
+        }
       }),
     ),
     Effect.provideService(FileSystem.FileSystem, fs),
@@ -130,7 +144,7 @@ const start = Effect.fnUntraced(function* (ready = true) {
           const row = Logger.formatStructured.log(options);
 
           if (row.message === "settings_heard") {
-            logs.push(row.annotations);
+            everyLog.push(row.annotations);
           }
         }),
       ]),
@@ -144,6 +158,7 @@ const start = Effect.fnUntraced(function* (ready = true) {
     got,
     at,
     logs,
+    every,
     events,
     refuse: Effect.sync(() => {
       unreadable = true;
@@ -558,7 +573,7 @@ it("L4 scenario: first answer needs no ready signal or elapsed time; one start c
   );
 });
 
-it("L5: repeated saves and unreadable ticks never repeat an answer", async () => {
+it("L5: ticks over an unchanged or unreadable file never repeat an answer", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(fc.string(), { minLength: 1, maxLength: 5 }),
@@ -569,24 +584,67 @@ it("L5: repeated saves and unreadable ticks never repeat an answer", async () =>
             const h = yield* start();
 
             for (const text of texts) {
+              yield* h.fs.writeFileString(file, text);
+              yield* h.event();
+              yield* bound;
+              // The poll alone, with no event, finds the same text again: nothing more is said.
+              const before = h.every.length;
+              yield* bound;
+              yield* bound;
+              expect(h.every).toHaveLength(before);
+            }
+
+            yield* h.refuse;
+            yield* bound;
+            const refused = h.every.length;
+            expect(h.every.at(-1)?._tag).toBe("refused");
+
+            for (let tick = 0; tick < ticks; tick++) {
+              yield* bound;
+            }
+
+            expect(h.every).toHaveLength(refused);
+          }),
+        ),
+    ),
+    runs,
+  );
+});
+
+// scenario: settingsSaves answers for each save burst, even when the text is what the last answer
+// said (the plan's amendment of 2026-11-10; ticket 553's settingsFile answered only a new text).
+// The keybindings reader writes the file itself, so another host's save that puts the old text back
+// is news to it, though not to the watch (host/keybindings.ts).
+it("L5b scenario: each save burst answers once, the same text and an unreadable file included", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.string(), { minLength: 1, maxLength: 5 }),
+      fc.integer({ min: 1, max: 4 }),
+      (texts, refusals) =>
+        go(
+          Effect.gen(function* () {
+            const h = yield* start();
+            let bursts = 0;
+
+            for (const text of texts) {
               for (let repeat = 0; repeat < 2; repeat++) {
                 yield* h.fs.writeFileString(file, text);
                 yield* h.event();
                 yield* bound;
+                bursts += 1;
+                expect(h.every).toHaveLength(1 + bursts);
+                expect(h.every.at(-1)).toEqual({ _tag: "read", value: text });
               }
             }
 
             yield* h.refuse;
 
-            for (let tick = 0; tick < ticks; tick++) {
+            for (let burst = 0; burst < refusals; burst++) {
               yield* h.event();
               yield* bound;
-            }
-
-            expect(h.got.at(-1)?._tag).toBe("refused");
-
-            for (let i = 1; i < h.got.length; i++) {
-              expect(Equal.equals(h.got[i - 1], h.got[i])).toBe(false);
+              bursts += 1;
+              expect(h.every).toHaveLength(1 + bursts);
+              expect(h.every.at(-1)?._tag).toBe("refused");
             }
           }),
         ),
