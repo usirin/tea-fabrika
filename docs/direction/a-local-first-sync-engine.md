@@ -125,11 +125,13 @@ The owner walked the architecture one layer at a time on 2026-10-30 and
 2026-10-31. It ended with five layers. Each one uses only the layer below it.
 
 *Changed 2026-11-09 (owner, [0043](../../.decisions/0043-rooms-on-floors.md)): in
-`next/packages/libfabrika/src` the layers are no longer folders. A folder is one subject, a room,
-and a layer is a floor: a line in `layer-rules.json` that says which rooms a room may import.
-There is no `coordination/` folder; its files sit in `processes/`, `presence/`, `access/` and
-`runtime/`, and `data/` is `ledger/` and `telemetry/`. The five layers below stay as the way the
-design is told.*
+`next/packages/libfabrika/src` the layers are no longer folders. A folder is one subject, a module,
+and its rank is a library layer: a line in `layer-rules.json` that says which modules a module may
+import. A library layer is not one of the five below. There is no `coordination/` folder; its files
+sit in `processes/`, `presence/`, `access/` and `runtime/`, and `data/` is `ledger/` and
+`telemetry/`. The five layers below stay as the way the design is told. Renamed 2026-11-10 (owner,
+[0091](../../.decisions/0091-modules-and-layers.md)): 0043 said room and floor, which stay only as
+the analogy.*
 
 ```ts
 // A sketch. Bottom to top. Ticket #7, one line per layer.

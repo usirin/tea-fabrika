@@ -110,6 +110,13 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
 build can start.
 
+`next/` naming sweep, ticket 688 (2026-11-11): libfabrika's folders are modules and their ranks
+are layers ([0091](../../.decisions/0091-modules-and-layers.md)). Each row of `layer-rules.json`
+says `layer` where it said `floor`, with the same twelve ranks; the lint rule `fabrika/rooms` is
+`fabrika/modules`, with the same checks; and oxlint's `eslint/id-denylist` keeps the old words out
+of names in `next/`. No import permission, rank or runtime behavior changes, and no Tier 1 row is
+done by it.
+
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
 and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
