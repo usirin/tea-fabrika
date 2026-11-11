@@ -663,7 +663,17 @@
           "error",
           {
             "src": "next/packages/libfabrika/src",
-            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"],
+            "rooms": [
+              "telemetry",
+              "ledger",
+              "transport",
+              "processes",
+              "presence",
+              "packs",
+              "access",
+              "runtime",
+              "gateway"
+            ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
             "values": ["ProcessId", "Sql", "Rev"]
