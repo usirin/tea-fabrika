@@ -48,6 +48,9 @@ Each setting still has one home: the theme pick is `theme` in `fabrika.toml`,
 each theme is its own file, and keys are in `keybindings.toml`. So "one
 spelling" holds.*
 
+*Changed 2026-11-10 by [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the home's
+cache of pack code is `~/.fabrika/cache/packs/`, not `packs/`.
+
 - **Decided:**
   - The repo's file is `.fabrika/fabrika.toml`, not `fabrika.toml` at the
     root.
@@ -163,6 +166,8 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
     project run the same pack code.
   - `~/.fabrika/packs/` only caches code, keyed by commit, like Go's module
     cache. Projects pinned to the same commit share one copy.
+    *Changed 2026-11-10 by [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the
+    cache is `~/.fabrika/cache/packs/`.
   - A pack only one person wants goes in `~/.fabrika/fabrika.toml`, with its
     own lock in the home. When both name the same pack, the project's pin
     wins.
