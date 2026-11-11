@@ -1,7 +1,7 @@
 ---
 id: 0066
 title: Mutation testing leaves the pull request's steps and runs hourly against main, with its findings filed as tickets
-status: accepted
+status: amended-in-part by [0067](0067-hourly-mutation-runs-in-ci.md)
 date: 2026-11-10
 tags: [mutation, steps, schedule, merge, exam, loosening, tracker]
 ---
@@ -73,6 +73,8 @@ and its narrowing list change. The rest of 0014 holds.
   changes it, or brings a fast step back to the pull request.
 - For now the hourly run is a second agent session on the owner's laptop that runs the container
   as code and judges only the survivors. Running it in CI was considered and put off.
+- Changed by [0067](0067-hourly-mutation-runs-in-ci.md): the hourly run now runs in GitHub CI,
+  started by hand each hour. The rest of this list holds.
 
 **Binding constraints:**
 

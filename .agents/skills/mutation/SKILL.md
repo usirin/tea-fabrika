@@ -1,17 +1,26 @@
 ---
 name: mutation
-description: Run the fast mutation check for one tea-fabrika ticket with StrykerJS, changed lines first, in five minutes per pull request. Survivors advise and never hold the pull request. Use when a brief says "use the mutation skill for ticket N", after the build's laws pass.
+description: Run the hourly mutation check on what merged to tea-fabrika's main with StrykerJS, changed lines first, and file each real gap as a tracker ticket. It is no step of a pull request (decision 0066). Use when a brief says "use the mutation skill" for the hourly run, or for a lane parked inside its mutation step before 0066.
 ---
 
-# The mutation step
+# The mutation run
 
-You run the fast check on the product files the build changed, as
-[fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md) decides: changed lines
-first, five minutes for the whole pull request, survivors as advice. As the ticket's test writer you
-may kill a real survivor with a law. You change test files only.
+Mutation is no step of a pull request
+([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). It runs once an hour against
+main, on the changed lines of what merged since the last run, in the container, with the tests
+beside the changed files. No new merge, no run. A merge never waits on it.
 
-A brief names the ticket, the branch, and the build commit or files to mutate. This skill holds the
-rest.
+- **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
+  real gap as one tracker ticket per file, at most three a day, and counts noise without filing it.
+  A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
+  counts: sampled, killed, survived, real, noise, tickets, minutes.
+- **A lane parked inside its mutation step before 0066** finishes it with the steps below, as the
+  ticket's test writer, test files only; then the lane goes on to review.
+
+A brief names the ticket or the merged range, and the build commit or files to mutate. This skill
+holds the rest. The fast check's settings are
+[fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md)'s: changed lines
+first, five minutes, survivors as advice.
 
 Never print npm, pnpm or env settings. The runner strips secret settings and redacts saved output.
 
