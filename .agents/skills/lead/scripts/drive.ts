@@ -375,6 +375,9 @@ type Model =
       readonly spent: Spent;
     };
 
+/** Where the step's machine is; the chain's heartbeat names it. */
+export type DrivePhase = Model["phase"];
+
 type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
 
 // ---------------------------------------------------------------- the Check
@@ -2089,9 +2092,15 @@ export interface DriveLine {
 /**
  * Run one prepared step to its end: the Electron lock and the one-typecheck wait, then the
  * machine, its Cmds in the main checkout and its one agent turn in the box. Never throws: a
- * crash is a `stuck:crash` line, with the box kept.
+ * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
+ * before that phase's work starts.
  */
-export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<DriveLine> => {
+export const driveStep = (
+  env: Env,
+  agents: Agents,
+  p: Prepared,
+  onPhase: (phase: DrivePhase) => void = () => {},
+): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
   const program = Effect.gen(function* () {
@@ -2115,6 +2124,8 @@ export const driveStep = (env: Env, agents: Agents, p: Prepared): Effect.Effect<
       terminal: (m) => m.phase === "over",
     });
     const runtime = yield* handle.ready;
+    // tea's change notifier fires after each transition and before its first Cmd starts.
+    runtime.subscribe(() => onPhase(runtime.getState().phase));
     yield* runtime.dispatch({ type: "start", ask });
     const end = yield* runtime.done();
 
