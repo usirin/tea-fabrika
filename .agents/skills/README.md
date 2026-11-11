@@ -34,7 +34,8 @@ An agent that meets something wrong outside its task writes one finding row, wit
 keeps going: never a fix, a ticket or only a mention
 ([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md), fields in
 [field/README.md](../../field/README.md#a-finding)). A read-only step hands the row over in its
-report, and the lead adds it. A person rates each row, and only a `fix` becomes a ticket.
+report, and the lead saves it as its own file in `field/findings/`
+([0090](../../.decisions/0090-each-field-row-is-a-file.md)). A person rates each row, and only a `fix` becomes a ticket.
 
 Plan writers and agents reviewing or revising plans return them unsigned. Only the lead session
 fills the blank first line after reading the plan and running `plancheck.sh --draft`.

@@ -1,3 +1,5 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./scope.ts?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -412,6 +414,37 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
       const got = JSON.parse(readFileSync(report, "utf8")) as Report;
       expect(got.files.map((f) => f.file)).toEqual(["src/hook.cjs", "src/lib.mjs", "src/types.cts"]);
       expect(got.files.every((f) => f.total > 0 && f.selected > 0)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // 0089: of the lead tooling, only lane code is sampled. Plant: drop `inScope` from the diff's loop.
+  it("scenario: a changed lane script and product file are sampled; another lead script is not", () => {
+    const { dir, git, put } = repo();
+    const code = (n: number) => `export const f = (a: number) => (a > ${n} ? a + 1 : a - 1);\n`;
+
+    try {
+      git("commit", "-q", "--allow-empty", "-m", "root");
+      const base = git("rev-parse", "HEAD");
+      // Built from stems, so the script-reads lint does not take these paths for reads.
+      const at = (name: string, stem: string) => `.agents/skills/${name}/scripts/${stem}.ts`;
+      put(at("lead", "chain"), code(1));
+      put(at("lead", "flow/machine"), code(2));
+      put(at("lead", "mutbox"), code(3));
+      put(at("mutation", "sample"), code(4));
+      put("src/a.ts", code(5));
+      git("add", "--all");
+      git("commit", "-qm", "build");
+      const report = join(dir, "s.json");
+      const ran = spawnSync(
+        process.execPath,
+        [join(import.meta.dirname, "sample.ts"), "--build", "HEAD", "--since", base, "--report", report],
+        { cwd: dir, encoding: "utf8" },
+      );
+      expect(ran.status, ran.stderr).toBe(0);
+      const got = JSON.parse(readFileSync(report, "utf8")) as Report;
+      expect(got.files.map((f) => f.file)).toEqual([at("lead", "chain"), at("lead", "flow/machine"), "src/a.ts"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

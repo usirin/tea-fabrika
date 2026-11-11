@@ -63,8 +63,9 @@ With a base, the sample is the pull request's own lines, `base..build`, so a tip
 samples the lane and not main (ticket 568); with none, it is the build commit against its parent.
 `--related` is the explicit related-test paths, separated by commas; in a brief that is one line,
 `RELATED=<paths>`, which `drive.ts` reads. They are the tests that run, never the files mutated:
-the sample is drawn from every changed product file in the diff (`PRODUCT` in `sample.ts`: `.ts`,
-`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`), each file's cheapest
+the sample is drawn from every changed product file in the diff (`PRODUCT` in `scope.ts`: `.ts`,
+`.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, less tests and `.d.*`; of `.agents/`, only
+`chain.ts`, `drive.ts` and the lead's `flow/` folder, 0089), each file's cheapest
 range first, round-robin, so every changed file gets a mutant before any gets a second (ticket
 655). For arm a, name the base's test file a moved or changed law came from too: arm a runs only
 the related tests the base has. `--plan` is the approved plan; drive passes it. Ticket 520's proof uses
@@ -147,6 +148,14 @@ range's base as arm a, and the tests beside the changed files as `--related`.
 A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
 run's base is the `build` in this run's `mutbox.json`.
 
+`scripts/heartbeat.ts` exits 1 when a merge on main has waited more than two hours for a passing
+run: the scheduler session stopped dispatching, or every run since failed. It starts no run, and
+nothing runs it on a schedule yet.
+
+Each arm's test and hook limit is the fast check's 10 s, raised to three times the slowest test or
+file set-up in that arm's plain run in the box, and at most 60 s (`scripts/limit.ts`, ticket 605).
+A fixed 10 s stopped the dry run on one slow law, and then no mutant ran.
+
 ## A gap's category
 
 Each real gap the hourly run files gets one category
@@ -178,7 +187,8 @@ counts as proof.
 
 A survivor is this step's own answer and stays in its report, never a finding row. Outside
 means anything else you meet that is wrong.
-Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
+unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 

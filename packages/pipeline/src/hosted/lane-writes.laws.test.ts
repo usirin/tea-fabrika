@@ -1,11 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { Ledger, LedgerUnreachable } from "@kampus/fabrika-old";
 import { memoryService } from "@kampus/fabrika-old/memory";
 import { Effect, Layer, Option, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { describe, it, vi } from "vitest";
 import * as realFacts from "../asks/ledger.ts";
 import { planOf, ticketId } from "../ids.ts";
 import * as realGate from "./idempotency.ts";
@@ -20,12 +17,12 @@ import * as realGate from "./idempotency.ts";
 // test fakes both under them (vitest's fake timers) and moves the clock on by hand. Nothing sleeps
 // on this machine's clock.
 //
-// Nobody writes their own exam: each planted mistake is a text edit on a COPY of the file in a
-// temp folder, and the exact laws it breaks are checked below. Before lane 18 the code broke
-// three laws, kept as known bugs. The fix turned two red. The third, `gateWaitsForRenew`, kept
-// failing because its world never renewed the lease; its world was fixed, and all three moved.
-// It checks only that the write was sent, so `gateHoldsOnRunOut` came after: no send on a lease
-// that has run out, judged on the ledger's own row.
+// Each law was seen to fail on a planted mistake, run once and not kept (decision 0093): the
+// plants and the laws each one broke are in the run row that took them out of this file. Before
+// lane 18 the code broke three laws, kept as known bugs. The fix turned two red. The third,
+// `gateWaitsForRenew`, kept failing because its world never renewed the lease; its world was
+// fixed, and all three moved. It checks only that the write was sent, so `gateHoldsOnRunOut` came
+// after: no send on a lease that has run out, judged on the ledger's own row.
 
 type Service = Ledger["Service"];
 
@@ -41,52 +38,9 @@ type GateMod = {
   readonly useKey: typeof realGate.useKey;
 };
 
+/** The modules a law runs on: the real ones here, or a planted copy in a one-off plant run. */
 type Mod = { readonly facts: FactsMod; readonly gate: GateMod };
 const real: Mod = { facts: realFacts, gate: realGate };
-
-const madeDirs: string[] = [];
-
-afterAll(() => {
-  for (const d of madeDirs) {
-    rmSync(d, { recursive: true, force: true });
-  }
-});
-
-/**
- * A copy of `file` (beside this one, or in ../asks) with one mistake, imported from its own
- * folder. Its relative imports point back at the real files. Each edit matches once.
- */
-async function plantFile(file: string, a: string, b: string): Promise<unknown> {
-  const from = join(import.meta.dirname, file);
-  const dir = mkdtempSync(join(import.meta.dirname, ".lane-writes-plant-"));
-  madeDirs.push(dir);
-  const text = readFileSync(from, "utf8").replace(
-    /from "(\.\.?\/[^"]+)"/g,
-    (_, path: string) => `from "${join(dirname(from), path)}"`,
-  );
-  const count = text.split(a).length - 1;
-
-  if (count !== 1) {
-    throw new Error(`plant edit on ${file}: "${a}" found ${count} times, want 1`);
-  }
-
-  const to = join(dir, "planted.ts");
-  writeFileSync(
-    to,
-    text.replace(a, () => b),
-  );
-  return import(/* @vite-ignore */ pathToFileURL(to).href);
-}
-
-const plantFacts = async (a: string, b: string): Promise<Mod> => ({
-  ...real,
-  facts: (await plantFile("../asks/ledger.ts", a, b)) as typeof realFacts,
-});
-
-const plantGate = async (a: string, b: string): Promise<Mod> => ({
-  ...real,
-  gate: (await plantFile("idempotency.ts", a, b)) as typeof realGate,
-});
 
 // ---------------------------------------------------------------- the world
 
@@ -181,9 +135,6 @@ const withFakeTime = async <A>(f: () => Promise<A>): Promise<A> => {
     vi.useRealTimers();
   }
 };
-
-const messageOf = (e: unknown): string =>
-  e instanceof Error ? (e.cause instanceof Error ? e.cause.message : e.message) : String(e);
 
 interface Law<W> {
   readonly name: string;
@@ -560,7 +511,7 @@ const gateHoldsOnRunOut: Law<{ readonly gone: boolean; readonly back: number }> 
   },
 };
 
-// ---------------------------------------------------------------- the laws and the plants
+// ---------------------------------------------------------------- the laws
 
 /** A law with its kind of world closed over: each law makes and checks its own. */
 interface Checked {
@@ -587,99 +538,8 @@ const LAWS: readonly Checked[] = [
   checked(gateHoldsOnRunOut),
 ];
 
-const BUGS: readonly (readonly [Checked, RegExp])[] = [];
-
-const PLANTS: Record<string, () => Promise<Mod>> = {
-  // A fact in its own stream gets a new id each try: a resend of one that landed lands again.
-  factIdPerTry: () =>
-    plantFacts(
-      'ledger.append(factsOf(home), "any", event, hold.fence)',
-      'Effect.suspend(() => ledger.append(factsOf(home), "any", {...event, id: crypto.randomUUID()}, hold.fence)),',
-    ),
-  // A fact to an inbox gets a new id each try.
-  sentIdPerTry: () =>
-    plantFacts(
-      // oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a source file; `${fact.type}` is that file's own template, written out as it is
-      "steady(`send ${fact.type}`, ledger.send(inbox, id, event, o.hold?.fence));",
-      // oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a planted line; its `${fact.type}` is that line's own template
-      "steady(`send ${fact.type}`, Effect.suspend(() => ledger.send(inbox, crypto.randomUUID(), event, o.hold?.fence)));",
-    ),
-  // The gate's rows get a new id each try. Lane 18 moved its retry into `steady`.
-  gateIdPerTry: () =>
-    plantGate(
-      'ledger.append(stream, "any", { kind, writer: o.holder, data, id }, o.fence)',
-      // oxlint-disable-next-line eslint/no-template-curly-in-string -- the text of a planted line; its `${...}` is that line's own template
-      'Effect.suspend(() => ledger.append(stream, "any", {kind, writer: o.holder, data, id: `${id}:${Date.now()}`}, o.fence)),',
-    ),
-  // The lease check does not look at whose lease it is.
-  otherFenceMissed: () =>
-    plantGate("if (lease !== null && lease.fence !== o.fence) {\n          return false;\n        }\n\n        ", ""),
-  // The lease check takes a lease past its end, or a row the alarm took, for a lost one: the
-  // clock fences, as before rule B. Added with `gateWaitsForRenew`, so it is seen to fail.
-  runOutIsLost: () =>
-    plantGate(
-      "if (lease !== null && lease.fence !== o.fence) {\n          return false;\n        }",
-      "if (lease === null || lease.fence !== o.fence || lease.expires_at <= Date.now()) return false;",
-    ),
-  // The send goes out with no lease check at all.
-  noLeaseCheck: () =>
-    plantGate(
-      'if (o.planted !== "no_lease_check" && !(yield* leaseHeld))',
-      "if (o.planted === undefined && false && !(yield* leaseHeld))",
-    ),
-  // The lease check takes rule B for an outside write: with no newer fence it sends, on a lease
-  // past its end too. Added with `gateHoldsOnRunOut`, which alone catches it.
-  sendsOnRunOut: () =>
-    plantGate(
-      "if (lease !== null && lease.expires_at - Date.now() > marginMs) {\n          return true;\n        }",
-      "return true;",
-    ),
-};
-
 describe("a lane's own writes for a short drop (lane 18, part 2)", () => {
   it.each(LAWS.map((law) => [law.name, law] as const))("%s", async (_, law) => {
     await law.assert(real);
-  });
-
-  it.each(BUGS.map(([law, how]) => [law.name, law, how] as const))("known bug: %s", async (_, law, how) => {
-    const e = await law.assert(real).then(
-      () => null,
-      (x: unknown) => x,
-    );
-    expect(e).toBeInstanceOf(Error);
-    expect(messageOf(e)).toMatch(how);
-  });
-
-  it("each law is seen to fail on a planted mistake, and only the laws it should", async () => {
-    const caught: Record<string, readonly string[]> = {};
-
-    for (const [name, make] of Object.entries(PLANTS)) {
-      const mod = await make();
-      const out: string[] = [];
-
-      for (const law of LAWS) {
-        const failed = await law.assert(mod).then(
-          () => false,
-          () => true,
-        );
-
-        if (failed) {
-          out.push(law.name);
-        }
-      }
-
-      caught[name] = out;
-    }
-
-    expect(caught).toEqual({
-      factIdPerTry: [factLandsOnce.name],
-      sentIdPerTry: [factLandsOnce.name],
-      gateIdPerTry: [gateOnce.name],
-      otherFenceMissed: [gateOtherFence.name],
-      // G5 catches these two as well: one sends on a run-out lease, the other never sends.
-      noLeaseCheck: [gateOtherFence.name, gateHoldsOnRunOut.name],
-      runOutIsLost: [gateWaitsForRenew.name, gateHoldsOnRunOut.name],
-      sendsOnRunOut: [gateHoldsOnRunOut.name],
-    });
   });
 });

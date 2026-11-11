@@ -20,6 +20,8 @@ import "./Runners.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../freshmain.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../sizecap.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../gc.ts?raw";
 import "../governance.sh?raw";
 import "../keepruns.sh?raw";
@@ -34,7 +36,11 @@ import "../mutbox.ts?raw";
 import "../redact.sh?raw";
 import "../../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../../mutation/scripts/scope.ts?raw";
 import "../../../plan/scripts/plancheck.sh?raw";
 import "../../../step-commit/scripts/exam.py?raw";
 import "../../../step-commit/scripts/stepcommit.sh?raw";

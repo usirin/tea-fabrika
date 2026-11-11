@@ -1,7 +1,7 @@
 ---
 id: 0029
 title: The repo formats code as Effect does, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
-status: amended-in-part by [0039](0039-keep-semicolons-and-es5-commas.md)
+status: amended-in-part by [0039](0039-keep-semicolons-and-es5-commas.md), [0094](0094-lines-are-100-columns.md)
 date: 2026-11-09
 tags: [style, format, oxfmt, names, of, services, effect, next]
 ---

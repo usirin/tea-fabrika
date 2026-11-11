@@ -118,7 +118,7 @@ answer = (
     "Give every finding in that answer, grouped by class, most serious first.",
     "Name each checked decided note and say where the change follows or breaks it.",
     "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-    "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
+    "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
     "End with exactly one answer: line, as the last line.",
 )
 cleanup = (
@@ -138,6 +138,8 @@ rules = {
             "Decided notes:", "Last fixes:", *review, *answer,
         ),
         "step:Land it": (*cleanup, *exam),
+        # Ticket 652: a lane agent's last act is land.ts ready; the lead session lands.
+        "heading:Lane brief template": ("land.ts ready",),
     },
     "AGENTS.md": {"bullet:Every pull request": exam},
 }
@@ -192,6 +194,18 @@ for path, sections in rules.items():
         ):
             if re.search(pattern, body, re.I):
                 bad.append(f"{path}: forbidden review restriction: {pattern}")
+        # Ticket 652: no brief template hands an agent a lead-only step. The permission check
+        # refuses a subagent the lead key, so a lane that is told to sign as lead stops (0056).
+        # stepcommit.sh --commit-only lead stays allowed: it commits and signs nothing.
+        lead_only = (
+            r"commits\s+sign", r"step-keys", r"botpush", r"catchup\.sh", r"land\.ts\s+run",
+            r"stepcommit\.sh\s+lead",
+        )
+        for title in re.findall(r"^#{1,6} (.*brief template.*?)\s*$", text, re.M | re.I):
+            body = section(text, "heading:" + title)
+            for pattern in lead_only:
+                if re.search(pattern, body, re.I):
+                    bad.append(f"{path}: lead-only step in {title}: {pattern}")
 for message in bad:
     print(message, file=sys.stderr)
 if not bad:
