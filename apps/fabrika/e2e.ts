@@ -11,6 +11,7 @@ import { kindOf, nameOf } from "@kampus/pipeline/tickets/ticket";
 import { SEVEN, SEVEN_TITLE } from "@tea-fabrika/tracker/seven";
 import { Effect } from "effect";
 import { _electron, type ElectronApplication, type Locator, type Page } from "playwright";
+import { askDesk } from "./e2e/ask-desk.ts";
 import { PROTOCOL } from "./src/link.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -2850,7 +2851,6 @@ const grid = async (page: Page, visit: (layout: Layout, ids: readonly string[]) 
 
 /** The key states the ARIA stage reads, in the order it puts each layout through them. */
 const STATES = ["plain", "asks-dot", "close-asked", "info", "palette", "strips", "closing", "pipe"] as const;
-
 type State = (typeof STATES)[number];
 
 /** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
@@ -3406,6 +3406,18 @@ const all = async () => {
     await borderDrag();
     await keysLook();
     await trackerFocus();
+    await askDesk({
+      launch,
+      prompted,
+      run,
+      prefixed,
+      focusOn,
+      tilesAre,
+      lookIs,
+      hostPid,
+      stop,
+      shots,
+    });
     // The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
     // run only with --focus, the way the ARIA trees run only with --aria.
   } finally {
@@ -3419,7 +3431,9 @@ const all = async () => {
 };
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
-if (process.argv.includes("--keys")) {
+if (process.argv.includes("--ask-desk")) {
+  await askDesk({ launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
+} else if (process.argv.includes("--keys")) {
   await keysLook();
 } else if (process.argv.includes("--drag")) {
   await borderDrag();
@@ -3436,7 +3450,6 @@ if (process.argv.includes("--keys")) {
 }
 
 const after = await pgrep(here);
-
 check("the host stopped by its pid: pgrep finds nothing of this app left", after.length === 0, after);
 
 const sock = await stat(join(home, "host", "sock")).then(

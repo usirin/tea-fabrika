@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema } from "effect";
+import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -37,9 +37,9 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
-import { Recovery } from "./internal/recovery.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { Refusal } from "./Program.ts";
-import { RecoveryStore } from "./RecoveryStore.ts";
+import { RecoveryStore, recoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
 const NAME = "counter:1";
@@ -447,8 +447,35 @@ const recover = (w: ReturnType<typeof world>) =>
     yield* ProgramRunner.use((r) => r.due(deadline!)).pipe(Effect.provide(w.layer()));
   });
 
+/** P37's real recording: a runner layer given `layer` keeps its spans as job records. */
+const traced = () => {
+  const sink = storage();
+  const parts = new Map<string, ReturnType<typeof storage>>();
+  const records = RecordManager.sql((name) => {
+    let part = parts.get(name);
+
+    if (part === undefined) {
+      part = storage();
+      parts.set(name, part);
+    }
+
+    return part.sql;
+  }, 1024 ** 3);
+  const store = Layer.mergeAll(SpanSink.layer(sink.sql, { object: A }), records, Archive.memory);
+  return {
+    layer: Recording.layer.pipe(Layer.provideMerge(store)),
+    rows: (process: string) =>
+      RecordManager.use((r) => Stream.runCollect(r.read({ _tag: "job", process }))).pipe(Effect.provide(records)),
+  };
+};
+
 describe("T337 down event identity, next/", () => {
-  const DownPolicy = Recovery.cases.down.mapFields(({ _tag, process, ...fields }) => fields);
+  /** A down record's policy fields, as the journal's writing-down case saves them. */
+  const DownPolicy = Schema.Struct({
+    reason: Schema.NonEmptyString,
+    crashes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    until: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  });
   it.effect.prop(
     "public down ids track policy and each caller retries its own event through reopen",
     { process: processIds, down: DownPolicy },
@@ -493,20 +520,33 @@ describe("T337 down event identity, next/", () => {
         const w = world(false, false, null, {}, "bad_msg", process);
         yield* w.boot;
         yield* ProcessManager.use((p) => p.exit(process, CRASHED, from())).pipe(Effect.provide(w.manager()));
-        const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
+        const recovery = () =>
+          RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
         yield* RecoveryStore.use((s) =>
           s.save({
-            v: 1,
+            v: 2,
             name: NAME,
             policy,
             seq: 0,
             build: BUILD,
-            recovery: Recovery.cases.down.make({ process, ...down }),
-            pending: { type: "down", process, from: from() },
-            attempt: null,
+            // P34c slice 2: the saved journal holds the down write still to do. `origin` is the crash
+            // it recovers from, for a journal that keeps it past the down write.
+            journal: {
+              _tag: "writing_down",
+              recovery: { process, ...down },
+              origin: {
+                _tag: "crash",
+                failure: { _tag: "interrupted", process, letter: "cut", build: BUILD, seq: 1 },
+                reason: CRASHED,
+              },
+              from: from(),
+            },
             restarts: [],
             observations: [],
             receipts: [],
+            crashes: down.crashes,
+            healthyAt: 0,
+            requests: [],
           }),
         ).pipe(Effect.provide(recovery()));
         // Lose the runner's answer after the real down append, then resume its saved action.
@@ -804,9 +844,16 @@ describe("P34 runner supervision", () => {
                   } else if (path === "Restart live") {
                     w.controls.build = `build-${id}`;
                     w.controls.wakeAt = time;
+                    const trace = traced();
                     yield* ProgramRunner.use((r) => r.restart({ id: `restart-${id}`, build: w.controls.build })).pipe(
-                      Effect.provide(w.layer()),
+                      Effect.provide(w.layer(trace.layer)),
                     );
+                    // The restart span names the build being started, not the replaced process's build.
+                    expect(
+                      (yield* trace.rows(A))
+                        .filter((row) => row.name === "runner.restart")
+                        .map((row) => row.attributes),
+                    ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                   } else {
                     const earlyCut = ["after_observation", "after_exit", "after_down"].includes(path);
 
@@ -856,9 +903,16 @@ describe("P34 runner supervision", () => {
                     if (path === "Restart down") {
                       w.controls.build = `build-${id}`;
                       w.controls.wakeAt = time;
+                      const trace = traced();
                       yield* ProgramRunner.use((r) => r.restart({ id: `restart-${id}`, build: w.controls.build })).pipe(
-                        Effect.provide(w.layer()),
+                        Effect.provide(w.layer(trace.layer)),
                       );
+                      // The restart span names the build being started, not the replaced process's build.
+                      expect(
+                        (yield* trace.rows(A))
+                          .filter((row) => row.name === "runner.restart")
+                          .map((row) => row.attributes),
+                      ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                     } else if (path === "external adoption") {
                       yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
                         Effect.provide(w.manager()),
@@ -886,12 +940,15 @@ describe("P34 runner supervision", () => {
                   }
 
                   const armed = w.alarm();
-                  const recovery = yield* RecoveryStore.use((s) => s.load).pipe(
-                    Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
-                  );
+                  const recovery = yield* recoveryStore(w.state.sql, {
+                    name: NAME,
+                    capacity: 1024 ** 3,
+                    schema: Supervision,
+                  }).load;
                   // The program is live, so no recovery deadline remains. Earlier down
                   // exits above checked the other side of the same earliest-deadline law.
-                  expect(recovery?.recovery._tag ?? "live").toBe("live");
+                  // P34c slice 2: a live program with no deadline is an idle journal.
+                  expect(recovery?.journal._tag ?? "idle").toBe("idle");
                   expect(
                     yield* ProcessManager.use((p) => p.isLive(path === "wake" ? A : PIDS[crashes]!)).pipe(
                       Effect.provide(w.manager()),
@@ -1184,9 +1241,8 @@ describe("P34 runner supervision", () => {
             w.reopen();
             yield* recover(w);
             const status = yield* ProcessManager.use((p) => p.status(NAME)).pipe(Effect.provide(w.manager()));
-            const saved = yield* RecoveryStore.use((s) => s.load).pipe(
-              Effect.provide(RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 })),
-            );
+            const saved = yield* recoveryStore(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision })
+              .load;
             expect({ records, saved, state: status.state }).toMatchObject({
               records: [{ build, body: { build, input: id } }],
               saved: { build },
@@ -1387,7 +1443,8 @@ describe("P34 runner supervision", () => {
 
             const afterFifty = yield* measure(51);
 
-            const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
+            const recovery = () =>
+              RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
             w.reopen();
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
@@ -1560,13 +1617,16 @@ describe("P34 runner supervision", () => {
                 RecoveryStore: S,
               }: {
                 RecoveryStore: Context.Service<Store, Store> & {
-                  layer: (sql: Sql, who: { name: string; capacity: number }) => LayerType.Layer<Store>;
+                  layer: (
+                    sql: Sql,
+                    who: { name: string; capacity: number; schema: typeof Supervision },
+                  ) => LayerType.Layer<Store>;
                 };
               } = yield* Effect.promise(() => import(path));
               expect(
                 yield* Effect.gen(function* () {
                   return yield* (yield* S).input(value);
-                }).pipe(Effect.provide(S.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 }))),
+                }).pipe(Effect.provide(S.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }))),
               ).toMatchObject({ id: value, envelope: { input: { type: "poison", key: value } } });
             }).pipe(Effect.provide(w.layer()));
           }),

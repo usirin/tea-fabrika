@@ -464,8 +464,9 @@
     },
     {
       // Test files only: an `expect` that sits only inside an `if` may never run.
-      // `!` is allowed here: a test that hits a missing value fails on its own.
-      "files": ["**/*.test.ts"],
+      // `!` is allowed here: a test that hits a missing value fails on its own. The record-part
+      // suite (0062) holds the laws its runner registers, so it is a test file here too.
+      "files": ["**/*.test.ts", "next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
       "rules": {
         "fabrika/no-expect-in-if": "error",
         "typescript/no-non-null-assertion": "off",
@@ -735,6 +736,18 @@
       }
     },
     {
+      // The record-part suite (0062) is the laws its runner registers. It is a test, as above, except
+      // that it keeps the edge rules on and marks its Promise edges: only `next/`'s `.test.ts` files
+      // may turn one off (`edge-comment.test.ts`).
+      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      "rules": {
+        "fabrika/prefer-schema-arbitrary": "warn",
+        "fabrika/effect-functions": "off",
+        "fabrika/no-hand-tag": "off",
+        "fabrika/one-store-hook": "off"
+      }
+    },
+    {
       // `.agents/` tests keep the edge rules on: only `next/`'s tests may turn one off
       // (`edge-comment.test.ts`). The rest is left out as for `next/`'s tests above.
       "files": [".agents/**/*.test.ts"],
@@ -745,8 +758,10 @@
       }
     },
     {
-      // T664, L15: start code in next/apps selects the settings Layers, the TOML adapter included.
-      "files": ["next/apps/**"],
+      // T664, L15, narrowed by T730's L9: only these start files in next/apps choose the TOML
+      // adapter, `settings-start.test.ts` standing in for the start it tests. Every other app file,
+      // tests included, keeps the `next/**` ban, and the parser stays banned here too.
+      "files": ["next/apps/fabrika/dev.ts", "next/apps/fabrika/cli.ts", "next/apps/fabrika/src/settings-start.test.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -812,6 +827,7 @@
               "settings",
               "processes",
               "presence",
+              "jobs",
               "access",
               "runtime",
               "gateway"
@@ -950,6 +966,7 @@
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/jobs/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
@@ -965,6 +982,7 @@
         "next/packages/libfabrika/src/ledger/internal/**",
         "next/packages/libfabrika/src/processes/internal/**",
         "next/packages/libfabrika/src/presence/internal/**",
+        "next/packages/libfabrika/src/jobs/internal/**",
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",

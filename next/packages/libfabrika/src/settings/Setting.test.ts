@@ -9,6 +9,8 @@
 //   An absent value is the default; a present value that fails the schema is a failure.
 // - `Setting.group({ name: setting, ... })` is a Config of the record, with `declarations` beside it.
 // - `Declarations.port` is `instance.port`; `Declarations.all` is the group of slice 1's settings.
+// - T730, P38 slice 2, L10: `since`, the release that introduced the key, is a required string
+//   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
@@ -29,6 +31,7 @@ const declare = (path: string) =>
     doc: "A generated port.",
     scope: ["person"],
     reload: "restart",
+    since: "0.0.0",
   });
 
 // A declaration path segment, as settings.md "Key spelling and paths" writes keys: short words,
@@ -98,21 +101,32 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
     // Compiled by `pnpm typecheck`, never run: each call below must be refused by the compiler.
     const refused = () => [
       // @ts-expect-error scope is required.
-      Setting.make("a.b", { schema: Port, default: 1, doc: "d", reload: "restart" }),
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", reload: "restart", since: "0.0.0" }),
       // @ts-expect-error scope cannot be empty.
-      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: [], reload: "restart" }),
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: [], reload: "restart", since: "0.0.0" }),
       // @ts-expect-error default is required.
-      Setting.make("a.b", { schema: Port, doc: "d", scope: ["person"], reload: "restart" }),
+      Setting.make("a.b", { schema: Port, doc: "d", scope: ["person"], reload: "restart", since: "0.0.0" }),
       // @ts-expect-error doc is required.
-      Setting.make("a.b", { schema: Port, default: 1, scope: ["person"], reload: "restart" }),
+      Setting.make("a.b", { schema: Port, default: 1, scope: ["person"], reload: "restart", since: "0.0.0" }),
       // @ts-expect-error reload is required.
-      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"] }),
-      // @ts-expect-error a default must have the schema's type.
-      Setting.make("a.b", { schema: Port, default: "1", doc: "d", scope: ["person"], reload: "restart" }),
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], since: "0.0.0" }),
+      Setting.make("a.b", {
+        schema: Port,
+        // @ts-expect-error a default must have the schema's type.
+        default: "1",
+        doc: "d",
+        scope: ["person"],
+        reload: "restart",
+        since: "0.0.0",
+      }),
       // @ts-expect-error a scope names only the two files.
-      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["cloud"], reload: "restart" }),
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["cloud"], reload: "restart", since: "0.0.0" }),
       // @ts-expect-error reload is live or restart.
-      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "never" }),
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "never", since: "0.0.0" }),
+      // @ts-expect-error since is required (T730 L10): the release that introduced the key.
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart" }),
+      // @ts-expect-error since is a release, never a number (T730 L10).
+      Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart", since: 1 }),
     ];
     expect(typeof refused).toBe("function");
   });
@@ -128,8 +142,14 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       doc: "d",
       scope: ["repo", "person"],
       reload: "live",
+      since: "1.2.3",
     });
     expectTypeOf(repo.scope).toEqualTypeOf<readonly ["repo", "person"]>();
+    // T730 L10: the release metadata is on the declaration, typed, and the value type stays inferred.
+    expectTypeOf(repo.since).toEqualTypeOf<string>();
+    expectTypeOf(Declarations.port.since).toEqualTypeOf<string>();
+    expectTypeOf(Declarations.all.declarations[0]!.since).toEqualTypeOf<string>();
+    expectTypeOf(Declarations.version.default).toEqualTypeOf<string>();
     expectTypeOf<Effect.Success<typeof repo>>().toEqualTypeOf<string>();
     expectTypeOf<Effect.Success<typeof Declarations.all>>().toExtend<{ readonly port: number }>();
   });

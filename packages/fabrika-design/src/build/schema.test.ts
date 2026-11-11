@@ -320,7 +320,8 @@ describe("what a value is", () => {
     ).toEqual([true, true, true, true, false, false]);
   });
 
-  it("tells a token with values of its own from one that extends", () => {
+  // format: decode the committed TOML set exactly, including closed's alias and focus's own values.
+  it("format: tells a token with values of its own from one that extends", () => {
     const { tokens } = decodeAll();
     const own = [...tokens].filter(([, t]) => isOwn(t)).map(([name]) => name);
     expect({
@@ -328,7 +329,7 @@ describe("what a value is", () => {
       closed: own.includes("closed"),
       focus: own.includes("focus"),
     }).toEqual({
-      count: 21,
+      count: 22,
       closed: false,
       focus: true,
     });
