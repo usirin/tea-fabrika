@@ -42,6 +42,8 @@ import "./flow/Runners.ts?raw";
 import "./flow/Step.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./flow/host.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/typecheck.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./sizecap.ts?raw";
@@ -135,6 +137,12 @@ const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
         type: "host_run_ok",
         value: { outcome: "skip", head: "", reason: "no host section" },
       } as never)
+    : [m, cmds];
+
+/** The host typecheck answered green; any other state stays. */
+const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
+  m.phase === "typechecking"
+    ? machine.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value: { _tag: "green" } } as never)
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
@@ -395,7 +403,10 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   };
   // Every review hosts first; these laws are about the other steps, so the host step skips.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
-    hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
+    typechecked(
+      machine,
+      hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never)),
+    );
 
   it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
@@ -718,6 +729,97 @@ describe("the host step runs before every review of a new head, today's tooling"
   });
 });
 
+describe("one host typecheck runs before the pull request opens, today's tooling", () => {
+  const machine = makeMachine(limits(16));
+  type Machine = typeof machine;
+  // A lane whose review said merge-ready at `head`, after `sends` sends back: the typecheck is next.
+  const reviewed = (head: string, sends = 0, on: Machine = machine) => {
+    const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+    const [idle] = on.init(null, undefined);
+    let [m] = on.update.start(idle, { type: "start", step: "build" });
+
+    for (let i = 0; i < sends; i++) {
+      [m] = ran(m, line("send:build:step_said", head));
+    }
+
+    [m] = hostSkipped(on, ran(m, line("done", head)));
+    return ran(m, line("done", head));
+  };
+  const answered = (m: Stepped[0], value: unknown, on: Machine = machine) =>
+    on.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value } as never);
+  const lines = fc.array(word, { minLength: 1, maxLength: 30 });
+
+  it("property: a merge-ready review runs the typecheck at its head, and nothing opens before it", () => {
+    fc.assert(
+      fc.property(sha, (head) => {
+        const [m, cmds] = reviewed(head);
+        expect(m.phase).toBe("typechecking");
+        expect(cmds).toEqual([expect.objectContaining({ type: "typecheck_run", head })]);
+      }),
+      options,
+    );
+  });
+
+  it("property: green opens the PR; one that did not run opens it too, and the lane keeps why", () => {
+    fc.assert(
+      fc.property(sha, word, (head, why) => {
+        const [m] = reviewed(head);
+        const [green, opens] = answered(m, { _tag: "green" });
+        expect(green).toMatchObject({ phase: "opening", lane: { unchecked: null } });
+        expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        const [skipped, also] = answered(m, { _tag: "skipped", reason: why });
+        expect(skipped).toMatchObject({ phase: "opening", lane: { unchecked: why } });
+        expect(also).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        const [threw, again] = machine.update.typecheck_run_err(m, {
+          type: "typecheck_run_err",
+          error: { _tag: "unknown" },
+        } as never);
+        expect(threw).toMatchObject({ phase: "opening", lane: { unchecked: "the typecheck threw" } });
+        expect(again).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+      }),
+      options,
+    );
+  });
+
+  it("property: red sends the lane to the step it names with every error line, as a send back", () => {
+    const to = fc.constantFrom("tests" as const, "build" as const);
+    fc.assert(
+      fc.property(sha, to, lines, (head, step, ls) => {
+        const [m] = reviewed(head);
+        const [sent, cmds] = answered(m, { _tag: "red", to: step, lines: ls });
+        expect(sent).toMatchObject({ phase: "stepping", step, lane: { unchecked: null } });
+        expect(sent.lane.window.at(-1)).toBe("send");
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step })]);
+
+        if (cmds[0]?.type === "step_run") {
+          for (const l of ls) {
+            expect(cmds[0].note).toContain(l);
+          }
+        }
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a red typecheck that fills the intensity window stops the lane (0076)", () => {
+    // 2 in 5 here, so one earlier send and the red one trip it.
+    const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
+    const [m] = reviewed("a".repeat(40), 1, tight);
+    expect(m.phase).toBe("typechecking");
+    const red = { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] };
+    const [stopped, cmds] = answered(m, red, tight);
+    expect(cmds).toEqual([]);
+    expect(stopped).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+  });
+
+  it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
+    const [idle] = machine.init(null, undefined);
+    const [same, cmds] = answered(idle, { _tag: "green" });
+    expect(same).toBe(idle);
+    expect(cmds).toEqual([]);
+  });
+});
+
 describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
   const machine = makeMachine(limits(16));
   // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
@@ -726,9 +828,12 @@ describe("T590 loosening.sh runs after review and before catch-up, today's tooli
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
     for (const _ of LANE_STEPS) {
-      [m] = hostSkipped(
+      [m] = typechecked(
         machine,
-        machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
+        hostSkipped(
+          machine,
+          machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
+        ),
       );
     }
 
