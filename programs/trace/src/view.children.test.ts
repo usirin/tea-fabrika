@@ -2,10 +2,12 @@ import { foldEvents, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import type { JobTrace, Span, Writer } from "@kampus/fabrika-old";
 import { LANE } from "@kampus/pipeline/stages/traced";
 import type { Entry, Fact } from "@kampus/pipeline/tickets/ticket";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Model, type TraceMsg, trace } from "./machine.ts";
 import { MIN, T0 } from "./t117.ts";
 import { shownOf, type TicketRow } from "./view.ts";
+import { counted } from "./work.test-support.ts";
 
 // The ticket view finds the spans under its steps from an index of its lane's record, built once
 // for that record: never once for each step row, never again on each redraw. Today's version. On
@@ -235,13 +237,15 @@ describe("a lane's record read again", () => {
 // step once for each span row, so opening a step's calls row draws one row per call and each row
 // walks all of them. The review on PR 351 measured 188 ms per redraw at 8,000 calls and 1.3 s at
 // 20,000, on the owner's laptop under load. Ticket 117's real record has 76,164 POST spans, so the
-// window pegs a core once that row is open. Linear means about as long for 8,000 calls once as for
-// 2,000 four times; the bar is 3x, as in ./ticket.children.test.ts, and for the same reasons.
+// window pegs a core once that row is open.
 //
-// Measured by this test on e3dc0b85, same laptop and load, 2026-11-03, two runs: 8,000 once took
-// 696 and 706 ms, 2,000 four times 176 and 173 ms, so about 4x, as squared predicts. Doubt: squared
-// gives 4x and the bar is 3x, so today's misses by only about 1.3x. A linear version should give
-// about 1.1x. If a fixed cost per redraw ever pulls today's under 3x, raise the sizes, not the bar.
+// The law once compared two clock readings, as ./ticket.children.test.ts did, and for the same
+// reason it now counts the work through the built-ins instead (ticket 649, 0052, 0065): one redraw
+// at 4n calls against four redraws at n, with a bar of 2x. Counted, the first redraw of each state:
+//
+//   calls under the step     500       2,000      one at 2,000 / four at 500
+//   main                     6,059     24,059     0.99
+//   e3dc0b85's spanRowsOf    256,059   4,024,059  3.93
 
 /** A ticket whose step has `n` calls under it, read, with the step and its calls row open. */
 const callsOpen = (n: number): Model =>
@@ -250,23 +254,15 @@ const callsOpen = (n: number): Model =>
     { type: "toggle", row: `calls:${STEP_ID}` },
   ]);
 
-/** The fastest of `times` redraws of each state `make` gives, made before the clock starts. */
-const fastestDrawing = (times: number, make: () => readonly Model[]): number => {
-  let best = Infinity;
-
-  for (let k = 0; k < times; k++) {
-    const states = make();
-    const t = performance.now();
-
-    for (const s of states) {
-      shownOf(s);
-    }
-
-    best = Math.min(best, performance.now() - t);
-  }
-
-  return best;
-};
+/** The work of the first redraw of each state, made before the count starts. */
+const drawing = (states: readonly Model[], cap: number): number =>
+  counted(
+    () =>
+      states.forEach((s) => {
+        shownOf(s);
+      }),
+    cap,
+  ).work;
 
 describe("a step's calls row, open", () => {
   it("draws one row per call, each once", () => {
@@ -275,12 +271,22 @@ describe("a step's calls row, open", () => {
     expect(rows.filter((r) => r.kind === "span").length).toBe(2_000);
   });
 
-  it("takes about as long for 8,000 calls once as for 2,000 four times: linear, not squared", () => {
-    fastestDrawing(1, () => [callsOpen(2_000), callsOpen(8_000)]);
-    const four = fastestDrawing(5, () => [1, 2, 3, 4].map(() => callsOpen(2_000)));
-    const once = fastestDrawing(5, () => [callsOpen(8_000)]);
-    expect(once, `8,000 once: ${once.toFixed(1)} ms; 2,000 four times: ${four.toFixed(1)} ms`).toBeLessThan(3 * four);
-  }, 60_000);
+  // Plant L4: e3dc0b85's spanRowsOf, a `filter` of every span under the step for each row.
+  it("does under 2x the counted work drawing 4n calls once as n calls four times: linear, not squared (L4)", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 250, max: 2_000 }), (n) => {
+        // A cap far above linear's few units per call, so a squared redraw still shows its ratio.
+        const cap = 20_000 * 4 * n;
+        const once = drawing([callsOpen(4 * n)], cap);
+        const four = drawing(
+          [1, 2, 3, 4].map(() => callsOpen(n)),
+          cap,
+        );
+        expect(once, `${4 * n} once: ${once} units; ${n} four times: ${four} units`).toBeLessThan(2 * four);
+      }),
+      { seed: 119120, numRuns: 6 },
+    );
+  });
 });
 
 // Ticket 117's real shape. The review on PR 351 read its record on the owner's laptop on
@@ -288,18 +294,18 @@ describe("a step's calls row, open", () => {
 // the old index's worst case (one list copied for each of 76,164 children). This record has the
 // same counts: the step's span, 20 spans under it, and 76,164 calls under a parent that is gone.
 //
-// Measured on the owner's laptop on 2026-11-03, under load from a live lane and two agents, by
-// this test with its budget set to 1 ms so it printed the time: a read and two redraws, the step
-// open.
+// Measured on the owner's laptop on 2026-11-03, under load from a live lane and two agents: a read
+// and two redraws, the step open, took 6 ms on e3dc0b85 (the index built on got) and 16,547 ms on
+// 5f426e11 (childrenOf per row, copying). The law had a budget of 1,000 ms; it now counts the work
+// instead (ticket 649, 0052, 0065), with a bound of 4 units per span. Counted: main spends 76,668
+// units, about 1.0 per span, every run. 5f426e11's copying walk passes the bound within its
+// first few hundred children, so OverCap stops it early.
 //
-//   e3dc0b85 (the index built on got)       6 ms, 6 ms, 6 ms
-//   5f426e11 (childrenOf per row, copying)   16,547 ms (one run)
-//
-// The budget is 1,000 ms: a linear version meets it about 160 times over, so a runner many times
-// slower still passes, and a walk that copies a list per child misses it by about 16x.
+// pinned: ticket 117's real counts, 20 spans under the step and 76,164 under a gone parent, the
+// record that held the host at 100% of a core; a generated size would not be that bug.
 
 const ORPHANS = 76_164;
-const BUDGET = 1_000;
+const PER_SPAN = 4;
 
 const t117Record = (): JobTrace =>
   recordWith([
@@ -312,17 +318,21 @@ const t117Record = (): JobTrace =>
   ]);
 
 describe("ticket 117's record: 76,185 spans, almost all under a parent that is gone", () => {
-  it(`is read and drawn twice, the step open, within ${BUDGET} ms`, () => {
+  // Plant L5: 5f426e11's childrenOf per row, a copy of a parent's list for each child.
+  it(`pinned: is read and drawn twice, the step open, within ${PER_SPAN} units of work per span (L5)`, () => {
     const record = t117Record();
     const timeline = ticketOf(1);
+    const toggle: readonly TraceMsg[] = [{ type: "toggle", row: `run:${runOf(0)}` }];
     expect(record.spans.length).toBe(76_185);
-    const t = performance.now();
-    const s = readThen(record, [{ type: "toggle", row: `run:${runOf(0)}` }], timeline);
-    shownOf(s);
-    const rows = rowsOf(s);
-    const took = performance.now() - t;
+    const { value: rows, work } = counted(() => {
+      const s = readThen(record, toggle, timeline);
+      shownOf(s);
+      return rowsOf(s);
+    }, PER_SPAN * record.spans.length);
     // Not a vacuous pass: the step opens, and its 20 spans are drawn, none of the orphans.
     expect(rows.filter((r) => r.kind === "span").length).toBe(20);
-    expect(took, `a read and two redraws took ${took.toFixed(0)} ms`).toBeLessThan(BUDGET);
+    expect(work, `a read and two redraws: ${work} units for ${record.spans.length} spans`).toBeLessThanOrEqual(
+      PER_SPAN * record.spans.length,
+    );
   }, 120_000);
 });

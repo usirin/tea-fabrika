@@ -1,8 +1,10 @@
 import type { JobTrace, Span } from "@kampus/fabrika-old";
 import { LANE } from "@kampus/pipeline/stages/traced";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { T0 } from "./t117.ts";
 import { childrenOf } from "./ticket.ts";
+import { counted, OverCap } from "./work.test-support.ts";
 
 // The spans under one long step, in a big record. Today's version. On 2026-11-03, with ticket 117's
 // lane open in the trace window, the host sat at 100% of a core for 15 minutes: 78% of its time in
@@ -12,16 +14,26 @@ import { childrenOf } from "./ticket.ts";
 // Measured on the owner's laptop on 2026-11-03, with a live lane running beside it (best of 3):
 //
 //   children under one span    5,000      20,000     80,000
-//   today's childrenOf         11-13 ms   410-433 ms  (not run)
+//   before ec39c211            11-13 ms   410-433 ms  (not run)
 //   a linear sketch            0.8 ms     3.1 ms      12.9 ms
 //
-// Wall-clock budgets break on slow or busy CI runners, and counting work cannot see this cost: the
-// copies are of the index's own arrays, never of the record, so a record that counts its reads
-// reads the same n either way. So the law compares growth inside one run on one machine: one call
-// on 20,000 children against four calls on 5,000, the same number of spans in all. A linear walk
-// takes about as long for both (the sort adds about 1.2x); today's takes about 9x as long for the
-// one big call. The bar is 3x: a linear version clears it by more than 2x, today's misses it by
-// about 3x. A slower runner slows both sides alike.
+// The law first compared two clock readings, and on 2026-11-10 a shared CI runner gave the linear
+// code 52.3 ms once against 17.1 ms four times, a false red (ticket 649). A clock on a noisy runner
+// moves one side and not the other, and a test may not lean on the machine (0052). So the law now
+// counts the work instead, through the built-ins (./work.test-support.ts): each iterator step, and
+// each linear Array method by its receiver's length. That sees the copies of the index's own
+// arrays, which a record that counts its reads cannot. The count is the same on every run (0065).
+//
+// Counted on main and on ec39c211's parent, which copied a parent's list for each child:
+//
+//   children under the step     500        2,000       one at 2,000 / four at 500
+//   main                        2,498      8,750       0.88
+//   before ec39c211             133,145    2,016,803   3.79
+//
+// Over the law's six sizes, main gives 0.79 to 0.96. The bar is 2x, and a cap of 100 units per span
+// (main spends about 4) stops a squared walk early: L1b trips it at n = 250 already.
+// Not counted, and accepted (0065): a hand `while` loop, an index loop that does arithmetic on `i`.
+// `typescript/prefer-for-of` in .oxlintrc.json catches the plain index loop.
 
 const RUN = "r-long";
 
@@ -100,26 +112,35 @@ const longStep = (n: number): { readonly record: JobTrace; readonly under: reado
 /** The same record, as a new object with a new spans array: no cache keyed on either hits. */
 const fresh = (r: JobTrace): JobTrace => ({ ...r, spans: [...r.spans] });
 
-/** The fastest of `times` runs of `f`, each on records made before the clock starts. */
-const fastest = (times: number, make: () => readonly JobTrace[]): number => {
-  let best = Infinity;
+/** The spans of a record, a count of work may spend up to `per` units on each. */
+const capOf = (records: readonly JobTrace[], per: number): number =>
+  per * records.reduce((sum, r) => sum + r.spans.length, 0);
 
-  for (let k = 0; k < times; k++) {
-    const records = make();
-    const t = performance.now();
-
-    for (const r of records) {
-      childrenOf(r, RUN, 0, 1);
-    }
-
-    best = Math.min(best, performance.now() - t);
-  }
-
-  return best;
+/** The work of one call on 4n children, and of four calls on n, each on records it has not seen. */
+const workAt = (n: number, per: number): { readonly once: number; readonly four: number } => {
+  const big = [fresh(longStep(4 * n).record)];
+  const quarters = [1, 2, 3, 4].map(() => fresh(longStep(n).record));
+  const once = counted(
+    () =>
+      big.forEach((r) => {
+        childrenOf(r, RUN, 0, 1);
+      }),
+    capOf(big, per),
+  ).work;
+  const four = counted(
+    () =>
+      quarters.forEach((r) => {
+        childrenOf(r, RUN, 0, 1);
+      }),
+    capOf(quarters, per),
+  ).work;
+  return { once, four };
 };
 
+const sizes = fc.integer({ min: 250, max: 2_000 });
+const runs = { seed: 119120, numRuns: 6 };
+
 describe("the spans under a long step (childrenOf)", () => {
-  const quarter = longStep(5_000);
   const whole = longStep(20_000);
 
   it("finds every span under a step of 20,000 children, nested ones too, in start order", () => {
@@ -128,13 +149,40 @@ describe("the spans under a long step (childrenOf)", () => {
     expect(got.map((s) => s.span)).toEqual(whole.under.map((s) => s.span));
   });
 
-  it("takes about as long for 20,000 children once as for 5,000 four times: linear, not squared", () => {
-    // Warm the JIT on both sizes first, so the first call's compiling is not on either side.
-    fastest(1, () => [fresh(quarter.record), fresh(whole.record)]);
-    const four = fastest(5, () => [1, 2, 3, 4].map(() => fresh(quarter.record)));
-    const once = fastest(5, () => [fresh(whole.record)]);
-    expect(once, `20,000 once: ${once.toFixed(1)} ms; 5,000 four times: ${four.toFixed(1)} ms`).toBeLessThan(3 * four);
-  }, 60_000);
+  // Plant L1: ec39c211's parent's childrenOf, a spread copy of the parent's list for each child.
+  it("does under 2x the counted work for 4n children once as for n four times: linear, not squared (L1)", () => {
+    fc.assert(
+      fc.property(sizes, (n) => {
+        // A cap far above linear's few units per span, so a squared walk still shows its ratio; L1b
+        // holds the tight one.
+        const { once, four } = workAt(n, 10_000);
+        expect(once, `${4 * n} once: ${once} units; ${n} four times: ${four} units`).toBeLessThan(2 * four);
+      }),
+      runs,
+    );
+  });
+
+  // Plant L1b: the same; it trips OverCap.
+  it("spends under 100 units of work per span in the record (L1b)", () => {
+    fc.assert(
+      fc.property(sizes, (n) => {
+        let over: OverCap | null = null;
+
+        try {
+          workAt(n, 100);
+        } catch (e) {
+          if (!(e instanceof OverCap)) {
+            throw e;
+          }
+
+          over = e;
+        }
+
+        expect(over, `${over?.work} units passed the cap of ${over?.cap}`).toBeNull();
+      }),
+      runs,
+    );
+  });
 });
 
 describe("a record whose parents loop (childrenOf)", () => {
