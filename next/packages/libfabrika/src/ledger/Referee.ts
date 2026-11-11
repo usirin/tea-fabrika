@@ -5,7 +5,7 @@ import { ledgerStore } from "./internal/ledgerStore.ts";
 import { Doorbell, type LedgerError } from "./Ledger.ts";
 import type { Appended, Entry, Waited } from "./Log.ts";
 
-export { STREAM, tag } from "./internal/ledgerStore.ts";
+export { STREAM, tag } from "./internal/ledgerTrace.ts";
 
 export class Referee extends Context.Service<
   Referee,
