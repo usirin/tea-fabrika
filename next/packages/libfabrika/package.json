@@ -38,9 +38,9 @@
     "./workers/record": "./src/cloudflare/record.ts",
     "./workers/runtime": "./src/cloudflare/runtime.ts",
     "./node/build": "./src/node/build/bundle.ts",
-    "./node/local-stage": "./src/node/dev/local-dev.ts",
-    "./node/stage": "./src/node/dev/dev.ts",
-    "./node/stage-recording": "./src/node/dev/dev-recording.ts",
+    "./node/local-dev": "./src/node/dev/local-dev.ts",
+    "./node/dev": "./src/node/dev/dev.ts",
+    "./node/dev-recording": "./src/node/dev/dev-recording.ts",
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
     "./testing": "./src/Testing.ts"
@@ -68,5 +68,8 @@
     "react": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "volta": {
+    "extends": "../../../package.json"
   }
 }

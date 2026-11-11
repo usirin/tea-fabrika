@@ -1,4 +1,4 @@
-import { startDev as start } from "@kampus/libfabrika/node/stage";
+import { startDev as start } from "@kampus/libfabrika/node/dev";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProvidersLive } from "alchemy/Auth/Registry";
@@ -10,7 +10,7 @@ import { stack } from "../alchemy.run.ts";
 import type { Built } from "./build.ts";
 import { Settings } from "./settings.ts";
 
-export const startDev = Effect.fn("stage.startDev")(function* (
+export const startDev = Effect.fn("instance.startDev")(function* (
   built: Omit<Built, "assets">,
   options: Omit<Settings, "build"> & { readonly home: string },
 ) {
@@ -27,6 +27,7 @@ export const startDev = Effect.fn("stage.startDev")(function* (
       Interaction.layerNonInteractive(),
       AuthProvidersLive,
     );
+    // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
     return deploy({ stack: stack(built, config, local), stage: "local", dev: true, scope }).pipe(
       Effect.provide(localState()),
       Effect.provide(engine),

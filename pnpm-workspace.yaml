@@ -118,6 +118,11 @@ catalog:
 # `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
 savePrefix: ''
 
+# `pnpm exec` and `pnpm run` warn when node_modules is behind the lockfile, and never install.
+# pnpm's default, `install`, starts one, and in a step's box (no network) it deletes node_modules,
+# so the round is lost (ticket 614). A box is made with a full install, and so is the next one.
+verifyDepsBeforeRun: warn
+
 allowBuilds:
   esbuild: true
   workerd: true

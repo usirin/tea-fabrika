@@ -12,6 +12,7 @@ import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -123,7 +124,7 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
   };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const ledger = LedgerSql.layer(sql, { reader: "p17" }).pipe(Layer.provide(quiet));
-  const transaction = LedgerTransaction.layer(sql).pipe(Layer.provide(quiet));
+  const transaction = LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet));
   const observations: Observed[] = [];
   let turns = 0;
   const observed = Layer.effect(
