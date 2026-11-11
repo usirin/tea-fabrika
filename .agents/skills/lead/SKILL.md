@@ -482,8 +482,10 @@ visible, and never weaken the rules to hide this message.
    its commit loses the annotation. This also applies to signed tags and tags pointing at tags.
 10. **After the merge:** `catchup.sh` closes each ticket the description names on a line of its
     own, `fabrika close ticket <N>`, so put that line in when the PR finishes the ticket
-    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Write the `MergeRow`,
-    then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
+    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close
+    gets a comment naming the PR and its merge commit (`scripts/catchup.sh:86`). No row per merge
+    is written: that measure is proposed
+    ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 
