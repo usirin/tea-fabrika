@@ -1385,7 +1385,7 @@ export const mutationTail = (step: StepName, steps: Lane["steps"], read: (path: 
   const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
   const text = last?.report ? read(last.report) : null;
   return text === null || !last?.report
-    ? "\n\n---\nThis lane has no mutation report drive can read; say so in your review, and do not look for one outside your box.\n"
+    ? "\n\n---\nThis lane has no mutation report drive can read. Since decision 0066 a lane runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe lane's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
 };
 
