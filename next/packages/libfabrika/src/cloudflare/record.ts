@@ -1,10 +1,10 @@
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Schema } from "effect";
-import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
 import { type Chain } from "../telemetry/Trace.ts";
+import { cloudflareSql } from "./CloudflareSql.ts";
 import { RecordPart, type RecordShape } from "./objects.ts";
 
 type Part = ReturnType<typeof recordPart>;

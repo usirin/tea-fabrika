@@ -792,7 +792,7 @@ describe("P12 real object adapters", () => {
         expect(receipt.parent).toBe(parent);
 
         if (end === "exit") {
-          await p.exit(pid, "normal", fixture.from);
+          await p.exit(pid, { _tag: "normal" }, fixture.from);
         } else {
           const { revokeText } = await import("@kampus/libfabrika/access/Text");
           const text = revokeText({

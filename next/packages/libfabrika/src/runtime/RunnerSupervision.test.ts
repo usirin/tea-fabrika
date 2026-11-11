@@ -18,12 +18,17 @@ import {
   W,
   again,
   brain,
+  CRASHED,
   data,
+  ExitReason,
+  fcErrorClass,
+  fcExitReason,
   first,
   from,
   ids,
   PIDS,
   read,
+  SHUTDOWN,
   storage,
   watcher,
 } from "../processes/Process.test-support.ts";
@@ -38,6 +43,8 @@ import { RecoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
 const NAME = "counter:1";
+/** A saved letter's fold that throws RangeError, as `crashAdd` and `savedThrows` do. */
+const SAVED_RANGE = ExitReason.cases.crashed.make({ phase: "saved_letter", error: "RangeError" });
 const BUILD = "build-a";
 
 const policy = {
@@ -62,7 +69,7 @@ const Msg = Schema.Union([
     type: Schema.Literal("DOWN"),
     ref: Schema.String,
     process: Schema.String,
-    reason: Schema.String,
+    reason: Down.fields.reason,
     to: Recipient,
   }),
 ]);
@@ -80,6 +87,12 @@ const Saved = Schema.TaggedStruct("saved", { token: Schema.String });
 type WiringPolicy = Omit<typeof policy, "maxDeliveries"> & { readonly maxDeliveries?: number };
 /** Limits a law sets: the program's own `maxDeliveries`, and the wiring's policy. */
 type Limits = { readonly program?: number | undefined; readonly policy?: WiringPolicy };
+
+/** An Error whose class is named `name`, as a program's own error class would be. */
+const thrown = ({ name, message }: { readonly name: string; readonly message: string }): Error => {
+  const named = { [name]: class extends Error {} }[name]!;
+  return new named(message);
+};
 
 type Wiring = {
   policy: WiringPolicy;
@@ -122,6 +135,8 @@ const world = (
     hits: [] as string[],
     downs: [] as Array<typeof Down.Type>,
     timers: [] as number[],
+    /** P34c: when set, the poison step and the saved fold throw this instead of their fixed errors. */
+    error: null as { readonly name: string; readonly message: string } | null,
   };
 
   // The platform has one activity key per object, shared by every selected process.
@@ -183,7 +198,7 @@ const world = (
           }
 
           if (controls.savedThrows) {
-            throw new RangeError("private saved failure");
+            throw controls.error === null ? new RangeError("private saved failure") : thrown(controls.error);
           }
 
           return [{ ...s, count: s.count + m.n }, []];
@@ -193,6 +208,10 @@ const world = (
 
           if (controls.invalid) {
             return [{ count: Number.NaN, replies: 0 }, []];
+          }
+
+          if (controls.throws && controls.error !== null) {
+            throw thrown(controls.error);
           }
 
           if (controls.throws) {
@@ -441,7 +460,7 @@ describe("T337 down event identity, next/", () => {
             yield* w.boot;
             yield* ProcessManager.use((p) =>
               Effect.gen(function* () {
-                yield* p.exit(process, policy.reason, from());
+                yield* p.exit(process, CRASHED, from());
                 yield* p.down(process, policy, from());
               }),
             ).pipe(Effect.provide(w.manager()));
@@ -473,7 +492,7 @@ describe("T337 down event identity, next/", () => {
 
         const w = world(false, false, null, {}, "bad_msg", process);
         yield* w.boot;
-        yield* ProcessManager.use((p) => p.exit(process, down.reason, from())).pipe(Effect.provide(w.manager()));
+        yield* ProcessManager.use((p) => p.exit(process, CRASHED, from())).pipe(Effect.provide(w.manager()));
         const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
         yield* RecoveryStore.use((s) =>
           s.save({
@@ -934,7 +953,7 @@ describe("P34 runner supervision", () => {
               expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).at(-1)).toMatchObject({
                 _tag: "exited",
-                body: { process: A, reason: "saved_letter" },
+                body: { process: A, reason: SAVED_RANGE },
               });
               const rows = yield* inbox;
               expect(rows).toMatchObject([{ id, body: { m: { type: "add", n } } }]);
@@ -1058,7 +1077,7 @@ describe("P34 runner supervision", () => {
               expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).at(-1)).toMatchObject({
                 _tag: "exited",
-                body: { process: A, reason: "saved_letter" },
+                body: { process: A, reason: SAVED_RANGE },
               });
               return yield* inbox;
             }).pipe(Effect.provide(w.layer()));
@@ -1205,7 +1224,7 @@ describe("P34 runner supervision", () => {
               expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
                 { body: { process: A } },
-                { body: { process: B, reason: "saved_letter" } },
+                { body: { process: B, reason: SAVED_RANGE } },
               ]);
               const store = yield* ProcessStore;
               const successor = yield* store.select(B);
@@ -1249,59 +1268,56 @@ describe("P34 runner supervision", () => {
 
   it("P34 p79 plant, skip untyped mail: the watcher program steps on real monitor DOWN signals", async () => {
     await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 3 }),
-        fc.constantFrom("normal", "crashed", "shutdown"),
-        (refs, reason) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              const w = world();
-              yield* w.boot;
-              yield* ProcessManager.use((p) => p.start(first("child:start", "child:1"), from())).pipe(
-                Effect.provide(w.manager()),
-              );
-              const watching = ProcessManager.layer({ ...brain(), ...watcher(A) }, ids().next).pipe(
-                Layer.provideMerge(w.base()),
-              );
+      fc.asyncProperty(fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 3 }), fcExitReason, (refs, reason) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const w = world();
+            yield* w.boot;
+            yield* ProcessManager.use((p) => p.start(first("child:start", "child:1"), from())).pipe(
+              Effect.provide(w.manager()),
+            );
+            const watching = ProcessManager.layer({ ...brain(), ...watcher(A) }, ids().next).pipe(
+              Layer.provideMerge(w.base()),
+            );
 
-              for (const ref of refs) {
-                yield* ProcessManager.use((p) => p.monitor(ref, B, from())).pipe(Effect.provide(watching));
-              }
+            for (const ref of refs) {
+              yield* ProcessManager.use((p) => p.monitor(ref, B, from())).pipe(Effect.provide(watching));
+            }
 
-              yield* ProcessManager.use((p) => p.exit(B, reason, from())).pipe(Effect.provide(w.manager()));
-              const expected = refs.map((ref) =>
-                Down.make({
-                  ref,
-                  process: B,
-                  reason,
-                  to: Recipient.cases.process.make({ process: A }),
-                }),
-              );
-              // Inspect the manager's actual untyped letters. The test does no translation.
-              const before = yield* inbox.pipe(Effect.provide(w.manager()));
-              expect(before.map((row) => row.body)).toEqual(expected.map((m) => expect.objectContaining({ m })));
+            yield* ProcessManager.use((p) => p.exit(B, reason, from())).pipe(Effect.provide(w.manager()));
+            const expected = refs.map((ref) =>
+              Down.make({
+                ref,
+                process: B,
+                reason,
+                to: Recipient.cases.process.make({ process: A }),
+              }),
+            );
+            // Inspect the manager's actual untyped letters. The test does no translation.
+            const before = yield* inbox.pipe(Effect.provide(w.manager()));
+            expect(before.map((row) => row.body)).toEqual(expected.map((m) => expect.objectContaining({ m })));
+            w.reopen();
+
+            for (let wake = 0; wake < 2; wake++) {
+              yield* Effect.gen(function* () {
+                const runner = yield* ProgramRunner;
+                expect((yield* runner.open("watcher")).view).toMatchObject({
+                  count: 0,
+                  replies: refs.length,
+                });
+                expect(w.controls.downs).toEqual(expected);
+                expect(yield* inbox).toEqual(before);
+              }).pipe(Effect.provide(w.layer()));
               w.reopen();
-
-              for (let wake = 0; wake < 2; wake++) {
-                yield* Effect.gen(function* () {
-                  const runner = yield* ProgramRunner;
-                  expect((yield* runner.open("watcher")).view).toMatchObject({
-                    count: 0,
-                    replies: refs.length,
-                  });
-                  expect(w.controls.downs).toEqual(expected);
-                  expect(yield* inbox).toEqual(before);
-                }).pipe(Effect.provide(w.layer()));
-                w.reopen();
-              }
-            }),
-          ),
+            }
+          }),
+        ),
       ),
       {
         seed: 119120,
         numRuns: 12,
         // T271 review: the manager writes _tag: DOWN, with no tea Msg type.
-        examples: [[["00000000-0000-4000-8000-000000000271"], "crashed"]],
+        examples: [[["00000000-0000-4000-8000-000000000271"], CRASHED]],
       },
     );
   });
@@ -1718,7 +1734,7 @@ describe("P34 runner supervision", () => {
               // P34 amendment: inside the restart budget the wake exits, waits and writes no down.
               expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
-                { body: { process: A, reason: "saved_letter" } },
+                { body: { process: A, reason: SAVED_RANGE } },
               ]);
               expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
               expect((yield* inbox).map((row) => row.id)).toEqual(["good", "saved-bad"]);
@@ -1973,4 +1989,187 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
       },
     );
   });
+});
+
+describe("P34c slice 1: the runner records each exit's structured reason", () => {
+  /** A wide restart budget, so a walk measures reasons and never trips the brake. */
+  const roomy = { intensity: 32, periodMs: 1_000_000, backoff: { minMs: 1, maxMs: 1, resetAfterMs: 1_000_000 } };
+  const SENTINEL = "~private-message~";
+  type RunnerMove = "fresh" | "saved" | "interrupt" | "restart" | "restart_again" | "reopen";
+  const Cell = fc.record({
+    move: fc.nat(),
+    error: fcErrorClass.filter((name) => name !== "__proto__"),
+    message: fc.string({ maxLength: 40 }).map((text) => `${SENTINEL}${text}`),
+  });
+  const Tape = fc.array(Cell, { minLength: 3, maxLength: 8 });
+
+  /** The exits and restarts the fold expects, from its own moves alone. */
+  type Expected = { exits: Array<{ process: string; reason: ExitReason }>; restarts: Array<string> };
+
+  const walk =
+    (moves: ReadonlyArray<RunnerMove>, done: Set<RunnerMove>) =>
+    (tape: ReadonlyArray<typeof Cell extends fc.Arbitrary<infer A> ? A : never>) =>
+      Effect.gen(function* () {
+        const w = world(false, false, null, { policy: roomy });
+        yield* w.boot;
+        const expected: Expected = { exits: [], restarts: [] };
+        let process = A;
+        let letters = 0;
+        /** One good step, so the live process has a checkpoint a saved letter can sit behind. */
+        const good = ProgramRunner.use((r) => r.msg(w.input(`good-${++letters}`, { type: "add", n: 1 }))).pipe(
+          Effect.provide(w.layer()),
+        );
+        yield* good;
+        const watch = (target: string) =>
+          ProcessManager.use((p) => p.monitor(`watch:${target}`, target, from())).pipe(Effect.provide(w.manager()));
+        yield* watch(process);
+        /** The successor the runner's recovery starts, read from the ledger the runner wrote. */
+        const successor = Effect.gen(function* () {
+          const status = yield* ProcessManager.use((p) => p.status(NAME)).pipe(Effect.provide(w.manager()));
+          expect(status.state._tag, "recovery leaves a live successor").toBe("live");
+          expect(status.state.process, "a successor has a new process ID").not.toBe(process);
+          process = status.state.process;
+          yield* watch(process);
+          yield* good;
+        });
+
+        for (const cell of tape) {
+          // A saved letter needs the live process's own checkpoint to sit behind; a retry needs a request.
+          const checkpoint = yield* ProcessStore.use((store) =>
+            Effect.flatMap(store.select(process), (own) => own.load),
+          ).pipe(Effect.provide(w.layer()));
+          const options = moves.filter(
+            (move) =>
+              (move !== "restart_again" || expected.restarts.length > 0) && (move !== "saved" || checkpoint !== null),
+          );
+          const move = options[cell.move % options.length]!;
+          const crashed = (phase: ExitReason extends infer R ? (R extends { phase: infer P } ? P : never) : never) =>
+            phase === "interrupted"
+              ? ExitReason.cases.crashed.make({ phase })
+              : ExitReason.cases.crashed.make({ phase, error: cell.error });
+
+          switch (move) {
+            case "fresh": {
+              w.controls.throws = true;
+              w.controls.error = { name: cell.error, message: cell.message };
+              yield* ProgramRunner.use((r) => failed(r.msg(w.input(`fresh-${++letters}`)))).pipe(
+                Effect.provide(w.layer()),
+              );
+              w.controls.throws = false;
+              expected.exits.push({ process, reason: crashed("step") });
+              yield* recover(w);
+              yield* successor;
+              break;
+            }
+            case "saved": {
+              const id = `saved-${++letters}`;
+              yield* Effect.gen(function* () {
+                const store = yield* ProcessStore;
+                const own = yield* store.select(process);
+                const saved = yield* own.load;
+                const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
+                expect(saved !== null && sent._tag === "placed", "the saved letter is placed behind a checkpoint").toBe(
+                  true,
+                );
+
+                if (saved !== null && sent._tag === "placed") {
+                  yield* own.save(saved, [{ id, rev: sent.rev, pos: sent.pos }]);
+                }
+              }).pipe(Effect.provide(w.layer()));
+              w.controls.savedThrows = true;
+              w.controls.error = { name: cell.error, message: cell.message };
+              w.reopen();
+              yield* ProgramRunner.use((r) => Effect.exit(r.open("saved"))).pipe(Effect.provide(w.layer()));
+              w.controls.savedThrows = false;
+              expected.exits.push({ process, reason: crashed("saved_letter") });
+              yield* recover(w);
+              yield* successor;
+              break;
+            }
+            case "interrupt": {
+              // The object ended mid-step: its stepping marker is all that survives the reopen.
+              const marker = Activity.cases.stepping.make({ process, letter: `cut-${++letters}`, build: BUILD });
+              yield* ProcessStore.use((store) =>
+                Effect.flatMap(store.select(process), (own) => own.activity(marker)),
+              ).pipe(Effect.provide(w.layer()));
+              w.reopen();
+              yield* ProgramRunner.use((r) => Effect.exit(r.open("interrupted"))).pipe(Effect.provide(w.layer()));
+              expected.exits.push({ process, reason: crashed("interrupted") });
+              yield* recover(w);
+              yield* successor;
+              break;
+            }
+            case "restart": {
+              const id = `restart-${++letters}`;
+              yield* ProgramRunner.use((r) => r.restart({ id, build: BUILD })).pipe(Effect.provide(w.layer()));
+              expected.exits.push({ process, reason: SHUTDOWN });
+              expected.restarts.push(id);
+              yield* successor;
+              break;
+            }
+            case "restart_again": {
+              // A retried request answers from saved work: no second exit, no second successor.
+              const id = expected.restarts[cell.move % expected.restarts.length]!;
+              yield* ProgramRunner.use((r) => r.restart({ id, build: BUILD })).pipe(Effect.provide(w.layer()));
+              break;
+            }
+            case "reopen":
+              w.reopen();
+              yield* ProgramRunner.use((r) => r.open("reopen")).pipe(Effect.provide(w.layer()));
+              break;
+          }
+
+          done.add(move);
+          const rows = yield* lives.pipe(Effect.provide(w.manager()));
+          const exits = rows
+            .filter((row) => row._tag === "exited")
+            .map((row) => valueFor(row) as { process: string; reason: unknown })
+            .map(({ process, reason }) => ({ process, reason }));
+          expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
+          const restarted = rows.filter((row) => row._tag === "restarted").map((row) => valueFor(row));
+          expect(restarted, "a person's restart keeps its request's reason for starting again").toHaveLength(
+            expected.restarts.length + expected.exits.filter((e) => e.reason._tag === "crashed").length,
+          );
+          const signals = (yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())))
+            .map((row) => valueFor(row) as { m: typeof Down.Type })
+            .map(({ m }) => [m.process, m.reason] as const);
+          expect(signals, "each DOWN carries its exit's reason unchanged").toEqual(
+            expected.exits.map(({ process, reason }) => [process, reason] as const),
+          );
+          // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
+          const serialized = JSON.stringify([rows, signals, w.ledger.rows().filter((row) => row._tag === "send")]);
+          expect(serialized.includes(SENTINEL), "no exception message in exit facts or monitor payloads").toBe(false);
+        }
+      }).pipe(Effect.provide(TestClock.layer()));
+
+  const law = (name: string, moves: ReadonlyArray<RunnerMove>, required: ReadonlyArray<RunnerMove>) =>
+    it(
+      name,
+      async () => {
+        const done = new Set<RunnerMove>();
+        await fc.assert(
+          fc.asyncProperty(Tape, (tape) => Effect.runPromise(walk(moves, done)(tape))),
+          { seed: 119120, numRuns: 40, includeErrorInReport: true },
+        );
+        // An empty flow cannot pass: each move this law is about ran.
+        expect([...done]).toEqual(expect.arrayContaining([...required]));
+      },
+      300_000,
+    );
+
+  law(
+    "L4: a crash records its phase and captured error class: fresh step, saved letter or interruption",
+    ["fresh", "saved", "interrupt", "reopen"],
+    ["fresh", "saved", "interrupt"],
+  );
+  law(
+    "L5: a person's restart records shutdown, keeps its request and new process ID, and answers a retry from saved work",
+    ["restart", "restart_again", "fresh", "reopen"],
+    ["restart", "restart_again"],
+  );
+  law(
+    "L8: error messages stay out of exit facts and monitor payloads",
+    ["fresh", "saved", "restart"],
+    ["fresh", "saved"],
+  );
 });
