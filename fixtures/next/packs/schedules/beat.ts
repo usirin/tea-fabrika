@@ -1,6 +1,6 @@
 import { Cmd } from "@demlik/tea/effect";
 import * as ScheduledJob from "@kampus/libfabrika/schedules/ScheduledJob";
-import * as Program from "@kampus/libfabrika/runtime/Program";
+import { Program } from "@kampus/libfabrika/runtime/Program";
 import { Result, Schema } from "effect";
 
 const BeatEvent = Schema.TaggedStruct("beat", { due: Schema.Number, period: Schema.Int });
