@@ -158,6 +158,7 @@ agent's, and the loop stays fabrika's (owner, 2026-11-10).**
     [0071](0071-risk-tier-decides-who-looks.md)'s risk tier.
     *2026-11-10: partly answered by [0082](0082-approvals-is-a-floor-for-every-run.md): a flow with
     fewer review steps than the repo's `approvals` floor is refused before any step runs.*
+    *2026-11-10, later: 0082's amendment renames that setting `review.human-approvals`.*
   - **The wall for view code an agent wrote,** which runs in a person's window.
   - **How today's primitives are rethought for `next/`.** They live in today's `packages/pipeline`
     and are rethought, not ported ([rethink, do not port](../docs/direction/rethink-do-not-port.md)).
