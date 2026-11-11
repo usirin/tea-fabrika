@@ -1,7 +1,7 @@
 ---
 id: 0014
 title: The lead merges any pull request, product code included, once every step passed, never waiting on the owner except for real loosening or a new design call
-status: amended-in-part by [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)
+status: amended-in-part by [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md), [0066](0066-mutation-runs-on-a-schedule.md)
 date: 2026-11-09
 tags: [merge, lead, owner, exam, loosening, pipeline]
 ---

@@ -1,5 +1,5 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
-import { grantText } from "@kampus/libfabrika/coordination";
+import { grantText } from "@kampus/libfabrika/access/Text";
 import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";

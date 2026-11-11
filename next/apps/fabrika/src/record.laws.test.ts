@@ -2,10 +2,10 @@
 // Plants: omit the shell's cap; map the callee's bad_row to unreachable.
 import { DatabaseSync } from "node:sqlite";
 import { expect, it, layer } from "@effect/vitest";
-import { Written } from "@kampus/libfabrika/data";
-import type { SinkError } from "@kampus/libfabrika/data";
-import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/data";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
+import type { SinkError } from "@kampus/libfabrika/telemetry/Sink";
+import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import type { Scope } from "effect";

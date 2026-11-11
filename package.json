@@ -45,6 +45,7 @@
     "esbuild": "catalog:",
     "fast-check": "catalog:",
     "oxfmt": "catalog:",
+    "oxc-parser": "catalog:",
     "oxlint": "catalog:",
     "stylelint": "catalog:",
     "typescript": "catalog:",

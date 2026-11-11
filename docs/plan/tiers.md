@@ -28,6 +28,32 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Tier 1 comes from [its plan](./tier-1.md). Tiers 2 to 7 are a first sorting, and they
 will change. So is splitting the old Tier 4 into hands and agents, which makes seven.
 
+*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* each tier carries and
+updates a working slice of every core idea. Four start late today and get a thin slice in an earlier
+tier: hands (Tier 4), programs written outside fabrika's own source (Tiers 5 and 7), programs
+working together (Tiers 2 and 4) and a person starting a program (Tier 2). Those tiers harden it.
+*Changed 2026-11-10 by [0088](../../.decisions/0088-six-slices-in-tier-1.md):* each of the four lands
+in Tier 1. *It said: which tier each slice lands in is not decided yet, so no row below has moved.*
+
+*Changed 2026-11-10 by [0078](../../.decisions/0078-agent-and-flow-slices-start-early.md):* two more
+core ideas join that list and get a thin slice in Tier 1: an agent fabrika starts (Tier 5) and a
+flow fabrika runs (Tier 6). Tiers 5 and 6 still build them for real, the full pipeline stays in
+Tier 6, and Tier 1's plan says how thin each is. No row below has moved.
+
+*Changed 2026-11-10 by [0075](../../.decisions/0075-cold-author-checks-outside-programs.md):* each
+tier checks its slice of programs written outside fabrika's source with a cold agent as the author.
+Every place it gets stuck is a gap, and each run is an experiment (ticket 665).
+
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* every program is in
+a pack, so Tier 5's repo programs are a pack in the repo's `.fabrika/packs/<name>/`, not
+`.fabrika/programs`. The tier each lands in does not move, so no row below has moved.
+
+*Changed 2026-11-10 by [0088](../../.decisions/0088-six-slices-in-tier-1.md):* all six core ideas get
+their thin slice in Tier 1, each as small as it can be and still work, with no stub. The four from
+0068 are Tier 1 rows P39 to P42, to be planned; the outside programs slice builds 0083 and 0084 in
+small, a repo's own pack listed by a `./` path. The tiers named above still build each for real, so
+no row below has moved. Each slice's size, the order and whether Tier 1 splits are not decided.
+
 | Tier | Transport | Data | Coordination | App | Desktop (Tuval) |
 |---|---|---|---|---|---|
 | **1. It works** | Signed hello, unknown keys refused, code and Approve, one-time link | Ledger behind a service; `granted` with `saw` and `as`; `denied`; revoke; each note's saved versions, with a check against stale saves; a backup sheet, recovery on a new Mac and `added`; email recovery on the cloud, with a 24-hour wait any device can cancel (decided 2026-11-06); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health rows for about 2 weeks and hourly summaries forever, and nothing a chaos fault does left unexplained (owner, 2026-11-07) | Mailbox, who belongs, window and agent grants, every device a master with its grant tree; a slice of C2 to C5: dead letters, one crashed program restarted with a brake and backoff, exit, info and monitors, each start a new process with its own id, who is online, and the brain restarted (decided by the owner, 2026-11-06) | Sealed programs, notes drawn as Markdown that agents write through MCP, each agent approved once, a counter as the test, chaos monkey | One core; Electron, browser and headless; menu bar with Approve and Remove |

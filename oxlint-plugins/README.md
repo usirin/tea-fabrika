@@ -194,7 +194,7 @@ Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md
 | `no-promises` | `async`, `await`, `for await`, `new Promise`, `Promise.x(...)`, `.then`, `import()`, `.catch` on anything not imported from Effect, and Effect 4.1.1's calls that take or make a Promise: `Effect.promise`, `Effect.tryPromise`, Schema's four `...Promise` calls, Stream's `fromAsyncIterable` and `toAsyncIterable` and its two variants, typed calls included | a line under an edge comment | left out |
 | `no-effect-run-outside-edge` | any of Effect's twelve run functions, on `Effect` or a runtime, and `runtimePromise` and `makeRuntimePromise`; `NodeRuntime.runMain` passes | a line under an edge comment | left out |
 | `edge-comment` | an ignore comment naming either rule above that is not `// oxlint-disable-next-line <rule> -- edge: <why>`: another form, another rule named beside them, or no `edge: ` reason | none | on |
-| `no-of` | a declared name `of` or ending in `Of`; a use passes | none | on |
+| `no-of` | a declared name `of` or ending in `Of`, a named import of `of`; a module's top-level exported `of` and a use pass (0029) | none | on |
 | `no-why-key` | a statically named `why` key in an object, class or type declaration; use `reason` | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` imported or read as a plain member anywhere in `next/`; a store hook's value dropped | none | left out |

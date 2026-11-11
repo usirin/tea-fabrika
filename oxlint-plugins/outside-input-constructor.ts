@@ -3,7 +3,7 @@ import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
 import { ancestors, dotted, pathIn, type Node } from "./match.ts";
 
 const scoped =
-  /^next\/packages\/libfabrika\/src\/(?:data\/(?:id|log)|coordination\/authorization|door\/(?:door|store|nonce)|app\/(?:nemesis|chaos-state|runner|entry))\.ts$/;
+  /^next\/packages\/libfabrika\/src\/(?:data\/id|ledger\/Log|access\/Authorization|gateway\/(?:Gateway|GatewayStore|GatewayNonce)|runtime\/(?:Nemesis|ChaosState|Runner|Entry))\.ts$/;
 
 const outside = /^(?:raw|wire|saved|row|params|input|body|bytes|stored|persisted)(?:[A-Z_].*)?$/;
 const sync = /(?:^|\.)(?:decodeSync|decodeUnknownSync)$/;
@@ -254,9 +254,7 @@ export const outsideInputConstructor: CreateRule = {
         const first = args[0];
         const curried = callee.type === "CallExpression" && sync.test(name(callee.callee) ?? "");
         const type = call.split(".")[0] ?? "";
-        const added = /\/(?:data\/id|coordination\/authorization|app\/(?:nemesis|chaos-state))\.ts$/.test(
-          pathIn(context),
-        );
+        const added = /\/(?:data\/id|access\/Authorization|runtime\/(?:Nemesis|ChaosState))\.ts$/.test(pathIn(context));
         const constructor =
           call.endsWith(".make") && !declarations.has(type) && (added || inputs.has(type) || inDecoder(node));
         const throwing = constructor || sync.test(call) || curried;

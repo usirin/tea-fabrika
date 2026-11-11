@@ -7,7 +7,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import type { From } from "@kampus/libfabrika/coordination";
+import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";

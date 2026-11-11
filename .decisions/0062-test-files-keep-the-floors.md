@@ -1,7 +1,7 @@
 ---
 id: 0062
 title: Test files keep to the floors too, and a lower room tests against a real database through a suite that a higher room runs
-status: accepted
+status: amended-in-part by [0091](0091-modules-and-layers.md)
 date: 2026-11-10
 tags: [tests, floors, rooms, layers, suites, sqlite, node, cloudflare, libfabrika, next]
 ---
@@ -11,6 +11,9 @@ tags: [tests, floors, rooms, layers, suites, sqlite, node, cloudflare, libfabrik
 **What this decides:** in `next/`'s libfabrika, a test file imports only from lower floors, as
 product code does, and a room whose laws need a real database writes them as a suite that the room
 holding the driver runs.
+
+A room is now a module and a floor a layer, names only; every rule here holds
+([0091](0091-modules-and-layers.md)).
 
 ```mermaid
 flowchart TD
