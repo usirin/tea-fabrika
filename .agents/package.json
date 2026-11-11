@@ -6,5 +6,8 @@
   "description": "The skills and the lead's own scripts. A package only so `pnpm typecheck` reads the lane scripts (ticket 486); its imports resolve from the root's dependencies.",
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
+  },
+  "volta": {
+    "extends": "../package.json"
   }
 }

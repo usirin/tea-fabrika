@@ -13,15 +13,14 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
     const mail = yield* ProgramMail;
     const wakeups = yield* MailWakeups;
     return MailDelivery.of({
-      send: Effect.fn("mail_delivery.send")(function* (sent: Mail) {
-        const receipt = yield* mail
-          .deliver(sent)
-          .pipe(Effect.mapError((error) => new MailDeliveryError({ reason: error.reason, cause: error })));
-        yield* wakeups
-          .wake(receipt.to.name)
-          .pipe(Effect.mapError((error) => new MailDeliveryError({ reason: error.reason, cause: error })));
-        return Queued.make({ id: receipt.id });
-      }),
+      send: Effect.fn("mail_delivery.send")(
+        function* (sent: Mail) {
+          const receipt = yield* mail.deliver(sent);
+          yield* wakeups.wake(receipt.to.name);
+          return Queued.make({ id: receipt.id });
+        },
+        Effect.mapError((error) => new MailDeliveryError({ reason: error.reason, cause: error })),
+      ),
     });
   }),
 );

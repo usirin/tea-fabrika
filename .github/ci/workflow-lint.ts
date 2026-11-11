@@ -45,6 +45,10 @@ const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
+// Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
+const chromium =
+  "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
+
 const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
 export const lintWorkflow = (text: string): string[] => {
@@ -236,7 +240,7 @@ export const lintWorkflow = (text: string): string[] => {
   const allowed = [
     "pnpm install --frozen-lockfile",
     'pnpm exec vitest run next/ --shard "$SHARD"',
-    "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+    chromium,
     "node next/apps/fabrika/e2e.ts",
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
   ];
@@ -256,10 +260,7 @@ export const lintWorkflow = (text: string): string[] => {
     ), "next passes its six-shard expression without an extra test guard");
 
   for (const [command, condition] of [
-    [
-      "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
-      "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-    ],
+    [chromium, "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
     ["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
     [
       'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',

@@ -5,6 +5,7 @@ import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
 import { lawShape } from "./law-shape.ts";
+import { modules } from "./modules.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
@@ -25,6 +26,7 @@ import { noPromises } from "./no-promises.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noStageWord } from "./no-stage-word.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWhyKey } from "./no-why-key.ts";
@@ -34,7 +36,6 @@ import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
-import { rooms } from "./rooms.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -44,6 +45,7 @@ const plugin: Plugin = {
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
     "law-shape": lawShape,
+    modules,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
     "no-clock-in-view": noClockInView,
@@ -64,6 +66,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-stage-word": noStageWord,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
     "no-why-key": noWhyKey,
@@ -73,7 +76,6 @@ const plugin: Plugin = {
     "outside-input-constructor": outsideInputConstructor,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
-    rooms,
     "use-import-extensions": useImportExtensions,
   },
 };

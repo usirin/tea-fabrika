@@ -39,6 +39,10 @@ the blank approval line.
 - When the plan changes a skill (owner, 2026-11-08), a rule code checks or could check becomes a
   check and leaves the prose. Only judgment stays in prose.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
+- End the Size section with `Estimate: <n> steps, $<d>`, the lane's budget: chain.ts stops a lane
+  at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps
+  you expect: tests, build, review, plus one per likely send-back. `d` is their list-price dollars,
+  priced from similar steps in `field/runs.jsonl`.
 - Say what fact is lost if it is not recorded now.
 - Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
   Give the files table a "Product lines expected" column (a number, or a word such as `tests` or
@@ -80,12 +84,13 @@ line two. The draft prints the digest. `--approved` checks the approval line aga
 The draft check checks the handoff format. It cannot prove session identity, because the step agents
 and the lead share shell access. Do not add a marker, key or readable file as proof.
 
-`scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 2` on
-line two, and no unfenced line beginning `Approved by the lead agent,`. The lead session runs it
-before approval. It checks the format, not who wrote it.
+`scripts/plancheck.sh --draft <plan.md>` requires a blank first line, `Plancheck-Version: 3` on
+line two, no unfenced line beginning `Approved by the lead agent,`, and one Estimate line, the
+Size section's last. The lead session runs it before approval. It checks the format, not who wrote
+it. Plans approved at version 2 need no Estimate line.
 
 `scripts/plancheck.sh <plan.md>` keeps saved-plan behavior, including approved and legacy plans. It
-checks owners in every plan. Version 2 also checks each laws table's generator grammar and requires
+checks owners in every plan. Versions 2 and 3 also check each laws table's generator grammar and require
 generated inputs on `[secrets]` rows. An unmarked plan prints `legacy plan: generator checks
 skipped`; unknown, malformed or duplicate markers fail. Escaped pipes stay in their cells. Every
 exam path in a files table's file/path cell counts, whatever words or punctuation surround it,

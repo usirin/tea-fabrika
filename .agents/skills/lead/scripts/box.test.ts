@@ -17,7 +17,11 @@ import "./leakgrep.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./drive.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
@@ -1885,4 +1889,42 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
       );
     },
   );
+});
+
+describe("T614 a box never installs, today's tooling", () => {
+  // scenario: a step that moves the lockfile or a manifest, then runs `pnpm exec`, kept its box's
+  // node_modules. pnpm's default `verifyDepsBeforeRun: install` started an install there, with no
+  // network, that deleted them (ticket 477's boxes layout2-tests4 and layout2-tests6). Real pnpm on
+  // a two-package workspace with no outside dependency, so nothing reaches the network.
+  // Plant: drop `verifyDepsBeforeRun` from pnpm-workspace.yaml (caught: it reads undefined). With
+  // `install` in the temp workspace, pnpm unlinks node_modules/a (checked by hand, 2026-11-11).
+  it("T614 scenario: pnpm exec behind the lockfile warns and leaves node_modules alone", () => {
+    // `pnpm exec vitest` hands its children `pnpm_config_verify_deps_before_run=false`; a box's
+    // shell has no such variable, so the child pnpm reads the setting from the files alone.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^p?npm_config_/i.test(k)));
+    const pnpm = (cwd: string, ...args: string[]) => spawnSync("pnpm", args, { cwd, env, encoding: "utf8" });
+    const setting = pnpm(root, "config", "get", "verifyDepsBeforeRun").stdout.trim();
+    expect(setting).toBe("warn");
+
+    const dir = mkdtempSync(join(tmpdir(), "vd614-"));
+
+    try {
+      // No `packageManager` pin: under the test's fresh home, a pin would fetch pnpm itself.
+      const manifest = (more: object) => JSON.stringify({ name: "root", private: true, ...more });
+      write(join(dir, "pnpm-workspace.yaml"), `packages:\n  - a\nverifyDepsBeforeRun: ${setting}\n`);
+      write(join(dir, "a/package.json"), JSON.stringify({ name: "a", version: "1.0.0" }));
+      write(join(dir, "package.json"), manifest({ dependencies: { a: "workspace:*" } }));
+      expect(pnpm(dir, "install", "--offline").status).toBe(0);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+
+      // The step's change: the manifest no longer matches the lockfile.
+      write(join(dir, "package.json"), manifest({}));
+      const ran = pnpm(dir, "exec", "true");
+      expect(ran.status).toBe(0);
+      expect(`${ran.stdout}${ran.stderr}`).toMatch(/out of sync with your lockfile/);
+      expect(existsSync(join(dir, "node_modules/a"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

@@ -28,7 +28,7 @@ export const stack = (
       state: Alchemy.localState(),
     },
     Effect.gen(function* () {
-      const stage = yield* setting(JSON.stringify(settings));
+      const instance = yield* setting(JSON.stringify(settings));
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],
@@ -49,7 +49,7 @@ export const stack = (
           RecordPart: Cloudflare.DurableObject("RecordPart"),
           LOADER: Cloudflare.WorkerLoader(),
           MEASUREMENTS: measurements,
-          STAGE: stage,
+          INSTANCE: instance,
         },
       });
       return { url: brain.url };

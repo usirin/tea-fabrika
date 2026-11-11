@@ -19,6 +19,7 @@ import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabri
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
@@ -249,8 +250,12 @@ afterAll(() => {
   rmSync(top, { recursive: true, force: true });
 });
 
+// Each world is a fresh SQLite file, and every door call commits. No law here kills the process
+// mid-write, so the rollback journal stays in memory and no commit waits on the disk. A reopen
+// still reads the same file. This halves the ticket 707 walks, 200 worlds each.
 const open = (path: string) => {
   const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF");
   opened.push(db);
   return db;
 };
@@ -362,7 +367,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     url: URL,
     origins: ["https://fabrika.test"],
     versions: [1, 2],
-    location: "test-stage",
+    location: "test-instance",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
     ping: { min: 10_000, max: 60_000 },
@@ -385,7 +390,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
     clients,
-    LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
+    LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
     Mailbox.layer.pipe(Layer.provide(clients)),
     SpanSink.layer(sql, { object: START }),
     records,
@@ -401,7 +406,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
       Layer.provideMerge(
         Layer.mergeAll(
           freshClients,
-          LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
+          LedgerTransactionSql.layer(storage).pipe(Layer.provide(quiet)),
           Mailbox.layer.pipe(Layer.provide(freshClients)),
           SpanSink.layer(storage, { object: START }),
           records,
@@ -1330,7 +1335,7 @@ describe("P10 door admission and waiting", () => {
           nonce: h.nonce,
           signed: h.hello.signed,
           sentAt: SENT,
-          location: "test-stage",
+          location: "test-instance",
           build: "test-build",
         });
         expect(rows[0]?.by).toBe(w.window.fingerprint);
@@ -1744,7 +1749,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             {
               key: connection.key,
               label,
-              where: "test-stage",
+              where: "test-instance",
               code: row.code,
               until: now + ttl,
               tabs: 1,
@@ -2947,7 +2952,7 @@ describe("P33 signal ids belong to the brain", () => {
       Effect.sync(() => next.shift()!),
     ).pipe(
       Layer.provide(
-        LedgerTransaction.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+        LedgerTransactionSql.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );
   };

@@ -38,7 +38,7 @@ const CODE = { program: "mail", hash: "build-a" };
 
 /** The host's closed grant: each source reaches only the names listed for it. */
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER, HELPER, GHOST], [RESPONDER]: [REQUESTER] };
-const granted = (source: string, to: string) => (Object.hasOwn(GRANTS, source) ? GRANTS[source] : []).includes(to);
+const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) && GRANTS[source]?.includes(to) === true;
 
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
