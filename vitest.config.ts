@@ -35,7 +35,9 @@ export const testConfig = {
       "vitest.shards.test.ts",
       ".github/ci/*.test.ts",
       "scripts/*.test.ts",
-      ".agents/skills/*/scripts/*.test.ts",
+      // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as 0089's hourly
+      // mutation run reads them (`flow/**/*.test.ts`).
+      ".agents/skills/*/scripts/**/*.test.ts",
       // Keep next/ for its own job and local runs. Today's CI excludes it on the CLI.
       // Its end-to-end tests sit outside `src/`, in
       // `next/apps/fabrika/e2e/`, and run through `node next/apps/fabrika/e2e.ts`.
