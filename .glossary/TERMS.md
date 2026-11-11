@@ -169,6 +169,7 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
+| scheduled job | In `next/`, a program whose wake is its next due time, made with `ScheduledJob.make` in `schedules/`. Its Process object owns its alarm, and it schedules the next run one period after the work answers. [Scheduled jobs run on the host's alarms](../docs/direction/scheduled-jobs-on-the-host.md) | Not a fiber, an interval or an agent's loop. Not a runtime job or queued work for the hands. |
 | BrainEvent | A local brain's `started`, `exited`, `restarting`, `braked` or `stopped` event, with its start ID and clock. `runtime/BrainEvent.ts` | Not a program's event or a span. |
 | BrainState, brainLife | The local brain lifecycle state and its tea machine. `brain-life` | Not a process's state. |
 | brainOutbox, checkMemory | The Node brain's durable event queue and RSS replacement check. `node/dev/local-dev.ts`, read as `@kampus/libfabrika/node/local-dev` ([0051](../.decisions/0051-gateway-connection-and-node-by-job.md)) | Not the span queue or a program's memory limit. |
