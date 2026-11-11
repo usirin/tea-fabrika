@@ -21,6 +21,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema } from "effect";
+import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectRuntime, type Env } from "./runtime.ts";
@@ -294,6 +295,8 @@ type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
+  /** The registered name whose first configure takes the fault; null faults the first configure of all. */
+  faultName: string | null = null,
 ) => {
   table.programs.counter = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
@@ -315,6 +318,7 @@ const world = (
     newCalls = 0,
     lostDone = false,
     stepFault: "none" | "rpc" | "decode" = "none",
+    faulted = false,
     closed = false;
   const schedule = (entry: Entry) => {
     clearTimeout(entry.timer);
@@ -454,13 +458,18 @@ const world = (
               if (method === "configure") {
                 return async (descriptor: Descriptor) => {
                   attempts.push(structuredClone(descriptor));
-                  entered.resolve();
+                  const hit = !faulted && (faultName === null || descriptor.name === faultName);
+                  faulted ||= hit;
 
-                  if (attempts.length === 1 && fault === "failed") {
+                  if (faulted) {
+                    entered.resolve();
+                  }
+
+                  if (hit && fault === "failed") {
                     throw new Error("configure failed before save");
                   }
 
-                  if (attempts.length === 1 && fault === "interrupted") {
+                  if (hit && fault === "interrupted") {
                     await interrupted.promise;
                     return;
                   }
@@ -715,53 +724,239 @@ const world = (
   };
 };
 
-describe("P12 Project configure recovery", () => {
-  for (const fault of ["failed", "interrupted", "healthy"] as const) {
-    it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
-      const w = world(fault);
-      const first = w.project.info().then(
-        (value) => ({ value }),
-        (error: unknown) => ({ error }),
-      );
-      await w.entered;
+// A18: the app's own wiring starts two counters (runtime.ts, "Layout and key tables" in P14's plan).
+// pinned: the list is written here, not read from the product, so an extra or a missing bootstrap fails.
+const PINNED = ["counter:1", "counter:2"] as const;
+type Fault = "failed" | "interrupted" | "healthy";
 
-      if (fault === "interrupted") {
-        await w.interrupt();
-      }
+/** Everything the law reads, taken once from one world. Plain data, so a plant is a changed copy. */
+type Observation = {
+  readonly fault: Fault;
+  readonly name: string;
+  readonly firstResolved: boolean;
+  /** Each saved stage_descriptors row, by the name in its descriptor. */
+  readonly saved: Record<string, { readonly process: string; readonly descriptor: Descriptor }>;
+  /** The rows saved before the reopen: the faulted name's descriptor is among them. */
+  readonly savedBeforeReopen: Observation["saved"];
+  /** info() after the first reopen. */
+  readonly info: ReadonlyArray<{ readonly process: string; readonly name: string; readonly program: string }>;
+  /** Every configure attempt, in order, up to the first reopen's end. */
+  readonly attempts: ReadonlyArray<Descriptor>;
+  /** Each process's own stored descriptor and its open view before the send. */
+  readonly stored: Record<string, Descriptor>;
+  readonly opened: Record<string, { readonly rev: number; readonly count: number }>;
+  /** The one send's target name, its answer, and each name's state after it. */
+  readonly sentTo: string;
+  readonly answer: unknown;
+  readonly after: Record<
+    string,
+    { readonly rev: number; readonly count: number; readonly inbox: number; readonly processes: number }
+  >;
+  readonly attemptsAfterSecondReopen: ReadonlyArray<Descriptor>;
+};
 
-      const result = await first;
-      expect("value" in result).toBe(fault === "healthy");
-      const descriptor = w.attempts[0]!;
-      const saved = w.db.prepare("SELECT value FROM stage_descriptors WHERE process=?").get(descriptor.id);
-      expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
-      expect(await w.reopen()).toMatchObject([{ process: descriptor.id, name: "counter:1", program: "counter" }]);
-      expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
+const observe = async (fault: Fault, name: string): Promise<Observation> => {
+  const w = world(fault, { limit: null, lost: null }, name);
+  const first = w.project.info().then(
+    (value) => ({ value }),
+    (error: unknown) => ({ error }),
+  );
+  await w.entered;
 
-      for (const attempt of w.attempts) {
-        expect(attempt).toEqual(descriptor);
-      }
-
-      const process = w.process(descriptor.id).object;
-      expect(await process.descriptor()).toEqual(descriptor);
-      expect(await process.open("audit")).toMatchObject({ rev: 0, view: { count: 0 } });
-      const client = await w.admit();
-      expect(
-        await w.project.route(client, "process.send", {
-          pid: descriptor.id,
-          letter: "after-restore",
-          m: { type: "inc" },
-          sentAt: SENT,
-          seen: 0,
-        }),
-      ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-      expect(await process.open("audit")).toMatchObject({ rev: 1, view: { count: 1 } });
-      expect(await w.project.read("counter:1/inbox", 0, "audit")).toHaveLength(1);
-      expect(await w.project.read("processes/counter:1", 0, "audit")).toHaveLength(1);
-      const attempts = [...w.attempts];
-      await w.reopen();
-      expect(w.attempts).toEqual(attempts);
-    });
+  if (fault === "interrupted") {
+    await w.interrupt();
   }
+
+  const firstResolved = "value" in (await first);
+  const rows = (): Observation["saved"] => {
+    const found: Record<string, { process: string; descriptor: Descriptor }> = {};
+
+    for (const row of w.db.prepare("SELECT process, value FROM stage_descriptors").all()) {
+      const descriptor: Descriptor = JSON.parse(String(row.value));
+      found[descriptor.name] = { process: String(row.process), descriptor };
+    }
+
+    return found;
+  };
+  // Boot is in order and stops at a fault, so a later name is saved only by the reopen.
+  const savedBeforeReopen = rows();
+  const info = await w.reopen();
+  const saved = rows();
+  const attempts = [...w.attempts];
+  const stored: Observation["stored"] = {},
+    opened: Observation["opened"] = {},
+    after: Observation["after"] = {};
+
+  for (const n of PINNED) {
+    const pid = saved[n]!.process,
+      object = w.process(pid).object;
+    stored[n] = await object.descriptor();
+    const view = await object.open("audit");
+    opened[n] = { rev: view.rev, count: view.view.count };
+  }
+
+  const client = await w.admit();
+  const answer = await w.project.route(client, "process.send", {
+    pid: saved[name]!.process,
+    letter: "after-restore",
+    m: { type: "inc" },
+    sentAt: SENT,
+    seen: 0,
+  });
+
+  for (const n of PINNED) {
+    const view = await w.process(saved[n]!.process).object.open("audit");
+    after[n] = {
+      rev: view.rev,
+      count: view.view.count,
+      inbox: (await w.project.read(`${n}/inbox`, 0, "audit")).length,
+      processes: (await w.project.read(`processes/${n}`, 0, "audit")).length,
+    };
+  }
+
+  await w.reopen();
+  return {
+    fault,
+    name,
+    firstResolved,
+    saved,
+    savedBeforeReopen,
+    info: info.map((i) => ({ process: i.process, name: i.name, program: i.program })),
+    attempts,
+    stored,
+    opened,
+    sentTo: name,
+    answer,
+    after,
+    attemptsAfterSecondReopen: [...w.attempts],
+  };
+};
+
+/** One step of the law: a failed expectation names which check threw. */
+const step = (label: string, body: () => void) => {
+  try {
+    body();
+  } catch (error) {
+    throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+};
+
+/** The law, one function over the observed world. */
+const recoveryHolds = (o: Observation) => {
+  step("first info resolves only when healthy", () => expect(o.firstResolved).toBe(o.fault === "healthy"));
+  step("each pinned name has one saved descriptor", () => expect(Object.keys(o.saved)).toEqual([...PINNED]));
+  step("the faulted name's descriptor was saved before the reopen", () => {
+    const first = o.attempts.find((a) => a.name === o.name);
+    expect(o.savedBeforeReopen[o.name]?.descriptor).toEqual(first);
+  });
+  step("info lists each pinned name once, in order, no other", () => {
+    expect(o.info).toHaveLength(PINNED.length);
+
+    for (const [i, n] of PINNED.entries()) {
+      expect(o.info[i]).toMatchObject({ process: o.saved[n]!.descriptor.id, name: n, program: "counter" });
+    }
+  });
+  step("attempts per name: 2 for the faulted name unless healthy, else 1, no other name", () => {
+    expect(o.attempts.every((a) => PINNED.some((n) => n === a.name))).toBe(true);
+
+    for (const n of PINNED) {
+      expect(o.attempts.filter((a) => a.name === n)).toHaveLength(o.fault !== "healthy" && n === o.name ? 2 : 1);
+    }
+  });
+  step("every attempt equals its name's saved descriptor", () => {
+    for (const a of o.attempts) {
+      expect(a).toEqual(o.saved[a.name]?.descriptor);
+    }
+  });
+  step("each process stores its own descriptor", () => {
+    for (const n of PINNED) {
+      expect(o.stored[n]).toEqual(o.saved[n]!.descriptor);
+    }
+  });
+  step("each process opens at rev 0, count 0", () => {
+    for (const n of PINNED) {
+      expect(o.opened[n]).toEqual({ rev: 0, count: 0 });
+    }
+  });
+  step("the send is accepted", () => expect(o.answer).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } }));
+  step("one send moves only its name", () => {
+    for (const n of PINNED) {
+      expect(o.after[n]).toEqual(
+        n === o.sentTo ? { rev: 1, count: 1, inbox: 1, processes: 1 } : { rev: 0, count: 0, inbox: 0, processes: 1 },
+      );
+    }
+  });
+  step("a second reopen adds no attempt", () => expect(o.attemptsAfterSecondReopen).toEqual(o.attempts));
+};
+
+describe("P12 Project configure recovery", () => {
+  const cases = PINNED.flatMap((name) =>
+    (["failed", "interrupted", "healthy"] as const).map((fault) => ({ fault, name })),
+  );
+  const seen = new Set<string>();
+
+  it("pinned: every pinned bootstrap is restored once after a faulted configure, retried with its saved descriptor and never configured again", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom(...cases), async ({ fault, name }) => {
+        seen.add(`${fault}:${name}`);
+        recoveryHolds(await observe(fault, name));
+      }),
+      { seed: 119120, numRuns: 24 },
+    );
+    // Good thing: every fault in every pinned name was generated.
+    expect(seen.size).toBe(cases.length);
+  });
+
+  // Each plant is one change to a real observation of a fault on counter:2. The law throws, on the named check.
+  it("pinned: plants: each changed observation fails the law on its own check", async () => {
+    const base = await observe("failed", "counter:2");
+    expect(() => recoveryHolds(base)).not.toThrow();
+    const [one, two] = [PINNED[0], PINNED[1]];
+    const attempt = (n: string) => base.attempts.find((a) => a.name === n)!;
+    const plants: ReadonlyArray<readonly [string, Observation, string]> = [
+      // restore only the first bootstrap: the second never comes back, so it never retries
+      ["restore only the first bootstrap", { ...base, info: base.info.slice(0, 1) }, "info lists each pinned name"],
+      // restore one name twice
+      ["restore one name twice", { ...base, attempts: [...base.attempts, attempt(one)] }, "attempts per name"],
+      // retry with a fresh id
+      [
+        "retry with a fresh id",
+        {
+          ...base,
+          attempts: base.attempts.map((a, i, all) => (i === all.length - 1 ? { ...a, id: "fresh-id" } : a)),
+        },
+        "every attempt equals its name's saved descriptor",
+      ],
+      // configure again on a second reopen
+      [
+        "configure again on a second reopen",
+        { ...base, attemptsAfterSecondReopen: [...base.attemptsAfterSecondReopen, attempt(one)] },
+        "a second reopen adds no attempt",
+      ],
+      // route one name's send to the other's pid: the other moves, the target does not
+      [
+        "route one name's send to the other's pid",
+        {
+          ...base,
+          after: { [one]: base.after[two]!, [two]: base.after[one]! } as Observation["after"],
+        },
+        "one send moves only its name",
+      ],
+      // skip the retry when the fault is on counter:2
+      [
+        "skip the retry when the fault is on counter:2",
+        {
+          ...base,
+          attempts: base.attempts.filter((a, i, all) => a.name !== two || i === all.findIndex((b) => b.name === two)),
+        },
+        "attempts per name",
+      ],
+    ];
+
+    for (const [plant, broken, check] of plants) {
+      expect(() => recoveryHolds(broken), plant).toThrow(check);
+    }
+  });
 });
 
 describe("P12 Process RPC refusal answers", () => {

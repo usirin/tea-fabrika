@@ -1,6 +1,7 @@
 // P8, next/. p61/p64/p65. Observe every Rolldown call of the real one-file build (P16, PR 687): the
 // brain, each program and each window script the brain carries as a text module.
 // Source: next/apps/fabrika/src/build.test.ts at 9b48d622b5d4. Existing p65 laws stay intact.
+import { resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
@@ -147,6 +148,11 @@ const carried = (brain: Observed) =>
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
 const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => c.code), ...graph.assets];
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
+// A18: the tab's own call, the one whose input is exactly the entry path the app's build.ts passes.
+const TAB_ENTRY = resolve(import.meta.dirname, "../entry/browser.tsx");
+const isTab = (graph: Observed) => graph.input === TAB_ENTRY;
+// The two routes the tab's call makes: its script, and the page it emits as an asset.
+const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
 const isWindow = (graph: Observed) =>
   typeof graph.input === "object" &&
@@ -154,7 +160,7 @@ const isWindow = (graph: Observed) =>
   Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
-// output of an observed program or window call, so no carried script escapes its own graph's check.
+// output of an observed program, window or tab call, so no carried script escapes its own graph's check.
 const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
   const brain = realBrain(all);
 
@@ -167,7 +173,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
   expect(texts).toHaveLength(Object.keys(built.programs).length + Object.keys(built.assets).length);
 
   for (const text of texts) {
-    expect(others.some((g) => (isProgram(g) || isWindow(g)) && emitted(g).includes(text))).toBe(true);
+    expect(others.some((g) => (isProgram(g) || isWindow(g) || isTab(g)) && emitted(g).includes(text))).toBe(true);
   }
 
   for (const program of Object.values(built.programs)) {
@@ -175,9 +181,20 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
     expect(others.some((g) => isProgram(g) && joined(g) === program.source)).toBe(true);
   }
 
-  for (const asset of Object.values(built.assets)) {
+  for (const [route, asset] of Object.entries(built.assets)) {
     expect(texts).toContain(asset.body);
-    expect(others.some((g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
+
+    if (TAB_ROUTES.includes(route)) {
+      // The tab's script and page come from the tab's call and from no other.
+      expect(others.some((g) => isTab(g) && emitted(g).includes(asset.body))).toBe(true);
+      expect(others.filter((g) => !isTab(g) && emitted(g).includes(asset.body))).toEqual([]);
+    } else {
+      expect(others.some((g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
+    }
+  }
+
+  if (Object.hasOwn(built.assets, "/window.js")) {
+    expect(all.filter(isTab)).toHaveLength(1);
   }
 
   return brain;
@@ -231,6 +248,56 @@ it.effect(
       ).toThrow();
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
+);
+
+// A18 plants, each one change to the real observation of the app's build. The tab's call is observed
+// and clean; its page is emitted by the call (build round 11). Until then the page is made after the
+// call, so `repaired` stands in for the call that emits it: the same bytes, put in the tab call's own
+// assets, the way the build will. Once the build emits the page, `repaired` is the observation itself.
+it.effect(
+  "scenario: the tab's script and page come from the tab's own call, and no other call or missing call stands in",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem,
+        path = yield* Path.Path;
+      const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p8-tab-" });
+      const start = observations.builds.length;
+      const built = yield* build({ out: path.join(folder, "out") });
+      const observed = observations.builds.slice(start);
+      const page = built.assets["/index.html"]?.body ?? "";
+      expect(page).not.toBe("");
+      expect(observed.filter(isTab)).toHaveLength(1);
+      const withPage = (all: ReadonlyArray<Observed>) =>
+        all.map((g) => (isTab(g) && !emitted(g).includes(page) ? { ...g, assets: [...g.assets, page] } : g));
+      const withoutPage = (all: ReadonlyArray<Observed>) =>
+        all.map((g) => (isTab(g) ? { ...g, assets: g.assets.filter((a) => a !== page) } : g));
+      const repaired = withPage(observed);
+      expect(() => checkBuild(repaired, built)).not.toThrow();
+      const tab = repaired.find(isTab)!;
+      const swap = (graph: Observed) => repaired.map((g) => (g === tab ? graph : g));
+
+      // The tab call's graph imports MCP: the call is checked like every other.
+      const mcpTab = swap({
+        ...tab,
+        modules: [
+          ...tab.modules,
+          { id: "@modelcontextprotocol/client/stdio", imports: [], dynamic: [], external: true, code: "" },
+        ],
+      });
+      expect(() => checkBuild(mcpTab, built)).toThrow(/to deeply equal \[\]/);
+      // The tab's call went unobserved: no call checked its graph, so its texts have no origin.
+      expect(() =>
+        checkBuild(
+          repaired.filter((g) => !isTab(g)),
+          built,
+        ),
+      ).toThrow();
+      // The page is in no call's output: today's product, which makes the page after the call.
+      expect(() => checkBuild(withoutPage(observed), built)).toThrow();
+      // The tab's texts come from a call with another entry: no call has the app's tab entry.
+      expect(() => checkBuild(swap({ ...tab, input: `${TAB_ENTRY}.other` }), built)).toThrow();
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
 );
 
 // One selected program with a window, in a scoped folder: the real libfabrika build on the real app
