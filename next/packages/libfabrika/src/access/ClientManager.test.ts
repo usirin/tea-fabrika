@@ -30,7 +30,8 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { From } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
-import { foldAccess, type MemberEvent, type Access } from "./Access.ts";
+import type { MemberEvent, Access } from "./Access.ts";
+import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats

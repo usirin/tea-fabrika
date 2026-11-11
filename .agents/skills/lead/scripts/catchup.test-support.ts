@@ -237,6 +237,13 @@ if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] ==
       if (state === "open") console.log("[15:00:00.000] INFO (#2): #" + number + " open c0 A ticket");
   process.exit(0);
 }
+if (cmd === "node" && args[0].endsWith("/sizecap.ts")) {
+  // 0087's size line, with its own laws in sizecap.test.ts: here it is advice, and a failure of it
+  // must stop nothing.
+  if (setup.stale) die("sizecap: planted");
+  console.log("size: 7 product lines, within the cap of 600, 593 to spare");
+  process.exit(0);
+}
 if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
   // The last look at main, with its own laws in freshmain.test.ts: here it only passes or refuses.
   if (setup.stale) die("pr 900: merge refused at the lint check: planted");

@@ -25,7 +25,8 @@ import { A, brain, first as firstStart, ids } from "../processes/Process.test-su
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { foldAccess, MemberEvent } from "./Access.ts";
+import { MemberEvent } from "./Access.ts";
+import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 
 const READER = "connection:t1";

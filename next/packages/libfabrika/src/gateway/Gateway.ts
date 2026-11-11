@@ -1,6 +1,8 @@
+import { applyCell } from "@demlik/tea";
 import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import { admitted, foldAccess, MemberEvent, Saw } from "../access/Access.ts";
+import { admitted, MemberEvent, Saw } from "../access/Access.ts";
+import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import {
@@ -34,7 +36,7 @@ import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
-import { Row, Waiting } from "./internal/waiting.ts";
+import * as Waiting from "./internal/waiting.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
@@ -136,9 +138,17 @@ const GrantReply = Schema.TaggedUnion({
 });
 
 const WatchReply = Schema.TaggedUnion({
-  watching: { rows: Schema.Array(Row) },
-  refused: { reason: Schema.String, rows: Schema.Array(Row) },
+  watching: { rows: Schema.Array(Waiting.Row) },
+  refused: { reason: Schema.String, rows: Schema.Array(Waiting.Row) },
 });
+
+type WaitingModel = typeof Waiting.machine.model.Type;
+type WaitingMsg = typeof Waiting.machine.msg.Type;
+
+// The waiting value as `gateway_state` holds it: flat rows and settings, decoded by the machine's
+// own codec.
+const SavedWaiting = Schema.toEncoded(Waiting.Stored);
+const stepWaiting = (s: WaitingModel, msg: WaitingMsg) => applyCell(Waiting.machine, s, msg)[0];
 
 const Enrollment = Schema.Struct({
   id: Schema.String,
@@ -216,7 +226,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
   readonly versions: ReadonlyArray<number>;
   readonly location: string;
   readonly build: string;
-  readonly waiting: Pick<Waiting, "most" | "ttl">;
+  readonly waiting: { readonly most: number; readonly ttl: number };
   readonly ping: { readonly min: number; readonly max: number };
   readonly inputCap: number;
   readonly spentCap: number;
@@ -251,7 +261,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
 };
 
 const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) {
-  const initialWaiting = Waiting.make({ rows: [], ...options.waiting });
+  const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
   const transaction = yield* LedgerTransaction;
@@ -557,9 +567,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     yield* flush;
     return result;
   });
+  const saveWaiting = (s: WaitingModel) => {
+    store.set("waiting", SavedWaiting, Schema.encodeSync(Waiting.Stored)(s));
+  };
   const waiting = (at: number) => {
-    const state = store.get("waiting", Waiting) ?? initialWaiting;
-    return Waiting.expire(state, at);
+    const saved = store.get("waiting", SavedWaiting);
+    const loaded = saved === null ? null : Schema.decodeUnknownResult(Waiting.Stored)(saved);
+
+    if (loaded !== null && Result.isFailure(loaded)) {
+      throw new LedgerError({ reason: "bad_row" });
+    }
+
+    const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
+    return stepWaiting(state, { type: "expire", at });
   };
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
@@ -573,11 +593,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const at = yield* clock;
     const state = yield* store.atomic(() => {
-      const next = Waiting.knock(waiting(at), {
+      const next = stepWaiting(waiting(at), {
+        type: "knock",
         key: attached.key,
         client,
         label: params.label,
-        where: options.location,
+        location: options.location,
         has: attached.hello.has,
         as: "window",
         code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
@@ -586,7 +607,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         pass: params.pass ?? null,
         at,
       });
-      store.set("waiting", Waiting, next);
+      saveWaiting(next);
       return next;
     });
     // The positive cap keeps the row this knock just wrote.
@@ -612,10 +633,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         Attached.cases.online.make({ ...checked.success.attached, watching: true }),
       );
       const live = waiting(at);
-      store.set("waiting", Waiting, live);
+      saveWaiting(live);
       return live;
     });
-    return WatchReply.cases.watching.make({ rows: state.rows });
+    return WatchReply.cases.watching.make({ rows: Waiting.rows(state) });
   });
   const disconnect = Effect.fnUntraced(function* (client: ConnectionId) {
     for (const attempt of checking.get(client) ?? []) {
@@ -627,7 +648,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const attached = store.get(`client/${client}`, Attached);
 
       if (attached?._tag === "waiting") {
-        store.set("waiting", Waiting, Waiting.leave(waiting(at), { key: attached.key, client }));
+        saveWaiting(stepWaiting(waiting(at), { type: "leave", key: attached.key, client }));
       }
 
       sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
@@ -910,11 +931,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             const pending = yield* store.atomic(() => {
               const live = waiting(at);
               const accepted = live.rows.filter((r) => !("reason" in admitted(latest, r.key)));
-              store.set(
-                "waiting",
-                Waiting,
-                Waiting.make({ ...live, rows: live.rows.filter((r) => !accepted.includes(r)) }),
-              );
+              const keys = accepted.map((r) => r.key);
+              saveWaiting(stepWaiting(live, { type: "accepted", keys }));
               return accepted;
             });
 
