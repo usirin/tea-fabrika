@@ -258,7 +258,16 @@ const once = (inner: readonly Inner[]): readonly Inner[] =>
       : p,
   );
 
-const inside = (outer: "object" | "function", inner: readonly Inner[]): readonly Line[] => {
+/**
+ * L5's outer allowed `of`: an object, a function, a bodiless `export declare function of`, an
+ * overload signature before its implementation, and a top-level `declare function of` exported by
+ * `export { of }`. A signature has no body, so there every inner piece is a parameter: a key is a
+ * member of the parameter's type, a nested const a second, required parameter.
+ */
+type Outer = "object" | "function" | "declare" | "overload" | "local";
+const OUTERS: readonly Outer[] = ["object", "function", "declare", "overload", "local"];
+
+const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   const fires = (p: Inner): readonly Message[] => (p.name.cls === "plain" ? [] : ["name"]);
   const line = (p: Inner, i: number, text: (n: string) => string): Line => ({
     text: text(spell(p.name, i)),
@@ -275,7 +284,28 @@ const inside = (outer: "object" | "function", inner: readonly Inner[]): readonly
     return [{ text: "export const of = {", fires: [] }, ...body, { text: "};", fires: [] }];
   }
 
-  const params = inner.flatMap((p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: number,`)] : []));
+  const signature = (head: string, tail: string): readonly Line[] => {
+    const entry: Record<Inner["kind"], (n: string, i: number) => string> = {
+      key: (n, i) => `  h${i}: { ${n}: number },`,
+      param: (n) => `  ${n}: string,`,
+      const: (n) => `  ${n}: number,`,
+    };
+    return [
+      { text: head, fires: [] },
+      ...inner.map((p, i) => line(p, i, (n) => entry[p.kind](n, i))),
+      { text: tail, fires: [] },
+    ];
+  };
+
+  if (outer === "declare") {
+    return signature("export declare function of(", "): string;");
+  }
+
+  if (outer === "local") {
+    return [...signature("declare function of(", "): string;"), { text: "export { of };", fires: [] }];
+  }
+
+  const params = inner.flatMap((p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
   const body = inner.flatMap((p, i) =>
     p.kind === "key"
       ? [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]
@@ -283,7 +313,7 @@ const inside = (outer: "object" | "function", inner: readonly Inner[]): readonly
         ? [line(p, i, (n) => `  const ${n} = ${i};`)]
         : [],
   );
-  return [
+  const implementation: readonly Line[] = [
     { text: "export function of(", fires: [] },
     ...params,
     { text: ") {", fires: [] },
@@ -291,12 +321,13 @@ const inside = (outer: "object" | "function", inner: readonly Inner[]): readonly
     { text: "  return 0;", fires: [] },
     { text: "}", fires: [] },
   ];
+  return outer === "overload" ? [...signature("export function of(", "): number;"), ...implementation] : implementation;
 };
 
 it("L5: inside an allowed `of`, every key, parameter and nested name is still checked", () => {
   fc.assert(
     fc.property(
-      fc.constantFrom("object" as const, "function" as const),
+      fc.constantFrom(...OUTERS),
       fc.array(fc.record({ kind: fc.constantFrom("key" as const, "param" as const, "const" as const), name: all }), {
         minLength: 1,
         maxLength: 4,
