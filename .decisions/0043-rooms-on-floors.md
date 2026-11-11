@@ -160,6 +160,8 @@ The rules:
    room on its own floor (owner, 2026-11-09, the same day). If one room needs another on its
    floor, the needed room moves down a floor in the rule file, in the open. `pnpm lint` checks
    both: no upward import and no same-floor import.
+   *Test files keep this rule too, with database laws as suites a higher room runs
+   ([0062](0062-test-files-keep-the-floors.md)).*
 4. **The floors, bottom up, as the rule file starts:**
 
    | Floor | Rooms |
