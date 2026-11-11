@@ -109,6 +109,7 @@ catalog:
   # Experiment 142: libghostty-vt on WebGPU. MIT.
   restty: 0.3.0
   smol-toml: 1.9.1
+  toml-eslint-parser: 1.0.3
   typescript: 7.0.2
   vitest: 5.0.5
   # The YAML parser oxlint-plugins/exact-versions.ts reads this file with. vite's optional peer, so already in the lockfile.

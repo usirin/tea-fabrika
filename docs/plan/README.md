@@ -55,6 +55,11 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
+ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
+later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
+and 79 kept modules, matching the approved plan's sketch.
+
 **Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
