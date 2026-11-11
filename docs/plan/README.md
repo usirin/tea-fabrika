@@ -117,7 +117,9 @@ for today's app (tile guidelines and pipe colors, the design package and typogra
 keybindings, the inbox, the move to Manti) go to plan and build in parallel with the pipeline
 work, so what is wrong shows early. Every "after ticket 117" below that holds one of them back no
 longer holds. A plan that only builds a decided note is approved by the lead agent; one that
-raises a new design call goes to the owner.
+raises a new design call goes to the owner. When the lead fills agent slots, these lanes count as
+much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
+[0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing
