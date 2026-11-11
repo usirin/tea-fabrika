@@ -31,7 +31,7 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
-import { Input } from "./Program.ts";
+import { Input, ProgramDown } from "./Program.ts";
 import { RecoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner, RunnerError, type RunnerOptions } from "./Runner.ts";
 
@@ -390,8 +390,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
     };
 
     /** A real runner on fresh storage, supervised by the real process manager, as in production. */
-    const runner = (policy?: RunnerOptions["policy"]) => {
-      const sql = fresh();
+    const runner = (policy?: RunnerOptions["policy"], declared: unknown = program, sql = fresh()) => {
       const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
       const mail = Mailbox.layer.pipe(Layer.provideMerge(ledgerOn(sql)));
       const dependencies = Layer.mergeAll(
@@ -433,7 +432,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
         },
       ).pipe(
         Layer.provideMerge(Layer.mergeAll(dependencies, manager)),
-        Layer.provide(ProgramLoader.layer({ cause: program }, {})),
+        Layer.provide(ProgramLoader.layer({ cause: declared }, {})),
       );
     };
 
@@ -490,6 +489,57 @@ export const suite = (law: Law, fresh: () => Sql) => {
           expect(error).toBeInstanceOf(LedgerError);
           expect((error as LedgerError).reason).toBe("bad_row");
           expect(Schema.isSchemaError((error as LedgerError).cause), "the decoder's own failure").toBe(true);
+        }),
+    );
+
+    // C7, Runner.ts:742 and Program.ts:379. A step whose model or view does not encode now keeps
+    // its failures as the cause; the class stored in the observation's and receipt's `error` stays
+    // the cause-free ProgramDown's own. Plant: `errorClass` reads the cause first.
+    law(
+      "C7: a delivery whose step fails to encode stores the class it stored without a cause",
+      fc.record({
+        bad: fc.oneof(fc.string(), fc.boolean(), fc.double({ noInteger: true, noNaN: true })),
+        part: fc.constantFrom("model", "view", "both"),
+      }),
+      ({ bad, part }) =>
+        Effect.gen(function* () {
+          const sql = fresh();
+          const wrong = { n: bad } as typeof Model.Type;
+          const broken = {
+            ...program,
+            machine: Machine.make({
+              model: Model,
+              msg: Msg,
+              init: (saved) => [saved ?? { n: 0 }, []],
+              update: { inc: (s) => [part === "view" ? { n: s.n + 1 } : wrong, []] },
+            }),
+            view: {
+              data: Model,
+              select: (s: typeof Model.Type) => (part === "model" || s.n === 0 ? s : wrong),
+            },
+          };
+          const sent = yield* Effect.provide(
+            Effect.gen(function* () {
+              const r = yield* ProgramRunner;
+              yield* r.open("before");
+              return yield* Effect.flip(r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736") as Incoming));
+            }),
+            runner(undefined, broken, sql),
+          );
+          expect(sent).toBeInstanceOf(ProgramDown);
+          const saved = yield* Effect.provide(
+            RecoveryStore.use((store) => store.load),
+            RecoveryStore.layer(sql, { name: NAME, capacity: 1024 ** 3 }),
+          );
+          const stored = [
+            ...(saved?.receipts ?? []).flatMap((receipt) => receipt.errors),
+            ...(saved?.observations ?? []).flatMap((o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
+          ];
+          expect(stored.length, "the failed step is stored").toBeGreaterThan(0);
+
+          for (const error of stored) {
+            expect(error).toBe(new ProgramDown({ reason: "step" }).errorClass);
+          }
         }),
     );
   });

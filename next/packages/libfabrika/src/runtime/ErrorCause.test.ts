@@ -5,7 +5,8 @@
 // that does not decode), `State.ts:19`, `:36`, `:56` and `:69` (saved state: a bad row, a throwing
 // upgrade, a bad upgraded model; a future version has no cause), `Execution.ts:151` and
 // `Entry.ts:92` (a declaration that does not load), `Built.ts:63` (built tables that do not decode).
-// C7: `Execution.ts:38`, the RPC failure reply, carries no input-bearing text of a cause.
+// C7: `Execution.ts:38`, the RPC failure reply, carries no input-bearing text of a cause, and
+// `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
@@ -49,6 +50,23 @@ type Faults = {
   readonly upgrade?: { readonly throws: unknown } | { readonly gives: unknown };
 };
 
+/** The v1-to-v2 upgrade, which misbehaves as `faults` says. */
+const upgrades = (faults: Faults) => [
+  {
+    from: 1,
+    name: "one-to-two",
+    run: (old: unknown) => {
+      const upgrade = faults.upgrade;
+
+      if (upgrade !== undefined && "throws" in upgrade) {
+        throw upgrade.throws;
+      }
+
+      return upgrade === undefined ? old : upgrade.gives;
+    },
+  },
+];
+
 /** A counter program, v2 with one upgrade from v1, that misbehaves as `faults` says. */
 const program = (faults: Faults) => ({
   name: "cause-counter",
@@ -60,25 +78,7 @@ const program = (faults: Faults) => ({
       inc: (s) => [(faults.model === undefined ? { count: s.count + 1 } : faults.model) as typeof s, []],
     },
   }),
-  state: {
-    v: 2,
-    schema: Model,
-    upgrades: [
-      {
-        from: 1,
-        name: "one-to-two",
-        run: (old: unknown) => {
-          const upgrade = faults.upgrade;
-
-          if (upgrade !== undefined && "throws" in upgrade) {
-            throw upgrade.throws;
-          }
-
-          return upgrade === undefined ? old : upgrade.gives;
-        },
-      },
-    ],
-  },
+  state: { v: 2, schema: Model, upgrades: upgrades(faults) },
   msg: Msg,
   view: {
     data: Model,
@@ -89,6 +89,24 @@ const program = (faults: Faults) => ({
   outputs: {},
   writes: {},
   wake: () => null,
+});
+
+/** A model keyed by input: a decoder's failure path names the key that held the bad value. */
+const Seen = Schema.Struct({ count: Schema.Int, seen: Schema.Record(Schema.String, Schema.Int) });
+
+/** The same counter over `Seen`, so a failure's path can hold input text. */
+const seenProgram = (faults: Faults) => ({
+  ...program(faults),
+  machine: Machine.make({
+    model: Seen,
+    msg: Msg,
+    init: (loaded) => [loaded ?? { count: 0, seen: {} }, []],
+    update: {
+      inc: (s) => [(faults.model === undefined ? { ...s, count: s.count + 1 } : faults.model) as typeof s, []],
+    },
+  }),
+  state: { v: 2, schema: Seen, upgrades: upgrades(faults) },
+  view: { data: Seen, select: (s: typeof Seen.Type) => s },
 });
 
 /** A value that is not an Int, as a damaged field holds it. */
@@ -257,50 +275,100 @@ describe("T695, a declaration that does not load keeps why", () => {
   );
 });
 
+const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };
+
+/** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
+const causedAt = {
+  saved_model: (bad: unknown) => nodeExecution(program({})).init({ count: bad }),
+  step_model: (bad: unknown) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  step_view: (bad: unknown) => nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  refusal: (bad: unknown) =>
+    nodeExecution(program({ refusal: { ...Refusal, reason: bad } })).step({ count: 1 }, { type: "inc" }),
+  saved_row: (bad: unknown) => nodeExecution(program({})).upgrade({ ...row1, after: bad }),
+  upgrade_throws: (bad: unknown) => nodeExecution(program({ upgrade: { throws: bad } })).upgrade(row1),
+  upgrade_gives: (bad: unknown) => nodeExecution(program({ upgrade: { gives: { count: bad } } })).upgrade(row1),
+  load: (bad: unknown) => nodeExecution({ name: bad, v: "1" }).init(null),
+} as const;
+
+// C7, Program.ts:379 and Runner.ts:742. A ProgramDown's class is the code-defined summary that
+// crosses RPC and is stored as an observation's `error`. A cause kept in memory leaves it as it
+// was before the cause was kept: the cause-free ProgramDown's own class. Plant: `errorClass` reads
+// the cause first, as it does for a program's own throw.
+law(
+  "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
+  fc.record({
+    site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
+    // Never a valid Int, number, string or name: each site fails for this value alone.
+    bad: fc.oneof(fc.boolean(), failures),
+  }),
+  ({ site, bad }) =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(causedAt[site](bad));
+      expect(error).toBeInstanceOf(ProgramDown);
+      expect(error.cause, "the site keeps a cause in memory").toBeDefined();
+      const before = new ProgramDown({ reason: error.reason }).errorClass;
+      expect(error.errorClass, "the class an observation stores").toBe(before);
+      expect(executionFailure(error).error, "the class the RPC reply carries").toBe(before);
+    }),
+);
+
 // C7 [secrets], Execution.ts:38. A ProgramDown's cause stays in memory; the reply that crosses RPC
 // holds no sentinel from the input that failed, raw, JSON-escaped or URL-encoded. The input is a
-// saved model, a saved row or an upgraded model. A program's own throw is not input: its text
-// already rides in deletable content (Runner.test.ts, "content deletable separately"). Effect's
-// SchemaError holds no input value, so the slip this catches is a cause that carries the input
-// itself. Plant: `cause: { failure: decoded.failure, raw }` at Program.ts:474.
+// saved model, a saved row, an upgraded model or a stepped model, each holding a generated
+// sentinel as a record key (a decoder's failure path names it) and as the bad value. A program's
+// own throw is not input: its text already rides in deletable content (Runner.test.ts, "content
+// deletable separately"). Plant: `cause: { failure: decoded.failure, raw }` at Program.ts:474, and
+// the reply's `content` as `Cause.pretty` of the cause.
 describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing text", () => {
-  const words = fc.stringMatching(/^[a-z]{12}$/).map((word) => `sntl${word}`);
-  const forms = (core: string, text: string) => [
-    core,
-    text,
-    JSON.stringify(text).slice(1, -1),
-    encodeURIComponent(text),
-  ];
+  const words = fc.stringMatching(/^[a-z]{12}$/);
+  const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+  const calls = ["init", "step", "fold", "upgrade_row", "upgrade_gives", "encode"] as const;
+
+  /** The call that feeds `seen`, keyed by `key`, to the decoder at one site. */
+  const feed = (call: (typeof calls)[number], seen: Record<string, unknown>) => {
+    const saved = { count: 1, seen };
+    const inc = { type: "inc" };
+
+    switch (call) {
+      case "init":
+        return nodeExecution(seenProgram({})).init(saved);
+      case "step":
+        return nodeExecution(seenProgram({})).step(saved, inc);
+      case "fold":
+        return nodeExecution(seenProgram({})).fold(saved, inc);
+      case "upgrade_row":
+        return nodeExecution(seenProgram({})).upgrade({ v: 1, build: seen, model: null, after: 0 });
+      case "upgrade_gives":
+        return nodeExecution(seenProgram({ upgrade: { gives: saved } })).upgrade({ ...row1, model: saved });
+      case "encode":
+        return nodeExecution(seenProgram({ model: saved })).step({ count: 0, seen: {} }, inc);
+    }
+  };
 
   law(
-    "C7: generated decode failures of saved input carrying sentinels leave none in the RPC reply",
+    "C7: generated failures of input holding sentinel keys and values leave none in the RPC reply",
     fc.record({
-      steps: fc.array(fc.record({ call: fc.constantFrom("step", "upgrade_row", "upgrade_gives"), word: words }), {
+      steps: fc.array(fc.record({ call: fc.constantFrom(...calls), key: words, value: words }), {
         minLength: 1,
         maxLength: 4,
       }),
-      decor: fc.constantFrom(' "quoted" ', " /path?x=1&y=2 ", "\n\t", " ü "),
+      decor: fc.constantFrom(' "quoted" ', " /path?x=1&y=2 ", "\n\t", " ü ", "@example.org"),
     }),
     ({ steps, decor }) =>
       Effect.gen(function* () {
-        for (const { call, word } of steps) {
-          const text = `${decor}${word}${decor}`;
-          const work =
-            call === "step"
-              ? nodeExecution(program({})).step({ count: { input: text } }, { type: "inc" })
-              : call === "upgrade_row"
-                ? nodeExecution(program({})).upgrade({ v: 1, build: { input: text }, model: null, after: 0 })
-                : nodeExecution(program({ upgrade: { gives: { count: text } } })).upgrade(row1);
-          const error = yield* Effect.flip(work);
+        for (const { call, key, value } of steps) {
+          const keyCore = `sntlk${key}`;
+          const valueCore = `sntlv${value}`;
+          const keyText = `${decor}${keyCore}${decor}`;
+          const valueText = `${decor}${valueCore}${decor}`;
+          const error = yield* Effect.flip(feed(call, { [keyText]: valueText }));
           expect(error).toBeInstanceOf(ProgramDown);
           const reply = JSON.stringify(executionFailure(error));
 
-          for (const form of forms(word, text)) {
+          for (const form of [keyCore, valueCore, ...forms(keyText), ...forms(valueText)]) {
             expect(reply.includes(form), "the RPC reply holds a cause's input-bearing text").toBe(false);
           }
         }
       }),
   );
 });
-
-const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };

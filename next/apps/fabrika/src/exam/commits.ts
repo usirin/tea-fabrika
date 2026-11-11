@@ -376,10 +376,7 @@ export const chain = (
 
 // The edge: git and ssh-keygen through effect/process, and the files a run reads and writes.
 
-class Failed extends Schema.TaggedError<Failed>()("Failed", {
-  what: Schema.String,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+class Failed extends Schema.TaggedError<Failed>()("Failed", { what: Schema.String }) {}
 
 const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
   return yield* s.pipe(Stream.decodeText(), Stream.mkString);
@@ -396,7 +393,7 @@ const run = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<string
       });
       return { out, err, code: Number(code) };
     }),
-  ).pipe(Effect.mapError((cause) => new Failed({ what: `could not start ${cmd}`, cause })));
+  ).pipe(Effect.mapError(() => new Failed({ what: `could not start ${cmd}` })));
 });
 
 const must = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<string>, input?: string) {
@@ -456,7 +453,7 @@ const verifier = Effect.gen(function* () {
       const ok = yield* run("ssh-keygen", args, signedText(note));
       const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(ok.out)?.[1];
       return ok.code === 0 && used === note.key ? note.step : null;
-    }).pipe(Effect.mapError((cause) => new Failed({ what: "could not write a temp file", cause })));
+    }).pipe(Effect.mapError(() => new Failed({ what: "could not write a temp file" })));
   });
 });
 
@@ -537,7 +534,7 @@ const personVerifier = Effect.gen(function* () {
         const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
         return result.code === 0 && (link === undefined || used === link.key);
       });
-    }).pipe(Effect.mapError((cause) => new Failed({ what: "could not write person signers", cause })));
+    }).pipe(Effect.mapError(() => new Failed({ what: "could not write person signers" })));
   });
 });
 
@@ -650,7 +647,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
     const fs = yield* FileSystem.FileSystem;
     yield* fs
       .writeFileString(summary.value, `${body.join("\n")}\n`, { flag: "a" })
-      .pipe(Effect.mapError((cause) => new Failed({ what: "could not write the step summary", cause })));
+      .pipe(Effect.mapError(() => new Failed({ what: "could not write the step summary" })));
   }
 
   return answers.some((a) => a._tag === "stuck") ? 1 : 0;
@@ -759,7 +756,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
 
     const row: unknown = yield* Effect.try({
       try: () => JSON.parse(line),
-      catch: (cause) => new Failed({ what: `field/runs.jsonl line ${i + 1} is not JSON`, cause }),
+      catch: () => new Failed({ what: `field/runs.jsonl line ${i + 1} is not JSON` }),
     });
 
     if (row === null || typeof row !== "object") {
