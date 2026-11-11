@@ -252,7 +252,9 @@ restart: (s, m) =>
 
 Decided 2026-11-01 (the guidelines' clash 2). A person who wants to steer a running lane writes a
 plain comment on its ticket. Linear lets a person "steer the approach" of a running session; here
-the ticket is the one way in, so nothing new opens a door into a running agent.
+the ticket is the one way in, so nothing new opens a door into a running agent. In `next/`, a lane's
+room is a second way in ([0073](../../.decisions/0073-a-lane-has-a-room.md)); the rest of this
+section still holds.
 
 ```ts
 // A sketch. Today's `commented` fact (tickets/ticket.ts) gains one field, which code fills in.
