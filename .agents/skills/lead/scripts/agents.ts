@@ -437,10 +437,10 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
       return { ...s, spent, said: report };
     }
 
-    const why = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
+    const detail = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
     return Failed.make({
       reason: "no_answer",
-      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${why})`,
+      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${detail})`,
       spent,
     });
   });

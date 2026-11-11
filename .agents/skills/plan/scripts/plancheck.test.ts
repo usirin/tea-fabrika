@@ -1405,9 +1405,11 @@ describe("laws and validation advice, today's tooling", () => {
     const runs = fc.constantFrom("", "200 runs", "1 run", "default runs", "Default runs");
     const at = fc.constantFrom("generator", "plant");
     fc.assert(
-      fc.property(kindHead, fcCell, runs, at, (head, gen, count, where) => {
+      fc.property(kindHead, fcCell, runs, at, (head, gen, count, location) => {
         const cells =
-          where === "generator" ? row("test", count ? `${gen}, ${count}` : gen) : row("test", gen, `break it ${count}`);
+          location === "generator"
+            ? row("test", count ? `${gen}, ${count}` : gen)
+            : row("test", gen, `break it ${count}`);
         const got = check(kinded(head, [cells]));
         expect(got.code, got.text).toBe(0);
         expect(advice(got.text).length, got.text).toBe(count === "" ? 1 : 0);

@@ -62,7 +62,7 @@ export const file = (name: string, document: TomlDocument): Source => ({
     }),
 });
 
-const where = (origin: Origin) =>
+const location = (origin: Origin) =>
   origin._tag === "file" ? `${origin.file}, line ${origin.line}` : origin._tag === "default" ? "default" : origin.name;
 
 export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, slots: Slots) {
@@ -102,7 +102,7 @@ export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, 
       const d = group.declarations.find((d) => d.segments.join(".") === path.join("."));
       return d === undefined
         ? new SettingsError({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error })
-        : refused(where(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? "");
+        : refused(location(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? "");
     }),
   );
   const resolved: Resolved<A> = { values, origins };

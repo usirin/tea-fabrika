@@ -1318,12 +1318,27 @@
 		{
 			"file": "next/packages/libfabrika/src/access/ClientManager.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
+			"code": "import type { LedgerError } from \"../ledger/Ledger.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/ClientManager.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { Appended, type Entry, fromHere, lineFor, valueFor } from \"../ledger/Log.ts\";"
+			"code": "import { Appended } from \"../ledger/Log.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/ClientManager.types.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import type { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/ClientManagerLedger.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/ClientManagerLedger.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import { type Entry, fromHere, lineFor, valueFor } from \"../ledger/Log.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/Passkey.test.ts",
@@ -1659,36 +1674,6 @@
 			"file": "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "who: { key: \"public\", person: \"person-test\", as: \"agent\" },"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "at: Date.now(),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "at: Date.now(),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "at: Date.now(),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "transition({ type: \"waiting\", after: start, until: Date.now() + event.delay, reason });"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "at: Date.now(),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/node/dev/dev.ts",
-			"rule": "fabrika(no-wall-clock)",
-			"code": "at: Date.now(),"
 		},
 		{
 			"file": "next/packages/libfabrika/src/node/dev/local-dev.test.ts",

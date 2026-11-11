@@ -843,6 +843,7 @@
               "settings",
               "processes",
               "presence",
+              "jobs",
               "access",
               "runtime",
               "gateway"
@@ -1028,6 +1029,7 @@
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/jobs/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
@@ -1043,6 +1045,7 @@
         "next/packages/libfabrika/src/ledger/internal/**",
         "next/packages/libfabrika/src/processes/internal/**",
         "next/packages/libfabrika/src/presence/internal/**",
+        "next/packages/libfabrika/src/jobs/internal/**",
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",

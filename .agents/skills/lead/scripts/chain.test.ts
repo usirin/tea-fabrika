@@ -205,8 +205,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   // `to === step` check in moveOf, and every case here runs the same step again.
   it("property: a send to the step that sent it is never another round of that step: it goes to judgment", () => {
     fc.assert(
-      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, why) => {
-        const m = moveOf(s, line(`send:${s}:step_said`, "h", why), stucks, 3);
+      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
+        const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
         expect(m).toEqual({ _tag: "judge" });
       }),
       options,
