@@ -2,7 +2,6 @@ import { join } from "node:path";
 import {
   Clock,
   Data,
-  Deferred,
   Duration,
   Effect,
   Equal,
@@ -22,7 +21,7 @@ import type { Launch } from "../launch.ts";
 // fabrika.toml's theme later, by the same rule (plan for ticket 174, "one reader of ~/.fabrika/").
 // Today's version. Effect's FileSystem and Path only, so a test runs it on a temp folder.
 //
-//   settingsFile(folder, "keybindings.toml", decode), and settingsSaves for a reader that writes
+//   settingsSaves(folder, "keybindings.toml", decode), one answer for each save burst
 //     no file                                   {_tag: "none"}
 //     a file that decodes                       {_tag: "read", value}
 //     a file that does not                      {_tag: "refused", line, why}
@@ -33,8 +32,8 @@ import type { Launch } from "../launch.ts";
 // the file, so a save is heard even without an OS event. Both wait for the text to stay still
 // for 50 ms; hints with unchanged text do not delay it. Any watch hint keeps its source "watch".
 // Each file is read apart, so a bad fabrika.toml never touches the keys, and the other way round.
-// An answer is said once: a
-// save that leaves the text as it was says nothing. A page never reads a file; the host sends
+// An answer is said once for each burst of saves, the same text as before included; a poll tick
+// that finds the text as it was says nothing. A page never reads a file; the host sends
 // each value on (a browser is always a client).
 
 /**
@@ -129,15 +128,21 @@ const settle =
       }),
     );
 
+type Decode<A> = (text: string) => Result.Result<A, { readonly line: number; readonly why: string }>;
+
 /**
- * Every answer for the file `name` in `folder`: one at once, then one each time a save
- * changes its text. The folder is made if it is missing, so a file put there later is heard; when it
- * cannot be made, the answer stays as it was last said. If the watch ends, the poll carries on.
+ * An answer for each burst of saves to the file `name` in `folder`, even when its text is what the
+ * last answer said; one at once, with no wait for the watch. For a reader that also writes the file:
+ * its own save moves what it holds, so a later save by another process that puts the text back is
+ * news to it, though not to the watch (host/keybindings.ts). A poll tick that finds the text as it
+ * was last said, or an unreadable file again, says nothing. The folder is made if it is missing, so
+ * a file put there later is heard; when it cannot be made, the answer stays as it was last said. If
+ * the watch ends, the poll carries on.
  */
-export const settingsFile = <A>(
+export const settingsSaves = <A>(
   folder: string,
   name: string,
-  decode: (text: string) => Result.Result<A, { readonly line: number; readonly why: string }>,
+  decode: Decode<A>,
 ): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
   Stream.unwrap(
     Effect.gen(function* () {
@@ -200,82 +205,10 @@ export const settingsFile = <A>(
       const saves = Stream.merge(heard, polled).pipe(settle(text));
       const first = Stream.fromEffect(Effect.map(text, (said) => ({ by: "start" as const, said })));
       return Stream.concat(first, saves).pipe(
-        Stream.changesWith((a, b) => Equal.equals(a.said, b.said)),
-        Stream.mapEffect(({ said, by }) => say(said, by)),
-        Stream.map(answer),
-      );
-    }),
-  );
-
-type Decode<A> = (text: string) => Result.Result<A, { readonly line: number; readonly why: string }>;
-
-/**
- * An answer for each burst of saves to the file `name` in `folder`, even when its text is what the
- * last answer said; one more as the watch starts. For a reader that also writes the file: its own
- * save moves what it holds, so a later save by another process that puts the text back is news to
- * it, though not to the watch (host/keybindings.ts). The folder is made if it is missing, so a file
- * put there later is heard; when it cannot be made, or the watch fails, the answer stays as it was
- * last said.
- */
-export const settingsSaves = <A>(
-  folder: string,
-  name: string,
-  decode: Decode<A>,
-): Stream.Stream<Setting<A>, never, FileSystem.FileSystem | Path.Path> =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const file = path.join(folder, name);
-      /** The file's text, or `null`: there is none, or it could not be read, which the log says. */
-      const text = fs
-        .readFileString(file)
-        .pipe(
-          Effect.catch((error) =>
-            error.reason._tag === "NotFound" ||
-            (error.cause instanceof Error && "code" in error.cause && error.cause.code === "ENOTDIR")
-              ? Effect.succeed(null)
-              : Effect.succeed(Setting.refused({ line: 1, why: `it could not be read: ${saidOf(error)}` })),
-          ),
-        );
-      const answer = (said: string | null | Setting<never>): Setting<A> => {
-        if (said === null) {
-          return Setting.none();
-        }
-
-        if (typeof said !== "string") {
-          return said;
-        }
-
-        const read = decode(said);
-        return Result.isSuccess(read)
-          ? Setting.read({ value: read.success })
-          : Setting.refused({ line: read.failure.line, why: read.failure.why });
-      };
-      const made = yield* Effect.exit(fs.makeDirectory(folder, { recursive: true }));
-
-      if (Exit.isFailure(made)) {
-        yield* Effect.logWarning(`fabrika host: no settings folder at ${folder}, so none is heard`);
-        return Stream.fromEffect(Effect.map(text, answer));
-      }
-
-      // The first read waits for the watch, so no save between the two is missed.
-      const ready = yield* Deferred.make<void>();
-      const saves = fs.watch(folder, { onReady: () => Deferred.doneUnsafe(ready, Effect.void) }).pipe(
-        Stream.filter((event) => path.basename(event.path) === name),
-        Stream.debounce(`${SETTLE_MS} millis`),
-        // A watch that fails before it is ready still lets the first read go, so the file is
-        // read once and the host never waits on a watch that will not start.
-        Stream.catchCause((cause) =>
-          Stream.fromEffect(
-            Deferred.succeed(ready, undefined).pipe(
-              Effect.andThen(Effect.logWarning(`fabrika host: the watch on ${folder} ended`, cause)),
-            ),
-          ).pipe(Stream.drain),
+        Stream.filterEffect(({ said, by }) =>
+          by === "poll" ? Effect.map(Ref.get(seen), (was) => !Equal.equals(said, was)) : Effect.succeed(true),
         ),
-      );
-      return Stream.merge(Stream.fromEffect(Deferred.await(ready)), saves).pipe(
-        Stream.mapEffect(() => text),
+        Stream.mapEffect(({ said, by }) => say(said, by)),
         Stream.map(answer),
       );
     }),
