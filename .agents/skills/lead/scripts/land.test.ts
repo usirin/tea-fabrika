@@ -169,7 +169,6 @@ const land = (world: World) => {
     for (const [name, text] of [
       ["body.md", "T652 fixture: one lane\n\nWhat the lane did.\n\nfabrika close ticket 652\n"],
       ["loosening.out", "loosening: 0 hits\n"],
-      ["mutation.out", "arm a 3 killed, arm b 3 killed; narrowing: none\n"],
     ] as const) {
       writeFileSync(join(dir, name), text);
     }
@@ -180,16 +179,7 @@ const land = (world: World) => {
       "--tree",
       lane,
       // A mid-lane handover names no PR files.
-      ...(world.wip
-        ? []
-        : [
-            "--body",
-            join(dir, "body.md"),
-            "--loosening",
-            join(dir, "loosening.out"),
-            "--mutation",
-            join(dir, "mutation.out"),
-          ]),
+      ...(world.wip ? [] : ["--body", join(dir, "body.md"), "--loosening", join(dir, "loosening.out")]),
       "--plan",
       join(dir, "plan.md"),
       ...lead,

@@ -5,11 +5,11 @@
 // key, and rightly (0056). So the lane agent's last act is `ready`, and the lead session runs the
 // mechanical tail with `run`:
 //
-//   land.ts ready <lane> --tree <dir> [--body <file> --loosening <file> --mutation <file>]
+//   land.ts ready <lane> --tree <dir> [--body <file> --loosening <file>]
 //       [--lead <sha>]... [--plan <file>]
 //     the lane agent. Records "ready to land" in BOXES/state/<lane>.land.json and one line in
 //     BOXES/state/<lane>.md. The tree must be clean. `--lead` names the lane's own lead commits
-//     (field rows, plan rows, a lockfile), made with `stepcommit.sh --commit-only lead`. The three
+//     (field rows, plan rows, a lockfile), made with `stepcommit.sh --commit-only lead`. The two
 //     PR files come together or not at all: without them it is a mid-lane handover (a lockfile, a
 //     merge of main), which goes only to the branch's -wip backup. It reads no key, pushes nothing
 //     and opens nothing.
@@ -51,8 +51,11 @@ class Refused extends Schema.TaggedError<Refused>()("Refused", {
 
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
-/** The files a PR is made of: its body (first line the title) and both exam outputs (0014). */
-const PrFiles = Schema.Struct({ body: Schema.String, loosening: Schema.String, mutation: Schema.String });
+/**
+ * The files a PR is made of: its body (first line the title) and the loosening check's output, the
+ * one exam output a PR carries (0014, as amended by 0066: mutation runs hourly on main, not in a PR).
+ */
+const PrFiles = Schema.Struct({ body: Schema.String, loosening: Schema.String });
 
 /** What a lane agent hands the lead: the lane, its tree and head, its lead commits, and the PR, if any. */
 class Ready extends Schema.Class<Ready>("Ready")({
@@ -156,24 +159,13 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
   return ran.code === 0 ? Schema.decodeUnknownOption(Owners)(ran.out).pipe(Option.getOrElse(() => ({}))) : {};
 });
 
-/** The PR body as it will be posted: the lane's body file, then both exam outputs (0014). */
-const prBody = (body: string, loosening: string, mutation: string) => {
+/** The PR body as it will be posted: the lane's body file, then the loosening check's output (0014, 0066). */
+const prBody = (body: string, loosening: string) => {
   const [first = "", ...rest] = body.split("\n");
   const fence = (t: string) => ["```text", t.trimEnd() || "(empty)", "```"];
   return {
     title: first.replace(/^#+\s*/, "").trim(),
-    body: [
-      rest.join("\n").trim(),
-      "",
-      "## Loosening",
-      "",
-      ...fence(loosening),
-      "",
-      "## Mutation, arm a vs arm b",
-      "",
-      ...fence(mutation),
-      "",
-    ].join("\n"),
+    body: [rest.join("\n").trim(), "", "## Loosening", "", ...fence(loosening), ""].join("\n"),
   };
 };
 
@@ -184,7 +176,6 @@ const ready = Command.make(
     tree: Flag.String("tree"),
     body: Flag.String("body").pipe(Flag.optional),
     loosening: Flag.String("loosening").pipe(Flag.optional),
-    mutation: Flag.String("mutation").pipe(Flag.optional),
     lead: Flag.String("lead").pipe(Flag.atLeast(0)),
     plan: Flag.String("plan").pipe(Flag.optional),
   },
@@ -205,13 +196,13 @@ const ready = Command.make(
       return yield* new Refused({ check: "ready", reason: "the tree has changes: commit them first", output: dirty });
     }
 
-    const given = Option.all({ body: ask.body, loosening: ask.loosening, mutation: ask.mutation });
-    const some = [ask.body, ask.loosening, ask.mutation].filter(Option.isSome).length;
+    const given = Option.all({ body: ask.body, loosening: ask.loosening });
+    const some = [ask.body, ask.loosening].filter(Option.isSome).length;
 
     if (some !== 0 && Option.isNone(given)) {
       return yield* new Refused({
         check: "ready",
-        reason: "give --body, --loosening and --mutation together",
+        reason: "give --body and --loosening together",
         output: "",
       });
     }
@@ -220,7 +211,6 @@ const ready = Command.make(
       Option.map(given, (files) => ({
         body: path.resolve(files.body),
         loosening: path.resolve(files.loosening),
-        mutation: path.resolve(files.mutation),
       })),
     );
 
@@ -232,7 +222,7 @@ const ready = Command.make(
       }
     }
 
-    if (pr !== undefined && prBody(yield* fs.readFileString(pr.body), "", "").title === "") {
+    if (pr !== undefined && prBody(yield* fs.readFileString(pr.body), "").title === "") {
       return yield* new Refused({ check: "ready", reason: "the body file's first line is the PR title", output: "" });
     }
 
@@ -322,11 +312,7 @@ export const draftPr = Effect.fn("land.draftPr")(function* ({ lane, ready, env }
     return undefined;
   }
 
-  const posted = prBody(
-    yield* fs.readFileString(ready.pr.body),
-    yield* fs.readFileString(ready.pr.loosening),
-    yield* fs.readFileString(ready.pr.mutation),
-  );
+  const posted = prBody(yield* fs.readFileString(ready.pr.body), yield* fs.readFileString(ready.pr.loosening));
   const file = `${env.BOXES}/${lane}-land-body.md`;
   yield* fs.writeFileString(file, posted.body);
   yield* must("leak", "the leak grep refused the PR body", ready.tree, "sh", [`${HERE}/leakgrep.sh`, "--text", file]);
@@ -426,8 +412,8 @@ export const signLead = Effect.fn("land.signLead")(function* (
 
   const signer = `${env.MAIN}/next/apps/fabrika/src/exam/commits.ts`;
   const key = `${env.HOME}/.fabrika/step-keys/lead`;
-  const sign = (at: string, what: string) =>
-    must("sign", `the sign script refused ${what}`, at, "node", [
+  const sign = (at: string, subject: string) =>
+    must("sign", `the sign script refused ${subject}`, at, "node", [
       signer,
       "sign",
       "--step",

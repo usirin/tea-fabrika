@@ -94,11 +94,11 @@ Run each step through drive.ts or chain.ts, read its answer, and send fixes to t
 Commit a lead file (field rows, a plan row, a lockfile) unsigned, with
 `stepcommit.sh --commit-only lead <ticket> <subject> <files>`, and keep its sha.
 When the review says merge-ready: write the PR body file (its first line the title, and a
-`fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output and the
-mutation arm a vs arm b comparison as files, and end with
-`node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path> --body <file> --loosening <file> --mutation <file> --plan <path> [--lead <sha>]...`.
+`fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output as a
+file, and end with
+`node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path> --body <file> --loosening <file> --plan <path> [--lead <sha>]...`.
 Mid-lane, when only a lead commit must reach the next step (a lockfile, a merge of main), end with the same
-command without the three PR files. Then stop and say "ready to land" with the state file's path.
+command without the two PR files. Then stop and say "ready to land" with the state file's path.
 ```
 
 ## Who runs which step
@@ -149,7 +149,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the hourly mutation run's Stryker sample in a container (0066; also a lane's mutation step started before it): `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
-| `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f> --mutation <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the three PR files it is a mid-lane handover to `-wip` |
+| `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the two PR files it is a mid-lane handover to `-wip` |
 | `land.ts run <lane> <ticket>` | the lead session only, in the background: refuses unless the tree is clean and at the ready head, leak-greps the PR body, merges `origin/main` in as the bot (never a rebase), leak-greps the change and each commit, signs each named lead commit and then the merge as lead through main's own signer, pushes with `botpush.mjs`, opens or updates the PR and runs `catchup.sh`. A conflict stops it with each file and the step that owns it in the plan's files table; every refusal before the push puts HEAD and the notes back. It never resolves a conflict and never reads a key |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |

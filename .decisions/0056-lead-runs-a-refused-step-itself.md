@@ -73,8 +73,8 @@ lead session runs that same action itself, without asking the owner again (owner
 
 - 2026-11-10: **the permanent fix landed** (tracker ticket 652). A lane agent is no longer handed
   a lead-only step: its last act is `land.ts ready`, which records "ready to land" in the lane's
-  state file with the PR body, the loosening output and the mutation comparison, and it stops
-  there. The lead session runs `land.ts run <lane> <ticket>`, which merges main in, signs as lead
+  state file with the PR body and the loosening output (no mutation comparison: since
+  [0066](0066-mutation-runs-on-a-schedule.md) a PR has none), and it stops there. The lead session runs `land.ts run <lane> <ticket>`, which merges main in, signs as lead
   through main's own signer, leak-greps, pushes with `botpush.mjs`, opens or updates the PR and
   runs `catchup.sh`. `skillscheck.sh` fails a brief template in the lead skill that names a lead
   sign, a step key, `botpush`, `catchup.sh` or `land.ts run`. This decision still covers any other
