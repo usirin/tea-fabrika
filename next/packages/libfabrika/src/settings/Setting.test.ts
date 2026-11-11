@@ -110,9 +110,9 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       Setting.make("a.b", { schema: Port, default: 1, scope: ["person"], reload: "restart", since: "0.0.0" }),
       // @ts-expect-error reload is required.
       Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], since: "0.0.0" }),
-      // @ts-expect-error a default must have the schema's type.
       Setting.make("a.b", {
         schema: Port,
+        // @ts-expect-error a default must have the schema's type.
         default: "1",
         doc: "d",
         scope: ["person"],
