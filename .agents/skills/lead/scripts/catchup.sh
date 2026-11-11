@@ -32,6 +32,9 @@
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
+#   - ends at once on a pull request that is not open and ready: on start and on every round of
+#     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
+#     a bound and ends with a line naming what it waited for
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -39,11 +42,21 @@ pr=$1; ticket=$2
 . "$(dirname "$0")/env.sh"
 W=$BOXES/catchup-$pr; LOCK=$BOXES/catchup.lock; LEAD=$lead_here
 AS='-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com'
-# Only command failures are retried. Callers inspect successful answers, including red ones.
+# Only command failures are retried. Callers inspect successful answers, including red ones. A pull
+# request GitHub does not know is no network trouble: it stops at once, never retried.
 read_gh() {
 	attempt=1
 	while :; do
-		if output=$(gh "$@"); then printf '%s\n' "$output"; return 0; fi
+		err=$(mktemp)
+		if output=$(gh "$@" 2>"$err"); then rm -f "$err"; printf '%s\n' "$output"; return 0; fi
+		failed=$(cat "$err"); rm -f "$err"
+		[ -z "$failed" ] || printf '%s\n' "$failed" >&2
+		case $failed in
+		*"Could not resolve to a PullRequest"*)
+			echo "pr $pr: no such pull request in $GH_REPO" >&2
+			return 1
+			;;
+		esac
 		if [ "$attempt" -ge 3 ]; then
 			echo "pr $pr: gh $* failed after 3 attempts at head ${tip:-unknown}" >&2
 			return 1
@@ -51,6 +64,25 @@ read_gh() {
 		sleep "$attempt"
 		attempt=$((attempt + 1))
 	done
+}
+# gate <state> <draft> <merge commit>: only an open pull request that is ready for review goes on.
+# Merged is done, so it exits 0; closed, draft or a state we do not know exits 1. Each says one
+# line.
+gate() {
+	case "$1 $2" in
+	"OPEN false") return 0 ;;
+	"OPEN true") echo "pr $pr: draft, not merged; refused until it is ready for review" >&2; exit 1 ;;
+	MERGED\ *) echo "pr $pr: already merged at $3"; exit 0 ;;
+	CLOSED\ *) echo "pr $pr: closed, not merged" >&2; exit 1 ;;
+	*) echo "pr $pr: in state ${1:-unknown}, not merged; refused" >&2; exit 1 ;;
+	esac
+}
+# look: read the pull request's state again and gate it, inside each wait.
+look() {
+	standing=$(read_gh pr view "$pr" -R "$GH_REPO" --json state,isDraft,mergeCommit \
+		-q '"\(.state) \(.isDraft) \(.mergeCommit.oid // "-")"')
+	# Unquoted on purpose: GitHub's state, a boolean and a hex sha, with no glob or space in any.
+	gate $standing
 }
 # close_named: once GitHub says MERGED and the squash commit is on main, close each ticket the PR
 # description names on a line of its own, `fabrika close ticket <N>` (0015). Nothing else closes
@@ -344,8 +376,10 @@ PY
 need="check e2e commits"
 checks_at() {
 	runs=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
-		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)"') || exit 1
-	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {print $1": "$3}')
+		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)\t\(.html_url // "")"') || exit 1
+	# A red job prints with its link, so nobody has to look it up.
+	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {
+		print $1": "$3 ($4 == "" ? "" : ", " $4) }')
 	missing=$(printf '%s\n' "$runs" | awk -F'\t' -v need="$need" '
 		{ present[$1]=1 }
 		$1=="next" && $2=="completed" && $3=="skipped" { skipped=1 }
@@ -408,7 +442,14 @@ green_at() {
 	commits_trusted "$1"
 }
 mkdir -p "$BOXES"
-until mkdir "$LOCK" 2>/dev/null; do sleep 5; done
+# The lock is held for minutes, while one catch-up fetches, merges, signs and pushes. A run killed
+# with SIGKILL runs no trap and leaves it behind, so the wait has the checks' own bound: an hour.
+deadline=$(($(date +%s) + 3600))
+until mkdir "$LOCK" 2>/dev/null; do
+	[ "$(date +%s)" -lt "$deadline" ] ||
+		{ echo "pr $pr: waited an hour for the catch-up lock $LOCK; nothing done" >&2; exit 1; }
+	sleep 5
+done
 # EXIT drops the lock while it is held and force-removes this run's own checkout, success or
 # failure, unless the checkout holds MAIN's Git storage: then it stays, with a line saying why.
 # INT and TERM end the run (and so run EXIT), never carry on past a signal.
@@ -420,7 +461,11 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
-head=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefName -q .headRefName)
+# The state comes first: a merged, closed or draft pull request ends here, before any fetch or push.
+view=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefName,state,isDraft,mergeCommit \
+	-q '"\(.state) \(.isDraft) \(.mergeCommit.oid // "-") \(.headRefName)"')
+gate $view
+head=${view#* * * }
 [ -d "$W" ] || git -C "$MAIN" worktree add -q --detach "$W" origin/main
 cd "$W"
 git fetch -q origin main "refs/notes/fabrika:refs/notes/fabrika" 2>/dev/null || git fetch -q origin main
@@ -461,6 +506,8 @@ if [ "$green" = no ]; then
 	missing=$need; pending=1; finished=no
 	deadline=$(($(date +%s) + 3600))
 	for _ in $(seq 120); do
+		# Someone may merge or close it while we wait: then nothing here can land it.
+		look
 		checks_at "$tip"
 		[ -z "$bad" ] || { echo "pr $pr: red at $tip: $bad" >&2; exit 1; }
 		[ "$(date +%s)" -lt "$deadline" ] || break
@@ -493,7 +540,8 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 			{ echo "pr $pr: merge behind main refused at $tip: $said" >&2; exit 1; }
 		echo "pr $pr: landed behind main on purpose (0049)"
 		;;
-	*) echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
+	# Merged or closed by someone else since the last look: say that, not a refusal.
+	*) look; echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
 	esac
 fi
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"

@@ -8,7 +8,8 @@ const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).
   description: "A port is a whole number from 1 to 65535.",
 });
 
-const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/)).annotate({
+// The u flag lets Effect write the pattern into the generated JSON Schema.
+const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)).annotate({
   title: "a version",
   description: "A version is three whole numbers, as 1.2.3.",
 });
@@ -19,6 +20,7 @@ export const port = Setting.make("instance.port", {
   doc: "The port the local instance listens on.",
   scope: ["person"],
   reload: "restart",
+  since: "0.0.0",
 });
 
 // The first version that reads settings. A later release never raises this default by itself.
@@ -28,6 +30,7 @@ export const version = Setting.make("fabrika-version", {
   doc: "The oldest fabrika this repo works with. It is read before every other setting.",
   scope: ["repo"],
   reload: "restart",
+  since: "0.0.0",
 });
 
 export const all = Setting.group({ port, version });
