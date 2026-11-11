@@ -73,7 +73,8 @@ counts as proof.
 
 Outside means no law in the approved plan covers it. Something wrong in the plan is not a
 finding: it goes back to plan (step 6).
-Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
+unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 
