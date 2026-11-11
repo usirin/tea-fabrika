@@ -9,6 +9,9 @@ come first, in Tier 5, lean about 60% ([the tiers](../plan/tiers.md)).*
 *Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
 outside fabrika's own source get a thin slice before Tier 5; repo programs and packs harden it later.
 
+*Changed 2026-11-10 by [0075](../../.decisions/0075-cold-author-checks-outside-programs.md):* each
+tier checks that slice with a cold agent as the author, and every place it gets stuck is a gap.
+
 ## The idea
 
 - **fabrika is a small core plus add-on packs.** The core is report, sort,
