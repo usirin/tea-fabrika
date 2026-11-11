@@ -4,7 +4,12 @@
 //
 //   node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>]
 //                 [--plan <approved plan>] [--claude tests,build] [--electron tests,build]
-//                 [--model sonnet|opus] [--start tests|build|mutation|review]
+//                 [--codex-exec tests,build,review] [--model sonnet|opus]
+//                 [--start tests|build|mutation|review]
+//
+// `--codex-exec` names the steps whose Codex runs as the installed `codex exec`, plainly, on the
+// user's own Codex config (./codexexec.ts), in place of Codex through ACP. `--claude` wins a step
+// both name. The judgment agent stays on the ACP row.
 //
 // The lane is a tea machine on the Effect engine. Each step runs drive.ts's pieces in this
 // process (`prepare`, then `driveStep`: one box, one agent turn, the reads, the push, the row),
@@ -98,6 +103,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import {
+  type AgentName,
   type DrivePhase,
   driveStep,
   type Env,
@@ -1027,6 +1033,8 @@ type Setup = {
   readonly plan: string;
   readonly brief: ReturnType<typeof sectionsOf>;
   readonly claude: ReadonlySet<StepName>;
+  /** Steps whose Codex runs as plain `codex exec` (`--codex-exec`). */
+  readonly exec: ReadonlySet<StepName>;
   readonly electron: ReadonlySet<StepName>;
   readonly model: string;
   /** The `## host` section's commands; none skips the host step. */
@@ -1202,7 +1210,8 @@ const handlers = (s: Setup) => {
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
         // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
         // runs it only for a lane started at mutation (0066).
-        const claude = (cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
+        const agent = stepAgent(cmd.step, s.claude, s.exec);
+        const claude = agent === "claude";
         const entry: StepRecord = {
           round,
           step: cmd.step,
@@ -1213,9 +1222,7 @@ const handlers = (s: Setup) => {
           judged: null,
         };
         saveStep(entry);
-        note(
-          `round ${round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
-        );
+        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note ? ` (${cmd.note})` : ""}`);
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
         // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
@@ -1227,7 +1234,7 @@ const handlers = (s: Setup) => {
             lane: s.lane,
             step: cmd.step,
             brief,
-            agent: claude ? "claude" : "codex",
+            agent,
             model: claude ? s.model : undefined,
             electron: claude && s.electron.has(cmd.step),
             ticket: s.ticket,
@@ -1429,6 +1436,7 @@ const handlers = (s: Setup) => {
           `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (${providers(
             saved().steps.map((e) => e.step),
             s.claude,
+            s.exec,
           )}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
@@ -1575,12 +1583,28 @@ const handlers = (s: Setup) => {
  * Which agent ran the lane's steps, for the PR body. It names only steps the lane ran, so a lane
  * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
  */
-export const providers = (ran: readonly string[], claude: ReadonlySet<StepName>): string => {
-  const onClaude = STEPS.filter(
-    (s) => ran.includes(s) && (s === "mutation" ? MUTATION_AGENT === "claude" : claude.has(s)),
-  );
-  return onClaude.length === 0 ? "Codex in a box" : `Codex in a box, or Claude for ${onClaude.join(", ")}`;
+export const providers = (
+  ran: readonly string[],
+  claude: ReadonlySet<StepName>,
+  exec: ReadonlySet<StepName> = new Set(),
+): string => {
+  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+  const onExec = on("codex-exec");
+  const onClaude = on("claude");
+  return [
+    "Codex in a box",
+    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
+    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
+  ].join(", ");
 };
+
+/**
+ * Which agent a step runs on: mutation on drive's `MUTATION_AGENT`; else Claude for a step
+ * `--claude` names, plain `codex exec` for one `--codex-exec` names, and Codex through ACP for the
+ * rest. `--claude` wins a step both name.
+ */
+export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
+  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
 
 /** One table row per step the lane ran, with its list-price dollars from the rows file. */
 export const stepsTable = (
@@ -1634,7 +1658,7 @@ export const chainMain = (args: string[], env: Env) =>
 
     if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(briefPath)) {
       console.error(
-        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start tests|build|mutation|review]",
+        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] [--model sonnet|opus] [--start tests|build|mutation|review]",
       );
       process.exit(2);
     }
@@ -1688,6 +1712,7 @@ export const chainMain = (args: string[], env: Env) =>
       plan,
       brief,
       claude: stepSet(flag(args, "--claude")),
+      exec: stepSet(flag(args, "--codex-exec")),
       electron: stepSet(flag(args, "--electron")),
       model: flag(args, "--model") ?? "sonnet",
       host,
