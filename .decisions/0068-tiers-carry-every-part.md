@@ -1,7 +1,7 @@
 ---
 id: 0068
 title: Each tier carries and updates a working slice of every core idea, so hands, outside programs, programs working together and a person starting a program start early, never in a late tier
-status: accepted
+status: amended-in-part by [0075](0075-cold-author-checks-outside-programs.md)
 date: 2026-11-10
 tags: [tiers, plan, next, hands, programs, packs, pipes, slice, client]
 ---
@@ -66,6 +66,10 @@ slice.**
   nothing.
 - A thin slice works: no stub, no dead path. Thin means small, never absent.
 - A thin slice records now every fact a later hardening needs, so nothing written before it is lost.
+
+*Amended in part 2026-11-10 by [0075](0075-cold-author-checks-outside-programs.md):* the slice for
+programs written outside fabrika's source is checked each tier by a cold agent as the author. The
+rest of this file still holds.
 
 ## Consequences
 
