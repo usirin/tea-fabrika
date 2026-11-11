@@ -7,7 +7,8 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -145,7 +146,7 @@ describe("p22 real counter in the runner", () => {
     const seen = new Map<string, { rev: number; view: unknown }>();
     const expected = Schema.Struct({ count: Schema.Int });
     const data = () =>
-      Ledger.sql(nodeSql(ledgerDb), { reader: "counter-law" }).pipe(
+      LedgerSql.layer(nodeSql(ledgerDb), { reader: "counter-law" }).pipe(
         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
       );
     const layer = () => {

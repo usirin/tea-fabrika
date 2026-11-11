@@ -10,6 +10,7 @@ import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { addText, Change, grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
@@ -88,7 +89,7 @@ const world = Effect.fnUntraced(function* () {
       build: "p8",
     };
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Ledger.sql(sql, { reader: "p8-agent" }).pipe(Layer.provide(quiet));
+  const ledger = LedgerSql.layer(sql, { reader: "p8-agent" }).pipe(Layer.provide(quiet));
   const env = Layer.mergeAll(
     ledger,
     LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),

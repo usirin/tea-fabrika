@@ -20,6 +20,7 @@ import { Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
+import * as LedgerSql from "./LedgerSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
@@ -67,7 +68,7 @@ const bell = (fails: ReadonlyArray<string> = []) => {
 const onReferee = (sql: Sql, doorbell: Layer.Layer<Doorbell>) => Referee.layer(sql).pipe(Layer.provide(doorbell));
 
 const onLedger = (sql: Sql, doorbell: Layer.Layer<Doorbell>, reader: string) =>
-  Ledger.sql(sql, { reader }).pipe(Layer.provide(doorbell));
+  LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell));
 
 const line = (over: Partial<Line> = {}): Line => ({
   by: "SHA256:writer-a",

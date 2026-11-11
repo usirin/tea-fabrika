@@ -26,6 +26,7 @@ import {
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -147,7 +148,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
   );
   const sql = nodeSql(db);
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-  const ledger = Layer.mergeAll(Ledger.sql(sql, { reader: "p8" }), LedgerTransaction.layer(sql)).pipe(
+  const ledger = Layer.mergeAll(LedgerSql.layer(sql, { reader: "p8" }), LedgerTransaction.layer(sql)).pipe(
     Layer.provide(quiet),
   );
   let nextProcess = 0;
