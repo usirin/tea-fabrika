@@ -80,6 +80,10 @@ const BANNED: readonly Shape[] = [
   banned((n, i) => `{ const ${n} = ${i}; void ${n}; }`),
   banned((n, i) => `export namespace S${i} { export const ${n} = ${i}; }`),
   banned((n, i) => `declare module "m${i}" { export function ${n}(): void; }`),
+  banned((n, i) => `export function h${i}() { function ${n}() { return ${i}; } return ${n}(); }`),
+  banned((n, i) => `{ function ${n}() { return ${i}; } void ${n}; }`),
+  banned((n, i) => `export namespace S${i} { export function ${n}() { return ${i}; } }`),
+  banned((n, i) => `export namespace S${i} { export declare function ${n}(): void; }`),
   { ...banned((n) => `export default function ${n}() {}`), once: true },
   banned((n, i) => `const ${n} = ${i}; export { ${n} as m${i} };`),
   // A type-only export is never read as `M.of`, so the local it names stays a bare `of`.
@@ -96,6 +100,10 @@ const BANNED: readonly Shape[] = [
     (n: string, i: number) => `{ const ${n} = ${i}; void ${n}; }`,
     (n: string, i: number) => `namespace S${i} { const ${n} = ${i}; void ${n}; }`,
     (n: string, i: number) => `declare module "m${i}" { function ${n}(): void; }`,
+    (n: string, i: number) => `export function h${i}() { function ${n}() { return ${i}; } return ${n}(); }`,
+    (n: string, i: number) => `{ function ${n}() { return ${i}; } void ${n}; }`,
+    (n: string, i: number) => `export namespace S${i} { export function ${n}() { return ${i}; } }`,
+    (n: string, i: number) => `export namespace S${i} { export declare function ${n}(): void; }`,
   ].map((nested): Shape => ({
     text: (n, i) => `const ${n} = ${i}; export { ${n} }; ${nested(n, i)}`,
     of: ["name"],
