@@ -239,12 +239,14 @@ jobs:
       # The os sandbox (packages/fabrika/src/sandbox/os.ts) is sandbox-runtime, which on
       # Linux needs bubblewrap, socat and ripgrep, and user namespaces that Ubuntu
       # 24.04 restricts by default (its README says so). On CI its tests never skip.
-      # The image has none of the five (image 20261101.360 installs all of them new).
-      # The runner's Azure mirror sometimes stops answering, and apt then waits with no end: 32 min
-      # on pull request 696, over an hour on 2026-11-11 (actions/runner-images issue 14594). apt.sh
-      # gives each try a wall-clock limit and, after a failed try, drops the Azure mirror from the
-      # image's mirror list, so the next try asks archive.ubuntu.com first. Its comment holds the
-      # measured limits; the cause is outside this repo (decision 0036).
+      # The image has none of the five (image 20261101.360 installs all of them new; its
+      # Ubuntu2404-Readme.md and toolset-2404.json list none of them), so apt always runs here.
+      # The runner's mirrors sometimes stop answering, and apt then waits with no end: 32 min on
+      # pull request 696 (actions/runner-images issue 14594), and on 2026-11-11 every Canonical
+      # host at once (issues 15296, 15297). apt.sh gives each try a wall-clock limit and, after a
+      # failed try, drops the top mirror, walking a chain of six that ends outside Canonical. Its
+      # comment holds the measured limits; the cause is outside this repo (decision 0036). Three
+      # dead mirrors, then a full install, take about 8 min, inside the step's 12.
       - name: apt packages
         timeout-minutes: 12
         run: |
