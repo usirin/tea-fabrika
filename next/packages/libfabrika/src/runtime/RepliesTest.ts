@@ -8,6 +8,7 @@ import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
 import { Replies } from "./Replies.ts";
+import * as RepliesSql from "./RepliesSql.ts";
 
 const SEED = 119120;
 const RUNS = 100;
@@ -237,7 +238,9 @@ const walk = (
     let scope = yield* Scope.make();
     let raw = yield* open.pipe(Scope.provide(scope));
     const connect = Effect.fnUntraced(function* (capacity: number) {
-      const context = yield* Layer.build(Replies.layer(faulty(raw, control), { capacity })).pipe(Scope.provide(scope));
+      const context = yield* Layer.build(RepliesSql.layer(faulty(raw, control), { capacity })).pipe(
+        Scope.provide(scope),
+      );
       return Context.get(context, Replies);
     });
     let service = yield* connect(1024 ** 3);
