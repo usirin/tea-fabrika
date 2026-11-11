@@ -107,5 +107,9 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - The builder's uncommitted edits stay exactly as they are.
 - Read, print or copy a key file. Push.
-- Write a law that cannot fail, or one whose plant you did not run and record.
+- Write a law that cannot fail, or one whose plant you did not run and record. A plant that needs
+  the build's file is written and named in the report as "after build", and runs at review.
+- Hold `done` for a part your box cannot do. Work until every part this box allows is done. A
+  part that needs another step's code, a typecheck or `--changed` is written, named in the report
+  as "after build" or "lead runs it", and does not block `done`. Never send the lane to tests.
 - Commit a plant test.
