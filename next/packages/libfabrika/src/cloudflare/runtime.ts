@@ -12,6 +12,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -111,7 +112,14 @@ export interface ProjectOptions {
   ) => Effect.Effect<
     GatewayCalls,
     unknown,
-    Ledger | LedgerTransaction | Id.Generator | ClientManager | SpanSink | RecordManager | Archive
+    | Ledger
+    | LedgerTransaction
+    | Id.Generator
+    | ClientManager
+    | SpanSink
+    | RecordManager
+    | Archive
+    | SecureRandom.SecureRandom
   >;
 }
 
@@ -339,7 +347,12 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     LedgerTransaction.layer(sql),
     Referee.layer(sql),
   ).pipe(Layer.provide(bell));
-  const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
+  // The door's nonce secret and salts come from the platform's WebCrypto.
+  const base = Layer.mergeAll(
+    ledgerLayer,
+    recordingLayer(sql, env, name, `project:${name}`),
+    SecureRandom.layerWebCrypto,
+  );
   const managers = Layer.mergeAll(
     ClientManager.layer(founder),
     ProcessManager.layer(

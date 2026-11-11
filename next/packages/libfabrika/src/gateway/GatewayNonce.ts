@@ -1,6 +1,7 @@
 import { Effect, Result, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
-import { LedgerError } from "../ledger/Ledger.ts";
+import { GatewayError } from "./Gateway.ts";
 import type { gatewayStore } from "./GatewayStore.ts";
 
 // SYN cookies keep an unproved connection out of storage (RFC 4987, section 3.6).
@@ -9,24 +10,35 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   ttl: number,
   cap: number,
 ) {
-  const secret = yield* store.atomic(() => {
-    const saved = store.get("challengeKey", Schema.String);
+  const random = yield* SecureRandom.SecureRandom;
+  const atomic = <A>(step: () => A) =>
+    store.atomic(step).pipe(Effect.mapError((cause) => new GatewayError({ reason: "storage", cause })));
+  const read = () => store.get("challengeKey", Schema.String);
+  // A transaction never suspends: draw first, then keep whichever secret is installed by then.
+  const install = (fresh: string) =>
+    atomic(() => {
+      const installed = read();
 
-    if (saved !== null) {
-      return saved;
-    }
+      if (installed !== null) {
+        return installed;
+      }
 
-    const fresh = Base64Url.encode(crypto.getRandomValues(new Uint8Array(32)));
-    store.set("challengeKey", Schema.String, fresh);
-    return fresh;
-  });
+      store.set("challengeKey", Schema.String, fresh);
+      return fresh;
+    });
+  const saved = yield* atomic(read);
+  const secret = saved ?? (yield* install(Base64Url.encode(yield* random.randomBytes(32))));
   const bytes = Base64Url.decode(secret);
 
-  if (Result.isFailure(bytes) || bytes.success.length !== 32) {
-    return yield* new LedgerError({ reason: "storage" });
+  if (Result.isFailure(bytes)) {
+    return yield* new GatewayError({ reason: "storage", cause: bytes.failure });
   }
 
-  const fail = () => new LedgerError({ reason: "crypto" });
+  if (bytes.success.length !== 32) {
+    return yield* new GatewayError({ reason: "storage" });
+  }
+
+  const fail = (cause: unknown) => new GatewayError({ reason: "crypto", cause });
   const args: Parameters<SubtleCrypto["importKey"]> = [
     "raw",
     new Uint8Array(bytes.success),
@@ -42,7 +54,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     new TextEncoder().encode(JSON.stringify([client, issuedAt, salt]));
   const issue = Effect.fnUntraced(function* (client: string) {
     const issuedAt = yield* clock;
-    const salt = Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
+    const salt = Base64Url.encode(yield* random.randomBytes(24));
     const data = text(client, issuedAt, salt);
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
     const work = Effect.tryPromise({ try: () => crypto.subtle.sign("HMAC", key, data), catch: fail });
@@ -83,7 +95,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     }
 
     if (Number(store.sql.exec("SELECT count(*) n FROM gateway_spent WHERE until>?", at)[0]?.n ?? 0) >= cap) {
-      return Result.fail(new LedgerError({ reason: "storage" }));
+      return Result.fail(new GatewayError({ reason: "storage" }));
     }
 
     store.sql.exec("DELETE FROM gateway_spent WHERE until<=?", at);

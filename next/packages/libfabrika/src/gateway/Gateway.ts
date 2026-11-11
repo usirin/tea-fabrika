@@ -1,5 +1,18 @@
 import { applyCell } from "@demlik/tea";
-import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
@@ -8,6 +21,7 @@ import { ClientManager } from "../access/ClientManager.ts";
 import {
   type Envelope,
   NotGranted,
+  type Session,
   SessionManager,
   SigningRefused,
   SignRequest,
@@ -16,9 +30,9 @@ import {
 import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
-import { Ledger, LedgerError } from "../ledger/Ledger.ts";
+import { Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
-import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
+import { type Appended, fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
 import { type ProcessError, brainOnly } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
@@ -33,13 +47,39 @@ import { Chain } from "../telemetry/Trace.ts";
 import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
-import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
+import { Admission, Answer, Attached, Hello, Who } from "../transport/Wire.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
+
+/** The gateway's own failure. A translated one keeps the lower failure, whole, as `cause`; a
+ *  condition the gateway found itself has none. `bad_row`: saved or received data that does not
+ *  decode. `storage`: the gateway's own state could not be read or written. `refused`: the ledger
+ *  refused a line the gateway needed written. `crypto`: WebCrypto threw or rejected.
+ *  `dependency`: a service below the gateway failed. */
+export class GatewayError extends Schema.TaggedError<GatewayError>()("GatewayError", {
+  reason: Schema.Literals(["bad_row", "storage", "refused", "crypto", "dependency"]),
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
+// Deliberate refusals keep their own class: callers answer them by class.
+type Kept = GatewayError | NotGranted | SigningRefused;
+
+const kept = (error: unknown) =>
+  error instanceof GatewayError || error instanceof NotGranted || error instanceof SigningRefused;
+
+/** A lower failure as the gateway's own, after every recovery and refusal the work already did. */
+const owned =
+  (reason: GatewayError["reason"]) =>
+  <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, Extract<E, Kept> | GatewayError, R> =>
+    work.pipe(
+      Effect.mapError((error) =>
+        kept(error) ? (error as Extract<E, Kept>) : new GatewayError({ reason, cause: error }),
+      ),
+    );
 
 const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) });
 
@@ -49,13 +89,8 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
 
 const json = Schema.decodeUnknownResult(Schema.Json);
 
-const rawObject = (a: unknown): Record<string, unknown> | null =>
-  typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
-
-const reserved = (a: unknown) => {
-  const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
-};
+const reserved = (a: unknown) =>
+  Predicate.isObject(a) && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(a, key));
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({ result });
@@ -274,9 +309,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const processes = yield* Effect.serviceOption(ProcessManager);
-  const store = gatewayStore(options.sql),
+  const unowned = gatewayStore(options.sql),
     sql = options.sql;
-  const nonces = yield* silent(gatewayNonce(store, options.waiting.ttl, options.spentCap));
+  // The store's failure is the gateway's own storage fault, and stays its cause.
+  const store = { ...unowned, atomic: <B>(step: () => B) => unowned.atomic(step).pipe(owned("storage")) };
+  const nonces = yield* silent(gatewayNonce(unowned, options.waiting.ttl, options.spentCap));
   // Only calls currently checking a proof live here. No challenge is retained.
   const checking = new Map<ConnectionId, Set<{ current: boolean }>>();
   const turn = options.turn ?? (yield* Semaphore.make(1));
@@ -300,7 +337,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         rows,
         (row) =>
           Schema.decodeUnknownEffect(MemberEvent)(valueFor(row)).pipe(
-            Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+            Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })),
           ),
         { concurrency: 1 },
       ),
@@ -543,7 +580,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       });
 
       if (placed._tag === "refused") {
-        return yield* new LedgerError({ reason: "refused" });
+        return yield* new GatewayError({ reason: "refused" });
       }
 
       yield* store.atomic(() => {
@@ -575,7 +612,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const loaded = saved === null ? null : Schema.decodeUnknownResult(Waiting.Stored)(saved);
 
     if (loaded !== null && Result.isFailure(loaded)) {
-      throw new LedgerError({ reason: "bad_row" });
+      throw new GatewayError({ reason: "bad_row", cause: loaded.failure });
     }
 
     const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
@@ -707,7 +744,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const decoded = decodeBinding(row.value);
 
       if (Result.isFailure(decoded)) {
-        throw new LedgerError({ reason: "bad_row" });
+        throw new GatewayError({ reason: "bad_row", cause: decoded.failure });
       }
 
       return decoded.success;
@@ -1037,7 +1074,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
         : null;
     const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
-    const name = message === null ? undefined : (options.inputs.name?.(message) ?? rawObject(message)?._tag);
+    const name =
+      message === null
+        ? undefined
+        : (options.inputs.name?.(message) ?? (Predicate.isObject(message) ? message._tag : undefined));
 
     if (
       method === "process.send" &&
@@ -1076,7 +1116,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const digest = yield* hash(JSON.stringify(params));
     const bodyHash = yield* hash(JSON.stringify(message));
     const process = yield* allocateStart();
-    const inputId = yield* ids.next(InputId).pipe(Effect.mapError(() => new LedgerError({ reason: "storage" })));
+    const inputId = yield* ids.next(InputId).pipe(owned("storage"));
     const at = yield* clock;
     const letter =
       refusal === null && request !== null && Result.isSuccess(request) ? `${target}/${request.success.letter}` : null;
@@ -1097,7 +1137,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           const decoded = decodeBinding(prior.value);
 
           if (Result.isFailure(decoded)) {
-            return Result.fail(new LedgerError({ reason: "bad_row" }));
+            return Result.fail(new GatewayError({ reason: "bad_row", cause: decoded.failure }));
           }
 
           const old = decoded.success;
@@ -1126,7 +1166,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               options.inputCap) ||
           !Number.isSafeInteger(count + 1)
         ) {
-          return Result.fail(new LedgerError({ reason: "storage" }));
+          return Result.fail(new GatewayError({ reason: "storage" }));
         }
 
         count++;
@@ -1146,7 +1186,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
-          sentAt: request !== null && Result.isSuccess(request) ? request.success.sentAt : new Date(at).toISOString(),
+          sentAt:
+            request !== null && Result.isSuccess(request)
+              ? request.success.sentAt
+              : DateTime.formatIso(DateTime.makeUnsafe(at)),
           state: EnvelopeState.cases.allocated.make({}),
         };
 
@@ -1206,7 +1249,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             ...event,
             door: binding.door,
             n: binding.n,
-          }).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })))
+          }).pipe(Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })))
         : event;
       const placed = yield* appendChecked(binding.client, {
         stream: "gateway/inputs",
@@ -1215,7 +1258,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       });
 
       if (placed._tag === "refused") {
-        return yield* new LedgerError({ reason: "refused" });
+        return yield* new GatewayError({ reason: "refused" });
       }
 
       if (binding.state._tag === "allocated") {
@@ -1274,7 +1317,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                 binding.process,
                 {
                   id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-                    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                    Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })),
                   ),
                   by: binding.by,
                   arrivedAt: binding.arrivedAt,
@@ -1285,7 +1328,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                   id: request.success.letter,
                   envelope: {
                     id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                      Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })),
                     ),
                     by: binding.by,
                     arrivedAt: binding.arrivedAt,
@@ -1301,7 +1344,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
           if (Exit.isFailure(result)) {
             yield* store.atomic(() => saveBinding({ ...binding, state: EnvelopeState.cases.retryable.make({}) }));
-            return yield* Effect.failCause(result.cause);
+            return yield* Effect.failCause(result.cause).pipe(owned("dependency"));
           }
 
           const answer = result.value ?? null;
@@ -1338,10 +1381,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             options.wait === undefined
               ? yield* ledger.wait(p.success.stream, p.success.after)
               : yield* options.wait(p.success.stream, p.success.after, reader).pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} })),
+                  owned("dependency"),
+                  Effect.flatMap((answer) =>
+                    Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} }))(
+                      answer,
+                    ).pipe(Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause }))),
                   ),
-                  Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
                 );
           return waited._tag === "parked" ? Answer.cases.parked.make(p.success) : ok({ rev: waited.rev });
         }
@@ -1399,7 +1444,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   /** The runner may save only the exact input whose checked binding the door delivered. */
   const accept = Effect.fn("gateway.accept")(function* (input: Incoming) {
     const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })),
     );
     const parent = Schema.decodeUnknownResult(InputId)(incoming.envelope.id);
 
@@ -1430,7 +1475,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const message = incoming.envelope.input;
 
     if (!Schema.is(options.inputs.schema)(message)) {
-      return yield* new LedgerError({ reason: "bad_row" });
+      return yield* new GatewayError({ reason: "bad_row" });
     }
 
     if (binding.hash !== (yield* hash(JSON.stringify(message)))) {
@@ -1453,7 +1498,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const m = yield* Schema.decodeUnknownEffect(Schema.Json)(message).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new GatewayError({ reason: "bad_row", cause })),
     );
     return yield* appendChecked(binding.client, {
       stream,
@@ -1468,14 +1513,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     });
   });
-  const append = Effect.fn("gateway.append")(function* (a: {
-    readonly id: string;
-    readonly parent: string;
-    readonly process: string;
-    readonly kind: string;
-    readonly stream: string;
-    readonly event: unknown;
-  }) {
+  const append = Effect.fn("gateway.append")(function* (a: Caused) {
     return yield* Effect.gen(function* () {
       if (options.isLive !== undefined && !(yield* options.isLive(a.process))) {
         return yield* new SigningRefused({ reason: "not_delivered" });
@@ -1489,10 +1527,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const event = rawObject(a.event);
+      const event = a.event;
 
       if (
-        event === null ||
+        !Predicate.isObject(event) ||
         event._tag !== a.kind ||
         a.stream.startsWith("gateway/") ||
         brainOnly({ stream: a.stream, id: a.id, tag: a.kind })
@@ -1518,7 +1556,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return prior.digest === digest && prior.stream === a.stream ? prior : null;
         }
 
-        const next = { sentAt: new Date(at).toISOString(), digest, stream: a.stream };
+        const next = { sentAt: DateTime.formatIso(DateTime.makeUnsafe(at)), digest, stream: a.stream };
         store.set(`append/${a.id}`, AppendMeta, next);
         return next;
       });
@@ -1545,80 +1583,154 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       });
     }).pipe(write);
   });
-  return {
-    target: Effect.fn("gateway.target")(function* (name: string, code: string) {
-      const at = yield* clock;
-      const rows = yield* store.atomic(() => waiting(at).rows);
+  const target = Effect.fn("gateway.target")(function* (name: string, code: string) {
+    const at = yield* clock;
+    const rows = yield* store.atomic(() => waiting(at).rows);
 
-      for (const row of rows) {
-        if (row.code === code && (yield* fingerprint(row.key, false)) === name) {
-          return {
-            key: row.key,
-            for: options.founder.person,
-            to: options.name,
-            code: row.code,
-            label: row.label,
-          };
-        }
+    for (const row of rows) {
+      if (row.code === code && (yield* fingerprint(row.key, false)) === name) {
+        return {
+          key: row.key,
+          for: options.founder.person,
+          to: options.name,
+          code: row.code,
+          label: row.label,
+        };
       }
+    }
 
-      return null;
-    }),
+    return null;
+  });
+  const signer = Effect.fn("gateway.signer")(function* (parent: string, process: string, kind: string) {
+    return yield* (yield* sessionsFor(process)).signer(parent, process, kind);
+  });
+  const sign = Effect.fn("gateway.sign")(function* (process: string, id: string, parent: string, kind: string) {
+    if (options.isLive !== undefined && !(yield* options.isLive(process))) {
+      return yield* new SigningRefused({ reason: "not_delivered" });
+    }
+
+    return yield* (yield* sessionsFor(process))
+      .signer(parent, process, kind)
+      .pipe(Effect.provideService(SignRequest, { id }));
+  });
+  const checkDelivery = Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
+    const binding = yield* savedBinding(input.envelope.id);
+
+    if (binding === null || binding.letter !== input.id || binding.process !== process) {
+      return yield* new SigningRefused({ reason: "not_delivered" });
+    }
+
+    const by = yield* membership(binding.client);
+
+    if (
+      !["delivered", "retryable", "settled"].includes(binding.state._tag) ||
+      JSON.stringify(by) !== JSON.stringify(binding.by) ||
+      JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
+      binding.arrivedAt !== input.envelope.arrivedAt ||
+      binding.sentAt !== input.sentAt ||
+      (binding.seen ?? 0) !== input.seen ||
+      binding.span.traceId !== input.span.traceId ||
+      binding.span.spanId !== input.span.spanId ||
+      binding.hash === undefined ||
+      binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
+    ) {
+      return yield* new SigningRefused({ reason: "not_delivered" });
+    }
+  });
+  const dependency = owned("dependency");
+  return Gateway.of({
+    target: (name, code) => dependency(target(name, code)),
     connect,
-    challenge,
-    initialize,
-    knock,
-    watch,
-    disconnect,
-    enrollment,
-    grant,
-    deny,
-    route,
-    signer: Effect.fn("gateway.signer")(function* (parent: string, process: string, kind: string) {
-      return yield* (yield* sessionsFor(process)).signer(parent, process, kind);
-    }),
-    sign: Effect.fn("gateway.sign")(function* (process: string, id: string, parent: string, kind: string) {
-      if (options.isLive !== undefined && !(yield* options.isLive(process))) {
-        return yield* new SigningRefused({ reason: "not_delivered" });
-      }
-
-      return yield* (yield* sessionsFor(process))
-        .signer(parent, process, kind)
-        .pipe(Effect.provideService(SignRequest, { id }));
-    }),
-    retire: sessions.end,
-    checkDelivery: Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
-      const binding = yield* savedBinding(input.envelope.id);
-
-      if (binding === null || binding.letter !== input.id || binding.process !== process) {
-        return yield* new SigningRefused({ reason: "not_delivered" });
-      }
-
-      const by = yield* membership(binding.client);
-
-      if (
-        !["delivered", "retryable", "settled"].includes(binding.state._tag) ||
-        JSON.stringify(by) !== JSON.stringify(binding.by) ||
-        JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
-        binding.arrivedAt !== input.envelope.arrivedAt ||
-        binding.sentAt !== input.sentAt ||
-        (binding.seen ?? 0) !== input.seen ||
-        binding.span.traceId !== input.span.traceId ||
-        binding.span.spanId !== input.span.spanId ||
-        binding.hash === undefined ||
-        binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
-      ) {
-        return yield* new SigningRefused({ reason: "not_delivered" });
-      }
-    }),
-    append,
-    accept,
-  };
+    challenge: (client) => dependency(challenge(client)),
+    initialize: (client, input, trusted) => dependency(initialize(client, input, trusted)),
+    knock: (client, params) => dependency(knock(client, params)),
+    watch: (client) => dependency(watch(client)),
+    disconnect: (client) => dependency(disconnect(client)),
+    enrollment: (binding) => dependency(enrollment(binding)),
+    grant: (input) => dependency(grant(input)),
+    deny: (client, input) => dependency(deny(client, input)),
+    route: (client, method, params, reader) => dependency(route(client, method, params, reader)),
+    signer: (parent, process, kind) => dependency(signer(parent, process, kind)),
+    sign: (process, id, parent, kind) => dependency(sign(process, id, parent, kind)),
+    retire: (process) => dependency(sessions.end(process)),
+    checkDelivery: (process, input) => dependency(checkDelivery(process, input)),
+    append: (input) => dependency(append(input)),
+    accept: (input) => dependency(accept(input)),
+  });
 });
 
-export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
-  "@kampus/libfabrika/Gateway",
-) {
+/** A waiting knock this ledger's founder may grant. */
+type Target = {
+  readonly key: string;
+  readonly for: string;
+  readonly to: string;
+  readonly code: string;
+  readonly label: string;
+};
+
+/** What a checked hello answers. */
+const Initialized = Schema.TaggedUnion({
+  online: { who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
+  refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
+});
+
+/** A fact a delivered process asks the gateway to sign and append. */
+type Caused = {
+  readonly id: string;
+  readonly parent: string;
+  readonly process: string;
+  readonly kind: string;
+  readonly stream: string;
+  readonly event: unknown;
+};
+
+// Operational failures are GatewayError. NotGranted and SigningRefused stay the deliberate refusals.
+export class Gateway extends Context.Service<
+  Gateway,
+  {
+    readonly target: (name: string, code: string) => Effect.Effect<Target | null, GatewayError | NotGranted>;
+    readonly connect: () => Effect.Effect<ConnectionId>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, GatewayError>;
+    readonly initialize: (
+      client: ConnectionId,
+      input: unknown,
+      trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    ) => Effect.Effect<typeof Initialized.Type, GatewayError | NotGranted>;
+    readonly knock: (
+      client: ConnectionId,
+      params: { readonly label: string; readonly pass?: string | null },
+    ) => Effect.Effect<typeof Answer.Type, GatewayError>;
+    readonly watch: (client: ConnectionId) => Effect.Effect<typeof WatchReply.Type, GatewayError>;
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, GatewayError>;
+    readonly enrollment: (binding: typeof Enrollment.Type) => Effect.Effect<string, GatewayError>;
+    readonly grant: (input: unknown) => Effect.Effect<typeof GrantReply.Type, GatewayError | NotGranted>;
+    readonly deny: (client: ConnectionId, input: unknown) => Effect.Effect<typeof GrantReply.Type, GatewayError>;
+    readonly route: (
+      client: ConnectionId,
+      method: string,
+      params: unknown,
+      reader?: string,
+    ) => Effect.Effect<typeof Answer.Type, GatewayError | NotGranted | SigningRefused>;
+    readonly signer: (
+      parent: string,
+      process: string,
+      kind: string,
+    ) => Effect.Effect<Session, GatewayError | NotGranted | SigningRefused, SignRequest>;
+    readonly sign: (
+      process: string,
+      id: string,
+      parent: string,
+      kind: string,
+    ) => Effect.Effect<Session, GatewayError | NotGranted | SigningRefused>;
+    readonly retire: (process: string) => Effect.Effect<void, GatewayError>;
+    readonly checkDelivery: (
+      process: string,
+      input: Incoming,
+    ) => Effect.Effect<void, GatewayError | NotGranted | SigningRefused>;
+    readonly append: (input: Caused) => Effect.Effect<Appended, GatewayError | NotGranted | SigningRefused>;
+    readonly accept: (input: Incoming) => Effect.Effect<Appended, GatewayError | NotGranted>;
+  }
+>()("@kampus/libfabrika/Gateway") {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>
     Layer.effect(Gateway, make(options));
 }
@@ -1642,7 +1754,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
   }
 
   const body = new Uint8Array(bytes.success);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new GatewayError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", body), catch: fail });
   const digest = yield* work;
@@ -1651,7 +1763,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 
 const hash = Effect.fnUntraced(function* (text: string) {
   const bytes = new TextEncoder().encode(text);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new GatewayError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;
