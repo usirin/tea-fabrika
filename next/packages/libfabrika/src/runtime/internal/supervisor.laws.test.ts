@@ -69,11 +69,11 @@ const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknown
 /** Accepted policies: every brake reachable (the waits of one window fit inside it). */
 const policies: fc.Arbitrary<typeof Policy.Type> = fc
   .record({
-    intensity: fc.integer({ min: 1, max: 6 }),
+    intensity: fc.integer({ min: 1, max: 8 }),
     deliveries: fc.integer({ min: 1, max: 6 }),
     minMs: fc.integer({ min: 1, max: 200 }),
     spread: fc.integer({ min: 0, max: 800 }),
-    slack: fc.integer({ min: 1, max: 3000 }),
+    slack: fc.integer({ min: 1, max: 5000 }),
     reset: fc.integer({ min: 1, max: 8000 }),
   })
   .map(({ intensity, deliveries, minMs, spread, slack, reset }) => {
@@ -99,7 +99,7 @@ const Cell = fc.record({
   gap: fc.integer({ min: 0, max: 3000 }),
   error: fcErrorClass.filter((e) => e.length <= 40),
 });
-type Cell = typeof Cell.Type;
+type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 const tapes = fc.array(Cell, { minLength: 1, maxLength: 80 });
 
 const LETTERS = ["l1", "l2", "l3"] as const;
@@ -443,6 +443,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
       fc.constantFrom(0, 33, 1.5).map((maxDeliveries) => ({ ...policy, maxDeliveries })),
       fc.integer({ max: 0 }).map((periodMs) => ({ ...policy, periodMs })),
       fc.integer({ min: 801, max: 5000 }).map((minMs) => ({ ...policy, backoff: { ...policy.backoff, minMs } })),
+      fc.integer({ max: 0 }).map((minMs) => ({ ...policy, backoff: { ...policy.backoff, minMs } })),
       fc.integer({ max: 0 }).map((resetAfterMs) => ({ ...policy, backoff: { ...policy.backoff, resetAfterMs } })),
       fc.integer({ min: 1, max: 2 }).map((intensity) => ({ ...policy, intensity })),
       fc.integer({ min: 1, max: 1500 }).map((periodMs) => ({ ...policy, periodMs })),
@@ -453,7 +454,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
         expect(() => Schema.decodeUnknownSync(Policy)(candidate)).toThrow();
         expect(JSON.stringify(candidate)).toBe(bytes);
       }),
-      { seed: SEED, numRuns: RUNS },
+      {
+        seed: SEED,
+        numRuns: RUNS,
+        // pinned: P34's list refused a zero first wait; a zero backoff would restart in a hot loop.
+        examples: [[{ ...policy, backoff: { ...policy.backoff, minMs: 0 } }]],
+      },
     );
     expect(Schema.decodeUnknownSync(Policy)(policy)).toEqual(policy);
   });
@@ -660,6 +666,22 @@ describe("P34c slice 2: one saved recovery journal", () => {
             // received, begin fresh, threw (dead at limit 1), dead written, exit written.
             [0, 0, 1, 0, 0].map((move) => ({ move, pick: 0, gap: 0, error: "TypeError" })),
           ],
+          // pinned: healthy for exactly resetAfterMs resets the crash count (P34 compares with >=).
+          // begin saved, threw, exit written, wait out the backoff, started, checkpointed, then
+          // two idle advances that end exactly resetAfterMs after the checkpoint.
+          [
+            Schema.decodeUnknownSync(Policy)(policy),
+            [
+              { move: 4, gap: 0 },
+              { move: 1, gap: 0 },
+              { move: 0, gap: 0 },
+              { move: 0, gap: policy.backoff.minMs },
+              { move: 1, gap: 0 },
+              { move: 0, gap: 0 },
+              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+            ].map((cell) => ({ ...cell, pick: 0, error: "TypeError" })),
+          ],
         ],
       },
     );
@@ -689,7 +711,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         extra: fc.integer({ min: 1, max: 12 }),
         minMs: fc.integer({ min: 1, max: 200 }),
         spread: fc.integer({ min: 0, max: 800 }),
-        slack: fc.integer({ min: 0, max: 3000 }),
+        slack: fc.integer({ min: 0, max: 5000 }),
       })
       .chain(({ deliveries, extra, minMs, spread, slack }) => {
         const intensity = deliveries + extra;

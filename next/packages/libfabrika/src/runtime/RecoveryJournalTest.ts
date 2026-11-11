@@ -100,12 +100,13 @@ const Cell = fc.record({
   cut: fc.option(fc.constantFrom(...CUTS), { nil: null }),
   error: fc.stringMatching(/^[A-Z][A-Za-z0-9_]{0,15}$/),
 });
-type Cell = typeof Cell.Type;
+type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Limits = fc.record({
   wiring: fc.option(fc.integer({ min: 1, max: 4 }), { nil: undefined }),
   program: fc.option(fc.integer({ min: 1, max: 4 }), { nil: undefined }),
 });
+type Limits = typeof Limits extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.array(Cell, { minLength: 2, maxLength: 8 });
 
@@ -123,7 +124,7 @@ type Account = {
   freshInit: boolean | null;
 };
 
-const world = Effect.fnUntraced(function* (rig: Rig, limits: typeof Limits.Type) {
+const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   const ledger = yield* rig.open;
   const state = yield* rig.open;
   const controls = {
@@ -401,14 +402,15 @@ const law = (
   rig: Rig,
   name: string,
   moves: ReadonlyArray<Move>,
-  required: ReadonlyArray<Move | (typeof CUTS)[number]>,
+  /** Moves and cuts this law must run, and `adopted`, which the walk marks when it adopts. */
+  required: ReadonlyArray<Move | (typeof CUTS)[number] | "adopted">,
 ) =>
   it.effect(
     name,
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
-        const law = (limits: typeof Limits.Type, tape: ReadonlyArray<Cell>) =>
+        const law = (limits: Limits, tape: ReadonlyArray<Cell>) =>
           Effect.scoped(walk(rig, limits, tape, moves, done)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Limits, Tape, (limits, tape) => Effect.runPromise(law(limits, tape)));
@@ -420,13 +422,7 @@ const law = (
     600_000,
   );
 
-const walk = (
-  rig: Rig,
-  limits: typeof Limits.Type,
-  tape: ReadonlyArray<Cell>,
-  allowed: ReadonlyArray<Move>,
-  done: Set<string>,
-) =>
+const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: ReadonlyArray<Move>, done: Set<string>) =>
   Effect.gen(function* () {
     const w = yield* world(rig, limits);
     yield* w.boot;
