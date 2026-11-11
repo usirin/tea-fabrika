@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Entry, Row } from "../ledger/Log.ts";
@@ -60,6 +61,90 @@ export const watcher = (process: string): Caller => ({
   owner: Owner.cases.process.make({ process }),
   recipient: Recipient.cases.process.make({ process }),
 });
+
+/**
+ * The fixture's own copy of the exit reason schema, so a law never checks the product against itself.
+ * An error class keeps the 256-character text bound.
+ */
+export const ERROR_CLASS_MAX = 256;
+const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(ERROR_CLASS_MAX));
+export const PHASES = ["step", "saved_letter", "interrupted"] as const;
+
+export const ExitReason = Schema.TaggedUnion({
+  normal: {},
+  shutdown: {},
+  kill: {},
+  crashed: { phase: Schema.Literals(PHASES), error: Schema.optionalKey(ErrorClass) },
+});
+export type ExitReason = typeof ExitReason.Type;
+/** What a DOWN carries: an exit reason, or `noproc` when the target was never live. */
+const NoProc = Schema.TaggedStruct("noproc", {});
+export const DownReason = Schema.Union([ExitReason, NoProc]);
+
+export const NORMAL = ExitReason.cases.normal.make({});
+export const SHUTDOWN = ExitReason.cases.shutdown.make({});
+export const KILL = ExitReason.cases.kill.make({});
+export const CRASHED = ExitReason.cases.crashed.make({ phase: "step", error: "Error" });
+export const INTERRUPTED = ExitReason.cases.crashed.make({ phase: "interrupted" });
+export const NOPROC = NoProc.make({});
+
+/** An error class as a program could throw it: an identifier, from one character to the bound. */
+export const fcErrorClass = fc.stringMatching(new RegExp(`^[A-Za-z_$][A-Za-z0-9_$]{0,${ERROR_CLASS_MAX - 1}}$`));
+
+/** Every schema-valid exit reason, the class lengths pushed to both edges of the bound. */
+export const fcExitReason: fc.Arbitrary<ExitReason> = fc.oneof(
+  fc.constant(NORMAL),
+  fc.constant(SHUTDOWN),
+  fc.constant(KILL),
+  fc
+    .record(
+      {
+        phase: fc.constantFrom(...PHASES),
+        error: fc.oneof(
+          fcErrorClass,
+          fc.integer({ min: 1, max: ERROR_CLASS_MAX }).map((n) => "E".repeat(n)),
+        ),
+      },
+      { requiredKeys: ["phase"] },
+    )
+    .map((fields) => ExitReason.cases.crashed.make(fields)),
+);
+
+/** A fresh, structurally equal copy of a reason, as JSON serialization or a reopened store gives it. */
+export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+
+/**
+ * One invalid exit input, made from a valid reason: text, an unknown tag or phase, a missing phase,
+ * an empty or overlong class, a class of the wrong type, or a stray tag.
+ */
+export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
+  fc.oneof(
+    fc.constant(reason._tag),
+    fc.string({ minLength: 1, maxLength: 40 }),
+    fc.constant(null),
+    fc.constant({}),
+    fc.constant(raw("noproc", reason)),
+    fc
+      .stringMatching(/^[a-z_]{1,20}$/)
+      .filter((tag) => !Object.hasOwn(ExitReason.cases, tag))
+      .map((tag) => raw(tag, reason)),
+    fc.constant(raw("crashed")),
+    fc.constant(raw("crashed", { error: "Error" })),
+    fc
+      .string({ minLength: 1, maxLength: 20 })
+      .filter((phase) => !(PHASES as ReadonlyArray<string>).includes(phase))
+      .map((phase) => raw("crashed", { phase })),
+    fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "" })),
+    fc
+      .integer({ min: ERROR_CLASS_MAX + 1, max: ERROR_CLASS_MAX + 64 })
+      .chain((n) => fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "E".repeat(n) }))),
+    fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: 42 })),
+  );
+
+/** A raw client value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
+const raw = (tag: string, fields: object = {}): unknown =>
+  // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
+  ({ ...fields, _tag: tag });
 
 export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =>
   Start.cases.first.make({ id, name, code });
