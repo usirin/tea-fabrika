@@ -327,6 +327,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
       // lint config, beside oxlint's own id-denylist.
       "no-question-word-key",
+      // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
+      "no-stage-word",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

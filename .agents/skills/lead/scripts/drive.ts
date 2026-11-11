@@ -36,7 +36,8 @@
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
-//   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
+//   recording  Act     the field row (with the plants the typed answer named, 0093),
+//                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
 //   over               the outcome
@@ -88,6 +89,7 @@ import {
   listUsd,
   makeStepAgents,
   NO_SPENT,
+  Plant,
   type Provider,
   runTurn,
   Spent,
@@ -333,6 +335,8 @@ const Entry = Schema.Struct({
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
+  /** The plants the step's typed answer named, for the field row (0093). */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 const record = Cmd.make("record", { input: Entry, ok: Done, err: ["unknown"] });
@@ -364,6 +368,7 @@ type Model =
       readonly head: string;
       readonly left: readonly string[];
       readonly spent: Spent;
+      readonly plants: Answer["plants"];
     }
   | {
       readonly phase: "recording" | "over";
@@ -620,8 +625,16 @@ type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
- * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly string[] = []): Step => {
+ * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). The
+ * plants the answer named go on the row whatever the outcome: they ran (0093). */
+const recordIt = (
+  ask: Ask,
+  j: Ended,
+  head: string,
+  spent: Spent,
+  left: readonly string[] = [],
+  plants: Answer["plants"] = undefined,
+): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
@@ -632,6 +645,7 @@ const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly
     exit: exitOf(j.outcome),
     keep: kept,
     spent,
+    ...(plants === undefined ? {} : { plants }),
   });
   return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
@@ -716,18 +730,19 @@ export const machine = defineMachine({
 
       const j = decide(s.ask, m.value, s.answer);
       const head = m.value.head ?? s.ask.base;
+      const plants = s.answer?.plants;
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head });
-        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent };
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent, plants };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
-      return recordIt(s.ask, j, head, s.spent, m.value.left);
+      return recordIt(s.ask, j, head, s.spent, m.value.left, plants);
     },
     step_read_err: (s): Step =>
       s.phase === "reading"
-        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent)
+        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent, [], s.answer?.plants)
         : stay(s),
     backup_push_ok: (s, m): Step => {
       if (s.phase !== "pushing") {
@@ -735,13 +750,15 @@ export const machine = defineMachine({
       }
 
       if (!m.value.ok) {
-        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left);
+        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left, s.plants);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left, s.plants);
     },
     backup_push_err: (s): Step =>
-      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left) : stay(s),
+      s.phase === "pushing"
+        ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left, s.plants)
+        : stay(s),
     record_ok: (s, m): Step => {
       if (s.phase !== "recording") {
         return stay(s);
@@ -1389,6 +1406,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               ended: new Date(ended),
               spent: e.spent,
               redacted: Number.isFinite(redacted) ? redacted : null,
+              plants: e.plants,
             }),
           );
         }

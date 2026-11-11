@@ -9,6 +9,7 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Referee } from "../ledger/Referee.ts";
+import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 
 const SEED = 119120;
@@ -137,7 +138,7 @@ describe("P12 Connection attachment laws", () => {
         const sql = nodeSql(db);
         let ring: Connection["ring"] = () => Effect.void;
         const bell = Layer.succeed(Doorbell, { ring: (_reader, stream, rev) => ring(stream, rev) });
-        const layer = Layer.mergeAll(Referee.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
+        const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
         );
         yield* Effect.gen(function* () {
