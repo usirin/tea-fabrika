@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { BrowserWindow } from "electron";
+import type { App, BrowserWindow } from "electron";
 import { _electron, type ElectronApplication, type Page } from "playwright";
 import { corner, quietEnv } from "./src/launch.ts";
 
@@ -19,8 +19,9 @@ import { corner, quietEnv } from "./src/launch.ts";
 //                   is quiet and the app hides the window itself before it is ever shown
 //   the size        `size` only: content size, then back to the work area's corner. A test never
 //                   moves a window by hand
-//   the watch       installed in the main process at launch: every OS focus and every window
-//                   shown. `close` fails on any focus, or on a window seen above opacity 0
+//   the watch       loaded into the main process with Electron's `-r`, before the app's own first
+//                   line and so before `ready` and the first window: every OS focus and every
+//                   window shown. `close` fails on any focus, or on a window seen above opacity 0
 //
 // Playwright's API is promises, and this file stays in it, as e2e.ts does.
 
@@ -61,24 +62,30 @@ const envFor = (parent: Readonly<Record<string, string | undefined>>, home: stri
 };
 
 /**
- * Every window there is, and each one made from now on: its focus and its showing, in one list. The
- * list lives in the main process; the handle reads it back.
+ * The watch, as the main process runs it: Electron loads it with `-r` before the app's code, so it
+ * sees every window from the moment it is made, and keeps its list on `globalThis` for `close`. It
+ * goes over as source, as `evaluate`'s functions do, so it reads nothing from this file's scope.
  */
-const watch = (app: ElectronApplication) =>
-  app.evaluateHandle(({ app: main, BrowserWindow: windows }) => {
-    const seen: Seen[] = [];
-    const note = (event: Seen["event"], window: BrowserWindow) =>
-      seen.push({ event, window: window.id, opacity: window.getOpacity(), at: new Date().toISOString() });
-    const follow = (window: BrowserWindow) => window.on("show", () => note("show", window));
-    main.on("browser-window-focus", (_event, window) => note("focus", window));
-    main.on("browser-window-created", (_event, window) => follow(window));
+const watch = ({ app }: { readonly app: App }) => {
+  const seen: Seen[] = [];
+  const note = (event: Seen["event"], window: BrowserWindow) =>
+    seen.push({ event, window: window.id, opacity: window.getOpacity(), at: new Date().toISOString() });
+  app.on("browser-window-focus", (_event, window) => note("focus", window));
+  app.on("browser-window-created", (_event, window) => window.on("show", () => note("show", window)));
+  Object.assign(globalThis, { testWindowSeen: seen });
+};
 
-    for (const window of windows.getAllWindows()) {
-      follow(window);
-    }
+/** The watch as a file for `-r`, in a folder of its own that `close` removes. */
+const watchFile = async () => {
+  const folder = await mkdtemp(join(tmpdir(), "fw-"));
+  const file = join(folder, "watch.cjs");
+  await writeFile(file, `(${String(watch)})(require("electron"));\n`);
+  return { folder, file };
+};
 
-    return seen;
-  });
+/** What the watch saw, or null when it never loaded. */
+const seenBy = (app: ElectronApplication) =>
+  app.evaluate((): Seen[] | null => (globalThis as { testWindowSeen?: Seen[] }).testWindowSeen ?? null);
 
 /** Every window as it is now, and the work area they sit in. */
 const read = (app: ElectronApplication) =>
@@ -96,11 +103,13 @@ export const launch = async (options: {
 }): Promise<TestWindow> => {
   const home = options.home ?? (await mkdtemp(join(tmpdir(), options.prefix ?? "fh-")));
   const env = envFor(options.env ?? process.env, home);
-  const app = await _electron.launch({ executablePath: electronPath, args: [here], env, cwd: options.cwd });
-  const watched = await watch(app).catch(async (e: unknown) => {
-    await app.close().catch(() => {});
-    throw e;
-  });
+  const watching = await watchFile();
+  const app = await _electron
+    .launch({ executablePath: electronPath, args: ["-r", watching.file, here], env, cwd: options.cwd })
+    .catch(async (e: unknown) => {
+      await rm(watching.folder, { recursive: true, force: true });
+      throw e;
+    });
 
   const size = async (width: number, height: number) => {
     const bounds = await app.evaluate(
@@ -124,11 +133,12 @@ export const launch = async (options: {
   };
 
   const close = async () => {
-    const now = await Promise.all([watched.jsonValue(), read(app)]).then(
-      ([seen, windows]) => ({ seen, ...windows }),
+    const now = await Promise.all([seenBy(app), read(app)]).then(
+      ([seen, windows]) => (seen === null ? { failed: "the watch never loaded" } : { seen, ...windows }),
       (e: unknown) => ({ failed: String(e) }),
     );
     await app.close().catch(() => {});
+    await rm(watching.folder, { recursive: true, force: true });
 
     if ("failed" in now) {
       throw new Error(`the test window on ${home} could not be read before it closed: ${now.failed}`);
