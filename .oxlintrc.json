@@ -815,7 +815,8 @@
               "jobs",
               "access",
               "runtime",
-              "gateway"
+              "gateway",
+              "loops"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
@@ -956,7 +957,8 @@
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/settings/**"
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/loops/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -972,7 +974,8 @@
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
-        "next/packages/libfabrika/src/settings/internal/**"
+        "next/packages/libfabrika/src/settings/internal/**",
+        "next/packages/libfabrika/src/loops/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },
@@ -1003,6 +1006,64 @@
       // on `i`, slips past both, and that gap is accepted (0065).
       "files": ["programs/trace/src/**/*.ts"],
       "rules": { "typescript/prefer-for-of": "error" }
+    },
+    {
+      "files": ["next/packages/libfabrika/src/loops/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "effect/Schedule",
+                "message": "A loop wakes through its Process alarm."
+              },
+              {
+                "name": "effect",
+                "importNames": ["Schedule"],
+                "message": "A loop wakes through its Process alarm."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": ["error", "setTimeout", "setInterval"]
+      }
     }
   ]
 }
