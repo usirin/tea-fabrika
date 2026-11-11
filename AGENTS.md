@@ -362,8 +362,8 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
   goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
-  337). No key, field, option or setting is named `where`, `why` or `what`: use the noun for the
-  value, such as `location`, `reason` or `scope` ([0081](./.decisions/0081-no-question-word-names.md)).
+  337). No key, field, option or setting is named `where`, `why`, `what`, `who` or `how`: use the
+  noun for the value, such as `location`, `reason`, `scope` or `to` ([0081](./.decisions/0081-no-question-word-names.md)).
   A key does not say again what its parent already says: inside
   an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
@@ -382,7 +382,7 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
   // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
-  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "ask", to: "owner", for: "approval" }
   { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.
