@@ -67,6 +67,7 @@ import { defaultPolicy, supervisor, type SupervisorMsg } from "./internal/superv
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
+import * as RepliesSql from "./RepliesSql.ts";
 
 export { defaultPolicy } from "./internal/supervisor.ts";
 
@@ -205,7 +206,7 @@ export class ProgramRunner extends Context.Service<
         const recovery = yield* RecoveryStore.pipe(
           Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
         );
-        const replies = yield* Replies.pipe(Effect.provide(Replies.layer(options.recovery.sql, options.recovery)));
+        const replies = yield* Replies.pipe(Effect.provide(RepliesSql.layer(options.recovery.sql, options.recovery)));
         let supervision: Supervision | null = null;
         let woke = false;
         const mailbox = yield* Mailbox;
