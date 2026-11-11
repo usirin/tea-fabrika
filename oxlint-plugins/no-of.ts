@@ -41,14 +41,18 @@ const spelled = (node: Node | null | undefined): string | null => {
   return null;
 };
 
-/** True when `program` has `export { of }` with no source: a top-level local exported as `of`. */
+/**
+ * True when `program` has `export { of }` with no source: a top-level local exported as `of`. A
+ * type-only export (`export type { of }`, `export { type of }`) is never read as `M.of`, so it does not count.
+ */
 const exportsOf = (program: Node): boolean =>
   program.type === "Program" &&
   program.body.some(
     (s) =>
       s.type === "ExportNamedDeclaration" &&
       s.source == null &&
-      s.specifiers.some((e) => spelled(e.local) === "of" && spelled(e.exported) === "of"),
+      s.exportKind !== "type" &&
+      s.specifiers.some((e) => e.exportKind !== "type" && spelled(e.local) === "of" && spelled(e.exported) === "of"),
   );
 
 export const noOf: CreateRule = {

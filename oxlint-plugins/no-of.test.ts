@@ -82,6 +82,13 @@ const BANNED: readonly Shape[] = [
   banned((n, i) => `declare module "m${i}" { export function ${n}(): void; }`),
   { ...banned((n) => `export default function ${n}() {}`), once: true },
   banned((n, i) => `const ${n} = ${i}; export { ${n} as m${i} };`),
+  // A type-only export is never read as `M.of`, so the local it names stays a bare `of`.
+  banned((n, i) => `const ${n} = ${i}; export type { ${n} };`),
+  banned((n, i) => `const ${n} = ${i}; export { type ${n} };`),
+  banned((n, i) => `let ${n} = ${i}; export type { ${n} };`),
+  banned((n, i) => `const { a: ${n} } = { a: ${i} }; export type { ${n} };`),
+  banned((n, i) => `function ${n}() { return ${i}; } export type { ${n} };`),
+  banned((n, i) => `declare function ${n}(h${i}: string): string; export { type ${n} };`),
   banned((n) => `export type ${n} = number;`),
   banned((n, i) => `export interface ${n} { readonly h${i}: string }`),
   banned((n) => `export class ${n} {}`),
@@ -157,11 +164,10 @@ const filler = piece(
 );
 
 /** The piece under test at a drawn position among 0 to 5 others. */
-const module = (main: fc.Arbitrary<Piece>): fc.Arbitrary<readonly Piece[]> =>
-  fc.tuple(main, fc.array(filler, { maxLength: 5 }), fc.nat()).map(([m, others, at]) => {
-    const k = at % (others.length + 1);
-    return [...others.slice(0, k), m, ...others.slice(k)];
-  });
+const place = (main: Piece, others: readonly Piece[], at: number): readonly Piece[] => {
+  const k = at % (others.length + 1);
+  return [...others.slice(0, k), main, ...others.slice(k)];
+};
 
 /** One line of a case, and what fires on it. */
 type Line = { readonly text: string; readonly fires: readonly Message[] };
@@ -185,32 +191,32 @@ const render = (pieces: readonly Piece[]): readonly Line[] =>
 
 const all = name(["of", "xOf", "plain"]);
 
+/**
+ * Each run draws a name, a source, 0 to 5 other pieces and a position, then checks every shape in
+ * `shapes` there. Drawing one shape per run left a 1 in 90 chance per run of `of` in a given shape,
+ * and the seed never drew `export namespace S { export const of }`, so the "any depth" plant lived.
+ */
+const everyShape = (shapes: readonly Shape[], n: fc.Arbitrary<Name>) =>
+  fc.property(n, from, fc.array(filler, { maxLength: 5 }), fc.nat(), (nm, f, others, at) => {
+    for (const shape of shapes) {
+      check(render(place({ shape, name: nm, from: f }, others, at)));
+    }
+  });
+
 it("L1: a module's top-level exported `of` passes in every allowed shape; an `xOf` name there fires", () => {
-  fc.assert(
-    fc.property(module(piece(ALLOWED, all)), (pieces) => check(render(pieces))),
-    RUNS,
-  );
+  fc.assert(everyShape(ALLOWED, all), RUNS);
 });
 
 it("L2: every other declared `of` or `xOf` name fires, newly visited positions included", () => {
-  fc.assert(
-    fc.property(module(piece(BANNED, name(["of", "xOf"]))), (pieces) => check(render(pieces))),
-    RUNS,
-  );
+  fc.assert(everyShape(BANNED, name(["of", "xOf"])), RUNS);
 });
 
 it("L3: a named import of `of` fires, renamed or type-only, and so does a local import bound as `of` or `xOf`", () => {
-  fc.assert(
-    fc.property(module(piece(IMPORTS, all)), (pieces) => check(render(pieces))),
-    RUNS,
-  );
+  fc.assert(everyShape(IMPORTS, all), RUNS);
 });
 
 it("L4: re-exports and uses pass; `export { a as N }` and `export * as N` with an `xOf` name fire", () => {
-  fc.assert(
-    fc.property(module(piece(EXPORTS, all)), (pieces) => check(render(pieces))),
-    RUNS,
-  );
+  fc.assert(everyShape(EXPORTS, all), RUNS);
 });
 
 /** L5's inner pieces: an object key, a parameter, a nested const. */
