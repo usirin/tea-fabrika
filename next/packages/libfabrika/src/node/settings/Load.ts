@@ -8,6 +8,8 @@ import * as Snapshot from "../../settings/Snapshot.ts";
 import * as Sources from "../../settings/Sources.ts";
 import { Toml } from "../../settings/Toml.ts";
 
+const REPO = ".fabrika/fabrika.toml";
+
 interface Place {
   /** Where the file is read from. */
   readonly path: string;
@@ -17,7 +19,8 @@ interface Place {
 
 export const load = Effect.fnUntraced(function* (options: {
   readonly person: Place;
-  readonly repo: Place;
+  /** A start that selects no repo reads none, and the repo's file counts as empty. */
+  readonly repo?: Place;
   readonly flags: Readonly<Record<string, string>>;
   readonly env: Readonly<Record<string, string>>;
   /** The running fabrika's version, which the repo's `fabrika-version` is checked against. */
@@ -51,7 +54,10 @@ export const load = Effect.fnUntraced(function* (options: {
       ),
       Effect.map((document) => ({ file: place.name, document })),
     );
-  const repo = yield* read(options.repo);
+  const repo =
+    options.repo === undefined ? { file: REPO, document: { value: {}, spans: [] } } : yield* read(options.repo);
+  // A repo that needs a newer fabrika is refused before the person's file is read.
+  yield* Files.supported(repo, options.version);
   const person = yield* read(options.person);
   yield* Files.validate(Declarations.all, { repo, person }, { version: options.version });
   const resolved = yield* Sources.resolve(Declarations.all, {

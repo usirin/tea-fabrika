@@ -143,7 +143,7 @@ const triple = (version: string) => {
 const newer = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Order.Number]));
 
 /** Refuse a repo that needs a newer fabrika, before anything else in either file is read. */
-const supported = Effect.fnUntraced(function* (repo: Place, version: string) {
+export const supported = Effect.fnUntraced(function* (repo: Place, version: string) {
   const d = Declarations.version;
   const wanted = repo.document.value[d.path];
 
