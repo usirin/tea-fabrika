@@ -14,7 +14,7 @@ const unreachable = () => new LedgerError({ reason: "unreachable" });
 export class ProjectClient extends Context.Service<
   ProjectClient,
   Client<Omit<ProjectBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/ProjectClient") {
+>()("@kampus/libfabrika/cloudflare/platform.ProjectClient") {
   static make(stub: ProjectBinding): ProjectClient["Service"] {
     return {
       clientConnect: () =>
@@ -129,7 +129,7 @@ export class ProjectClient extends Context.Service<
 export class ProcessClient extends Context.Service<
   ProcessClient,
   Client<Omit<ProcessBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/ProcessClient") {
+>()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     return {
       configure: (...args) =>
@@ -169,7 +169,7 @@ export class ProcessClient extends Context.Service<
 export class GatewayClient extends Context.Service<
   GatewayClient,
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
->()("fabrika/GatewayClient") {
+>()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
     return {
       fetch: (...args) =>
@@ -188,7 +188,9 @@ export class GatewayClient extends Context.Service<
   }
 }
 
-export class RecordClient extends Context.Service<RecordClient, RecordShape>()("fabrika/RecordClient") {
+export class RecordClient extends Context.Service<RecordClient, RecordShape>()(
+  "@kampus/libfabrika/cloudflare/platform.RecordClient",
+) {
   static make(stub: RecordShape): RecordClient["Service"] {
     return stub;
   }
@@ -204,7 +206,7 @@ export class StorageClient extends Context.Service<
     readonly setAlarm: (at: number) => Effect.Effect<void, LedgerError>;
     readonly deleteAlarm: () => Effect.Effect<void, LedgerError>;
   }
->()("fabrika/StorageClient") {
+>()("@kampus/libfabrika/cloudflare/platform.StorageClient") {
   static make(storage: DurableObjectStorage): StorageClient["Service"] {
     return {
       get: <A>(key: string) =>
@@ -235,7 +237,7 @@ export class BucketClient extends Context.Service<
     readonly put: (key: string, body: Uint8Array, sha256: string) => Effect.Effect<unknown, LedgerError>;
     readonly head: (key: string) => Effect.Effect<R2Object | null, LedgerError>;
   }
->()("fabrika/BucketClient") {
+>()("@kampus/libfabrika/cloudflare/platform.BucketClient") {
   static make(bucket: R2Bucket): BucketClient["Service"] {
     return {
       put: (key, body, sha256) =>

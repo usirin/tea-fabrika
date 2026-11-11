@@ -2,7 +2,7 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Schema } from "effect";
+import { Deferred, Effect, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -16,7 +16,12 @@ const PING = 42;
 type Saved = typeof Attached.Type;
 type W = typeof Wait.Type;
 type Waited = { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" };
-type Frame = { readonly id: string | number; readonly result?: unknown; readonly error?: { readonly message: string } };
+
+type Frame = {
+  readonly id: string | number;
+  readonly result?: unknown;
+  readonly error?: { readonly message: string; readonly data?: { readonly reason: string } };
+};
 
 type Event =
   | { readonly _tag: "save"; readonly saved: Saved }
@@ -29,7 +34,7 @@ type Event =
       readonly reader: string;
       readonly saved: Saved;
     }
-  | { readonly _tag: "call"; readonly method: string; readonly saved: Saved };
+  | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
@@ -57,7 +62,8 @@ const settle = Effect.gen(function* () {
   }
 });
 
-type Pending<A> = { readonly label: string; readonly reply: Deferred.Deferred<A, { readonly reason?: string }> };
+// A wait or call may fail with any value: the connection reads its reason by itself (T737 D3).
+type Pending<A> = { readonly label: string; readonly reply: Deferred.Deferred<A, unknown> };
 
 /** One driver over callbacks that record each save, send and call in order. */
 const harness = (first: Saved) => {
@@ -69,7 +75,7 @@ const harness = (first: Saved) => {
   const calls: Array<Pending<typeof Answer.Type>> = [];
   const reentrant = new Set<string>();
   let ring: (stream: string, rev: number) => Effect.Effect<void> = () => Effect.void;
-  const c = connection<{ readonly reason?: string }>({
+  const c = connection<unknown>({
     reader: READER,
     session: SESSION,
     ping: () => PING,
@@ -95,16 +101,16 @@ const harness = (first: Saved) => {
           return { _tag: "parked" } as const;
         }
 
-        const reply = yield* Deferred.make<Waited, { readonly reason?: string }>();
+        const reply = yield* Deferred.make<Waited, unknown>();
         waits.push({ label: key, stream, after, reply });
         return yield* Deferred.await(reply);
       }),
-    call: (method) =>
+    call: (method, params) =>
       Effect.gen(function* () {
-        log.push({ _tag: "call", method, saved });
+        log.push({ _tag: "call", method, params, saved });
         calling += 1;
         most = Math.max(most, calling);
-        const reply = yield* Deferred.make<typeof Answer.Type, { readonly reason?: string }>();
+        const reply = yield* Deferred.make<typeof Answer.Type, unknown>();
         calls.push({ label: method, reply });
         const answer = yield* Deferred.await(reply);
         calling -= 1;
@@ -367,7 +373,7 @@ describe("T703 connection driver laws", () => {
                 } else if (handshake) {
                   // Before hello only the handshake reaches the call, and nothing is saved.
                   expect(after).toEqual([
-                    { _tag: "call", method, saved: now },
+                    { _tag: "call", method, params: {}, saved: now },
                     { _tag: "send", frame: { jsonrpc: "2.0", id, result: { method } } },
                   ]);
                 } else {
@@ -456,3 +462,371 @@ const admittedTotals = (log: ReadonlyArray<Event>) => {
 
   return totals;
 };
+
+// T737 D2 and D3, next/. Frames are decoded with Effect Schema now, and a failed wait's reason is
+// read with Predicate. The oracles below are independent copies of the checks before that change:
+// parse, then the Request schema; and the old object, `in` and string checks for the reason.
+const OldRequest = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  id: Schema.Union([Schema.String, Schema.Number]),
+  method: Schema.String,
+  params: Schema.Unknown,
+});
+
+const OldRead = Schema.Struct({ stream: Schema.String, after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) });
+
+const oldFrame = (text: string) =>
+  Result.flatMap(
+    // oxlint-disable-next-line eslint/no-restricted-properties -- oracle: the old parse this law compares against
+    Result.try({ try: (): unknown => JSON.parse(text), catch: () => null }),
+    (parsed) => Result.mapError(Schema.decodeUnknownResult(OldRequest)(parsed), () => null),
+  );
+
+const oldReason = (error: unknown) =>
+  typeof error === "object" && error !== null && "reason" in error && typeof error.reason === "string"
+    ? error.reason
+    : "unreachable";
+
+const methods = ["process.send", "initialize", "ledger.read", "ledger.wait"] as const;
+
+const mutations = [
+  "none",
+  "none",
+  "none",
+  "none",
+  "drop:jsonrpc",
+  "drop:id",
+  "drop:method",
+  "jsonrpc:1.0",
+  "id:true",
+  "id:null",
+  "method:7",
+  "truncate",
+  "garbage",
+  "empty",
+  "array",
+  "string",
+] as const;
+
+const FrameRecipe = fc.record({
+  id: fc.oneof(fc.string({ maxLength: 4 }), fc.integer({ min: -3, max: 40 }), fc.double({ noNaN: true })),
+  method: fc.constantFrom(...methods),
+  params: fc.oneof(
+    {
+      arbitrary: fc.record({ stream: fc.constantFrom(...streams), after: fc.integer({ min: -1, max: 6 }) }),
+      weight: 4,
+    },
+    { arbitrary: fc.jsonValue({ maxDepth: 2 }), weight: 1 },
+    {
+      arbitrary: fc.record({
+        stream: fc.oneof(fc.constant(1), fc.string()),
+        after: fc.oneof(fc.double(), fc.string()),
+      }),
+      weight: 1,
+    },
+  ),
+  presence: fc.constantFrom("given", "given", "missing", "null"),
+  extra: fc.option(fc.dictionary(fc.string({ maxLength: 4 }), fc.jsonValue({ maxDepth: 1 }), { maxKeys: 2 }), {
+    nil: undefined,
+  }),
+  mutation: fc.oneof(
+    { arbitrary: fc.constant("none" as const), weight: 2 },
+    { arbitrary: fc.constantFrom(...mutations), weight: 1 },
+  ),
+});
+type FrameRecipe = typeof FrameRecipe extends fc.Arbitrary<infer A> ? A : never;
+
+/** A frame's text: a Request, maybe with extras, then one mutation of it. */
+const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; readonly pick: number }) => {
+  // State-guided: a wait may name a saved wait's id or stream, so the refusals are reachable.
+  const reuse = r.method === "ledger.wait" && state.held.length > 0 && state.pick % 2 === 0;
+  const held = reuse ? at(state.held, state.pick) : undefined;
+  const id = held?.id ?? r.id;
+  const params =
+    held !== undefined && Math.floor(state.pick / 2) % 2 === 0
+      ? { stream: held.stream, after: held.after + 1 }
+      : r.params;
+  const base: Record<string, unknown> = {
+    ...r.extra,
+    jsonrpc: "2.0",
+    id,
+    method: r.method,
+    ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
+  };
+  const [field, value] = r.mutation.split(":");
+
+  if (field === "drop") {
+    delete base[value!];
+  } else if (field === "jsonrpc") {
+    base.jsonrpc = value;
+  } else if (field === "id") {
+    base.id = value === "true" ? true : null;
+  } else if (field === "method") {
+    base.method = 7;
+  }
+
+  const text = JSON.stringify(base);
+
+  switch (r.mutation) {
+    case "truncate":
+      return text.slice(0, -1);
+    case "garbage":
+      return `${text}}`;
+    case "empty":
+      return "";
+    case "array":
+      return JSON.stringify([base]);
+    case "string":
+      return JSON.stringify(text);
+    default:
+      return text;
+  }
+};
+
+/** How a generated failure reads its reason: what each field read does. */
+const Failure = fc.record({
+  kind: fc.constantFrom(
+    "plain",
+    "inherited",
+    "array",
+    "function",
+    "instance",
+    "null",
+    "undefined",
+    "string",
+    "number",
+    "boolean",
+    "bigint",
+    "symbol",
+  ),
+  reason: fc.oneof(
+    { arbitrary: fc.string({ maxLength: 6 }), weight: 6 },
+    { arbitrary: fc.constant(""), weight: 2 },
+    { arbitrary: fc.constantFrom<unknown>(0, null, undefined, {}, "absent"), weight: 3 },
+  ),
+  extra: fc.option(fc.string({ maxLength: 3 }), { nil: undefined }),
+  proxy: fc.boolean(),
+  throwOn: fc.constantFrom("none", "none", "has", "get"),
+});
+type Failure = typeof Failure extends fc.Arbitrary<infer A> ? A : never;
+
+class Refused {
+  readonly extra = "x";
+}
+
+/** A fresh failure value from its recipe; a proxy logs each read of `reason` in `trace`. */
+const failure = (f: Failure, trace: Array<string>): unknown => {
+  const fields: Record<string, unknown> = f.reason === "absent" ? {} : { reason: f.reason };
+  const extra = f.extra === undefined ? {} : { extra: f.extra };
+  const target: unknown = (() => {
+    switch (f.kind) {
+      case "plain":
+        return { ...extra, ...fields };
+      case "inherited":
+        return Object.assign(Object.create(fields), extra);
+      case "array":
+        return Object.assign([1, 2], extra, fields);
+      case "function":
+        return Object.assign(() => 0, extra, fields);
+      case "instance":
+        return Object.assign(new Refused(), fields);
+      case "null":
+        return null;
+      case "undefined":
+        return undefined;
+      case "string":
+        return f.extra ?? "";
+      case "number":
+        return f.extra?.length ?? 0;
+      case "boolean":
+        return f.extra !== undefined;
+      case "bigint":
+        return BigInt(f.extra?.length ?? 0);
+      case "symbol":
+        return Symbol(f.extra);
+    }
+  })();
+
+  if (!f.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+    return target;
+  }
+
+  return new Proxy(target, {
+    has: (t, key) => {
+      if (key === "reason") {
+        trace.push("has");
+
+        if (f.throwOn === "has") {
+          throw new Error("planted has trap");
+        }
+      }
+
+      return Reflect.has(t, key);
+    },
+    get: (t, key, receiver) => {
+      if (key === "reason") {
+        trace.push("get");
+
+        if (f.throwOn === "get") {
+          throw new Error("planted get trap");
+        }
+      }
+
+      return Reflect.get(t, key, receiver);
+    },
+  });
+};
+
+/** The old guard's answer on a twin of the failure, with its reads, or `thrown`. */
+const oldAnswer = (f: Failure) => {
+  const trace: Array<string> = [];
+  const answer = Result.try({ try: () => oldReason(failure(f, trace)), catch: () => "thrown" as const });
+  return { reason: Result.isSuccess(answer) ? answer.success : ("thrown" as const), trace };
+};
+
+const Move737 = fc.record({
+  move: fc.nat({ max: 99 }),
+  pick: fc.nat(),
+  frame: FrameRecipe,
+  failure: Failure,
+  rev: fc.integer({ min: 1, max: 9 }),
+});
+
+describe("T737 decodes keep the connection's acceptance, refusals and order, next/", () => {
+  it("D2 D3: frames act as parse-then-decode did, and a failed wait keeps the old guard's reason and reads", async () => {
+    const seen = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.array(Move737, { minLength: 1, maxLength: 50, size: "max" }), (moves) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const h = harness(online());
+            // Ordinary calls the old decode accepted, in the order they must reach `call`.
+            const queued: Array<{ readonly id: string | number; readonly method: string; readonly params: unknown }> =
+              [];
+            const check = (from: number) => {
+              const calls = h.log
+                .slice(from)
+                .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
+              // The calls the old decode accepted, in order, and no other.
+              expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
+            };
+
+            for (const { move, pick, frame, failure: f, rev } of moves) {
+              const now = h.saved();
+              const held = now._tag === "online" ? now.waits : [];
+              const from = h.log.length;
+
+              if (move < 50 || (h.calls.length === 0 && h.waits.length === 0)) {
+                const text = frameText(frame, { held, pick });
+                const old = oldFrame(text);
+                yield* h.run(h.c.frame(text));
+                const after = h.log.slice(from);
+
+                if (Result.isFailure(old)) {
+                  // Ignored: no call, no wait, no send and no save.
+                  expect(after).toEqual([]);
+                  seen.add(`ignored:${frame.mutation}${frame.mutation === "none" ? `:${frame.presence}` : ""}`);
+                } else if (old.success.method === "ledger.wait") {
+                  const request = old.success;
+                  const read = Schema.decodeUnknownResult(OldRead)(request.params);
+
+                  if (Result.isFailure(read)) {
+                    expect(after).toEqual([no(request.id, "bad_input")]);
+                    seen.add("wait:bad_input");
+                  } else {
+                    const wait = Wait.make({ id: request.id, ...read.success });
+
+                    if (admits(now, wait)) {
+                      expect(after[0]).toMatchObject({ _tag: "save" });
+                      expect(after[1]).toMatchObject({ _tag: "wait", stream: wait.stream, after: wait.after });
+                      seen.add("wait:admitted");
+                    } else {
+                      expect(after).toEqual([no(request.id, "too_many_waits")]);
+                      seen.add("wait:too_many_waits");
+                    }
+                  }
+                } else {
+                  queued.push({ id: old.success.id, method: old.success.method, params: old.success.params });
+                  seen.add(`call:${frame.presence}:${frame.extra === undefined ? "exact" : "extra"}`);
+                }
+              } else if (move < 70 && h.calls.length > 0) {
+                const [call] = h.calls.splice(pick % h.calls.length, 1);
+                yield* Deferred.succeed(call!.reply, Answer.cases.ok.make({ result: null }));
+                yield* settle;
+              } else if (move < 92 && h.waits.length > 0) {
+                const [pending] = h.waits.splice(pick % h.waits.length, 1);
+                const trace: Array<string> = [];
+                const value = failure(f, trace);
+                const before = h.saved();
+                const id = (before._tag === "online" ? before.waits : []).find(
+                  (w) => `${w.stream}|${w.after}` === pending!.label,
+                )?.id;
+                yield* Deferred.fail(pending!.reply, value);
+                yield* settle;
+                const old = oldAnswer(f);
+                const sent = answers(h.log, from);
+                // The same reads of `reason`, in the same order, as the old guard made.
+                expect(trace).toEqual(old.trace);
+
+                if (old.reason === "thrown") {
+                  // The read threw: the enclosing fiber fails before anything is sent or saved.
+                  expect(h.log.slice(from)).toEqual([]);
+                  seen.add("failed:thrown");
+                } else if (id !== undefined) {
+                  expect(sent.filter((s) => s.id === id).map((s) => s.error?.data?.reason)).toEqual([old.reason]);
+                  seen.add(`failed:${f.kind}:${old.reason === "unreachable" ? "fallback" : "reason"}`);
+
+                  if (old.reason === "") {
+                    seen.add("failed:empty");
+                  }
+                }
+              } else if (h.waits.length > 0) {
+                const [pending] = h.waits.splice(pick % h.waits.length, 1);
+                yield* Deferred.succeed(pending!.reply, { _tag: "ready", rev: pending!.after + rev });
+                yield* settle;
+              }
+
+              check(from);
+            }
+
+            for (const wait of h.waits.splice(0)) {
+              yield* Deferred.succeed(wait.reply, { _tag: "parked" });
+            }
+
+            while (h.calls.length > 0) {
+              const from = h.log.length;
+              yield* Deferred.succeed(h.calls.shift()!.reply, Answer.cases.ok.make({ result: null }));
+              yield* settle;
+              check(from);
+            }
+
+            // Every call the old decode accepted was made, and no other.
+            expect(queued).toEqual([]);
+          }),
+        ),
+      ),
+      { seed: SEED, numRuns: RUNS },
+    );
+
+    for (const side of [
+      "ignored:none:missing",
+      "ignored:truncate",
+      "ignored:empty",
+      "ignored:drop:id",
+      "wait:bad_input",
+      "wait:admitted",
+      "wait:too_many_waits",
+      "call:given:extra",
+      "call:given:exact",
+      "call:null:exact",
+      "failed:thrown",
+      "failed:array:reason",
+      "failed:inherited:reason",
+      "failed:function:fallback",
+      "failed:plain:reason",
+      "failed:empty",
+    ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+});

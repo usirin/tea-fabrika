@@ -11,4 +11,4 @@ export class Referee extends Context.Service<
     readonly read: (stream: string, after: Rev, reader: string) => Effect.Effect<ReadonlyArray<Entry>, LedgerError>;
     readonly wait: (stream: string, after: Rev, reader: string) => Effect.Effect<Waited, LedgerError>;
   }
->()("@kampus/libfabrika/Referee") {}
+>()("@kampus/libfabrika/ledger/Referee") {}

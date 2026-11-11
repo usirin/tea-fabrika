@@ -30,4 +30,4 @@ export class ClientManager extends Context.Service<
     readonly members: Effect.Effect<Access, LedgerError>;
     readonly write: (event: MemberEvent, from: From) => Effect.Effect<Written, LedgerError>;
   }
->()("@kampus/libfabrika/ClientManager") {}
+>()("@kampus/libfabrika/access/ClientManager") {}

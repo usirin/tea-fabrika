@@ -187,7 +187,9 @@ export const recoveryStore = <S extends Kept>(
   };
 };
 
-export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()("@kampus/libfabrika/RecoveryStore") {
+export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()(
+  "@kampus/libfabrika/runtime/RecoveryStore",
+) {
   static readonly layer = <S extends Kept>(
     sql: Sql,
     options: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },

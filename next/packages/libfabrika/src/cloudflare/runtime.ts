@@ -295,7 +295,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     sql = cloudflareSql(ctx.storage);
   const turn = yield* Semaphore.make(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
-    "fabrika/WriteNotifications",
+    "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
     { defaultValue: () => null },
   );
   const write = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
@@ -713,7 +713,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 });
 
 export class ProjectService extends Context.Service<ProjectService, Effect.Success<ReturnType<typeof projectLogic>>>()(
-  "fabrika/Project",
+  "@kampus/libfabrika/cloudflare/runtime.ProjectService",
 ) {}
 
 export const projectLayer = (ctx: DurableObjectState, env: Env, options: ProjectOptions) =>
@@ -867,7 +867,7 @@ const processLogic = Effect.fnUntraced(function* (
 });
 
 export class ProcessService extends Context.Service<ProcessService, Effect.Success<ReturnType<typeof processLogic>>>()(
-  "fabrika/Process",
+  "@kampus/libfabrika/cloudflare/runtime.ProcessService",
 ) {}
 
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
