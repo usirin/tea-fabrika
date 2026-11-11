@@ -155,9 +155,10 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
 });
 
 /** One command's end: its exit code, and stdout and stderr as one text. */
-type Ran = { readonly code: number; readonly output: string };
+export type Ran = { readonly code: number; readonly output: string };
 
-const exec = Effect.fn("host.exec")(
+/** One command in `dir` with safe git, run to its end; ./typecheck.ts runs it too. */
+export const exec = Effect.fn("host.exec")(
   function* (
     dir: string,
     command: string,
@@ -266,7 +267,7 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
 });
 
 /** A worktree of the main checkout at `head`, detached; the scope removes it. */
-const worktree = Effect.fn("host.worktree")(function* (main: string, dir: string, head: string) {
+export const worktree = Effect.fn("host.worktree")(function* (main: string, dir: string, head: string) {
   const git = (...args: ReadonlyArray<string>) => exec(main, "git", ["-C", main, ...args]);
   // A run killed with SIGKILL ran no finalizer: its worktree goes first.
   yield* git("worktree", "remove", "--force", dir).pipe(Effect.ignore);
