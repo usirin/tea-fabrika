@@ -212,6 +212,7 @@ describe("a settings file, when the folder cannot be watched", () => {
         yield* fs.writeFileString(join(dir, "keybindings.toml"), "ctrl+a");
         const broken = yield* watchFails;
         return yield* settingsSaves(dir, "keybindings.toml", decode).pipe(
+          Stream.take(1),
           Stream.runCollect,
           Effect.provideService(FileSystem.FileSystem, broken),
           Effect.timeout("3 seconds"),
