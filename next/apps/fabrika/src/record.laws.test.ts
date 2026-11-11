@@ -100,17 +100,17 @@ let sequence = 0;
 
 const NodeLive = Layer.succeed(Wire, { driver: node });
 
-// The wire stage is acquired by the layer, so the file's layer scope releases it.
+// The wire instance is acquired by the layer, so the file's layer scope releases it.
 const WireLive = Layer.effect(
   Wire,
   Effect.gen(function* () {
-    const stage = yield* recordWire(cap);
+    const instance = yield* recordWire(cap);
     const driver: Driver = Effect.fnUntraced(function* (name: string) {
       const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
         name,
       );
       const [project, part] = Option.getOrElse(decoded, () => ["invalid-name", name]);
-      const stub = stage.record(project, part);
+      const stub = instance.record(project, part);
       const { write, read, content, deleteContent } = stub;
 
       if (write === undefined || read === undefined || content === undefined || deleteContent === undefined) {
@@ -253,7 +253,7 @@ for (const [kind, live] of [
   });
 }
 
-// A whole stage at cap 1 cannot start, since its own spans roll forever.
+// A whole instance at cap 1 cannot start, since its own spans roll forever.
 it.effect.prop(
   "a cap below the initialized database rolls before a fresh row",
   { input: Input },

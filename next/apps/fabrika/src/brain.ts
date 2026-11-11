@@ -304,6 +304,7 @@ export class Connection extends DurableObject<Env> {
 const Bridge = makeDurableObjectBridge(DurableObject, {
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
   entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
+  // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   stack: { name: "fabrika", stage: "local" },
 });
 
