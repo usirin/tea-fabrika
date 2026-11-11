@@ -36,6 +36,7 @@ import { paddingLineBetweenStatements } from "./padding-line-between-statements.
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
 import { rooms } from "./rooms.ts";
+import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -76,6 +77,7 @@ const plugin: Plugin = {
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
     rooms,
+    "service-id": serviceId,
     "use-import-extensions": useImportExtensions,
   },
 };

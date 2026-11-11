@@ -710,3 +710,485 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
     );
   });
 });
+
+// T737 D4 to D6, next/. Program's guards read their input with Predicate now. Independent copies of
+// the checks before that change are the oracles: same acceptance, and the machine and a saved Msg
+// keep their identity, since a Struct projection would strip their fields.
+const oldIsSteps = (u: unknown) =>
+  typeof u === "object" &&
+  u !== null &&
+  "update" in u &&
+  typeof u.update === "object" &&
+  u.update !== null &&
+  "init" in u &&
+  typeof u.init === "function";
+
+const oldTyped = (u: unknown): u is { readonly type: string } =>
+  typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+
+const oldCode = (u: unknown) => typeof u === "function";
+
+class Shaped {
+  readonly extra = 1;
+}
+
+/** Callable kinds and things that only look like one. */
+const callables = {
+  arrow: () => () => 0,
+  function: () =>
+    function named() {
+      return 0;
+    },
+  async: () => async () => 0,
+  generator: () =>
+    function* gen() {
+      yield 0;
+    },
+  class: () => class Callable {},
+  bound: () => ((a: number) => a).bind(null, 1),
+  proxy: () => new Proxy(() => 0, {}),
+  object: () => ({ call: () => 0 }),
+  prototype: () => Object.create(Function.prototype),
+  null: () => null,
+  undefined: () => undefined,
+  string: () => "() => 0",
+  number: () => 0,
+  array: () => [() => 0],
+} as const;
+
+const Callable = fc.constantFrom(...(Object.keys(callables) as Array<keyof typeof callables>));
+
+/** Where a machine's fields live and what they hold. */
+const MachineRecipe = fc.record({
+  container: fc.constantFrom("plain", "plain", "inherited", "array", "instance", "function", "null", "string"),
+  update: fc.constantFrom("table", "table", "array", "null", "function", "string", "missing", "inherited"),
+  init: Callable,
+  cmds: fc.constantFrom("given", "missing", "garbage", "number"),
+  schemas: fc.constantFrom("own", "own", "inherited", "missing", "bad"),
+  extra: fc.option(fc.dictionary(fc.string({ maxLength: 4 }), fc.jsonValue({ maxDepth: 1 }), { maxKeys: 2 }), {
+    nil: undefined,
+  }),
+});
+type MachineRecipe = typeof MachineRecipe extends fc.Arbitrary<infer A> ? A : never;
+
+const built = (r: MachineRecipe, base: typeof machine): unknown => {
+  const own: Record<string, unknown> = { ...r.extra };
+  const inherited: Record<string, unknown> = {};
+  const table = { ...base.update };
+
+  if (r.update === "inherited") {
+    inherited.update = table;
+  } else if (r.update !== "missing") {
+    own.update =
+      r.update === "table"
+        ? table
+        : r.update === "array"
+          ? Object.assign([], table)
+          : r.update === "null"
+            ? null
+            : r.update === "function"
+              ? Object.assign(() => 0, table)
+              : "update";
+  }
+
+  own.init = callables[r.init]();
+
+  if (r.cmds !== "missing") {
+    own.cmds = r.cmds === "given" ? [save] : r.cmds === "garbage" ? "cmds" : 3;
+  }
+
+  if (r.schemas !== "missing") {
+    const target = r.schemas === "inherited" ? inherited : own;
+    target.model = r.schemas === "bad" ? {} : base.model;
+    target.msg = r.schemas === "bad" ? {} : base.msg;
+  }
+
+  switch (r.container) {
+    case "plain":
+      return Object.assign(Object.create(inherited), own);
+    case "inherited":
+      return Object.create(Object.assign({}, inherited, own));
+    case "array":
+      return Object.assign(Object.setPrototypeOf([], Object.assign(Object.create(Array.prototype), inherited)), own);
+    case "instance":
+      return Object.assign(
+        Object.setPrototypeOf(new Shaped(), Object.assign(Object.create(Shaped.prototype), inherited)),
+        own,
+      );
+    case "function":
+      return Object.assign(() => 0, inherited, own);
+    case "null":
+      return null;
+    case "string":
+      return "machine";
+  }
+};
+
+const Callables = fc.record({
+  select: Callable,
+  refuse: Callable,
+  wake: Callable,
+  run: fc.option(Callable, { nil: undefined }),
+});
+
+describe("T737 Program guards keep acceptance and identity, next/", () => {
+  it("D4: declarations and authored programs accept the same machines and callables, and keep the machine", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(declarations, MachineRecipe, Callables, ({ fields }, recipe, fns) => {
+        const m = built(recipe, fields.machine);
+        const p = Program.make(fields);
+        const upgrades = fns.run === undefined ? [] : [{ name: "up", from: 1, run: callables[fns.run]() }];
+        const raw: unknown = {
+          ...p,
+          machine: m,
+          state: { ...p.state, upgrades },
+          view: { ...p.view, select: callables[fns.select]() },
+          refuse: callables[fns.refuse](),
+          wake: callables[fns.wake](),
+        };
+        const codeOk =
+          oldCode(callables[fns.select]()) &&
+          oldCode(callables[fns.refuse]()) &&
+          oldCode(callables[fns.wake]()) &&
+          upgrades.every((u) => oldCode(u.run));
+        const ok = oldIsSteps(m) && codeOk;
+        const decoded = Schema.decodeUnknownResult(Program.schema)(raw);
+        expect(Result.isSuccess(decoded)).toBe(ok);
+
+        if (Result.isSuccess(decoded)) {
+          expect(decoded.success.machine).toBe(m);
+        }
+
+        // tea may throw on a machine whose cmds it cannot read; only an accepted one gets that far.
+        const loaded = Result.try({ try: () => stepper(raw), catch: () => "thrown" as const });
+
+        if (Result.isSuccess(loaded)) {
+          expect(Result.isSuccess(loaded.success)).toBe(ok);
+
+          if (Result.isSuccess(loaded.success)) {
+            expect(loaded.success.success.program.machine).toBe(m);
+          }
+        } else {
+          expect(ok).toBe(true);
+        }
+
+        // Authoring also needs the machine's model and Msg schemas, own or inherited.
+        const authored = {
+          ...fields,
+          machine: m,
+          state: { v: fields.state.v, upgrades },
+          view: callables[fns.select](),
+          refuse: callables[fns.refuse](),
+          wake: callables[fns.wake](),
+        };
+        const schemasOk =
+          typeof m === "object" &&
+          m !== null &&
+          "model" in m &&
+          Schema.isSchema(m.model) &&
+          "msg" in m &&
+          Schema.isSchema(m.msg);
+        const made = Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [authored]));
+        expect(Exit.isSuccess(made)).toBe(ok && schemasOk);
+
+        if (Exit.isSuccess(made)) {
+          expect(Reflect.get(made.value, "machine")).toBe(m);
+        }
+
+        seen.add(`${ok}:${recipe.container}:${recipe.update}`);
+        seen.add(`init:${recipe.init}:${oldCode(callables[recipe.init]())}`);
+        seen.add(`cmds:${recipe.cmds}:${ok}`);
+      }),
+      { seed: SEED, numRuns: 1_000 },
+    );
+
+    for (const side of [
+      "true:plain:table",
+      "true:array:table",
+      "true:plain:array",
+      "true:inherited:table",
+      "true:instance:table",
+      "true:plain:inherited",
+      "false:function:table",
+      "false:plain:function",
+      "false:plain:null",
+      "false:plain:missing",
+      "cmds:missing:true",
+      "cmds:garbage:true",
+      "init:class:true",
+      "init:prototype:false",
+    ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+
+  it("D5: an authored program keeps the machine it was given, and refuses an equal-shaped replacement read later", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(declarations, fc.integer({ min: 1, max: 3 }), fc.boolean(), ({ fields }, cycle, effect) => {
+        // The first read gives the authored machine; later reads cycle through equal-shaped copies.
+        const copies = [fields.machine, { ...fields.machine }, { ...fields.machine }].slice(0, cycle);
+        let reads = 0;
+        const spec: Record<string, unknown> = { ...fields };
+        Object.defineProperty(spec, "machine", { enumerable: true, get: () => copies[reads++ % cycle] });
+        const made = effect
+          ? Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [spec]))
+          : Result.try({ try: (): unknown => Reflect.apply(Program.make, Program, [spec]), catch: () => null });
+        const value = Exit.isExit(made)
+          ? Exit.isSuccess(made)
+            ? made.value
+            : undefined
+          : Result.isSuccess(made)
+            ? made.success
+            : undefined;
+        expect(value !== undefined).toBe(cycle === 1);
+
+        if (value !== undefined) {
+          expect(Reflect.get(value, "machine")).toBe(fields.machine);
+        }
+
+        seen.add(`${cycle}:${effect}`);
+      }),
+      parameters,
+    );
+    expect(seen.size).toBe(6);
+  });
+
+  const oldSettled = (msg: unknown): boolean | undefined => {
+    if (!oldTyped(msg) || (msg.type !== "save_ok" && msg.type !== "save_err")) {
+      return undefined;
+    }
+
+    const cmd = "cmd" in msg ? msg.cmd : undefined;
+
+    if (!(oldTyped(cmd) && cmd.type === "save") || !("at" in msg) || typeof msg.at !== "number") {
+      return false;
+    }
+
+    if (msg.type === "save_ok") {
+      return "value" in msg && Schema.is(Schema.Int)(msg.value);
+    }
+
+    const error = "error" in msg ? msg.error : undefined;
+    return typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string";
+  };
+
+  const Answer = fc.record({
+    container: fc.constantFrom("plain", "plain", "plain", "array", "instance", "inherited", "function"),
+    type: fc.constantFrom("save_ok", "save_ok", "save_err", "save_err", "", "other", 7, "missing"),
+    cmd: fc.constantFrom("pending", "pending", "pending", "other", "missing", "untyped", "array"),
+    at: fc.constantFrom<unknown>(
+      42,
+      42,
+      0,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      "42",
+      "missing",
+      "inherited",
+    ),
+    value: fc.constantFrom<unknown>(3, 3, -1, "3", 1.5, "missing", "inherited"),
+    error: fc.constantFrom("tag", "tag", "empty", "number", "array", "function", "null", "inherited", "missing"),
+    extra: fc.option(fc.string({ maxLength: 3 }), { nil: undefined }),
+    saved: fc.boolean(),
+  });
+  type Answer = typeof Answer extends fc.Arbitrary<infer A> ? A : never;
+
+  /** One generated answer to a Cmd the walk saw the machine return. */
+  const answer = (a: Answer, pending: unknown): unknown => {
+    const own: Record<string, unknown> = a.extra === undefined ? {} : { extra: a.extra };
+    const inherited: Record<string, unknown> = {};
+
+    if (a.type !== "missing") {
+      own.type = a.type;
+    }
+
+    if (a.cmd !== "missing") {
+      own.cmd =
+        a.cmd === "pending"
+          ? pending
+          : a.cmd === "other"
+            ? { type: "other", n: 1 }
+            : a.cmd === "untyped"
+              ? { type: 7 }
+              : Object.assign([], pending);
+    }
+
+    if (a.at !== "missing") {
+      (a.at === "inherited" ? inherited : own).at = a.at === "inherited" ? 42 : a.at;
+    }
+
+    if (a.value !== "missing") {
+      (a.value === "inherited" ? inherited : own).value = a.value === "inherited" ? 3 : a.value;
+    }
+
+    if (a.error !== "missing") {
+      own.error =
+        a.error === "tag"
+          ? { _tag: "disk" }
+          : a.error === "empty"
+            ? { _tag: "" }
+            : a.error === "number"
+              ? { _tag: 3 }
+              : a.error === "array"
+                ? Object.assign([], { _tag: "disk" })
+                : a.error === "function"
+                  ? Object.assign(() => 0, { _tag: "disk" })
+                  : a.error === "null"
+                    ? null
+                    : Object.create({ _tag: "disk" });
+    }
+
+    switch (a.container) {
+      case "plain":
+        return Object.assign(Object.create(inherited), own);
+      case "array":
+        return Object.assign(Object.setPrototypeOf([], Object.assign(Object.create(Array.prototype), inherited)), own);
+      case "instance":
+        return Object.assign(
+          Object.setPrototypeOf(new Shaped(), Object.assign(Object.create(Shaped.prototype), inherited)),
+          own,
+        );
+      case "inherited":
+        return Object.create(Object.assign({}, inherited, own));
+      case "function":
+        return Object.assign(() => 0, inherited, own);
+    }
+  };
+
+  const Move = fc.record({
+    fresh: fc.nat({ max: 9 }),
+    n: fc.integer({ min: -3, max: 3 }),
+    pick: fc.nat(),
+    answer: Answer,
+  });
+
+  it("D6: saved and fresh answers to the machine's own Cmds keep the old checks' acceptance and the saved Msg itself", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(fc.array(Move, { minLength: 1, maxLength: 30, size: "max" }), (moves) => {
+        const received: Array<unknown> = [];
+        const recorded = Machine.make({
+          model: Model,
+          msg: Msg,
+          cmds: [save],
+          init: (loaded) => [loaded ?? { count: 0, replies: 0 }, []],
+          update: {
+            add: (s, m) => {
+              received.push(m);
+              return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
+            },
+            throw: (s) => [s, []],
+            save_ok: (s, m) => {
+              received.push(m);
+              return [{ ...s, replies: s.replies + 1 }, []];
+            },
+            save_err: (s, m) => {
+              received.push(m);
+              return [{ ...s, replies: s.replies + 1 }, []];
+            },
+          },
+        });
+        const loaded = stepper(Program.make({ ...authoring(), machine: recorded, refuse: () => null }));
+        expect(Result.isSuccess(loaded)).toBe(true);
+
+        if (Result.isFailure(loaded)) {
+          return;
+        }
+
+        const p = loaded.success;
+        const start = p.init(null);
+        let model = start._tag === "stepped" ? start.model : null;
+        const pending: Array<unknown> = [];
+
+        for (const { fresh, n, pick, answer: a } of moves) {
+          // Answer a Cmd the machine really returned, once one exists.
+          if (fresh < 3 || pending.length === 0) {
+            const stepped = p.step(model, { type: "add", n, extra: "kept out by the Msg schema" });
+            expect(stepped).toMatchObject({ _tag: "stepped" });
+
+            if (stepped._tag === "stepped") {
+              model = stepped.model;
+              pending.push(...stepped.cmds);
+            }
+
+            continue;
+          }
+
+          const cmd = pending[pick % pending.length];
+          const msg = answer(a, cmd);
+          const before = received.length;
+
+          if (!a.saved) {
+            // A fresh input never settles a Cmd, and never reaches the machine.
+            expect(p.step(model, msg)).toEqual({ _tag: "refused", reason: "bad_msg" });
+            expect(received.length).toBe(before);
+            seen.add(`fresh:${oldSettled(msg) === true}`);
+            continue;
+          }
+
+          const typed = oldTyped(msg);
+          const settled = oldSettled(msg);
+          const expected =
+            typed && !["add", "throw", "save_ok", "save_err"].includes(msg.type)
+              ? "skipped"
+              : settled === true
+                ? "applied"
+                : "down";
+          const folded = Result.try({ try: () => p.fold(model, msg), catch: (e) => e });
+
+          if (expected === "down") {
+            expect(Result.isFailure(folded) ? folded.failure : folded.success).toMatchObject({
+              _tag: "ProgramDown",
+              reason: "saved_letter",
+            });
+            expect(received.length).toBe(before);
+          } else {
+            expect(Result.isSuccess(folded)).toBe(true);
+
+            if (Result.isSuccess(folded) && folded.success._tag === "stepped") {
+              if (expected === "applied") {
+                // The machine gets the saved Msg itself, inherited and extra fields included.
+                expect(received.slice(before)).toHaveLength(1);
+                expect(received[before]).toBe(msg);
+              } else {
+                expect(folded.success.model).toEqual(model);
+                expect(received.length).toBe(before);
+              }
+
+              model = folded.success.model;
+            }
+          }
+
+          seen.add(`${expected}:${a.container}`);
+          seen.add(`${expected}:at:${typeof a.at === "number" && !Number.isFinite(a.at) ? "nonfinite" : String(a.at)}`);
+          seen.add(`${expected}:error:${a.type === "save_err" ? a.error : "-"}`);
+        }
+      }),
+      { seed: SEED, numRuns: 300 },
+    );
+
+    for (const side of [
+      "fresh:true",
+      "fresh:false",
+      "applied:plain",
+      "applied:array",
+      "applied:instance",
+      "applied:inherited",
+      "down:function",
+      "skipped:plain",
+      "applied:at:nonfinite",
+      "applied:at:inherited",
+      "down:at:42",
+      "applied:error:empty",
+      "applied:error:inherited",
+      "applied:error:array",
+      "down:error:function",
+      "down:error:number",
+    ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+});

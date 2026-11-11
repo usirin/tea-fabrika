@@ -13,7 +13,31 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Four rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch` and `prefer-schema-arbitrary`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these four. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+Six rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and since ticket 737 oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`) and `service-id`. Their messages start with "Advice, does not block". Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides: it prints every fire, and fails on any fire but these six. Experiment 125 found the first two wrong far too often to block: 8 of 8 and 21 of 21 fires kept their code. Under Biome the same two gave their diagnostics at `"info"`, which `pnpm lint` (`biome check --error-on-warnings`) printed and did not fail on.
+
+## Decode and service-ID advice
+
+Ticket 737 builds decision 0023 in `next/`: input is decoded with Effect Schema, and a service ID carries the package and its file's path, as Effect's own guide asks. Two guards keep it so, both advice until their false alarms are counted.
+
+```ts
+JSON.parse(text);                                            // advice: Schema.fromJsonString(S) instead
+class Doorbell extends Context.Service<Doorbell, Shape>()(
+  "@kampus/libfabrika/ledger/Ledger.Doorbell",               // passes in ledger/Ledger.ts
+) {}
+```
+
+`no-restricted-properties` is oxlint's built-in, set for object `JSON`, property `parse`, on `next/**`. It fires on `JSON.parse(x)`, `JSON["parse"](x)`, `JSON?.parse(x)`, a reference `const f = JSON.parse` and `const { parse } = JSON`. It does not fire on another object's `parse`, a comment, a string, `typeof JSON.parse` or code outside `next/`. It does not read scope: a local `JSON` fires too (a false alarm), and an alias (`const J = JSON; J.parse(x)`) is missed. A test oracle that must parse as the old code did keeps it with `// oxlint-disable-next-line eslint/no-restricted-properties -- <why>`. `decode-guards.test.ts` holds each of these cases.
+
+`service-id` is ours: oxlint's selectors cannot resolve a renamed import or a shadowed name, or compare an ID with its file (0040). Its options name the package and its source folder; outside that folder it says nothing. A class's ID is exactly `<package>/<path>`, or `<package>/<path>.<Class>` when the class is not named as its file. A Reference or a direct Service names nothing the rule trusts, so `<path>` or `<path>.<Name>` for one name passes. An ID that is not a literal is reported as unproved. The rule's head comment lists the import forms it resolves and what it misses (a local alias of `Context.Service`, a helper). `service-id.test.ts` plants each form, holds the plan's old-to-new mapping as a vector, and replays the rule over libfabrika.
+
+Replay on 2026-11-11, at `8594eebc6` with this ticket's laws, before its build:
+
+| Guard | Fires | True | False alarms | Unresolved | Reviewed misses |
+|---|---|---|---|---|---|
+| `service-id`, libfabrika `src/` | 35 | 35: 33 services, 1 Reference, `ProgramRunner` (next slice) | 0 | 0 | the app's `t502/RecordLaws.Wire` test service, outside the rule's folder |
+| `JSON.parse`, `next/` | 75 | 2 in product code: `transport/Connection.ts` (this ticket) and `Testing.ts` (its round trip, outside it); 73 in tests and test kits, not yet read one by one | none in the 2 product hits; the 73 are unread, and the shadow case is possible | 0 | aliases |
+
+After the build, `service-id` should find only Runner's ID, which the next slice renames; it is a named hit, not an exemption. Promotion to blocking needs about 0% false alarms on main (Google, CACM 2018), measured by a fresh replay; up to 10% may keep advising, and above that the rule is repaired first. `decode-guards.test.ts` runs `lint.ts` itself: a report of only these two passes, and any blocking diagnostic beside them still fails.
 
 ## Effect property data advice
 
