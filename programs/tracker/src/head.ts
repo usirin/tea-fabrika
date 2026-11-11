@@ -1,5 +1,16 @@
 import { Writer } from "@kampus/fabrika-old";
-import { type Entry, type Fact, factsOf, Id, Stage, Title } from "@kampus/pipeline/tickets/ticket";
+import { AskShown, askShownOf } from "@kampus/pipeline/tickets/ask";
+import {
+  closedAsks,
+  type Entry,
+  type Fact,
+  factsOf,
+  Id,
+  Stage,
+  Title,
+  questionOf,
+  picksOf,
+} from "@kampus/pipeline/tickets/ticket";
 import { Schema } from "effect";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
@@ -45,6 +56,8 @@ const MOVES = {
   reviewed: true,
   pr: true,
   asked: true,
+  withdrawn: true,
+  stopped: true,
   carried: true,
   answered: true,
   rated: false,
@@ -55,14 +68,41 @@ const MOVES = {
 /** An ask with no answer yet: what its box shows. */
 export const OpenAsk = Schema.Struct({
   ask: Id,
+  /** Its `asked` entry's place on the ledger: the key of that entry's activity row. */
+  pos: Schema.Int,
   what: Title,
   picks: Schema.NonEmptyArray(Title),
+  /** A sealed ask as a window gets it, with no rec or blind draw. Left out: an ask from before sealing. */
+  sealed: Schema.optionalKey(AskShown),
+  /** What a sealed ask is for, as its fact says. */
+  for: Schema.optionalKey(Schema.String),
   by: Writer,
   /** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
   whose: Schema.optional(Schema.String),
   at: Schema.Finite,
 });
 export type OpenAsk = typeof OpenAsk.Type;
+
+/**
+ * A sealed ask, answered or not, as its Activity row opens: the question and each pick with what
+ * it does. A window's timeline leaves sealed asks out (their rec and blind draw), so this is what
+ * the row has to show (review 9).
+ */
+export const SealedAsk = Schema.Struct({
+  /** Its `asked` entry's place on the ledger: the key of its activity row. */
+  pos: Schema.Int,
+  what: AskShown.fields.shows.fields.what,
+  picks: AskShown.fields.shows.fields.picks,
+});
+export type SealedAsk = typeof SealedAsk.Type;
+
+/** Every sealed ask on a timeline, oldest first, as its row opens. Pure. */
+export const sealedAsksOf = (timeline: readonly Entry[]): readonly SealedAsk[] =>
+  timeline.flatMap((e) =>
+    e.fact.type === "asked" && "format" in e.fact
+      ? [{ pos: e.pos, what: e.fact.shows.what, picks: e.fact.shows.picks }]
+      : [],
+  );
 
 export const Head = Schema.Union([
   /** `pr`: the merged pull request's URL, or `null` for a ticket a person closed once answered. */
@@ -84,14 +124,16 @@ export type Head = typeof Head.Type;
 
 /** The asks with no answer, oldest first. A comment never answers one; only `answered` does. */
 export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
-  const answered = new Set(factsOf(timeline, "answered").map((a) => a.ask));
+  const closed = closedAsks(timeline);
   return timeline.flatMap((e) =>
-    e.fact.type === "asked" && !answered.has(e.fact.ask)
+    e.fact.type === "asked" && !closed.has(e.fact.ask)
       ? [
           {
             ask: e.fact.ask,
-            what: e.fact.what,
-            picks: e.fact.picks,
+            pos: e.pos,
+            what: questionOf(e.fact),
+            picks: picksOf(e.fact) as readonly [string, ...string[]],
+            ...("format" in e.fact ? { sealed: askShownOf(e.fact), for: e.fact.for } : {}),
             by: e.by,
             ...(e.whose === undefined ? {} : { whose: e.whose }),
             at: e.at,
@@ -141,6 +183,12 @@ export const headOf = (timeline: readonly Entry[], now: number): Head => {
   }
 
   const run = openRuns(timeline).at(-1);
+  const stop = timeline.findLast((e) => e.fact.type === "stopped");
+  const restart = timeline.findLast((e) => e.fact.type === "restarted" || e.fact.type === "started");
+
+  if (stop?.fact.type === "stopped" && stop.pos > (restart?.pos ?? 0)) {
+    return { _tag: "stuck", stage: stop.fact.resume, why: stop.fact.why };
+  }
 
   if (run !== undefined) {
     return { _tag: "running", run: run.run, stage: run.stage, task: run.task, since: run.at };

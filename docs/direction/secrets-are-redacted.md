@@ -2,6 +2,9 @@
 
 Decided 2026-10-26 by the owner.
 
+Its decided rules are in: [0320](../../.decisions/0320-every-secret-is-an-effect-redacted.md),
+[0321](../../.decisions/0321-a-state-holds-a-secrets-name.md).
+
 ```ts
 import {Config, Effect, Redacted} from "effect";
 

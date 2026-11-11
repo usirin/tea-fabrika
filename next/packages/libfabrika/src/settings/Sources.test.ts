@@ -26,7 +26,14 @@ const REPO = ".fabrika/fabrika.toml";
 const PERSON = "~/.fabrika/fabrika.toml";
 
 const declare = (path: string) =>
-  Setting.make(path, { schema: Port, default: DEFAULT, doc: "A port.", scope: ["repo", "person"], reload: "restart" });
+  Setting.make(path, {
+    schema: Port,
+    default: DEFAULT,
+    doc: "A port.",
+    scope: ["repo", "person"],
+    reload: "restart",
+    since: "0.0.0",
+  });
 
 // Two settings, so a law also sees that each key picks its own winner.
 const group = Setting.group({ alpha: declare("alpha.port"), beta: declare("beta-two.port") });

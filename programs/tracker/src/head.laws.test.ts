@@ -108,9 +108,7 @@ const OPTS = { numRuns: 2000, seed: 6 };
 // ---------------------------------------------------------------- what is wanted, said again
 
 const since = (t: readonly Entry[]) => t.slice(t.findLastIndex((e) => e.fact.type === "reopened") + 1);
-
 const mergedSince = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === "pr" && e.fact.state === "merged");
-
 const closedNow = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === "closed");
 
 /**
@@ -134,6 +132,8 @@ const WORK = {
   reviewed: true,
   pr: true,
   asked: true,
+  withdrawn: true,
+  stopped: true,
   carried: true,
   answered: true,
   rated: false,
@@ -399,6 +399,16 @@ const ONE_OF_EACH: {
     by: build,
     fact: { type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS] },
   },
+  withdrawn: {
+    before: [FILED, [build, { type: "asked", ask: "a-1", what: "approve a-1", picks: [...PICKS] }]],
+    by: build,
+    fact: { type: "withdrawn", ask: "a-1", why: "changed" },
+  },
+  stopped: {
+    before: [FILED],
+    by: build,
+    fact: { type: "stopped", why: "read_failed", resume: "build" },
+  },
   carried: {
     before: [FILED],
     by: build,
@@ -471,20 +481,31 @@ const mixed: fc.Arbitrary<readonly Entry[]> = fc
 
 describe("what wakes a ticket (label-guidelines.md, L1: nothing decides on advice)", () => {
   it("has a row for every kind of fact a ticket's stream can hold, so a new kind must say if it is work", () => {
-    const kinds = Fact.members.map((m) => m.fields.type.literal);
-    expect([...KINDS].sort()).toEqual([...kinds].sort());
-    expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
+    fc.assert(
+      fc.property(fc.shuffledSubarray([...Fact.members], { minLength: Fact.members.length }), (members) => {
+        const kinds = new Set(members.map((m) => m.fields.type.literal));
+        expect([...KINDS].sort()).toEqual([...kinds].sort());
+        expect(Object.keys(ONE_OF_EACH).sort()).toEqual([...kinds].sort());
+      }),
+      OPTS,
+    );
   });
 
   it.each(WORK_KINDS)("wakes an idle ticket on a %s fact, and the hour starts again from it", (kind) => {
-    const { before, by, fact } = ONE_OF_EACH[kind];
-    const t = ticketOf(before, [by, fact]);
-    expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
-    const later = headOf(t, AT + HOUR + 1);
+    fc.assert(
+      fc.property(fc.nat({ max: HOUR - 1 }), (elapsed) => {
+        const { before, by, fact } = ONE_OF_EACH[kind];
+        const t = ticketOf(before, [by, fact]);
+        expect(headOf(t, AT + 30 * MINUTE)._tag).not.toBe("idle");
+        expect(headOf(t, AT + elapsed)._tag).not.toBe("idle");
+        const later = headOf(t, AT + HOUR + 1);
 
-    if (later._tag === "idle") {
-      expect(later.since).toBe(AT);
-    }
+        if (later._tag === "idle") {
+          expect(later.since).toBe(AT);
+        }
+      }),
+      OPTS,
+    );
   });
 
   it.each(ADVICE_KINDS)("leaves an idle ticket's line as it was on a %s fact, at any time after it", (kind) => {

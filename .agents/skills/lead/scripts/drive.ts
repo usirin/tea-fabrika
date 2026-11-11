@@ -47,8 +47,9 @@
 // the lead, in `reason`), 30 stuck, 40 skip (nothing here for the step, such as a mutation step
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
 // any agent ran: `refused:<check>`, one of lane_running (another live process drives this lane:
-// a chain, or a step run alone; state/<lane>.lock holds its pid), agent_cap (8 agents running: the ACP harnesses drive
-// started), low_disk (under 20 GB free, with gcloop.ts's status line), branch_checked_out (the lane's
+// a chain, or a step run alone; state/<lane>.lock holds its pid), agent_cap (12 agents running,
+// 0012: the ACP harnesses drive started), low_disk (under 20 GB free, with gcloop.ts's status
+// line), branch_checked_out (the lane's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
 // (plan_unapproved, base_not_signed, shared_ticket, root_not_ancestor). It never retries. A stuck step
@@ -1736,6 +1737,12 @@ drive.ts reads your report, then one JSON object at its very end (its schema fol
 
 const MIN_FREE_GB = 20;
 
+/** At most this many code agents run at once on the laptop (decision 0012). */
+export const AGENT_CAP = 12;
+
+/** A step's start is refused once the agents running reach the cap. */
+export const agentCapFull = (agents: number): boolean => agents >= AGENT_CAP;
+
 /** One timed part of a step's start, in ms, kept on the step's entry in state/<lane>.json, so the
  * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
 const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Number });
@@ -2071,10 +2078,10 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
   if (refused) {
     console.error(skipLine("agent cap"));
-  } else if (agents >= 8) {
+  } else if (agentCapFull(agents)) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
-      reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
+      reason: `${agents} agents running (the ACP harnesses drive started); the cap is ${AGENT_CAP}`,
       exit: 3,
     });
   }
