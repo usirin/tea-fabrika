@@ -34,6 +34,7 @@
     "./workers/bindings": "./src/cloudflare/bindings.ts",
     "./workers/control": "./src/cloudflare/control.ts",
     "./workers/gateway": "./src/cloudflare/connection.ts",
+    "./workers/objects": "./src/cloudflare/objects.ts",
     "./workers/record": "./src/cloudflare/record.ts",
     "./workers/runtime": "./src/cloudflare/runtime.ts",
     "./node/build": "./src/node/build/bundle.ts",
@@ -48,6 +49,8 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "catalog:",
+    "alchemy": "catalog:",
     "@alchemy.run/cloudflare-runtime": "2.0.0-beta.84",
     "@demlik/tea": "catalog:",
     "effect": "catalog:",

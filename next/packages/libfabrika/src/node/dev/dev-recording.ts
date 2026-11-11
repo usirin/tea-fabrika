@@ -32,18 +32,10 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
     Layer.mergeAll(
       SpanSink.layer(nodeSql(db), { object }),
       RecordManager.remote((name) => ({
-        write: (...args) =>
-          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the record binding requires a Promise
-          Effect.runPromise(call("record", name, "write", args)),
-        read: (...args) =>
-          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the record binding requires a Promise
-          Effect.runPromise(call("record", name, "read", args)),
-        content: (...args) =>
-          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the record binding requires a Promise
-          Effect.runPromise(call("record", name, "content", args)),
-        deleteContent: (...args) =>
-          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the record binding requires a Promise
-          Effect.runPromise(call("record", name, "deleteContent", args)),
+        write: (...args) => call("record", name, "write", args),
+        read: (...args) => call("record", name, "read", args),
+        content: (...args) => call("record", name, "content", args),
+        deleteContent: (...args) => call("record", name, "deleteContent", args),
       })),
       Archive.bucket({
         put: (key, body, sha256) =>

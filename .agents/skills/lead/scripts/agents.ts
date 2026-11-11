@@ -37,10 +37,13 @@ export const Answer = Schema.Struct({
 });
 export type Answer = typeof Answer.Type;
 
-/** The judgment agent's answer: send a step again with a note, or park the lane for the lead. */
+/**
+ * The judgment agent's answer: send a lane step again with a note, or park the lane for the lead.
+ * A lane has no mutation step (.decisions/0066), so the answer cannot name one.
+ */
 export const Judgment = Schema.Struct({
   answer: Schema.Literals(["send", "park"]),
-  step: Schema.NullOr(Schema.Literals(["tests", "build", "mutation", "review"])),
+  step: Schema.NullOr(Schema.Literals(["tests", "build", "review"])),
   note: Schema.String,
 });
 export type Judgment = typeof Judgment.Type;

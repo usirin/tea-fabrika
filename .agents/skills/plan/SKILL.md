@@ -16,6 +16,9 @@ the blank approval line.
    and any note `rg -n "<row or word>" docs` finds.
 2. **Read the code as built,** on main. Read the installed versions in `pnpm-lock.yaml` (Effect,
    `@demlik/tea`, vitest, any patch in `patches/`) and check every API against that version.
+   Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
+   its decisions, patterns and source, and name its answer or say you found none
+   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
 3. **Check what is settled** before you call anything open: `docs/direction/`, `experiments/`,
    `docs/plan/`, and the settled-search tool the brief names, if any. Read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the

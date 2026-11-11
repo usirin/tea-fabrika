@@ -115,6 +115,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),
   /** Spans in memory that met a full disk; 0 otherwise. */
   held: Schema.Int,
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** A thrown error as a typed one: a row that does not decode is `bad_row`, the rest `storage`. */

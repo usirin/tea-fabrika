@@ -72,6 +72,7 @@ const commit = (n: Note, paths: string[] = []): Commit => ({
   tree: n.to,
   parentTree: n.from,
   paths,
+  exam: EXAM_ROWS,
   signed: signed(n),
 });
 
@@ -84,14 +85,16 @@ const pr = (commits: Commit[], more: Partial<PullRequest> = {}): PullRequest => 
   ...more,
 });
 
-const EXAM = examMatcher([
+const EXAM_ROWS = [
   { glob: "exam-paths.json", reason: "" },
   { glob: "boundary-rules.json", reason: "" },
   { glob: ".github/**", reason: "" },
   { glob: "next/apps/fabrika/src/exam/**", reason: "" },
   { glob: "next/**/*.test.ts", reason: "" },
   { glob: "fixtures/next/**", reason: "" },
-]);
+];
+
+const EXAM = examMatcher(EXAM_ROWS);
 
 const answers = (p: PullRequest) => check(p, EXAM).answers;
 const DONE = { _tag: "done" as const };
@@ -941,5 +944,109 @@ describe("trusted config files", () => {
 			        run: pnpm -s commits chain --advise
 			"
 		`);
+  });
+});
+
+const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).chain((folders) =>
+  fc.record({
+    left: fc.constant(folders.slice(0, 1).map((f) => ({ glob: `${f}/**`, reason: "" }))),
+    right: fc.constant(folders.slice(1, -1).map((f) => ({ glob: `${f}/**`, reason: "" }))),
+    paths: fc.array(
+      fc.tuple(fc.constantFrom(...folders), filename).map(([f, n]) => `${f}/${n}.ts`),
+      { minLength: 1, maxLength: 8 },
+    ),
+  }),
+);
+
+const refusals = (cs: Commit[], main = EXAM) => check(pr(cs), main).answers.filter((a) => a._tag === "stuck");
+
+describe("0053 parent exam lists", () => {
+  // Plant: use main's matcher, or union main and parent.
+  it("t1: build paths use only its parent list", () => {
+    fc.assert(
+      fc.property(anyNote, parentLists, (n, { left, right, paths }) => {
+        const c = { ...commit({ ...n, step: "build" }, paths), exam: left };
+        const matched = paths.filter(examMatcher(left)).sort();
+        const expected = matched.length ? [stuck("build_touched_exam", c.sha, { paths: matched })] : [];
+        expect(refusals([c], examMatcher(right))).toEqual(expected);
+        expect(refusals([c], examMatcher(left))).toEqual(expected);
+      }),
+      runs,
+    );
+  });
+  // Plant: ask from parent lists, or their union with main.
+  it("t2: owner read uses main and changed alone", () => {
+    fc.assert(
+      fc.property(route, parentLists, ({ commits }, { left, right, paths }) => {
+        const main = examMatcher(right);
+        const matched = [...new Set(paths.filter(main))].sort();
+
+        for (const exam of [left, right]) {
+          const result = check(
+            pr(
+              commits.map((c) => ({ ...c, exam, paths: ["unrelated/file.ts"] })),
+              { changed: paths },
+            ),
+            main,
+          );
+          expect(result.answers.filter((a) => a._tag === "ask")).toEqual(matched.length ? [ask(matched)] : []);
+        }
+      }),
+      runs,
+    );
+  });
+  // Plant: null is empty, falls back to main, or skips the commit.
+  it("t3: missing build list fails closed even without paths", () => {
+    fc.assert(
+      fc.property(route, fc.array(filename), ({ commits }, paths) => {
+        const cs = commits.map((c) => ({ ...c, paths, exam: c.signed?.note.step === "build" ? null : c.exam }));
+        const expected = cs.filter((c) => c.signed?.note.step === "build").map((c) => stuck("no_exam_list", c.sha));
+        expect(refusals(cs)).toEqual(expected);
+      }),
+      runs,
+    );
+  });
+  // Plant: stale first, or no_exam_list before unsigned.
+  it("t4: unsigned then missing list then stale", () => {
+    fc.assert(
+      fc.property(anyNote, (n) => {
+        const note = { ...n, step: "build" as const };
+        const c = { ...commit(note), exam: null };
+        const newer = signed({ ...note, version: note.version + 1 });
+        expect(check(pr([c], { notes: [signed(note), newer] }), EXAM).answers).toEqual([stuck("no_exam_list", c.sha)]);
+        expect(refusals([{ ...c, signed: null }])).toEqual([stuck("unsigned_commit", c.sha)]);
+      }),
+      runs,
+    );
+  });
+  // Plant: refuse every missing list, including tests, lead and person.
+  it("t5: non-build commits ignore missing parent lists", () => {
+    fc.assert(
+      fc.property(route, ({ commits }) => {
+        const cs = commits.filter((c) => c.signed?.note.step !== "build");
+        const people = commits.map((c): Commit => ({ ...c, signed: null, person: true }));
+
+        for (const group of [cs, people]) {
+          expect(refusals(group.map((c) => ({ ...c, exam: null })))).toEqual(refusals(group));
+        }
+      }),
+      runs,
+    );
+  });
+  // Plant: use the first or last commit's list for all commits.
+  it("t6: another commit list cannot change this commit answer", () => {
+    fc.assert(
+      fc.property(route, parentLists, ({ commits }, { left, right, paths }) => {
+        const cs = commits.slice(0, 5).map((c) => ({ ...c, paths, exam: left }));
+
+        for (let i = 0; i < cs.length; i++) {
+          const changed = cs.map((c, j) => ({ ...c, exam: i === j ? right : left }));
+          expect(refusals(changed).filter((a) => a.sha !== cs[i]?.sha)).toEqual(
+            refusals(cs).filter((a) => a.sha !== cs[i]?.sha),
+          );
+        }
+      }),
+      runs,
+    );
   });
 });

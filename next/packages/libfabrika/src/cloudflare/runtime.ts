@@ -1,3 +1,4 @@
+import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
   Context,
   Effect,
@@ -35,6 +36,7 @@ import { type Sql } from "../Sql.ts";
 import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { SinkError } from "../telemetry/Trace.ts";
 import {
   CommitReply,
   ProcessReplies,
@@ -48,6 +50,7 @@ import {
   type RecordBinding,
 } from "./bindings.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
+import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
@@ -116,7 +119,7 @@ export const processStub = (env: Env, project: string, name: string) =>
   env.PROCESS.getByName(JSON.stringify([project, name]));
 
 export const recordStub = (env: Env, project: string, name: string) =>
-  env.RECORD.getByName(JSON.stringify([project, name]));
+  makeRpcStub<RecordShape>(env.RECORD.getByName(JSON.stringify([project, name])), { errors: [SinkError] });
 
 // Bindings have already entered Effect before the caller adds its RPC span.
 export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {

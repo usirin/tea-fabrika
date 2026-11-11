@@ -15,6 +15,9 @@ git config core.bare false
 git reset -q --hard refs/heads/build
 pnpm install --offline --frozen-lockfile > /out/install.txt 2>&1 || exit 70
 export TMPDIR=/tmp
+# Stryker mutates /repo itself: a sandbox copy would reach other packages' unmutated files
+# through their node_modules links (ticket 457). /repo is this container's own throwaway copy.
+export IN_PLACE=1
 set -f
 IFS=,
 set -- $RELATED
@@ -33,6 +36,8 @@ arm() {
 		[ ! -e "/tmp/mut-$2/$f" ] || cp -R "/tmp/mut-$2/$f" "/out/$1/"
 	done
 	echo "$code" > "/out/$1/exit"
+	# A run stopped at its cap may leave a mutated file behind; the next arm starts clean.
+	git reset -q --hard refs/heads/build
 }
 
 # With a base, the sample is the lane's own lines, base..build, not the build commit's alone: a
@@ -44,7 +49,9 @@ arm b "$T"
 b=$(cat /out/b/exit)
 
 # Arm a: the same sample against the related tests as the base has them. A test the base lacks
-# is left out of that arm.
+# is left out of that arm. Stryker stops when a test fails in its dry run, so arm a first runs the
+# base's tests on the build and keeps only the files that pass; /out/a-kept names them, and
+# /out/a-baseline.json says why the rest were dropped (ticket 655).
 if git rev-parse -q --verify refs/heads/base > /dev/null; then
 	kept=
 	for f in "$@"; do
@@ -53,8 +60,21 @@ if git rev-parse -q --verify refs/heads/base > /dev/null; then
 			kept="$kept${kept:+,}$f"
 		fi
 	done
+	passing=
 	if [ -n "$kept" ]; then
-		RELATED=$kept arm a "${T}a"
+		IFS=,
+		set -- $kept
+		unset IFS
+		node_modules/.bin/vitest run --maxWorkers=1 --reporter=json --outputFile=/out/a-baseline.json "$@" \
+			> /out/a-baseline.txt 2>&1 || :
+		passing=$(node -e '
+const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+process.stdout.write(r.testResults.filter((t) => t.status === "passed").map((t) => t.name.replace(/^\/repo\//, "")).join(","));
+' /out/a-baseline.json 2> /dev/null) || passing=
+	fi
+	printf '%s\n' "$passing" > /out/a-kept
+	if [ -n "$passing" ]; then
+		RELATED=$passing arm a "${T}a"
 	fi
 fi
 exit "$b"

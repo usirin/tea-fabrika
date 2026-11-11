@@ -43,6 +43,10 @@
 //   - A split's new function has its header on one line and closes with `};`. Another shape is a
 //     fault.
 //   - A rename reads whole identifiers, in strings and comments too: `healthRow` is not `health`.
+//   - A move may add one line kind besides specifiers: exactly `/** @internal */`, alone at the start
+//     of its line, right above a line that starts with `export`, in a file under an `internal/`
+//     folder (ticket 591). An indented tag, another comment, a tag above anything else, a tag
+//     outside `internal/` and a removed tag are faults.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Exit, FileSystem, Option, Schema, Stream } from "effect";
@@ -107,11 +111,31 @@ const firstChange = (before: string, after: string): string => {
     : `line ${at + 1}: ${short(is[at] ?? "")}`;
 };
 
-const followed = (path: string, before: string, after: string): ReadonlyArray<Fault> => {
-  const was = unspecified(before);
-  const is = unspecified(after);
+// The one line a move may add besides specifiers (ticket 591): exactly `/** @internal */` at the
+// start of its line, right above a line that starts with `export`, in a file under an `internal/`
+// folder, so `fabrika/rooms`' rule 3 holds for a file that moved there.
+const TAG = /^\/\*\* @internal \*\/\n(?=export\b)/gm;
 
-  return was === is ? [] : [{ path, reason: `more than import specifiers changed, ${firstChange(was, is)}` }];
+/** Whether a path is under an `internal/` folder, at any depth. */
+const isInternal = (path: string): boolean => path.split("/").slice(0, -1).includes("internal");
+
+/** The text with every allowed tag line taken out, in an `internal/` file only. */
+const untagged = (path: string, text: string): string => (isInternal(path) ? text.replace(TAG, "") : text);
+
+/** How many allowed tag lines a text holds. */
+const tagCount = (text: string): number => text.match(TAG)?.length ?? 0;
+
+const followed = (path: string, before: string, after: string): ReadonlyArray<Fault> => {
+  const was = unspecified(untagged(path, before));
+  const is = unspecified(untagged(path, after));
+
+  if (was !== is) {
+    return [{ path, reason: `more than import specifiers changed, ${firstChange(was, is)}` }];
+  }
+
+  return isInternal(path) && tagCount(after) < tagCount(before)
+    ? [{ path, reason: "an @internal tag line was removed" }]
+    : [];
 };
 
 /**

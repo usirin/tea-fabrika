@@ -136,7 +136,7 @@ const fixture = (name: string, value: string) => {
   homes.push(home);
   mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-  for (const pkg of ["effect", "@demlik", "@kampus"]) {
+  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
     symlinkSync(join(ROOT, "next/apps/fabrika/node_modules", pkg), join(home, "node_modules", pkg), "dir");
   }
 

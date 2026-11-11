@@ -20,11 +20,16 @@
 //   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
+//   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
+//                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
 //   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> mutation -> review -> open -> land. A send goes
-// to the step it names; a send to plan parks, since only the lead approves a plan. A lockfile ask
+// The moves, pure (`moveOf`): tests done -> build -> review -> open -> loosen -> land. A lane runs no
+// mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
+// stays for a lane parked inside its mutation step before 0066: it runs that one step, then goes on
+// to review, so nothing in flight is stranded. No move ever names mutation: a send to it, or to
+// plan, parks (only the lead approves a plan). A send goes to the lane step it names. A lockfile ask
 // parks too: the lead refreshes it outside the box. Any other ask, and any stuck, goes to the
 // judgment agent. A start refusal for a full laptop (agent_cap, low_disk) is retried on one named
 // Effect Schedule (`slotSchedule`); any other refusal parks. Every limit is a Context.Reference with
@@ -42,8 +47,9 @@
 // (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
 //
 // The lane brief is one Markdown file. Its text before the first `## ` heading goes to every step.
-// Then one section per step, `## tests`, `## build`, `## mutation`, `## review`, and `## pr`, the
-// pull request's description (its first line is the title). drive appends its own answer tail.
+// Then one section per step, `## tests`, `## build`, `## review`, and `## pr`, the pull request's
+// description (its first line is the title). An older brief's `## mutation` is accepted and not run,
+// unless the lane starts at mutation, which needs it. drive appends its own answer tail.
 
 import { spawn } from "node:child_process";
 import {
@@ -66,9 +72,14 @@ import { driveStep, type Env, loadEnv, MUTATION_AGENT, prepare, sh } from "./dri
 import { wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
+/** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
 export const STEPS = ["tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
+/** A lane's steps, in order (0066). A move names only these, so no move reaches mutation. */
+export const LANE_STEPS = ["tests", "build", "review"] as const;
+export type LaneStep = (typeof LANE_STEPS)[number];
+const isLaneStep = (s: string): s is LaneStep => (LANE_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits
 
@@ -150,21 +161,24 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
 /** The next move after a step's outcome, as data. */
 export const Move = Schema.TaggedUnion({
-  step: { step: Schema.Literals(STEPS), note: Schema.String },
+  step: { step: Schema.Literals(LANE_STEPS), note: Schema.String },
   judge: {},
   open: {},
   park: { reason: Schema.String },
 });
 export type Move = typeof Move.Type;
-const toStep = (step: StepName, note: string) => Move.cases.step.make({ step, note });
+const toStep = (step: LaneStep, note: string) => Move.cases.step.make({ step, note });
 const toPark = (reason: string) => Move.cases.park.make({ reason });
 const toJudge = Move.cases.judge.make({});
 const toOpen = Move.cases.open.make({});
 
-/** The step a done answer hands to, or `null` at the end of the chain. */
-const after: Record<StepName, StepName | null> = {
+/**
+ * The step a done answer hands to, or `null` at the end of the chain. Build hands to review (0066);
+ * a mutation step, run only by `--start mutation`, hands to review too.
+ */
+const after: Record<StepName, LaneStep | null> = {
   tests: "build",
-  build: "mutation",
+  build: "review",
   mutation: "review",
   review: null,
 };
@@ -178,19 +192,19 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
   const [verb, to = "", why = ""] = line.outcome.split(":");
 
   switch (verb) {
-    case "done": {
+    case "done":
+    case "skip": {
+      // A skip is nothing here for this step: on to the next, with the why on record.
       const next = after[step];
       return next === null ? toOpen : toStep(next, "");
     }
-    case "skip":
-      // Nothing here for this step: on to the next, with the why on record.
-      return after[step] === null ? toOpen : toStep(after[step] ?? "review", "");
     case "send":
-      if (isStep(to)) {
+      if (isLaneStep(to)) {
         return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
-      return toPark(`${step} sent the lane to ${to}: ${line.reason}`);
+      // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
+      return toPark(`${step} sent the lane to ${to}, which is not a lane step: ${line.reason}`);
     case "ask":
       if (why === "lockfile") {
         return toPark(line.reason);
@@ -204,6 +218,7 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
   }
 };
 
+// An older answer may still name mutation; it reads as a send that names no lane step, so it parks.
 const JUDGED = /^[`*\s]*answer:\s*(send\s+(tests|build|mutation|review)|park)\b[`*\s]*(.*)$/i;
 
 /** A judgment: a step to run again with a note, or a park for the lead. */
@@ -220,7 +235,7 @@ export const moveFrom = (text: string): Judged => {
   try {
     const d = JSON.parse(text) as Judged;
 
-    if (d._tag === "step" && isStep(d.step)) {
+    if (d._tag === "step" && isLaneStep(d.step)) {
       return toStep(d.step, String(d.note ?? ""));
     }
 
@@ -244,7 +259,7 @@ export const judgedOf = (text: string): Judged => {
     const note = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
     const to = m[2]?.toLowerCase() ?? "";
 
-    if (isStep(to)) {
+    if (isLaneStep(to)) {
       return toStep(to, `the lead's judgment: ${note}`);
     }
 
@@ -286,6 +301,13 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   return { head: head.join("\n").trim(), sections };
 };
 
+/**
+ * The sections a lane brief lacks for a lane started at `start`: every lane step's and `pr`. A
+ * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
+ */
+export const lacks = (lane: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
+  [...LANE_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !lane.sections[k]);
+
 /** What one step is told about the lane: the brief's shared head, its section and the facts. */
 export type Facts = {
   readonly ticket: string;
@@ -317,6 +339,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipOf(f.branch)} at ${f.head}`);
   }
 
+  // Only a lane started at mutation, parked inside that step before 0066, gets here.
   if (step === "mutation") {
     lines.push(
       `T=${f.ticket}, BUILD=${short(f.heads.build ?? f.head)} (the newest build commit; the mutation sampler diffs it against its parent).`,
@@ -387,17 +410,45 @@ const prOpen = Cmd.make("pr_open", {
   err: ["unknown"],
 });
 
+const loosen = Cmd.make("loosen", {
+  input: Schema.Struct({ pr: Schema.Number, head: Schema.String }),
+  ok: Schema.Struct({ code: Schema.Number, text: Schema.String }),
+  err: ["unknown"],
+});
+
 const land = Cmd.make("land", {
   input: Schema.Struct({ pr: Schema.Number }),
   ok: Done,
   err: ["unknown"],
 });
 
-type Cmds = ReturnType<typeof stepRun> | ReturnType<typeof judge> | ReturnType<typeof prOpen> | ReturnType<typeof land>;
+type Cmds =
+  | ReturnType<typeof stepRun>
+  | ReturnType<typeof judge>
+  | ReturnType<typeof prOpen>
+  | ReturnType<typeof loosen>
+  | ReturnType<typeof land>;
 
 /** How the lane ends: landed, parked for the lead, or stuck. */
 export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string };
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
+
+/**
+ * The Check, pure: what loosening.sh's exit means before catch-up (0014). Exit 0 (no hits) lands,
+ * and `null` says so. Exit 1 is the hit list, parked for the lead's hand check. Anything else is an
+ * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
+ */
+export const looseningEnd = (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
+  const text = ran.text.trim();
+
+  if (ran.code === 0) {
+    return null;
+  }
+
+  return ran.code === 1
+    ? { kind: "ask", reason: `PR ${pr}: loosening.sh hits for the lead's hand check: ${text}` }
+    : { kind: "stuck", reason: `PR ${pr}: loosening.sh did not run clean (exit ${ran.code}): ${text}` };
+};
 
 type Lane = {
   readonly round: number;
@@ -419,6 +470,7 @@ type Model =
     }
   | { readonly phase: "judging"; readonly lane: Lane; readonly step: StepName; readonly line: Line }
   | { readonly phase: "opening"; readonly lane: Lane }
+  | { readonly phase: "loosening"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "landing"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "over"; readonly lane: Lane; readonly end: End };
 
@@ -456,7 +508,7 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): 
 export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
-    cmds: [stepRun, judge, prOpen, land],
+    cmds: [stepRun, judge, prOpen, loosen, land],
     init: (): Step => [{ phase: "idle", lane: { round: 0, head: "", heads: {}, stucks: 0 } }, []],
     update: {
       start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
@@ -511,8 +563,20 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           return over(s.lane, { kind: "stuck", reason: m.value.detail });
         }
 
-        return [{ phase: "landing", lane: s.lane, pr: m.value.pr }, [land({ pr: m.value.pr })]];
+        return [{ phase: "loosening", lane: s.lane, pr: m.value.pr }, [loosen({ pr: m.value.pr, head: s.lane.head })]];
       },
+      loosen_ok: (s, m): Step => {
+        if (s.phase !== "loosening") {
+          return stay(s);
+        }
+
+        const end = looseningEnd(s.pr, m.value);
+        return end === null ? [{ phase: "landing", lane: s.lane, pr: s.pr }, [land({ pr: s.pr })]] : over(s.lane, end);
+      },
+      loosen_err: (s): Step =>
+        s.phase === "loosening"
+          ? over(s.lane, { kind: "stuck", reason: `loosening.sh for PR ${s.pr} threw` })
+          : stay(s),
       pr_open_err: (s): Step =>
         s.phase === "opening" ? over(s.lane, { kind: "stuck", reason: "opening the PR threw" }) : stay(s),
       land_ok: (s, m): Step =>
@@ -597,7 +661,7 @@ answered ${line.outcome}: ${line.reason}
 You read; you change no file and start nothing. Your row only reads this repo and nothing beside
 it, so the lane's state file and the step's report follow below. Read what you need in this repo.
 Before you park a question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then
-answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build, mutation
+answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build
 or review) and a note of one or two sentences for that step, or answer "park" with step null and
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
@@ -677,7 +741,8 @@ const handlers = (s: Setup) => {
         const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
-        // draft runs is `mutationDraft` there. The chain names no other fact about that step.
+        // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
+        // runs it only for a lane started at mutation (0066).
         const claude = (cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
         const entry: StepRecord = {
           round,
@@ -873,7 +938,10 @@ const handlers = (s: Setup) => {
           "",
           "## Steps",
           "",
-          `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (Codex in a box, or Claude for ${["mutation", ...s.claude].join(", ")}); the lead agent wrote no step's work. Steps and dollars:`,
+          `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (${providers(
+            saved().steps.map((e) => e.step),
+            s.claude,
+          )}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
         ].join("\n");
@@ -904,6 +972,44 @@ const handlers = (s: Setup) => {
         writeRecord({ ...readRecord(), pr });
         return { pr, detail: "opened" };
       }),
+    // loosening.sh on the exam diff from where the lane leaves main to the reviewed head, run in
+    // the main checkout, which holds every step's commits. Its output, hits or not, goes on the PR
+    // as a comment before anything lands (0014); a comment that fails is exit 2, never a pass.
+    loosen: (cmd: { pr: number; head: string }) =>
+      Effect.sync(() => {
+        sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
+        const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
+
+        if (base.code !== 0 || !base.out.trim()) {
+          return { code: 2, text: `no merge-base of origin/main and ${cmd.head.slice(0, 8)}` };
+        }
+
+        const from = base.out.trim();
+        const ran = sh("sh", [join(HERE, "loosening.sh"), from, cmd.head], env.MAIN);
+        const text = [ran.out.trim(), ran.err.trim()].filter(Boolean).join("\n");
+        note(
+          `loosening.sh ${from.slice(0, 8)} ${cmd.head.slice(0, 8)} exited ${ran.code}: ${text.split("\n")[0] ?? ""}`,
+        );
+        const bodyFile = join(env.BOXES, `${s.lane}-loosening.md`);
+        writeFileSync(
+          bodyFile,
+          [
+            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.lane}\` after review and before catch-up (exit ${ran.code}):`,
+            "",
+            "```text",
+            text || "(no output)",
+            "```",
+            "",
+          ].join("\n"),
+        );
+        const posted = sh("gh", ["pr", "comment", String(cmd.pr), "-R", env.GH_REPO, "--body-file", bodyFile]);
+
+        if (posted.code !== 0) {
+          return { code: 2, text: `the loosening comment did not post on PR ${cmd.pr}: ${text}` };
+        }
+
+        return { code: ran.code, text };
+      }),
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
         note(`catchup.sh ${cmd.pr} ${s.ticket}`);
@@ -921,6 +1027,17 @@ const handlers = (s: Setup) => {
         return { ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}` };
       }),
   };
+};
+
+/**
+ * Which agent ran the lane's steps, for the PR body. It names only steps the lane ran, so a lane
+ * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
+ */
+export const providers = (ran: readonly string[], claude: ReadonlySet<StepName>): string => {
+  const onClaude = STEPS.filter(
+    (s) => ran.includes(s) && (s === "mutation" ? MUTATION_AGENT === "claude" : claude.has(s)),
+  );
+  return onClaude.length === 0 ? "Codex in a box" : `Codex in a box, or Claude for ${onClaude.join(", ")}`;
 };
 
 /** One table row per step the lane ran, with its list-price dollars from the rows file. */
@@ -1002,7 +1119,7 @@ export const chainMain = (args: string[], env: Env) =>
     }
 
     const brief = sectionsOf(readFileSync(briefPath, "utf8"));
-    const missing = [...STEPS, "pr"].filter((k) => !brief.sections[k]);
+    const missing = lacks(brief, start);
 
     if (missing.length > 0) {
       console.error(`chain.ts: the lane brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);

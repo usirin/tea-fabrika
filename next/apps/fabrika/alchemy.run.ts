@@ -46,6 +46,7 @@ export const stack = (
           PROCESS: Cloudflare.DurableObject("Process"),
           CONNECTION: Cloudflare.DurableObject("Connection"),
           RECORD: Cloudflare.DurableObject("RecordPart"),
+          RecordPart: Cloudflare.DurableObject("RecordPart"),
           LOADER: Cloudflare.WorkerLoader(),
           MEASUREMENTS: measurements,
           STAGE: stage,

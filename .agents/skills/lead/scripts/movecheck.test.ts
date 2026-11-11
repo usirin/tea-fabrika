@@ -256,6 +256,64 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
   });
 });
 
+describe("movecheck, a move PR: one @internal tag line above an export, in an internal/ file only (ticket 591)", () => {
+  // A body of export and plain lines. Tagging puts `/** @internal */` above each chosen export.
+  const line = fc.oneof(
+    word.map((name) => `export const ${name} = 1;`),
+    word.map((name) => `const ${name} = 2;`),
+  );
+  const body = fc.array(line, { minLength: 1, maxLength: 8 });
+  const tagged = (lines: ReadonlyArray<string>, pick: ReadonlyArray<boolean>): string =>
+    lines.flatMap((l, n) => (pick[n] === true && l.startsWith("export") ? ["/** @internal */", l] : [l])).join("\n");
+  const moved = (to: string, before: string, after: string): Change => ({
+    _tag: "renamed",
+    from: `${SRC}/data/old.ts`,
+    to,
+    before,
+    after,
+  });
+  const faults = (to: string, before: string, after: string) =>
+    paths(moveFaults([moved(to, before, after)], { moves: [{ from: `${SRC}/data/old.ts`, to }], named: [] }));
+  const INTERNAL = `${SRC}/runtime/internal/supervisor.ts`;
+  const FRONT = `${SRC}/runtime/Runner.ts`;
+
+  // Plant: drop the isInternal guard, so a tag passes anywhere; or drop the tag strip, so none does.
+  it("adding the tag above exports passes in an internal/ file and is a fault outside one", () => {
+    fc.assert(
+      fc.property(body, fc.array(fc.boolean(), { minLength: 8, maxLength: 8 }), (lines, pick) => {
+        const plain = lines.join("\n");
+        const after = tagged(lines, pick);
+        expect(faults(INTERNAL, plain, after)).toEqual([]);
+        expect(faults(FRONT, plain, after)).toEqual(after === plain ? [] : [FRONT]);
+      }),
+      options,
+    );
+  });
+
+  // Plant: drop the count check, so a removed tag passes.
+  it("removing a tag that stood before is a fault", () => {
+    fc.assert(
+      fc.property(body, fc.array(fc.boolean(), { minLength: 8, maxLength: 8 }), (lines, pick) => {
+        const before = tagged(lines, pick);
+        const plain = lines.join("\n");
+        expect(faults(INTERNAL, before, before)).toEqual([]);
+        expect(faults(INTERNAL, before, plain)).toEqual(before === plain ? [] : [INTERNAL]);
+      }),
+      options,
+    );
+  });
+
+  // Plant: loosen the pattern (allow indentation, any doc text, or no `export` after it).
+  it.each([
+    ["scenario: an indented tag", "  /** @internal */\nexport const a = 1;"],
+    ["scenario: another doc comment", "/** @internal a */\nexport const a = 1;"],
+    ["scenario: a tag above a line that is not an export", "/** @internal */\nconst a = 1;"],
+    ["scenario: a line comment", "// @internal\nexport const a = 1;"],
+  ])("%s is a fault in an internal/ file", (_, after) => {
+    expect(faults(INTERNAL, after.split("\n").slice(-1).join("\n"), after)).toEqual([INTERNAL]);
+  });
+});
+
 describe("movecheck --split: every old line lands once, in order, and new lines only wire the parts", () => {
   interface Cut {
     readonly lines: ReadonlyArray<string>;

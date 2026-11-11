@@ -9,7 +9,8 @@
 //   pnpm commits sign --step <role> --ticket <n> --key <path>
 //   pnpm commits push
 //
-// `allowed_signers` and `exam-paths.json` are always read from main as CI checked it out (`--main`,
+// Build commits use their first parent’s exam list (0053). Scope and the owner read use main.
+// `allowed_signers` and the trusted exam list are read from main as CI checked it out (`--main`,
 // else the base), never from the change under test. After a merge, a logged link's keys commit counts
 // only when it was on main before its squash. `--keys-from head` reads both from the head instead: only for the pull request that adds them,
 // run once by hand, and never passed by the workflow. A pure core over plain data (`signedText`,
@@ -61,7 +62,7 @@ type PersonLink = typeof PersonLink.Type;
 const ChainLink = Schema.Union([Link, PersonLink]);
 type ChainLink = typeof ChainLink.Type;
 
-const Reason = Schema.Literals(["unsigned_commit", "build_touched_exam", "broken_chain", "stale_link"]);
+const Reason = Schema.Literals(["unsigned_commit", "build_touched_exam", "no_exam_list", "broken_chain", "stale_link"]);
 type Reason = typeof Reason.Type;
 
 export const Answer = Schema.TaggedUnion({
@@ -215,6 +216,8 @@ export interface Commit {
   readonly sha: string;
   readonly tree: string;
   readonly parentTree: string | null;
+  /** The decoded first-parent exam list, or null when unreadable. */
+  readonly exam: ExamList | null;
   /** Changed against its first parent: added, changed and deleted, and both sides of a rename. */
   readonly paths: ReadonlyArray<string>;
   readonly signed: Signed | null;
@@ -279,10 +282,12 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
 
   for (const c of pr.commits) {
     const step = role(c);
-    const touched = step === "build" ? c.paths.filter(isExam).sort() : [];
+    const touched = step === "build" && c.exam !== null ? c.paths.filter(examMatcher(c.exam)).sort() : [];
 
     if (step === null && !(c.signed === null && c.person === true)) {
       answers.push(stuck("unsigned_commit", c.sha));
+    } else if (step === "build" && c.exam === null) {
+      answers.push(stuck("no_exam_list", c.sha));
     } else if (touched.length > 0) {
       answers.push(stuck("build_touched_exam", c.sha, { paths: touched }));
     } else if (step !== null && stale.has(step)) {
@@ -708,6 +713,8 @@ const checkMain = Effect.gen(function* () {
       sha,
       tree: (yield* treeAt(sha))?.trim() ?? "",
       parentTree: parent === null ? null : ((yield* treeAt(parent.trim()))?.trim() ?? null),
+      exam:
+        parent === null ? null : Option.getOrNull(decodeExam((yield* fileAt(parent.trim(), "exam-paths.json")) ?? "")),
       paths: parent === null ? [] : yield* changedPaths(parent.trim(), sha),
       signed: note === undefined ? null : yield* signedBy(note),
       person: note === undefined && (yield* verifyPerson(sha)) ? true : undefined,

@@ -18,6 +18,9 @@ the rest.
 2. **Run the red laws** on a narrow path and read why each fails.
 3. **Build** as the plan and decided notes say, and nothing they leave undecided.
    Step-commit checks the plan's file owners.
+   A patch to a package (tea, demlik, Manti, Effect, Alchemy) the plan does not name, after the
+   read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back to
+   plan, never into the build.
 4. **Run** the relevant narrow laws.
 5. **Commit** with the step-commit skill.
 6. **Report** which laws went green, any still red and why, any file you needed

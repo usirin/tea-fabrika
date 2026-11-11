@@ -107,4 +107,23 @@ describe("the hold", () => {
     const { steps } = fold([{ type: "key", key: ctrlB }]);
     expect(steps[0]).toEqual([{ type: "pass", key: ctrlB, held: false }]);
   });
+
+  // scenario: ticket 589. One answer can release a key to the tile and send the next to the host,
+  // and the hold's model after it is already waiting again: the page learns the passed key's
+  // order from the Cmds, never from that model.
+  it("releases a passed key before a new press, with the hold waiting again after both", () => {
+    const esc = key("<esc>", "Escape");
+    const { s, steps } = fold([
+      PREFIX_ONLY,
+      { type: "key", key: ctrlB },
+      { type: "key", key: esc },
+      { type: "key", key: ctrlB },
+      { type: "answer", id: 0, took: true },
+    ]);
+    expect(steps[4]).toEqual([
+      { type: "pass", key: esc, held: true },
+      { type: "press", id: 1, key: "<c-b>" },
+    ]);
+    expect(s.waiting?.id).toBe(1);
+  });
 });

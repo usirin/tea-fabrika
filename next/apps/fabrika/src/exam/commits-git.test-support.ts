@@ -78,7 +78,13 @@ class Repo {
   readonly dir: string;
   readonly base: string;
 
-  constructor(keys: string | null = GOOD_KEYS, at?: string, format: "sha1" | "sha256" = "sha1", initial = "x\n") {
+  constructor(
+    keys: string | null = GOOD_KEYS,
+    at?: string,
+    format: "sha1" | "sha256" = "sha1",
+    initial = "x\n",
+    exam = EXAM_LIST,
+  ) {
     count += 1;
     this.dir = at ?? join(TOP, `r${count}`);
     mkdirSync(this.dir);
@@ -88,7 +94,7 @@ class Repo {
       this.write("allowed_signers", keys);
     }
 
-    this.write("exam-paths.json", EXAM_LIST);
+    this.write("exam-paths.json", exam);
     this.write("README.md", initial);
     this.write("boundary-rules.json", "[]\n");
     this.write("fixtures/next/v.txt", "v\n");

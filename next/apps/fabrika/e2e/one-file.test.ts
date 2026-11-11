@@ -66,7 +66,7 @@ describe("P16 real browser from a copied one-file build", () => {
             browser = await chromium.launch({ headless: true });
             mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-            for (const name of ["@kampus", "@demlik", "effect"]) {
+            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
               symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
             }
 

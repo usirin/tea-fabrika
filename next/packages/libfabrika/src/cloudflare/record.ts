@@ -1,8 +1,11 @@
+import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Schema } from "effect";
 import { cloudflareSql } from "../ledger/CloudflareSql.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
 import { type Chain } from "../telemetry/Trace.ts";
+import { RecordPart, type RecordShape } from "./objects.ts";
 
 type Part = ReturnType<typeof recordPart>;
 type Rows = Parameters<Part["write"]>[0];
@@ -66,3 +69,30 @@ export const recordDelete = Effect.fn(function* (
 ) {
   return yield* (yield* part(ctx, bytes, chain, at)).deleteContent(id, by);
 });
+
+export const RecordPartLive = RecordPart.make(
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    const env = yield* WorkerEnvironment;
+    const cap = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(
+        Schema.Struct({
+          limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
+        }),
+      ),
+    )(env.STAGE).pipe(
+      Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
+      Effect.map((config) => config.limits?.recordBytes),
+      Effect.cached,
+    );
+    // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw storage until PR 8; not reported, 0042 amendment 2026-11-09
+    const raw = state.raw as unknown as DurableObjectState;
+    return Effect.succeed({
+      write: (chain, at, rows) => cap.pipe(Effect.flatMap((bytes) => recordWrite(raw, bytes, chain, at, rows))),
+      read: (chain, at, after) => cap.pipe(Effect.flatMap((bytes) => recordRead(raw, bytes, chain, at, after))),
+      content: (chain, at, id) => cap.pipe(Effect.flatMap((bytes) => recordContent(raw, bytes, chain, at, id))),
+      deleteContent: (chain, at, id, by) =>
+        cap.pipe(Effect.flatMap((bytes) => recordDelete(raw, bytes, chain, at, id, by))),
+    } satisfies RecordShape);
+  }),
+);

@@ -50,10 +50,18 @@ afterAll(() => {
 
 let file = 0;
 
+const open = (path: string) => {
+  const db = new DatabaseSync(path);
+  // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
+  // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
+  db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
+  opened.push(db);
+  return db;
+};
+
 const disk = () => {
   const path = join(top, `${++file}.db`);
-  let db = new DatabaseSync(path);
-  opened.push(db);
+  let db = open(path);
   let inner = nodeSql(db);
   const sql: Sql = {
     exec: (q, ...args) => inner.exec(q, ...args),
@@ -64,8 +72,7 @@ const disk = () => {
     sql,
     reopen: () => {
       db.close();
-      db = new DatabaseSync(path);
-      opened.push(db);
+      db = open(path);
       inner = nodeSql(db);
     },
   };
