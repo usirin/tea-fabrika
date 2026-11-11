@@ -89,13 +89,28 @@ def owner_of(p):
     if any(part in ("", ".", "..") for part in p.split("/")): return None
     under = [k for k in owners if k.endswith("/") and p.startswith(k)]
     return owners[max(under, key=len)] if under else None
+def unlisted_exam(paths):
+    # The exam is the test writer's (docs/direction/nobody-writes-their-own-exam.md), so a tests
+    # commit may hold an exam path the plan gives to no step. The list is the box base's, never the
+    # checkout's, so a step cannot widen the exam to take a path. exam.py prints "path<TAB>glob" per
+    # hit and exits 1; any other answer allows nothing.
+    unlisted = [p for p in paths if owner_of(p) is None]
+    if step != "tests" or not unlisted: return set()
+    listed = git("show", state.get("base", "") + ":exam-paths.json")
+    if listed.returncode: return set()
+    with tempfile.NamedTemporaryFile(suffix=".json") as exam_list:
+        exam_list.write(listed.stdout); exam_list.flush()
+        exam = subprocess.run([sys.executable, str(here / "exam.py"), exam_list.name, *unlisted], capture_output=True, text=True)
+    if exam.returncode != 1: return set()
+    return {l.rsplit("\t", 1)[0] for l in exam.stdout.splitlines() if "\t" in l}
 def check(paths):
     if role == "build":
         exam = subprocess.run([sys.executable, str(here / "exam.py"), "exam-paths.json", *paths], capture_output=True)
         if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
     if owners is not None:
+        exam = unlisted_exam(paths)
         for p in paths:
-            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests"):
+            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests") and p not in exam:
                 refuse("not_owner: " + p)
 check(named)
 # A case-only rename on a disk that ignores case (id.ts to Id.ts): git keeps the index's old name
