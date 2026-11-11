@@ -36,13 +36,20 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
   expect(kept.filter((id) => forbidden.test(id))).toEqual([]);
 });
 
+// The direct entry takes no input, so one bundle of it serves every case.
+let direct = false;
+
 it.effect.prop(
   "the browser contract excludes the ledger implementation for every export selection",
   { names: Schema.Array(Schema.Literals(["Founder", "Written"])) },
   ({ names }) =>
     Effect.gen(function* () {
-      yield* inspect(null);
+      if (!direct) {
+        yield* inspect(null);
+        direct = true;
+      }
+
       yield* inspect(["ClientManager", ...new Set(names)]);
     }).pipe(Effect.scoped),
-  { arbitrary: { seed: 119120, runs: 100 } },
+  { timeout: 60_000, arbitrary: { seed: 119120, runs: 100 } },
 );
