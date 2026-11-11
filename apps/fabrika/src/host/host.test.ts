@@ -5,6 +5,7 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { Ledger, streams, writerText } from "@kampus/fabrika-old";
 import { layerSqliteSync } from "@kampus/fabrika-old/sqlite";
+import { Answer, type Asked, Rec, sealAsk, Via } from "@kampus/pipeline/tickets/ask";
 import { type Fact, nameOf } from "@kampus/pipeline/tickets/ticket";
 import { pullRequestsOf } from "@tea-fabrika/tracker";
 import { Effect, Exit, FileSystem, Layer, Logger, Schedule, Scope } from "effect";
@@ -421,11 +422,35 @@ describe("the asks' later and seen", () => {
       }
     }).pipe(Effect.provide(layerSqliteSync({ path: join(home, "ledger.sqlite"), tickMs: 1000 })));
   const filed = (title: string): Fact => ({ type: "filed", title, body: "" });
-  const asked = (what: string, ask = "a-1"): Fact => ({
-    type: "asked",
-    ask,
-    what,
-    picks: ["yes", "no"],
+  /**
+   * A sealed ask, as a lane writes it today. An unsealed one would be withdrawn and replaced as the
+   * host reads it (ask-desk plan, "Old facts and parked asks"), and these laws are about later and seen.
+   */
+  const asked = (what: string, ask = "a-1") =>
+    sealAsk({
+      ask,
+      for: "approve",
+      step: "plan",
+      repo: "acme/site",
+      why: null,
+      what,
+      picks: [
+        { pick: "yes", does: "Take yes" },
+        { pick: "no", does: "Take no" },
+      ],
+      rec: Rec.cases.none.make({ why: "No recommendation was recorded" }),
+      ticket: { title: what, body: "" },
+      evidence: { _tag: "other", text: "" },
+      until: null,
+    });
+  /** The person picks `pick` on the sealed ask `sealed`, from the window. */
+  const answered = (sealed: Asked, pick: string): Fact => ({
+    type: "answered",
+    format: 1,
+    ask: sealed.ask,
+    answer: Answer.cases.chose.make({ pick }),
+    saw: sealed.saw,
+    via: Via.cases.window.make({ took: { key: "click", rec: "none", ms: 0, opened: [], said: 0 } }),
   });
 
   /** Two tickets, each with an ask: 1/a-1 and 3/a-1. */
@@ -433,9 +458,9 @@ describe("the asks' later and seen", () => {
     const { home, paths } = yield* freshHome;
     yield* write(home, [
       [1, "f1", filed("Login fails")],
-      [1, "a1", asked("approve plan")],
+      [1, "a1", yield* asked("approve plan")],
       [3, "f3", filed("Dark mode")],
-      [3, "a3", asked("is it a duplicate?")],
+      [3, "a3", yield* asked("is it a duplicate?")],
     ]);
     return { home, paths };
   });
@@ -481,7 +506,8 @@ describe("the asks' later and seen", () => {
       return yield* Effect.die(`waited for asks.json to hold ${JSON.stringify(marks)}: ${last}`);
     });
 
-  it("keeps later and seen across a host restart, and drops an answered ask's later", async () => {
+  // scenario: a real host stops and starts on its temporary home, SQLite ledger and Unix socket.
+  it("scenario: keeps later and seen across a host restart, and drops an answered ask's later", async () => {
     const seen = await go(
       Effect.gen(function* () {
         const { home, paths } = yield* seeded;
@@ -496,14 +522,14 @@ describe("the asks' later and seen", () => {
         yield* first.stop;
 
         // The host is stopped: the ask on #3 is answered meanwhile.
-        yield* write(home, [[3, "n3", { type: "answered", ask: "a-1", pick: "yes", note: "" }]]);
+        yield* write(home, [[3, "n3", answered(yield* asked("is it a duplicate?"), "yes")]]);
         const second = yield* hostOn(home);
         const again = yield* asksOn(paths.sock);
         const after = said(again.asks());
         const file = yield* keptAs(home, { later: ["1/a-1"], seen: ["1/a-1"] });
 
         // One more ask comes: it counts, and it is new.
-        yield* write(home, [[1, "a1b", asked("merge?", "a-2")]]);
+        yield* write(home, [[1, "a1b", yield* asked("merge?", "a-2")]]);
         const newer = yield* until("the new ask", () =>
           again.asks()?.asks.some((a) => a.key === "1/a-2") === true ? again.asks() : undefined,
         );
@@ -520,7 +546,8 @@ describe("the asks' later and seen", () => {
   it.each([
     ["a broken file", "{"],
     ["a file an older build wrote", '{"later":["1/a-1"]}'],
-  ])("starts on %s with every ask counted and new, and says so in the log", async (_, text) => {
+    // scenario: start a real host on a temporary home containing each historical asks.json file.
+  ])("scenario: starts on %s with every ask counted and new, and says so in the log", async (_, text) => {
     const seen = await go(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;

@@ -88,7 +88,7 @@ export { fold, ROOT, readRow } from "@kampus/pipeline/tickets/ticket";
 export { Hint, hintsOn } from "./duplicates.ts";
 export { Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words } from "./head.ts";
 export { RepoTree, type RepoTreeShape } from "./folders.ts";
-export { Author } from "./ledger.ts";
+export { Author, saveCell, preparePending } from "./ledger.ts";
 export {
   Failed,
   type Listed,
@@ -107,6 +107,7 @@ export { checksLine, Row } from "./rows.ts";
 export { currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords } from "./steps.ts";
 export {
   Answer,
+  AskAnswer,
   Comment,
   File,
   MakeArea,

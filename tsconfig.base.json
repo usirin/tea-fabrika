@@ -67,6 +67,31 @@
         // `next/` product code takes two more: a plain `Error` in an Effect's error channel
         // loses its tag. Its tests may still fail with one, to check the path.
         "overrides": [
+          // All of `next/`, its tests too: rules that fired 0 times there but fire on
+          // today's code, so they block in `next/` alone.
+          {
+            "include": ["next/**/*.ts", "next/**/*.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "abortControllerInEffect": "error",
+                "allOfMapToForEach": "error",
+                "cryptoRandomUUID": "error",
+                "cryptoRandomUUIDInEffect": "error",
+                "effectFnOpportunity": "error",
+                "errorPayloadShadowsName": "error",
+                "flatMapToTap": "error",
+                "globalRandom": "error",
+                "mapConstToAs": "error",
+                "multipleCatchTag": "error",
+                "optionMatchToFromOption": "error",
+                "promiseInEffectSuccess": "error",
+                "provideLayerSucceedToProvideService": "error",
+                "raceFirstWithSleepToTimeout": "error",
+                "serviceNotAsClass": "error",
+                "unsafeEffectTypeAssertion": "error"
+              }
+            }
+          },
           {
             "include": ["next/**/*.ts", "next/**/*.tsx"],
             "exclude": ["next/**/*.test.ts", "next/**/*.test.tsx"],

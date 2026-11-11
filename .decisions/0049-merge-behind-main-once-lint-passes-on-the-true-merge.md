@@ -80,3 +80,9 @@ behind main, on purpose, once `pnpm lint` passes on the true merge of its head w
   lead tooling change that follows this decision. It must keep the head pinned, as
   `--match-head-commit` does today. `--admin` and `--auto` stay out unless that change's own
   reasoning shows one is the plain way.
+
+## Amendments
+
+- 2026-11-11: the owner turned off the ruleset's "require branches to be up to date" rule on main, so
+  `gh` no longer refuses a pull request as `BEHIND`. The REST merge fallback left `catchup.sh`: a
+  pull request behind main lands with the plain pinned `gh pr merge`.
