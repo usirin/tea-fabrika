@@ -1,14 +1,24 @@
+// Each generated case runs in process through oxlint's RuleTester; one oxlint run per property over
+// every case's file then proves the repo's own .oxlintrc.json wires the rule for next/ tests. The
+// last property is the config's and lint.ts's own law, so it stays on oxlint and lint.ts.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
+import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
+import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const oxlint = join(root, "node_modules/.bin/oxlint");
 const config = join(root, ".oxlintrc.json");
 const code = "fabrika(prefer-schema-arbitrary)";
+
+// RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+const tester = new RuleTester({ cwd: root });
 
 const constructors = [
   "record",
@@ -37,6 +47,7 @@ const name = fc.stringMatching(/^[a-z]{3,8}$/).map((s) => `random_${s}`);
 
 interface Diagnostic {
   code: string;
+  filename: string;
   message: string;
   labels: { span: { line: number } }[];
 }
@@ -89,12 +100,59 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
   }
 };
 
+/** One report a case expects: its line where the law names one, and what its message holds. */
+type Hit = { readonly line?: number; readonly message: RegExp };
+
+/** One generated case: a next/ test file's text, and the reports the rule gives it, in line order. */
+type Case = { readonly text: string; readonly hits: readonly Hit[] };
+
+/** Every report the rule gives has this, so a law that names no message still says it is the rule's. */
+const ADVICE = /has a matching Schema/;
+
+/** The cases of one property, each checked in process as it is drawn, then all linted by `cli`. */
+const cases = () => {
+  const all: Case[] = [];
+
+  /** In process, RuleTester: the case's file gives exactly these reports. */
+  const want = (text: string, hits: readonly Hit[] = []) => {
+    const filename = "next/unit.test.ts";
+    tester.run("prefer-schema-arbitrary", preferSchemaArbitrary, {
+      valid: hits.length === 0 ? [{ code: text, filename }] : [],
+      invalid: hits.length === 0 ? [] : [{ code: text, filename, errors: hits.map((hit) => ({ ...hit })) }],
+    });
+    all.push({ text, hits });
+  };
+
+  /** One oxlint run over every case's file, through the repo's own config: the same reports. */
+  const cli = () => {
+    const files = all.map((_, i) => `next/case${i}.test.ts`);
+    const { hits } = lint(Object.fromEntries(all.map(({ text }, i) => [files[i]!, text])));
+    const found = files.map((file) =>
+      hits
+        .filter((d) => d.filename === file)
+        .map((d) => ({ line: d.labels[0]!.span.line, message: d.message }))
+        .sort((a, b) => a.line - b.line),
+    );
+    expect(found).toEqual(
+      all.map(({ hits }) =>
+        hits.map((hit) => ({ line: hit.line ?? expect.any(Number), message: expect.stringMatching(hit.message) })),
+      ),
+    );
+  };
+
+  return { want, cli };
+};
+
+/** `n` reports, anywhere, each the rule's own. */
+const reports = (n: number): readonly Hit[] => Array.from({ length: n }, () => ({ message: ADVICE }));
+
 const imports = (alias: string) =>
   `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\nconst S = Schema.Struct({x: Schema.String});\n`;
 
 describe("T325 K20 prefer-schema-arbitrary, today's tooling for next tests", () => {
   // R4 finding 11. Syntax probes have no domain Schema. Plant: treat any nested maker as evidence.
   it("R4 requires the generated value to flow through the maker", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(fc.record({ alias: name, field: name }), ({ alias, field }) => {
         const prefix = imports(alias);
@@ -105,21 +163,11 @@ describe("T325 K20 prefer-schema-arbitrary, today's tooling for next tests", () 
           `n => S.make({x: 'fixed'})`,
           `n => ({count: n, ${field}: S.make})`,
         ]) {
-          expect(
-            lint({
-              "next/unit.test.ts": `${prefix}export const g = ${alias}.integer().map(${callback});`,
-            }).hits,
-            callback,
-          ).toHaveLength(0);
+          want(`${prefix}export const g = ${alias}.integer().map(${callback});`);
         }
 
         for (const callback of ["S.make", "n => S.make(n)", "n => { return S.make(n); }", "n => S.make({x: n})"]) {
-          expect(
-            lint({
-              "next/unit.test.ts": `${prefix}export const g = ${alias}.string().map(${callback});`,
-            }).hits,
-            callback,
-          ).toHaveLength(1);
+          want(`${prefix}export const g = ${alias}.string().map(${callback});`, reports(1));
         }
 
         const assembled = `${prefix}
@@ -128,14 +176,16 @@ ${alias}.assert(${alias}.property(${alias}.record({x: ${alias}.string()}), field
   const value = {...fields, unused: true}; return Schema.is(S)(value);
 }));
 ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.string()})), rows => rows.map(S.make)));`;
-        expect(lint({ "next/unit.test.ts": assembled }).hits).toHaveLength(0);
+        want(assembled);
       }),
       options,
     );
+    cli();
   });
 
   // R4 finding 12. Plant: report an inner maker as well as its enclosing typed generator.
   it("R4 reports only the outer matching constructor", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(fc.record({ alias: name, depth: fc.integer({ min: 1, max: 3 }) }), ({ alias, depth }) => {
         let expr = `${alias}.string().map(Schema.String.make)`;
@@ -144,18 +194,16 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           expr = `${alias}.record({x: ${expr}})`;
         }
 
-        const { hits } = lint({
-          "next/unit.test.ts": `${imports(alias)}export const g: ${alias}.Arbitrary<typeof S.Type> = ${expr};`,
-        });
-        expect(hits).toHaveLength(1);
-        expect(hits[0]!.message).toContain("with S,");
+        want(`${imports(alias)}export const g: ${alias}.Arbitrary<typeof S.Type> = ${expr};`, [{ message: /with S,/ }]);
       }),
       options,
     );
+    cli();
   });
 
   // R4 finding 13. Plant: refuse qualified schemas or only recognize variable declarations.
   it("R4 recognizes qualified schema types and local Schema classes on all evidence paths", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(fc.record({ alias: name, schemaName: name.map((n) => `S_${n}`) }), ({ alias, schemaName }) => {
         const prefix = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\nimport * as data from './data.ts';\nclass ${schemaName} extends Schema.Class<${schemaName}>('${schemaName}')({x: Schema.String}) {}\n`;
@@ -166,16 +214,20 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           `export const d = ${alias}.record({x: ${alias}.string()}).map(${schemaName}.make);`,
           `const g = ${alias}.record({x: ${alias}.string()}); ${alias}.assert(${alias}.property(g, value => Schema.is(${schemaName})(value)));`,
         ];
-        const { hits } = lint({ "next/unit.test.ts": prefix + lines.join("\n") });
-        expect(hits.map((d) => d.labels[0]!.span.line)).toEqual(lines.map((_, i) => i + 5));
+        want(
+          prefix + lines.join("\n"),
+          lines.map((_, i) => ({ line: i + 5, message: ADVICE })),
+        );
       }),
       options,
     );
+    cli();
   });
 
   // Plant: drop schema evidence matching, or flag only record. All named data constructors
   // are tried under every generated import alias. No property runner is itself a diagnostic.
   it("reports each outer data generator once when a type or maker names its schema", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(
         fc.record({
@@ -198,21 +250,21 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           // Import-type annotations have no namespace binding; use the maker for named imports.
           const body =
             named && evidence === "type" ? data.map((expr, i) => `export const g${i} = ${expr}.map(S.make);`) : lines;
-          const { hits } = lint({ "next/unit.test.ts": prefix + body.join("\n") });
-          expect(hits.map((d) => d.labels[0]!.span.line)).toEqual(body.map((_, i) => i + 4));
-
-          for (const hit of hits) {
-            expect(hit.message).toContain("S");
-            expect(hit.message).toContain("nearby reason");
-          }
+          // Each message holds the schema's name, S, and the nearby reason that excuses one.
+          want(
+            prefix + body.join("\n"),
+            body.map((_, i) => ({ line: i + 4, message: /^(?=[^]*S)(?=[^]*nearby reason)/ })),
+          );
         },
       ),
       options,
     );
+    cli();
   });
 
   // Plants: ignore a simple binding alias; confuse a callback value with a different binding.
   it("follows generated bindings into explicit Effect checks and respects scope shadows", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(
         fc.record({
@@ -223,20 +275,19 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
         ({ alias, check, schemaAlias }) => {
           const target = schemaAlias ? "T" : "S";
           const text = `${imports(alias)}const T = S;\nconst g = ${alias}.record({x: ${alias}.string()});\nconst h = g;\n${alias}.assert(${alias}.property(h, (value) => Schema.${check}(${target})(value)));\nfunction shadow(${alias}: any) { return ${alias}.record({x: ${alias}.string()}).map(S.make); }\nexport {shadow};\n`;
-          const { hits } = lint({ "next/unit.test.ts": text });
-          expect(hits).toHaveLength(1);
-          expect(hits[0]!.labels[0]!.span.line).toBe(5);
-          expect(hits[0]!.message).toContain(target);
+          want(text, [{ line: 5, message: new RegExp(target) }]);
           const shadowSchema = `${imports(alias)}function local(S: any) { return ${alias}.string().map(S.make); }\nexport {local};`;
-          expect(lint({ "next/unit.test.ts": shadowSchema }).hits).toEqual([]);
+          want(shadowSchema);
         },
       ),
       options,
     );
+    cli();
   });
 
   // Plants: infer a schema from its capitalized name or record keys; ignore a nearby reason.
   it("leaves guesses, property runners and justified edge or unsupported data alone", () => {
+    const { want, cli } = cases();
     fc.assert(
       fc.property(
         fc.record({
@@ -248,11 +299,12 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
         }),
         ({ alias, reason }) => {
           const text = `${imports(alias)}import {Similar} from './data.ts';\nimport {Redacted} from 'effect';\nexport const arbitraryS = ${alias}.record({x: ${alias}.string()});\nexport const unrelated = ${alias}.constant(Similar);\nexport const secret = ${alias}.string().map(Redacted.make);\n${alias}.assert(${alias}.property(arbitraryS, (value) => value.x.length >= 0));\n// fast-check: ${reason}\nexport const justified: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
-          expect(lint({ "next/unit.test.ts": text }).hits).toEqual([]);
+          want(text);
         },
       ),
       options,
     );
+    cli();
   });
 
   // Plant: remove the ADVICE entry. Exercise lint.ts's real exit, including a different warn.
