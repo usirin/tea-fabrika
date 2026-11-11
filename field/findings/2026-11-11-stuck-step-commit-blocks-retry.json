@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-stuck-step-commit-blocks-retry",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/box.sh",
+    "line": 432
+  },
+  "says": "A step that commits and then ends stuck leaves the lane unable to start again: drive moves the local branch to the new commit but pushes no -wip backup and keeps the lane's saved head, so the next box start from the saved head is refused base_not_signed until someone signs and pushes that commit to <branch>-wip.",
+  "proof": "drive.ts:1128 collect runs update-ref refs/heads/<branch> to the stuck step's commit. drive.ts:715 pushes the -wip backup only when the outcome is not stuck. drive.ts:1395-1396 and 1424 keep the saved head when the outcome starts with stuck. drive.ts:1915 then picks the base from origin's branch and -wip tips or the saved head, both the old head. box.sh:426 counts the base as the lane's own only when refs/heads/<branch> or origin/<branch> equals it, which the moved local branch no longer does, so for a base that is a tests commit (neither build nor lead) box.sh:432 refuses base_not_signed. Field note 2026-11-10-25 in field/notes.jsonl saw it twice on ticket 574: 'the next box was refused base_not_signed until the lead moved it back'.",
+  "cost": "Every stuck step that had committed parks its lane until a person moves the branch or pushes the backup by hand.",
+  "head": "0bb25969c3b92c1e148d84446d845a20a00b5368",
+  "ticket": null,
+  "pr": null
+}

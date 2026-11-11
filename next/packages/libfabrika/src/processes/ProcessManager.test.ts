@@ -13,6 +13,7 @@ import {
   CODE as originalCode,
   data,
   events,
+  fcExitReason,
   first as makeFirst,
   from,
   ids,
@@ -46,7 +47,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
 
 describe("p21 amended by p79, starts have request IDs and process IDs", () => {
   it.effect("each exit ends process.exit with the real process tag", () =>
-    check(hash, [], (reason) => {
+    check(fcExitReason, [], (reason) => {
       const store = storage();
       const spans: Tracer.NativeSpan[] = [];
       const tracer = Tracer.make({
@@ -67,7 +68,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     }),
   );
   it.effect("fresh receive refuses missing and ended lives with the typed ended error", () =>
-    check(hash, [], (reason) => {
+    check(fcExitReason, [], (reason) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;

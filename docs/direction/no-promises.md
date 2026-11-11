@@ -22,7 +22,7 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
   is no longer an edge we write. Until then the edge lines in `brain.ts` stay.*
   *Also from 2026-11-09
   ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): every platform piece,
-  in the cloud and in the local stage, is used through Alchemy's Effect form, so a platform call
+  in the cloud and in the local instance, is used through Alchemy's Effect form, so a platform call
   is not an edge we write either. 130 edge comments sit on platform calls today (64
   `fabrika/no-promises`, 66 `fabrika/no-effect-run-outside-edge`); each goes with its port. An
   edge stays only where Alchemy has a gap that cannot be patched in reasonable size, and then its

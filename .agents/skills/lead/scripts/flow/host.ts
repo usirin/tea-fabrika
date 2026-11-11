@@ -31,6 +31,7 @@
 import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import { repoNode } from "../boxnode.ts";
 import { wipOf } from "../lane.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
@@ -155,9 +156,10 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
 });
 
 /** One command's end: its exit code, and stdout and stderr as one text. */
-type Ran = { readonly code: number; readonly output: string };
+export type Ran = { readonly code: number; readonly output: string };
 
-const exec = Effect.fn("host.exec")(
+/** One command in `dir` with safe git, run to its end; ./typecheck.ts runs it too. */
+export const exec = Effect.fn("host.exec")(
   function* (
     dir: string,
     command: string,
@@ -183,22 +185,6 @@ const exec = Effect.fn("host.exec")(
  */
 export const commandArgv = (line: string, node: string | null): readonly [string, ...string[]] =>
   node === null ? ["sh", "-c", line] : ["volta", "run", "--node", node, "sh", "-c", line];
-
-/** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
-export const repoNode = Effect.fn("host.repoNode")(function* (dir: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(`${dir}/package.json`).pipe(Effect.orElseSucceed(() => ""));
-  const pinned = Schema.decodeUnknownOption(Schema.fromJsonString(Pins))(text);
-  return Option.isNone(pinned) ? null : (pinned.value.volta?.node ?? pinned.value.engines?.node ?? null);
-});
-
-/** An exact version, as `pnpm lint` keeps every pin: never a range for `volta run`. */
-const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/));
-
-const Pins = Schema.Struct({
-  volta: Schema.optional(Schema.Struct({ node: Schema.optional(Version) })),
-  engines: Schema.optional(Schema.Struct({ node: Schema.optional(Version) })),
-});
 
 /** One host command in `dir` (`commandArgv` says how), its output appended to `log`; its exit code. */
 const runLine = Effect.fn("host.runLine")(
@@ -266,7 +252,7 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
 });
 
 /** A worktree of the main checkout at `head`, detached; the scope removes it. */
-const worktree = Effect.fn("host.worktree")(function* (main: string, dir: string, head: string) {
+export const worktree = Effect.fn("host.worktree")(function* (main: string, dir: string, head: string) {
   const git = (...args: ReadonlyArray<string>) => exec(main, "git", ["-C", main, ...args]);
   // A run killed with SIGKILL ran no finalizer: its worktree goes first.
   yield* git("worktree", "remove", "--force", dir).pipe(Effect.ignore);
@@ -449,7 +435,6 @@ export const recordInLane = Effect.fn("host.recordInLane")(function* (
     from: a.head,
     head: hosted.head,
     outcome: outcomeName(hosted.outcome),
-    // oxlint-disable-next-line fabrika/no-why-key -- drive.ts writes this file with today's key, and its readers read one shape
     why: hosted.outcome.reason,
     exit: hosted.outcome._tag === "stuck" ? 30 : 0,
     report: hosted.log,
@@ -466,7 +451,6 @@ const HostEntry = Schema.Struct({
   step: Schema.Literal("host"),
   outcome: Schema.String,
   head: Schema.String,
-  // oxlint-disable-next-line fabrika/no-why-key -- drive.ts writes this file with today's key, and its readers read one shape
   why: Schema.String,
 });
 

@@ -176,6 +176,26 @@
 			"code": "const holderOf = (porcelain: string, branch: string): string | null => {"
 		},
 		{
+			"file": ".agents/skills/lead/scripts/flow/host.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "why: hosted.outcome.reason,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/flow/host.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "why: Schema.String,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/flow/typecheck.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const why = Option.isNone(installed) ? late : tail(installed.value.output);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/flow/typecheck.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "return notRun(`\\`${install}\\` failed: ${why}`);"
+		},
+		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import { existsSync, readdirSync, readFileSync, rmSync, statSync } from \"node:fs\";"
@@ -624,6 +644,21 @@
 			"file": ".agents/skills/lead/scripts/chain.test.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "judged: { box: \"b\", answer: why },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "fc.property(sha, word, (head, why) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const [skipped, also] = answered(m, { _tag: \"skipped\", reason: why });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "expect(skipped).toMatchObject({ phase: \"opening\", lane: { unchecked: why } });"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",

@@ -1,5 +1,6 @@
 import { makeDurableObjectBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
+import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
@@ -95,7 +96,7 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.start(request, from)));
   }
 
-  exit(pid: string, reason: string, from: From) {
+  exit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.exit(pid, reason, from)));
   }
@@ -155,7 +156,7 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processStart(request, from)));
   }
 
-  processExit(pid: string, reason: string, from: From) {
+  processExit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
   }
@@ -303,6 +304,7 @@ export class Connection extends DurableObject<Env> {
 const Bridge = makeDurableObjectBridge(DurableObject, {
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
   entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
+  // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   stack: { name: "fabrika", stage: "local" },
 });
 

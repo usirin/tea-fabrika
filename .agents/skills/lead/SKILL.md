@@ -259,7 +259,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
-  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
+  one; where pgrep cannot list processes, that wait and the agent cap are skipped with one line
+  each (`pgrep.ts`). A box finds the Node the repo pins first on its PATH, with pnpm run on it
+  (`boxnode.ts`), so a brief writes a plain `node` and `pnpm`, never `volta run`. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Run a whole lane with chain.ts
 
@@ -317,7 +319,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review pushes the branch as the bot, opens the PR (or finds the open one) with a
+  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
+  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
+  send back with the error lines: to tests when every error is in an exam path, else to build. One
+  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
+  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
   steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;

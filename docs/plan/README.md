@@ -61,6 +61,11 @@ P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31
 from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* No Tier 1
 row merged on 2026-11-11.
 
+*2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
+[0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
+`instance.json`, the `INSTANCE` binding and the `node/dev` subpaths, with a lint rule,
+`fabrika/no-stage-word`, that keeps the old word out. Alchemy's own `stage` keys and two saved quotes keep the word.
+
 *2026-11-11:* big rows are cut into stacks of slices of at most 600 product lines each
 ([0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)). P13, notes (ticket 281), is
 re-planned as 4 slices; slice 1, durable terminal replies, is being built on a fresh branch, and
@@ -73,10 +78,13 @@ setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-o
 into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
 [0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
 only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
-`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. → the lead lands each slice once its
+`Sql` adapter moves to `cloudflare/`; slice 1 merged as
+[PR 891](https://github.com/usirin/tea-fabrika/pull/891). Its slice 3 (ticket 723) is being built:
+`Referee.ts` and `LedgerTransaction.ts` hold only their contracts, and their layers are
+`RefereeSql.ts` and `LedgerTransactionSql.ts`. No Tier 1 row changes. → the lead lands each slice once its
 steps pass
 
-*2026-11-09:* the local stage, P12, landed as
+*2026-11-09:* the local instance, P12, landed as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too
 ([PR 537](https://github.com/usirin/tea-fabrika/pull/537)). P16, one built file, is built as
 [PR 687](https://github.com/usirin/tea-fabrika/pull/687): each program and its window scripts ride
@@ -95,7 +103,7 @@ to come; see 2026-11-11 above.*
 ([0088](../../.decisions/0088-six-slices-in-tier-1.md)), so P39 to P42 were added, to be planned,
 and Tier 1 has 43 rows.
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
-[PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
+[PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local instance saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
 *2026-11-10:* libfabrika's files move into rooms (ticket 477,
 [0043](../../.decisions/0043-rooms-on-floors.md) and [0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
@@ -113,6 +121,13 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
 build can start.
+
+`next/` naming sweep, ticket 688 (2026-11-11): libfabrika's folders are modules and their ranks
+are layers ([0091](../../.decisions/0091-modules-and-layers.md)). Each row of `layer-rules.json`
+says `layer` where it said `floor`, with the same twelve ranks; the lint rule `fabrika/rooms` is
+`fabrika/modules`, with the same checks; and oxlint's `eslint/id-denylist` keeps the old words out
+of names in `next/`. No import permission, rank or runtime behavior changes, and no Tier 1 row is
+done by it.
 
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`

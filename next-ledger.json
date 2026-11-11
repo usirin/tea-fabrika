@@ -1,7 +1,7 @@
 {
 	"entries": [
 		{
-			"file": "next/apps/fabrika/e2e/stage.test.ts",
+			"file": "next/apps/fabrika/e2e/instance.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
@@ -174,6 +174,16 @@
 			"file": "next/apps/fabrika/src/door.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: r.where,"
+		},
+		{
+			"file": "next/apps/fabrika/src/door.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"test-instance\","
 		},
 		{
 			"file": "next/apps/fabrika/src/exam/agent-may.test.ts",
@@ -826,7 +836,37 @@
 			"code": "how: \"command\","
 		},
 		{
-			"file": "next/apps/fabrika/src/local-stage.test.ts",
+			"file": "next/apps/fabrika/src/instance-one-file.test.ts",
+			"rule": "vitest(no-hooks)",
+			"code": "afterEach(() => {"
+		},
+		{
+			"file": "next/apps/fabrika/src/instance-records.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "saw: { label: \"fixture\", where: \"local\", how: \"command\", check: \"none\" },"
+		},
+		{
+			"file": "next/apps/fabrika/src/instance-records.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "saw: { label: \"fixture\", where: \"local\", how: \"command\", check: \"none\" },"
+		},
+		{
+			"file": "next/apps/fabrika/src/instance-wire.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"local\","
+		},
+		{
+			"file": "next/apps/fabrika/src/instance-wire.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "how: \"command\","
+		},
+		{
+			"file": "next/apps/fabrika/src/instance-wire.test.ts",
+			"rule": "vitest(no-hooks)",
+			"code": "afterEach(async () => {"
+		},
+		{
+			"file": "next/apps/fabrika/src/local-instance.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(() => {"
 		},
@@ -872,36 +912,6 @@
 		},
 		{
 			"file": "next/apps/fabrika/src/runtime.laws.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(async () => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-one-file.test.ts",
-			"rule": "vitest(no-hooks)",
-			"code": "afterEach(() => {"
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-records.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "saw: { label: \"fixture\", where: \"local\", how: \"command\", check: \"none\" },"
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-records.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "saw: { label: \"fixture\", where: \"local\", how: \"command\", check: \"none\" },"
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-wire.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "where: \"local\","
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-wire.test.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "how: \"command\","
-		},
-		{
-			"file": "next/apps/fabrika/src/stage-wire.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterEach(async () => {"
 		},
@@ -1036,6 +1046,66 @@
 			"code": "where: Schema.String,"
 		},
 		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const SAW = { code: \"4417\", label: \"Mac\", where: \"Istanbul\", how: \"compare\", check: \"touch\", has: [] } as const;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const SAW = { code: \"4417\", label: \"Mac\", where: \"Istanbul\", how: \"compare\", check: \"touch\", has: [] } as const;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const TOOK = { label: \"Mac\", where: \"Istanbul\", how: \"panel\", check: \"touch\" } as const;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const TOOK = { label: \"Mac\", where: \"Istanbul\", how: \"panel\", check: \"touch\" } as const;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "how: \"device\","
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: \"Istanbul\","
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const who = pickFor(model, c);"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "grant: { id, key: pickTarget(model, c, n, \"leaf\"), for: who, to: TO, as: c.as, saw: SAW, sentAt: SENT },"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "revoke: { id, key: pickTarget(model, c, n, \"gone\"), for: who, to: TO, saw: TOOK, sentAt: SENT },"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "for: who,"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "for: who,"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessMachine.laws.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "saw: { ...ADD_SAW, how: \"sheet\", typed: true, kept: \"print\" },"
+		},
+		{
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "where: SAW_MARK,"
@@ -1093,17 +1163,22 @@
 		{
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { LedgerTransaction } from \"../ledger/LedgerTransaction.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
-			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/AccessSpans.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
@@ -1149,6 +1224,16 @@
 			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => rmSync(folder, { recursive: true, force: true }));"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/Authorization.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/Authorization.ts",
@@ -1224,6 +1309,11 @@
 			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
+		},
+		{
+			"file": "next/packages/libfabrika/src/access/ClientManager.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/access/ClientManager.ts",
@@ -1377,11 +1467,6 @@
 		},
 		{
 			"file": "next/packages/libfabrika/src/gateway/Gateway.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "where: options.location,"
-		},
-		{
-			"file": "next/packages/libfabrika/src/gateway/Gateway.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Ledger, LedgerError } from \"../ledger/Ledger.ts\";"
 		},
@@ -1456,6 +1541,16 @@
 			"code": "afterAll(() => {"
 		},
 		{
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
+		},
+		{
 			"file": "next/packages/libfabrika/src/gateway/GatewayStore.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { LedgerError } from \"../ledger/Ledger.ts\";"
@@ -1463,7 +1558,7 @@
 		{
 			"file": "next/packages/libfabrika/src/gateway/internal/waiting.test.ts",
 			"rule": "eslint(id-denylist)",
-			"code": "where: \"test\","
+			"code": "where: r.location,"
 		},
 		{
 			"file": "next/packages/libfabrika/src/gateway/internal/waiting.ts",
@@ -1471,44 +1566,14 @@
 			"code": "where: Schema.String,"
 		},
 		{
+			"file": "next/packages/libfabrika/src/gateway/internal/waiting.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "where: p.location,"
+		},
+		{
 			"file": "next/packages/libfabrika/src/ledger/Ledger.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "static readonly sql = (sql: Sql, who: Who): Layer.Layer<Ledger, never, Doorbell> =>"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "read: (stream, after) => pages(after, (from) => referee.read(stream, from, who.reader)),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "wait: (stream, after) => referee.wait(stream, after, who.reader),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "static readonly remote = (stub: LedgerCalls, who: Who): Layer.Layer<Ledger> => {"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "...short({ [STREAM]: stream, [tag(\"reader\")]: who.reader }),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "read: (stream, after) => pages(after, (from) => call(\"read\", stream, page, stream, from, who.reader)),"
-		},
-		{
-			"file": "next/packages/libfabrika/src/ledger/Ledger.ts",
-			"rule": "eslint(id-denylist)",
-			"code": "wait: (stream, after) => call(\"wait\", stream, Waited, stream, after, who.reader),"
 		},
 		{
 			"file": "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts",
@@ -1658,17 +1723,22 @@
 		{
 			"file": "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { LedgerTransaction } from \"../ledger/LedgerTransaction.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
-			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Appended, fromHere, type Line, lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts",
@@ -1696,6 +1766,16 @@
 			"code": "import { Referee } from \"../ledger/Referee.ts\";"
 		},
 		{
+			"file": "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as RefereeSql from \"../ledger/RefereeSql.ts\";"
+		},
+		{
 			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import type { LedgerError } from \"../ledger/Ledger.ts\";"
@@ -1714,6 +1794,11 @@
 			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
 			"rule": "vitest(no-hooks)",
 			"code": "afterAll(() => {"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/ProcessStore.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/ProcessStore.ts",
@@ -1893,11 +1978,6 @@
 		{
 			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { LedgerTransaction } from \"../ledger/LedgerTransaction.ts\";"
-		},
-		{
-			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
-			"rule": "eslint(no-restricted-imports)",
 			"code": "import { Appended, type Entry, InputId, lineFor } from \"../ledger/Log.ts\";"
 		},
 		{
@@ -1916,14 +1996,14 @@
 			"code": "afterEach(() => {"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { Doorbell, Ledger } from \"../ledger/Ledger.ts\";"
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
 		},
 		{
-			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
+			"file": "next/packages/libfabrika/src/runtime/Runner.test.ts",
 			"rule": "eslint(no-restricted-imports)",
-			"code": "import { LedgerTransaction } from \"../ledger/LedgerTransaction.ts\";"
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
@@ -1934,6 +2014,21 @@
 			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
 			"rule": "eslint(no-restricted-imports)",
 			"code": "import { nodeSql } from \"../ledger/NodeSqlite.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import { Doorbell } from \"../ledger/Ledger.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerSql from \"../ledger/LedgerSql.ts\";"
+		},
+		{
+			"file": "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts",
+			"rule": "eslint(no-restricted-imports)",
+			"code": "import * as LedgerTransactionSql from \"../ledger/LedgerTransactionSql.ts\";"
 		},
 		{
 			"file": "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts",
@@ -2046,6 +2141,11 @@
 			"code": "...who: A extends Online ? [who: typeof Who.Type] : []"
 		},
 		{
+			"file": "next/packages/libfabrika/src/transport/Connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "who: { key: \"SHA256:test\", person: \"person-test\", as: \"window\" },"
+		},
+		{
 			"file": "next/packages/libfabrika/src/transport/Hello.test.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "const who = {"
@@ -2094,6 +2194,46 @@
 			"file": "next/packages/libfabrika/src/transport/Wire.ts",
 			"rule": "eslint(id-denylist)",
 			"code": "who: Who,"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const { client, who, version, watching, waits, busy } = saved;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "return { _tag: busy ? \"busy\" : \"idle\", client, identity: who, version, watching, waits };"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "who: model.identity,"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const who = fc.record({ key: text, person: text, as: fc.constantFrom(\"window\" as const, \"agent\" as const) });"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.test.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "who,"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const { client, who, version, watching, waits } = attached;"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "const s = { client, identity: who, version, watching, waits };"
+		},
+		{
+			"file": "next/packages/libfabrika/src/transport/internal/connection.ts",
+			"rule": "eslint(id-denylist)",
+			"code": "who: model.identity,"
 		},
 		{
 			"file": "next/programs/counter/src/runner.laws.test.ts",

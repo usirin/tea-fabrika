@@ -19,6 +19,7 @@ import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabri
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
+import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
@@ -64,6 +65,8 @@ const SAW = {
 } as const;
 
 const SENT = "2026-11-08T04:00:00.000Z";
+/** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
+const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
 const START = processId();
 const TOOK = { label: "Browser", where: "test", how: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -360,7 +363,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     url: URL,
     origins: ["https://fabrika.test"],
     versions: [1, 2],
-    location: "test-stage",
+    location: "test-instance",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
     ping: { min: 10_000, max: 60_000 },
@@ -383,7 +386,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
   const env = Layer.mergeAll(
     clients,
-    LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
+    LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
     Mailbox.layer.pipe(Layer.provide(clients)),
     SpanSink.layer(sql, { object: START }),
     records,
@@ -399,7 +402,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
       Layer.provideMerge(
         Layer.mergeAll(
           freshClients,
-          LedgerTransaction.layer(storage).pipe(Layer.provide(quiet)),
+          LedgerTransactionSql.layer(storage).pipe(Layer.provide(quiet)),
           Mailbox.layer.pipe(Layer.provide(freshClients)),
           SpanSink.layer(storage, { object: START }),
           records,
@@ -1328,7 +1331,7 @@ describe("P10 door admission and waiting", () => {
           nonce: h.nonce,
           signed: h.hello.signed,
           sentAt: SENT,
-          location: "test-stage",
+          location: "test-instance",
           build: "test-build",
         });
         expect(rows[0]?.by).toBe(w.window.fingerprint);
@@ -1742,7 +1745,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             {
               key: connection.key,
               label,
-              where: "test-stage",
+              where: "test-instance",
               code: row.code,
               until: now + ttl,
               tabs: 1,
@@ -2945,7 +2948,7 @@ describe("P33 signal ids belong to the brain", () => {
       Effect.sync(() => next.shift()!),
     ).pipe(
       Layer.provide(
-        LedgerTransaction.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+        LedgerTransactionSql.layer(w.sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );
   };
@@ -3063,7 +3066,7 @@ describe("P33 signal ids belong to the brain", () => {
                   }),
                 ),
               ).toMatchObject({ _tag: "SigningRefused" });
-              yield* ProcessManager.use((p) => p.exit(TARGET, "crashed", brainFrom)).pipe(
+              yield* ProcessManager.use((p) => p.exit(TARGET, CRASHED, brainFrom)).pipe(
                 Effect.provide(processes(w, asBrain, brainSeat)),
               );
               const inbox = yield* entries("watcher:1/inbox");
@@ -3071,13 +3074,13 @@ describe("P33 signal ids belong to the brain", () => {
               expect(inbox[0]).toMatchObject({
                 _tag: "send",
                 by: BRAIN,
-                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed" } },
+                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED } },
               });
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([
-                { _tag: "DOWN", ref: value, process: TARGET, reason: "crashed", to: toWatcher },
+                { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED, to: toWatcher },
               ]);
             }).pipe(w.provide);
           }),

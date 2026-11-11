@@ -1,4 +1,4 @@
-// T421, next/. The dev stage serves a prebuilt brain, and Alchemy watches its folder to restart
+// T421, next/. The dev instance serves a prebuilt brain, and Alchemy watches its folder to restart
 // workerd on a change. On macOS a watch also gets events from before it started (the build
 // folder's own creation, up to seconds late), so an event alone is no proof of a change.
 // The law hands the watcher its file events itself: the real macOS ones come when they like.
@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
-describe("T421 the dev stage's watch on the build folder", () => {
+describe("T421 the dev instance's watch on the build folder", () => {
   it("scenario: a file event that changes no byte restarts nothing; changed bytes restart once", () =>
     Effect.runPromise(
       Effect.scoped(

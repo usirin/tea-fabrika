@@ -9,6 +9,8 @@ import {
   B,
   brain,
   CODE,
+  CRASHED,
+  ExitReason,
   first,
   from,
   ids,
@@ -57,7 +59,7 @@ const seed = (store: Storage) =>
 const monitor = (store: Storage, ref: string) =>
   ProcessManager.use((p) => p.monitor(ref, A, from())).pipe(Effect.provide(manager(store, watcher(W))));
 
-const exit = (store: Storage, reason = "crashed") =>
+const exit = (store: Storage, reason: ExitReason = CRASHED) =>
   ProcessManager.use((p) => p.exit(A, reason, from())).pipe(Effect.provide(manager(store)));
 
 const fresh = (store: Storage) => receive(W).pipe(Effect.provide(manager(store, watcher(W))));
@@ -125,12 +127,18 @@ describe("P33 rule 1, the text caps live in the schema", () => {
     {
       name: "a DOWN's ref",
       schema: Down,
-      value: (t) => ({ _tag: "DOWN", ref: t, process: A, reason: "w", to: toW }),
+      value: (t) => ({ _tag: "DOWN", ref: t, process: A, reason: CRASHED, to: toW }),
     },
     {
-      name: "a DOWN's reason",
+      name: "a DOWN's error class",
       schema: Down,
-      value: (t) => ({ _tag: "DOWN", ref: "r", process: A, reason: t, to: toW }),
+      value: (t) => ({
+        _tag: "DOWN",
+        ref: "r",
+        process: A,
+        reason: { _tag: "crashed", phase: "step", error: t },
+        to: toW,
+      }),
     },
     {
       name: "a monitored event's ref",
@@ -143,9 +151,9 @@ describe("P33 rule 1, the text caps live in the schema", () => {
       value: (t) => ({ _tag: "demonitored", ref: t, to: toW, reason: "canceled" }),
     },
     {
-      name: "an exited event's reason",
+      name: "an exited event's error class",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "exited", process: A, reason: t }),
+      value: (t) => ({ _tag: "exited", process: A, reason: { _tag: "crashed", phase: "step", error: t } }),
     },
     {
       name: "a down event's reason",
@@ -289,14 +297,15 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     options,
   );
   it.effect.prop(
-    `an exit whose reason has ${CAP + 1} characters`,
+    `an exit whose error class has ${CAP + 1} characters`,
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
       return Effect.gen(function* () {
         yield* seed(store);
         yield* monitor(store, "watch:1");
-        yield* refusedWritingNothing(store, exit(store, over));
+        // A raw client value: refused at the boundary, never truncated to fit.
+        yield* refusedWritingNothing(store, exit(store, { _tag: "crashed", phase: "step", error: over }));
       });
     }),
     options,
@@ -387,7 +396,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       yield* seed(store);
       return Exit.isSuccess(yield* Effect.exit(monitor(store, ref)));
     });
-  const delivered = (ref: string, reason: string) =>
+  const delivered = (ref: string, reason: ExitReason) =>
     Effect.gen(function* () {
       const store = storage();
       yield* seed(store);
@@ -397,7 +406,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
     });
   it.effect.prop(
     "the longest ref a monitor accepts still lets the target's exit land",
-    [Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), Down.fields.reason],
+    [Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), ProcessEvent.cases.exited.fields.reason],
     (generated) =>
       Effect.gen(function* () {
         // Find the limit by calling the monitor, so raising its cap cannot hide a lost DOWN.
@@ -414,12 +423,14 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
           }
         }
 
-        yield* delivered(at(low), "crashed");
-        yield* examples([[at(CAP), at(CAP, '"')]], (ref: string, reason: string) =>
-          Effect.gen(function* () {
-            yield* delivered(ref, "crashed");
-            yield* delivered(ref, reason);
-          }),
+        yield* delivered(at(low), CRASHED);
+        yield* examples(
+          [[at(CAP), ExitReason.cases.crashed.make({ phase: "step", error: at(CAP, '"') })]],
+          (ref: string, reason: ExitReason) =>
+            Effect.gen(function* () {
+              yield* delivered(ref, CRASHED);
+              yield* delivered(ref, reason);
+            }),
         )(generated);
       }),
     options,
@@ -462,7 +473,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 
         yield* monitor(store, text);
         yield* exit(store);
-        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref: text, process: A, reason: "crashed", to: toW })]);
+        expect(downs(yield* fresh(store))).toEqual([Down.make({ ref: text, process: A, reason: CRASHED, to: toW })]);
       }),
     { arbitrary: { seed: 119120, runs: 25 } },
   );
