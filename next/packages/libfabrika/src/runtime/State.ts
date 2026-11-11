@@ -17,6 +17,8 @@ const decodeRow = Schema.decodeUnknownResult(Row);
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });
+/** The same, keeping the failure that stopped it. */
+const downFrom = (cause: unknown): ProgramDown => new ProgramDown({ reason: "saved_state", cause });
 
 export class Saved extends Schema.Opaque<Saved>()(Row) {
   /**
@@ -32,7 +34,12 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
   ): { readonly saved: Saved; readonly ran: ReadonlyArray<string> } {
     const row = decodeRow(raw);
 
-    if (Result.isFailure(row) || row.success.v > state.v) {
+    if (Result.isFailure(row)) {
+      throw downFrom(row.failure);
+    }
+
+    // A future version decoded fine: no failure to keep.
+    if (row.success.v > state.v) {
       throw down();
     }
 
@@ -53,7 +60,7 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
       }
 
       const input = structuredClone(model);
-      const next = Result.try({ try: () => upgrade.run(input), catch: down });
+      const next = Result.try({ try: () => upgrade.run(input), catch: downFrom });
 
       if (Result.isFailure(next)) {
         throw next.failure;
@@ -66,14 +73,18 @@ export class Saved extends Schema.Opaque<Saved>()(Row) {
     const decoded = Schema.decodeUnknownResult(state.schema)(model);
 
     if (Result.isFailure(decoded)) {
-      throw down();
+      throw downFrom(decoded.failure);
     }
 
     const encoded = Schema.encodeUnknownResult(state.schema)(decoded.success);
     const json = Result.isSuccess(encoded) ? decodeJson(encoded.success) : Result.fail(null);
 
+    if (Result.isFailure(encoded)) {
+      throw downFrom(encoded.failure);
+    }
+
     if (Result.isFailure(json)) {
-      throw down();
+      throw downFrom(json.failure);
     }
 
     return {

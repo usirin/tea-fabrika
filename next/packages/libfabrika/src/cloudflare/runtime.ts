@@ -169,7 +169,7 @@ const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   }
 
   const refused = yield* Schema.decodeUnknownEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   return yield* new ProcessError({ reason: refused.reason });
 });
@@ -208,7 +208,7 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
 export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState) {
   const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
   return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
 });
 
@@ -223,7 +223,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   sha256: string,
 ) {
   const copy = new Uint8Array(body);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
   const digest = yield* work;
@@ -274,11 +274,11 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(blob)) {
-    return yield* new LedgerError({ reason: "bad_row" });
+    return yield* new LedgerError({ reason: "bad_row", cause: blob.failure });
   }
 
   const bytes = blob.success.slice(-32);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
@@ -374,7 +374,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor));
     sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
@@ -383,7 +383,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const resolved = (pid: string) =>
     processes
       .resolve(pid)
-      .pipe(Effect.catchTag("ProcessError", () => Effect.fail(new LedgerError({ reason: "refused" }))));
+      .pipe(Effect.catchTag("ProcessError", (cause) => Effect.fail(new LedgerError({ reason: "refused", cause }))));
   /** The registered name whose object stores this process ID. */
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
   type InputPolicy = { inputs: Array<string>; events: Array<string> };
@@ -428,7 +428,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     const program = yield* loader
       .load(life.state.code.program, life.state.process)
-      .pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
   const notify = Effect.fnUntraced(function* (client: string, news: unknown) {
@@ -460,7 +460,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).open(client))),
           Effect.flatMap((value) =>
             Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
-              Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             ),
           ),
         ),
@@ -534,7 +534,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
-      Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+      Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
     yield* Effect.gen(function* () {
       yield* processes.exit(pid, reason, origin);
@@ -551,7 +551,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     original !== undefined
       ? {
           process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
-            Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
           )).process,
           rev: original.rev,
         }
@@ -574,7 +574,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
 
@@ -584,7 +584,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     const descriptor = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(Schema.Struct({ owner: Writer, build: Schema.String })),
-    )(saved.value).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+    )(saved.value).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     const origin = yield* fromHere({
       by: descriptor.owner.key,
       for: descriptor.owner.for,
@@ -677,7 +677,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
               },
               Schema.TaggedStruct("send", { m: Schema.Json }).make({
                 m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-                  Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                 ),
               }),
             ),
@@ -734,7 +734,7 @@ const processLogic = Effect.fnUntraced(function* (
   // The object is its registered name's; its first process's descriptor names its storage.
   const [project] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-  )(ctx.id.name).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+  )(ctx.id.name).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
   const stub = projectStub(env, project),
     p = ProjectClient.make(stub),
     storage = StorageClient.make(ctx.storage),
@@ -795,7 +795,7 @@ const processLogic = Effect.fnUntraced(function* (
       sign: (id, parent, kind) =>
         Effect.suspend(() => rpc(p.sign(active, id, parent, kind))).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(SigningReply)),
-          Effect.mapError(() => new LedgerError({ reason: "unreachable" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
           Effect.flatMap(checkedValue),
         ),
       append: (input) => Effect.suspend(() => rpc(p.inbox(active, input))),
@@ -804,7 +804,7 @@ const processLogic = Effect.fnUntraced(function* (
           rpc(p.commit(active, { id, parent: session.parent, kind: event._tag, stream, event })),
         ).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(CommitReply)),
-          Effect.mapError(() => new LedgerError({ reason: "unreachable" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
           Effect.flatMap(checkedValue),
         ),
       own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {
@@ -849,7 +849,7 @@ const processLogic = Effect.fnUntraced(function* (
     due: (at: number) => attributed(runner.due(at)),
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
-        Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         Effect.flatMap((checked) => attributed(runner.restart(checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.

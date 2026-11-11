@@ -17,6 +17,8 @@ class ControlPlugin extends Plugin.Service<ControlPlugin>()("cloudflare-runtime/
 
 class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 type Target = "project" | "process" | "record" | "loader" | "bucket";
@@ -41,7 +43,7 @@ const sample = (pid: number) =>
 
       return Number(text.trim()) * 1024;
     }),
-  ).pipe(Effect.mapError(() => new ControlError({ reason: "sample" })));
+  ).pipe(Effect.mapError((cause) => new ControlError({ reason: "sample", cause })));
 
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
   const raw = yield* work;
@@ -115,7 +117,7 @@ export const startDev = Effect.fn("brain.stage")(function* <E, R>(
     }
 
     const url = `http://127.0.0.1:${port}`;
-    const fail = () => new ControlError({ reason: "unreachable" });
+    const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
     const request = yield* Effect.try({
       try: () => ({
         method: "POST",
@@ -130,11 +132,11 @@ export const startDev = Effect.fn("brain.stage")(function* <E, R>(
     });
     // oxlint-disable-next-line fabrika/no-promises -- edge: the private runtime socket is an HTTP transport for object calls
     const response = yield* Effect.tryPromise({ try: () => fetch(url, request), catch: fail });
-    const badRow = () => new ControlError({ reason: "bad_row" });
+    const badRow = (cause: unknown) => new ControlError({ reason: "bad_row", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: the binding transport response returns a Promise
     const raw = yield* Effect.tryPromise({ try: () => response.json(), catch: badRow });
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
-      Effect.mapError(() => new ControlError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
     );
 
     if (answer.error !== undefined) {
@@ -193,10 +195,11 @@ export const startDev = Effect.fn("brain.stage")(function* <E, R>(
       start: Effect.fnUntraced(function* (ports) {
         port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
           Effect.mapError(
-            () =>
+            (cause) =>
               new SystemError({
                 subtag: "control_port",
                 message: "The local runtime returned an invalid control port",
+                cause,
               }),
           ),
         );

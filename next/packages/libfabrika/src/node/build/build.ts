@@ -48,7 +48,7 @@ const Manifest = Schema.Struct({
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)])),
 });
 
-const fail = (reason: string) => () => new BuildError({ reason });
+const fail = (reason: string) => (cause: unknown) => new BuildError({ reason, cause });
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 // The window a selected package exports, if any. A path, not a package name, has no manifest.

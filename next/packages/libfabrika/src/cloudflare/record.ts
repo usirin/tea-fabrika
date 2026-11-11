@@ -19,7 +19,7 @@ const part = Effect.fnUntraced(function* (
 ) {
   const [, name] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-  )(ctx.id.name).pipe(Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 })));
+  )(ctx.id.name).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));
   const expected = chain._tag === "spans" ? `spans/${at}` : `job/${chain.process}/${at}`;
 
   if (name !== expected) {

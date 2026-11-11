@@ -192,7 +192,7 @@ export class ProcessManager extends Context.Service<
           yield* Effect.annotateCurrentSpan({ "fab.process": process });
           // The reason is decoded before the turn opens: text, an unknown tag or noproc writes nothing.
           const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
-            Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+            Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
           );
           yield* checked((table, turn) => {
             const life = table.exit(process, reason, caller.owner);
@@ -349,7 +349,7 @@ export class ProcessManager extends Context.Service<
           }),
           dead: Effect.fn("process.dead")(function* (process: string, dead: typeof DeadInput.Type, from: From) {
             const input = yield* Schema.decodeUnknownEffect(DeadInput)(dead).pipe(
-              Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+              Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
             );
             yield* checked((table, turn) => {
               const life = table.parent(process, caller.owner);

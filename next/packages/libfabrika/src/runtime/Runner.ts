@@ -600,7 +600,7 @@ export class ProgramRunner extends Context.Service<
                   maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
                 });
               },
-              catch: () => new LedgerError({ reason: "bad_row" }),
+              catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
             });
             supervision = yield* recovery.load;
 
@@ -719,7 +719,7 @@ export class ProgramRunner extends Context.Service<
             const attempt = supervision.attempt;
 
             if (attempt === null) {
-              return yield* new LedgerError({ reason: "bad_row" });
+              return yield* new LedgerError({ reason: "bad_row", cause: result.cause });
             }
 
             if (Cause.hasInterrupts(result.cause)) {
@@ -807,7 +807,7 @@ export class ProgramRunner extends Context.Service<
           const decoded = decodeDispatched(saved.cmds);
 
           if (Result.isFailure(decoded)) {
-            return yield* new ProgramDown({ reason: "saved_state" });
+            return yield* new ProgramDown({ reason: "saved_state", cause: decoded.failure });
           }
 
           const cmds = decoded.success;
@@ -1339,7 +1339,7 @@ export class ProgramRunner extends Context.Service<
             msg(
               Effect.gen(function* () {
                 const input = yield* decodeDelivery(raw).pipe(
-                  Effect.mapError(() => new RunnerError({ reason: "bad_input" })),
+                  Effect.mapError((cause) => new RunnerError({ reason: "bad_input", cause })),
                 );
                 yield* Effect.annotateCurrentSpan(tag("letter"), input.id);
                 // An accepted letter answers its first placing, before any receipt check. Its
@@ -1363,7 +1363,7 @@ export class ProgramRunner extends Context.Service<
                   const digest =
                     receipt.digest ??
                     (yield* decodeDelivery(receipt.input).pipe(
-                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                       Effect.flatMap(inputDigest),
                     ));
 
@@ -1507,7 +1507,7 @@ export class ProgramRunner extends Context.Service<
                   {
                     letter: input.id,
                     input: yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(
-                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                     ),
                     digest: yield* inputDigest(input),
                     errors: [],
@@ -1549,7 +1549,7 @@ export class ProgramRunner extends Context.Service<
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.
             const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
-              Effect.mapError(() => new RunnerError({ reason: "bad_input" })),
+              Effect.mapError((cause) => new RunnerError({ reason: "bad_input", cause })),
             );
             yield* store.save(checkpoint(state, Turn.cases.prepared.make({ id: input.id })));
             const appended = yield* checked.append(incoming);
@@ -1588,6 +1588,8 @@ export class ProgramRunner extends Context.Service<
 /** A delivery that does not have P10's shape. */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
   reason: Schema.Literals(["bad_input", "bad_client"]),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 type RunnerFailure = LedgerError | ProgramDown | RunnerError | SinkError | ProcessError | NotGranted;

@@ -148,7 +148,9 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 };
 
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
-  const pure = Effect.fromResult(stepper(declared)).pipe(Effect.mapError(() => new ProgramDown({ reason: "load" })));
+  const pure = Effect.fromResult(stepper(declared)).pipe(
+    Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })),
+  );
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
   return {

@@ -114,7 +114,7 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   const saved = Schema.decodeUnknownResult(Activity)(raw);
 
   if (Result.isFailure(saved)) {
-    return Result.fail(new LedgerError({ reason: "bad_row" }));
+    return Result.fail(new LedgerError({ reason: "bad_row", cause: saved.failure }));
   }
 
   const value = saved.success;
@@ -146,6 +146,8 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
     "bad_name",
     "bad_text",
   ]),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** A live watch as queries return it; `canceled` is always false and never stored. */

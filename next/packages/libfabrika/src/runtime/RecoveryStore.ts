@@ -50,7 +50,7 @@ export class RecoveryStore extends Context.Service<
         catch: (error) =>
           error instanceof LedgerError
             ? error
-            : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage" }),
+            : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
       });
     const snapshot = () => {
       const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name);

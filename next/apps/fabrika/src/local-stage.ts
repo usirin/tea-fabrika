@@ -2,6 +2,8 @@ import { Effect, Path, Schema } from "effect";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literal("storage"),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export const localStage = Effect.fn("brain.localStage")(function* (
@@ -15,13 +17,13 @@ export const localStage = Effect.fn("brain.localStage")(function* (
   const { startDev } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
     try: () => import("./stage.ts"),
-    catch: () => new BrainError({ reason: "storage" }),
+    catch: (cause) => new BrainError({ reason: "storage", cause }),
   });
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary
   const { ProcessIdGenerator } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: load the platform dependency at the command boundary
     try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
-    catch: () => new BrainError({ reason: "storage" }),
+    catch: (cause) => new BrainError({ reason: "storage", cause }),
   });
   return yield* startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
 });

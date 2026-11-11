@@ -441,7 +441,7 @@ export class RecordManager extends Context.Service<
       return yield* io.pipe(
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(answer)(raw).pipe(
-            Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 })),
+            Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
           ),
         ),
       );
