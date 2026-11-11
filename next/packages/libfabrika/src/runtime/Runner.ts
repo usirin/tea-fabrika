@@ -67,7 +67,7 @@ import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 
-export { defaultPolicy } from "./internal/supervisor.ts";
+export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
 export const Sent = Schema.TaggedUnion({
