@@ -1,5 +1,5 @@
 diff --git a/dist/core/node/Runtime.d.mts b/dist/core/node/Runtime.d.mts
-index 896acf1a337db848a4c5972f932d6db7bec67902..6fa6acaacea14368e8b4982231560cf5aa526586 100644
+index 1fb57b0712cdd0156a68b0a6c114b3574eedf0d8..f35b3bc69b87a3fa9a5921989d01feba3a7d6593 100644
 --- a/dist/core/node/Runtime.d.mts
 +++ b/dist/core/node/Runtime.d.mts
 @@ -1,6 +1,6 @@
@@ -14,31 +14,23 @@ index 896acf1a337db848a4c5972f932d6db7bec67902..6fa6acaacea14368e8b4982231560cf5
  import * as Layer from "effect/Layer";
  import * as Scope from "effect/Scope";
  //#region src/core/Runtime.d.ts
-+type RuntimeEvent = { readonly worker: string } & (
++export type RuntimeEvent = { readonly worker: string } & (
 +  | { readonly type: "start"; readonly pid: number }
 +  | { readonly type: "exit"; readonly exit: WorkerdExit }
 +  | { readonly type: "restart"; readonly exit: WorkerdExit; readonly delay: number }
 +  | { readonly type: "stop"; readonly exit: WorkerdExit; readonly reason: "intensity" | "restart_failed" }
 +);
-+declare const RuntimeLifecycle: Context.Reference<(event: RuntimeEvent) => void>;
++export declare const RuntimeLifecycle: Context.Reference<(event: RuntimeEvent) => void>;
  declare const Runtime_base: Context.ServiceClass<Runtime, "cloudflare-runtime/Runtime", {
    readonly start: <B extends BindingHooks>(worker: RuntimeWorker<B>) => Effect.Effect<URL, RuntimeError, BindingRequirements<B> | Scope.Scope>;
  }>;
-@@ -17,5 +24,5 @@ declare class Runtime extends Runtime_base {}
- type BindingRequirements<B extends BindingHooks> = B extends Array<never> ? never : B extends Array<BindingHook<infer R>> ? R : never;
- declare const RuntimeLive: Layer.Layer<Runtime, never, Docker | Globals | Storage | Workerd>;
- //#endregion
--export { Runtime, RuntimeLive };
-+export { Runtime, RuntimeLive, RuntimeLifecycle, RuntimeEvent };
- //# sourceMappingURL=Runtime.d.mts.map
-\ No newline at end of file
 diff --git a/dist/core/node/Runtime.mjs b/dist/core/node/Runtime.mjs
-index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..51e51e4ee0cda61e8b4eff13f08bb9c7074dac26 100644
+index ab641f224a671681a3e1c7f01a6188d4b679da7b..fa8ae402d94cf7e33b6af5c974a44b922ac72f6a 100644
 --- a/dist/core/node/Runtime.mjs
 +++ b/dist/core/node/Runtime.mjs
-@@ -15,11 +15,13 @@ import * as Queue from "effect/Queue";
+@@ -15,11 +15,13 @@ import * as Clock from "effect/Clock";
+ import * as Queue from "effect/Queue";
  import * as Result from "effect/Result";
- import * as Scope from "effect/Scope";
  //#region src/core/Runtime.ts
 +const RuntimeLifecycle = Context.Reference("cloudflare-runtime/RuntimeLifecycle", { defaultValue: () => () => {} });
  var Runtime = class extends Context.Service()("cloudflare-runtime/Runtime") {};
@@ -50,15 +42,15 @@ index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..51e51e4ee0cda61e8b4eff13f08bb9c7
  	const plugins = yield* pickPluginsFromContext();
  	const preparePlugins = Effect.fnUntraced(function* (worker) {
  		const context = yield* make(worker, plugins);
-@@ -173,6 +175,7 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
- 			...worker.logging?.verbose ? { verbose: true } : void 0
- 		}, {
+@@ -176,6 +178,7 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
+ 			bin: worker.workerd?.path,
+ 			env: worker.workerd?.env,
  			onOutput: worker.logging?.onOutput,
 +			onStart: (pid) => lifecycle({ type: "start", worker: worker.name, pid }),
  			onExit: (exit) => {
  				Queue.offerUnsafe(exits, exit);
  			}
-@@ -185,19 +188,24 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
+@@ -188,19 +191,24 @@ const RuntimeLive = Layer.effect(Runtime, Effect.gen(function* () {
  			let restartTimes = [];
  			while (true) {
  				const exit = yield* Queue.take(exits);
@@ -84,7 +76,7 @@ index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..51e51e4ee0cda61e8b4eff13f08bb9c7
  					yield* Effect.logError(`The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`);
  					return;
  				}
-@@ -216,6 +224,6 @@ const pinSocket = (ports) => (socket) => {
+@@ -219,6 +227,6 @@ const pinSocket = (ports) => (socket) => {
  	};
  };
  //#endregion
@@ -94,10 +86,10 @@ index 4b40c8edb5c3efc8938080e6008e9ce24fe10eae..51e51e4ee0cda61e8b4eff13f08bb9c7
  //# sourceMappingURL=Runtime.mjs.map
 \ No newline at end of file
 diff --git a/dist/core/node/internal/Port.d.mts b/dist/core/node/internal/Port.d.mts
-index 76b54e44802090fa76a5cb654c70e8ae781f429d..22ad540eed1c48358a22615df86063894421672d 100644
+index 38e10422267247a535bde1df912e6db6a827a3a3..45ff49b574cfe7b6f19d2f936be402fcda0c5efa 100644
 --- a/dist/core/node/internal/Port.d.mts
 +++ b/dist/core/node/internal/Port.d.mts
-@@ -54,6 +54,8 @@ interface Ports {
+@@ -54,6 +54,8 @@ export interface Ports {
     * Note that this is best-effort; the caller should include retry logic to handle race conditions.
     */
    readonly reserve: (port: number) => Effect.Effect<void>;
@@ -107,10 +99,10 @@ index 76b54e44802090fa76a5cb654c70e8ae781f429d..22ad540eed1c48358a22615df8606389
  interface PortsOptions {
    /** Prevents redundant lookups and helps with race conditions; should only be disabled for testing. */
 diff --git a/dist/core/node/internal/Port.mjs b/dist/core/node/internal/Port.mjs
-index d5ff9feed27ab4057c21c3350e4a5d5e4bc7e6fc..46ab25eda039a26148459fc9444d5f338fdf42d1 100644
+index 1be4345eb83d71a6be18d4cdf75160576e1f7756..19532566c8285dba1f67d34cafe065486c6dca8a 100644
 --- a/dist/core/node/internal/Port.mjs
 +++ b/dist/core/node/internal/Port.mjs
-@@ -169,6 +169,9 @@ const make = (options) => Effect.gen(function* () {
+@@ -167,6 +167,9 @@ const make = (options) => Effect.gen(function* () {
  	const reserve = (port) => Effect.sync(() => {
  		globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
  	}).pipe(Effect.andThen(reserveLocal(port)));
@@ -120,7 +112,7 @@ index d5ff9feed27ab4057c21c3350e4a5d5e4bc7e6fc..46ab25eda039a26148459fc9444d5f33
  	const searchLock = globalSearchLock;
  	const search = Effect.fn(function* (start) {
  		let port = start;
-@@ -203,7 +206,8 @@ const make = (options) => Effect.gen(function* () {
+@@ -201,7 +204,8 @@ const make = (options) => Effect.gen(function* () {
  			times: WAIT_FOR_ATTEMPTS
  		}), Effect.tap(() => reserve(port))),
  		check: (port) => Effect.suspend(() => isReserved(port) ? Effect.fail(addressInUseError(port)) : Cache.get(cache, port).pipe(Effect.flatMap((available) => available ? reserve(port).pipe(Effect.as(port)) : Effect.fail(addressInUseError(port))))),
@@ -131,10 +123,10 @@ index d5ff9feed27ab4057c21c3350e4a5d5e4bc7e6fc..46ab25eda039a26148459fc9444d5f33
  });
  //#endregion
 diff --git a/dist/core/node/proxy/WorkerProxy.mjs b/dist/core/node/proxy/WorkerProxy.mjs
-index 4e382f2a1bc1a496d52c28b49897506714fc5360..b446264e7b190ba3c5be3c4bc722ed84d5b61587 100644
+index 3f368d232444a507eb448e5233edf7cec7b4f7ab..789c0088972edf1475ad5bdc15de68bc73357745 100644
 --- a/dist/core/node/proxy/WorkerProxy.mjs
 +++ b/dist/core/node/proxy/WorkerProxy.mjs
-@@ -238,6 +238,7 @@ const WorkerProxyLive = Layer.effect(WorkerProxy, Effect.gen(function* () {
+@@ -234,6 +234,7 @@ const WorkerProxyLive = Layer.effect(WorkerProxy, Effect.gen(function* () {
  	});
  	const serve = Effect.fnUntraced(function* ({ host, port, ipv6, pendingTimeout }) {
  		const relay = makeRelay(pendingTimeout);
@@ -143,23 +135,23 @@ index 4e382f2a1bc1a496d52c28b49897506714fc5360..b446264e7b190ba3c5be3c4bc722ed84
  		if (ipv6) yield* listen(relay, "::1", port);
  		yield* Effect.addFinalizer(() => relay.close);
 diff --git a/dist/core/node/workerd/Workerd.d.mts b/dist/core/node/workerd/Workerd.d.mts
-index e3991a9c71fce8534ce0646188c95c3a3c7a3dc9..82cce75adc8a43193d515dcd3d8c9f0601a0209f 100644
+index 2991479e21238758c4536fca424d4e3edcedf9ad..a95567c956b2754a50c9c6009e312e77c30fa580 100644
 --- a/dist/core/node/workerd/Workerd.d.mts
 +++ b/dist/core/node/workerd/Workerd.d.mts
-@@ -24,6 +24,8 @@ interface WorkerdExit {
+@@ -24,6 +24,8 @@ export interface WorkerdExit {
    readonly stderr: string;
  }
- interface ServeOptions {
+ export interface ServeOptions {
 +  /** Called with the actual child PID once its sockets are listening. */
 +  readonly onStart?: (pid: number) => void;
    /**
     * Capture the workerd process's output instead of piping it to the parent
     * process's stdout/stderr. Output produced before the process finishes
 diff --git a/dist/core/node/workerd/Workerd.mjs b/dist/core/node/workerd/Workerd.mjs
-index 60b6efff0012140f1eccead5c8c0ffd685535472..89217e29c5eda275cb09f7654da3df034c6af3df 100644
+index bfcb078c732e4a325a75d9b4e1ae3a0d51b3582b..ca64633b57eec1a0dc5532436033ca831db0c5a5 100644
 --- a/dist/core/node/workerd/Workerd.mjs
 +++ b/dist/core/node/workerd/Workerd.mjs
-@@ -85,6 +85,7 @@ const make = (spawn) => Workerd.of({
+@@ -94,6 +94,7 @@ const make = (spawn) => Workerd.of({
  		}), Effect.forkScoped);
  		const ports = {};
  		for (const message of control) if (message.event === "listen") ports[message.socket] = message.port;
@@ -167,7 +159,7 @@ index 60b6efff0012140f1eccead5c8c0ffd685535472..89217e29c5eda275cb09f7654da3df03
  		return ports;
  	}, Effect.retry({
  		while: (error) => error._tag === "SystemError",
-@@ -154,6 +155,7 @@ const makeBun = () => make((command, args, config, configuredAddresses) => Effec
+@@ -166,6 +167,7 @@ const makeBun = () => make((command, args, config, configuredAddresses, env) =>
  		process.stderr.write(chunk);
  	});
  	return {
@@ -175,7 +167,7 @@ index 60b6efff0012140f1eccead5c8c0ffd685535472..89217e29c5eda275cb09f7654da3df03
  		control: (count) => Effect.callback((resume, signal) => {
  			if (!child.stdio[3]) return resume(SystemError.make({
  				subtag: "WorkerdSpawn",
-@@ -234,6 +236,7 @@ const makeNode = () => make((command, args, config, configuredAddresses) => {
+@@ -246,6 +248,7 @@ const makeNode = () => make((command, args, config, configuredAddresses, env) =>
  			stderrTail.push(chunk.toString());
  		});
  	})), Effect.map((child) => ({
@@ -184,7 +176,7 @@ index 60b6efff0012140f1eccead5c8c0ffd685535472..89217e29c5eda275cb09f7654da3df03
  			const onError = (cause, message = "Failed to write to the workerd process stdin.") => {
  				resume(SystemError.make({
 diff --git a/src/core/Runtime.ts b/src/core/Runtime.ts
-index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..3838c18f6dfa80ef568fe039dd3e6516cd774255 100644
+index 0e245166b84686f62b80f25d900dde4c940da4ab..8f140fb1ccb0bff96ae8556adab2134501c64942 100644
 --- a/src/core/Runtime.ts
 +++ b/src/core/Runtime.ts
 @@ -24,6 +24,19 @@ import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
@@ -215,15 +207,15 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..3838c18f6dfa80ef568fe039dd3e6516
      const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
  
      const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
-@@ -266,6 +280,7 @@ export const RuntimeLive = Layer.effect(
-             },
-             {
+@@ -269,6 +283,7 @@ export const RuntimeLive = Layer.effect(
+               bin: worker.workerd?.path,
+               env: worker.workerd?.env,
                onOutput: worker.logging?.onOutput,
 +              onStart: (pid) => lifecycle({ type: "start", worker: worker.name, pid }),
                onExit: (exit) => {
                  Queue.offerUnsafe(exits, exit);
                },
-@@ -289,6 +304,7 @@ export const RuntimeLive = Layer.effect(
+@@ -292,6 +307,7 @@ export const RuntimeLive = Layer.effect(
            let restartTimes: Array<number> = [];
            while (true) {
              const exit = yield* Queue.take(exits);
@@ -231,7 +223,7 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..3838c18f6dfa80ef568fe039dd3e6516
              // Release the old process, output listeners and plugin tasks before
              // starting another generation. Closing also detaches this child
              // scope from the parent, so repeated crashes do not retain it.
-@@ -296,19 +312,23 @@ export const RuntimeLive = Layer.effect(
+@@ -299,19 +315,23 @@ export const RuntimeLive = Layer.effect(
              const now = yield* Clock.currentTimeMillis;
              restartTimes = restartTimes.filter((time) => now - time < 60_000);
              if (restartTimes.length >= 3) {
@@ -257,7 +249,7 @@ index 25ebd7c80cb7fd7a61999a8280b189600258ab0d..3838c18f6dfa80ef568fe039dd3e6516
                  `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
                );
 diff --git a/src/core/workerd/Workerd.ts b/src/core/workerd/Workerd.ts
-index fefc26c37bd23ed9f3263045554bc05832898cf3..c53877edda43397d818df708830025e29ad4babd 100644
+index 6e8cc14b478c0fabececff5d28f1c9f3619a5210..7fec53c4367e3a6deec7097e865288d79ce0afe1 100644
 --- a/src/core/workerd/Workerd.ts
 +++ b/src/core/workerd/Workerd.ts
 @@ -30,6 +30,8 @@ export interface WorkerdExit {
@@ -269,7 +261,7 @@ index fefc26c37bd23ed9f3263045554bc05832898cf3..c53877edda43397d818df708830025e2
    /**
     * Capture the workerd process's output instead of piping it to the parent
     * process's stdout/stderr. Output produced before the process finishes
-@@ -82,6 +84,7 @@ type ControlMessage =
+@@ -89,6 +91,7 @@ type ControlMessage =
      };
  
  interface ProcessHandle {
@@ -277,7 +269,7 @@ index fefc26c37bd23ed9f3263045554bc05832898cf3..c53877edda43397d818df708830025e2
    /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
    readonly configure?: () => Effect.Effect<void, SystemError>;
    /** Waits for the process to listen on the given number of sockets. */
-@@ -209,6 +212,7 @@ const make = (
+@@ -226,6 +229,7 @@ const make = (
              ports[message.socket] = message.port;
            }
          }
@@ -285,7 +277,7 @@ index fefc26c37bd23ed9f3263045554bc05832898cf3..c53877edda43397d818df708830025e2
          return ports;
        },
        Effect.retry({
-@@ -294,6 +298,7 @@ const makeBun = () =>
+@@ -311,6 +315,7 @@ const makeBun = () =>
            process.stderr.write(chunk);
          });
          return {
@@ -293,7 +285,7 @@ index fefc26c37bd23ed9f3263045554bc05832898cf3..c53877edda43397d818df708830025e2
            control: (count) =>
              Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
                if (!child.stdio[3]) {
-@@ -405,6 +410,7 @@ const makeNode = () =>
+@@ -422,6 +427,7 @@ const makeNode = () =>
          }),
        ),
        Effect.map((child) => ({

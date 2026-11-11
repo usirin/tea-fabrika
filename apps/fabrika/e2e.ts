@@ -2011,7 +2011,10 @@ const lookFocus = async () => {
   const { app } = win;
 
   try {
-    await win.size(1200, 600);
+    // No wider than CI's 1024-wide work area. At 1200, macOS moved the window 1px off the corner in
+    // 1 of 2 runs of the same commit; every window inside the area landed on it. `promptLine`
+    // joins a wrapped burst, so the narrower tiles change nothing the law reads.
+    await win.size(1024, 600);
     const page = await app.firstWindow();
     await prompted(page, "t1");
     await lookIs(app, page, "dark");

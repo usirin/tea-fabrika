@@ -24,6 +24,8 @@ import "./pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
@@ -186,6 +188,9 @@ describe("catchup, today's tooling", () => {
   });
 
   // Plant: clean before a successful merge, including after checks, trust, pushes or merge fail.
+  // `merge: true` is a head that lacks main. Green at its head, it lands without a catch-up (0097),
+  // so each failure is planted on both paths: on the fast path (its own checks or trust, the last
+  // look at main, the merge) and on the catch-up path a red first look sends it down (the push).
   it("T318 cleanup starts only after a successful merge", () => {
     fc.assert(
       fc.property(
@@ -194,7 +199,14 @@ describe("catchup, today's tooling", () => {
           answer: fc.constantFrom<Setup["answer"]>("red", "event", "app", "ticket", "trust-red"),
         }),
         ({ suffix, answer }) => {
-          for (const patch of [{ answer }, { merge: true, refused: "notes" as const }, { mergeFails: true }]) {
+          for (const patch of [
+            { answer },
+            { merge: true, answer },
+            { merge: true, before: "red" as const, refused: "notes" as const },
+            { mergeFails: true },
+            { merge: true, mergeFails: true },
+            { merge: true, stale: true },
+          ]) {
             const got = run({
               ...green,
               branch: `fabrikalfa/cleanup-${suffix}`,

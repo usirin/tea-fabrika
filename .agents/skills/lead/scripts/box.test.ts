@@ -21,6 +21,8 @@ import "./pgrep.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./agents.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./boxnode.ts?raw";
 import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
@@ -778,6 +780,42 @@ describe("T321 K1 fetch, today's tooling", () => {
       options,
     );
   }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+
+  // scenario: the exam is the test writer's (nobody-writes-their-own-exam.md), so fetch signs a
+  // tests commit that holds an exam path the plan gives to no step, as stepcommit commits it, and
+  // still refuses one the plan gives to build. 2026-11-11: three tests steps lost their laws to
+  // not_owner on exam paths the plan did not name. Plants: refuse every unlisted path; allow an
+  // exam path the plan gives to another step.
+  it("K1 signs a tests commit with an exam path no plan row names, never one given to build", () => {
+    const exam = ".agents/skills/lead/scripts/fixture.test.ts";
+    each(["unlisted", "build"] as const, (row) =>
+      fixture(
+        (b) => {
+          b.setup({
+            batches: [
+              [
+                { path: "src/a.ts", text: "tests change\n" },
+                { path: exam, text: "a new law\n" },
+              ],
+            ],
+          });
+          expect(b.run().code).toBe(0);
+          const got = b.fetch();
+          const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
+
+          if (row === "unlisted") {
+            expect(got.code, got.text).toBe(0);
+            expect(signs.map((c) => c.head)).toEqual([b.head(b.work)]);
+          } else {
+            refused(got, new RegExp(`not_owner ${exam.replaceAll(".", "\\.")}`));
+            expect(signs).toEqual([]);
+            expect(b.notes()).toBe("");
+          }
+        },
+        [["src/a.ts", "tests"], ...(row === "build" ? [[exam, "build"] as [string, string]] : [])],
+      ),
+    );
+  }, 180_000);
 
   // Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
   it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {

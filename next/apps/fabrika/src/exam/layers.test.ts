@@ -241,8 +241,11 @@ const rowParts: Readonly<Record<string, string>> = {
   "next-transport": "transport",
   "next-telemetry": "data",
   "next-ledger": "data",
+  "next-settings": "data", // T664: layer 2 beside the ledger, and node/settings/ imports it
   "next-processes": "coordination",
   "next-presence": "coordination",
+  // P39: the jobs module is coordination, so it may import data and id and nothing above them.
+  "next-jobs": "coordination",
   "next-access": "coordination",
   "next-runtime": "app",
   "next-mcp": "mcp",
@@ -794,6 +797,7 @@ describe("the rule file's rows give a file its part", () => {
     expect(rowsAt(REAL, "next/packages/libfabrika/src/gateway/internal/waiting.ts")).toEqual(["next-door"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/cloudflare/runtime.ts")).toEqual(["next-workers"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/telemetry/internal/measurements.ts")).toEqual(["next-telemetry"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/jobs/internal/job.ts")).toEqual(["next-jobs"]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/data/index.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
     expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
@@ -1138,8 +1142,10 @@ describe("layers", () => {
       "next-access": 4,
       "next-processes": 3,
       "next-presence": 3,
+      "next-jobs": 3,
       "next-ledger": 2,
       "next-transport": 2,
+      "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
       "next-shared": 0,
     });
