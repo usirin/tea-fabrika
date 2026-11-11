@@ -28,6 +28,7 @@ import * as LedgerSql from "./LedgerSql.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
+import * as RefereeSql from "./RefereeSql.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -237,7 +238,7 @@ describe("p95, every call is one span, names and numbers only", () => {
               ["w-4", "refused", "bad_parent"],
             ]);
           }).pipe(
-            Effect.provide(Layer.merge(onSql(fresh()), Referee.layer(fresh()).pipe(Layer.provide(quiet)))),
+            Effect.provide(Layer.merge(onSql(fresh()), RefereeSql.layer(fresh()).pipe(Layer.provide(quiet)))),
             Effect.withTracer(tracer),
           );
         },
@@ -633,7 +634,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           ]);
           expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
         }).pipe(
-          Effect.provide(Referee.layer(fresh()).pipe(Layer.provide(dying(how, rang)))),
+          Effect.provide(RefereeSql.layer(fresh()).pipe(Layer.provide(dying(how, rang)))),
           Effect.withTracer(tracer),
         );
       },

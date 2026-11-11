@@ -10,7 +10,7 @@ import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Entry, Row } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -237,7 +237,7 @@ export type Storage = ReturnType<typeof storage>;
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const data = (sql: Sql, bell = quiet) =>
-  Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransaction.layer(sql)).pipe(
+  Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(bell),
   );
 

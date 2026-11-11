@@ -42,6 +42,8 @@ const Note = Schema.Struct({
   links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
+
 const Run = Schema.Struct({
   date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
   role: Schema.String,
@@ -65,6 +67,7 @@ const Run = Schema.Struct({
   cachedTokens: Schema.optionalKey(Count),
   outputTokens: Schema.optionalKey(Count),
   driver_caused: Schema.optionalKey(Schema.Boolean),
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 const noteFields = [
@@ -105,6 +108,7 @@ const runFields = [
   "cachedTokens",
   "outputTokens",
   "driver_caused",
+  "plants",
 ];
 
 // Decision 0090: a new row is its own file, named by its date and a slug, and that name is its id.
@@ -339,6 +343,45 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
           errors.every((bad) => checker.checkFile(fileOf("runs"), "", `${JSON.stringify(bad)}\n`).exitCode !== 0) &&
           checker.checkFile(fileOf("runs"), "", JSON.stringify(row).replace(/"tokens":[^,}]*/, '"tokens":1e999'))
             .exitCode !== 0
+        );
+      },
+      schemaOptions,
+    ),
+  );
+  expect(result._tag).toBe("Passed");
+});
+
+// 0093: a step's plants and their results ride on its run row. Plants run once, both red: any
+// `result` accepted; `plants` gone from the schema (the core-fields law above goes red too).
+it("a run row's plants pass whole, and one plant with a result outside red and green, or a key gone, blocks", () => {
+  const wrong = Arbitrary.map(
+    Arbitrary.all([
+      Arbitrary.schema(Plant),
+      Arbitrary.schema(Schema.String),
+      Arbitrary.schema(Schema.Literals(["law", "plant", "result"])),
+      Arbitrary.schema(Schema.Boolean),
+    ]),
+    ([plant, word, key, drop]) =>
+      drop
+        ? Object.fromEntries(Object.entries(plant).filter(([k]) => k !== key))
+        : { ...plant, result: word === "red" || word === "green" ? `${word}!` : word },
+  );
+  const result = Effect.runSync(
+    Arbitrary.checkEffect(
+      Arbitrary.all([
+        Arbitrary.map(Arbitrary.schema(Run), (row) => own(row, "run")),
+        Arbitrary.schema(Schema.Array(Plant)),
+        wrong,
+        Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 }))),
+      ]),
+      ([row, plants, bad, at]) => {
+        const check = (list: readonly unknown[]) =>
+          checker.checkFile(fileOf("runs"), "", `${JSON.stringify({ ...row, plants: list })}\n`);
+        const report = check([...plants.slice(0, at), bad, ...plants.slice(at)]);
+        return (
+          check(plants).exitCode === 0 &&
+          report.exitCode !== 0 &&
+          report.findings.some((f) => f._tag === "error" && f.field === "plants")
         );
       },
       schemaOptions,
@@ -659,6 +702,77 @@ it("the field job reads the old logs and every path in a log's folder", () => {
   });
   expect(checker.readFieldFiles(base, head, "push", run).map((input) => input.file)).toEqual(
     vectors.filter(([, read]) => read).map(([path]) => path),
+  );
+});
+
+// Ticket 725: three conditions no law noticed when switched off. Each generator reaches both sides.
+const day = Arbitrary.schema(Schema.Literals(["2026-11-09", "2026-11-10", "2026-11-11", "2025-01-31"]));
+
+const fieldsOf = (report: ReturnType<typeof checker.checkFile>, tag: "error" | "warning") =>
+  report.findings.filter((f) => f._tag === tag).map((f) => [f.field, f.reason]);
+
+it("a row file warns on its date exactly when the row's date differs from the file name's, and only warns", () => {
+  const result = Effect.runSync(
+    Arbitrary.checkEffect(
+      Arbitrary.all([Arbitrary.schema(Note), Arbitrary.schema(Run), slug, day, day]),
+      ([note, run, name, fileDay, rowDay]) => {
+        const stem = `${fileDay}-${name}`;
+        return [
+          checker.checkFile(`field/notes/${stem}.json`, "", JSON.stringify({ ...note, id: stem, date: rowDay })),
+          checker.checkFile(`field/runs/${stem}.json`, "", JSON.stringify({ ...run, run: stem, date: rowDay })),
+        ].every(
+          (report) =>
+            report.exitCode === 0 &&
+            fieldsOf(report, "error").length === 0 &&
+            fieldsOf(report, "warning").some(([field]) => field === "date") === (rowDay !== fileDay),
+        );
+      },
+      schemaOptions,
+    ),
+  );
+  expect(result._tag).toBe("Passed");
+});
+
+it("a run row file blocks on its run id exactly when the id is not its file name", () => {
+  // No run id, any other text, or the file's own name: both sides of the check.
+  const other = Arbitrary.schema(Schema.UndefinedOr(Schema.String));
+  const result = Effect.runSync(
+    Arbitrary.checkEffect(
+      Arbitrary.all([Arbitrary.schema(Run), slug, other, Arbitrary.schema(Schema.Boolean)]),
+      ([run, name, id, mine]) => {
+        const stem = `2026-11-11-${name}`;
+        const value = mine ? stem : id;
+        const row = value === undefined ? without(run, "run") : { ...run, run: value };
+        const report = checker.checkFile(`field/runs/${stem}.json`, "", JSON.stringify(row));
+        const blocked = fieldsOf(report, "error").some(([field]) => field === "run");
+        return blocked === (value !== stem) && report.exitCode === (value === stem ? 0 : 1);
+      },
+      schemaOptions,
+    ),
+  );
+  expect(result._tag).toBe("Passed");
+});
+
+it("each added line that is not JSON is an invalid-JSON error at its own line, and no other line is", () => {
+  // An open brace with no closing one is never JSON: an object ends with `}`, and `}` is left out.
+  const broken = fc.stringMatching(/^\{[ -|~]{0,20}$/);
+  const line = fc.oneof(
+    broken.map((text) => ({ text, json: false })),
+    fc.dictionary(fc.stringMatching(/^[a-z]{1,6}$/), fc.string({ maxLength: 10 })).map((o) => ({
+      text: JSON.stringify(o),
+      json: true,
+    })),
+  );
+  fc.assert(
+    fc.property(fc.uniqueArray(line, { minLength: 1, maxLength: 8, selector: (l) => l.text }), (lines) => {
+      const report = checker.checkFile("field/future.jsonl", "", text(lines.map((l) => l.text)));
+      const invalid = report.findings.filter((f) => f.reason === "invalid JSON").map((f) => [f._tag, f.field, f.line]);
+      expect(invalid).toEqual(lines.flatMap((l, i) => (l.json ? [] : [["error", "row", i + 1]])));
+      expect(report.exitCode).toBe(lines.every((l) => l.json) ? 0 : 1);
+      const file = checker.checkFile(fileOf("notes"), "", lines[0]!.text);
+      expect(fieldsOf(file, "error").some(([, reason]) => reason === "invalid JSON")).toBe(!lines[0]!.json);
+    }),
+    options,
   );
 });
 

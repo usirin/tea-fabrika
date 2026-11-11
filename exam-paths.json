@@ -16,7 +16,7 @@
   { "glob": "next/packages/libfabrika/src/Id.test-support.ts", "why": "the generated ID fixtures" },
   {
     "glob": "next/apps/fabrika/src/port.test-support.ts",
-    "why": "the port a stage test hands to dev.ts"
+    "why": "the port an instance test hands to dev.ts"
   },
   { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
   { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
