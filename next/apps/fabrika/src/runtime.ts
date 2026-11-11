@@ -27,7 +27,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
           projectLayer(ctx, env, {
             config,
             programs,
-            bootstrap: { name: "counter:1", id: "counter:1", program: "counter" },
+            // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
+            bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
             door: (options) =>
               Gateway.pipe(
                 Effect.provide(

@@ -5,6 +5,7 @@
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
+import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
 import { bundle, bundlePrograms } from "./bundle.ts";
 import { check, compile, Row } from "./compiler.ts";
@@ -12,7 +13,7 @@ import { inlineStylesheet } from "./css.ts";
 
 export { BuildError } from "../../runtime/Built.ts";
 
-/** One program the client selects: its package, and the export that holds its declaration. */
+/** One program the client selects: its `pack/program` name, its package, and the export that holds its declaration. */
 export type Selection = { readonly name: string; readonly package: string; readonly export: string };
 
 export type Built = {
@@ -41,8 +42,8 @@ export type Options = {
 const BUILT_MODULE = "virtual:fabrika-built";
 const TEXT = "\0fabrika-text:";
 const WINDOW = "fabrika:window:";
-const NAME = /^[A-Za-z_][\w-]*$/;
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+const isProgramName = Schema.is(ProgramName);
 
 const Manifest = Schema.Struct({
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)])),
@@ -254,7 +255,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   if (
     new Set(names).size !== names.length ||
-    !options.programs.every((p) => NAME.test(p.name) && IDENTIFIER.test(p.export))
+    !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
     return yield* new BuildError({ reason: "table" });
   }
@@ -309,7 +310,9 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     plugins: [compiler],
     programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
   });
-  const generated = (name: string) => path.join(from, `window.${name}.generated.ts`);
+  // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
+  // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
+  const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
