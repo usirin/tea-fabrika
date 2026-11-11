@@ -114,7 +114,7 @@ describe("P12 Rolldown build", () => {
         program,
         `import {Tip} from "./${name}.tsx"; import {counter} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))}; export const program = {...counter, fixture: Tip};`,
       );
-      const options = { out, files: [], ledger: [], programs: { counter: program } };
+      const options = { out, files: [], ledger: [], programs: { "fabrika/counter": program } };
       await runNode(build(options));
       const before = snapshot(out);
       writeFileSync(file, source);
@@ -160,18 +160,18 @@ describe("P12 Rolldown build", () => {
 
       try {
         const built = await runNode(
-          build({ out, programs: { counter: program } }).pipe(
+          build({ out, programs: { "fabrika/counter": program } }).pipe(
             Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
           ),
         );
-        expect(built.programs.counter?.hash).toMatch(/^[a-f0-9]{64}$/);
+        expect(built.programs["fabrika/counter"]?.hash).toMatch(/^[a-f0-9]{64}$/);
         // P16 replaces P12's loose view files: the one published file is the brain.
         expect(readdirSync(out)).toEqual(["brain.mjs"]);
         // Discovery must still reach the real Compiler.
         const before = snapshot(out);
         writeFileSync(view, plants[1][1]);
         const failed = await runNode(
-          Effect.result(build({ out, programs: { counter: program } })).pipe(
+          Effect.result(build({ out, programs: { "fabrika/counter": program } })).pipe(
             Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
           ),
         );
@@ -230,13 +230,20 @@ describe("P12 Rolldown build", () => {
       const { build } = await import("./build.ts");
       const built = await runNode(build({ out: join(home(), "dist") }));
       expect(built.brain).toEqual(expect.any(String));
-      expect(built.programs.counter).toMatchObject({
+      // P40: the app's own selections build under qualified names, the core counter as `fabrika/counter`.
+      expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+
+      for (const key of Object.keys(built.programs)) {
+        expect(key, "one pack and one program segment").toMatch(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/);
+      }
+
+      expect(built.programs["fabrika/counter"]).toMatchObject({
         hash: expect.any(String),
         source: expect.any(String),
       });
       // The native Worker entry may import cloudflare:workers. Its execution is checked on workerd.
       const file = join(home(), `${name}.mjs`);
-      writeFileSync(file, built.programs.counter!.source);
+      writeFileSync(file, built.programs["fabrika/counter"]!.source);
       const bundle = await rolldown({
         input: file,
         platform: "browser",
