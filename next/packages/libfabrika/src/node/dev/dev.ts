@@ -1,19 +1,17 @@
-import * as Plugin from "@alchemy.run/cloudflare-runtime/core/Plugin";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
 import { applyCell } from "@demlik/tea";
-import { Context, Deferred, Effect, Exit, Queue, Redacted, Schema, Scope, Stream } from "effect";
+import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
-import { brainLife } from "../../runtime/BrainLife.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
+import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
+import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
-
-class ControlPlugin extends Plugin.Service<ControlPlugin>()("cloudflare-runtime/plugin/FabrikaControl") {}
 
 class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
@@ -23,6 +21,18 @@ class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
 
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+type Life = typeof devLife.model.Type;
+
+type Cause = {
+  readonly reason: (typeof BrainEvent.cases.started.Type)["reason"];
+  readonly bytes: number | undefined;
+};
+
+// The token a move consumed, so its replacement is settled once.
+const consumed = (prev: Life, next: Life) => {
+  const id = pending(prev);
+  return id !== null && pending(next) !== id ? id : null;
+};
 
 const Response = Schema.Struct({
   value: Schema.optionalKey(Schema.Unknown),
@@ -74,11 +84,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     ids = yield* ProcessIdGenerator;
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
-    events = yield* Queue.unbounded<{
-      readonly event: RuntimeEvent;
-      readonly reason: (typeof BrainEvent.cases.started.Type)["reason"];
-      readonly bytes: number | undefined;
-    }>(),
+    events = yield* Queue.unbounded<{ readonly event: RuntimeEvent; readonly cause: Cause }>(),
     // Alchemy's local Worker provider forks the workerd start, so deploy returns before workerd
     // listens. The control socket's first start opens this latch.
     listening = yield* Deferred.make<void>(),
@@ -86,25 +92,17 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const token = Redacted.make(
     Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
   );
-  let port = 0,
-    pid = 0,
-    previous = yield* outbox.last,
-    start = "",
-    stopping = false;
-  let replacement: Deferred.Deferred<void, ControlError> | null = null;
-  let reason: "open" | "crash" | "memory" | "core" = "open",
-    bytes: number | undefined;
-  let state = brainLife.init(null, {})[0];
-  const transition = (
-    msg:
-      | Parameters<typeof brainLife.update.started>[1]
-      | { type: "waiting"; after: string; until: number; reason: string }
-      | { type: "braked"; after: string; reason: string }
-      | { type: "stop" }
-      | { type: "stopped" },
-  ) => {
-    state = applyCell(brainLife, state, msg)[0];
-  };
+  const life = yield* Ref.make(devLife.init(null, { last: yield* outbox.last })[0]);
+  // Each move folds one Msg atomically, and hands back the state before and after it.
+  const send = (msg: typeof devLife.msg.Type) =>
+    Ref.modify(life, (prev) => {
+      const [next] = applyCell(devLife, prev, msg);
+      return [[prev, next] as const, next];
+    });
+  // The handles behind the machine's replacement tokens.
+  const replacements = new Map<string, Deferred.Deferred<void, ControlError>>();
+  // What the callback saw last, kept for the next event's row.
+  let cause: Cause = { reason: "open", bytes: undefined };
   const call = Effect.fnUntraced(function* (
     target: Target,
     project: string,
@@ -112,7 +110,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     method: string,
     args: ReadonlyArray<unknown>,
   ) {
-    if (port === 0) {
+    const port = address(yield* Ref.get(life));
+
+    if (port === null) {
       return yield* new ControlError({ reason: "offline" });
     }
 
@@ -168,12 +168,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     );
   const local = Context.empty().pipe(
     Context.add(RuntimeLifecycle, (event) => {
-      const observed = { event, reason, bytes };
+      const observed = { event, cause };
 
       // A new child starts with a clean cause before any queued file write can yield.
       if (event.type === "start") {
-        reason = "crash";
-        bytes = undefined;
+        cause = { reason: "crash", bytes: undefined };
       }
 
       Queue.offerUnsafe(events, observed);
@@ -193,7 +192,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         },
       ],
       start: Effect.fnUntraced(function* (ports) {
-        port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
+        const port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
           Effect.mapError(
             (cause) =>
               new SystemError({
@@ -203,33 +202,33 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
               }),
           ),
         );
+        const [prev, next] = yield* send({ type: "listened", port });
         yield* Deferred.succeed(listening, undefined);
+        const id = consumed(prev, next);
+        const ready = id === null ? undefined : replacements.get(id);
 
-        if (replacement !== null) {
-          yield* Deferred.succeed(replacement, undefined);
-          replacement = null;
+        if (id !== null && ready !== undefined) {
+          replacements.delete(id);
+          yield* Deferred.succeed(ready, undefined);
         }
       }),
     }),
   );
   const stopRuntime = Effect.fn("brain.stop")(function* () {
-    stopping = true;
-    transition({ type: "stop" });
+    const [, stopping] = yield* send({ type: "stop" });
     yield* Scope.close(runtimeScope, Exit.void);
+    const start = latest(stopping);
 
-    if (start !== "") {
-      yield* outbox.add(
-        BrainEvent.cases.stopped.make({
-          id: `${start}/stopped`,
-          start,
-          at: Date.now(),
-          reason: "stop",
-        }),
-      );
+    if (start !== null) {
+      const at = yield* Clock.currentTimeMillis;
+      const id = `${start}/stopped`;
+      yield* outbox.add(BrainEvent.cases.stopped.make({ id, start, at, reason: "stop" }));
       yield* flush.pipe(Effect.ignore);
     }
 
-    transition({ type: "stopped" });
+    yield* send({ type: "stopped" });
+    // The stop discards any replacement still waiting; its restart ends with the scope.
+    replacements.clear();
   });
   yield* Effect.addFinalizer(() => recorded(stopRuntime()).pipe(Effect.orDie));
   const restartRuntime = Effect.fn("brain.restart")(function* (ready: Deferred.Deferred<void, ControlError>) {
@@ -237,54 +236,77 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   });
   const recordEvents = Effect.forever(
     Effect.gen(function* () {
-      const { event, reason, bytes: rss } = yield* Queue.take(events);
+      const {
+        event,
+        cause: { reason, bytes: rss },
+      } = yield* Queue.take(events);
+      const now = yield* Ref.get(life);
 
-      if (stopping) {
+      if (now._tag === "stopping" || now._tag === "stopped") {
         return;
       }
 
+      const start = latest(now) ?? "";
+
       if (event.type === "exit") {
+        const at = yield* Clock.currentTimeMillis;
         yield* outbox.add(
           BrainEvent.cases.exited.make({
             id: `${start}/exited`,
             start,
-            at: Date.now(),
+            at,
             reason,
             exitCode: event.exit.exitCode,
             signal: event.exit.signal === null ? null : String(event.exit.signal),
             ...(rss === undefined ? {} : { bytes: rss }),
           }),
         );
-        pid = 0;
+        // The handle exists before its token, so the listener always finds it.
         const ready = yield* Deferred.make<void, ControlError>();
-        replacement = ready;
+        replacements.set(start, ready);
+        const [prev] = yield* send({ type: "exited", replacement: start });
+        const old = pending(prev);
+
+        // A second exit before any listener replaces the token, as main replaced the wait.
+        if (old !== null && old !== start) {
+          replacements.delete(old);
+        }
+
         yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
       }
 
       if (event.type === "start") {
-        previous = start || previous;
-        start = yield* ids.next;
-        pid = event.pid;
+        const next = yield* ids.next;
+        const at = yield* Clock.currentTimeMillis;
+        const { pid } = event;
+        const [, up] = yield* send({ type: "started", start: next, pid, build: config.build, at });
+
+        // Braked and stopping refuse a start.
+        if (up._tag !== "spawned" && up._tag !== "online") {
+          return;
+        }
+
         const startedEvent = BrainEvent.cases.started.make({
-          id: `${start}/started`,
-          start,
-          after: previous,
-          build: config.build,
+          id: `${next}/started`,
+          start: next,
+          after: up.session.after,
+          build: up.session.build,
           reason,
-          pid,
-          at: Date.now(),
+          pid: up.pid,
+          at,
           ...(rss === undefined ? {} : { bytes: rss }),
         });
-        transition({ type: "started", ...startedEvent });
         yield* outbox.add(startedEvent);
         yield* Deferred.succeed(started, undefined);
       } else if (event.type === "restart") {
-        transition({ type: "waiting", after: start, until: Date.now() + event.delay, reason });
+        const until = (yield* Clock.currentTimeMillis) + event.delay;
+        yield* send({ type: "waiting", until, reason });
+        const at = yield* Clock.currentTimeMillis;
         yield* outbox.add(
           BrainEvent.cases.restarting.make({
             id: `${start}/restarting`,
             start,
-            at: Date.now(),
+            at,
             reason,
             exitCode: event.exit.exitCode,
             signal: event.exit.signal === null ? null : String(event.exit.signal),
@@ -293,23 +315,26 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           }),
         );
       } else if (event.type === "stop") {
-        if (replacement !== null) {
-          yield* Deferred.fail(replacement, new ControlError({ reason: event.reason }));
-          replacement = null;
+        const [prev, next] = yield* send({ type: "braked", reason: event.reason });
+        const id = consumed(prev, next);
+        const ready = id === null ? undefined : replacements.get(id);
+
+        if (id !== null && ready !== undefined) {
+          replacements.delete(id);
+          yield* Deferred.fail(ready, new ControlError({ reason: event.reason }));
         }
 
-        transition({ type: "braked", after: start, reason: event.reason });
+        const at = yield* Clock.currentTimeMillis;
         yield* outbox.add(
           BrainEvent.cases.braked.make({
             id: `${start}/braked`,
             start,
-            at: Date.now(),
+            at,
             reason: event.reason,
             exitCode: event.exit.exitCode,
             signal: event.exit.signal === null ? null : String(event.exit.signal),
           }),
         );
-        pid = 0;
       }
     }),
   );
@@ -332,7 +357,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Effect.gen(function* () {
         yield* Effect.sleep("1 second");
 
-        if (stopping || pid === 0) {
+        const pid = target(yield* Ref.get(life));
+
+        if (pid === null) {
           return;
         }
 
@@ -341,8 +368,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           sample,
           replace: (value) =>
             Effect.sync(() => {
-              reason = "memory";
-              bytes = value.bytes;
+              cause = { reason: "memory", bytes: value.bytes };
               process.kill(value.pid, "SIGTERM");
             }),
         }).pipe(Effect.ignore);

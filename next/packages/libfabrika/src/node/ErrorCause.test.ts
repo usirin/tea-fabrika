@@ -6,10 +6,12 @@ import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
-import { Doorbell, Ledger, type LedgerCalls } from "../ledger/Ledger.ts";
+import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerCauseTest from "../ledger/LedgerCauseTest.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import * as RuntimeCauseTest from "../runtime/RuntimeCauseTest.ts";
@@ -51,7 +53,17 @@ LedgerCauseTest.suite(law, fresh, (sql, text) => {
   sql.exec("UPDATE entries SET seen = ? WHERE pos = 1", text);
 });
 
-RuntimeCauseTest.suite(law, fresh);
+const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
+RuntimeCauseTest.suite(law, {
+  fresh,
+  ledger: (sql, reader) => LedgerSql.layer(sql, { reader }).pipe(Layer.provide(quiet)),
+  transactions: (sql) => LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
+  lineFor,
+  append: (stream, id, line) => Ledger.use((ledger) => ledger.append(stream, id, line)),
+  LedgerError,
+});
+
 GatewayCauseTest.suite(law, fresh);
 
 const failures: fc.Arbitrary<object> = fc.oneof(

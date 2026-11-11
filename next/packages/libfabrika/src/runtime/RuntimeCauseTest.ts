@@ -1,11 +1,12 @@
 // T695, next/. The runtime's stores keep the failure they translate (decision 0043 rule 12). A
-// suite on any `Sql`, read through its module as `RuntimeCauseTest.suite(law, fresh)`; the module that
-// owns the driver runs it (0062).
+// suite on any `Sql`, read through its module as `RuntimeCauseTest.suite(law, harness)`; the module
+// that owns the driver runs it and gives the ledger the stores read, so this file names no ledger
+// module (0043, 0062).
 //
 // Audit sites: `ProcessStore.ts:120` (a throw in a stored step), `ProcessStore.ts:141` (an activity
 // from the object's storage that does not decode), `RecoveryStore.ts:53` (a throw, and its
 // pass-through branch for a LedgerError already made). The runtime's lower modules' stores, which
-// it calls and may import: `access/Authorization.ts:30` and `access/ClientManager.ts:64` (a member
+// it calls and may import: `access/Authorization.ts:30` and `access/ClientManagerLedger.ts:40` (a member
 // row that does not decode), `access/SessionManager.ts:119` and `presence/Connections.ts:55` (a
 // throw in a stored step), `processes/Process.ts:131` (a saved activity that does not decode),
 // `processes/ProcessManager.ts:338` (a dead letter's record that does not decode). The runner, built
@@ -18,12 +19,9 @@ import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
+import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import type { NotGranted } from "../access/SessionManager.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
-import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
-import * as LedgerSql from "../ledger/LedgerSql.ts";
-import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Line, lineFor } from "../ledger/Log.ts";
 import { Connections } from "../presence/Connections.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { BRAIN, brain, from } from "../processes/Process.test-support.ts";
@@ -70,14 +68,6 @@ const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm
   };
 };
 
-const ledgerOn = (sql: Sql) =>
-  LedgerSql.layer(sql, { reader: PROCESS }).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
-
-const processStore = (sql: Sql, storage?: Parameters<typeof ProcessStore.layer>[1]["storage"]) =>
-  ProcessStore.layer(sql, { process: PROCESS, ...(storage === undefined ? {} : { storage }) }).pipe(
-    Layer.provide(ledgerOn(sql)),
-  );
-
 const recoveryStore = (sql: Sql) => RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3 });
 
 /** The process store's calls a runner makes, by name. */
@@ -109,7 +99,39 @@ const callRecovery = (call: RecoveryCall) =>
     call === "load" ? store.load : call === "input" ? store.input("letter-1") : store.receipt("letter-1"),
   );
 
-export const suite = (law: Law, fresh: () => Sql) => {
+/** What the stores read from the context: the ledger, named through the process store's layer. */
+type LedgerNeeds = Layer.Services<ReturnType<typeof ProcessStore.layer>>;
+/** What a write under the referee's lock reads, named through `appendAdmitted`. */
+type TransactionNeeds = Effect.Services<ReturnType<typeof appendAdmitted>>;
+/** A ledger line, as `appendAdmitted` takes one. */
+type WriteLine = Parameters<typeof appendAdmitted>[1]["line"];
+/** The error the stores fail with, named through the recovery store's calls. */
+type StoreError = Effect.Error<ReturnType<typeof callRecovery>>;
+
+/** What the module that owns the driver gives: fresh storage, and the ledger over it. */
+export type Harness = {
+  /** A fresh, empty database. */
+  readonly fresh: () => Sql;
+  /** The ledger on `sql`, read as `process`, with a doorbell that rings nobody. */
+  readonly ledger: (sql: Sql, process: string) => Layer.Layer<LedgerNeeds>;
+  /** The referee's transactions on `sql`, with a doorbell that rings nobody. */
+  readonly transactions: (sql: Sql) => Layer.Layer<TransactionNeeds>;
+  /** The ledger's line for `event`, written by `from`. */
+  readonly lineFor: (from: Omit<WriteLine, "_tag" | "body">, event: MemberEvent) => WriteLine;
+  /** Appends `line` to `stream` under `id`, unchecked, as a row no reader wrote. */
+  readonly append: (stream: string, id: string, line: WriteLine) => Effect.Effect<unknown, unknown, LedgerNeeds>;
+  /** The stores' own error class, which a store passes through untouched. */
+  readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
+};
+
+export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, LedgerError }: Harness) => {
+  const ledgerOn = (sql: Sql) => ledger(sql, PROCESS);
+
+  const processStore = (sql: Sql, storage?: Parameters<typeof ProcessStore.layer>[1]["storage"]) =>
+    ProcessStore.layer(sql, { process: PROCESS, ...(storage === undefined ? {} : { storage }) }).pipe(
+      Layer.provide(ledgerOn(sql)),
+    );
+
   describe("T695, ProcessStore keeps what its storage threw", () => {
     // C1, ProcessStore.ts:120. Plant: `catch: () => new LedgerError({ reason: "storage" })`.
     law(
@@ -241,13 +263,13 @@ export const suite = (law: Law, fresh: () => Sql) => {
       build: "b-1",
     };
     /** A valid `founded` line, then its body replaced by `body`. */
-    const memberLine = (body: Line["body"]): Line => ({
+    const memberLine = (body: WriteLine["body"]): WriteLine => ({
       ...lineFor(writer, MemberEvent.cases.founded.make({ id: "person-1", name: "p", keys: [], window: null })),
       body,
     });
     const founder = { name: "p", keys: [], window: null, person: "person-1", by: "SHA256:founder", build: "b-1" };
 
-    // C3, Authorization.ts:30 and ClientManager.ts:64. Plant: `new LedgerError({ reason: "bad_row" })`.
+    // C3, Authorization.ts:30 and ClientManagerLedger.ts:40. Plant: `new LedgerError({ reason: "bad_row" })`.
     law(
       "C3: a member row with a damaged field fails `bad_row` with the decoder's SchemaError, on both readers",
       fc.record({
@@ -258,27 +280,23 @@ export const suite = (law: Law, fresh: () => Sql) => {
       ({ reader, field, bad }) =>
         Effect.gen(function* () {
           const sql = fresh();
-          const ledger = ledgerOn(sql);
+          const members = ledgerOn(sql);
           const body = { id: "person-1", name: "p", keys: [], window: null, [field]: bad };
-          yield* Effect.provide(
-            Ledger.use((l) => l.append("gateway/access", "founded", memberLine(body))),
-            ledger,
-          );
-          const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-          const error = yield* Effect.flip<unknown, LedgerError | NotGranted, never>(
+          yield* Effect.provide(append("gateway/access", "founded", memberLine(body)), members);
+          const error = yield* Effect.flip<unknown, StoreError | NotGranted, never>(
             reader === "authorization"
               ? Effect.provide(
                   appendAdmitted("SHA256:anyone", { stream: "notes:1", id: "w-1", line: memberLine({ note: 1 }) }),
-                  LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
+                  transactions(sql),
                 )
               : Effect.provide(
                   ClientManager.use((m) => m.members),
-                  ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+                  ClientManagerLedger.layer(founder).pipe(Layer.provide(members)),
                 ),
           );
           expect(error).toBeInstanceOf(LedgerError);
-          expect((error as LedgerError).reason).toBe("bad_row");
-          expect(Schema.isSchemaError((error as LedgerError).cause), "the decoder's own failure").toBe(true);
+          expect(error).toMatchObject({ reason: "bad_row" });
+          expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
         }),
     );
 
@@ -341,9 +359,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
         Effect.gen(function* () {
           const sql = fresh();
           const manager = ProcessManager.layer({ ...brain(), by: BRAIN }, Effect.succeed(PROCESS)).pipe(
-            Layer.provide(
-              LedgerTransactionSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
-            ),
+            Layer.provide(transactions(sql)),
           );
           const dead = { tries: 3, limit: 3, m: "m-1", build: "b-1", errors: ["E", "E", "E"], [field]: bad };
           const error = yield* Effect.flip(
@@ -393,7 +409,6 @@ export const suite = (law: Law, fresh: () => Sql) => {
 
     /** A real runner on fresh storage, supervised by the real process manager, as in production. */
     const runner = (policy?: RunnerOptions["policy"], declared: unknown = program, sql = fresh()) => {
-      const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
       const mail = Mailbox.layer.pipe(Layer.provideMerge(ledgerOn(sql)));
       const dependencies = Layer.mergeAll(
         ProcessStore.layer(sql, { process: PROCESS }),
@@ -424,7 +439,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
             Effect.succeed(PROCESS),
           ),
         ),
-        Layer.provide(LedgerTransactionSql.layer(fresh()).pipe(Layer.provide(quiet))),
+        Layer.provide(transactions(fresh())),
       );
       return ProgramRunner.layer(
         { id: PROCESS, name: NAME, program: "cause", build: "test", owner },
@@ -464,8 +479,8 @@ export const suite = (law: Law, fresh: () => Sql) => {
             ),
           );
           expect(error).toBeInstanceOf(RunnerError);
-          expect((error as RunnerError).reason).toBe("bad_input");
-          expect(Schema.isSchemaError((error as RunnerError).cause), "the decoder's own failure").toBe(true);
+          expect(error).toMatchObject({ reason: "bad_input" });
+          expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
         }),
     );
 
@@ -489,8 +504,8 @@ export const suite = (law: Law, fresh: () => Sql) => {
             ),
           );
           expect(error).toBeInstanceOf(LedgerError);
-          expect((error as LedgerError).reason).toBe("bad_row");
-          expect(Schema.isSchemaError((error as LedgerError).cause), "the decoder's own failure").toBe(true);
+          expect(error).toMatchObject({ reason: "bad_row" });
+          expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
         }),
     );
 
