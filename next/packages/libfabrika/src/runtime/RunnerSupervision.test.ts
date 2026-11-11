@@ -37,7 +37,6 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
-import { Recovery } from "./internal/recovery.ts";
 import { Refusal } from "./Program.ts";
 import { RecoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
@@ -448,7 +447,12 @@ const recover = (w: ReturnType<typeof world>) =>
   });
 
 describe("T337 down event identity, next/", () => {
-  const DownPolicy = Recovery.cases.down.mapFields(({ _tag, process, ...fields }) => fields);
+  /** A down record's policy fields, as the journal's writing-down case saves them. */
+  const DownPolicy = Schema.Struct({
+    reason: Schema.NonEmptyString,
+    crashes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    until: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  });
   it.effect.prop(
     "public down ids track policy and each caller retries its own event through reopen",
     { process: processIds, down: DownPolicy },
@@ -496,17 +500,29 @@ describe("T337 down event identity, next/", () => {
         const recovery = () => RecoveryStore.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3 });
         yield* RecoveryStore.use((s) =>
           s.save({
-            v: 1,
+            v: 2,
             name: NAME,
             policy,
             seq: 0,
             build: BUILD,
-            recovery: Recovery.cases.down.make({ process, ...down }),
-            pending: { type: "down", process, from: from() },
-            attempt: null,
+            // P34c slice 2: the saved journal holds the down write still to do. `origin` is the crash
+            // it recovers from, for a journal that keeps it past the down write.
+            journal: {
+              _tag: "writing_down",
+              recovery: { process, ...down },
+              origin: {
+                _tag: "crash",
+                failure: { _tag: "interrupted", process, letter: "cut", build: BUILD, seq: 1 },
+                reason: CRASHED,
+              },
+              from: from(),
+            },
             restarts: [],
             observations: [],
             receipts: [],
+            crashes: down.crashes,
+            healthyAt: 0,
+            requests: [],
           }),
         ).pipe(Effect.provide(recovery()));
         // Lose the runner's answer after the real down append, then resume its saved action.

@@ -177,12 +177,13 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
     recover: Effect.gen(function* () {
       const saved = yield* RecoveryStore.use((s) => s.load).pipe(Effect.provide(recovery));
       expect(saved).not.toBeNull();
-      // P34 keeps the restart wait in starting until the restart brake trips.
+      // The journal keeps the restart wait in its start until the restart brake trips (P34c slice 2).
+      const journal = saved?.journal;
       const until =
-        saved?.recovery._tag === "down"
-          ? saved.recovery.until
-          : saved?.recovery._tag === "starting" && saved.pending?.type === "start"
-            ? saved.pending.until
+        journal?._tag === "waiting_recovery" || journal?._tag === "writing_down"
+          ? journal.recovery.until
+          : journal?._tag === "waiting_start" && journal.timing._tag === "scheduled"
+            ? journal.timing.until
             : undefined;
 
       if (until !== undefined) {
@@ -258,7 +259,8 @@ for (const source of ["rpc", "decode"] as const) {
                   value: { _tag: "ProgramDown", source: move },
                 });
                 const saved = yield* w.snapshot;
-                expect(saved?.attempt).toBeNull();
+                // No attempt is left open: the journal is not stepping.
+                expect(saved?.journal._tag).not.toBe("stepping");
                 expect(saved?.observations).toHaveLength(crashes);
               }
 
