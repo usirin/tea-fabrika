@@ -51,6 +51,7 @@ import {
   type Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
+import { ExitReason } from "../processes/ExitReason.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -62,6 +63,7 @@ import {
   type View,
   WatcherManager,
 } from "./Entry.ts";
+import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy, Recovery, type Supervision } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, type SupervisorMsg } from "./internal/supervisor.ts";
 import { diff } from "./Patch.ts";
@@ -357,14 +359,9 @@ export class ProgramRunner extends Context.Service<
                   return yield* new LedgerError({ reason: "bad_row" });
                 }
 
+                // A person's restart ends the live process with shutdown; a captured failure is a crash.
                 const reason =
-                  s.restart !== undefined
-                    ? "restart"
-                    : s.recovery.failure._tag === "saved"
-                      ? "saved_letter"
-                      : s.recovery.failure._tag === "fresh"
-                        ? "step"
-                        : "interrupted";
+                  s.restart !== undefined ? ExitReason.cases.shutdown.make({}) : fromFailure(s.recovery.failure);
                 yield* p.exit(action.process, reason, meta);
                 yield* fault("after_exit");
                 const status = yield* p.status(process.name);
