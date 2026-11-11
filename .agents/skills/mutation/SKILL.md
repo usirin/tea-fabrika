@@ -148,6 +148,14 @@ range's base as arm a, and the tests beside the changed files as `--related`.
 A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
 run's base is the `build` in this run's `mutbox.json`.
 
+`scripts/heartbeat.ts` exits 1 when a merge on main has waited more than two hours for a passing
+run: the scheduler session stopped dispatching, or every run since failed. It starts no run, and
+nothing runs it on a schedule yet.
+
+Each arm's test and hook limit is the fast check's 10 s, raised to three times the slowest test or
+file set-up in that arm's plain run in the box, and at most 60 s (`scripts/limit.ts`, ticket 605).
+A fixed 10 s stopped the dry run on one slow law, and then no mutant ran.
+
 ## A gap's category
 
 Each real gap the hourly run files gets one category
