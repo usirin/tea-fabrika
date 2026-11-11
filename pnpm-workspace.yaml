@@ -21,8 +21,8 @@ packages:
 catalog:
   '@agentclientprotocol/sdk': 2.2.0
   # The ledger server's deploy (packages/ledger-server), held exact: a beta, as experiments 144 and 147 ran it.
-  '@alchemy.run/cloudflare': 2.0.0-beta.84
-  alchemy: 2.0.0-beta.84
+  '@alchemy.run/cloudflare': 2.0.0-beta.85
+  alchemy: 2.0.0-beta.85
   '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
@@ -109,6 +109,7 @@ catalog:
   # Experiment 142: libghostty-vt on WebGPU. MIT.
   restty: 0.3.0
   smol-toml: 1.9.1
+  toml-eslint-parser: 1.0.3
   typescript: 7.0.2
   vitest: 5.0.5
   # The YAML parser oxlint-plugins/exact-versions.ts reads this file with. vite's optional peer, so already in the lockfile.
@@ -133,19 +134,15 @@ overrides:
 
 patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
-  # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks
-  # (https://github.com/alchemy-run/alchemy/issues/3184).
+  # Keep Alchemy's existing restart policy (https://github.com/alchemy-run/alchemy/issues/3184).
   # P16: a closed worker proxy also drops its 30-second port reservation, so a stage restarted in
   # the same process can bind its fixed port again
-  # (https://github.com/alchemy-run/alchemy/issues/3188, closed as completed). Drop that part at
-  # the release that carries the fix.
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
+  # (https://github.com/alchemy-run/alchemy/issues/3188). Alchemy merged both
+  # (https://github.com/alchemy-run/alchemy/pull/3203) after 2.0.0-beta.85. Drop this at the
+  # release that carries it.
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.85': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch
   # demlik#897: expose the machine's existing schemas; drop at the release that has it.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
-  # effect 4.1 deleted effect/Crypto, which alchemy 2.0.0-beta.84 imports, so its Cloudflare
-  # package cannot load. The patch is the fix alchemy already merged
-  # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.
-  alchemy@2.0.0-beta.84: patches/alchemy@2.0.0-beta.84.patch
   # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
   # first shrink, not while generating (sampleFromValidatedShrink already is). Drop at the release that has it.
   effect@4.1.2: patches/effect@4.1.2.patch
@@ -162,12 +159,13 @@ patchedDependencies:
   # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
   # reports a late event for a folder made just before the watch began, so a Mac replaced the
   # brain's workerd soon after a start, and after the three-replacement brake too. The patch
-  # passes on only a bundle whose hash differs. Drop this when Alchemy compares the bundle
-  # before it serves again (https://github.com/alchemy-run/alchemy/issues/3214).
+  # passes on only a bundle whose hash differs (https://github.com/alchemy-run/alchemy/issues/3214).
   # Also loads WorkerAsyncBindings lazily in Worker's onCreate, so a runtime bundle does not
-  # walk Alchemy's local and deploy graph. Drop this when Alchemy loads it lazily
-  # (https://github.com/alchemy-run/alchemy/issues/3227).
-  '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
+  # walk Alchemy's local and deploy graph (https://github.com/alchemy-run/alchemy/issues/3227).
+  # Alchemy merged both (https://github.com/alchemy-run/alchemy/pull/3246,
+  # https://github.com/alchemy-run/alchemy/pull/3240) after 2.0.0-beta.85. Drop this at the
+  # release that carries them.
+  '@alchemy.run/cloudflare@2.0.0-beta.85': patches/@alchemy.run__cloudflare@2.0.0-beta.85.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
