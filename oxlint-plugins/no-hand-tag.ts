@@ -16,7 +16,7 @@
 import type { CreateRule } from "@oxlint/plugins";
 import { type Node, pathIn } from "./match.ts";
 
-const EDGE = "next/packages/libfabrika/src/data/log.ts";
+const EDGE = "next/packages/libfabrika/src/ledger/Log.ts";
 
 const isTag = (key: Node): boolean =>
   (key.type === "Identifier" && key.name === "_tag") || (key.type === "Literal" && key.value === "_tag");

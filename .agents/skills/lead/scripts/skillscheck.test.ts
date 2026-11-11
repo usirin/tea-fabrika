@@ -41,8 +41,9 @@ const script = process.env.T318_SKILLSCHECK_SCRIPT ?? join(import.meta.dirname, 
 // These fixtures are independent of the checker: deleting a checker clause must fail a law.
 const exam = [
   "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
-  "Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no owner read is needed.",
-  "The lead records both outputs in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
+  // pinned: 0066, mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
+  "Zero hits from loosening.sh mean no owner read is needed.",
+  "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 ];
 
 const check = [

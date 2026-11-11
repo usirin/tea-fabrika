@@ -3,8 +3,9 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
-import { Mailbox } from "@kampus/libfabrika/coordination";
-import { Entry, Ledger, TraceId } from "@kampus/libfabrika/data";
+import { Ledger } from "@kampus/libfabrika/ledger/Ledger";
+import { Entry, TraceId } from "@kampus/libfabrika/ledger/Log";
+import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 
 const Note = Id.make("note");

@@ -12,8 +12,8 @@
     "glob": "next/**/tsconfig.json",
     "why": "next/'s type checks, including Node's erasable syntax"
   },
-  { "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
-  { "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+  { "glob": "next/packages/libfabrika/src/node/build/compiler.ts", "why": "the shared Compiler check" },
+  { "glob": "next/packages/libfabrika/src/Id.test-support.ts", "why": "the generated ID fixtures" },
   {
     "glob": "next/apps/fabrika/src/port.test-support.ts",
     "why": "the port a stage test hands to dev.ts"

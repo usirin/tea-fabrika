@@ -2,7 +2,7 @@
 // nothing is opened in the laptop sandbox (decision 0045). Today's lead tooling, not product.
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
-//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>]
+//                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--plan <file>]
 //   node mutbox.ts gc --lock <file>
 //
 // `run` prints one JSON line and writes the same value to <out>/mutbox.json: outcome `done` (exit
@@ -33,7 +33,9 @@
 //   9. a dead run left its lock or its container   the lock is taken over, the container removed
 //  10. a path with spaces                          runs; a path Docker's --mount cannot take
 //                                                  (a comma, a quote, a newline) is stuck bad_path
-//  11. a related test that needs a window          left out, named with its reason in the report
+//  11. a related test that needs a window          left out, named with its reason in the report;
+//                                                  read from its parsed imports, so an Electron
+//                                                  import inside a planted string is not one
 //  12. a related path that is not a test file      stuck bad_related, before Docker is asked
 //  13. a link planted in the output folder         never followed: stuck bad_output
 //  14. the sampler selects no range                skip
@@ -43,11 +45,23 @@
 //      (ignoreStatic stays on), and the run ended  ignoreStatic on, no test can judge it; a
 //      with none unreached                          mix with any other status, none at all, or a
 //                                                   capped run is still 16
+//  18. the build's sampler gives no per-file reach  done no_reach:old_sampler, narrowing "unknown"
+//  19. a base test fails on the build              left out of arm a, named in armA.dropped, since
+//                                                  Stryker stops at a failing dry-run test
+//  20. a base with none of the related tests, or   done no_arm_a:base_has_none or :none_pass,
+//      none of them passes on the build            narrowing "unknown": the lead hand-checks
+//  21. arm a was due and left no answer or failed  stuck arm_a_failed
+//  22. with --plan, the sample reached none of     stuck no_build_reach, naming them; a plan
+//      the plan's build-owned files that have      plancheck cannot read is stuck bad_plan
+//      a mutant on their changed lines
+// Every report carries `reach`, the line "the sample reached N of M changed files", naming each
+// file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
 export const LABEL = "fabrika.mutbox=1";
@@ -84,12 +98,37 @@ export const parseRelated = (text: string): ReadonlyArray<string> | null => {
 /** Docker's `--mount` reads a comma-separated list, so these three cannot be in a path it takes. */
 export const mountable = (path: string) => path.startsWith("/") && !/[,"\n]/.test(path);
 
+const WINDOWS = new Set(["electron", "playwright", "@playwright/test"]);
+
 /**
- * Why a test cannot run in this container, read from its source, or `null`. Electron and a
- * browser need a display, and the container has none.
+ * The modules a source loads at run time, from its parsed syntax: value imports, re-exports,
+ * `import("x")` and `require("x")` with a literal name. A type-only import loads nothing, and an
+ * import inside a string (a lint rule's planted source) is not one (ticket 655).
  */
-export const needsHost = (source: string): string | null =>
-  /from\s+["'](?:electron|playwright|@playwright\/test)["']/.test(source)
+const loads = (file: string, source: string): ReadonlySet<string> => {
+  const names = new Set<string>();
+  const add = (node: { readonly type: string; readonly value?: unknown } | null | undefined) => {
+    if (node?.type === "Literal" && typeof node.value === "string") {
+      names.add(node.value);
+    }
+  };
+  new Visitor({
+    ImportDeclaration: (node) => (node.importKind === "type" ? undefined : add(node.source)),
+    ExportNamedDeclaration: (node) => (node.exportKind === "type" ? undefined : add(node.source)),
+    ExportAllDeclaration: (node) => (node.exportKind === "type" ? undefined : add(node.source)),
+    ImportExpression: (node) => add(node.source),
+    CallExpression: (node) =>
+      node.callee.type === "Identifier" && node.callee.name === "require" ? add(node.arguments[0]) : undefined,
+  }).visit(parseSync(file, source).program);
+  return names;
+};
+
+/**
+ * Why a test cannot run in this container, read from the modules it loads, or `null`. Electron
+ * and a browser need a display, and the container has none.
+ */
+export const needsHost = (file: string, source: string): string | null =>
+  [...loads(file, source)].some((name) => WINDOWS.has(name))
     ? "it starts an Electron or browser window, and this Linux container has no display"
     : null;
 
@@ -180,7 +219,36 @@ const Sample = Schema.Struct({
   total: Schema.Number,
   selected: Schema.Number,
   left: Schema.Number,
+  /** Every changed file's mutants and how many were selected; a sampler from before ticket 655 has none. */
+  files: Schema.optional(
+    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Number, selected: Schema.Number })),
+  ),
 });
+
+type FileReach = NonNullable<(typeof Sample.Type)["files"]>[number];
+
+/** The report's reach line: how many changed files got a mutant, and each one that got none. Pure. */
+export const reachLine = (files: ReadonlyArray<FileReach>): string => {
+  const missed = files.filter((f) => f.selected === 0);
+  const why = (f: FileReach) =>
+    f.total === 0 ? "no mutant on its changed lines" : `${f.total} mutants on its changed lines, none selected`;
+  return [
+    `the sample reached ${files.length - missed.length} of ${files.length} changed files`,
+    ...(missed.length > 0 ? [`; zero mutants in ${missed.map((f) => `${f.file} (${why(f)})`).join(", ")}`] : []),
+  ].join("");
+};
+
+/**
+ * Whether the plan gives a file to the build step: its own row, else the longest folder row
+ * (`dir/`) above it, as the box's own owner check reads the same table. Pure.
+ */
+export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
+  const folders = Object.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
+  const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
+  return key !== undefined && owners[key] === "build";
+};
+
+const Owners = Schema.Record(Schema.String, Schema.String);
 
 const Baseline = Schema.Struct({
   testResults: Schema.Array(
@@ -248,12 +316,19 @@ const Summary = Schema.Struct({
   /** Tests that skipped themselves inside the container (their own `skipIf`). They did not run. */
   skipped: Schema.Array(Schema.String),
   sample: Schema.NullOr(Sample),
+  /** `reachLine` of the sample, or `null` when there is no sample or its sampler gives no reach. */
+  reach: Schema.NullOr(Schema.String),
   /** Arm b: the branch's own tests. */
   b: Schema.NullOr(Arm),
   /** Arm a: the same sample against the base's tests, when a base was given and has them. */
   a: Schema.NullOr(Arm),
-  /** Mutants arm a kills that arm b lets live; `null` when arm a did not run. */
-  narrowing: Schema.NullOr(Schema.Array(Row)),
+  /**
+   * Mutants arm a kills that arm b lets live; `null` with no base; `"unknown"` when the reason
+   * names a gap (`no_arm_a:<cause>`, `no_reach:old_sampler`) and the lead hand-checks the laws.
+   */
+  narrowing: Schema.NullOr(Schema.Union([Schema.Array(Row), Schema.Literal("unknown")])),
+  /** With a base: each related test left out of arm a, and why. */
+  armA: Schema.NullOr(Schema.Struct({ dropped: Schema.Array(Named) })),
 });
 type Summary = typeof Summary.Type;
 
@@ -306,6 +381,13 @@ export const judge = (seen: {
   readonly sample: typeof Sample.Type | null;
   readonly b: Arm | null;
   readonly failed: ReadonlyArray<string>;
+  /**
+   * With a base: arm a's answer, how many related tests the base has, and how many of those pass
+   * on the build and so ran in arm a. `null`: no base.
+   */
+  readonly base: { readonly a: Arm | null; readonly has: number; readonly kept: number } | null;
+  /** The plan's file owners, or `null` when no plan was given. */
+  readonly owners: Readonly<Record<string, string>> | null;
 }): Pick<Summary, "outcome" | "reason" | "detail"> => {
   if (seen.exit === 70) {
     return {
@@ -379,14 +461,102 @@ export const judge = (seen: {
     };
   }
 
-  return seen.b.exit === 124
-    ? {
-        outcome: "done",
-        reason: "capped",
-        detail: `the five minutes ran out: ${seen.b.unreached} selected mutants were not reached`,
-      }
-    : { outcome: "done", reason: "", detail: "" };
+  // Arm a was due to run and gave no clean answer: that is not a known state.
+  if (seen.base !== null && seen.base.kept > 0 && (seen.base.a === null || ![0, 124].includes(seen.base.a.exit))) {
+    return {
+      outcome: "stuck",
+      reason: "arm_a_failed",
+      detail: `arm a, on the ${seen.base.kept} base test files that pass on the build, ${seen.base.a === null ? "left no answer" : `exited ${seen.base.a.exit}`}; see box/a/run.txt and box/a/log.txt`,
+    };
+  }
+
+  const owners = seen.owners;
+  const files = seen.sample.files;
+  const owned =
+    owners === null || files === undefined ? [] : files.filter((f) => f.total > 0 && buildOwns(owners, f.file));
+
+  if (owned.length > 0 && owned.every((f) => f.selected === 0)) {
+    return {
+      outcome: "stuck",
+      reason: "no_build_reach",
+      detail: `the sample reached none of the plan's build-owned files: ${owned.map((f) => f.file).join(", ")}`,
+    };
+  }
+
+  // Known gaps: the run is done, but what it cannot show is named, and narrowing is "unknown", so
+  // the lead hand-checks the laws as for a loosening hit (ticket 655).
+  const gaps = [
+    ...(files === undefined
+      ? [
+          {
+            reason: "no_reach:old_sampler",
+            detail:
+              "the build's sample.ts predates per-file reach (ticket 655), so nobody can see which changed files got a mutant",
+          },
+        ]
+      : []),
+    ...(seen.base !== null && seen.base.kept === 0
+      ? [
+          seen.base.has === 0
+            ? {
+                reason: "no_arm_a:base_has_none",
+                detail: "the base has none of the related tests, so arm a had nothing to run",
+              }
+            : {
+                reason: "no_arm_a:none_pass",
+                detail: "none of the base's related tests pass on the build, so arm a had nothing to run",
+              },
+        ]
+      : []),
+    ...(seen.b.exit === 124
+      ? [
+          {
+            reason: "capped",
+            detail: `the five minutes ran out: ${seen.b.unreached} selected mutants were not reached`,
+          },
+        ]
+      : []),
+  ];
+  const unknown = gaps.some((g) => g.reason !== "capped");
+  return {
+    outcome: "done",
+    reason: gaps.map((g) => g.reason).join(","),
+    detail: [
+      ...gaps.map((g) => g.detail),
+      ...(unknown ? ["narrowing is unknown: hand-check that no law got narrower"] : []),
+    ].join("; "),
+  };
 };
+
+/**
+ * Each related test left out of arm a, and why: the base has no such file, or its tests fail on
+ * the build (named from arm a's own vitest run), which would stop Stryker's dry run. Pure.
+ */
+export const droppedFromArmA = (
+  related: ReadonlyArray<string>,
+  onBase: ReadonlyArray<string>,
+  kept: ReadonlyArray<string>,
+  baseline: typeof Baseline.Type | null,
+): Array<typeof Named.Type> =>
+  related
+    .filter((p) => !kept.includes(p))
+    .map((p) => {
+      const failed = (baseline?.testResults ?? [])
+        .filter((file) => file.name.replace(/^\/repo\//, "") === p)
+        .flatMap((file) => file.assertionResults.filter((t) => t.status === "failed").map((t) => t.fullName));
+      return {
+        path: p,
+        reason: !onBase.includes(p)
+          ? "the base has no such file"
+          : failed.length > 0
+            ? `its base version fails on the build: ${failed.slice(0, 5).join("; ")}`
+            : "its base version does not pass on the build; see box/a-baseline.txt",
+      };
+    });
+
+/** Whether a done's reason names a gap that leaves narrowing unknown. Pure. */
+export const narrowingUnknown = (reason: string) =>
+  reason.split(",").some((r) => r.startsWith("no_reach:") || r.startsWith("no_arm_a:"));
 
 export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0 : outcome === "skip" ? 40 : 30);
 
@@ -566,6 +736,8 @@ interface Ask {
   readonly lock: string;
   readonly base: string | undefined;
   readonly seconds: number | undefined;
+  /** The approved plan, from the current folder, as drive reads it; its build-owned files must get a mutant. */
+  readonly plan: string | undefined;
 }
 
 /** A run that ended before the container answered: what was asked, and why it is stuck. */
@@ -585,9 +757,11 @@ const stuckSummary = (ask: Ask, started: number, reason: string, detail: string)
   excluded: [],
   skipped: [],
   sample: null,
+  reach: null,
   b: null,
   a: null,
   narrowing: null,
+  armA: null,
 });
 
 /** The whole run. Fails with `Stuck` before the container answers; else gives the summary. */
@@ -602,6 +776,26 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     return yield* new Stuck({
       reason: "bad_related",
       detail: "--related takes test file paths inside the repo, separated by commas, and --ticket a number",
+    });
+  }
+
+  // The plan's owners, by plancheck's own table reader, the one the box's owner check uses.
+  const owners =
+    ask.plan === undefined
+      ? null
+      : yield* decoded(
+          Owners,
+          (yield* sh("sh", [
+            path.join(here, "../../plan/scripts/plancheck.sh"),
+            "--owners-json",
+            path.resolve(ask.plan),
+          ])).out,
+        );
+
+  if (ask.plan !== undefined && owners === null) {
+    return yield* new Stuck({
+      reason: "bad_plan",
+      detail: "plancheck.sh --owners-json could not read the plan's files table",
     });
   }
 
@@ -629,6 +823,10 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const repo = path.join(input, "repo.git");
   yield* fs.makeDirectory(repo, { recursive: true }).pipe(Effect.ignore);
   yield* fs.makeDirectory(box, { recursive: true }).pipe(Effect.ignore);
+  // The container writes here as its `node` user. Docker Desktop maps a bind mount to whoever
+  // runs it, but a Linux host keeps the folder's owner, so on a CI runner (another uid) the box
+  // could not write a byte. Open to any user: it holds only what the container leaves.
+  yield* fs.chmod(box, 0o777).pipe(Effect.ignore);
   const git = (...args: ReadonlyArray<string>) =>
     sh("git", ["--git-dir", repo, "-c", "core.hooksPath=/dev/null", ...args]);
   const resolve = Effect.fnUntraced(function* (ref: string) {
@@ -679,12 +877,21 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   for (const p of all) {
     const source = yield* show(p);
-    const reason = source === null ? "the build commit has no such file" : needsHost(source);
+    const reason = source === null ? "the build commit has no such file" : needsHost(p, source);
 
     if (reason === null) {
       related.push(p);
     } else {
       excluded.push({ path: p, reason });
+    }
+  }
+
+  // Arm a runs the related tests the base has, as mutbox-entry.sh picks them.
+  const onBase: Array<string> = [];
+
+  for (const p of base === null ? [] : related) {
+    if ((yield* git("cat-file", "-e", `refs/heads/base:${p}`)).code === 0) {
+      onBase.push(p);
     }
   }
 
@@ -798,14 +1005,23 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       status: t.status,
     })),
   );
+  // Which base tests passed on the build and ran in arm a; the entry wrote them before arm a.
+  const kept = ((yield* readOut(box, "a-kept")) ?? "")
+    .trim()
+    .split(",")
+    .filter((p) => p !== "");
+  const aBaseline = yield* decoded(Baseline, yield* readOut(box, "a-baseline.json"));
+  const ended = judge({
+    exit: ran.value.code,
+    sample,
+    b: b?.arm ?? null,
+    failed: tests.filter((t) => t.status === "failed").map((t) => t.name),
+    base: base === null ? null : { a: a?.arm ?? null, has: onBase.length, kept: kept.length },
+    owners,
+  });
   const summary: Summary = {
     ...stuckSummary(ask, started, "", ""),
-    ...judge({
-      exit: ran.value.code,
-      sample,
-      b: b?.arm ?? null,
-      failed: tests.filter((t) => t.status === "failed").map((t) => t.name),
-    }),
+    ...ended,
     build,
     base,
     image,
@@ -814,9 +1030,11 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     excluded,
     skipped: tests.filter((t) => t.status !== "passed" && t.status !== "failed").map((t) => `${t.name} (${t.status})`),
     sample,
+    reach: sample?.files === undefined ? null : reachLine(sample.files),
     b: b?.arm ?? null,
     a: a?.arm ?? null,
-    narrowing: a === null || b === null ? null : narrowed(a.rows, b.rows),
+    narrowing: narrowingUnknown(ended.reason) ? "unknown" : a === null || b === null ? null : narrowed(a.rows, b.rows),
+    armA: base === null ? null : { dropped: droppedFromArmA(related, onBase, kept, aBaseline) },
   };
   return summary;
 });
@@ -834,6 +1052,7 @@ const run = Command.make(
     lock: Flag.String("lock"),
     base: Flag.String("base").pipe(Flag.withDefault(undefined)),
     seconds: Flag.Int("seconds").pipe(Flag.withDefault(undefined)),
+    plan: Flag.String("plan").pipe(Flag.withDefault(undefined)),
   },
   Effect.fn("mutbox.run")(function* (ask) {
     const fs = yield* FileSystem.FileSystem;

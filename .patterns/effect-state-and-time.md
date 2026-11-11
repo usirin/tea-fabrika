@@ -24,7 +24,7 @@ export class TurnTimeout extends Context.Reference<Duration.Duration>("clanka/Ag
 		Layer.succeed(TurnTimeout, Duration.fromInputUnsafe(timeout));
 }
 
-// Ours, in use: next/packages/libfabrika/src/id.ts:179
+// Ours, in use: next/packages/libfabrika/src/Id.ts:179
 const now = yield* Clock.currentTimeMillis;
 ```
 
@@ -50,7 +50,7 @@ Rules for the host around a tea machine (program state itself stays in the tea m
 - **Time comes from `Clock`.** `Clock.currentTimeMillis` or `DateTime.now`, never `Date.now()` or
   `new Date()` inside an Effect. A law then runs on `TestClock` and needs no real wait. Formatting a
   time you already hold is fine (`new Date(at).toISOString()`, as in
-  `next/packages/libfabrika/src/door/door.ts:1293`), though `DateTime.formatIso` reads better.
+  `next/packages/libfabrika/src/gateway/Gateway.ts:1293`), though `DateTime.formatIso` reads better.
 - **A repeat or a retry is a named `Schedule`.** `Effect.repeat(Schedule.spaced(...))` or
   `Effect.retry(retryPolicy)`, never `Effect.forever(Effect.gen(function* () { yield* Effect.sleep(...); ... }))`.
   The Schedule names the policy and composes (capped, jittered) where a hand loop does not
@@ -66,12 +66,12 @@ where a clock read is refused outright (`fabrika/no-clock-in-view`).
 
 Ticket 443 sweeps it. On main `d48cb774`, in `next/` product code:
 
-- 7 `Date.now()`: `next/packages/libfabrika/src/node/stage.ts:204`, `:227`, `:250`, `:257`, `:262`,
-  `:280` and `workers/gateway.ts:98`; and `new Date()` in `next/apps/fabrika/grant.ts:74`.
-- 3 `Effect.forever` plus `sleep` loops: `node/stage.ts:218`, `:305`, `next/apps/fabrika/dev.ts:31`.
+- 7 `Date.now()`: `next/packages/libfabrika/src/node/dev/dev.ts:204`, `:227`, `:250`, `:257`, `:262`,
+  `:280` and `cloudflare/connection.ts:98`; and `new Date()` in `next/apps/fabrika/grant.ts:74`.
+- 3 `Effect.forever` plus `sleep` loops: `node/dev/dev.ts:218`, `:305`, `next/apps/fabrika/dev.ts:31`.
   0 `Schedule` in all of `next/`.
 - State many fibers touch, kept in `let` behind a permit: the clearest case is
-  `next/packages/libfabrika/src/app/runner.ts:207-228` (`store`, `process`, `supervision`, `woke`,
+  `next/packages/libfabrika/src/runtime/Runner.ts:207-228` (`store`, `process`, `supervision`, `woke`,
   `live`, `alarmAt`, `retry`), shared by every runner call and guarded by `Semaphore.make(1)` at
   `:224`. 0 `Ref` in all of `next/`. Not every `let` is a hit: of the 52 in 14 product files, the
   ones local to one fiber are fine.

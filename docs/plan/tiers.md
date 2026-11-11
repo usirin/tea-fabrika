@@ -28,6 +28,12 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Tier 1 comes from [its plan](./tier-1.md). Tiers 2 to 7 are a first sorting, and they
 will change. So is splitting the old Tier 4 into hands and agents, which makes seven.
 
+*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* each tier carries and
+updates a working slice of every core idea. Four start late today and get a thin slice in an earlier
+tier: hands (Tier 4), programs written outside fabrika's own source (Tiers 5 and 7), programs
+working together (Tiers 2 and 4) and a person starting a program (Tier 2). Those tiers harden it.
+Which tier each slice lands in is not decided yet, so no row below has moved.
+
 | Tier | Transport | Data | Coordination | App | Desktop (Tuval) |
 |---|---|---|---|---|---|
 | **1. It works** | Signed hello, unknown keys refused, code and Approve, one-time link | Ledger behind a service; `granted` with `saw` and `as`; `denied`; revoke; each note's saved versions, with a check against stale saves; a backup sheet, recovery on a new Mac and `added`; email recovery on the cloud, with a 24-hour wait any device can cancel (decided 2026-11-06); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health rows for about 2 weeks and hourly summaries forever, and nothing a chaos fault does left unexplained (owner, 2026-11-07) | Mailbox, who belongs, window and agent grants, every device a master with its grant tree; a slice of C2 to C5: dead letters, one crashed program restarted with a brake and backoff, exit, info and monitors, each start a new process with its own id, who is online, and the brain restarted (decided by the owner, 2026-11-06) | Sealed programs, notes drawn as Markdown that agents write through MCP, each agent approved once, a counter as the test, chaos monkey | One core; Electron, browser and headless; menu bar with Approve and Remove |
