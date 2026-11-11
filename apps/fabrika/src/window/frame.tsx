@@ -1,67 +1,67 @@
-import {runIn} from "@demlik/tea/effect";
-import {useMachine} from "@demlik/tea/react";
-import {ASK_COMMANDS} from "@kampus/pipeline/tickets/ask";
-import {Button, Dialog, Kbd} from "@manti-ui/react";
-import {AskActions, type AskKeys, AskStatus, AskView} from "@tea-fabrika/tracker/ask-window";
-import {Layer, ManagedRuntime} from "effect";
+import { runIn } from "@demlik/tea/effect";
+import { useMachine } from "@demlik/tea/react";
+import { ASK_COMMANDS } from "@kampus/pipeline/tickets/ask";
+import { Button, Dialog, Kbd } from "@manti-ui/react";
+import { AskActions, type AskKeys, AskStatus, AskView } from "@tea-fabrika/tracker/ask-window";
+import { Layer, ManagedRuntime } from "effect";
 import {
-	type ReactNode,
-	type RefObject,
-	useCallback,
-	useContext,
-	useEffect,
-	useEffectEvent,
-	useLayoutEffect,
-	useRef,
-	useState,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
-import type {AsksNow} from "../asks.ts";
-import {activeOf, focusedOf, type Open} from "../desk/desk.ts";
-import type {Keys} from "../desk/keymap.ts";
-import {type Group, wordOf} from "../desk/keys.ts";
-import type {Editor, EditorMsg} from "../keys/machine.ts";
-import type {Snapshot} from "../keys/program.ts";
-import {KeysWindow} from "../keys/window.tsx";
-import type {FromPage, HostNow, LinkNow, SummonedOn, ToApp} from "../messages.ts";
+import type { AsksNow } from "../asks.ts";
+import { activeOf, focusedOf, type Open } from "../desk/desk.ts";
+import type { Keys } from "../desk/keymap.ts";
+import { type Group, wordOf } from "../desk/keys.ts";
+import type { Editor, EditorMsg } from "../keys/machine.ts";
+import type { Snapshot } from "../keys/program.ts";
+import { KeysWindow } from "../keys/window.tsx";
+import type { FromPage, HostNow, LinkNow, SummonedOn, ToApp } from "../messages.ts";
 import {
-	agentsWord,
-	asksMenuMachine,
-	asksSections,
-	asksWord,
-	bottomLineShows,
-	asksHead,
-	type Command,
-	clockWord,
-	commandsOf,
-	fileWord,
-	type Frame,
-	type FrameMsg,
-	hereWord,
-	holdsWord,
-	hostWord,
-	INFO,
-	infoFor,
-	type JobItem,
-	jobItem,
-	jobsList,
-	lineIn,
-	matching,
-	middleFree,
-	modeWord,
-	nowhereNote,
-	opensOf,
-	type Part,
-	prefixLine,
-	questionWord,
-	restartedWord,
-	type Shapes,
-	syncWord,
-	type TicketsShown,
-	tileWord,
-	workspaceName,
+  agentsWord,
+  asksMenuMachine,
+  asksSections,
+  asksWord,
+  bottomLineShows,
+  asksHead,
+  type Command,
+  clockWord,
+  commandsOf,
+  fileWord,
+  type Frame,
+  type FrameMsg,
+  hereWord,
+  holdsWord,
+  hostWord,
+  INFO,
+  infoFor,
+  type JobItem,
+  jobItem,
+  jobsList,
+  lineIn,
+  matching,
+  middleFree,
+  modeWord,
+  nowhereNote,
+  opensOf,
+  type Part,
+  prefixLine,
+  questionWord,
+  restartedWord,
+  type Shapes,
+  syncWord,
+  type TicketsShown,
+  tileWord,
+  workspaceName,
 } from "./frame.ts";
-import {type Cap, type Hint, type Row, sentence, type Words} from "./pop.ts";
-import {type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} from "./pop.tsx";
+import { type Cap, type Hint, type Row, sentence, type Words } from "./pop.ts";
+import { type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf } from "./pop.tsx";
 
 // The window's frame, drawn: the top bar, the bottom line, and what opens over the desk (the
 // asks list, the jobs list, the palette, an item's few lines). Its words are frame.ts's; this file only lays
@@ -72,35 +72,35 @@ import {type Empty, Foot, IconOf, Lines, Menu, Palette, Panel, useTip, WordsOf} 
 
 /** The element id of each thing that opens over the desk: its opener names it in `aria-controls`. */
 const POP = {
-	asks: "pop-asks",
-	jobs: "pop-jobs",
-	lines: "pop-lines",
-	palette: "pop-palette",
+  asks: "pop-asks",
+  jobs: "pop-jobs",
+  lines: "pop-lines",
+  palette: "pop-palette",
 } as const;
 
 /** What the frame is drawn from, and how it sends. */
 export interface FrameProps {
-	readonly desk: Open | null;
-	readonly frame: Frame;
-	readonly asks: AsksNow | null;
-	/** The host as it says of itself: its process, its ledger, its agents. `null` until it says. */
-	readonly host: HostNow | null;
-	readonly link: LinkNow;
-	/** A desk came once: a link down after it is the host down, not a first connect. */
-	readonly attachedOnce: boolean;
-	/** The keys file's table, as the host sent it (desk/keymap.ts): the defaults until it says. */
-	readonly keys: Keys;
-	readonly keysEditor?: Editor | null;
-	readonly editKeys?: (msg: EditorMsg) => void;
-	readonly keyChanges?: Snapshot["changes"];
-	readonly shapes: Shapes;
-	readonly tickets: TicketsShown;
-	readonly armed: boolean;
-	readonly toHost: (m: FromPage) => void;
-	readonly toApp: (m: ToApp) => void;
-	/** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
-	readonly toRun: (run: string, msg: unknown) => void;
-	readonly step: (m: FrameMsg) => void;
+  readonly desk: Open | null;
+  readonly frame: Frame;
+  readonly asks: AsksNow | null;
+  /** The host as it says of itself: its process, its ledger, its agents. `null` until it says. */
+  readonly host: HostNow | null;
+  readonly link: LinkNow;
+  /** A desk came once: a link down after it is the host down, not a first connect. */
+  readonly attachedOnce: boolean;
+  /** The keys file's table, as the host sent it (desk/keymap.ts): the defaults until it says. */
+  readonly keys: Keys;
+  readonly keysEditor?: Editor | null;
+  readonly editKeys?: (msg: EditorMsg) => void;
+  readonly keyChanges?: Snapshot["changes"];
+  readonly shapes: Shapes;
+  readonly tickets: TicketsShown;
+  readonly armed: boolean;
+  readonly toHost: (m: FromPage) => void;
+  readonly toApp: (m: ToApp) => void;
+  /** One of a run's own inputs, as its window would send it: `{type: "query", value: {ticket: 2}}`. */
+  readonly toRun: (run: string, msg: unknown) => void;
+  readonly step: (m: FrameMsg) => void;
 }
 
 /** ` · `, between two words of the frame. */
@@ -108,83 +108,81 @@ const Sep = () => <span className="sep">·</span>;
 
 /** The palette's command by its name, with every workspace there could be. */
 const commandNamed = (props: FrameProps, name: string): Command | undefined =>
-	commandsOf(props.keys, 9).find((c) => c.name === name);
+  commandsOf(props.keys, 9).find((c) => c.name === name);
 
 /** The key a name's command is on, as the bars write it, or `null`: no key runs it. */
 const keyFor = (props: FrameProps, name: string): string | null => {
-	const command = commandNamed(props, name);
-	return command === undefined || command.caps.length === 0 ? null : command.key;
+  const command = commandNamed(props, name);
+  return command === undefined || command.caps.length === 0 ? null : command.key;
 };
 
 /** The key a name's command is on, as keycaps for its tooltip: `⌃B` `A`. None when nothing is bound. */
-const capsFor = (props: FrameProps, name: string): readonly Cap[] =>
-	commandNamed(props, name)?.caps ?? [];
+const capsFor = (props: FrameProps, name: string): readonly Cap[] => commandNamed(props, name)?.caps ?? [];
 
 /** The tsh word of a name's command, or `null`. */
-const wordFor = (props: FrameProps, name: string): string | null =>
-	commandNamed(props, name)?.tsh ?? null;
+const wordFor = (props: FrameProps, name: string): string | null => commandNamed(props, name)?.tsh ?? null;
 
 /** No tooltip shows while something lies over the desk, or while info mode explains the item. */
 const quietOf = (frame: Frame): boolean => frame.over.kind !== "none" || frame.info.kind === "on";
 
 /** What a frame item opens, if anything: a menu or a dialog, by its element's id. */
 interface Opens {
-	readonly popup: "menu" | "dialog";
-	readonly id: string;
-	readonly open: boolean;
+  readonly popup: "menu" | "dialog";
+  readonly id: string;
+  readonly open: boolean;
 }
 
 /** A frame item: a button of plain words, with its tooltip and its info line. */
 function Item(props: {
-	readonly name: string;
-	/** The name is a typed word, a program's: its tooltip draws it in mono. */
-	readonly typed?: boolean;
-	readonly caps: readonly Cap[];
-	/** The tsh word that does the same, typed in a tile; `null` for Try again, which no word does. */
-	readonly word: string | null;
-	readonly quiet: boolean;
-	readonly info: string;
-	/** What a screen reader names it, when its words alone do not: an icon with no word. */
-	readonly label?: string;
-	readonly className?: string | undefined;
-	readonly current?: boolean;
-	/** A toggle button's state, as `aria-pressed`: its name stays, and this says on or off. */
-	readonly pressed?: boolean;
-	readonly opens?: Opens;
-	readonly onClick: () => void;
-	readonly children: ReactNode;
+  readonly name: string;
+  /** The name is a typed word, a program's: its tooltip draws it in mono. */
+  readonly typed?: boolean;
+  readonly caps: readonly Cap[];
+  /** The tsh word that does the same, typed in a tile; `null` for Try again, which no word does. */
+  readonly word: string | null;
+  readonly quiet: boolean;
+  readonly info: string;
+  /** What a screen reader names it, when its words alone do not: an icon with no word. */
+  readonly label?: string;
+  readonly className?: string | undefined;
+  readonly current?: boolean;
+  /** A toggle button's state, as `aria-pressed`: its name stays, and this says on or off. */
+  readonly pressed?: boolean;
+  readonly opens?: Opens;
+  readonly onClick: () => void;
+  readonly children: ReactNode;
 }): ReactNode {
-	const tip = useTip(
-		{
-			name: props.typed === true ? props.name : sentence(props.name),
-			typed: props.typed === true,
-			caps: props.caps,
-			word: props.word,
-		},
-		props.quiet,
-	);
-	return (
-		<>
-			<button
-				type="button"
-				className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
-				data-info={props.info}
-				data-item={props.name}
-				aria-label={props.label}
-				aria-current={props.current}
-				aria-pressed={props.pressed}
-				aria-haspopup={props.opens?.popup}
-				aria-expanded={props.opens?.open}
-				aria-controls={props.opens?.id}
-				{...tip.on}
-				onPointerDown={(e) => e.preventDefault()}
-				onClick={props.onClick}
-			>
-				{props.children}
-			</button>
-			{tip.node}
-		</>
-	);
+  const tip = useTip(
+    {
+      name: props.typed === true ? props.name : sentence(props.name),
+      typed: props.typed === true,
+      caps: props.caps,
+      word: props.word,
+    },
+    props.quiet,
+  );
+  return (
+    <>
+      <button
+        type="button"
+        className={`fb${props.className === undefined ? "" : ` ${props.className}`}`}
+        data-info={props.info}
+        data-item={props.name}
+        aria-label={props.label}
+        aria-current={props.current}
+        aria-pressed={props.pressed}
+        aria-haspopup={props.opens?.popup}
+        aria-expanded={props.opens?.open}
+        aria-controls={props.opens?.id}
+        {...tip.on}
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={props.onClick}
+      >
+        {props.children}
+      </button>
+      {tip.node}
+    </>
+  );
 }
 
 /** The host's own words are its own: while the app is not attached, they may be old, and are not shown. */
@@ -192,7 +190,7 @@ const onHost = (link: LinkNow): boolean => link.kind === "up" || link.kind === "
 
 /** The host as it said last, while the app is on it; else `null`. */
 const reachedOf = (props: FrameProps): HostNow | null =>
-	props.host !== null && onHost(props.link) ? props.host : null;
+  props.host !== null && onHost(props.link) ? props.host : null;
 
 /**
  * The top bar: the whole desk. Workspaces, the line, then the asks, the agents and the sync, each
@@ -200,185 +198,185 @@ const reachedOf = (props: FrameProps): HostNow | null =>
  * its own shape when it is not.
  */
 export function TopBar(props: FrameProps): ReactNode {
-	const {desk, asks, step} = props;
-	const ws = desk === null ? null : activeOf(desk);
-	const line = ws === null ? [] : lineIn(ws);
-	const reached = reachedOf(props);
-	const agents = reached === null ? null : agentsWord(reached);
-	const sync = asks === null || reached === null ? null : syncWord(asks, reached.ledger);
-	const host = hostWord(props.link, props.attachedOnce);
-	const asking = asks === null ? null : asksWord(asks.asks.length);
-	const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
-	const quiet = quietOf(props.frame);
-	const over = props.frame.over;
-	const lines = (what: Part): Opens => ({
-		popup: "dialog",
-		id: POP.lines,
-		open: over.kind === "item" && over.what === what,
-	});
-	const bar = useRef<HTMLElement>(null);
-	const brand = useRef<HTMLDivElement>(null);
-	const free = useFreeMiddle(bar, brand, desk !== null);
-	return (
-		<header className="topbar" ref={bar}>
-			<div className="lights-room" aria-hidden="true" />
-			{desk !== null && (
-				<nav className="workspaces" aria-label="workspaces">
-					{desk.workspaces.map((w, i) => (
-						<Item
-							key={w.id}
-							name={`workspace ${i + 1}`}
-							caps={i < 9 ? capsFor(props, `workspace ${i + 1}`) : []}
-							word={wordOf({kind: "pick", at: i + 1})}
-							quiet={quiet}
-							info={infoFor(props.keys).workspace}
-							current={w.id === desk.active}
-							onClick={() => props.toHost({type: "pick", workspace: w.id})}
-						>
-							<span className="num">{i + 1}</span> {workspaceName(w, props.tickets)}
-						</Item>
-					))}
-				</nav>
-			)}
-			<nav className="line" aria-label="the line">
-				{line.length === 0 && ws !== null && <span className="seg plain">tsh</span>}
-				{line.map((s, i) => (
-					<span key={s.tile} className="seg-pair">
-						{i > 0 && (
-							<span className="pipe" data-info={INFO.pipe}>
-								|
-							</span>
-						)}
-						<Item
-							name={s.program}
-							typed
-							caps={[]}
-							word={wordOf({kind: "go", tile: s.tile})}
-							quiet={quiet}
-							info={INFO.segment}
-							className={`seg${s.focused ? " on" : ""}`}
-							onClick={() => props.toHost({type: "go", tile: s.tile})}
-						>
-							{s.program}
-						</Item>
-					</span>
-				))}
-			</nav>
-			<div className="drag" data-info={INFO.drag} />
-			<div className="right">
-				{asks === null && (
-					<>
-						<span className="quiet">reading the ledger</span>
-						<Sep />
-					</>
-				)}
-				{asking !== null && (
-					<>
-						<Item
-							name="asks"
-							caps={capsFor(props, "asks")}
-							word={wordFor(props, "asks")}
-							quiet={quiet}
-							info={INFO.asks}
-							className="accent"
-							opens={{popup: "menu", id: POP.asks, open: over.kind === "asks"}}
-							onClick={() => step({type: "show", what: "asks"})}
-						>
-							{asking}
-							{unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
-						</Item>
-						<Sep />
-					</>
-				)}
-				{agents !== null && (
-					<>
-						<Item
-							name="agents"
-							caps={capsFor(props, "agents")}
-							word={wordFor(props, "agents")}
-							quiet={quiet}
-							info={INFO.agents}
-							opens={lines("agents")}
-							onClick={() => step({type: "item", what: "agents"})}
-						>
-							{agents}
-						</Item>
-						<Sep />
-					</>
-				)}
-				{sync !== null && (
-					<>
-						<Item
-							name="sync"
-							caps={capsFor(props, "sync")}
-							word={wordFor(props, "sync")}
-							quiet={quiet}
-							info={INFO.sync}
-							className={sync.broken ? "broken" : undefined}
-							opens={lines("sync")}
-							onClick={() => step({type: "item", what: "sync"})}
-						>
-							{sync.word}
-						</Item>
-						<Sep />
-					</>
-				)}
-				{/* Said as a status, never an alert: a screen reader hears the host go and come back. */}
-				<span role="status" aria-label="the link to the host">
-					<Item
-						name="host"
-						caps={capsFor(props, "host")}
-						word={wordFor(props, "host")}
-						quiet={quiet}
-						info={INFO.host}
-						label={host.kind === "up" ? "host up" : host.word}
-						className={host.kind === "word" && host.broken ? "host broken" : "host"}
-						opens={lines("host")}
-						onClick={() => step({type: "item", what: "host"})}
-					>
-						{host.kind === "up" ? (
-							<IconOf icon="done" />
-						) : (
-							<>
-								<IconOf icon={host.shape} />
-								{host.word}
-							</>
-						)}
-					</Item>
-					{props.link.kind === "stopped" && (
-						<>
-							<Sep />
-							<Item
-								name="try again"
-								caps={[]}
-								word={null}
-								quiet={quiet}
-								info={INFO.again}
-								onClick={() => props.toApp({type: "again"})}
-							>
-								try again
-							</Item>
-						</>
-					)}
-				</span>
-			</div>
-			<div className="brand" data-free={free} ref={brand} aria-hidden="true">
-				<Mark />
-				<span>fabrika</span>
-			</div>
-		</header>
-	);
+  const { desk, asks, step } = props;
+  const ws = desk === null ? null : activeOf(desk);
+  const line = ws === null ? [] : lineIn(ws);
+  const reached = reachedOf(props);
+  const agents = reached === null ? null : agentsWord(reached);
+  const sync = asks === null || reached === null ? null : syncWord(asks, reached.ledger);
+  const host = hostWord(props.link, props.attachedOnce);
+  const asking = asks === null ? null : asksWord(asks.asks.length);
+  const unseen = asks?.asks.filter((a) => !a.seen).length ?? 0;
+  const quiet = quietOf(props.frame);
+  const over = props.frame.over;
+  const lines = (what: Part): Opens => ({
+    popup: "dialog",
+    id: POP.lines,
+    open: over.kind === "item" && over.what === what,
+  });
+  const bar = useRef<HTMLElement>(null);
+  const brand = useRef<HTMLDivElement>(null);
+  const free = useFreeMiddle(bar, brand, desk !== null);
+  return (
+    <header className="topbar" ref={bar}>
+      <div className="lights-room" aria-hidden="true" />
+      {desk !== null && (
+        <nav className="workspaces" aria-label="workspaces">
+          {desk.workspaces.map((w, i) => (
+            <Item
+              key={w.id}
+              name={`workspace ${i + 1}`}
+              caps={i < 9 ? capsFor(props, `workspace ${i + 1}`) : []}
+              word={wordOf({ kind: "pick", at: i + 1 })}
+              quiet={quiet}
+              info={infoFor(props.keys).workspace}
+              current={w.id === desk.active}
+              onClick={() => props.toHost({ type: "pick", workspace: w.id })}
+            >
+              <span className="num">{i + 1}</span> {workspaceName(w, props.tickets)}
+            </Item>
+          ))}
+        </nav>
+      )}
+      <nav className="line" aria-label="the line">
+        {line.length === 0 && ws !== null && <span className="seg plain">tsh</span>}
+        {line.map((s, i) => (
+          <span key={s.tile} className="seg-pair">
+            {i > 0 && (
+              <span className="pipe" data-info={INFO.pipe}>
+                |
+              </span>
+            )}
+            <Item
+              name={s.program}
+              typed
+              caps={[]}
+              word={wordOf({ kind: "go", tile: s.tile })}
+              quiet={quiet}
+              info={INFO.segment}
+              className={`seg${s.focused ? " on" : ""}`}
+              onClick={() => props.toHost({ type: "go", tile: s.tile })}
+            >
+              {s.program}
+            </Item>
+          </span>
+        ))}
+      </nav>
+      <div className="drag" data-info={INFO.drag} />
+      <div className="right">
+        {asks === null && (
+          <>
+            <span className="quiet">reading the ledger</span>
+            <Sep />
+          </>
+        )}
+        {asking !== null && (
+          <>
+            <Item
+              name="asks"
+              caps={capsFor(props, "asks")}
+              word={wordFor(props, "asks")}
+              quiet={quiet}
+              info={INFO.asks}
+              className="accent"
+              opens={{ popup: "menu", id: POP.asks, open: over.kind === "asks" }}
+              onClick={() => step({ type: "show", what: "asks" })}
+            >
+              {asking}
+              {unseen > 0 && <span className="udot" role="img" aria-label={`${unseen} not seen`} />}
+            </Item>
+            <Sep />
+          </>
+        )}
+        {agents !== null && (
+          <>
+            <Item
+              name="agents"
+              caps={capsFor(props, "agents")}
+              word={wordFor(props, "agents")}
+              quiet={quiet}
+              info={INFO.agents}
+              opens={lines("agents")}
+              onClick={() => step({ type: "item", what: "agents" })}
+            >
+              {agents}
+            </Item>
+            <Sep />
+          </>
+        )}
+        {sync !== null && (
+          <>
+            <Item
+              name="sync"
+              caps={capsFor(props, "sync")}
+              word={wordFor(props, "sync")}
+              quiet={quiet}
+              info={INFO.sync}
+              className={sync.broken ? "broken" : undefined}
+              opens={lines("sync")}
+              onClick={() => step({ type: "item", what: "sync" })}
+            >
+              {sync.word}
+            </Item>
+            <Sep />
+          </>
+        )}
+        {/* Said as a status, never an alert: a screen reader hears the host go and come back. */}
+        <span role="status" aria-label="the link to the host">
+          <Item
+            name="host"
+            caps={capsFor(props, "host")}
+            word={wordFor(props, "host")}
+            quiet={quiet}
+            info={INFO.host}
+            label={host.kind === "up" ? "host up" : host.word}
+            className={host.kind === "word" && host.broken ? "host broken" : "host"}
+            opens={lines("host")}
+            onClick={() => step({ type: "item", what: "host" })}
+          >
+            {host.kind === "up" ? (
+              <IconOf icon="done" />
+            ) : (
+              <>
+                <IconOf icon={host.shape} />
+                {host.word}
+              </>
+            )}
+          </Item>
+          {props.link.kind === "stopped" && (
+            <>
+              <Sep />
+              <Item
+                name="try again"
+                caps={[]}
+                word={null}
+                quiet={quiet}
+                info={INFO.again}
+                onClick={() => props.toApp({ type: "again" })}
+              >
+                try again
+              </Item>
+            </>
+          )}
+        </span>
+      </div>
+      <div className="brand" data-free={free} ref={brand} aria-hidden="true">
+        <Mark />
+        <span>fabrika</span>
+      </div>
+    </header>
+  );
 }
 
 /** The app's icon as a small size draws it, on its 16 grid (docs/direction/app-icon.md). */
 function Mark(): ReactNode {
-	return (
-		<svg className="mark" viewBox="0 0 16 16" width="16" height="16">
-			<rect className="dim" x="5" y="3" width="2" height="10" rx="0.5" />
-			<rect className="lit" x="8" y="3" width="4" height="3" rx="0.5" />
-			<rect className="dim" x="8" y="7" width="3" height="3" rx="0.5" />
-		</svg>
-	);
+  return (
+    <svg className="mark" viewBox="0 0 16 16" width="16" height="16">
+      <rect className="dim" x="5" y="3" width="2" height="10" rx="0.5" />
+      <rect className="lit" x="8" y="3" width="4" height="3" rx="0.5" />
+      <rect className="dim" x="8" y="7" width="3" height="3" rx="0.5" />
+    </svg>
+  );
 }
 
 /**
@@ -388,283 +386,297 @@ function Mark(): ReactNode {
  * watches them anew.
  */
 function useFreeMiddle(
-	bar: RefObject<HTMLElement | null>,
-	brand: RefObject<HTMLElement | null>,
-	hasDesk: boolean,
+  bar: RefObject<HTMLElement | null>,
+  brand: RefObject<HTMLElement | null>,
+  hasDesk: boolean,
 ): boolean {
-	const [free, setFree] = useState(true);
-	useLayoutEffect(() => {
-		const header = bar.current;
-		const name = brand.current;
-		if (header === null || name === null) return;
-		const items = [...header.children].filter(
-			(item) => item !== name && !item.classList.contains("drag"),
-		);
-		const check = () =>
-			setFree(
-				middleFree(
-					name.getBoundingClientRect(),
-					items.map((item) => item.getBoundingClientRect()),
-				),
-			);
-		const watch = new ResizeObserver(check);
-		watch.observe(header);
-		for (const item of items) watch.observe(item);
-		return () => watch.disconnect();
-	}, [bar, brand, hasDesk]);
-	return free;
+  const [free, setFree] = useState(true);
+  useLayoutEffect(() => {
+    const header = bar.current;
+    const name = brand.current;
+
+    if (header === null || name === null) {
+      return;
+    }
+
+    const items = [...header.children].filter((item) => item !== name && !item.classList.contains("drag"));
+    const check = () =>
+      setFree(
+        middleFree(
+          name.getBoundingClientRect(),
+          items.map((item) => item.getBoundingClientRect()),
+        ),
+      );
+    const watch = new ResizeObserver(check);
+    watch.observe(header);
+
+    for (const item of items) {
+      watch.observe(item);
+    }
+
+    return () => watch.disconnect();
+  }, [bar, brand, hasDesk]);
+  return free;
 }
 
 /** What lies over the desk now: the asks list, the jobs list, an item's lines, or the palette. Shown with the bars hidden too. */
 export function Over(props: FrameProps): ReactNode {
-	const {over} = props.frame;
-	switch (over.kind) {
-		case "none":
-			return null;
-		case "asks":
-			return props.asks === null ? null : <AsksList {...props} asks={props.asks} />;
-		case "jobs":
-			return props.desk === null ? null : <JobsMenu {...props} desk={props.desk} />;
-		case "item":
-			return <ItemLines {...props} what={over.what} />;
-		case "palette":
-			return <CommandPalette {...props} />;
-	}
+  const { over } = props.frame;
+
+  switch (over.kind) {
+    case "none":
+      return null;
+    case "asks":
+      return props.asks === null ? null : <AsksList {...props} asks={props.asks} />;
+    case "jobs":
+      return props.desk === null ? null : <JobsMenu {...props} desk={props.desk} />;
+    case "item":
+      return <ItemLines {...props} what={over.what} />;
+    case "palette":
+      return <CommandPalette {...props} />;
+  }
 }
 
 /** The band left when both bars are hidden, or before there is a desk: room for the window's buttons. */
 export function Band(): ReactNode {
-	return <div className="band" data-info={INFO.drag} />;
+  return <div className="band" data-info={INFO.drag} />;
 }
 
 /** The asks list's footer: the keys no row shows, with Later's from the person's key map. None: no hint. */
 const asksFoot = (later: readonly string[]): readonly Hint[] => [
-	{caps: ["↑", "↓"], name: "Move"},
-	{caps: ["↵"], name: "Open"},
-	...(later.length === 0 ? [] : [{caps: later.map((k) => k.toUpperCase()), name: "Later"}]),
-	{caps: ["Esc"], name: "Close"},
+  { caps: ["↑", "↓"], name: "Move" },
+  { caps: ["↵"], name: "Open" },
+  ...(later.length === 0 ? [] : [{ caps: later.map((k) => k.toUpperCase()), name: "Later" }]),
+  { caps: ["Esc"], name: "Close" },
 ];
 
 /** The asks menu's selection runs on the Effect engine, with nothing to provide. */
 const menuRun = runIn(ManagedRuntime.make(Layer.empty));
 
 /** Today's menu keeps its opening and Later behavior, with the shared answer controls. */
-function AsksList(props: FrameProps & {readonly asks: AsksNow}): ReactNode {
-	const {asks, desk, step, toHost, toRun, tickets} = props;
-	const [menu, select] = useMachine(asksMenuMachine, {run: menuRun, ctx: undefined});
-	const actions = useContext(AskActions);
-	// Later is the menu's own action, on the key the person's map gives it; unbound, no key.
-	const laterKeys = actions?.keys.later ?? [ASK_COMMANDS.later.keys];
-	const grid = useRef<HTMLDivElement>(null);
-	/** The selected ask's view: the grid keeps the focus and passes it the answer keys. */
-	const view = useRef<AskKeys>(null);
-	useEffect(() => {
-		grid.current?.focus();
-	}, []);
-	const rows = [...asks.asks, ...asks.later];
-	const waiting = asks.asks.filter((ask) => ask.kind === "ask");
-	const labels = new Map(
-		asksSections(asks, desk, tickets, Date.now())
-			.flatMap((s) => s.rows)
-			.map((r) => [r.id, r]),
-	);
-	const active = rows.find((a) => a.key === menu.selected) ?? rows[0];
-	// Opened, every ask in it is seen: the dot in the top bar goes. By the asks' keys, not their
-	// count: one ask leaving as another arrives keeps the count, and the new one is seen too.
-	const shown = asks.asks.map((a) => a.key).join("\n");
-	const sayAsksSeen = useEffectEvent(() => toHost({type: "seen"}));
-	useLayoutEffect(() => {
-		sayAsksSeen();
-	}, [shown]);
-	const close = useCallback(() => step({type: "close"}), [step]);
-	const open = (row: {id: string}) => {
-		const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
-		if (ask === undefined) return;
-		// A stop opens its lane, as its button says: the host finds or opens the lane's tile.
-		if (ask.kind === "stuck" && actions !== null) {
-			actions.openLane(ask.ticket);
-			return close();
-		}
-		const to = opensOf(desk, ask.ticket, tickets);
-		switch (to.kind) {
-			case "tile":
-				toHost({type: "go", tile: to.tile});
-				return close();
-			case "tracker":
-				toRun(to.run, {type: "query", value: {ticket: ask.ticket}});
-				toHost({type: "go", tile: to.tile});
-				return close();
-			case "none":
-				return step({type: "say", note: nowhereNote(ask.ticket)});
-		}
-	};
-	const aside = (row: {id: string}) =>
-		toHost(
-			asks.later.some((a) => a.key === row.id)
-				? {type: "back", key: row.id}
-				: {type: "later", key: row.id},
-		);
-	/**
-	 * A row's own two actions. On an ask they end the ask's toolbar (`toolbar`), so all its actions
-	 * share one row and the toolbar keeps its one tab stop; a stuck row draws them alone.
-	 */
-	const rowActs = (row: (typeof rows)[number], toolbar: boolean) => (
-		<>
-			<Button
-				size="sm"
-				variant="outline"
-				tabIndex={toolbar ? -1 : undefined}
-				aria-keyshortcuts="Enter"
-				onClick={() => open({id: row.key})}
-			>
-				{row.kind === "stuck" ? "Open lane" : "Open ticket"}
-				<Kbd size="sm">↵</Kbd>
-			</Button>
-			<Button
-				size="sm"
-				variant="outline"
-				tabIndex={toolbar ? -1 : undefined}
-				aria-keyshortcuts={laterKeys.length === 0 ? undefined : laterKeys.join(" ")}
-				onClick={() => aside({id: row.key})}
-			>
-				{asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
-				{laterKeys.length > 0 && <Kbd size="sm">{laterKeys.join(" / ")}</Kbd>}
-			</Button>
-		</>
-	);
-	return (
-		<Panel id={POP.asks} label="Asks" onClose={close}>
-			<AskStatus
-				asks={waiting.map((ask) => ({ticket: ask.ticket, ask: ask.sealed?.ask ?? ask.key}))}
-				left={waiting.length}
-			>
-				<p className="pop-head">
-					{asksHead(waiting.length, asks.asks.filter((a) => a.kind === "stuck").length)}
-				</p>
-				{asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
-				{rows.length === 0 ? (
-					<p className="pop-empty">Nothing waits on you.</p>
-				) : (
-					<div
-						role="grid"
-						aria-label="Waiting asks"
-						tabIndex={0}
-						ref={grid}
-						aria-activedescendant={
-							active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`
-						}
-						onKeyDown={(e) => {
-							if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)
-								return;
-							// Later, from the row or its view: the key the person's map gives it.
-							const command = actions?.command(
-								{key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey},
-								false,
-							);
-							const later =
-								actions === null
-									? e.key === ASK_COMMANDS.later.keys && !e.ctrlKey && !e.altKey && !e.metaKey
-									: command?.value._tag === "later" && !actions.blocked();
-							if (later && active !== undefined) {
-								e.preventDefault();
-								aside({id: active.key});
-								return;
-							}
-							// A key inside the selected ask's view is the view's own.
-							if (e.target !== e.currentTarget && (e.target as Element).closest(".ask-view"))
-								return;
-							// The selected ask's keys come first, as if pressed on its view: a key the
-							// person mapped to an answer wins over the built-in j and k (review 5).
-							if (e.target === e.currentTarget && view.current?.press(e) === true) return;
-							const by =
-								e.key === "ArrowDown" || e.key === "j"
-									? 1
-									: e.key === "ArrowUp" || e.key === "k"
-										? -1
-										: 0;
-							if (by !== 0) {
-								e.preventDefault();
-								const at = active === undefined ? -1 : rows.indexOf(active);
-								const next = rows[(at + by + rows.length) % rows.length];
-								if (next !== undefined) select({type: "select", key: next.key});
-								return;
-							}
-							if (e.key === "Enter" && active !== undefined) {
-								e.preventDefault();
-								open({id: active.key});
-								return;
-							}
-						}}
-						onFocus={(e) => {
-							if (e.target === e.currentTarget) view.current?.focus(true);
-						}}
-						onBlur={(e) => {
-							if (e.target === e.currentTarget) view.current?.focus(false);
-						}}
-					>
-						{rows.map((row, i) => (
-							<div
-								role="row"
-								aria-selected={row.key === active?.key}
-								id={`ask-row-${i}`}
-								key={row.key}
-								className="asks-row"
-							>
-								<div role="gridcell">
-									{asks.later[0]?.key === row.key && <p>Later</p>}
-									<Button
-										className="asks-title"
-										variant="tertiary"
-										tabIndex={-1}
-										// A pointer target only: the grid keeps the focus through
-										// aria-activedescendant, so the answer keys still reach the ask.
-										onClick={() => {
-											select({type: "select", key: row.key});
-											grid.current?.focus();
-										}}
-									>
-										<WordsOf words={labels.get(row.key)?.title ?? row.what} />
-									</Button>
-									<p>
-										<WordsOf words={labels.get(row.key)?.sub ?? ""} />
-									</p>
-									{row.key !== active?.key ? null : row.kind === "ask" &&
-									  row.sealed !== undefined ? (
-										<AskView
-											key={row.key}
-											ticket={row.ticket}
-											ask={row.sealed}
-											place="menu"
-											keys={view}
-											acts={rowActs(row, true)}
-										/>
-									) : (
-										<>
-											{row.kind === "stuck" && (
-												<p>
-													{row.why ?? "State not recorded"} · resume at{" "}
-													{row.resume ?? "the saved step"}
-												</p>
-											)}
-											<div className="asks-acts">{rowActs(row, false)}</div>
-										</>
-									)}
-								</div>
-							</div>
-						))}
-					</div>
-				)}
-				{rows.length > 0 && <Foot hints={asksFoot(laterKeys)} />}
-			</AskStatus>
-		</Panel>
-	);
+function AsksList(props: FrameProps & { readonly asks: AsksNow }): ReactNode {
+  const { asks, desk, step, toHost, toRun, tickets } = props;
+  const [menu, select] = useMachine(asksMenuMachine, { run: menuRun, ctx: undefined });
+  const actions = useContext(AskActions);
+  // Later is the menu's own action, on the key the person's map gives it; unbound, no key.
+  const laterKeys = actions?.keys.later ?? [ASK_COMMANDS.later.keys];
+  const grid = useRef<HTMLDivElement>(null);
+  /** The selected ask's view: the grid keeps the focus and passes it the answer keys. */
+  const view = useRef<AskKeys>(null);
+  useEffect(() => {
+    grid.current?.focus();
+  }, []);
+  const rows = [...asks.asks, ...asks.later];
+  const waiting = asks.asks.filter((ask) => ask.kind === "ask");
+  const labels = new Map(
+    asksSections(asks, desk, tickets, Date.now())
+      .flatMap((s) => s.rows)
+      .map((r) => [r.id, r]),
+  );
+  const active = rows.find((a) => a.key === menu.selected) ?? rows[0];
+  // Opened, every ask in it is seen: the dot in the top bar goes. By the asks' keys, not their
+  // count: one ask leaving as another arrives keeps the count, and the new one is seen too.
+  const shown = asks.asks.map((a) => a.key).join("\n");
+  const sayAsksSeen = useEffectEvent(() => toHost({ type: "seen" }));
+  useLayoutEffect(() => {
+    sayAsksSeen();
+  }, [shown]);
+  const close = useCallback(() => step({ type: "close" }), [step]);
+  const open = (row: { id: string }) => {
+    const ask = [...asks.asks, ...asks.later].find((a) => a.key === row.id);
+
+    if (ask === undefined) {
+      return;
+    }
+
+    // A stop opens its lane, as its button says: the host finds or opens the lane's tile.
+    if (ask.kind === "stuck" && actions !== null) {
+      actions.openLane(ask.ticket);
+      return close();
+    }
+
+    const to = opensOf(desk, ask.ticket, tickets);
+
+    switch (to.kind) {
+      case "tile":
+        toHost({ type: "go", tile: to.tile });
+        return close();
+      case "tracker":
+        toRun(to.run, { type: "query", value: { ticket: ask.ticket } });
+        toHost({ type: "go", tile: to.tile });
+        return close();
+      case "none":
+        return step({ type: "say", note: nowhereNote(ask.ticket) });
+    }
+  };
+  const aside = (row: { id: string }) =>
+    toHost(asks.later.some((a) => a.key === row.id) ? { type: "back", key: row.id } : { type: "later", key: row.id });
+  /**
+   * A row's own two actions. On an ask they end the ask's toolbar (`toolbar`), so all its actions
+   * share one row and the toolbar keeps its one tab stop; a stuck row draws them alone.
+   */
+  const rowActs = (row: (typeof rows)[number], toolbar: boolean) => (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        tabIndex={toolbar ? -1 : undefined}
+        aria-keyshortcuts="Enter"
+        onClick={() => open({ id: row.key })}
+      >
+        {row.kind === "stuck" ? "Open lane" : "Open ticket"}
+        <Kbd size="sm">↵</Kbd>
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        tabIndex={toolbar ? -1 : undefined}
+        aria-keyshortcuts={laterKeys.length === 0 ? undefined : laterKeys.join(" ")}
+        onClick={() => aside({ id: row.key })}
+      >
+        {asks.later.some((a) => a.key === row.key) ? "Bring back" : "Later"}
+        {laterKeys.length > 0 && <Kbd size="sm">{laterKeys.join(" / ")}</Kbd>}
+      </Button>
+    </>
+  );
+  return (
+    <Panel id={POP.asks} label="Asks" onClose={close}>
+      <AskStatus
+        asks={waiting.map((ask) => ({ ticket: ask.ticket, ask: ask.sealed?.ask ?? ask.key }))}
+        left={waiting.length}
+      >
+        <p className="pop-head">{asksHead(waiting.length, asks.asks.filter((a) => a.kind === "stuck").length)}</p>
+        {asks.reach === "failed" && <p role="alert">{asks.why ?? "The ledger is disconnected"}</p>}
+        {rows.length === 0 ? (
+          <p className="pop-empty">Nothing waits on you.</p>
+        ) : (
+          <div
+            role="grid"
+            aria-label="Waiting asks"
+            tabIndex={0}
+            ref={grid}
+            aria-activedescendant={active === undefined ? undefined : `ask-row-${rows.indexOf(active)}`}
+            onKeyDown={(e) => {
+              if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
+                return;
+              }
+
+              // Later, from the row or its view: the key the person's map gives it.
+              const command = actions?.command({ key: e.key, ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }, false);
+              const later =
+                actions === null
+                  ? e.key === ASK_COMMANDS.later.keys && !e.ctrlKey && !e.altKey && !e.metaKey
+                  : command?.value._tag === "later" && !actions.blocked();
+
+              if (later && active !== undefined) {
+                e.preventDefault();
+                aside({ id: active.key });
+                return;
+              }
+
+              // A key inside the selected ask's view is the view's own.
+              if (e.target !== e.currentTarget && (e.target as Element).closest(".ask-view")) {
+                return;
+              }
+
+              // The selected ask's keys come first, as if pressed on its view: a key the
+              // person mapped to an answer wins over the built-in j and k (review 5).
+              if (e.target === e.currentTarget && view.current?.press(e) === true) {
+                return;
+              }
+
+              const by = e.key === "ArrowDown" || e.key === "j" ? 1 : e.key === "ArrowUp" || e.key === "k" ? -1 : 0;
+
+              if (by !== 0) {
+                e.preventDefault();
+                const at = active === undefined ? -1 : rows.indexOf(active);
+                const next = rows[(at + by + rows.length) % rows.length];
+
+                if (next !== undefined) {
+                  select({ type: "select", key: next.key });
+                }
+
+                return;
+              }
+
+              if (e.key === "Enter" && active !== undefined) {
+                e.preventDefault();
+                open({ id: active.key });
+                return;
+              }
+            }}
+            onFocus={(e) => {
+              if (e.target === e.currentTarget) {
+                view.current?.focus(true);
+              }
+            }}
+            onBlur={(e) => {
+              if (e.target === e.currentTarget) {
+                view.current?.focus(false);
+              }
+            }}
+          >
+            {rows.map((row, i) => (
+              <div
+                role="row"
+                aria-selected={row.key === active?.key}
+                id={`ask-row-${i}`}
+                key={row.key}
+                className="asks-row"
+              >
+                <div role="gridcell">
+                  {asks.later[0]?.key === row.key && <p>Later</p>}
+                  <Button
+                    className="asks-title"
+                    variant="tertiary"
+                    tabIndex={-1}
+                    // A pointer target only: the grid keeps the focus through
+                    // aria-activedescendant, so the answer keys still reach the ask.
+                    onClick={() => {
+                      select({ type: "select", key: row.key });
+                      grid.current?.focus();
+                    }}
+                  >
+                    <WordsOf words={labels.get(row.key)?.title ?? row.what} />
+                  </Button>
+                  <p>
+                    <WordsOf words={labels.get(row.key)?.sub ?? ""} />
+                  </p>
+                  {row.key !== active?.key ? null : row.kind === "ask" && row.sealed !== undefined ? (
+                    <AskView
+                      key={row.key}
+                      ticket={row.ticket}
+                      ask={row.sealed}
+                      place="menu"
+                      keys={view}
+                      acts={rowActs(row, true)}
+                    />
+                  ) : (
+                    <>
+                      {row.kind === "stuck" && (
+                        <p>
+                          {row.why ?? "State not recorded"} · resume at {row.resume ?? "the saved step"}
+                        </p>
+                      )}
+                      <div className="asks-acts">{rowActs(row, false)}</div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.length > 0 && <Foot hints={asksFoot(laterKeys)} />}
+      </AskStatus>
+    </Panel>
+  );
 }
 
 /** The jobs list's footer: its rows have no second thing, so Enter is the one action. */
 const JOBS_FOOT: readonly Hint[] = [
-	{caps: ["↑", "↓"], name: "Move"},
-	{caps: ["↵"], name: "Go to tile"},
-	{caps: ["Esc"], name: "Close"},
+  { caps: ["↑", "↓"], name: "Move" },
+  { caps: ["↵"], name: "Go to tile" },
+  { caps: ["Esc"], name: "Close" },
 ];
 
 /**
@@ -673,14 +685,14 @@ const JOBS_FOOT: readonly Hint[] = [
  * hint: each row already shows its `%n`.
  */
 const JOBS_EMPTY: Empty = {
-	title: "Nothing is running",
-	sub: [
-		{text: "A job you start in tsh shows here. There, ", typed: false},
-		{text: "jobs", typed: true},
-		{text: " lists them and ", typed: false},
-		{text: "attach %n", typed: true},
-		{text: " brings one forward.", typed: false},
-	],
+  title: "Nothing is running",
+  sub: [
+    { text: "A job you start in tsh shows here. There, ", typed: false },
+    { text: "jobs", typed: true },
+    { text: " lists them and ", typed: false },
+    { text: "attach %n", typed: true },
+    { text: " brings one forward.", typed: false },
+  ],
 };
 
 /**
@@ -689,100 +701,107 @@ const JOBS_EMPTY: Empty = {
  * on a row focuses the tile it runs in; on one of this tile's, that is only the list closing and
  * focus going back to the tile. There is no trace to open for a job yet.
  */
-function JobsMenu(props: FrameProps & {readonly desk: Open}): ReactNode {
-	const {desk, step, toHost} = props;
-	const now = useNow(() => true);
-	const list = jobsList(desk, now);
-	const here = focusedOf(desk)?.id;
-	const close = useCallback(() => step({type: "close"}), [step]);
-	const go = (row: Row) => {
-		const tile = list.tiles.get(row.id);
-		if (tile !== undefined && tile !== here) toHost({type: "go", tile});
-		close();
-	};
-	return (
-		<Menu
-			id={POP.jobs}
-			label="Jobs"
-			from="bottom"
-			count={list.count}
-			sections={list.sections}
-			foot={JOBS_FOOT}
-			empty={JOBS_EMPTY}
-			onAct={go}
-			// No job row has a second thing (`second: null`), so H does nothing here.
-			onSecond={() => undefined}
-			onClose={close}
-		/>
-	);
+function JobsMenu(props: FrameProps & { readonly desk: Open }): ReactNode {
+  const { desk, step, toHost } = props;
+  const now = useNow(() => true);
+  const list = jobsList(desk, now);
+  const here = focusedOf(desk)?.id;
+  const close = useCallback(() => step({ type: "close" }), [step]);
+  const go = (row: Row) => {
+    const tile = list.tiles.get(row.id);
+
+    if (tile !== undefined && tile !== here) {
+      toHost({ type: "go", tile });
+    }
+
+    close();
+  };
+  return (
+    <Menu
+      id={POP.jobs}
+      label="Jobs"
+      from="bottom"
+      count={list.count}
+      sections={list.sections}
+      foot={JOBS_FOOT}
+      empty={JOBS_EMPTY}
+      onAct={go}
+      // No job row has a second thing (`second: null`), so H does nothing here.
+      onSecond={() => undefined}
+      onClose={close}
+    />
+  );
 }
 
 /** What the restart does to the jobs, said before the person confirms. */
-const JOBS_STOP =
-	"Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
+const JOBS_STOP = "Its running jobs stop. Their saved lists stay, and each comes back with attach %n.";
 
 /** Each item's panel, as a screen reader names it. */
 const LINES_LABEL: Readonly<Record<Part, string>> = {
-	agents: "The agents",
-	sync: "The sync",
-	host: "The host",
+  agents: "The agents",
+  sync: "The sync",
+  host: "The host",
 };
 
 /** A few lines on one item of the top bar, under it: the agents, the sync or the host. */
-function ItemLines(props: FrameProps & {readonly what: Part}): ReactNode {
-	const {link, step} = props;
-	const close = useCallback(() => step({type: "close"}), [step]);
-	const host = reachedOf(props);
-	const now = Date.now();
-	const body = (): ReactNode => {
-		if (props.what === "host")
-			return (
-				<HostLines
-					link={link}
-					first={!props.attachedOnce}
-					toApp={props.toApp}
-					host={host}
-					desk={props.desk}
-					now={now}
-				/>
-			);
-		if (host === null)
-			return (
-				<>
-					<h2 className="pop-title">The app is not on the host</h2>
-					<p className="pop-text">Once it is back, this says what the host says.</p>
-				</>
-			);
-		return props.what === "agents" ? (
-			<AgentsLines host={host} now={now} toHost={props.toHost} />
-		) : (
-			<SyncLines host={host} asks={props.asks} />
-		);
-	};
-	return (
-		<Panel id={POP.lines} label={LINES_LABEL[props.what]} onClose={close}>
-			{body()}
-		</Panel>
-	);
+function ItemLines(props: FrameProps & { readonly what: Part }): ReactNode {
+  const { link, step } = props;
+  const close = useCallback(() => step({ type: "close" }), [step]);
+  const host = reachedOf(props);
+  const now = Date.now();
+  const body = (): ReactNode => {
+    if (props.what === "host") {
+      return (
+        <HostLines
+          link={link}
+          first={!props.attachedOnce}
+          toApp={props.toApp}
+          host={host}
+          desk={props.desk}
+          now={now}
+        />
+      );
+    }
+
+    if (host === null) {
+      return (
+        <>
+          <h2 className="pop-title">The app is not on the host</h2>
+          <p className="pop-text">Once it is back, this says what the host says.</p>
+        </>
+      );
+    }
+
+    return props.what === "agents" ? (
+      <AgentsLines host={host} now={now} toHost={props.toHost} />
+    ) : (
+      <SyncLines host={host} asks={props.asks} />
+    );
+  };
+  return (
+    <Panel id={POP.lines} label={LINES_LABEL[props.what]} onClose={close}>
+      {body()}
+    </Panel>
+  );
 }
 
 /** How an agent attaches, said under its list, its command typed. */
 const ATTACH: Words = [
-	{text: "An agent attaches with ", typed: false},
-	{text: "fabrika mcp --as claude", typed: true},
-	{
-		text: ", under its own name. It drives the app's programs as tools; it never answers an ask.",
-		typed: false,
-	},
+  { text: "An agent attaches with ", typed: false },
+  { text: "fabrika mcp --as claude", typed: true },
+  {
+    text: ", under its own name. It drives the app's programs as tools; it never answers an ask.",
+    typed: false,
+  },
 ];
 
 /** What a summoned agent does now, in a word or two. */
 const STATE_WORD: Readonly<Record<SummonedOn["state"], string>> = {
-	opening: "opening",
-	idle: "idle",
-	turn: "working",
-	asking: "asking you",
-	down: "down",
+  opening: "opening",
+  idle: "idle",
+  turn: "working",
+  asking: "asking you",
+  down: "down",
 };
 
 /**
@@ -790,55 +809,57 @@ const STATE_WORD: Readonly<Record<SummonedOn["state"], string>> = {
  * Dismiss, as `dismiss <name>` is in a tile. Nothing when none is summoned.
  */
 function SummonedLines(props: {
-	readonly summoned: readonly SummonedOn[];
-	readonly now: number;
-	readonly toHost: (m: FromPage) => void;
+  readonly summoned: readonly SummonedOn[];
+  readonly now: number;
+  readonly toHost: (m: FromPage) => void;
 }): ReactNode {
-	const {summoned} = props;
-	if (summoned.length === 0) return null;
-	return (
-		<>
-			<h2 className="pop-title">
-				{`${summoned.length} agent${summoned.length === 1 ? "" : "s"} summoned here`}
-			</h2>
-			<ul className="pop-lines">
-				{summoned.map((a) => (
-					<li key={a.name} className="pop-row two">
-						<span className="lead">
-							<IconOf icon={a.state === "down" ? "stuck" : "running"} />
-						</span>
-						<span className="text">
-							<span className="t">{a.name}</span>
-							<span className="s">
-								{[a.agent, a.model, a.effort].filter((w) => w !== null).join(" · ")} ·{" "}
-								{STATE_WORD[a.state]} · since {clockWord(a.since, props.now)}
-							</span>
-						</span>
-						<button
-							type="button"
-							className="pop-button"
-							aria-label={`Dismiss ${a.name}`}
-							onClick={() => props.toHost({type: "dismiss", name: a.name})}
-						>
-							Dismiss
-						</button>
-					</li>
-				))}
-			</ul>
-			<p className="pop-text">
-				<WordsOf words={SUMMON} />
-			</p>
-		</>
-	);
+  const { summoned } = props;
+
+  if (summoned.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <h2 className="pop-title">{`${summoned.length} agent${summoned.length === 1 ? "" : "s"} summoned here`}</h2>
+      <ul className="pop-lines">
+        {summoned.map((a) => (
+          <li key={a.name} className="pop-row two">
+            <span className="lead">
+              <IconOf icon={a.state === "down" ? "stuck" : "running"} />
+            </span>
+            <span className="text">
+              <span className="t">{a.name}</span>
+              <span className="s">
+                {[a.agent, a.model, a.effort].filter((w) => w !== null).join(" · ")} · {STATE_WORD[a.state]} · since{" "}
+                {clockWord(a.since, props.now)}
+              </span>
+            </span>
+            <button
+              type="button"
+              className="pop-button"
+              aria-label={`Dismiss ${a.name}`}
+              onClick={() => props.toHost({ type: "dismiss", name: a.name })}
+            >
+              Dismiss
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="pop-text">
+        <WordsOf words={SUMMON} />
+      </p>
+    </>
+  );
 }
 
 /** How an agent is summoned, said under the summoned ones, its command typed. */
 const SUMMON: Words = [
-	{text: "Summon one in a tile with ", typed: false},
-	{text: "summon claude as scout", typed: true},
-	{text: ", then talk with ", typed: false},
-	{text: "@scout", typed: true},
-	{text: ".", typed: false},
+  { text: "Summon one in a tile with ", typed: false },
+  { text: "summon claude as scout", typed: true },
+  { text: ", then talk with ", typed: false },
+  { text: "@scout", typed: true },
+  { text: ".", typed: false },
 ];
 
 /**
@@ -846,209 +867,210 @@ const SUMMON: Words = [
  * the host's agents' socket, under its own heading: its name, and since when.
  */
 function AgentsLines(props: {
-	readonly host: HostNow;
-	readonly now: number;
-	readonly toHost: (m: FromPage) => void;
+  readonly host: HostNow;
+  readonly now: number;
+  readonly toHost: (m: FromPage) => void;
 }): ReactNode {
-	return (
-		<>
-			<SummonedLines summoned={props.host.summoned ?? []} now={props.now} toHost={props.toHost} />
-			<AttachedLines host={props.host} now={props.now} />
-		</>
-	);
+  return (
+    <>
+      <SummonedLines summoned={props.host.summoned ?? []} now={props.now} toHost={props.toHost} />
+      <AttachedLines host={props.host} now={props.now} />
+    </>
+  );
 }
 
 /** Each agent attached to the host now, a row each: its name, and since when. */
-function AttachedLines(props: {readonly host: HostNow; readonly now: number}): ReactNode {
-	const {agents} = props.host;
-	if (agents === null)
-		return (
-			<>
-				<h2 className="pop-title">No agents attach here</h2>
-				<p className="pop-text">
-					This host has no agents' socket, so no agent can attach to it. Only a host built before
-					every home had one says so.
-				</p>
-			</>
-		);
-	return (
-		<>
-			<h2 className="pop-title">
-				{agents.length === 0
-					? "No agent is attached"
-					: `${agents.length} agent${agents.length === 1 ? " is" : "s are"} attached`}
-			</h2>
-			<Lines
-				rows={agents.map((a, i) => ({
-					id: `${a.name}-${a.since}-${i}`,
-					icon: "running",
-					title: sentence(a.name),
-					sub: null,
-					side: `since ${clockWord(a.since, props.now)}`,
-					second: null,
-				}))}
-			/>
-			<p className="pop-text">
-				<WordsOf words={ATTACH} />
-			</p>
-		</>
-	);
+function AttachedLines(props: { readonly host: HostNow; readonly now: number }): ReactNode {
+  const { agents } = props.host;
+
+  if (agents === null) {
+    return (
+      <>
+        <h2 className="pop-title">No agents attach here</h2>
+        <p className="pop-text">
+          This host has no agents' socket, so no agent can attach to it. Only a host built before every home had one
+          says so.
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h2 className="pop-title">
+        {agents.length === 0
+          ? "No agent is attached"
+          : `${agents.length} agent${agents.length === 1 ? " is" : "s are"} attached`}
+      </h2>
+      <Lines
+        rows={agents.map((a, i) => ({
+          id: `${a.name}-${a.since}-${i}`,
+          icon: "running",
+          title: sentence(a.name),
+          sub: null,
+          side: `since ${clockWord(a.since, props.now)}`,
+          second: null,
+        }))}
+      />
+      <p className="pop-text">
+        <WordsOf words={ATTACH} />
+      </p>
+    </>
+  );
 }
 
 /** Which ledger the home reads, and how its last read went. */
-function SyncLines(props: {readonly host: HostNow; readonly asks: AsksNow | null}): ReactNode {
-	const {ledger} = props.host;
-	const {asks} = props;
-	const failed = asks?.reach === "failed";
-	const why = failed && (
-		<>
-			{asks.why !== null && <code className="pop-why">{asks.why}</code>}
-			<p className="pop-text">The asks count is the last one read. It reads again every second.</p>
-		</>
-	);
-	if (ledger.kind === "own")
-		return (
-			<>
-				<h2 className={`pop-title${failed ? " broken" : ""}`}>
-					{failed ? "The ledger is unreachable" : "This home keeps its own ledger"}
-				</h2>
-				<p className="pop-text">
-					<code>ledger.sqlite</code>, in the app's home. Nothing to sync: every fact is written
-					here.
-				</p>
-				{why}
-			</>
-		);
-	return (
-		<>
-			<h2 className={`pop-title${failed ? " broken" : ""}`}>
-				{failed
-					? "The ledger server is unreachable"
-					: asks?.reach === "ok"
-						? "Synced with the ledger server"
-						: "Syncing with the ledger server"}
-			</h2>
-			<p className="pop-text">
-				<code>{ledger.address}</code>, as {ledger.login}
-			</p>
-			{why || (
-				<p className="pop-text">
-					Every write goes straight to the server, so none waits here. It reads again every second.
-				</p>
-			)}
-		</>
-	);
+function SyncLines(props: { readonly host: HostNow; readonly asks: AsksNow | null }): ReactNode {
+  const { ledger } = props.host;
+  const { asks } = props;
+  const failed = asks?.reach === "failed";
+  const why = failed && (
+    <>
+      {asks.why !== null && <code className="pop-why">{asks.why}</code>}
+      <p className="pop-text">The asks count is the last one read. It reads again every second.</p>
+    </>
+  );
+
+  if (ledger.kind === "own") {
+    return (
+      <>
+        <h2 className={`pop-title${failed ? " broken" : ""}`}>
+          {failed ? "The ledger is unreachable" : "This home keeps its own ledger"}
+        </h2>
+        <p className="pop-text">
+          <code>ledger.sqlite</code>, in the app's home. Nothing to sync: every fact is written here.
+        </p>
+        {why}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h2 className={`pop-title${failed ? " broken" : ""}`}>
+        {failed
+          ? "The ledger server is unreachable"
+          : asks?.reach === "ok"
+            ? "Synced with the ledger server"
+            : "Syncing with the ledger server"}
+      </h2>
+      <p className="pop-text">
+        <code>{ledger.address}</code>, as {ledger.login}
+      </p>
+      {why || (
+        <p className="pop-text">
+          Every write goes straight to the server, so none waits here. It reads again every second.
+        </p>
+      )}
+    </>
+  );
 }
 
 /** A panel's one thing to do, as a button. */
-function Do(props: {readonly onClick: () => void; readonly children: ReactNode}): ReactNode {
-	return (
-		<button type="button" className="pop-button" onClick={props.onClick}>
-			{props.children}
-		</button>
-	);
+function Do(props: { readonly onClick: () => void; readonly children: ReactNode }): ReactNode {
+  return (
+    <button type="button" className="pop-button" onClick={props.onClick}>
+      {props.children}
+    </button>
+  );
 }
 
 /** The host, in a few lines: its process when it is up; else what the old corner notes said. */
 function HostLines(props: {
-	readonly link: LinkNow;
-	readonly first: boolean;
-	readonly toApp: (m: ToApp) => void;
-	readonly host: HostNow | null;
-	readonly desk: Open | null;
-	readonly now: number;
+  readonly link: LinkNow;
+  readonly first: boolean;
+  readonly toApp: (m: ToApp) => void;
+  readonly host: HostNow | null;
+  readonly desk: Open | null;
+  readonly now: number;
 }): ReactNode {
-	const {link, first, host} = props;
-	const restarted = host === null ? null : restartedWord(host, props.now);
-	const restart = (
-		<Do onClick={() => props.toApp({type: "restart"})}>Stop the old host and start this one</Do>
-	);
-	switch (link.kind) {
-		case "up":
-			return (
-				<>
-					<h2 className="pop-title">The host is up</h2>
-					{host !== null && (
-						<p className="pop-text">
-							Process {host.pid}, since {clockWord(host.since, props.now)},{" "}
-							{host.build === null ? (
-								"no build named"
-							) : (
-								<>
-									build <code>{host.build}</code>
-								</>
-							)}
-							.
-						</p>
-					)}
-					{restarted !== null && (
-						<p className="pop-text">
-							{sentence(restarted)}
-							{/[.!?]$/.test(restarted) ? "" : "."}
-						</p>
-					)}
-					{props.desk !== null && <p className="pop-text">{holdsWord(props.desk)}</p>}
-					<p className="pop-text">
-						It runs every tile and job. Quitting the app leaves it running; the next start attaches
-						to it.
-					</p>
-				</>
-			);
-		case "build":
-			return (
-				<>
-					<h2 className="pop-title">The host runs older code</h2>
-					<p className="pop-text">
-						{link.theirs === null ? (
-							<>
-								It names no build. This app is build <code>{link.ours}</code>.
-							</>
-						) : (
-							<>
-								It is build <code>{link.theirs}</code>. This app is build <code>{link.ours}</code>.
-							</>
-						)}{" "}
-						{JOBS_STOP}
-					</p>
-					{restart}
-				</>
-			);
-		case "version":
-			return (
-				<>
-					<h2 className="pop-title broken">The host speaks link version {link.theirs}</h2>
-					<p className="pop-text">This app speaks {link.ours}.</p>
-					{restart}
-				</>
-			);
-		case "reconnecting":
-			return (
-				<>
-					<h2 className="pop-title">
-						{first ? "Connecting to the host…" : "Reconnecting to the host…"}
-					</h2>
-					<code className="pop-why">{link.why}</code>
-				</>
-			);
-		case "stopped":
-			return (
-				<>
-					<h2 className="pop-title broken">
-						{first ? "Could not connect to the host" : "Could not reconnect to the host"}
-					</h2>
-					<code className="pop-why">{link.why}</code>
-					<p className="pop-text">It stopped trying after five minutes.</p>
-					<Do onClick={() => props.toApp({type: "again"})}>Try again</Do>
-				</>
-			);
-		case "restarting":
-			return (
-				<>
-					<h2 className="pop-title">Stopping the old host…</h2>
-					<p className="pop-text">Once it has stopped, this app starts its own and attaches.</p>
-				</>
-			);
-	}
+  const { link, first, host } = props;
+  const restarted = host === null ? null : restartedWord(host, props.now);
+  const restart = <Do onClick={() => props.toApp({ type: "restart" })}>Stop the old host and start this one</Do>;
+
+  switch (link.kind) {
+    case "up":
+      return (
+        <>
+          <h2 className="pop-title">The host is up</h2>
+          {host !== null && (
+            <p className="pop-text">
+              Process {host.pid}, since {clockWord(host.since, props.now)},{" "}
+              {host.build === null ? (
+                "no build named"
+              ) : (
+                <>
+                  build <code>{host.build}</code>
+                </>
+              )}
+              .
+            </p>
+          )}
+          {restarted !== null && (
+            <p className="pop-text">
+              {sentence(restarted)}
+              {/[.!?]$/.test(restarted) ? "" : "."}
+            </p>
+          )}
+          {props.desk !== null && <p className="pop-text">{holdsWord(props.desk)}</p>}
+          <p className="pop-text">
+            It runs every tile and job. Quitting the app leaves it running; the next start attaches to it.
+          </p>
+        </>
+      );
+    case "build":
+      return (
+        <>
+          <h2 className="pop-title">The host runs older code</h2>
+          <p className="pop-text">
+            {link.theirs === null ? (
+              <>
+                It names no build. This app is build <code>{link.ours}</code>.
+              </>
+            ) : (
+              <>
+                It is build <code>{link.theirs}</code>. This app is build <code>{link.ours}</code>.
+              </>
+            )}{" "}
+            {JOBS_STOP}
+          </p>
+          {restart}
+        </>
+      );
+    case "version":
+      return (
+        <>
+          <h2 className="pop-title broken">The host speaks link version {link.theirs}</h2>
+          <p className="pop-text">This app speaks {link.ours}.</p>
+          {restart}
+        </>
+      );
+    case "reconnecting":
+      return (
+        <>
+          <h2 className="pop-title">{first ? "Connecting to the host…" : "Reconnecting to the host…"}</h2>
+          <code className="pop-why">{link.why}</code>
+        </>
+      );
+    case "stopped":
+      return (
+        <>
+          <h2 className="pop-title broken">
+            {first ? "Could not connect to the host" : "Could not reconnect to the host"}
+          </h2>
+          <code className="pop-why">{link.why}</code>
+          <p className="pop-text">It stopped trying after five minutes.</p>
+          <Do onClick={() => props.toApp({ type: "again" })}>Try again</Do>
+        </>
+      );
+    case "restarting":
+      return (
+        <>
+          <h2 className="pop-title">Stopping the old host…</h2>
+          <p className="pop-text">Once it has stopped, this app starts its own and attaches.</p>
+        </>
+      );
+  }
 }
 
 /**
@@ -1056,123 +1078,141 @@ function HostLines(props: {
  * (`close t2? (y/n)`) is said here, where tmux says it. An agent's ask never is.
  */
 export function BottomLine(props: FrameProps): ReactNode {
-	const {desk, frame, armed} = props;
-	const question = desk === null ? null : questionWord(desk);
-	const here = desk === null ? null : focusedOf(desk);
-	const jobs = desk === null || here === null ? undefined : desk.jobs[here.id];
-	const now = useNow((t) => jobItem(jobs, t) !== null);
-	const job = jobItem(jobs, now);
-	const left = (): ReactNode => {
-		if (question !== null)
-			return (
-				<span className="prompt" role="alertdialog" aria-label={question}>
-					{question}
-				</span>
-			);
-		if (armed)
-			return (
-				<span className="keying">
-					<b>PREFIX</b>
-					{prefixLine(props.keys).map((k) => (
-						<span key={k.key}>
-							<Sep />
-							<b>{k.key}</b> {k.name}
-						</span>
-					))}
-				</span>
-			);
-		if (frame.info.kind === "on")
-			return (
-				<span className="info">
-					<b>INFO</b>
-					<Sep />
-					{frame.info.explained ?? "point at anything"}
-				</span>
-			);
-		if (desk === null) return null;
-		return (
-			<>
-				<span className="here" data-info={INFO.here}>
-					{hereWord(desk, props.shapes, props.tickets)}
-				</span>
-				{job !== null && (
-					<>
-						<Sep />
-						<JobWord {...props} job={job} />
-					</>
-				)}
-			</>
-		);
-	};
-	const right = (): ReactNode => {
-		if (question !== null) return <span className="quiet">y closes · n keeps it</span>;
-		if (armed) return <span className="quiet">esc cancels</span>;
-		if (frame.note !== null) return <span className="note">{frame.note}</span>;
-		const keys = keyFor(props, "keys");
-		const info = keyFor(props, "info");
-		const quiet = quietOf(frame);
-		const on = frame.info.kind === "on";
-		const file = fileWord(props.keys.file);
-		const said = infoFor(props.keys);
-		return (
-			<>
-				{/* The way out, named first: the right side is pinned to the window's right edge, so a
+  const { desk, frame, armed } = props;
+  const question = desk === null ? null : questionWord(desk);
+  const here = desk === null ? null : focusedOf(desk);
+  const jobs = desk === null || here === null ? undefined : desk.jobs[here.id];
+  const now = useNow((t) => jobItem(jobs, t) !== null);
+  const job = jobItem(jobs, now);
+  const left = (): ReactNode => {
+    if (question !== null) {
+      return (
+        <span className="prompt" role="alertdialog" aria-label={question}>
+          {question}
+        </span>
+      );
+    }
+
+    if (armed) {
+      return (
+        <span className="keying">
+          <b>PREFIX</b>
+          {prefixLine(props.keys).map((k) => (
+            <span key={k.key}>
+              <Sep />
+              <b>{k.key}</b> {k.name}
+            </span>
+          ))}
+        </span>
+      );
+    }
+
+    if (frame.info.kind === "on") {
+      return (
+        <span className="info">
+          <b>INFO</b>
+          <Sep />
+          {frame.info.explained ?? "point at anything"}
+        </span>
+      );
+    }
+
+    if (desk === null) {
+      return null;
+    }
+
+    return (
+      <>
+        <span className="here" data-info={INFO.here}>
+          {hereWord(desk, props.shapes, props.tickets)}
+        </span>
+        {job !== null && (
+          <>
+            <Sep />
+            <JobWord {...props} job={job} />
+          </>
+        )}
+      </>
+    );
+  };
+  const right = (): ReactNode => {
+    if (question !== null) {
+      return <span className="quiet">y closes · n keeps it</span>;
+    }
+
+    if (armed) {
+      return <span className="quiet">esc cancels</span>;
+    }
+
+    if (frame.note !== null) {
+      return <span className="note">{frame.note}</span>;
+    }
+
+    const keys = keyFor(props, "keys");
+    const info = keyFor(props, "info");
+    const quiet = quietOf(frame);
+    const on = frame.info.kind === "on";
+    const file = fileWord(props.keys.file);
+    const said = infoFor(props.keys);
+    return (
+      <>
+        {/* The way out, named first: the right side is pinned to the window's right edge, so a
 				    word after the items would push them left. First, it leaves them where they were, and
 				    a second click where the mode turned on turns it off. */}
-				{on && (
-					<>
-						<span className="quiet">esc leaves</span>
-						<Sep />
-					</>
-				)}
-				{/* A keys file that did not read: in words, with the warning color, while the keys go on
+        {on && (
+          <>
+            <span className="quiet">esc leaves</span>
+            <Sep />
+          </>
+        )}
+        {/* A keys file that did not read: in words, with the warning color, while the keys go on
 				    as they were (WCAG 1.4.1: the words say it, the color only marks it). */}
-				{file !== null && (
-					<>
-						<span className="broken" title={file}>
-							{file}
-						</span>
-						<Sep />
-					</>
-				)}
-				{/* A toggle button by the ARIA APG: its name stays "info", and aria-pressed says on or
+        {file !== null && (
+          <>
+            <span className="broken" title={file}>
+              {file}
+            </span>
+            <Sep />
+          </>
+        )}
+        {/* A toggle button by the ARIA APG: its name stays "info", and aria-pressed says on or
 				    off. Clicked or pressed, the pointer or focus is on it, so it is what is explained first. */}
-				<Item
-					name="info"
-					caps={capsFor(props, "info")}
-					word={wordFor(props, "info")}
-					quiet={quiet}
-					info={said.info}
-					pressed={on}
-					onClick={() => props.step({type: "info", focus: said.info})}
-				>
-					{info ?? ""} info
-				</Item>
-				<Sep />
-				<Item
-					name="keys"
-					caps={capsFor(props, "keys")}
-					word={wordFor(props, "keys")}
-					quiet={quiet}
-					info={said.keys}
-					opens={{
-						popup: "dialog",
-						id: POP.palette,
-						open: frame.over.kind === "palette" && frame.over.title === "keys",
-					}}
-					onClick={() => props.step({type: "show", what: "keys"})}
-				>
-					{keys ?? ""} keys
-				</Item>
-			</>
-		);
-	};
-	return (
-		<footer className="bottomline">
-			<div className="left">{left()}</div>
-			<div className="right">{right()}</div>
-		</footer>
-	);
+        <Item
+          name="info"
+          caps={capsFor(props, "info")}
+          word={wordFor(props, "info")}
+          quiet={quiet}
+          info={said.info}
+          pressed={on}
+          onClick={() => props.step({ type: "info", focus: said.info })}
+        >
+          {info ?? ""} info
+        </Item>
+        <Sep />
+        <Item
+          name="keys"
+          caps={capsFor(props, "keys")}
+          word={wordFor(props, "keys")}
+          quiet={quiet}
+          info={said.keys}
+          opens={{
+            popup: "dialog",
+            id: POP.palette,
+            open: frame.over.kind === "palette" && frame.over.title === "keys",
+          }}
+          onClick={() => props.step({ type: "show", what: "keys" })}
+        >
+          {keys ?? ""} keys
+        </Item>
+      </>
+    );
+  };
+  return (
+    <footer className="bottomline">
+      <div className="left">{left()}</div>
+      <div className="right">{right()}</div>
+    </footer>
+  );
 }
 
 /**
@@ -1183,12 +1223,12 @@ export function BottomLine(props: FrameProps): ReactNode {
  * whatever the bars, before it has anything to say, so a screen reader is listening when it
  * changes, and "off" is heard with the bars hidden.
  */
-export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
-	return (
-		<p className="mode-status" role="status">
-			{modeWord(props.frame)}
-		</p>
-	);
+export function ModeStatus(props: { readonly frame: Frame }): ReactNode {
+  return (
+    <p className="mode-status" role="status">
+      {modeWord(props.frame)}
+    </p>
+  );
 }
 
 /**
@@ -1196,15 +1236,15 @@ export function ModeStatus(props: {readonly frame: Frame}): ReactNode {
  * `instead` of the desk (another link version), and the mode's status region always, outside the
  * line, so it is heard whatever the bars and the link.
  */
-export function BottomArea(props: FrameProps & {readonly instead: boolean}): ReactNode {
-	const {frame, desk, armed, instead} = props;
-	const shows = bottomLineShows(frame, {armed, asking: desk?.ask != null});
-	return (
-		<>
-			{!instead && shows && <BottomLine {...props} />}
-			<ModeStatus frame={frame} />
-		</>
-	);
+export function BottomArea(props: FrameProps & { readonly instead: boolean }): ReactNode {
+  const { frame, desk, armed, instead } = props;
+  const shows = bottomLineShows(frame, { armed, asking: desk?.ask != null });
+  return (
+    <>
+      {!instead && shows && <BottomLine {...props} />}
+      <ModeStatus frame={frame} />
+    </>
+  );
 }
 
 /** How often the page reads its clock again while a job's time is on screen, in ms. */
@@ -1215,49 +1255,50 @@ const TICK_MS = 1000;
  * screen moves at that time: a job runs, or one just ended and will clear. Elm's `Time.every`.
  */
 const useNow = (moving: (now: number) => boolean): number => {
-	const [now, setNow] = useState(Date.now);
-	const on = moving(now);
-	useEffect(() => {
-		if (!on) return;
-		setNow(Date.now());
-		const timer = setInterval(() => setNow(Date.now()), TICK_MS);
-		return () => clearInterval(timer);
-	}, [on]);
-	return now;
+  const [now, setNow] = useState(Date.now);
+  const on = moving(now);
+  useEffect(() => {
+    if (!on) {
+      return;
+    }
+
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(timer);
+  }, [on]);
+  return now;
 };
 
 /** The job item: `%3 seq --to 9 | tally 2m +1`. A click lists the jobs, as C-b J does. */
-function JobWord(props: FrameProps & {readonly job: JobItem}): ReactNode {
-	const {job, frame} = props;
-	return (
-		<Item
-			name="jobs"
-			caps={capsFor(props, "jobs")}
-			word={wordFor(props, "jobs")}
-			quiet={quietOf(frame)}
-			info={INFO.job}
-			className="job"
-			opens={{popup: "menu", id: POP.jobs, open: frame.over.kind === "jobs"}}
-			onClick={() => props.step({type: "show", what: "jobs"})}
-		>
-			<b>%{job.n}</b> <span className="job-line">{job.text}</span>{" "}
-			<span className="took">{job.said}</span>
-			{job.more > 0 && <span className="took"> +{job.more}</span>}
-		</Item>
-	);
+function JobWord(props: FrameProps & { readonly job: JobItem }): ReactNode {
+  const { job, frame } = props;
+  return (
+    <Item
+      name="jobs"
+      caps={capsFor(props, "jobs")}
+      word={wordFor(props, "jobs")}
+      quiet={quietOf(frame)}
+      info={INFO.job}
+      className="job"
+      opens={{ popup: "menu", id: POP.jobs, open: frame.over.kind === "jobs" }}
+      onClick={() => props.step({ type: "show", what: "jobs" })}
+    >
+      <b>%{job.n}</b> <span className="job-line">{job.text}</span> <span className="took">{job.said}</span>
+      {job.more > 0 && <span className="took"> +{job.more}</span>}
+    </Item>
+  );
 }
 
 /** A group of commands, as its heading says it. */
 const GROUP_TITLE: Readonly<Record<Group, string>> = {
-	tile: "Tile",
-	focus: "Focus",
-	workspace: "Workspace",
-	window: "Window",
+  tile: "Tile",
+  focus: "Focus",
+  workspace: "Workspace",
+  window: "Window",
 };
 
 /** `19 commands`, `1 shortcut`. */
-const countWord = (n: number, keys: boolean): string =>
-	`${n} ${keys ? "shortcut" : "command"}${n === 1 ? "" : "s"}`;
+const countWord = (n: number, keys: boolean): string => `${n} ${keys ? "shortcut" : "command"}${n === 1 ? "" : "s"}`;
 
 /**
  * The palette (Cmd-K), or every key (C-b ?): each command and its keys, grouped, the focused tile
@@ -1265,69 +1306,78 @@ const countWord = (n: number, keys: boolean): string =>
  * command as its key would, Escape closes it.
  */
 function CommandPalette(props: FrameProps): ReactNode {
-	const {frame, step, desk} = props;
-	const close = useCallback(() => step({type: "close"}), [step]);
-	if (frame.over.kind !== "palette") return null;
-	const {title, query, at} = frame.over;
-	if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined)
-		return (
-			<Dialog
-				id={POP.palette}
-				className="keys-dialog"
-				title="Keyboard shortcuts"
-				open
-				size="lg"
-				closeOnEscape={false}
-				showCloseButton={false}
-				closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
-				onOpenChange={(open) => {
-					if (!open && props.keysEditor?.recording._tag !== "saving") close();
-				}}
-			>
-				<KeysWindow
-					keys={props.keys}
-					editor={props.keysEditor}
-					send={props.editKeys}
-					changes={props.keyChanges ?? []}
-					close={close}
-				/>
-			</Dialog>
-		);
-	const keys = title === "keys";
-	const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
-	const run = (i: number) => {
-		const c = shown[i];
-		if (c === undefined) return;
-		props.toHost({type: "run", does: c.runs});
-		step({type: "ran", key: c.key});
-	};
-	const focused = desk === null ? null : focusedOf(desk);
-	const groups = [...new Set(shown.map((c) => c.group))];
-	// The shortcuts list says a keys file that did not read on top, until it reads again.
-	const file = keys ? fileWord(props.keys.file) : null;
-	return (
-		<Palette
-			id={POP.palette}
-			label={keys ? "Keyboard shortcuts" : "Commands"}
-			chip={
-				keys || focused === null
-					? "Keyboard shortcuts"
-					: `${focused.id} · ${tileWord(focused, props.tickets)}`
-			}
-			note={file ?? undefined}
-			query={query}
-			sections={groups.map((g) => ({
-				title: GROUP_TITLE[g],
-				options: shown
-					.filter((c) => c.group === g)
-					.map((c) => ({id: c.name, name: c.name, word: c.tsh, caps: c.caps})),
-			}))}
-			at={at}
-			count={countWord(shown.length, keys)}
-			onQuery={(q) => step({type: "query", query: q})}
-			onMove={(by) => step({type: "move", by, of: shown.length})}
-			onRun={run}
-			onClose={close}
-		/>
-	);
+  const { frame, step, desk } = props;
+  const close = useCallback(() => step({ type: "close" }), [step]);
+
+  if (frame.over.kind !== "palette") {
+    return null;
+  }
+
+  const { title, query, at } = frame.over;
+
+  if (title === "keys" && props.keysEditor != null && props.editKeys !== undefined) {
+    return (
+      <Dialog
+        id={POP.palette}
+        className="keys-dialog"
+        title="Keyboard shortcuts"
+        open
+        size="lg"
+        closeOnEscape={false}
+        showCloseButton={false}
+        closeOnInteractOutside={props.keysEditor.recording._tag !== "saving"}
+        onOpenChange={(open) => {
+          if (!open && props.keysEditor?.recording._tag !== "saving") {
+            close();
+          }
+        }}
+      >
+        <KeysWindow
+          keys={props.keys}
+          editor={props.keysEditor}
+          send={props.editKeys}
+          changes={props.keyChanges ?? []}
+          close={close}
+        />
+      </Dialog>
+    );
+  }
+
+  const keys = title === "keys";
+  const shown = matching(commandsOf(props.keys, desk?.workspaces.length ?? 0), query);
+  const run = (i: number) => {
+    const c = shown[i];
+
+    if (c === undefined) {
+      return;
+    }
+
+    props.toHost({ type: "run", does: c.runs });
+    step({ type: "ran", key: c.key });
+  };
+  const focused = desk === null ? null : focusedOf(desk);
+  const groups = [...new Set(shown.map((c) => c.group))];
+  // The shortcuts list says a keys file that did not read on top, until it reads again.
+  const file = keys ? fileWord(props.keys.file) : null;
+  return (
+    <Palette
+      id={POP.palette}
+      label={keys ? "Keyboard shortcuts" : "Commands"}
+      chip={keys || focused === null ? "Keyboard shortcuts" : `${focused.id} · ${tileWord(focused, props.tickets)}`}
+      note={file ?? undefined}
+      query={query}
+      sections={groups.map((g) => ({
+        title: GROUP_TITLE[g],
+        options: shown
+          .filter((c) => c.group === g)
+          .map((c) => ({ id: c.name, name: c.name, word: c.tsh, caps: c.caps })),
+      }))}
+      at={at}
+      count={countWord(shown.length, keys)}
+      onQuery={(q) => step({ type: "query", query: q })}
+      onMove={(by) => step({ type: "move", by, of: shown.length })}
+      onRun={run}
+      onClose={close}
+    />
+  );
 }

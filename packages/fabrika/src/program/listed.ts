@@ -1,23 +1,23 @@
-import {Effect, Layer, type Scope} from "effect";
+import { Effect, Layer, type Scope } from "effect";
 import {
-	type AnyProgram,
-	type BadShape,
-	type Called,
-	call,
-	type DoesNotFit,
-	defineProgram,
-	type Flags,
-	type Given,
-	type Inputs,
-	type Kept,
-	type Kinds,
-	type Listeners,
-	type Outputs,
-	type Program,
-	pipe,
-	type Running,
-	type Started,
-	start,
+  type AnyProgram,
+  type BadShape,
+  type Called,
+  call,
+  type DoesNotFit,
+  defineProgram,
+  type Flags,
+  type Given,
+  type Inputs,
+  type Kept,
+  type Kinds,
+  type Listeners,
+  type Outputs,
+  type Program,
+  pipe,
+  type Running,
+  type Started,
+  start,
 } from "./program.ts";
 
 // A program packed with the services it asks for, so a host can start it
@@ -43,38 +43,38 @@ export type AnyStarted = Started<any, any, any, any, any>;
 
 /** A program and its services, ready to start. Every value a host passes was checked against its own shape first. */
 export interface Entry {
-	readonly program: AnyProgram;
-	/** `start`, with the program's services given. */
-	readonly start: (
-		flags: Readonly<Record<string, unknown>>,
-		listeners: Listeners<any>,
-		keeping: Kept,
-	) => Effect.Effect<AnyStarted, never, Scope.Scope>;
-	/** `pipe`, with the program's services given: this program's `output` into `to`'s `input`. */
-	readonly pipe: (
-		flags: Readonly<Record<string, unknown>>,
-		listeners: Listeners<any>,
-		keeping: Kept,
-		output: string,
-		to: AnyRunning,
-		input: string,
-	) => Effect.Effect<AnyStarted | DoesNotFit, never, Scope.Scope>;
-	/** `call`, with the program's services given. */
-	readonly call: (
-		flags: Readonly<Record<string, unknown>>,
-		options: {
-			readonly told: Readonly<Record<string, readonly unknown[]>>;
-			readonly listeners: Listeners<any>;
-			readonly keeping: Kept;
-			readonly stopOn: Effect.Effect<unknown>;
-		},
-	) => Effect.Effect<Called<any, unknown> | BadShape, never, Scope.Scope>;
-	/**
-	 * This entry as an agent may start it: its program with every input only a person tells
-	 * (`{personOnly: true}`) taken out, on the same services. The same entry when it has none. A
-	 * host wrapping an entry wraps this one too, or an agent's runs skip the wrapper.
-	 */
-	readonly forAgent: () => Entry;
+  readonly program: AnyProgram;
+  /** `start`, with the program's services given. */
+  readonly start: (
+    flags: Readonly<Record<string, unknown>>,
+    listeners: Listeners<any>,
+    keeping: Kept,
+  ) => Effect.Effect<AnyStarted, never, Scope.Scope>;
+  /** `pipe`, with the program's services given: this program's `output` into `to`'s `input`. */
+  readonly pipe: (
+    flags: Readonly<Record<string, unknown>>,
+    listeners: Listeners<any>,
+    keeping: Kept,
+    output: string,
+    to: AnyRunning,
+    input: string,
+  ) => Effect.Effect<AnyStarted | DoesNotFit, never, Scope.Scope>;
+  /** `call`, with the program's services given. */
+  readonly call: (
+    flags: Readonly<Record<string, unknown>>,
+    options: {
+      readonly told: Readonly<Record<string, readonly unknown[]>>;
+      readonly listeners: Listeners<any>;
+      readonly keeping: Kept;
+      readonly stopOn: Effect.Effect<unknown>;
+    },
+  ) => Effect.Effect<Called<any, unknown> | BadShape, never, Scope.Scope>;
+  /**
+   * This entry as an agent may start it: its program with every input only a person tells
+   * (`{personOnly: true}`) taken out, on the same services. The same entry when it has none. A
+   * host wrapping an entry wraps this one too, or an agent's runs skip the wrapper.
+   */
+  readonly forAgent: () => Entry;
 }
 
 /**
@@ -84,13 +84,17 @@ export interface Entry {
  * ones, so their handlers are never called.
  */
 const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
-	const inputs = Object.entries<Inputs[string]>(program.inputs);
-	if (!inputs.some(([, declared]) => declared.personOnly)) return program;
-	// `...program` carries its own `view` key, so the narrowed copy keeps the window.
-	return defineProgram({
-		...program,
-		inputs: Object.fromEntries(inputs.filter(([, declared]) => !declared.personOnly)),
-	});
+  const inputs = Object.entries<Inputs[string]>(program.inputs);
+
+  if (!inputs.some(([, declared]) => declared.personOnly)) {
+    return program;
+  }
+
+  // `...program` carries its own `view` key, so the narrowed copy keeps the window.
+  return defineProgram({
+    ...program,
+    inputs: Object.fromEntries(inputs.filter(([, declared]) => !declared.personOnly)),
+  });
 };
 
 /**
@@ -98,64 +102,63 @@ const withoutPersonOnly = (program: AnyProgram): AnyProgram => {
  * program asks for: a program whose `main` reads `CodeHost` does not
  * type-check with a Layer that gives none.
  */
-export function listed<
-	F extends Flags,
-	I extends Inputs,
-	O extends Outputs,
-	Ms extends Kinds,
-	E,
-	R,
->(program: Program<F, I, O, Ms, E, R>, services: Layer.Layer<R>): Entry {
-	// A memo map of the run's own. `Layer.build` forks the memo map the starting fiber carries,
-	// so a run started while its host's own Layer is being built would be handed any service
-	// that build already made, instead of a fresh one.
-	const served = <A>(effect: Effect.Effect<A, never, R | Scope.Scope>) =>
-		Effect.gen(function* () {
-			const scope = yield* Effect.scope;
-			const memo = yield* Layer.makeMemoMap;
-			const context = yield* Layer.buildWithMemoMap(services, memo, scope);
-			return yield* Effect.provideContext(effect, context);
-		});
-	// A host hands each entry values its own shapes took, by name, and the run's id and storage
-	// (which every program takes). The types below cannot see that: they are the program's own,
-	// and the values were read at run time.
-	const given = (flags: Readonly<Record<string, unknown>>) => flags as Given<F>;
-	const keepingOf = (keeping: Kept) => keeping as never;
-	// Made once, on first ask: one program for agents, so a window finds its view by it.
-	let agents: Entry | undefined;
-	const entry: Entry = {
-		program,
-		forAgent: () => {
-			if (agents !== undefined) return agents;
-			const narrowed = withoutPersonOnly(program);
-			agents = narrowed === program ? entry : listed(narrowed, services as Layer.Layer<any>);
-			return agents;
-		},
-		start: (flags, listeners, keeping) =>
-			served(start(program, given(flags), listeners as Listeners<O>, keepingOf(keeping))),
-		pipe: (flags, listeners, keeping, output, to, input) =>
-			served(
-				pipe(
-					{
-						program,
-						flags: given(flags),
-						listeners: listeners as Listeners<O>,
-						keeping: keepingOf(keeping),
-					},
-					output as keyof O & string,
-					to,
-					input as never,
-				),
-			),
-		call: (flags, options) =>
-			served(
-				call(program, given(flags), {
-					told: options.told,
-					listeners: options.listeners as Listeners<O>,
-					keeping: keepingOf(options.keeping),
-					stopOn: options.stopOn,
-				} as never),
-			),
-	};
-	return entry;
+export function listed<F extends Flags, I extends Inputs, O extends Outputs, Ms extends Kinds, E, R>(
+  program: Program<F, I, O, Ms, E, R>,
+  services: Layer.Layer<R>,
+): Entry {
+  // A memo map of the run's own. `Layer.build` forks the memo map the starting fiber carries,
+  // so a run started while its host's own Layer is being built would be handed any service
+  // that build already made, instead of a fresh one.
+  const served = <A>(effect: Effect.Effect<A, never, R | Scope.Scope>) =>
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      const memo = yield* Layer.makeMemoMap;
+      const context = yield* Layer.buildWithMemoMap(services, memo, scope);
+      return yield* Effect.provideContext(effect, context);
+    });
+  // A host hands each entry values its own shapes took, by name, and the run's id and storage
+  // (which every program takes). The types below cannot see that: they are the program's own,
+  // and the values were read at run time.
+  const given = (flags: Readonly<Record<string, unknown>>) => flags as Given<F>;
+  const keepingOf = (keeping: Kept) => keeping as never;
+  // Made once, on first ask: one program for agents, so a window finds its view by it.
+  let agents: Entry | undefined;
+  const entry: Entry = {
+    program,
+    forAgent: () => {
+      if (agents !== undefined) {
+        return agents;
+      }
+
+      const narrowed = withoutPersonOnly(program);
+      agents = narrowed === program ? entry : listed(narrowed, services as Layer.Layer<any>);
+      return agents;
+    },
+    start: (flags, listeners, keeping) =>
+      served(start(program, given(flags), listeners as Listeners<O>, keepingOf(keeping))),
+    pipe: (flags, listeners, keeping, output, to, input) =>
+      served(
+        pipe(
+          {
+            program,
+            flags: given(flags),
+            listeners: listeners as Listeners<O>,
+            keeping: keepingOf(keeping),
+          },
+          output as keyof O & string,
+          to,
+          input as never,
+        ),
+      ),
+    call: (flags, options) =>
+      served(
+        call(program, given(flags), {
+          told: options.told,
+          listeners: options.listeners as Listeners<O>,
+          keeping: keepingOf(options.keeping),
+          stopOn: options.stopOn,
+        } as never),
+      ),
+  };
+  return entry;
 }

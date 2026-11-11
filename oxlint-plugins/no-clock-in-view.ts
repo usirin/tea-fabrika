@@ -9,32 +9,33 @@
 // `next/**/*.tsx` and leaves tests out.
 //
 // It sees no types: the same read through a helper in a `.ts` file passes. Report any miss.
-import type {CreateRule} from "@oxlint/plugins";
-import {dotted} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { dotted } from "./match.ts";
 
 const READS = new Set(["Date.now", "performance.now", "Math.random", "crypto.randomUUID"]);
 
 /** The written name without a leading `window.` or `globalThis.`. */
 const plain = (name: string | null): string | null =>
-	name === null ? null : name.replace(/^(?:window|globalThis)\./, "");
+  name === null ? null : name.replace(/^(?:window|globalThis)\./, "");
 
 const MESSAGE =
-	"A view reads no clock and no randomness, handlers included: send a Msg with no time, and let `update` ask for it with a Cmd (docs/direction/react-compiler.md, C1).";
+  "A view reads no clock and no randomness, handlers included: send a Msg with no time, and let `update` ask for it with a Cmd (docs/direction/react-compiler.md, C1).";
 
 export const noClockInView: CreateRule = {
-	create(context) {
-		return {
-			CallExpression(node) {
-				const name = plain(dotted(node.callee));
-				if (name !== null && (READS.has(name) || name === "Date")) {
-					context.report({node, message: MESSAGE});
-				}
-			},
-			NewExpression(node) {
-				if (plain(dotted(node.callee)) === "Date" && node.arguments.length === 0) {
-					context.report({node, message: MESSAGE});
-				}
-			},
-		};
-	},
+  create(context) {
+    return {
+      CallExpression(node) {
+        const name = plain(dotted(node.callee));
+
+        if (name !== null && (READS.has(name) || name === "Date")) {
+          context.report({ node, message: MESSAGE });
+        }
+      },
+      NewExpression(node) {
+        if (plain(dotted(node.callee)) === "Date" && node.arguments.length === 0) {
+          context.report({ node, message: MESSAGE });
+        }
+      },
+    };
+  },
 };

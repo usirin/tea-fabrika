@@ -1,14 +1,14 @@
-import {describe, expect, it} from "@effect/vitest";
-import {Deferred, Duration, Effect, Layer, Schema} from "effect";
-import {HostJobs, openJobs} from "../host/host-jobs.ts";
-import {ear} from "../program/ear.ts";
-import {listed} from "../program/listed.ts";
-import {defineProgram, start, tell} from "../program/program.ts";
-import {CAPACITY, input} from "../program/shape.ts";
-import {memoryStorage} from "../program/storage.ts";
-import {Programs, programList} from "./programs.ts";
-import {type Printed, type Ready, tsh} from "./shell.ts";
-import {SMALL} from "./small.ts";
+import { describe, expect, it } from "@effect/vitest";
+import { Deferred, Duration, Effect, Layer, Schema } from "effect";
+import { HostJobs, openJobs } from "../host/host-jobs.ts";
+import { ear } from "../program/ear.ts";
+import { listed } from "../program/listed.ts";
+import { defineProgram, start, tell } from "../program/program.ts";
+import { CAPACITY, input } from "../program/shape.ts";
+import { memoryStorage } from "../program/storage.ts";
+import { Programs, programList } from "./programs.ts";
+import { type Printed, type Ready, tsh } from "./shell.ts";
+import { SMALL } from "./small.ts";
 
 // A full mailbox, as a person meets it in `jobs` (after experiment 79): `seq`
 // piped into a program that has stopped reading. seq sleeps on the full
@@ -17,89 +17,88 @@ import {SMALL} from "./small.ts";
 
 /** Reads nothing until `go`, then every number; then holds on until `hold`, so the job stays in the table. */
 const lazyOf = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
-	defineProgram({
-		name: "lazy",
-		description: "Reads its numbers once it is let go, then waits.",
-		inputs: {n: input(Schema.Int, "A number.")},
-		outputs: {},
-		main: ({serve}) =>
-			Deferred.await(go).pipe(
-				Effect.andThen(serve({n: () => Effect.void})),
-				Effect.andThen(Deferred.await(hold)),
-			),
-	});
+  defineProgram({
+    name: "lazy",
+    description: "Reads its numbers once it is let go, then waits.",
+    inputs: { n: input(Schema.Int, "A number.") },
+    outputs: {},
+    main: ({ serve }) =>
+      Deferred.await(go).pipe(Effect.andThen(serve({ n: () => Effect.void })), Effect.andThen(Deferred.await(hold))),
+  });
 
 const session = (go: Deferred.Deferred<void>, hold: Deferred.Deferred<void>) =>
-	Effect.gen(function* () {
-		const printed = ear<Printed>();
-		const ready = ear<Ready>();
-		const storage = memoryStorage();
-		const list = programList([...SMALL, listed(lazyOf(go, hold), Layer.empty)]);
-		const jobs = yield* openJobs(storage);
-		const started = yield* start(
-			tsh,
-			{show: "short"},
-			{printed: printed.hear, ready: ready.hear},
-			{id: "tsh:full-line", storage},
-		).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
-		if (started.kind !== "running") return yield* Effect.die("tsh did not start");
-		let told = 0;
-		const line = (text: string) =>
-			Effect.gen(function* () {
-				const from = printed.values.length;
-				expect(yield* tell(started.run, "line", text)).toBe("queued");
-				told += 1;
-				const all = yield* ready.upTo(told);
-				return {status: all[told - 1]?.status, out: printed.values.slice(from).map((p) => p.text)};
-			});
-		/** `jobs`, again and again, until its rows pass `until`. */
-		const jobsUntil = (until: (rows: readonly string[]) => boolean) => {
-			let last: readonly string[] = [];
-			return Effect.gen(function* () {
-				for (;;) {
-					last = (yield* line("jobs")).out;
-					if (until(last)) return last;
-					yield* Effect.sleep(Duration.millis(5));
-				}
-			}).pipe(
-				// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for and saw last.
-				Effect.onInterrupt(() =>
-					Effect.logError(`jobs never got there; it showed:\n${last.join("\n")}`),
-				),
-			);
-		};
-		return {started, line, jobsUntil};
-	});
+  Effect.gen(function* () {
+    const printed = ear<Printed>();
+    const ready = ear<Ready>();
+    const storage = memoryStorage();
+    const list = programList([...SMALL, listed(lazyOf(go, hold), Layer.empty)]);
+    const jobs = yield* openJobs(storage);
+    const started = yield* start(
+      tsh,
+      { show: "short" },
+      { printed: printed.hear, ready: ready.hear },
+      { id: "tsh:full-line", storage },
+    ).pipe(Effect.provideService(HostJobs, jobs), Effect.provideService(Programs, list));
+
+    if (started.kind !== "running") {
+      return yield* Effect.die("tsh did not start");
+    }
+
+    let told = 0;
+    const line = (text: string) =>
+      Effect.gen(function* () {
+        const from = printed.values.length;
+        expect(yield* tell(started.run, "line", text)).toBe("queued");
+        told += 1;
+        const all = yield* ready.upTo(told);
+        return { status: all[told - 1]?.status, out: printed.values.slice(from).map((p) => p.text) };
+      });
+    /** `jobs`, again and again, until its rows pass `until`. */
+    const jobsUntil = (until: (rows: readonly string[]) => boolean) => {
+      let last: readonly string[] = [];
+      return Effect.gen(function* () {
+        for (;;) {
+          last = (yield* line("jobs")).out;
+
+          if (until(last)) {
+            return last;
+          }
+
+          yield* Effect.sleep(Duration.millis(5));
+        }
+      }).pipe(
+        // Stopped mid-wait (the test's time limit, or a cancel): say what it waited for and saw last.
+        Effect.onInterrupt(() => Effect.logError(`jobs never got there; it showed:\n${last.join("\n")}`)),
+      );
+    };
+    return { started, line, jobsUntil };
+  });
 
 describe("jobs shows a full line", () => {
-	it.live(
-		"seq piped into a reader that stopped: seq waits for room, lazy's input is full; both rows go once lazy reads",
-		() =>
-			Effect.gen(function* () {
-				const seen = yield* Effect.gen(function* () {
-					const go = yield* Deferred.make<void>();
-					const hold = yield* Deferred.make<void>();
-					const {started, line, jobsUntil} = yield* session(go, hold);
-					expect((yield* line("seq --to 3000 | lazy &")).status).toBe(0);
-					const stuck = yield* jobsUntil((rows) =>
-						rows.some((r) => r.includes("waiting for room")),
-					);
-					yield* Deferred.succeed(go, undefined);
-					// Read when the reader has drained the line: seq has ended and lazy holds on, so the job is still in the table.
-					const moving = yield* jobsUntil(
-						(rows) => rows.length === 1 && rows[0]?.startsWith("[1] running") === true,
-					);
-					yield* Deferred.succeed(hold, undefined);
-					started.close("line");
-					yield* started.run.ended;
-					return {stuck, moving};
-				}).pipe(Effect.scoped);
-				expect(seen.stuck).toEqual([
-					"[1] running   seq --to 3000 | lazy",
-					"      seq   waiting for room: lazy's mailbox is full",
-					`      lazy  mailbox full: ${CAPACITY} unread, 1 waiting on n`,
-				]);
-				expect(seen.moving).toEqual(["[1] running   seq --to 3000 | lazy"]);
-			}),
-	);
+  it.live(
+    "seq piped into a reader that stopped: seq waits for room, lazy's input is full; both rows go once lazy reads",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* Effect.gen(function* () {
+          const go = yield* Deferred.make<void>();
+          const hold = yield* Deferred.make<void>();
+          const { started, line, jobsUntil } = yield* session(go, hold);
+          expect((yield* line("seq --to 3000 | lazy &")).status).toBe(0);
+          const stuck = yield* jobsUntil((rows) => rows.some((r) => r.includes("waiting for room")));
+          yield* Deferred.succeed(go, undefined);
+          // Read when the reader has drained the line: seq has ended and lazy holds on, so the job is still in the table.
+          const moving = yield* jobsUntil((rows) => rows.length === 1 && rows[0]?.startsWith("[1] running") === true);
+          yield* Deferred.succeed(hold, undefined);
+          started.close("line");
+          yield* started.run.ended;
+          return { stuck, moving };
+        }).pipe(Effect.scoped);
+        expect(seen.stuck).toEqual([
+          "[1] running   seq --to 3000 | lazy",
+          "      seq   waiting for room: lazy's mailbox is full",
+          `      lazy  mailbox full: ${CAPACITY} unread, 1 waiting on n`,
+        ]);
+        expect(seen.moving).toEqual(["[1] running   seq --to 3000 | lazy"]);
+      }),
+  );
 });

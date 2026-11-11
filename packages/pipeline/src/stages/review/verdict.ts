@@ -1,10 +1,10 @@
-import {Schema} from "effect";
-import {type Row, Version} from "../../criteria/book.ts";
-import {CriterionId} from "../../ids.ts";
-import type {Brief} from "./gate.ts";
-import type {ReviewOutcome} from "./outcome.ts";
-import {TextKind} from "./pack.ts";
-import {Finding, isAgainstDecision, Place, type Sheet} from "./sheet.ts";
+import { Schema } from "effect";
+import { type Row, Version } from "../../criteria/book.ts";
+import { CriterionId } from "../../ids.ts";
+import type { Brief } from "./gate.ts";
+import type { ReviewOutcome } from "./outcome.ts";
+import { TextKind } from "./pack.ts";
+import { Finding, isAgainstDecision, Place, type Sheet } from "./sheet.ts";
 
 // The Check after the reviewer: the verdict, worked out from the sheet. The
 // agent never says pass or fail for a review. It grades rows and writes
@@ -24,21 +24,23 @@ export type Verdict = typeof Verdict.Type;
  * person's decision counts for none: that call is the person's.
  */
 export function verdictOf(sheet: Sheet, kind: TextKind): Verdict {
-	const failed =
-		sheet.rows.some((row) => row.grade === "fail") ||
-		sheet.findings.some(
-			(finding) => finding.kind === kind && finding.state === "open" && !isAgainstDecision(finding),
-		);
-	if (failed) return "fail";
-	return sheet.rows.some((row) => row.grade === "unseen") ? "unseen" : "pass";
+  const failed =
+    sheet.rows.some((row) => row.grade === "fail") ||
+    sheet.findings.some((finding) => finding.kind === kind && finding.state === "open" && !isAgainstDecision(finding));
+
+  if (failed) {
+    return "fail";
+  }
+
+  return sheet.rows.some((row) => row.grade === "unseen") ? "unseen" : "pass";
 }
 
-export const KindVerdict = Schema.Struct({kind: TextKind, verdict: Verdict});
+export const KindVerdict = Schema.Struct({ kind: TextKind, verdict: Verdict });
 export type KindVerdict = typeof KindVerdict.Type;
 
 /** The verdict of each kind, in the order the kinds are owed. */
 export const verdictsOf = (kinds: readonly TextKind[], sheet: Sheet): readonly KindVerdict[] =>
-	kinds.map((kind) => ({kind, verdict: verdictOf(sheet, kind)}));
+  kinds.map((kind) => ({ kind, verdict: verdictOf(sheet, kind) }));
 
 /**
  * The stage's one outcome, from the verdicts. Any fail goes back to the
@@ -47,10 +49,15 @@ export const verdictsOf = (kinds: readonly TextKind[], sheet: Sheet): readonly K
  * kind of review this stage does not do.
  */
 export function outcomeOf(brief: Brief, verdicts: readonly KindVerdict[]): ReviewOutcome {
-	if (verdicts.some((v) => v.verdict === "fail"))
-		return {kind: "send", to: "builder", why: "review_failed"};
-	if (verdicts.some((v) => v.verdict === "unseen")) return {kind: "stuck", why: "unseen"};
-	return {kind: "done", part: brief.left.length > 0, head: brief.head};
+  if (verdicts.some((v) => v.verdict === "fail")) {
+    return { kind: "send", to: "builder", why: "review_failed" };
+  }
+
+  if (verdicts.some((v) => v.verdict === "unseen")) {
+    return { kind: "stuck", why: "unseen" };
+  }
+
+  return { kind: "done", part: brief.left.length > 0, head: brief.head };
 }
 
 // ---------------------------------------------------------------- the criteria, open or met
@@ -72,22 +79,22 @@ export function outcomeOf(brief: Brief, verdicts: readonly KindVerdict[]): Revie
  * why it could not be seen.
  */
 const judgedFields = {
-	text: Schema.String,
-	/** In the reviewer's words: how it knows, why it is not met, or what it could not see. */
-	says: Schema.String,
-	/** The lines that show it. */
-	where: Schema.Array(Place),
-	/** What keeps it open: the findings that came from it. */
-	findings: Schema.Array(Finding),
+  text: Schema.String,
+  /** In the reviewer's words: how it knows, why it is not met, or what it could not see. */
+  says: Schema.String,
+  /** The lines that show it. */
+  where: Schema.Array(Place),
+  /** What keeps it open: the findings that came from it. */
+  findings: Schema.Array(Finding),
 };
 
 /** A criterion of the ticket: its id, and the wording the review judged. */
 export const TicketJudged = Schema.Struct({
-	from: Schema.Literal("ticket"),
-	id: CriterionId,
-	version: Version,
-	state: Schema.Literals(["met", "open"]),
-	...judgedFields,
+  from: Schema.Literal("ticket"),
+  id: CriterionId,
+  version: Version,
+  state: Schema.Literals(["met", "open"]),
+  ...judgedFields,
 });
 export type TicketJudged = typeof TicketJudged.Type;
 
@@ -98,9 +105,9 @@ export type TicketJudged = typeof TicketJudged.Type;
  * ticket's, and the next round that no longer finds it passes it.
  */
 export const ReviewJudged = Schema.Struct({
-	from: Schema.Literal("review"),
-	state: Schema.Literal("open"),
-	...judgedFields,
+  from: Schema.Literal("review"),
+  state: Schema.Literal("open"),
+  ...judgedFields,
 });
 export type ReviewJudged = typeof ReviewJudged.Type;
 
@@ -114,41 +121,44 @@ export type Judged = typeof Judged.Type;
  * is no criterion: nothing a builder or a test writer could close.
  */
 export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
-	const open = sheet.findings.filter(
-		(finding) => finding.state === "open" && !isAgainstDecision(finding),
-	);
-	const ticket = brief.criteria.map((criterion): Judged => {
-		const row = sheet.rows.find((r) => r.id === criterion.id);
-		const findings = open.filter(
-			(f) => f.from.source === "criterion" && f.from.id === criterion.id,
-		);
-		const base = {
-			from: "ticket" as const,
-			id: criterion.id,
-			version: criterion.version,
-			text: criterion.text,
-			findings,
-		};
-		if (row === undefined) return {...base, state: "open", says: "No row was given.", where: []};
-		if (row.grade === "unseen") return {...base, state: "open", says: row.says, where: []};
-		return {
-			...base,
-			state: row.grade === "pass" && findings.length === 0 ? "met" : "open",
-			says: row.says,
-			where: row.where,
-		};
-	});
-	const added = open
-		.filter((finding) => finding.from.source !== "criterion")
-		.map((finding): Judged => ({
-			text: finding.wants,
-			from: "review",
-			state: "open",
-			says: finding.fault,
-			where: finding.at === null ? [] : [finding.at],
-			findings: [finding],
-		}));
-	return [...ticket, ...added];
+  const open = sheet.findings.filter((finding) => finding.state === "open" && !isAgainstDecision(finding));
+  const ticket = brief.criteria.map((criterion): Judged => {
+    const row = sheet.rows.find((r) => r.id === criterion.id);
+    const findings = open.filter((f) => f.from.source === "criterion" && f.from.id === criterion.id);
+    const base = {
+      from: "ticket" as const,
+      id: criterion.id,
+      version: criterion.version,
+      text: criterion.text,
+      findings,
+    };
+
+    if (row === undefined) {
+      return { ...base, state: "open", says: "No row was given.", where: [] };
+    }
+
+    if (row.grade === "unseen") {
+      return { ...base, state: "open", says: row.says, where: [] };
+    }
+
+    return {
+      ...base,
+      state: row.grade === "pass" && findings.length === 0 ? "met" : "open",
+      says: row.says,
+      where: row.where,
+    };
+  });
+  const added = open
+    .filter((finding) => finding.from.source !== "criterion")
+    .map((finding): Judged => ({
+      text: finding.wants,
+      from: "review",
+      state: "open",
+      says: finding.fault,
+      where: finding.at === null ? [] : [finding.at],
+      findings: [finding],
+    }));
+  return [...ticket, ...added];
 }
 
 /**
@@ -159,20 +169,24 @@ export function criteriaOf(brief: Brief, sheet: Sheet): readonly Judged[] {
  * was judged, and ship sends it back to be reviewed.
  */
 export function rowsOf(brief: Brief, sheet: Sheet): readonly Row[] {
-	return brief.criteria.flatMap((criterion): Row[] => {
-		const row = sheet.rows.find((r) => r.id === criterion.id);
-		if (row === undefined || row.grade === "unseen") return [];
-		const held = sheet.findings.some(
-			(f) => f.state === "open" && f.from.source === "criterion" && f.from.id === criterion.id,
-		);
-		return [
-			{
-				criterion: criterion.id,
-				version: criterion.version,
-				head: brief.head,
-				grade: row.grade === "pass" && !held ? "pass" : "fail",
-				proof: `the review of ${brief.pr} at ${brief.head}`,
-			},
-		];
-	});
+  return brief.criteria.flatMap((criterion): Row[] => {
+    const row = sheet.rows.find((r) => r.id === criterion.id);
+
+    if (row === undefined || row.grade === "unseen") {
+      return [];
+    }
+
+    const held = sheet.findings.some(
+      (f) => f.state === "open" && f.from.source === "criterion" && f.from.id === criterion.id,
+    );
+    return [
+      {
+        criterion: criterion.id,
+        version: criterion.version,
+        head: brief.head,
+        grade: row.grade === "pass" && !held ? "pass" : "fail",
+        proof: `the review of ${brief.pr} at ${brief.head}`,
+      },
+    ];
+  });
 }

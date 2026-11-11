@@ -1,15 +1,6 @@
-import {hash} from "@kampus/fabrika-old";
-import {Effect, Schema} from "effect";
-import {
-	answerRefused,
-	factsOf,
-	Body,
-	type Entry,
-	type FactOf,
-	type Hash,
-	type Ticket,
-	Title,
-} from "./ticket.ts";
+import { hash } from "@kampus/fabrika-old";
+import { Effect, Schema } from "effect";
+import { answerRefused, factsOf, Body, type Entry, type FactOf, type Hash, type Ticket, Title } from "./ticket.ts";
 
 // What an approval covers, and what takes it back (docs/direction/tickets-start-in-our-tracker.md).
 //
@@ -26,26 +17,23 @@ import {
 // SHA-256, the same in Node, a worker and the window.
 
 /** A ticket's text, as a person reads it: its title and its body. */
-export const Text = Schema.Struct({title: Title, body: Body});
+export const Text = Schema.Struct({ title: Title, body: Body });
 export type Text = typeof Text.Type;
 
 /** SHA-256 of some text, as the facts spell a hash. */
 export const sha256 = (text: string): Effect.Effect<Hash> =>
-	Effect.promise(async () => {
-		const digest = new Uint8Array(
-			await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)),
-		);
-		return `sha256:${Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-	});
+  Effect.promise(async () => {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+    return `sha256:${Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  });
 
 /** The hash an approval names: of the title and body, as one JSON pair. */
-export const hashOf = (text: Text): Effect.Effect<Hash> =>
-	sha256(JSON.stringify([text.title, text.body]));
+export const hashOf = (text: Text): Effect.Effect<Hash> => sha256(JSON.stringify([text.title, text.body]));
 
 /** A ticket's text as it reads now: the title and body it was filed with. */
 export const textOf = (ticket: Ticket): Text => {
-	const filed = ticket.timeline[0]?.fact;
-	return {title: ticket.title, body: filed?.type === "filed" ? filed.body : ""};
+  const filed = ticket.timeline[0]?.fact;
+  return { title: ticket.title, body: filed?.type === "filed" ? filed.body : "" };
 };
 
 /**
@@ -53,25 +41,27 @@ export const textOf = (ticket: Ticket): Text => {
  * An answer from before the hash covers nothing, so it is asked again.
  */
 export const covers = (answer: FactOf<"answered">, ticket: Ticket): Effect.Effect<boolean> => {
-	if ("format" in answer) {
-		const asked = factsOf(ticket.timeline, "asked").find((a) => a.ask === answer.ask);
-		if (
-			asked === undefined ||
-			!("format" in asked) ||
-			answerRefused(ticket.timeline, answer, 0) !== null
-		)
-			return Effect.succeed(false);
-		return hash(asked.shows).pipe(
-			Effect.map((saw) => saw === answer.saw),
-			Effect.orElseSucceed(() => false),
-		);
-	}
-	// Historical text hashes cannot approve a plan or a diff.
-	if (factsOf(ticket.timeline, "planned").length > 0 || answer.head !== undefined)
-		return Effect.succeed(false);
-	return answer.text === undefined
-		? Effect.succeed(false)
-		: Effect.map(hashOf(textOf(ticket)), (now) => now === answer.text);
+  if ("format" in answer) {
+    const asked = factsOf(ticket.timeline, "asked").find((a) => a.ask === answer.ask);
+
+    if (asked === undefined || !("format" in asked) || answerRefused(ticket.timeline, answer, 0) !== null) {
+      return Effect.succeed(false);
+    }
+
+    return hash(asked.shows).pipe(
+      Effect.map((saw) => saw === answer.saw),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  // Historical text hashes cannot approve a plan or a diff.
+  if (factsOf(ticket.timeline, "planned").length > 0 || answer.head !== undefined) {
+    return Effect.succeed(false);
+  }
+
+  return answer.text === undefined
+    ? Effect.succeed(false)
+    : Effect.map(hashOf(textOf(ticket)), (now) => now === answer.text);
 };
 
 /**
@@ -79,10 +69,6 @@ export const covers = (answer: FactOf<"answered">, ticket: Ticket): Effect.Effec
  * a person's "Request changes" counts. An agent's, and a plain comment, never do.
  */
 export const changesRequested = (timeline: readonly Entry[], since: number): boolean =>
-	timeline.some(
-		(e) =>
-			e.pos > since &&
-			e.by.kind === "user" &&
-			e.fact.type === "commented" &&
-			e.fact.asks === "changes",
-	);
+  timeline.some(
+    (e) => e.pos > since && e.by.kind === "user" && e.fact.type === "commented" && e.fact.asks === "changes",
+  );

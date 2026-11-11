@@ -18,6 +18,9 @@ the rest.
 2. **Run the red laws** on a narrow path and read why each fails.
 3. **Build** as the plan and decided notes say, and nothing they leave undecided.
    Step-commit checks the plan's file owners.
+   A patch to a package (tea, demlik, Manti, Effect, Alchemy) the plan does not name, after the
+   read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back to
+   plan, never into the build.
 4. **Run** the relevant narrow laws.
 5. **Commit** with the step-commit skill.
 6. **Report** which laws went green, any still red and why, any file you needed
@@ -25,6 +28,17 @@ the rest.
    was already green at the start and you changed nothing, do not commit: put
    `laws: green <the narrow test paths you ran>` just before `answer: done`. drive.ts takes that as
    done; `done` with no commit and no such line is `stuck:no_commit`.
+
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means the approved plan does not name it. A red law the plan names is your work, and a
+file you need but may not touch goes in your report (step 6): neither is a finding.
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
 
 ## Go easy on the machine
 

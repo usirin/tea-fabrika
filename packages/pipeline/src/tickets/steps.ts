@@ -1,4 +1,4 @@
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // A lane's steps and the kinds of question it asks, in words alone: the tracker and the host read
 // them as they start, so nothing here reaches a stage (apps/fabrika/src/bundles.test.ts). The routes
@@ -6,19 +6,20 @@ import {Schema} from "effect";
 
 /** Every step that runs a machine, in the order a ticket meets them. */
 export const STEPS = [
-	"triage",
-	"plan",
-	"exam",
-	"exam_review",
-	"exam_merge",
-	"test_writer",
-	"build",
-	"mutation",
-	"mutants",
-	"review",
-	"push",
-	"merge",
+  "triage",
+  "plan",
+  "exam",
+  "exam_review",
+  "exam_merge",
+  "test_writer",
+  "build",
+  "mutation",
+  "mutants",
+  "review",
+  "push",
+  "merge",
 ] as const;
+
 export const LaneStep = Schema.Literals(STEPS);
 export type LaneStep = typeof LaneStep.Type;
 
@@ -31,27 +32,27 @@ export type LaneStep = typeof LaneStep.Type;
  * whether it runs again (jidoka rows 18, 23, 40, 57).
  */
 export const AskFor = Schema.Literals([
-	"approve",
-	"exam_merge",
-	"merge",
-	"step",
-	"rounds_spent",
-	"exam_touched",
-	"exam_conflict",
-	"spend",
+  "approve",
+  "exam_merge",
+  "merge",
+  "step",
+  "rounds_spent",
+  "exam_touched",
+  "exam_conflict",
+  "spend",
 ]);
 export type AskFor = typeof AskFor.Type;
 
 /** The kind of question a lane's ask id names. */
 export const askedFor = (ask: string): AskFor | null => {
-	const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
-	return Schema.is(AskFor)(kind) ? kind : null;
+  const kind = /^a-([a-z_]+)-\d+$/.exec(ask)?.[1];
+  return Schema.is(AskFor)(kind) ? kind : null;
 };
 
 /** Where a spent round's `again` goes: the writer first after a review. */
 const againTo = (step: LaneStep): LaneStep =>
-	step.startsWith("exam") ? "exam" : step === "review" ? "test_writer" : "build";
+  step.startsWith("exam") ? "exam" : step === "review" ? "test_writer" : "build";
 
 /** The step a question resumes after the named step ended. */
 export const askedStep = (kind: AskFor, step: LaneStep): LaneStep =>
-	kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;
+  kind === "rounds_spent" ? againTo(step) : kind === "exam_conflict" ? "test_writer" : step;

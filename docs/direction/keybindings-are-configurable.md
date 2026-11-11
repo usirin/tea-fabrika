@@ -525,6 +525,8 @@ The owner approved each lean below on 2026-11-01. The numbers stay as written.
   clash should ask first. A week of use would tell.
 - **Live reload, why and cost.** A swap is a value change. Experiment 177 swapped a theme in 11 to
   19 ms. An armed prefix is disarmed by a swap. Cheap, and how sure: 80%.
+  Today's version hears a save through the folder watch, or a one second poll when the OS says
+  nothing; both use the same 50 ms settle (tracker ticket 553).
 - **Matching, why and the doubt.** On German, French and Turkish-F Macs, `|` needs Option, so
   today's `keyName` names it `<a-|>` and split cannot be pressed (experiment 182's probe). The
   doubt: what Chromium puts in `event.key` for Ctrl on a Russian layout. A run on a real layout

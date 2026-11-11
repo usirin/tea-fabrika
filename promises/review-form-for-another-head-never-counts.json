@@ -1,35 +1,35 @@
 {
-	"promise": "A reviewer's form counts only for the head and the run it was asked for.",
-	"harm": "A pass written for an older head, or by an older run, could mark new code as reviewed when nobody read it.",
-	"tool": "search",
-	"check": "node packages/pipeline/src/laws/promise-check.ts review \"a form for another head or an old run never counts\"",
-	"plant": {
-		"name": "takesAnyHead",
-		"what": "The run check forgets the head: a form from any head is taken for this one."
-	},
-	"covers": [
-		"packages/pipeline/src/stages/review/machine.ts#createReview",
-		"packages/pipeline/src/stages/review/machine.ts#isRun",
-		"packages/pipeline/src/stages/review/machine.ts#judged",
-		"packages/pipeline/src/stages/review/machine.ts#end",
-		"packages/pipeline/src/stages/review/machine.ts#review"
-	],
-	"exam": [
-		"packages/pipeline/src/laws/review.ts",
-		"packages/pipeline/src/laws/explore.ts",
-		"packages/pipeline/src/laws/promise-check.ts"
-	],
-	"confirmed": {
-		"commit": "a5661f932ade7b3d8301ebd2210be8f6357b6f26",
-		"prints": {
-			"packages/pipeline/src/stages/review/machine.ts#createReview": "08f4b583d64aa028",
-			"packages/pipeline/src/stages/review/machine.ts#isRun": "48535fac290df7ef",
-			"packages/pipeline/src/stages/review/machine.ts#judged": "b50574d828fec2b8",
-			"packages/pipeline/src/stages/review/machine.ts#end": "2c3c3315b585124e",
-			"packages/pipeline/src/stages/review/machine.ts#review": "a07bdcc7fa3235fe",
-			"packages/pipeline/src/laws/review.ts": "0f997423349a81e3",
-			"packages/pipeline/src/laws/explore.ts": "45d67ebdbe3ebac4",
-			"packages/pipeline/src/laws/promise-check.ts": "d2f8c19615514cfc"
-		}
-	}
+  "promise": "A reviewer's form counts only for the head and the run it was asked for.",
+  "harm": "A pass written for an older head, or by an older run, could mark new code as reviewed when nobody read it.",
+  "tool": "search",
+  "check": "node packages/pipeline/src/laws/promise-check.ts review \"a form for another head or an old run never counts\"",
+  "plant": {
+    "name": "takesAnyHead",
+    "what": "The run check forgets the head: a form from any head is taken for this one."
+  },
+  "covers": [
+    "packages/pipeline/src/stages/review/machine.ts#createReview",
+    "packages/pipeline/src/stages/review/machine.ts#isRun",
+    "packages/pipeline/src/stages/review/machine.ts#judged",
+    "packages/pipeline/src/stages/review/machine.ts#end",
+    "packages/pipeline/src/stages/review/machine.ts#review"
+  ],
+  "exam": [
+    "packages/pipeline/src/laws/review.ts",
+    "packages/pipeline/src/laws/explore.ts",
+    "packages/pipeline/src/laws/promise-check.ts"
+  ],
+  "confirmed": {
+    "commit": "d1663e5066ad915d56582fe9497ffefa4680955d",
+    "prints": {
+      "packages/pipeline/src/stages/review/machine.ts#createReview": "6938028b1a944259",
+      "packages/pipeline/src/stages/review/machine.ts#isRun": "3077f58392ac5267",
+      "packages/pipeline/src/stages/review/machine.ts#judged": "6685abb900191175",
+      "packages/pipeline/src/stages/review/machine.ts#end": "f13fa07054b1744f",
+      "packages/pipeline/src/stages/review/machine.ts#review": "a07bdcc7fa3235fe",
+      "packages/pipeline/src/laws/review.ts": "f35a1cd7e4a4694e",
+      "packages/pipeline/src/laws/explore.ts": "6cb61418cb179f6b",
+      "packages/pipeline/src/laws/promise-check.ts": "3c4985bfc23c502a"
+    }
+  }
 }

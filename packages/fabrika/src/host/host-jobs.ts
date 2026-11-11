@@ -1,8 +1,8 @@
-import {run as runMachine, type StoreFailed} from "@demlik/tea/effect";
-import {Context, Effect, type Scope} from "effect";
-import type {Watchable} from "../program/program.ts";
-import type {Storage} from "../program/storage.ts";
-import {Jobs, type JobsMsg, jobsMachine, type Owner} from "./jobs.ts";
+import { run as runMachine, type StoreFailed } from "@demlik/tea/effect";
+import { Context, Effect, type Scope } from "effect";
+import type { Watchable } from "../program/program.ts";
+import type { Storage } from "../program/storage.ts";
+import { Jobs, type JobsMsg, jobsMachine, type Owner } from "./jobs.ts";
 
 // Where a host keeps its jobs. A job is what one start on a host made: a root run and every run
 // it started, like a Unix process group. A tsh line is a job; so is a lane. The host keeps them,
@@ -37,39 +37,39 @@ import {Jobs, type JobsMsg, jobsMachine, type Owner} from "./jobs.ts";
  * older code opens as it is. A host opens this run anew, so an older host still on the same
  * storage has its next table write fail `Stale`: two hosts never both write the table.
  */
-export const TABLE = {run: "tsh", machine: "jobs", key: "table"} as const;
+export const TABLE = { run: "tsh", machine: "jobs", key: "table" } as const;
 
 /** The host's table, as a client sees it: its state, its changes, and the Msgs it takes. */
 export interface JobTable extends Watchable<Jobs> {
-	readonly dispatch: (msg: JobsMsg) => Effect.Effect<void, unknown>;
+  readonly dispatch: (msg: JobsMsg) => Effect.Effect<void, unknown>;
 }
 
 /** What a host hands whatever starts programs on it. */
 export interface JobsOnHost {
-	readonly table: JobTable;
-	/** Where the jobs' runs keep their state, each under its run id. */
-	readonly storage: Storage;
-	/** `false`: the table found was saved by older code. It is left as it was, and jobs started now are not kept. */
-	readonly kept: boolean;
-	/**
-	 * Whom the tsh handed these is for (./jobs.ts's `Owner`): every job it begins or attaches is
-	 * that tsh's in the table. `openJobs` answers `null`; a host that runs several names each, as
-	 * the app hands each tile's tsh `{...jobs, owner: "t2"}`.
-	 */
-	readonly owner: Owner;
-	/**
-	 * Who that tsh writes as, as a writer's text (`user:owner`, `agent:claude for:github:7`): every
-	 * job it begins is theirs for life (./jobs.ts's `by`), and every stop it asks says them.
-	 * `openJobs` answers `null`, not known; the app hands each tile's tsh its writer.
-	 */
-	readonly by: string | null;
-	/**
-	 * Who restarted the host that left these jobs, as a writer's text, when it was restarted on
-	 * purpose (an agent's `restart`, or the person's from the window): tsh names them beside the
-	 * jobs from an earlier tsh, so a restart never looks like a crash. Left out: the host started
-	 * fresh, or after a crash, or `openJobs`, which knows nothing of it.
-	 */
-	readonly restarted?: {readonly by: string} | undefined;
+  readonly table: JobTable;
+  /** Where the jobs' runs keep their state, each under its run id. */
+  readonly storage: Storage;
+  /** `false`: the table found was saved by older code. It is left as it was, and jobs started now are not kept. */
+  readonly kept: boolean;
+  /**
+   * Whom the tsh handed these is for (./jobs.ts's `Owner`): every job it begins or attaches is
+   * that tsh's in the table. `openJobs` answers `null`; a host that runs several names each, as
+   * the app hands each tile's tsh `{...jobs, owner: "t2"}`.
+   */
+  readonly owner: Owner;
+  /**
+   * Who that tsh writes as, as a writer's text (`user:owner`, `agent:claude for:github:7`): every
+   * job it begins is theirs for life (./jobs.ts's `by`), and every stop it asks says them.
+   * `openJobs` answers `null`, not known; the app hands each tile's tsh its writer.
+   */
+  readonly by: string | null;
+  /**
+   * Who restarted the host that left these jobs, as a writer's text, when it was restarted on
+   * purpose (an agent's `restart`, or the person's from the window): tsh names them beside the
+   * jobs from an earlier tsh, so a restart never looks like a crash. Left out: the host started
+   * fresh, or after a crash, or `openJobs`, which knows nothing of it.
+   */
+  readonly restarted?: { readonly by: string } | undefined;
 }
 
 /** The host's jobs. Whoever runs a host opens them (`openJobs`) and hands them to tsh. */
@@ -83,18 +83,18 @@ export class HostJobs extends Context.Service<HostJobs, JobsOnHost>()("host/Jobs
  * `StoreRefusedError`), and says so through `kept`. `StoreFailed`: the table could not be loaded.
  */
 export const openJobs = (storage: Storage): Effect.Effect<JobsOnHost, StoreFailed, Scope.Scope> =>
-	Effect.gen(function* () {
-		const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
-		// Read first through its schema, so a refused table is known before tea loads it.
-		const kept = yield* home.read(TABLE.machine, TABLE.key, Jobs).pipe(
-			Effect.as(true),
-			Effect.catchTag("StateRefused", () => Effect.succeed(false)),
-			Effect.orDie,
-		);
-		const table = yield* (yield* runMachine(jobsMachine, {
-			ctx: undefined,
-			...(kept ? {store: home.store(TABLE.machine, TABLE.key, Jobs)} : {}),
-		})).ready;
-		yield* table.dispatch({type: "detached", n: null}).pipe(Effect.orDie);
-		return {table, storage, kept, owner: null, by: null};
-	});
+  Effect.gen(function* () {
+    const home = yield* storage.open(TABLE.run, null).pipe(Effect.orDie);
+    // Read first through its schema, so a refused table is known before tea loads it.
+    const kept = yield* home.read(TABLE.machine, TABLE.key, Jobs).pipe(
+      Effect.as(true),
+      Effect.catchTag("StateRefused", () => Effect.succeed(false)),
+      Effect.orDie,
+    );
+    const table = yield* (yield* runMachine(jobsMachine, {
+      ctx: undefined,
+      ...(kept ? { store: home.store(TABLE.machine, TABLE.key, Jobs) } : {}),
+    })).ready;
+    yield* table.dispatch({ type: "detached", n: null }).pipe(Effect.orDie);
+    return { table, storage, kept, owner: null, by: null };
+  });

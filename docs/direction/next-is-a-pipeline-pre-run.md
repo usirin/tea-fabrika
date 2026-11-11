@@ -55,10 +55,15 @@ ticket -> triage -> plan (the owner approves its Properties)
 - **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
   a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
   and the lead agent reads the diff and runs a leak grep, then merges and writes the `MergeRow`.
-  Still the owner's: an exam pull request, the read of any exam path a pull request touches
-  ([a unit of work is a commit](./a-unit-of-work-is-a-commit.md)), an edge comment a build adds,
-  and any new design call. *Changed 2026-11-05 (owner): this said every such pull request waited
-  on the owner's yes.*
+  This holds for product code, exam pull requests and exam paths too: the lead merges with
+  `catchup.sh` once every step passed and `loosening.sh` shows no real loosening after the lead's
+  hand check. The lead reads each new edge comment. Still the owner's: real loosening or removal
+  of a law, and any new design call
+  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed 2026-11-09
+  (owner): this said the owner kept exam pull requests, the read of any exam path a pull request
+  touches ([a unit of work is a commit](./a-unit-of-work-is-a-commit.md)) and each edge comment a
+  build adds.* *Changed 2026-11-05 (owner): this said every such pull request waited on the
+  owner's yes.*
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep,
   with no yes.
 - **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds

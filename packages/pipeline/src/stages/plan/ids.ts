@@ -1,21 +1,13 @@
-import {apply, type Book, type CriteriaMsg, currentOf, EMPTY, nextId} from "../../criteria/book.ts";
+import { apply, type Book, type CriteriaMsg, currentOf, EMPTY, nextId } from "../../criteria/book.ts";
+import { type CriterionId, type Owner, PLAN, type QuestionId, questionId, type TaskId, taskId } from "../../ids.ts";
 import {
-	type CriterionId,
-	type Owner,
-	PLAN,
-	type QuestionId,
-	questionId,
-	type TaskId,
-	taskId,
-} from "../../ids.ts";
-import {
-	type Plan,
-	type PlanCriterion,
-	type PlanQuestion,
-	type RevisedQuestion,
-	type RevisedTask,
-	type Revision,
-	textOf,
+  type Plan,
+  type PlanCriterion,
+  type PlanQuestion,
+  type RevisedQuestion,
+  type RevisedTask,
+  type Revision,
+  textOf,
 } from "./plan.ts";
 
 // Where a plan's tasks and criteria get their ids: the criteria book, and
@@ -46,17 +38,14 @@ import {
 
 /** A plan under ids, the book after it, and the events that made the one from the other. */
 export interface Numbered {
-	readonly plan: Plan;
-	readonly book: Book;
-	readonly events: readonly CriteriaMsg[];
+  readonly plan: Plan;
+  readonly book: Book;
+  readonly events: readonly CriteriaMsg[];
 }
 
 /** The number of the next task id: one more than any task a criterion of the book was ever under. The plan's own criteria are under no task. */
 const nextTaskOf = (b: Book): number =>
-	Math.max(
-		0,
-		...[...b.live, ...b.retired].flatMap((e) => (e.task === PLAN ? [] : [Number(e.task.slice(1))])),
-	) + 1;
+  Math.max(0, ...[...b.live, ...b.retired].flatMap((e) => (e.task === PLAN ? [] : [Number(e.task.slice(1))]))) + 1;
 
 type RevisedClaim = RevisedTask["job"] | RevisedTask["criteria"][number];
 
@@ -68,20 +57,17 @@ const numberOfQuestion = (id: QuestionId): number => Number(id.slice(1));
  * `versions` asked keeps it, once; every other one gets one more than the
  * highest any version gave. Pure.
  */
-function questionsOf(
-	questions: readonly RevisedQuestion[],
-	versions: readonly Plan[],
-): readonly PlanQuestion[] {
-	const live = new Set(versions.at(-1)?.questions.map((q) => q.id) ?? []);
-	const asked = versions.flatMap((v) => v.questions.map((q) => numberOfQuestion(q.id)));
-	let next = Math.max(0, ...asked) + 1;
-	const used = new Set<QuestionId>();
-	return questions.map(({keeps, ...words}) => {
-		const kept = keeps !== undefined && live.has(keeps) && !used.has(keeps) ? keeps : null;
-		const id = kept ?? questionId(`q${next++}`);
-		used.add(id);
-		return {id, ...words};
-	});
+function questionsOf(questions: readonly RevisedQuestion[], versions: readonly Plan[]): readonly PlanQuestion[] {
+  const live = new Set(versions.at(-1)?.questions.map((q) => q.id) ?? []);
+  const asked = versions.flatMap((v) => v.questions.map((q) => numberOfQuestion(q.id)));
+  let next = Math.max(0, ...asked) + 1;
+  const used = new Set<QuestionId>();
+  return questions.map(({ keeps, ...words }) => {
+    const kept = keeps !== undefined && live.has(keeps) && !used.has(keeps) ? keeps : null;
+    const id = kept ?? questionId(`q${next++}`);
+    used.add(id);
+    return { id, ...words };
+  });
 }
 
 /**
@@ -90,68 +76,61 @@ function questionsOf(
  * same book, versions and revision give the same ids.
  */
 export function withIds(book: Book, revision: Revision, versions: readonly Plan[] = []): Numbered {
-	let b = book;
-	let nextTask = nextTaskOf(book);
-	const events: CriteriaMsg[] = [];
-	const used = new Set<CriterionId>();
-	const usedTasks = new Set<TaskId>();
-	const step = (msg: CriteriaMsg) => {
-		if (msg.type === "reworded" && currentOf(b).some((x) => x.id === msg.id && x.text === msg.text))
-			return;
-		events.push(msg);
-		b = apply(b, msg);
-	};
-	const placeTask = (keeps: TaskId | undefined): TaskId => {
-		const kept =
-			keeps !== undefined && !usedTasks.has(keeps) && b.live.some((e) => e.task === keeps)
-				? keeps
-				: null;
-		const id = kept ?? taskId(`t${nextTask++}`);
-		usedTasks.add(id);
-		return id;
-	};
-	const place = <C extends RevisedClaim>(
-		task: Owner,
-		c: C,
-	): Omit<C, "keeps"> & Pick<PlanCriterion, "id" | "version"> => {
-		const text = textOf(c);
-		const kept =
-			c.keeps !== undefined &&
-			!used.has(c.keeps) &&
-			b.live.some((e) => e.id === c.keeps && e.task === task)
-				? c.keeps
-				: null;
-		const id = kept ?? nextId(b);
-		step(
-			kept === null
-				? {type: "added", task, text, by: "plan"}
-				: {type: "reworded", id: kept, text, by: "plan"},
-		);
-		used.add(id);
-		const version = currentOf(b).find((x) => x.id === id)?.version ?? 1;
-		const {keeps: _hint, ...words} = c;
-		return {...words, id, version};
-	};
-	const tasks = revision.tasks.map(({keeps, ...task}) => {
-		const id = placeTask(keeps);
-		const job = place(id, task.job);
-		const criteria = task.criteria.map((c) => place(id, c));
-		return {id, ...task, job, criteria};
-	});
-	// The plan's own criteria come after every task's, under `plan`: the book gives their ids
-	// from the same counter, so a goal put in later moves no task's ids.
-	const {goal: revisedGoal, ...rest} = revision;
-	const goal =
-		revisedGoal === undefined
-			? {}
-			: {
-					goal: {
-						job: place(PLAN, revisedGoal.job),
-						criteria: revisedGoal.criteria.map((c) => place(PLAN, c)),
-					},
-				};
-	const questions = questionsOf(revision.questions, versions);
-	return {plan: {...rest, tasks, ...goal, questions}, book: b, events};
+  let b = book;
+  let nextTask = nextTaskOf(book);
+  const events: CriteriaMsg[] = [];
+  const used = new Set<CriterionId>();
+  const usedTasks = new Set<TaskId>();
+  const step = (msg: CriteriaMsg) => {
+    if (msg.type === "reworded" && currentOf(b).some((x) => x.id === msg.id && x.text === msg.text)) {
+      return;
+    }
+
+    events.push(msg);
+    b = apply(b, msg);
+  };
+  const placeTask = (keeps: TaskId | undefined): TaskId => {
+    const kept = keeps !== undefined && !usedTasks.has(keeps) && b.live.some((e) => e.task === keeps) ? keeps : null;
+    const id = kept ?? taskId(`t${nextTask++}`);
+    usedTasks.add(id);
+    return id;
+  };
+  const place = <C extends RevisedClaim>(
+    task: Owner,
+    c: C,
+  ): Omit<C, "keeps"> & Pick<PlanCriterion, "id" | "version"> => {
+    const text = textOf(c);
+    const kept =
+      c.keeps !== undefined && !used.has(c.keeps) && b.live.some((e) => e.id === c.keeps && e.task === task)
+        ? c.keeps
+        : null;
+    const id = kept ?? nextId(b);
+    step(kept === null ? { type: "added", task, text, by: "plan" } : { type: "reworded", id: kept, text, by: "plan" });
+    used.add(id);
+    const version = currentOf(b).find((x) => x.id === id)?.version ?? 1;
+    const { keeps: _hint, ...words } = c;
+    return { ...words, id, version };
+  };
+  const tasks = revision.tasks.map(({ keeps, ...task }) => {
+    const id = placeTask(keeps);
+    const job = place(id, task.job);
+    const criteria = task.criteria.map((c) => place(id, c));
+    return { id, ...task, job, criteria };
+  });
+  // The plan's own criteria come after every task's, under `plan`: the book gives their ids
+  // from the same counter, so a goal put in later moves no task's ids.
+  const { goal: revisedGoal, ...rest } = revision;
+  const goal =
+    revisedGoal === undefined
+      ? {}
+      : {
+          goal: {
+            job: place(PLAN, revisedGoal.job),
+            criteria: revisedGoal.criteria.map((c) => place(PLAN, c)),
+          },
+        };
+  const questions = questionsOf(revision.questions, versions);
+  return { plan: { ...rest, tasks, ...goal, questions }, book: b, events };
 }
 
 /**
@@ -160,23 +139,22 @@ export function withIds(book: Book, revision: Revision, versions: readonly Plan[
  * book gives. Pure.
  */
 export function revisionOf(plan: Plan): Revision {
-	const bare = <C extends {readonly id: CriterionId; readonly version: number}>({
-		id,
-		version: _v,
-		...rest
-	}: C) => ({keeps: id, ...rest});
-	const {goal, ...rest} = plan;
-	return {
-		...rest,
-		tasks: plan.tasks.map(({id, job, criteria, ...task}) => ({
-			keeps: id,
-			...task,
-			job: bare(job),
-			criteria: criteria.map(bare),
-		})),
-		...(goal === undefined ? {} : {goal: {job: bare(goal.job), criteria: goal.criteria.map(bare)}}),
-		questions: plan.questions.map(({id, ...words}) => ({keeps: id, ...words})),
-	};
+  const bare = <C extends { readonly id: CriterionId; readonly version: number }>({ id, version: _v, ...rest }: C) => ({
+    keeps: id,
+    ...rest,
+  });
+  const { goal, ...rest } = plan;
+  return {
+    ...rest,
+    tasks: plan.tasks.map(({ id, job, criteria, ...task }) => ({
+      keeps: id,
+      ...task,
+      job: bare(job),
+      criteria: criteria.map(bare),
+    })),
+    ...(goal === undefined ? {} : { goal: { job: bare(goal.job), criteria: goal.criteria.map(bare) } }),
+    questions: plan.questions.map(({ id, ...words }) => ({ keeps: id, ...words })),
+  };
 }
 
 /**
@@ -192,39 +170,42 @@ export function revisionOf(plan: Plan): Revision {
  * when the owner approves it. Pure.
  */
 export function keptFrom(last: Plan, next: Revision): Revision {
-	const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-	const keep = <C extends RevisedClaim>(
-		pool: readonly {readonly id: CriterionId; readonly when: string; readonly result: string}[],
-		c: C,
-	): C => {
-		const hit = pool.find((p) => same(textOf(p), textOf(c)));
-		return hit === undefined ? c : {...c, keeps: hit.id};
-	};
-	const tasks = next.tasks.map((t): RevisedTask => {
-		const was = last.tasks.find((p) => same(p.title, t.title));
-		if (was === undefined) return t;
-		return {
-			...t,
-			keeps: was.id,
-			job: {...t.job, keeps: was.job.id},
-			criteria: t.criteria.map((c) => keep(was.criteria, c)),
-		};
-	});
-	const goal =
-		next.goal === undefined
-			? {}
-			: {
-					goal: {
-						job:
-							last.goal === undefined ? next.goal.job : {...next.goal.job, keeps: last.goal.job.id},
-						criteria: next.goal.criteria.map((c) => keep(last.goal?.criteria ?? [], c)),
-					},
-				};
-	const questions = next.questions.map((q): RevisedQuestion => {
-		const was = last.questions.find((p) => same(p.ask, q.ask));
-		return was === undefined ? q : {...q, keeps: was.id};
-	});
-	return {...next, tasks, ...goal, questions};
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const keep = <C extends RevisedClaim>(
+    pool: readonly { readonly id: CriterionId; readonly when: string; readonly result: string }[],
+    c: C,
+  ): C => {
+    const hit = pool.find((p) => same(textOf(p), textOf(c)));
+    return hit === undefined ? c : { ...c, keeps: hit.id };
+  };
+  const tasks = next.tasks.map((t): RevisedTask => {
+    const was = last.tasks.find((p) => same(p.title, t.title));
+
+    if (was === undefined) {
+      return t;
+    }
+
+    return {
+      ...t,
+      keeps: was.id,
+      job: { ...t.job, keeps: was.job.id },
+      criteria: t.criteria.map((c) => keep(was.criteria, c)),
+    };
+  });
+  const goal =
+    next.goal === undefined
+      ? {}
+      : {
+          goal: {
+            job: last.goal === undefined ? next.goal.job : { ...next.goal.job, keeps: last.goal.job.id },
+            criteria: next.goal.criteria.map((c) => keep(last.goal?.criteria ?? [], c)),
+          },
+        };
+  const questions = next.questions.map((q): RevisedQuestion => {
+    const was = last.questions.find((p) => same(p.ask, q.ask));
+    return was === undefined ? q : { ...q, keeps: was.id };
+  });
+  return { ...next, tasks, ...goal, questions };
 }
 
 /** A first plan's ids: t1, t2, ..., c1, c2, ... and q1, q2, ... in reading order, as an empty book gives them. Pure. */

@@ -10,6 +10,7 @@
  * whoever's name is on it.
  */
 const MARKED = /<!--[\s\S]*?-->/;
+
 /**
  * Fabrika 0.9.0's records on an issue that carry no hidden mark: each opens
  * with its keyword and a colon. A lane's claim is one, and every run posts
@@ -17,6 +18,7 @@ const MARKED = /<!--[\s\S]*?-->/;
  * it would go to the Judge as the owner's answer.
  */
 const FABRIKA_RECORD =
-	/^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
+  /^\s*(?:lane-(?:claim|adopt|record)|build-(?:claim|claim-override|adopt|deviations)|decision-ruling):/;
+
 /** Whether a comment is a machine's, and so nobody's reply. */
 export const isMachines = (body: string): boolean => MARKED.test(body) || FABRIKA_RECORD.test(body);

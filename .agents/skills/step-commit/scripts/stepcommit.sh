@@ -30,6 +30,32 @@ for p in paths:
         refuse("named file paths required, no folders: " + p)
     named.append(n)
 branch = git("branch", "--show-current").stdout.decode().strip()
+# A lead link for a ticket whose open PR is on another branch becomes that ticket's newest lead
+# link, outside that PR's chain, so the commits check reads the PR's own lead links as stale_link
+# (staleSteps in next/apps/fabrika/src/exam/commits.ts; PRs 609, 614, 615 and 617). The PR's
+# ticket is any note on its commits, signed or not: a refusal here only asks for another ticket.
+if step == "lead" and not only:
+    lane = branch.removesuffix("-wip")
+    # gh pr list --json commits asks for every author too, which GitHub refuses as too big.
+    query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName commits(first:250){totalCount nodes{commit{oid}}}}}}}"
+    cannot = "open PRs cannot be read, so a lead link cannot be checked: "
+    try: listed = subprocess.run(["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", "-f", "query=" + query], capture_output=True, text=True)
+    except OSError as e: refuse(cannot + str(e), 5)
+    if listed.returncode: refuse(cannot + listed.stderr.strip(), 5)
+    try: prs = json.loads(listed.stdout)["data"]["repository"]["pullRequests"]
+    except (ValueError, KeyError, TypeError): refuse(cannot + "unexpected answer", 5)
+    if prs["totalCount"] > len(prs["nodes"]) or any(pr["commits"]["totalCount"] > len(pr["commits"]["nodes"]) for pr in prs["nodes"]):
+        refuse(cannot + "more open PRs or commits than one read holds", 5)
+    notes = dict(reversed(l.split()) for l in git("notes", "--ref=fabrika", "list").stdout.decode().splitlines() if len(l.split()) == 2)
+    def ticket_of(sha):
+        if sha not in notes: return None
+        try: note = json.loads(git("cat-file", "blob", notes[sha]).stdout)
+        except ValueError: return None
+        return note.get("ticket") if isinstance(note, dict) else None
+    for pr in prs["nodes"]:
+        other = pr["headRefName"].removesuffix("-wip")
+        if other != lane and any(ticket_of(c["commit"]["oid"]) == ticket for c in pr["commits"]["nodes"]):
+            refuse(f"stale_link: ticket {ticket}'s open PR {pr['number']} is on {pr['headRefName']}; a lead link here would make that PR's lead links stale. Sign under a lead ticket of your own instead.", 5)
 boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent)))
 def facts(path):
     return dict(l.split(": ", 1) for l in path.read_text().splitlines() if ": " in l)
@@ -57,15 +83,31 @@ if state:
     read = subprocess.run(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--owners-json", state["plan"]], capture_output=True, text=True)
     if read.returncode: refuse("not_owner: cannot read plan")
     owners = json.loads(read.stdout)
+def owner_of(p):
+    # A row ending in / owns every path under it; a plain prefix (owned.ts, owned.tsx) does not.
+    if p in owners: return owners[p]
+    if any(part in ("", ".", "..") for part in p.split("/")): return None
+    under = [k for k in owners if k.endswith("/") and p.startswith(k)]
+    return owners[max(under, key=len)] if under else None
 def check(paths):
     if role == "build":
         exam = subprocess.run([sys.executable, str(here / "exam.py"), "exam-paths.json", *paths], capture_output=True)
         if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
     if owners is not None:
         for p in paths:
-            if owners.get(p) != step and not (step == "mutation" and owners.get(p) == "tests"):
+            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests"):
                 refuse("not_owner: " + p)
 check(named)
+# A case-only rename on a disk that ignores case (id.ts to Id.ts): git keeps the index's old name
+# and stages nothing new under the new one, so the old entry goes first. Only a tracked path that
+# differs from a named one by case alone, and is not itself named, is dropped (ticket 573).
+tracked = [t for t in git("ls-files", "--cached", "-z").stdout.decode().split("\0") if t]
+exact = set(tracked)
+for n in named:
+    if n in exact: continue
+    for t in tracked:
+        if t != n and t.lower() == n.lower() and t not in named:
+            if git("--literal-pathspecs", "rm", "--cached", "-q", "--", t).returncode: refuse("case rename could not be staged: " + t)
 added = git("--literal-pathspecs", "add", "--", *named)
 if added.returncode: refuse("named path could not be staged")
 # --no-renames lists both sides as add/delete, including a removed exam path.

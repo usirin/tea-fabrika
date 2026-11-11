@@ -42,6 +42,8 @@ Layer.succeed(Host, {platform: "browser", has: ["screen", "clipboard", "notify"]
 Keep `client` boring. "The client dials." "One gateway per client." "One key per
 client." When one kind is meant, name that kind.
 
+*Renamed 2026-11-10 for `next/`: say "one connection per client", and the door is the gateway ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).*
+
 | Word | Means | Say it like |
 |---|---|---|
 | hands | what takes jobs from the queue | "the Mac's hands took c-41" |

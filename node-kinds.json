@@ -1,8 +1,8 @@
 {
-	"entryExportConventions": {
-		"saved-builder-output": {
-			"files": "experiments/results/178-lane-rehearsal/**/*.ts",
-			"exports": ["slugify"]
-		}
-	}
+  "entryExportConventions": {
+    "alchemy-durable-object-export": {
+      "files": "src/brain.ts",
+      "exports": ["RecordPart"]
+    }
+  }
 }

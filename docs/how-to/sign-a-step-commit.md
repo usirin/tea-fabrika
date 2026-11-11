@@ -99,6 +99,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | `ask exam_read` | send the owner one line with the paths; merge after the yes, and note it in the `MergeRow` |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
+| `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
 | `stuck broken_chain` | the branch is behind `main`: merge `main` in, as above |
 

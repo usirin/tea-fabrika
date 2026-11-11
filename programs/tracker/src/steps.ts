@@ -1,6 +1,6 @@
-import {endedAs} from "@kampus/pipeline/stages/status";
-import {type Entry, picksOf, questionOf, readAnswer} from "@kampus/pipeline/tickets/ticket";
-import {Schema} from "effect";
+import { endedAs } from "@kampus/pipeline/stages/status";
+import { type Entry, picksOf, questionOf, readAnswer } from "@kampus/pipeline/tickets/ticket";
+import { Schema } from "effect";
 
 // The plan's nine steps for one ticket, each with where it stands, read off the ticket's facts
 // alone (docs/direction/a-ticket-runs-from-the-app.md: the parent's children, with the owner's
@@ -16,16 +16,17 @@ import {Schema} from "effect";
 
 /** The nine, in the order a lane runs them. */
 export const STEPS = [
-	"triage",
-	"plan",
-	"approval",
-	"test_writer",
-	"build",
-	"mutation",
-	"review",
-	"push",
-	"merge",
+  "triage",
+  "plan",
+  "approval",
+  "test_writer",
+  "build",
+  "mutation",
+  "review",
+  "push",
+  "merge",
 ] as const;
+
 export const StepName = Schema.Literals(STEPS);
 export type StepName = typeof StepName.Type;
 
@@ -37,14 +38,14 @@ export const StepState = Schema.Literals(["none", "running", "you", "stuck", "do
 export type StepState = typeof StepState.Type;
 
 export const StepNow = Schema.Struct({
-	step: StepName,
-	state: StepState,
-	/** How many runs it had. For the approval: how many asks. */
-	runs: Schema.Int,
-	/** What its runs cost, from each `ended`. */
-	usd: Schema.Finite,
-	/** Its last word, as a row says it: "sent to plan: yes", "running, task t-2". `null`: none yet. */
-	last: Schema.NullOr(Schema.String),
+  step: StepName,
+  state: StepState,
+  /** How many runs it had. For the approval: how many asks. */
+  runs: Schema.Int,
+  /** What its runs cost, from each `ended`. */
+  usd: Schema.Finite,
+  /** Its last word, as a row says it: "sent to plan: yes", "running, task t-2". `null`: none yet. */
+  last: Schema.NullOr(Schema.String),
 });
 export type StepNow = typeof StepNow.Type;
 
@@ -55,58 +56,61 @@ export const stepWords = (step: string): string => step.replaceAll("_", " ");
 const isApproval = (picks: readonly string[]) => picks.includes("approve");
 
 const approvalOf = (timeline: readonly Entry[]): StepNow => {
-	const asks = timeline.flatMap((e) =>
-		e.fact.type === "asked" && isApproval(picksOf(e.fact)) ? [e.fact] : [],
-	);
-	const last = asks.at(-1);
-	if (last === undefined) return {step: "approval", state: "none", runs: 0, usd: 0, last: null};
-	const answer = timeline.findLast(
-		(e) => e.fact.type === "answered" && e.fact.ask === last.ask,
-	)?.fact;
-	return answer?.type === "answered"
-		? {
-				step: "approval",
-				state: "done",
-				runs: asks.length,
-				usd: 0,
-				last: `answered: ${readAnswer(timeline, answer)?.pick ?? "unknown"}`,
-			}
-		: {step: "approval", state: "you", runs: asks.length, usd: 0, last: questionOf(last)};
+  const asks = timeline.flatMap((e) => (e.fact.type === "asked" && isApproval(picksOf(e.fact)) ? [e.fact] : []));
+  const last = asks.at(-1);
+
+  if (last === undefined) {
+    return { step: "approval", state: "none", runs: 0, usd: 0, last: null };
+  }
+
+  const answer = timeline.findLast((e) => e.fact.type === "answered" && e.fact.ask === last.ask)?.fact;
+  return answer?.type === "answered"
+    ? {
+        step: "approval",
+        state: "done",
+        runs: asks.length,
+        usd: 0,
+        last: `answered: ${readAnswer(timeline, answer)?.pick ?? "unknown"}`,
+      }
+    : { step: "approval", state: "you", runs: asks.length, usd: 0, last: questionOf(last) };
 };
 
 const stageOf = (step: StepName, timeline: readonly Entry[]): StepNow => {
-	const started = timeline.flatMap((e) =>
-		e.fact.type === "started" && e.fact.stage === step ? [e.fact] : [],
-	);
-	const ended = timeline.flatMap((e) =>
-		e.fact.type === "ended" && e.fact.stage === step ? [e.fact] : [],
-	);
-	const usd = ended.reduce((sum, e) => sum + e.usd, 0);
-	const done = new Set(ended.map((e) => e.run));
-	const open = started.findLast((s) => !done.has(s.run));
-	if (open !== undefined)
-		return {
-			step,
-			state: "running",
-			runs: started.length,
-			usd,
-			last: open.task === null ? "running" : `running, task ${open.task}`,
-		};
-	const last = ended.at(-1);
-	if (last === undefined) return {step, state: "none", runs: started.length, usd, last: null};
-	return {
-		step,
-		state: last.outcome.kind === "stuck" ? "stuck" : "done",
-		runs: started.length,
-		usd,
-		last: endedAs(last.outcome, "done"),
-	};
+  const started = timeline.flatMap((e) => (e.fact.type === "started" && e.fact.stage === step ? [e.fact] : []));
+  const ended = timeline.flatMap((e) => (e.fact.type === "ended" && e.fact.stage === step ? [e.fact] : []));
+  const usd = ended.reduce((sum, e) => sum + e.usd, 0);
+  const done = new Set(ended.map((e) => e.run));
+  const open = started.findLast((s) => !done.has(s.run));
+
+  if (open !== undefined) {
+    return {
+      step,
+      state: "running",
+      runs: started.length,
+      usd,
+      last: open.task === null ? "running" : `running, task ${open.task}`,
+    };
+  }
+
+  const last = ended.at(-1);
+
+  if (last === undefined) {
+    return { step, state: "none", runs: started.length, usd, last: null };
+  }
+
+  return {
+    step,
+    state: last.outcome.kind === "stuck" ? "stuck" : "done",
+    runs: started.length,
+    usd,
+    last: endedAs(last.outcome, "done"),
+  };
 };
 
 /** The nine steps of one ticket, in order, from its facts. */
 export const stepsOf = (timeline: readonly Entry[]): readonly StepNow[] =>
-	STEPS.map((step) => (step === "approval" ? approvalOf(timeline) : stageOf(step, timeline)));
+  STEPS.map((step) => (step === "approval" ? approvalOf(timeline) : stageOf(step, timeline)));
 
 /** The step a ticket is at: the one running or waiting on a person, else `null`. */
 export const currentOf = (steps: readonly StepNow[]): StepNow | null =>
-	steps.find((s) => s.state === "running" || s.state === "you" || s.state === "stuck") ?? null;
+  steps.find((s) => s.state === "running" || s.state === "you" || s.state === "stuck") ?? null;

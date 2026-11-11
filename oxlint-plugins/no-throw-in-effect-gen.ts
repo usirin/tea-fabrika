@@ -20,29 +20,30 @@
 //
 // A genuine exception (a real defect stated as a throw at a pre-Effect boundary) is a per-line
 // `// oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>`, never blanket.
-import type {CreateRule} from "@oxlint/plugins";
-import {ancestors, dotted, type Node, plainCall} from "./match.ts";
+import type { CreateRule } from "@oxlint/plugins";
+import { ancestors, dotted, type Node, plainCall } from "./match.ts";
 
-const isEffectBody = (name: string | null): boolean =>
-	name === "Effect.gen" || name === "Effect.fn";
+const isEffectBody = (name: string | null): boolean => name === "Effect.gen" || name === "Effect.fn";
 
-const opensEffect = (callee: Node): boolean =>
-	isEffectBody(dotted(callee)) || isEffectBody(plainCall(callee));
+const opensEffect = (callee: Node): boolean => isEffectBody(dotted(callee)) || isEffectBody(plainCall(callee));
 
 export const noThrowInEffectGen: CreateRule = {
-	create(context) {
-		return {
-			ThrowStatement(node) {
-				for (const up of ancestors(node)) {
-					if (up.type !== "CallExpression" || !opensEffect(up.callee)) continue;
-					context.report({
-						node,
-						message:
-							"Bare `throw` inside an `Effect.gen`/`Effect.fn` body is banned: a thrown exception escapes the `E` channel as an uncatchable defect (#2736). Fix: `yield* Effect.fail(new SomeError({...}))` (a `Schema.TaggedErrorClass` in the `E` channel) for a recoverable failure, or `yield* Effect.die(cause)` for a genuine defect. Exception: // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>.",
-					});
-					return;
-				}
-			},
-		};
-	},
+  create(context) {
+    return {
+      ThrowStatement(node) {
+        for (const up of ancestors(node)) {
+          if (up.type !== "CallExpression" || !opensEffect(up.callee)) {
+            continue;
+          }
+
+          context.report({
+            node,
+            message:
+              "Bare `throw` inside an `Effect.gen`/`Effect.fn` body is banned: a thrown exception escapes the `E` channel as an uncatchable defect (#2736). Fix: `yield* Effect.fail(new SomeError({...}))` (a `Schema.TaggedErrorClass` in the `E` channel) for a recoverable failure, or `yield* Effect.die(cause)` for a genuine defect. Exception: // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- <reason>.",
+          });
+          return;
+        }
+      },
+    };
+  },
 };

@@ -1,5 +1,5 @@
-import {markOf} from "../../criteria/mark.ts";
-import {type Plan, type PlanCriterion, type PlanDraft, sizeOf, storyText, textOf} from "./plan.ts";
+import { markOf } from "../../criteria/mark.ts";
+import { type Plan, type PlanCriterion, type PlanDraft, sizeOf, storyText, textOf } from "./plan.ts";
 
 // The markdown view of a plan, for people. Made from the data and never read
 // back (docs/direction/data-first-markdown-is-a-view.md). A person marks what
@@ -10,107 +10,101 @@ import {type Plan, type PlanCriterion, type PlanDraft, sizeOf, storyText, textOf
 // (../review/pack.ts). What it serves and how it is checked go on a line
 // under the box, not in its words.
 
-const ENDS = {pr: "ends in a pull request", answer: "ends in written findings"} as const;
+const ENDS = { pr: "ends in a pull request", answer: "ends in written findings" } as const;
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** Text as inline code, in a fence longer than any run of backticks inside it. */
 const code = (text: string) => {
-	const fence = "`".repeat(Math.max(0, ...[...text.matchAll(/`+/g)].map((r) => r[0].length)) + 1);
-	const pad = fence.length > 1 ? " " : "";
-	return `${fence}${pad}${text}${pad}${fence}`;
+  const fence = "`".repeat(Math.max(0, ...[...text.matchAll(/`+/g)].map((r) => r[0].length)) + 1);
+  const pad = fence.length > 1 ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** One criterion as a box: its mark and its sentence, then what it serves and its check on a line under it. */
 const box = (c: PlanCriterion, lead = "") =>
-	`- [ ] ${markOf(c)} ${flat(textOf(c))}\n  - ${lead}_Serves ${c.serves.join(", ")}. Check (${c.check.how}): ${flat(c.check.what)}_`;
+  `- [ ] ${markOf(c)} ${flat(textOf(c))}\n  - ${lead}_Serves ${c.serves.join(", ")}. Check (${c.check.how}): ${flat(c.check.what)}_`;
 
 /** A plan's open questions, each with its lean whole: why, what it costs, how sure, what would settle it. Pure. */
 export const questionLines = (plan: Pick<Plan, "questions">): readonly string[] =>
-	plan.questions.length === 0
-		? ["None."]
-		: plan.questions.flatMap((q, i) => [
-				`${i + 1}. \`${q.id}\` ${flat(q.ask)}`,
-				...(q.options.length === 0 ? [] : [`   - Options: ${q.options.map(flat).join(" / ")}`]),
-				`   - Lean: ${flat(q.lean)}`,
-				`   - Why: ${flat(q.why)}`,
-				...(q.cost === undefined ? [] : [`   - Cost: ${flat(q.cost)}`]),
-				...(q.sure === undefined ? [] : [`   - Sure: ${q.sure}%`]),
-				...(q.doubt === undefined ? [] : [`   - Would settle it: ${flat(q.doubt)}`]),
-			]);
+  plan.questions.length === 0
+    ? ["None."]
+    : plan.questions.flatMap((q, i) => [
+        `${i + 1}. \`${q.id}\` ${flat(q.ask)}`,
+        ...(q.options.length === 0 ? [] : [`   - Options: ${q.options.map(flat).join(" / ")}`]),
+        `   - Lean: ${flat(q.lean)}`,
+        `   - Why: ${flat(q.why)}`,
+        ...(q.cost === undefined ? [] : [`   - Cost: ${flat(q.cost)}`]),
+        ...(q.sure === undefined ? [] : [`   - Sure: ${q.sure}%`]),
+        ...(q.doubt === undefined ? [] : [`   - Would settle it: ${flat(q.doubt)}`]),
+      ]);
 
 /**
  * The plan as markdown. `title`: what the heading calls the ticket. `exam`: the rule changes the
  * planner listed, which a numbered plan does not hold. Pure.
  */
-export function planMarkdown(
-	plan: Plan,
-	title: string,
-	exam: NonNullable<PlanDraft["exam"]> = [],
-): string {
-	const size = sizeOf(plan);
-	const rules =
-		exam.length === 0
-			? []
-			: [
-					"## Rule changes",
-					"",
-					"These land first, in a pull request of their own, on your yes. With the one for the tasks, this plan makes two pull requests.",
-					"",
-					...exam.map((c) => `- ${code(flat(c.path))}: ${flat(c.change)} Why: ${flat(c.why)}`),
-					"",
-				];
-	const stories = plan.stories.map(
-		(s) => `- **${s.id}**: ${flat(storyText(s))}.${s.from === undefined ? "" : ` _(${s.from})_`}`,
-	);
-	const tasks = plan.tasks.flatMap((task, t) => [
-		`## Task ${t + 1}: ${flat(task.title)}`,
-		"",
-		`It ${ENDS[task.ends]}.`,
-		"",
-		`${box(task.job, "**The whole job.** ")}  \n    _Fixture: ${flat(task.job.fixture)}_`,
-		...task.criteria.map((c) => box(c)),
-		"",
-	]);
-	const goal =
-		plan.goal === undefined
-			? []
-			: [
-					"## The whole plan",
-					"",
-					"Judged once every task is in, at the head of the pull request that holds them.",
-					"",
-					`${box(plan.goal.job, "**The whole job.** ")}  \n    _Fixture: ${flat(plan.goal.job.fixture)}_`,
-					...plan.goal.criteria.map((c) => box(c)),
-					"",
-				];
-	const pointers =
-		plan.pointers.length === 0
-			? ["None."]
-			: plan.pointers.map((p) => `- ${code(flat(p.at))}: ${flat(p.why)}`);
-	return [
-		`# Plan: ${flat(title)}`,
-		"",
-		flat(plan.summary),
-		"",
-		`Size: ${plural(size.stories, "story", "stories")}, ${plural(size.tasks, "task", "tasks")}, ${plural(size.criteria, "criterion", "criteria")}, ${size.words} words.`,
-		"",
-		"## User stories",
-		"",
-		...stories,
-		"",
-		...rules,
-		...tasks,
-		...goal,
-		"## Open questions",
-		"",
-		...questionLines(plan),
-		"",
-		"## Pointers (they bind nobody)",
-		"",
-		...pointers,
-		"",
-	].join("\n");
+export function planMarkdown(plan: Plan, title: string, exam: NonNullable<PlanDraft["exam"]> = []): string {
+  const size = sizeOf(plan);
+  const rules =
+    exam.length === 0
+      ? []
+      : [
+          "## Rule changes",
+          "",
+          "These land first, in a pull request of their own, on your yes. With the one for the tasks, this plan makes two pull requests.",
+          "",
+          ...exam.map((c) => `- ${code(flat(c.path))}: ${flat(c.change)} Why: ${flat(c.why)}`),
+          "",
+        ];
+  const stories = plan.stories.map(
+    (s) => `- **${s.id}**: ${flat(storyText(s))}.${s.from === undefined ? "" : ` _(${s.from})_`}`,
+  );
+  const tasks = plan.tasks.flatMap((task, t) => [
+    `## Task ${t + 1}: ${flat(task.title)}`,
+    "",
+    `It ${ENDS[task.ends]}.`,
+    "",
+    `${box(task.job, "**The whole job.** ")}  \n    _Fixture: ${flat(task.job.fixture)}_`,
+    ...task.criteria.map((c) => box(c)),
+    "",
+  ]);
+  const goal =
+    plan.goal === undefined
+      ? []
+      : [
+          "## The whole plan",
+          "",
+          "Judged once every task is in, at the head of the pull request that holds them.",
+          "",
+          `${box(plan.goal.job, "**The whole job.** ")}  \n    _Fixture: ${flat(plan.goal.job.fixture)}_`,
+          ...plan.goal.criteria.map((c) => box(c)),
+          "",
+        ];
+  const pointers =
+    plan.pointers.length === 0 ? ["None."] : plan.pointers.map((p) => `- ${code(flat(p.at))}: ${flat(p.why)}`);
+  return [
+    `# Plan: ${flat(title)}`,
+    "",
+    flat(plan.summary),
+    "",
+    `Size: ${plural(size.stories, "story", "stories")}, ${plural(size.tasks, "task", "tasks")}, ${plural(size.criteria, "criterion", "criteria")}, ${size.words} words.`,
+    "",
+    "## User stories",
+    "",
+    ...stories,
+    "",
+    ...rules,
+    ...tasks,
+    ...goal,
+    "## Open questions",
+    "",
+    ...questionLines(plan),
+    "",
+    "## Pointers (they bind nobody)",
+    "",
+    ...pointers,
+    "",
+  ].join("\n");
 }

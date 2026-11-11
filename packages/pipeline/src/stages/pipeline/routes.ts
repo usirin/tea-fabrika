@@ -1,19 +1,19 @@
-import {Schema} from "effect";
-import {AskFor, askedFor, askedStep, LaneStep, STEPS} from "../../tickets/steps.ts";
-import type {BuildName} from "../build/outcome.ts";
-import type {ExamOutcome} from "../exam/machine.ts";
-import type {MutationName} from "../mutation/outcome.ts";
-import type {Name} from "../outcome.ts";
-import type {PlanName} from "../plan/outcome.ts";
-import type {PushOutcome} from "../push/machine.ts";
-import type {ReviewName} from "../review/outcome.ts";
-import type {ShipName} from "../ship/outcome.ts";
-import type {SortName} from "../sort/outcome.ts";
-import type {MutantsOutcome} from "../test-writer/mutants.ts";
-import type {TestWriterName} from "../test-writer/outcome.ts";
-import {EndOutcome} from "./outcome.ts";
+import { Schema } from "effect";
+import { AskFor, askedFor, askedStep, LaneStep, STEPS } from "../../tickets/steps.ts";
+import type { BuildName } from "../build/outcome.ts";
+import type { ExamOutcome } from "../exam/machine.ts";
+import type { MutationName } from "../mutation/outcome.ts";
+import type { Name } from "../outcome.ts";
+import type { PlanName } from "../plan/outcome.ts";
+import type { PushOutcome } from "../push/machine.ts";
+import type { ReviewName } from "../review/outcome.ts";
+import type { ShipName } from "../ship/outcome.ts";
+import type { SortName } from "../sort/outcome.ts";
+import type { MutantsOutcome } from "../test-writer/mutants.ts";
+import type { TestWriterName } from "../test-writer/outcome.ts";
+import { EndOutcome } from "./outcome.ts";
 
-export {AskFor, askedFor, askedStep, LaneStep, STEPS};
+export { AskFor, askedFor, askedStep, LaneStep, STEPS };
 
 // Where the lane goes when a step ends with an outcome (self-fix PR 10 and PR 11). Today's version.
 //
@@ -34,15 +34,7 @@ export {AskFor, askedFor, askedStep, LaneStep, STEPS};
  * conflict. `mutant`: the one left alive. `nothing_changed`: the run before changed nothing.
  * `disputed`: what the builder disputes, for a fresh review (jidoka row 45).
  */
-export const With = Schema.Literals([
-	"names",
-	"findings",
-	"comment",
-	"files",
-	"mutant",
-	"nothing_changed",
-	"disputed",
-]);
+export const With = Schema.Literals(["names", "findings", "comment", "files", "mutant", "nothing_changed", "disputed"]);
 export type With = typeof With.Type;
 
 /**
@@ -73,302 +65,300 @@ export type Service = typeof Service.Type;
  * `step`, as in `run` and `back`.)
  */
 export const Move = Schema.Union([
-	Schema.TaggedStruct("next", {}),
-	Schema.TaggedStruct("run", {step: LaneStep}),
-	Schema.TaggedStruct("back", {
-		step: LaneStep,
-		with: With,
-		bound: Schema.Literals(["rounds", "once"]),
-	}),
-	Schema.TaggedStruct("fresh", {step: LaneStep}),
-	Schema.TaggedStruct("once", {}),
-	Schema.TaggedStruct("wait", {in: Service}),
-	Schema.TaggedStruct("host", {}),
-	Schema.TaggedStruct("ask", {for: AskFor}),
-	Schema.TaggedStruct("stop", {}),
-	Schema.TaggedStruct("end", {outcome: EndOutcome}),
-	Schema.TaggedStruct("cannot", {law: Schema.String}),
+  Schema.TaggedStruct("next", {}),
+  Schema.TaggedStruct("run", { step: LaneStep }),
+  Schema.TaggedStruct("back", {
+    step: LaneStep,
+    with: With,
+    bound: Schema.Literals(["rounds", "once"]),
+  }),
+  Schema.TaggedStruct("fresh", { step: LaneStep }),
+  Schema.TaggedStruct("once", {}),
+  Schema.TaggedStruct("wait", { in: Service }),
+  Schema.TaggedStruct("host", {}),
+  Schema.TaggedStruct("ask", { for: AskFor }),
+  Schema.TaggedStruct("stop", {}),
+  Schema.TaggedStruct("end", { outcome: EndOutcome }),
+  Schema.TaggedStruct("cannot", { law: Schema.String }),
 ]);
 export type Move = typeof Move.Type;
 
-const next: Move = {_tag: "next"};
-export const run = (step: LaneStep): Move => ({_tag: "run", step});
+const next: Move = { _tag: "next" };
+export const run = (step: LaneStep): Move => ({ _tag: "run", step });
+
 /** Back to `step` with what it must fix. `rounds`, the default, counts a round, as a build round does. */
 export const back = (step: LaneStep, why: With, bound: "rounds" | "once" = "rounds"): Move => ({
-	_tag: "back",
-	step,
-	with: why,
-	bound,
+  _tag: "back",
+  step,
+  with: why,
+  bound,
 });
-export const fresh = (step: LaneStep): Move => ({_tag: "fresh", step});
-export const once: Move = {_tag: "once"};
-const wait = (service: Service): Move => ({_tag: "wait", in: service});
-const host: Move = {_tag: "host"};
-const ask = (kind: AskFor): Move => ({_tag: "ask", for: kind});
-const stop: Move = {_tag: "stop"};
-const end = (outcome: EndOutcome): Move => ({_tag: "end", outcome});
-const cannot = (law: string): Move => ({_tag: "cannot", law});
+
+export const fresh = (step: LaneStep): Move => ({ _tag: "fresh", step });
+export const once: Move = { _tag: "once" };
+const wait = (service: Service): Move => ({ _tag: "wait", in: service });
+const host: Move = { _tag: "host" };
+const ask = (kind: AskFor): Move => ({ _tag: "ask", for: kind });
+const stop: Move = { _tag: "stop" };
+const end = (outcome: EndOutcome): Move => ({ _tag: "end", outcome });
+const cannot = (law: string): Move => ({ _tag: "cannot", law });
 
 /** The names the lane's step bodies make in program.ts, on top of their stage's (experiment 193's `MADE`). */
 const MADE = {
-	plan: ["stuck:unchecked"],
-	exam_review: [
-		"stuck:head_moved",
-		"send:builder:conflicts",
-		"stuck:checks_not_run",
-		"send:builder:checks_red",
-	],
-	build: [
-		"send:builder:checks_red",
-		"stuck:checks_not_run",
-		"stuck:rounds_spent",
-		"ask:owner:no_change",
-		"ask:owner:still_red",
-	],
-	review: ["ask:owner:unseen", "ask:owner:decision"],
-	merge: ["stuck:merged_elsewhere"],
+  plan: ["stuck:unchecked"],
+  exam_review: ["stuck:head_moved", "send:builder:conflicts", "stuck:checks_not_run", "send:builder:checks_red"],
+  build: [
+    "send:builder:checks_red",
+    "stuck:checks_not_run",
+    "stuck:rounds_spent",
+    "ask:owner:no_change",
+    "ask:owner:still_red",
+  ],
+  review: ["ask:owner:unseen", "ask:owner:decision"],
+  merge: ["stuck:merged_elsewhere"],
 } as const;
+
 type MadeAt<S extends keyof typeof MADE> = (typeof MADE)[S][number];
 
 /** Every outcome name each step can hand the lane. */
 type NamesAt = {
-	readonly triage: SortName;
-	readonly plan: PlanName | MadeAt<"plan">;
-	readonly exam: Name<ExamOutcome>;
-	readonly exam_review: ReviewName | MadeAt<"exam_review">;
-	readonly exam_merge: ShipName;
-	readonly test_writer: TestWriterName;
-	readonly build: BuildName | MadeAt<"build">;
-	readonly mutation: MutationName;
-	readonly mutants: Name<MutantsOutcome>;
-	readonly review: ReviewName | MadeAt<"review">;
-	readonly push: Name<PushOutcome>;
-	readonly merge: ShipName | MadeAt<"merge">;
+  readonly triage: SortName;
+  readonly plan: PlanName | MadeAt<"plan">;
+  readonly exam: Name<ExamOutcome>;
+  readonly exam_review: ReviewName | MadeAt<"exam_review">;
+  readonly exam_merge: ShipName;
+  readonly test_writer: TestWriterName;
+  readonly build: BuildName | MadeAt<"build">;
+  readonly mutation: MutationName;
+  readonly mutants: Name<MutantsOutcome>;
+  readonly review: ReviewName | MadeAt<"review">;
+  readonly push: Name<PushOutcome>;
+  readonly merge: ShipName | MadeAt<"merge">;
 };
 
 /** One row per name each step can say, and no other. */
-export type Routes = {readonly [S in LaneStep]: {readonly [N in NamesAt[S]]: Move}};
+export type Routes = { readonly [S in LaneStep]: { readonly [N in NamesAt[S]]: Move } };
 
 /** Every `send` ship can end with, by its printed name. */
 type ShipSend = Extract<ShipName, `send:${string}`>;
 
 /** A ship send at `exam_merge`, and where it goes (self-fix PR 10). Each `back` counts an exam round. */
 export const EXAM_MERGE_SENDS = {
-	/** Code first: format and checks, then a fresh review. */
-	"send:reviewer:no_review": run("exam_review"),
-	/** Format and checks by code; still red goes to the exam writer from there. */
-	"send:builder:checks_red": run("exam_review"),
-	/** Main merged into the exam branch, then the same: `exam_review` takes main in itself. */
-	"send:builder:behind": fresh("exam_review"),
-	"send:builder:review_failed": back("exam", "findings"),
-	/** The exam writer redoes those files on main. */
-	"send:builder:conflicts": back("exam", "files"),
-	"send:builder:bot_comment": back("exam", "comment"),
-	/** Ship again, as a new run; twice: stop, with ship's why. */
-	"send:builder:ejected": once,
+  /** Code first: format and checks, then a fresh review. */
+  "send:reviewer:no_review": run("exam_review"),
+  /** Format and checks by code; still red goes to the exam writer from there. */
+  "send:builder:checks_red": run("exam_review"),
+  /** Main merged into the exam branch, then the same: `exam_review` takes main in itself. */
+  "send:builder:behind": fresh("exam_review"),
+  "send:builder:review_failed": back("exam", "findings"),
+  /** The exam writer redoes those files on main. */
+  "send:builder:conflicts": back("exam", "files"),
+  "send:builder:bot_comment": back("exam", "comment"),
+  /** Ship again, as a new run; twice: stop, with ship's why. */
+  "send:builder:ejected": once,
 } as const satisfies Record<ShipSend, Move>;
 
 /** The stops ship has at both its steps: what it could not read, what a new run reads fresh, its guard. */
 const SHIP_STUCK = {
-	"stuck:read_failed": wait("code_host"),
-	"stuck:approval_unknown": wait("code_host"),
-	"stuck:reviews_unknown": wait("code_host"),
-	"stuck:proof_refused": once,
-	"stuck:head_moving": once,
-	"stuck:checks_stuck": once,
-	"stuck:queue_silent": once,
-	"stuck:enqueue_failed": once,
-	"stuck:merge_failed": once,
-	"stuck:merge_unknown": once,
-	"stuck:criteria_unknown": cannot("each pull request the lane opens names its ticket's criteria"),
+  "stuck:read_failed": wait("code_host"),
+  "stuck:approval_unknown": wait("code_host"),
+  "stuck:reviews_unknown": wait("code_host"),
+  "stuck:proof_refused": once,
+  "stuck:head_moving": once,
+  "stuck:checks_stuck": once,
+  "stuck:queue_silent": once,
+  "stuck:enqueue_failed": once,
+  "stuck:merge_failed": once,
+  "stuck:merge_unknown": once,
+  "stuck:criteria_unknown": cannot("each pull request the lane opens names its ticket's criteria"),
 } as const satisfies Record<Extract<ShipName, `stuck:${string}`>, Move>;
 
 /** What ship asks and skips at both its steps. A close or a draft reads the ticket fresh (row 13). */
 const SHIP_ASKS = {
-	"ask:owner:approval": ask("step"),
-	"ask:commenter:comment": ask("step"),
-	"skip:closed": host,
-	"skip:draft": host,
-	"skip:not_ours": cannot("the lane opened it on the person's login"),
+  "ask:owner:approval": ask("step"),
+  "ask:commenter:comment": ask("step"),
+  "skip:closed": host,
+  "skip:draft": host,
+  "skip:not_ours": cannot("the lane opened it on the person's login"),
 } as const satisfies Record<Extract<ShipName, `ask:${string}` | `skip:${string}`>, Move>;
 
 /** The rows the review stage has at both its steps, `exam_review` and `review`. */
 const REVIEWED = {
-	done: next,
-	"done:part": next,
-	"skip:merged": host,
-	"skip:closed": host,
-	"skip:draft": cannot("the lane's review target is its own book, never a draft"),
-	"stuck:read_failed": wait("review_pack"),
-	"stuck:ticket_unknown": wait("review_pack"),
-	"stuck:diff_unknown": wait("review_pack"),
-	"stuck:kinds_unknown": wait("review_pack"),
-	"stuck:checks_unknown": wait("review_pack"),
-	"stuck:no_criteria": cannot("the plan's Check needs a Property, and each one is a criterion"),
-	// Row 55's guard, the rubrics folder checked as the lane starts, is not built yet: a stop till then.
-	"stuck:rubric_unknown": stop,
-	"stuck:draft_failed": once,
-	"stuck:over_budget": ask("spend"),
-	"stuck:checks_stuck": once,
+  done: next,
+  "done:part": next,
+  "skip:merged": host,
+  "skip:closed": host,
+  "skip:draft": cannot("the lane's review target is its own book, never a draft"),
+  "stuck:read_failed": wait("review_pack"),
+  "stuck:ticket_unknown": wait("review_pack"),
+  "stuck:diff_unknown": wait("review_pack"),
+  "stuck:kinds_unknown": wait("review_pack"),
+  "stuck:checks_unknown": wait("review_pack"),
+  "stuck:no_criteria": cannot("the plan's Check needs a Property, and each one is a criterion"),
+  // Row 55's guard, the rubrics folder checked as the lane starts, is not built yet: a stop till then.
+  "stuck:rubric_unknown": stop,
+  "stuck:draft_failed": once,
+  "stuck:over_budget": ask("spend"),
+  "stuck:checks_stuck": once,
 } as const satisfies Partial<Record<ReviewName, Move>>;
 
 export const ROUTES = {
-	triage: {
-		// Triage closed it, as a no or a duplicate: done, and nobody is next.
-		done: end({kind: "done", part: false}),
-		"done:part": end({kind: "done", part: false}),
-		"send:plan:yes": next,
-		"send:plan:fold": next,
-		"send:research:yes": end({kind: "skip", why: "research"}),
-		"ask:owner:ruling": ask("step"),
-		"skip:closed": end({kind: "skip", why: "closed"}),
-		"stuck:read_failed": wait("tickets"),
-		"stuck:write_failed": wait("tickets"),
-		"stuck:draft_failed": once,
-		// The words changed while it sorted: sort again on the new words.
-		"stuck:changed": once,
-		"stuck:over_budget": ask("spend"),
-		"stuck:unchecked": stop,
-	},
-	plan: {
-		done: next,
-		"done:part": next,
-		// A plan with open questions goes to the same yes: the person reads them there.
-		"ask:owner:questions": ask("approve"),
-		"skip:closed": end({kind: "skip", why: "closed"}),
-		"stuck:read_failed": wait("tickets"),
-		"stuck:draft_failed": once,
-		"stuck:cut_off": once,
-		"stuck:over_budget": ask("spend"),
-		"stuck:unchecked": stop,
-	},
-	exam: {
-		done: next,
-		"done:part": next,
-		// Its pull request is open: the lane's own review reads it first, the person after (PR 10).
-		"ask:owner:check_change": run("exam_review"),
-		"skip:no_rules_change": next,
-		"stuck:draft_failed": once,
-		"stuck:land_failed": wait("code_host"),
-		"stuck:unchecked": stop,
-	},
-	exam_review: {
-		...REVIEWED,
-		// The exam's review, its checks or its merge with main failed: the exam writer, in its rounds.
-		"send:builder:review_failed": back("exam", "findings"),
-		"send:builder:checks_red": back("exam", "names"),
-		"send:builder:no_ticket": back("exam", "findings"),
-		"send:builder:conflicts": back("exam", "files"),
-		// The lane asks no question on the exam's review: a stop, with its why.
-		"stuck:unseen": stop,
-		// Someone rewrote the rule changes' branch: the lane does not guess which stands.
-		"stuck:head_moved": stop,
-		"stuck:checks_not_run": once,
-	},
-	exam_merge: {
-		...EXAM_MERGE_SENDS,
-		...SHIP_STUCK,
-		...SHIP_ASKS,
-		done: next,
-		"done:part": next,
-	},
-	test_writer: {
-		done: next,
-		"done:part": next,
-		// Rows 28, 29 and 35: back to the writer one time with what failed, then its own question.
-		"ask:owner:fails_on_base": back("test_writer", "names", "once"),
-		"ask:owner:already_passes": back("test_writer", "names", "once"),
-		"stuck:no_result": back("test_writer", "names", "once"),
-		"ask:owner:cannot_test": ask("step"),
-		"skip:no_properties": next,
-		"stuck:read_failed": wait("work"),
-		"stuck:record_failed": wait("tickets"),
-		"stuck:commit_failed": once,
-		"stuck:draft_failed": once,
-		"stuck:cut_off": once,
-		"stuck:run_failed": once,
-		"stuck:unchecked": stop,
-	},
-	build: {
-		done: next,
-		"done:part": next,
-		"skip:closed": host,
-		"skip:merged": host,
-		"skip:not_ready": cannot("the lane's yes writes the approval before build starts"),
-		"stuck:read_failed": wait("tickets"),
-		"stuck:no_criteria": cannot("in the lane, the plan's Properties are the criteria"),
-		"stuck:criteria_unknown": cannot("in the lane, the plan's Properties are the criteria"),
-		"stuck:copy_failed": once,
-		"stuck:draft_failed": once,
-		"stuck:over_budget": ask("spend"),
-		// Row 41: once more, told it changed nothing, then its own question.
-		"stuck:no_change": back("build", "nothing_changed", "once"),
-		"stuck:push_failed": cannot("the lane's build never pushes: push is its own step"),
-		"stuck:open_failed": cannot("the lane's build opens nothing: push is its own step"),
-		// A builder never changes its exam: a person says which was wrong.
-		"stuck:exam_touched": ask("exam_touched"),
-		// Code's checks at its head are red: back a round up, with each failing test.
-		"send:builder:checks_red": back("build", "names"),
-		// They could not run, after one more try: never guessed green.
-		"stuck:checks_not_run": stop,
-		"stuck:rounds_spent": ask("rounds_spent"),
-		// Row 45: green, and the builder changed nothing: a fresh review reads what it disputes.
-		"ask:owner:no_change": back("review", "disputed", "once"),
-		// Row 46: another round with the failing names, until the rounds are spent.
-		"ask:owner:still_red": back("build", "names"),
-	},
-	mutation: {
-		done: next,
-		"done:part": next,
-		"send:test_writer:mutant_survived": run("mutants"),
-		// The head's own tests fail by the mutation step's run: the builder gets them by name.
-		"send:builder:tests_red": back("build", "names"),
-		"ask:owner:check_change": ask("step"),
-		"skip:no_lines": next,
-		"stuck:read_failed": wait("work"),
-		"stuck:run_failed": once,
-	},
-	mutants: {
-		done: next,
-		"done:part": next,
-		"ask:owner:disable": ask("step"),
-		// A new test missed its mutant: the writer again, with that mutant, as a round.
-		"stuck:not_killed": back("mutants", "mutant"),
-		"stuck:run_failed": once,
-	},
-	review: {
-		...REVIEWED,
-		// A finding needs a test, and the builder cannot add one: the writer goes first.
-		"send:builder:review_failed": back("test_writer", "findings"),
-		"send:builder:checks_red": back("test_writer", "names"),
-		"send:builder:no_ticket": back("test_writer", "findings"),
-		"stuck:unseen": cannot("the lane turns review's unseen into ask:owner:unseen"),
-		"ask:owner:unseen": ask("step"),
-		"ask:owner:decision": ask("step"),
-	},
-	push: {
-		done: next,
-		"done:part": next,
-		"stuck:push_failed": wait("work"),
-		"stuck:open_failed": wait("code_host"),
-		"stuck:post_failed": wait("code_host"),
-	},
-	merge: {
-		...SHIP_STUCK,
-		...SHIP_ASKS,
-		// Row 62: to build, the next round, with ship's words.
-		"send:builder:review_failed": back("build", "findings"),
-		"send:builder:checks_red": back("build", "names"),
-		"send:builder:bot_comment": back("build", "comment"),
-		// Row 62: main taken in first; a clean result with green checks runs merge again, with no round.
-		"send:builder:conflicts": fresh("merge"),
-		"send:builder:behind": fresh("merge"),
-		"send:builder:ejected": once,
-		// Row 63: the review again, at the pull request's head, in the same round.
-		"send:reviewer:no_review": run("review"),
-		// Someone else merged it: what landed is theirs, and the lane ends on it.
-		"stuck:merged_elsewhere": end({kind: "stuck", why: "merged_elsewhere"}),
-		done: next,
-		"done:part": next,
-	},
+  triage: {
+    // Triage closed it, as a no or a duplicate: done, and nobody is next.
+    done: end({ kind: "done", part: false }),
+    "done:part": end({ kind: "done", part: false }),
+    "send:plan:yes": next,
+    "send:plan:fold": next,
+    "send:research:yes": end({ kind: "skip", why: "research" }),
+    "ask:owner:ruling": ask("step"),
+    "skip:closed": end({ kind: "skip", why: "closed" }),
+    "stuck:read_failed": wait("tickets"),
+    "stuck:write_failed": wait("tickets"),
+    "stuck:draft_failed": once,
+    // The words changed while it sorted: sort again on the new words.
+    "stuck:changed": once,
+    "stuck:over_budget": ask("spend"),
+    "stuck:unchecked": stop,
+  },
+  plan: {
+    done: next,
+    "done:part": next,
+    // A plan with open questions goes to the same yes: the person reads them there.
+    "ask:owner:questions": ask("approve"),
+    "skip:closed": end({ kind: "skip", why: "closed" }),
+    "stuck:read_failed": wait("tickets"),
+    "stuck:draft_failed": once,
+    "stuck:cut_off": once,
+    "stuck:over_budget": ask("spend"),
+    "stuck:unchecked": stop,
+  },
+  exam: {
+    done: next,
+    "done:part": next,
+    // Its pull request is open: the lane's own review reads it first, the person after (PR 10).
+    "ask:owner:check_change": run("exam_review"),
+    "skip:no_rules_change": next,
+    "stuck:draft_failed": once,
+    "stuck:land_failed": wait("code_host"),
+    "stuck:unchecked": stop,
+  },
+  exam_review: {
+    ...REVIEWED,
+    // The exam's review, its checks or its merge with main failed: the exam writer, in its rounds.
+    "send:builder:review_failed": back("exam", "findings"),
+    "send:builder:checks_red": back("exam", "names"),
+    "send:builder:no_ticket": back("exam", "findings"),
+    "send:builder:conflicts": back("exam", "files"),
+    // The lane asks no question on the exam's review: a stop, with its why.
+    "stuck:unseen": stop,
+    // Someone rewrote the rule changes' branch: the lane does not guess which stands.
+    "stuck:head_moved": stop,
+    "stuck:checks_not_run": once,
+  },
+  exam_merge: {
+    ...EXAM_MERGE_SENDS,
+    ...SHIP_STUCK,
+    ...SHIP_ASKS,
+    done: next,
+    "done:part": next,
+  },
+  test_writer: {
+    done: next,
+    "done:part": next,
+    // Rows 28, 29 and 35: back to the writer one time with what failed, then its own question.
+    "ask:owner:fails_on_base": back("test_writer", "names", "once"),
+    "ask:owner:already_passes": back("test_writer", "names", "once"),
+    "stuck:no_result": back("test_writer", "names", "once"),
+    "ask:owner:cannot_test": ask("step"),
+    "skip:no_properties": next,
+    "stuck:read_failed": wait("work"),
+    "stuck:record_failed": wait("tickets"),
+    "stuck:commit_failed": once,
+    "stuck:draft_failed": once,
+    "stuck:cut_off": once,
+    "stuck:run_failed": once,
+    "stuck:unchecked": stop,
+  },
+  build: {
+    done: next,
+    "done:part": next,
+    "skip:closed": host,
+    "skip:merged": host,
+    "skip:not_ready": cannot("the lane's yes writes the approval before build starts"),
+    "stuck:read_failed": wait("tickets"),
+    "stuck:no_criteria": cannot("in the lane, the plan's Properties are the criteria"),
+    "stuck:criteria_unknown": cannot("in the lane, the plan's Properties are the criteria"),
+    "stuck:copy_failed": once,
+    "stuck:draft_failed": once,
+    "stuck:over_budget": ask("spend"),
+    // Row 41: once more, told it changed nothing, then its own question.
+    "stuck:no_change": back("build", "nothing_changed", "once"),
+    "stuck:push_failed": cannot("the lane's build never pushes: push is its own step"),
+    "stuck:open_failed": cannot("the lane's build opens nothing: push is its own step"),
+    // A builder never changes its exam: a person says which was wrong.
+    "stuck:exam_touched": ask("exam_touched"),
+    // Code's checks at its head are red: back a round up, with each failing test.
+    "send:builder:checks_red": back("build", "names"),
+    // They could not run, after one more try: never guessed green.
+    "stuck:checks_not_run": stop,
+    "stuck:rounds_spent": ask("rounds_spent"),
+    // Row 45: green, and the builder changed nothing: a fresh review reads what it disputes.
+    "ask:owner:no_change": back("review", "disputed", "once"),
+    // Row 46: another round with the failing names, until the rounds are spent.
+    "ask:owner:still_red": back("build", "names"),
+  },
+  mutation: {
+    done: next,
+    "done:part": next,
+    "send:test_writer:mutant_survived": run("mutants"),
+    // The head's own tests fail by the mutation step's run: the builder gets them by name.
+    "send:builder:tests_red": back("build", "names"),
+    "ask:owner:check_change": ask("step"),
+    "skip:no_lines": next,
+    "stuck:read_failed": wait("work"),
+    "stuck:run_failed": once,
+  },
+  mutants: {
+    done: next,
+    "done:part": next,
+    "ask:owner:disable": ask("step"),
+    // A new test missed its mutant: the writer again, with that mutant, as a round.
+    "stuck:not_killed": back("mutants", "mutant"),
+    "stuck:run_failed": once,
+  },
+  review: {
+    ...REVIEWED,
+    // A finding needs a test, and the builder cannot add one: the writer goes first.
+    "send:builder:review_failed": back("test_writer", "findings"),
+    "send:builder:checks_red": back("test_writer", "names"),
+    "send:builder:no_ticket": back("test_writer", "findings"),
+    "stuck:unseen": cannot("the lane turns review's unseen into ask:owner:unseen"),
+    "ask:owner:unseen": ask("step"),
+    "ask:owner:decision": ask("step"),
+  },
+  push: {
+    done: next,
+    "done:part": next,
+    "stuck:push_failed": wait("work"),
+    "stuck:open_failed": wait("code_host"),
+    "stuck:post_failed": wait("code_host"),
+  },
+  merge: {
+    ...SHIP_STUCK,
+    ...SHIP_ASKS,
+    // Row 62: to build, the next round, with ship's words.
+    "send:builder:review_failed": back("build", "findings"),
+    "send:builder:checks_red": back("build", "names"),
+    "send:builder:bot_comment": back("build", "comment"),
+    // Row 62: main taken in first; a clean result with green checks runs merge again, with no round.
+    "send:builder:conflicts": fresh("merge"),
+    "send:builder:behind": fresh("merge"),
+    "send:builder:ejected": once,
+    // Row 63: the review again, at the pull request's head, in the same round.
+    "send:reviewer:no_review": run("review"),
+    // Someone else merged it: what landed is theirs, and the lane ends on it.
+    "stuck:merged_elsewhere": end({ kind: "stuck", why: "merged_elsewhere" }),
+    done: next,
+    "done:part": next,
+  },
 } as const satisfies Routes;

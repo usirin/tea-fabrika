@@ -1,17 +1,17 @@
-import {Writer} from "@kampus/fabrika-old";
-import {AskShown, askShownOf} from "@kampus/pipeline/tickets/ask";
+import { Writer } from "@kampus/fabrika-old";
+import { AskShown, askShownOf } from "@kampus/pipeline/tickets/ask";
 import {
-	closedAsks,
-	type Entry,
-	type Fact,
-	factsOf,
-	Id,
-	Stage,
-	Title,
-	questionOf,
-	picksOf,
+  closedAsks,
+  type Entry,
+  type Fact,
+  factsOf,
+  Id,
+  Stage,
+  Title,
+  questionOf,
+  picksOf,
 } from "@kampus/pipeline/tickets/ticket";
-import {Schema} from "effect";
+import { Schema } from "effect";
 
 // A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
 // One of seven things, the first that fits, in this order:
@@ -42,44 +42,44 @@ export const HOUR = 60 * 60 * 1000;
  * A new kind of fact must take a row here, or this does not compile.
  */
 const MOVES = {
-	filed: true,
-	commented: true,
-	closed: true,
-	reopened: true,
-	started: true,
-	session: true,
-	ended: true,
-	checked: true,
-	restarted: true,
-	planned: true,
-	pushed: true,
-	reviewed: true,
-	pr: true,
-	asked: true,
-	withdrawn: true,
-	stopped: true,
-	carried: true,
-	answered: true,
-	rated: false,
-	maybe_duplicate: false,
-	duplicate_rated: false,
+  filed: true,
+  commented: true,
+  closed: true,
+  reopened: true,
+  started: true,
+  session: true,
+  ended: true,
+  checked: true,
+  restarted: true,
+  planned: true,
+  pushed: true,
+  reviewed: true,
+  pr: true,
+  asked: true,
+  withdrawn: true,
+  stopped: true,
+  carried: true,
+  answered: true,
+  rated: false,
+  maybe_duplicate: false,
+  duplicate_rated: false,
 } as const satisfies Record<Fact["type"], boolean>;
 
 /** An ask with no answer yet: what its box shows. */
 export const OpenAsk = Schema.Struct({
-	ask: Id,
-	/** Its `asked` entry's place on the ledger: the key of that entry's activity row. */
-	pos: Schema.Int,
-	what: Title,
-	picks: Schema.NonEmptyArray(Title),
-	/** A sealed ask as a window gets it, with no rec or blind draw. Left out: an ask from before sealing. */
-	sealed: Schema.optionalKey(AskShown),
-	/** What a sealed ask is for, as its fact says. */
-	for: Schema.optionalKey(Schema.String),
-	by: Writer,
-	/** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
-	whose: Schema.optional(Schema.String),
-	at: Schema.Finite,
+  ask: Id,
+  /** Its `asked` entry's place on the ledger: the key of that entry's activity row. */
+  pos: Schema.Int,
+  what: Title,
+  picks: Schema.NonEmptyArray(Title),
+  /** A sealed ask as a window gets it, with no rec or blind draw. Left out: an ask from before sealing. */
+  sealed: Schema.optionalKey(AskShown),
+  /** What a sealed ask is for, as its fact says. */
+  for: Schema.optionalKey(Schema.String),
+  by: Writer,
+  /** For an agent's ask: the name its person goes by on this ledger (the entry's `whose`). */
+  whose: Schema.optional(Schema.String),
+  at: Schema.Finite,
 });
 export type OpenAsk = typeof OpenAsk.Type;
 
@@ -89,113 +89,130 @@ export type OpenAsk = typeof OpenAsk.Type;
  * the row has to show (review 9).
  */
 export const SealedAsk = Schema.Struct({
-	/** Its `asked` entry's place on the ledger: the key of its activity row. */
-	pos: Schema.Int,
-	what: AskShown.fields.shows.fields.what,
-	picks: AskShown.fields.shows.fields.picks,
+  /** Its `asked` entry's place on the ledger: the key of its activity row. */
+  pos: Schema.Int,
+  what: AskShown.fields.shows.fields.what,
+  picks: AskShown.fields.shows.fields.picks,
 });
 export type SealedAsk = typeof SealedAsk.Type;
 
 /** Every sealed ask on a timeline, oldest first, as its row opens. Pure. */
 export const sealedAsksOf = (timeline: readonly Entry[]): readonly SealedAsk[] =>
-	timeline.flatMap((e) =>
-		e.fact.type === "asked" && "format" in e.fact
-			? [{pos: e.pos, what: e.fact.shows.what, picks: e.fact.shows.picks}]
-			: [],
-	);
+  timeline.flatMap((e) =>
+    e.fact.type === "asked" && "format" in e.fact
+      ? [{ pos: e.pos, what: e.fact.shows.what, picks: e.fact.shows.picks }]
+      : [],
+  );
 
 export const Head = Schema.Union([
-	/** `pr`: the merged pull request's URL, or `null` for a ticket a person closed once answered. */
-	Schema.TaggedStruct("done", {pr: Schema.NullOr(Schema.String)}),
-	Schema.TaggedStruct("closed", {by: Writer, at: Schema.Finite}),
-	Schema.TaggedStruct("asks", {asks: Schema.NonEmptyArray(OpenAsk)}),
-	Schema.TaggedStruct("running", {
-		run: Id,
-		stage: Stage,
-		task: Schema.NullOr(Id),
-		since: Schema.Finite,
-	}),
-	Schema.TaggedStruct("stuck", {stage: Stage, why: Schema.String}),
-	Schema.TaggedStruct("idle", {since: Schema.Finite}),
-	/** `stage`: `triage` when no run has ended, the last run's `send`, else `null`: none was named. */
-	Schema.TaggedStruct("next", {stage: Schema.NullOr(Stage)}),
+  /** `pr`: the merged pull request's URL, or `null` for a ticket a person closed once answered. */
+  Schema.TaggedStruct("done", { pr: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("closed", { by: Writer, at: Schema.Finite }),
+  Schema.TaggedStruct("asks", { asks: Schema.NonEmptyArray(OpenAsk) }),
+  Schema.TaggedStruct("running", {
+    run: Id,
+    stage: Stage,
+    task: Schema.NullOr(Id),
+    since: Schema.Finite,
+  }),
+  Schema.TaggedStruct("stuck", { stage: Stage, why: Schema.String }),
+  Schema.TaggedStruct("idle", { since: Schema.Finite }),
+  /** `stage`: `triage` when no run has ended, the last run's `send`, else `null`: none was named. */
+  Schema.TaggedStruct("next", { stage: Schema.NullOr(Stage) }),
 ]);
 export type Head = typeof Head.Type;
 
 /** The asks with no answer, oldest first. A comment never answers one; only `answered` does. */
 export const openAsksOf = (timeline: readonly Entry[]): readonly OpenAsk[] => {
-	const closed = closedAsks(timeline);
-	return timeline.flatMap((e) =>
-		e.fact.type === "asked" && !closed.has(e.fact.ask)
-			? [
-					{
-						ask: e.fact.ask,
-						pos: e.pos,
-						what: questionOf(e.fact),
-						picks: picksOf(e.fact) as readonly [string, ...string[]],
-						...("format" in e.fact ? {sealed: askShownOf(e.fact), for: e.fact.for} : {}),
-						by: e.by,
-						...(e.whose === undefined ? {} : {whose: e.whose}),
-						at: e.at,
-					},
-				]
-			: [],
-	);
+  const closed = closedAsks(timeline);
+  return timeline.flatMap((e) =>
+    e.fact.type === "asked" && !closed.has(e.fact.ask)
+      ? [
+          {
+            ask: e.fact.ask,
+            pos: e.pos,
+            what: questionOf(e.fact),
+            picks: picksOf(e.fact) as readonly [string, ...string[]],
+            ...("format" in e.fact ? { sealed: askShownOf(e.fact), for: e.fact.for } : {}),
+            by: e.by,
+            ...(e.whose === undefined ? {} : { whose: e.whose }),
+            at: e.at,
+          },
+        ]
+      : [],
+  );
 };
 
 /** The entries since the last `reopened`: what a reopen leaves of a finished ticket. */
 const sinceReopen = (timeline: readonly Entry[]): readonly Entry[] => {
-	const at = timeline.findLastIndex((e) => e.fact.type === "reopened");
-	return timeline.slice(at + 1);
+  const at = timeline.findLastIndex((e) => e.fact.type === "reopened");
+  return timeline.slice(at + 1);
 };
 
 /** The runs started and not ended, oldest first. */
 const openRuns = (timeline: readonly Entry[]) => {
-	const ended = new Set(factsOf(timeline, "ended").map((e) => e.run));
-	return timeline.flatMap((e) =>
-		e.fact.type === "started" && !ended.has(e.fact.run) ? [{...e.fact, at: e.at}] : [],
-	);
+  const ended = new Set(factsOf(timeline, "ended").map((e) => e.run));
+  return timeline.flatMap((e) =>
+    e.fact.type === "started" && !ended.has(e.fact.run) ? [{ ...e.fact, at: e.at }] : [],
+  );
 };
 
 /** The ticket's top line, from its facts, at `now`. */
 export const headOf = (timeline: readonly Entry[], now: number): Head => {
-	const fresh = sinceReopen(timeline);
-	const merged = factsOf(fresh, "pr").findLast((p) => p.state === "merged");
-	if (merged !== undefined) return {_tag: "done", pr: merged.url};
+  const fresh = sinceReopen(timeline);
+  const merged = factsOf(fresh, "pr").findLast((p) => p.state === "merged");
 
-	const asks = openAsksOf(timeline);
-	const close = fresh.findLast((e) => e.fact.type === "closed");
-	if (close !== undefined) {
-		const answered = factsOf(timeline, "answered").length > 0;
-		return close.by.kind === "user" && answered && asks.length === 0
-			? {_tag: "done", pr: null}
-			: {_tag: "closed", by: close.by, at: close.at};
-	}
+  if (merged !== undefined) {
+    return { _tag: "done", pr: merged.url };
+  }
 
-	const [first, ...more] = asks;
-	if (first !== undefined) return {_tag: "asks", asks: [first, ...more]};
+  const asks = openAsksOf(timeline);
+  const close = fresh.findLast((e) => e.fact.type === "closed");
 
-	const run = openRuns(timeline).at(-1);
-	const stop = timeline.findLast((e) => e.fact.type === "stopped");
-	const restart = timeline.findLast(
-		(e) => e.fact.type === "restarted" || e.fact.type === "started",
-	);
-	if (stop?.fact.type === "stopped" && stop.pos > (restart?.pos ?? 0))
-		return {_tag: "stuck", stage: stop.fact.resume, why: stop.fact.why};
-	if (run !== undefined)
-		return {_tag: "running", run: run.run, stage: run.stage, task: run.task, since: run.at};
+  if (close !== undefined) {
+    const answered = factsOf(timeline, "answered").length > 0;
+    return close.by.kind === "user" && answered && asks.length === 0
+      ? { _tag: "done", pr: null }
+      : { _tag: "closed", by: close.by, at: close.at };
+  }
 
-	const endedAt = timeline.findLastIndex((e) => e.fact.type === "ended");
-	const ended = timeline[endedAt]?.fact;
-	const askedSince = timeline.slice(endedAt + 1).some((e) => e.fact.type === "asked");
-	if (ended?.type === "ended" && ended.outcome.kind === "stuck" && !askedSince)
-		return {_tag: "stuck", stage: ended.stage, why: ended.outcome.why};
+  const [first, ...more] = asks;
 
-	const last = timeline.findLast((e) => MOVES[e.fact.type])?.at ?? now;
-	if (now - last > HOUR) return {_tag: "idle", since: last};
+  if (first !== undefined) {
+    return { _tag: "asks", asks: [first, ...more] };
+  }
 
-	if (ended?.type !== "ended") return {_tag: "next", stage: "triage"};
-	return {_tag: "next", stage: ended.outcome.kind === "send" ? ended.outcome.to : null};
+  const run = openRuns(timeline).at(-1);
+  const stop = timeline.findLast((e) => e.fact.type === "stopped");
+  const restart = timeline.findLast((e) => e.fact.type === "restarted" || e.fact.type === "started");
+
+  if (stop?.fact.type === "stopped" && stop.pos > (restart?.pos ?? 0)) {
+    return { _tag: "stuck", stage: stop.fact.resume, why: stop.fact.why };
+  }
+
+  if (run !== undefined) {
+    return { _tag: "running", run: run.run, stage: run.stage, task: run.task, since: run.at };
+  }
+
+  const endedAt = timeline.findLastIndex((e) => e.fact.type === "ended");
+  const ended = timeline[endedAt]?.fact;
+  const askedSince = timeline.slice(endedAt + 1).some((e) => e.fact.type === "asked");
+
+  if (ended?.type === "ended" && ended.outcome.kind === "stuck" && !askedSince) {
+    return { _tag: "stuck", stage: ended.stage, why: ended.outcome.why };
+  }
+
+  const last = timeline.findLast((e) => MOVES[e.fact.type])?.at ?? now;
+
+  if (now - last > HOUR) {
+    return { _tag: "idle", since: last };
+  }
+
+  if (ended?.type !== "ended") {
+    return { _tag: "next", stage: "triage" };
+  }
+
+  return { _tag: "next", stage: ended.outcome.kind === "send" ? ended.outcome.to : null };
 };
 
 /** Does the line wait on the owner: an open ask, or a stuck run. */
@@ -203,8 +220,8 @@ export const waits = (head: Head): boolean => head._tag === "asks" || head._tag 
 
 /** A pull request's URL as `#12`, or the URL when it names no number. */
 export const prRefOf = (url: string): string => {
-	const n = /\/pull\/(\d+)\/?$/.exec(url)?.[1];
-	return n === undefined ? url : `#${n}`;
+  const n = /\/pull\/(\d+)\/?$/.exec(url)?.[1];
+  return n === undefined ? url : `#${n}`;
 };
 
 /** A word with its underscores as spaces: `read_failed` reads `read failed`. */
@@ -212,28 +229,22 @@ export const words = (word: string): string => word.replaceAll("_", " ");
 
 /** The line in words. `when`: a time in a few words, as the window says it. */
 export const lineOf = (head: Head, when: (at: number) => string): string => {
-	switch (head._tag) {
-		case "done":
-			return head.pr === null
-				? "done: closed after your answer"
-				: `done: PR ${prRefOf(head.pr)} merged`;
-		case "closed":
-			return head.by.kind === "user" ? `closed by ${head.by.id}` : `closed by agent ${head.by.id}`;
-		case "asks": {
-			const [only, ...more] = head.asks;
-			return more.length === 0
-				? `waits on you: ${only.what}`
-				: `waits on you: ${head.asks.length} asks`;
-		}
-		case "running":
-			return head.task === null
-				? `${head.stage} running`
-				: `${head.stage} running, task ${head.task}`;
-		case "stuck":
-			return `stuck: ${words(head.why)}`;
-		case "idle":
-			return `idle since ${when(head.since)}`;
-		case "next":
-			return head.stage === null ? "next: not named" : `next: ${head.stage}`;
-	}
+  switch (head._tag) {
+    case "done":
+      return head.pr === null ? "done: closed after your answer" : `done: PR ${prRefOf(head.pr)} merged`;
+    case "closed":
+      return head.by.kind === "user" ? `closed by ${head.by.id}` : `closed by agent ${head.by.id}`;
+    case "asks": {
+      const [only, ...more] = head.asks;
+      return more.length === 0 ? `waits on you: ${only.what}` : `waits on you: ${head.asks.length} asks`;
+    }
+    case "running":
+      return head.task === null ? `${head.stage} running` : `${head.stage} running, task ${head.task}`;
+    case "stuck":
+      return `stuck: ${words(head.why)}`;
+    case "idle":
+      return `idle since ${when(head.since)}`;
+    case "next":
+      return head.stage === null ? "next: not named" : `next: ${head.stage}`;
+  }
 };

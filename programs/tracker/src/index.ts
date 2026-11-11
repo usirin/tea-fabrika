@@ -1,32 +1,22 @@
-import {run} from "@demlik/tea/effect";
-import {defineProgram, end, input, kind, output} from "@kampus/fabrika-old";
-import {TicketNumber} from "@kampus/pipeline/tickets/ticket";
-import {Effect, Schema} from "effect";
-import {duplicatesCell} from "./duplicates.ts";
-import {foldersCell} from "./folders.ts";
-import {clockRunner, loadCell, pollRunner, saveCell, saveHintsCell} from "./ledger.ts";
+import { run } from "@demlik/tea/effect";
+import { defineProgram, end, input, kind, output } from "@kampus/fabrika-old";
+import { TicketNumber } from "@kampus/pipeline/tickets/ticket";
+import { Effect, Schema } from "effect";
+import { duplicatesCell } from "./duplicates.ts";
+import { foldersCell } from "./folders.ts";
+import { clockRunner, loadCell, pollRunner, saveCell, saveHintsCell } from "./ledger.ts";
+import { Find, over, Show, Shown, shownOf, statusOf, Tracker, type TrackerMsg, tracker as tickets } from "./machine.ts";
+import { pullRequestsCell, pullRequestsWaitRunner } from "./pull-requests.ts";
 import {
-	Find,
-	over,
-	Show,
-	Shown,
-	shownOf,
-	statusOf,
-	Tracker,
-	type TrackerMsg,
-	tracker as tickets,
-} from "./machine.ts";
-import {pullRequestsCell, pullRequestsWaitRunner} from "./pull-requests.ts";
-import {
-	Answer,
-	Comment,
-	File,
-	MakeArea,
-	MergeArea,
-	OneTicket,
-	RateDuplicate,
-	RenameArea,
-	type Write,
+  Answer,
+  Comment,
+  File,
+  MakeArea,
+  MergeArea,
+  OneTicket,
+  RateDuplicate,
+  RenameArea,
+  type Write,
 } from "./ticket.ts";
 
 // The tracker: tickets on the ledger, one stream of facts each (`@kampus/pipeline/tickets/ticket`,
@@ -92,47 +82,48 @@ import {
 // A lane writes its facts through the pipeline's `Tickets` service, on the same streams, and the
 // poll shows them. Left for later: linking a pull request to a ticket, and the PR watcher.
 
-export type {Fact, Ticket} from "@kampus/pipeline/tickets/ticket";
+export type { Fact, Ticket } from "@kampus/pipeline/tickets/ticket";
 /** The streams the tracker reads and writes, and its fold: what a move copies and checks. */
-export {fold, ROOT, readRow} from "@kampus/pipeline/tickets/ticket";
-export {Hint, hintsOn} from "./duplicates.ts";
-export {Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words} from "./head.ts";
-export {RepoTree, type RepoTreeShape} from "./folders.ts";
-export {Author, saveCell, preparePending} from "./ledger.ts";
+export { fold, ROOT, readRow } from "@kampus/pipeline/tickets/ticket";
+export { Hint, hintsOn } from "./duplicates.ts";
+export { Head, headOf, lineOf, OpenAsk, openAsksOf, prRefOf, waits, words } from "./head.ts";
+export { RepoTree, type RepoTreeShape } from "./folders.ts";
+export { Author, saveCell, preparePending } from "./ledger.ts";
 export {
-	Failed,
-	type Listed,
-	Opened,
-	openedOf,
-	over,
-	type Show,
-	type Shown,
-	statusOf,
-	Tracker,
-	type TrackerMsg,
+  Failed,
+  type Listed,
+  Opened,
+  openedOf,
+  over,
+  type Show,
+  type Shown,
+  statusOf,
+  Tracker,
+  type TrackerMsg,
 } from "./machine.ts";
-export {One, oneOf} from "./one.ts";
-export {type PullRequest, PullRequests, pullRequestsOf} from "./pull-requests.ts";
-export {checksLine, Row} from "./rows.ts";
-export {currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords} from "./steps.ts";
+export { One, oneOf } from "./one.ts";
+export { type PullRequest, PullRequests, pullRequestsOf } from "./pull-requests.ts";
+export { checksLine, Row } from "./rows.ts";
+export { currentOf, STEPS, StepName, StepNow, StepState, stepsOf, stepWords } from "./steps.ts";
 export {
-	Answer,
-	AskAnswer,
-	Comment,
-	File,
-	MakeArea,
-	MergeArea,
-	OneTicket,
-	RateDuplicate,
-	RenameArea,
-	type Summary,
-	Write,
+  Answer,
+  AskAnswer,
+  Comment,
+  File,
+  MakeArea,
+  MergeArea,
+  OneTicket,
+  RateDuplicate,
+  RenameArea,
+  type Summary,
+  Write,
 } from "./ticket.ts";
+
 /**
  * The tracker's machine, for a program that reads the same tickets another way: the ticket,
  * map and runs programs run it with `ticketsOptions`, open one ticket, and show that.
  */
-export {tickets};
+export { tickets };
 
 /**
  * The query: one ticket's page, or the list by status and a title search ("" or left out: every
@@ -142,8 +133,8 @@ export {tickets};
  *   {status: "open", find: "login"}    the list: open tickets with "login" in the title
  */
 export const Query = Schema.Union([
-	Schema.Struct({ticket: TicketNumber}),
-	Schema.Struct({status: Show, find: Schema.optionalKey(Find)}),
+  Schema.Struct({ ticket: TicketNumber }),
+  Schema.Struct({ status: Show, find: Schema.optionalKey(Find) }),
 ]);
 export type Query = typeof Query.Type;
 
@@ -156,30 +147,30 @@ export type Query = typeof Query.Type;
  *   pickOf({status: "open"}, 7)        null
  */
 export const pickOf = (q: Query, last: number | null): number | null =>
-	"ticket" in q && q.ticket !== last ? q.ticket : null;
+  "ticket" in q && q.ticket !== last ? q.ticket : null;
 
 /** What the machine is told for one query, in order. */
 const queryMsgsOf = (q: Query): readonly TrackerMsg[] =>
-	"ticket" in q
-		? [{type: "open", ticket: q.ticket}]
-		: [{type: "list"}, {type: "show", show: q.status}, {type: "find", text: q.find ?? ""}];
+  "ticket" in q
+    ? [{ type: "open", ticket: q.ticket }]
+    : [{ type: "list" }, { type: "show", show: q.status }, { type: "find", text: q.find ?? "" }];
 
 /** What the machine is told for one write. It gets its message id here, once. */
-const writeMsgOf = (write: Write): TrackerMsg => ({type: "write", id: crypto.randomUUID(), write});
+const writeMsgOf = (write: Write): TrackerMsg => ({ type: "write", id: crypto.randomUUID(), write });
 
 /** How the machine runs: its cells and Subs, on the `Ledger`, `Author` and `PullRequests` services. */
 export const ticketsOptions = {
-	ctx: undefined,
-	interpret: {
-		load: loadCell,
-		save: saveCell,
-		pull_requests: pullRequestsCell,
-		duplicates: duplicatesCell,
-		save_hints: saveHintsCell,
-		folders: foldersCell,
-	},
-	subscribe: {poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner},
-	terminal: over,
+  ctx: undefined,
+  interpret: {
+    load: loadCell,
+    save: saveCell,
+    pull_requests: pullRequestsCell,
+    duplicates: duplicatesCell,
+    save_hints: saveHintsCell,
+    folders: foldersCell,
+  },
+  subscribe: { poll: pollRunner, pull_requests_wait: pullRequestsWaitRunner, clock: clockRunner },
+  terminal: over,
 };
 
 /**
@@ -187,124 +178,122 @@ export const ticketsOptions = {
  * runs it and shows it; no ref of a run ever starts it.
  */
 export const ticketsKind = kind({
-	machine: tickets,
-	state: Tracker,
-	parent: "main",
-	options: () => ticketsOptions,
-	drawing: () => ({
-		name: "tickets",
-		steps: {
-			load: "read the ledger",
-			save: "write a fact",
-			poll: "wait for news",
-			pull_requests: "read the open pull requests",
-			pull_requests_wait: "wait to read them again",
-			clock: "keep the time",
-			duplicates: "ask Jev for a duplicate",
-			save_hints: "write the duplicate hints",
-			folders: "read the repositories' folders",
-		},
-	}),
-	status: statusOf,
+  machine: tickets,
+  state: Tracker,
+  parent: "main",
+  options: () => ticketsOptions,
+  drawing: () => ({
+    name: "tickets",
+    steps: {
+      load: "read the ledger",
+      save: "write a fact",
+      poll: "wait for news",
+      pull_requests: "read the open pull requests",
+      pull_requests_wait: "wait to read them again",
+      clock: "keep the time",
+      duplicates: "ask Jev for a duplicate",
+      save_hints: "write the duplicate hints",
+      folders: "read the repositories' folders",
+    },
+  }),
+  status: statusOf,
 });
 
 export const tracker = defineProgram({
-	name: "tracker",
-	description:
-		"Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. Holds the project's areas, which a person makes, renames and merges. It has a window.",
-	inputs: {
-		file: input(
-			File,
-			'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`.',
-		),
-		comment: input(
-			Comment,
-			'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.',
-		),
-		close: input(OneTicket, "Close a ticket. Writes its `closed`."),
-		reopen: input(OneTicket, "Reopen a closed ticket. Writes its `reopened`."),
-		answer: input(
-			Answer,
-			"Answer an open ask on a ticket: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
-			{personOnly: true},
-		),
-		rate_duplicate: input(
-			RateDuplicate,
-			"Accept or dismiss a duplicate hint: is the ticket the same as `of`? A person only. Writes one `duplicate_rated`.",
-			{personOnly: true},
-		),
-		make_area: input(
-			MakeArea,
-			'Make an area, a part of the project: its name, and the suggestion it came from if a person ticked one. {_tag: "titles", word, tickets} | {_tag: "folder", path}. A person only. Writes one `area_made`, with the next number.',
-			{personOnly: true},
-		),
-		rename_area: input(
-			RenameArea,
-			"Rename a live area. No ticket changes. A person only. Writes one `area_renamed`.",
-			{personOnly: true},
-		),
-		merge_area: input(
-			MergeArea,
-			"Merge a live area into another: its tickets then read `into`. A person only. Writes one `area_merged`.",
-			{personOnly: true},
-		),
-		skip_onboarding: input(
-			Schema.Null,
-			"Skip the step that suggests the first areas, for as long as this tracker runs. A person only. Writes nothing.",
-			{writes: false, personOnly: true},
-		),
-		query: input(
-			Query,
-			'Read tickets: {ticket: 43} opens one; {status: "open" | "closed" | "all", find?: "text"} lists them by status and title. Writes nothing.',
-			{writes: false},
-		),
-		quit: input(Schema.Null, "Stop, once every write told before it is on the ledger."),
-	},
-	outputs: {
-		ticket: output(
-			TicketNumber,
-			"The ticket the person picks, by its number: sent each time the pick changes, so a pipe carries the latest pick.",
-		),
-	},
-	machines: {tickets: ticketsKind},
-	view: {machine: "tickets", data: Shown, of: shownOf},
-	main: ({serve, send, watch}) =>
-		Effect.gen(function* () {
-			const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
-			yield* watch("tickets", "tickets", runtime);
-			let last: number | null = null;
-			const write = (w: Write) => runtime.dispatch(writeMsgOf(w)).pipe(Effect.orDie);
-			// One handler per input, each value in the order told across all of them.
-			yield* serve({
-				file: (v) => write({kind: "file", ...v}),
-				comment: (v) => write({kind: "comment", ...v}),
-				close: (v) => write({kind: "close", ...v}),
-				reopen: (v) => write({kind: "reopen", ...v}),
-				answer: (v) => write({kind: "answer", ...v}),
-				rate_duplicate: (v) => write({kind: "rate_duplicate", ...v}),
-				make_area: (v) => write({kind: "make_area", ...v}),
-				rename_area: (v) => write({kind: "rename_area", ...v}),
-				merge_area: (v) => write({kind: "merge_area", ...v}),
-				skip_onboarding: () => runtime.dispatch({type: "skip_onboarding"}).pipe(Effect.orDie),
-				query: (q) =>
-					Effect.gen(function* () {
-						// One message after another: a list query's `list`, `show` and `find` land in that order.
-						yield* Effect.forEach(
-							queryMsgsOf(q),
-							(msg) => runtime.dispatch(msg).pipe(Effect.orDie),
-							{concurrency: 1, discard: true},
-						);
-						// Sent after the window moved. Down a pipe whose reader has gone, this send fails
-						// and the tracker ends, as a writer on a closed Unix pipe does.
-						const picked = pickOf(q, last);
-						if (picked === null) return;
-						last = picked;
-						yield* send("ticket", picked);
-					}),
-				quit: () => end,
-			});
-			// Quit, or the input was closed: the writes still waiting land before it ends.
-			yield* runtime.dispatch({type: "quit"}).pipe(Effect.orDie);
-			yield* runtime.done();
-		}).pipe(Effect.scoped),
+  name: "tracker",
+  description:
+    "Tickets on the ledger, one stream of facts each: lists them with the open pull requests beside them, files one, shows one's timeline and top line, comments, answers an open ask, closes and reopens. Holds the project's areas, which a person makes, renames and merges. It has a window.",
+  inputs: {
+    file: input(
+      File,
+      'File a new ticket: its title and body, and from: the PR and step, the lane run, or the walk it came out of; leave it out only if none. {_tag: "pr", url, step?} | {_tag: "run", ticket, run, head?} | {_tag: "walk", url}. Writes its `filed`.',
+    ),
+    comment: input(Comment, 'Comment on a ticket. `asks: "changes"` requests changes. Writes one `commented`.'),
+    close: input(OneTicket, "Close a ticket. Writes its `closed`."),
+    reopen: input(OneTicket, "Reopen a closed ticket. Writes its `reopened`."),
+    answer: input(
+      Answer,
+      "Answer an open ask on a ticket: a pick, a note, and the title and body as seen. A person only. Writes one `answered`.",
+      { personOnly: true },
+    ),
+    rate_duplicate: input(
+      RateDuplicate,
+      "Accept or dismiss a duplicate hint: is the ticket the same as `of`? A person only. Writes one `duplicate_rated`.",
+      { personOnly: true },
+    ),
+    make_area: input(
+      MakeArea,
+      'Make an area, a part of the project: its name, and the suggestion it came from if a person ticked one. {_tag: "titles", word, tickets} | {_tag: "folder", path}. A person only. Writes one `area_made`, with the next number.',
+      { personOnly: true },
+    ),
+    rename_area: input(RenameArea, "Rename a live area. No ticket changes. A person only. Writes one `area_renamed`.", {
+      personOnly: true,
+    }),
+    merge_area: input(
+      MergeArea,
+      "Merge a live area into another: its tickets then read `into`. A person only. Writes one `area_merged`.",
+      { personOnly: true },
+    ),
+    skip_onboarding: input(
+      Schema.Null,
+      "Skip the step that suggests the first areas, for as long as this tracker runs. A person only. Writes nothing.",
+      { writes: false, personOnly: true },
+    ),
+    query: input(
+      Query,
+      'Read tickets: {ticket: 43} opens one; {status: "open" | "closed" | "all", find?: "text"} lists them by status and title. Writes nothing.',
+      { writes: false },
+    ),
+    quit: input(Schema.Null, "Stop, once every write told before it is on the ledger."),
+  },
+  outputs: {
+    ticket: output(
+      TicketNumber,
+      "The ticket the person picks, by its number: sent each time the pick changes, so a pipe carries the latest pick.",
+    ),
+  },
+  machines: { tickets: ticketsKind },
+  view: { machine: "tickets", data: Shown, of: shownOf },
+  main: ({ serve, send, watch }) =>
+    Effect.gen(function* () {
+      const runtime = yield* (yield* run(tickets, ticketsOptions)).ready;
+      yield* watch("tickets", "tickets", runtime);
+      let last: number | null = null;
+      const write = (w: Write) => runtime.dispatch(writeMsgOf(w)).pipe(Effect.orDie);
+      // One handler per input, each value in the order told across all of them.
+      yield* serve({
+        file: (v) => write({ kind: "file", ...v }),
+        comment: (v) => write({ kind: "comment", ...v }),
+        close: (v) => write({ kind: "close", ...v }),
+        reopen: (v) => write({ kind: "reopen", ...v }),
+        answer: (v) => write({ kind: "answer", ...v }),
+        rate_duplicate: (v) => write({ kind: "rate_duplicate", ...v }),
+        make_area: (v) => write({ kind: "make_area", ...v }),
+        rename_area: (v) => write({ kind: "rename_area", ...v }),
+        merge_area: (v) => write({ kind: "merge_area", ...v }),
+        skip_onboarding: () => runtime.dispatch({ type: "skip_onboarding" }).pipe(Effect.orDie),
+        query: (q) =>
+          Effect.gen(function* () {
+            // One message after another: a list query's `list`, `show` and `find` land in that order.
+            yield* Effect.forEach(queryMsgsOf(q), (msg) => runtime.dispatch(msg).pipe(Effect.orDie), {
+              concurrency: 1,
+              discard: true,
+            });
+            // Sent after the window moved. Down a pipe whose reader has gone, this send fails
+            // and the tracker ends, as a writer on a closed Unix pipe does.
+            const picked = pickOf(q, last);
+
+            if (picked === null) {
+              return;
+            }
+
+            last = picked;
+            yield* send("ticket", picked);
+          }),
+        quit: () => end,
+      });
+      // Quit, or the input was closed: the writes still waiting land before it ends.
+      yield* runtime.dispatch({ type: "quit" }).pipe(Effect.orDie);
+      yield* runtime.done();
+    }).pipe(Effect.scoped),
 });

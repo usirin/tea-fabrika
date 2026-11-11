@@ -10,6 +10,9 @@ packages:
   - docs/tutorials/*
   - oxlint-plugins
   - .github/ci
+  # .agents: the skills and the lead's own scripts, type-checked here (ticket 486). It names no
+  # dependency: its imports resolve from the root's.
+  - .agents
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
   - next/packages/*
   - next/programs/*
@@ -24,7 +27,7 @@ catalog:
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.15.0
-  '@demlik/structure-sweep': 0.3.9
+  '@demlik/structure-sweep': 0.4.1
   '@demlik/tea': 0.25.0
   '@effect/opentelemetry': 4.1.2
   '@effect/platform-node': 4.1.2
@@ -50,7 +53,12 @@ catalog:
   # Held exact: 0.x and weekly, and the port is "experimental".
   oxc-parser: 0.157.0
   oxc-transform-react: 0.157.0
+  # P16's package-layout rule (oxlint-plugins/program-package-layout.ts) resolves export targets
+  # and relative links with oxc's resolver, the version the lockfile already holds (0040).
+  oxc-resolver: 11.24.2
   rolldown: 1.2.13
+  # P16 bundles window CSS with its imports. Reuse the version already in the lockfile.
+  lightningcss: 1.33.0
   # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.2 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
@@ -122,6 +130,10 @@ patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
   # Keep Alchemy's existing restart policy. Drop this when Alchemy exposes the hooks
   # (https://github.com/alchemy-run/alchemy/issues/3184).
+  # P16: a closed worker proxy also drops its 30-second port reservation, so a stage restarted in
+  # the same process can bind its fixed port again
+  # (https://github.com/alchemy-run/alchemy/issues/3188, closed as completed). Drop that part at
+  # the release that carries the fix.
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.84': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.84.patch
   # demlik#897: expose the machine's existing schemas; drop at the release that has it.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
@@ -129,6 +141,9 @@ patchedDependencies:
   # package cannot load. The patch is the fix alchemy already merged
   # (https://github.com/alchemy-run/alchemy/pull/2754), on the built files. Drop it at the next beta.
   alchemy@2.0.0-beta.84: patches/alchemy@2.0.0-beta.84.patch
+  # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
+  # first shrink, not while generating (sampleFromValidatedShrink already is). Drop at the release that has it.
+  effect@4.1.2: patches/effect@4.1.2.patch
   # Manti's type files name each relative import without its `.js`, which only a bundler's
   # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`
   # (`./components` becomes `./components/index.js`) and changes no code. Drop it when Manti
@@ -140,6 +155,12 @@ patchedDependencies:
   # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
   # drop at the release that has the fix.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
+  # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
+  # reports a late event for a folder made just before the watch began, so a Mac replaced the
+  # brain's workerd soon after a start, and after the three-replacement brake too. The patch
+  # passes on only a bundle whose hash differs. Drop this when Alchemy compares the bundle
+  # before it serves again (https://github.com/alchemy-run/alchemy/issues/3214).
+  '@alchemy.run/cloudflare@2.0.0-beta.84': patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.24.0 || 0.25.0'
