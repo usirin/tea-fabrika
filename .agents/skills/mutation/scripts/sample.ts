@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { Schema } from "effect";
 import fc from "fast-check";
+import { inScope, PRODUCT } from "./scope.ts";
 
 type Position = { readonly line: number; readonly column: number };
 
@@ -29,26 +30,6 @@ const Sample = Schema.Struct({
   /** Every changed file, in name order: its mutants on changed lines, and how many were selected. */
   files: Schema.Array(Schema.Struct({ file: Schema.String, total: Count, selected: Count })),
 });
-
-/**
- * The diff's product files: every extension Stryker 10.1.1's Instrumenter parses as JavaScript or
- * TypeScript (its parsers/create-parser.js), less tests and type-only declarations, which hold no
- * mutant. A changed `.cjs` or `.mjs` file is sampled like a `.ts` one (ticket 655).
- */
-const PRODUCT = [
-  "*.ts",
-  "*.tsx",
-  "*.mts",
-  "*.cts",
-  "*.js",
-  "*.jsx",
-  "*.mjs",
-  "*.cjs",
-  ":!*.test.*",
-  ":!*.d.ts",
-  ":!*.d.mts",
-  ":!*.d.cts",
-] as const;
 
 const position = (a: Position, b: Position) => a.line - b.line || a.column - b.column;
 
@@ -248,7 +229,8 @@ if (import.meta.main) {
 
     const hunk = /^@@ .* \+(\d+)(?:,(\d+))? @@/.exec(line);
 
-    if (hunk) {
+    // Lead tooling other than lane code is out of the run (0089).
+    if (hunk && inScope(file)) {
       const start = Number(hunk[1]);
 
       for (let n = 0; n < Number(hunk[2] ?? 1); n++) {

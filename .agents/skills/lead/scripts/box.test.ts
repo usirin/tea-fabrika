@@ -6,6 +6,8 @@ import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 // Declare script reads for Vitest's affected walk, including transitive calls.
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
@@ -880,7 +882,7 @@ describe("T321 K2 box start, today's tooling", () => {
   // Plant: inspect only the current branch's links, or block on any branch that shares the
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
-  // Plant: block on an open branch whose only change is field/*.jsonl rows.
+  // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (0090).
   it("K2 refuses a shared ticket only when another live branch carries its links", () => {
     const places = [
       "main",
@@ -893,6 +895,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "different-ticket",
       "inside",
       "field-rows",
+      "field-files",
     ] as const;
     const blocks = new Set(["open-pr", "running-box", "gh-down"]);
     fc.assert(
@@ -907,9 +910,15 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             // Lead-only field rows on an open PR are not a lane (PR 601, 2026-11-09).
-            const path = place === "field-rows" ? "field/runs.jsonl" : "src/a.ts";
+            const path =
+              place === "field-rows"
+                ? "field/runs.jsonl"
+                : place === "field-files"
+                  ? "field/runs/2026-11-11-t321-tests1.json"
+                  : "src/a.ts";
+            const rows = place === "field-rows" || place === "field-files";
             const sha = b.commit(b.main, path, `${text}\n`);
-            b.sign(b.main, place === "field-rows" ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
+            b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
 
             if (place === "main" || place === "merged") {
               b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
@@ -921,7 +930,9 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             b.setup({
-              openPrs: ["open-pr", "field-rows"].includes(place) ? ["fabrikalfa/other"] : ["fabrikalfa/unrelated"],
+              openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
+                ? ["fabrikalfa/other"]
+                : ["fabrikalfa/unrelated"],
               ...(place === "gh-down" ? { gh: "down" as const } : {}),
             });
 

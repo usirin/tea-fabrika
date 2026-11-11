@@ -24,8 +24,8 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. A write-up quotes the numbers it uses inline. Raw results and assets (saved answers, shots, inputs, every timing of a run) go to the owner's private archive, not into git: a script writes them under `runs/` or to a path a flag names. A script is not kept on main: keep it on its own branch and name that branch in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/`. |
-| Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
-| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row in `field/findings.jsonl`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
+| Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/`, with the older rows in `field/notes.jsonl` and `field/runs.jsonl` | One file per agent run in `field/runs/` and one per thing that broke, cost too much, needed a person or worked well in `field/notes/`, the same day, named `<date>-<slug>.json` and in the schema the README gives. Never a line added to the old `.jsonl` files ([0090](./.decisions/0090-each-field-row-is-a-file.md)). |
+| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row file in `field/findings/`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
 | Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
@@ -59,8 +59,8 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 19 of Tier 1's 43 rows have merged
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
+`next/` is on main, and 20 of Tier 1's 43 rows have merged, plus P17a, half of P17
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
 added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
 P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
@@ -193,7 +193,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   its cause kept, and `runtime/` never imports `ledger/`. A new file goes in its module now, before
   the move lands ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the layers too,
   with no exemption: a module whose laws need a real database writes them as a suite, read through
-  its namespace as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
+  its module as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
   two modules share sits on a layer both may import
   ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
@@ -437,7 +437,7 @@ every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or `field/*.jsonl` rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
@@ -502,7 +502,7 @@ brief carries these caps. Each one came from a laptop that became unusable.
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
   Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
-  the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
+  the changed paths (`.github/ci/changes.mjs`). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
   and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
   Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
