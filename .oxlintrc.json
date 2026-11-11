@@ -104,7 +104,8 @@
     // build imports Radix, so it is turned off for that folder alone below.
     // A test window is launched only through apps/fabrika/test-window.ts, which keeps it out of a
     // person's way (AGENTS.md, "Go easy on the machine"). On main before ticket 733, 3 of 3
-    // `_electron` imports were real bypasses.
+    // `_electron` imports were real bypasses. An override replaces a rule's options, so every
+    // override of this rule repeats the two `_electron` entries.
     "eslint/no-restricted-imports": [
       "error",
       {
@@ -446,6 +447,16 @@
               {
                 "name": "fs/promises",
                 "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ]
           }
@@ -458,6 +469,18 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
             "patterns": [
               {
                 "group": [
@@ -502,8 +525,27 @@
     },
     {
       // The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
+      // It keeps the top level's `_electron` ban (ticket 733): an override replaces a rule's options.
       "files": ["packages/fabrika-design/src/build/**"],
-      "rules": { "eslint/no-restricted-imports": "off" }
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       // `ownRules` is the one place that says where a Claude run's settings come from.
@@ -693,6 +735,16 @@
               {
                 "name": "@radix-ui/colors",
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [

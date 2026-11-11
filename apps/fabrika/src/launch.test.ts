@@ -77,14 +77,23 @@ const parentEnv = fc.dictionary(envName, envValue, { maxKeys: 12 });
 /** A short home under /tmp, as `launch` makes one: it always fits the socket's limit. */
 const shortHome = fc.string({ minLength: 1, maxLength: 24 }).map((tail) => `/tmp/fh-${tail}`);
 
+/**
+ * Any home a caller could pass: a short one, the empty one (launchOf reads it as the owner's), or
+ * any bytes up to past the socket's limit.
+ */
+const someHome = fc.oneof(shortHome, fc.constant(""), fc.string({ unit: "binary", maxLength: 140 }));
+
 describe("quietEnv", () => {
-  it("is quiet on a fitting home for every parent env: launchOf reads it as quiet, never foreground", () => {
+  // An ok env is a quiet start on that home, never foreground and never the owner's; a home it
+  // cannot make quiet is refused. pinned: "" once answered ok, and launchOf read it as the owner's
+  // start, so TestWindow.launch({ home: "" }) opened the owner's app.
+  it("is quiet whenever it says ok, for every parent env and every home: launchOf reads it as quiet", () => {
     fc.assert(
-      fc.property(parentEnv, shortHome, (parent, home) => {
+      fc.property(parentEnv, someHome, (parent, home) => {
         const made = quietEnv(parent, home);
-        expect(made.kind === "ok" ? launchOf(made.env) : made).toEqual({ kind: "quiet", home });
+        expect(made.kind === "ok" ? launchOf(made.env) : { kind: "quiet", home }).toEqual({ kind: "quiet", home });
       }),
-      runs,
+      { ...runs, examples: [[{ FABRIKA_FOREGROUND: "1" }, ""]] },
     );
   });
 
