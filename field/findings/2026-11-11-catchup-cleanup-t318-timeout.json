@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-catchup-cleanup-t318-timeout",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": ".agents/skills/lead/scripts/catchup.cleanup.test.ts",
+    "line": 303
+  },
+  "says": "The law 'T318 kept dirty unsaved locked malformed or failed candidates never stop later cleanup or turn merge red' runs close to vitest's 60-second limit, so on a loaded laptop it times out with no assertion failing.",
+  "proof": "nice -n 19 pnpm exec vitest run --maxWorkers=1 .agents/skills/lead/scripts/catchup.cleanup.test.ts -t T318, run twice at a load average near 17: once 'Error: Test timed out in 60000ms', once all 32 passed. The law runs 3 cases of 5 cleanup kinds, each a full catchup.sh run on the shell stub.",
+  "cost": "A red local run that is not a real failure, under the caps AGENTS.md sets for a busy laptop; the next agent may rerun it until green.",
+  "head": "259704b1f6576a0b069965d5e1f515046f122c1c",
+  "ticket": null,
+  "pr": null
+}

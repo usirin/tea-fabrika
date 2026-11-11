@@ -1,5 +1,6 @@
+import { hash } from "@kampus/fabrika-old";
 import { Effect, Schema } from "effect";
-import { Body, type Entry, type FactOf, type Hash, type Ticket, Title } from "./ticket.ts";
+import { answerRefused, factsOf, Body, type Entry, type FactOf, type Hash, type Ticket, Title } from "./ticket.ts";
 
 // What an approval covers, and what takes it back (docs/direction/tickets-start-in-our-tracker.md).
 //
@@ -39,8 +40,29 @@ export const textOf = (ticket: Ticket): Text => {
  * Does this answer cover the ticket as it reads now: the same title and body, to the character.
  * An answer from before the hash covers nothing, so it is asked again.
  */
-export const covers = (answer: FactOf<"answered">, ticket: Ticket): Effect.Effect<boolean> =>
-  answer.text === undefined ? Effect.succeed(false) : Effect.map(hashOf(textOf(ticket)), (now) => now === answer.text);
+export const covers = (answer: FactOf<"answered">, ticket: Ticket): Effect.Effect<boolean> => {
+  if ("format" in answer) {
+    const asked = factsOf(ticket.timeline, "asked").find((a) => a.ask === answer.ask);
+
+    if (asked === undefined || !("format" in asked) || answerRefused(ticket.timeline, answer, 0) !== null) {
+      return Effect.succeed(false);
+    }
+
+    return hash(asked.shows).pipe(
+      Effect.map((saw) => saw === answer.saw),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  // Historical text hashes cannot approve a plan or a diff.
+  if (factsOf(ticket.timeline, "planned").length > 0 || answer.head !== undefined) {
+    return Effect.succeed(false);
+  }
+
+  return answer.text === undefined
+    ? Effect.succeed(false)
+    : Effect.map(hashOf(textOf(ticket)), (now) => now === answer.text);
+};
 
 /**
  * Did a person request changes after the row at `since` (an approval's place on the ledger)? Only

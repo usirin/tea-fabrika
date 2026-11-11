@@ -1,3 +1,4 @@
+import { ASK_COMMANDS, type AskCommand } from "@kampus/pipeline/tickets/ask";
 import { Result, Schema } from "effect";
 import { parse, TomlError } from "smol-toml";
 import { type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf } from "./keys.ts";
@@ -83,6 +84,9 @@ export const Does = Schema.Literals([
 ]);
 export type Does = typeof Does.Type;
 
+const ProgramDoes = Schema.Literals(["program.ask.rec", "program.ask.not", "program.ask.picks", "program.ask.later"]);
+type Command = Does | typeof ProgramDoes.Type;
+
 /** One command and its keys. `source` is where its keys come from, as VS Code's Source column (K3). */
 const Row = Schema.Struct({
   does: Does,
@@ -91,6 +95,7 @@ const Row = Schema.Struct({
   source: Schema.Literals(["default", "yours"]),
 });
 type Row = typeof Row.Type;
+const ProgramRow = Schema.Struct({ ...Row.fields, does: ProgramDoes });
 
 /** What came of the file: none (the defaults), read, or refused, with its line and why. */
 export const File = Schema.TaggedUnion({
@@ -105,6 +110,7 @@ export const Keys = Schema.Struct({
   /** A setting, never a row (K5): every `<prefix>` row moves with it. */
   prefix: KeyName,
   rows: Schema.Array(Row),
+  programs: Schema.optionalKey(Schema.Array(ProgramRow)),
   /** Command keys nobody hears, as today's Cmd-W: on a Mac they never reach the menu. */
   ignore: Schema.Array(KeyName),
   file: File,
@@ -145,6 +151,13 @@ export const defaults: Keys = {
           : BINDINGS.filter((b) => b.command === does).map((b) =>
               b.does.kind === "cycle" ? alone(b.key) : after(b.key),
             ),
+      source: "default",
+    }),
+  ),
+  programs: ProgramDoes.literals.map((does) =>
+    ProgramRow.make({
+      does,
+      keys: [alone(ASK_COMMANDS[does.slice(12) as AskCommand["_tag"]].keys)],
       source: "default",
     }),
   ),
@@ -268,7 +281,7 @@ const notOurs = (name: string, spelled: string): string | null => {
 };
 
 /** One key of a row: after the prefix (`<prefix>z`), or pressed alone (`cmd+d`). */
-const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
+const readKey = (spelled: string, mac: boolean, scoped = false): Result.Result<Key, string> => {
   const word = /^<([^<>]*)>(.*)$/.exec(spelled);
 
   if (word !== null) {
@@ -305,14 +318,14 @@ const readKey = (spelled: string, mac: boolean): Result.Result<Key, string> => {
       return Result.fail(no);
     }
 
-    if (BARE.has(p.name)) {
+    if (!scoped && BARE.has(p.name)) {
       return Result.fail(
         `${spelled} pressed alone would stop it typing or moving in a tile: write <prefix>${spelled}, or add ctrl, alt or cmd`,
       );
     }
 
     // A bare character pressed alone would stop typing in tsh (WCAG 2.1.4).
-    if (p.printable) {
+    if (!scoped && p.printable) {
       return Result.fail(
         `${spelled} pressed alone would stop typing in a tile: write <prefix>${spelled === " " ? "space" : spelled}, or add ctrl or cmd`,
       );
@@ -747,11 +760,11 @@ const linesOf = (text: string): ReadonlyMap<string, number> => {
   return at;
 };
 
-const isCommand = (word: string): word is Does => (Does.literals as readonly string[]).includes(word);
+const isCommand = (word: string): word is Command => Schema.is(Does)(word) || Schema.is(ProgramDoes)(word);
 
 /** One of your rows: its command, its keys as read and as spelled, and its line. */
 interface Yours {
-  readonly does: Does;
+  readonly does: Command;
   readonly keys: readonly { readonly key: Key; readonly spelled: string }[];
   readonly line: number;
 }
@@ -855,10 +868,14 @@ const readWritten = (
     const keys: Yours["keys"][number][] = [];
 
     for (const one of spelled.success) {
-      const read = readKey(one, mac);
+      const read = readKey(one, mac, word.startsWith("program."));
 
       if (Result.isFailure(read)) {
         return no(read.failure);
+      }
+
+      if (Schema.is(ProgramDoes)(word) && read.success._tag === "after_prefix") {
+        return no(`${word} takes a key pressed alone inside the focused ask, not ${one}`);
       }
 
       keys.push({ key: read.success, spelled: one });
@@ -871,10 +888,11 @@ const readWritten = (
 };
 
 const sameKey = (a: Key, b: Key): boolean => a._tag === b._tag && a.key === b.key;
+const scopeOf = (does: Command) => (does.startsWith("program.") ? does.split(".").slice(0, 2).join(".") : "global");
 
 /** Your rows checked against each other and the prefix: one key does one thing in each place. */
 const clash = (set: Written, prefix: string): Refused | null => {
-  const seen: { key: Key; spelled: string; does: Does; line: number }[] = [];
+  const seen: { key: Key; spelled: string; does: Command; line: number }[] = [];
   const ignored = set.ignore?.names ?? [];
 
   for (const row of set.rows) {
@@ -900,7 +918,9 @@ const clash = (set: Written, prefix: string): Refused | null => {
         };
       }
 
-      const other = seen.find((s) => s.does !== row.does && sameKey(s.key, key));
+      const other = seen.find(
+        (s) => s.does !== row.does && scopeOf(s.does) === scopeOf(row.does) && sameKey(s.key, key),
+      );
 
       if (other !== undefined) {
         return { line: row.line, why: `${spelled} is on both ${other.does} and ${row.does}` };
@@ -945,7 +965,7 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
     return Result.fail(within(no));
   }
 
-  const taken = set.rows.flatMap((row) => row.keys.map((k) => k.key));
+  const taken = set.rows.filter((r) => scopeOf(r.does) === "global").flatMap((row) => row.keys.map((k) => k.key));
   const ignore = (set.ignore?.names ?? defaults.ignore).filter(
     (name) => name !== prefix && !taken.some((k) => k._tag === "alone" && k.key === name),
   );
@@ -964,7 +984,42 @@ export const decodeKeys = (text: string, mac: boolean): Result.Result<Keys, Refu
     return Result.fail({ line: 1, why: "Keep a focus key so a terminal has a keyboard way out" });
   }
 
-  return Result.succeed({ prefix, rows, ignore, file: File.cases.read.make({}) });
+  const programs = (defaults.programs ?? []).map((row) => {
+    const yours = set.rows.find((r) => r.does === row.does);
+    const takenHere = set.rows
+      .filter((r) => scopeOf(r.does) === scopeOf(row.does))
+      .flatMap((r) => r.keys.map((k) => k.key));
+    return yours === undefined
+      ? {
+          ...row,
+          keys: row.keys.filter(
+            (k) => !takenHere.some((t) => sameKey(t, k)) && k.key !== prefix && !ignore.includes(k.key),
+          ),
+        }
+      : ProgramRow.make({ does: row.does, keys: yours.keys.map((k) => k.key), source: "yours" });
+  });
+  return Result.succeed({ prefix, rows, programs, ignore, file: File.cases.read.make({}) });
+};
+
+export const programCommandOn = (
+  raw: unknown,
+  scope: string,
+  key: string,
+  state: {
+    focused: boolean;
+    typing: boolean;
+    prefix: boolean;
+    platform: boolean;
+  },
+) => {
+  if (!state.focused || state.typing || state.prefix || state.platform || scope !== "ask" || !Schema.is(Keys)(raw)) {
+    return undefined;
+  }
+
+  const row = (raw.programs ?? defaults.programs ?? []).find(
+    (r) => r.does.startsWith("program.ask.") && r.keys.some((k) => k._tag === "alone" && k.key === key),
+  );
+  return row === undefined ? undefined : ASK_COMMANDS[row.does.slice(12) as AskCommand["_tag"]].send;
 };
 
 // ---------------------------------------------------------------- a key, as the file spells it

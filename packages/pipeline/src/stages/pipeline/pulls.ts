@@ -6,7 +6,7 @@ import { Book, currentOf } from "../../criteria/book.ts";
 import { CriteriaRecord, heldOf, keep, ledgerRecord } from "../../criteria/record.ts";
 import { PLAN, planOf, readTicketId, type TicketId } from "../../ids.ts";
 import { CodeHost, CodeHostWrites } from "../../services.ts";
-import type { PrFact } from "../../tickets/ticket.ts";
+import { Fact, type PrFact, readAnswer } from "../../tickets/ticket.ts";
 import { Tickets, Watcher } from "../../tickets/tickets.ts";
 import type { TextKind } from "../review/pack.ts";
 import { type PrFacts, ReviewKind } from "../ship/facts.ts";
@@ -262,6 +262,34 @@ const prefixOf = (pull: Pull) => (pull.kind === "exam" ? "a-exam_merge-" : "a-me
 /** A person's `merge` to the newest ask for this pull request, and what it binds to. Pure. */
 export const yesOf = (ticket: Timeline, pull: Pull): Yes => {
   const prefix = prefixOf(pull);
+  const decoded = ticket.timeline.flatMap((e) => {
+    const read = Schema.decodeUnknownOption(Fact)(e.fact);
+    return Option.isSome(read) ? [{ fact: read.value, by: e.by }] : [];
+  });
+  const current = decoded.findLast(
+    (e) => e.fact.type === "asked" && "format" in e.fact && (e.fact.replaces ?? e.fact.ask).startsWith(prefix),
+  )?.fact;
+
+  if (current?.type === "asked" && "format" in current) {
+    if (decoded.some((e) => e.fact.type === "withdrawn" && e.fact.ask === current.ask)) {
+      return { _tag: "none" };
+    }
+
+    const answer = decoded.find(
+      (e) =>
+        e.by.kind === "user" &&
+        e.fact.type === "answered" &&
+        e.fact.ask === current.ask &&
+        "format" in e.fact &&
+        e.fact.saw === current.saw &&
+        readAnswer(decoded, e.fact)?.pick === "merge",
+    );
+    const evidence = current.shows.evidence;
+    return answer !== undefined && evidence._tag === "change"
+      ? { _tag: "asked", head: evidence.head }
+      : { _tag: "none" };
+  }
+
   const asked = ticket.timeline.findLast(
     (e) => e.fact.type === "asked" && e.fact.ask?.startsWith(prefix) === true,
   )?.fact;
