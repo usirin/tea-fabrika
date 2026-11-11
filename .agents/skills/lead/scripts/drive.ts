@@ -36,7 +36,8 @@
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed
-//   recording  Act     the field row, state/<lane>.json and .md, and the box removed unless stuck
+//   recording  Act     the field row (with the plants the typed answer named, 0093),
+//                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
 //   over               the outcome
@@ -90,6 +91,7 @@ import {
   listUsd,
   makeStepAgents,
   NO_SPENT,
+  Plant,
   type Provider,
   runTurn,
   Spent,
@@ -97,6 +99,7 @@ import {
   type Turned,
 } from "./agents.ts";
 import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -336,6 +339,8 @@ const Entry = Schema.Struct({
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
+  /** The plants the step's typed answer named, for the field row (0093). */
+  plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
 const record = Cmd.make("record", { input: Entry, ok: Done, err: ["unknown"] });
@@ -367,6 +372,7 @@ type Model =
       readonly head: string;
       readonly left: readonly string[];
       readonly spent: Spent;
+      readonly plants: Answer["plants"];
     }
   | {
       readonly phase: "recording" | "over";
@@ -592,8 +598,16 @@ type Step = readonly [Model, readonly Cmds[]];
 const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
- * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). */
-const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly string[] = []): Step => {
+ * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). The
+ * plants the answer named go on the row whatever the outcome: they ran (0093). */
+const recordIt = (
+  ask: Ask,
+  j: Ended,
+  head: string,
+  spent: Spent,
+  left: readonly string[] = [],
+  plants: Answer["plants"] = undefined,
+): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
   const entry = record({
@@ -604,6 +618,7 @@ const recordIt = (ask: Ask, j: Ended, head: string, spent: Spent, left: readonly
     exit: exitOf(j.outcome),
     keep: kept,
     spent,
+    ...(plants === undefined ? {} : { plants }),
   });
   return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
@@ -688,18 +703,19 @@ export const machine = defineMachine({
 
       const j = decide(s.ask, m.value, s.answer);
       const head = m.value.head ?? s.ask.base;
+      const plants = s.answer?.plants;
 
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head });
-        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent };
+        const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent, plants };
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
-      return recordIt(s.ask, j, head, s.spent, m.value.left);
+      return recordIt(s.ask, j, head, s.spent, m.value.left, plants);
     },
     step_read_err: (s): Step =>
       s.phase === "reading"
-        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent)
+        ? recordIt(s.ask, stuck("fetch_failed", "reading the step threw"), s.ask.base, s.spent, [], s.answer?.plants)
         : stay(s),
     backup_push_ok: (s, m): Step => {
       if (s.phase !== "pushing") {
@@ -707,13 +723,15 @@ export const machine = defineMachine({
       }
 
       if (!m.value.ok) {
-        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left);
+        return recordIt(s.ask, stuck("push_failed", m.value.detail), s.head, s.spent, s.left, s.plants);
       }
 
-      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left);
+      return recordIt(s.ask, { outcome: s.outcome, reason: s.reason }, s.head, s.spent, s.left, s.plants);
     },
     backup_push_err: (s): Step =>
-      s.phase === "pushing" ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left) : stay(s),
+      s.phase === "pushing"
+        ? recordIt(s.ask, stuck("push_failed", "botpush threw"), s.head, s.spent, s.left, s.plants)
+        : stay(s),
     record_ok: (s, m): Step => {
       if (s.phase !== "recording") {
         return stay(s);
@@ -1361,6 +1379,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               ended: new Date(ended),
               spent: e.spent,
               redacted: Number.isFinite(redacted) ? redacted : null,
+              plants: e.plants,
             }),
           );
         }
@@ -2042,10 +2061,17 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     started: Date.now(),
   };
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
-  const count = (pattern: string) => sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
-  const agents = count("codex-acp/dist/index.js") + count("claude-agent-acp/dist/index.js") + count("^codex exec");
+  // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
+  const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
+    const r = sh("pgrep", ["-f", pattern]);
+    return pgrepAnswer(r.code, r.out);
+  });
+  const refused = counts.some((c) => c._tag === "refused");
+  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
-  if (agents >= 8) {
+  if (refused) {
+    console.error(skipLine("agent cap"));
+  } else if (agents >= 8) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
       reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
@@ -2185,8 +2211,22 @@ export const driveStep = (
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
+    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
+    // typecheck` still takes its own lock (scripts/typecheck.sh).
     if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
-      while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
+      for (;;) {
+        const r = sh("pgrep", ["-x", "tsgo"]);
+        const tsgo = pgrepAnswer(r.code, r.out);
+
+        if (tsgo._tag === "refused") {
+          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+          break;
+        }
+
+        if (tsgo.count === 0) {
+          break;
+        }
+
         yield* Effect.sleep("20 seconds");
       }
     }
@@ -2313,7 +2353,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;

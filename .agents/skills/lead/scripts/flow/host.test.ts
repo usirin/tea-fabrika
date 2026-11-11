@@ -14,6 +14,8 @@ import "../runid.ts?raw";
 import "../clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../drive.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../pgrep.ts?raw";
 import "../env.sh?raw";
 import "../fieldrow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -55,6 +57,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { repoNode } from "../boxnode.ts";
 import {
   changedPaths,
   commandArgv,
@@ -64,7 +67,6 @@ import {
   hostEnv,
   lastHost,
   recordInLane,
-  repoNode,
   runCommands,
   runners,
 } from "./host.ts";

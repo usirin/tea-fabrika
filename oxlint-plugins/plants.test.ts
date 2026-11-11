@@ -320,12 +320,14 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-ledger-sql",
       "no-node-filesystem",
       "no-node-imports",
-      // libfabrika's rooms are planted at their real paths in rooms.test.ts.
-      "rooms",
+      // libfabrika's modules are planted at their real paths in modules.test.ts.
+      "modules",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
       // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
       "no-why-key",
+      // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
+      "no-stage-word",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
