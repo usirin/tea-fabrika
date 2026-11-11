@@ -1,11 +1,11 @@
-import { Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
 import { ProcessIdGenerator } from "../coordination/process-id.ts";
 import { LedgerError, Waited } from "../data/index.ts";
 import { workerSql } from "../data/worker-sql.ts";
 import { connection } from "../transport/gateway.ts";
 import { Answer, Attached, Hello } from "../transport/index.ts";
 import type { ConnectionId } from "./bindings.ts";
-import { ProjectClient } from "./platform.ts";
+import { ProjectClient, rejected } from "./platform.ts";
 import { complete, projectStub, recordingLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
 
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env, config: BrainOptions) {
@@ -116,8 +116,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
           return yield* rpc(p.route(client, method, params));
         },
-        // A failed or defective call still answers its request without exposing error details.
-        Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
+        // A failed or defective call still answers its request without exposing error details. Its cause
+        // rides in a failed span, as runner.throw does: the sink names the thrown class in `error.type`,
+        // and the text goes only to P37's deletable content.
+        Effect.catchCause((cause) =>
+          Effect.exit(Effect.fail(rejected(Cause.squash(cause))).pipe(Effect.withSpan("gateway.refused"))).pipe(
+            Effect.as(Answer.cases.refused.make({ reason: "unreachable" })),
+          ),
+        ),
       ),
     });
     connections.set(ws, c);

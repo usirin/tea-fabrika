@@ -2,7 +2,7 @@ import { Context, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream
 import { Base64, Base64Url } from "effect/encoding";
 import { Incoming } from "../app/entry.ts";
 import { type ProgramDown } from "../app/program.ts";
-import { type RunnerError, type Sent } from "../app/runner.ts";
+import { type RunnerError, Sent } from "../app/runner.ts";
 import {
   admitted,
   appendAdmitted,
@@ -1082,10 +1082,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const recordInput = Effect.fn("door.input")(function* () {
       const span = yield* Effect.currentSpan;
       const destination = letter !== null && Option.isSome(processes) ? yield* processes.value.resolve(target) : null;
-      const accepted =
+      // The letter's inbox row, if an earlier delivery landed it: its placing is the letter's answer.
+      const held =
         destination === null || request === null || Result.isFailure(request)
-          ? false
-          : (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).some(
+          ? undefined
+          : (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).find(
               (entry) => entry.id === request.success.letter,
             );
       const allocation = yield* store.atomic(() => {
@@ -1107,7 +1108,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
           if (
             old.state._tag === "settled" ||
-            accepted ||
+            held !== undefined ||
             destination?.state._tag !== "live" ||
             destination.state.process === old.process
           ) {
@@ -1224,17 +1225,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           yield* store.atomic(() => saveBinding(recorded));
         }
 
-        return recorded;
+        return { binding: recorded, held };
       }
 
-      return binding;
+      return { binding, held };
     });
-    const binding = yield* recordInput();
+    const input = yield* recordInput();
     yield* flush;
 
-    if (binding === null) {
+    if (input === null) {
       return no("id_reused");
     }
+
+    const { binding, held } = input;
 
     const routeInput = Effect.fn("door.route", {
       links: [{ span: Tracer.externalSpan(binding.span), attributes: {} }],
@@ -1257,6 +1260,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
           if (binding.state._tag === "settled") {
             return deliveryAnswer(binding.state.result);
+          }
+
+          if (held !== undefined) {
+            // The letter landed, and a crash cut its answer: its answer is its first placing (p10, p13).
+            // It is never delivered again, so it needs no session, and the binding keeps its pid (p69).
+            const answer = Sent.cases.accepted.make({ rev: held.rev, pos: held.pos });
+            yield* store.atomic(() =>
+              saveBinding({ ...binding, state: EnvelopeState.cases.settled.make({ result: answer }) }),
+            );
+            return deliveryAnswer(answer);
           }
 
           const sessions = yield* sessionsFor(binding.process);

@@ -9,7 +9,24 @@ type Client<S> = {
     : never;
 };
 
-const unreachable = () => new LedgerError({ reason: "unreachable" });
+/** A rejected platform call. Its message keeps the thrown value's class and text as `<class>: <text>`,
+ *  the class as span sinks name it (0043: the cause is kept); it rides in a span's failure, never a tag. */
+const unreachable = (cause: unknown) =>
+  new LedgerError({
+    reason: "unreachable",
+    message: cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`,
+  });
+
+/** The thrown value behind an `unreachable` LedgerError, rebuilt from its message with its class as
+ *  `name`, so a failed span names the class that was thrown; any other error stays as it is. */
+export const rejected = (error: unknown): unknown => {
+  if (!(error instanceof LedgerError) || error.reason !== "unreachable" || error.message === undefined) {
+    return error;
+  }
+
+  const at = error.message.indexOf(": ");
+  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+};
 
 export class ProjectClient extends Context.Service<
   ProjectClient,
