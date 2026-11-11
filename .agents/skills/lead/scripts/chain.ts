@@ -1641,7 +1641,7 @@ export const chainMain = (args: string[], env: Env) =>
       backstop,
     };
     const machine = makeMachine(limits);
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const handle = yield* run(machine, {
       ctx: undefined,
       interpret: handlers({ ...setup, agents }),
