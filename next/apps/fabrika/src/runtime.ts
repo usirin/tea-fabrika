@@ -26,6 +26,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
         Effect.map((config) =>
           projectLayer(ctx, env, {
             config,
+            mail: config.mail,
             programs,
             bootstrap: { name: "counter:1", id: "counter:1", program: "counter" },
             door: (options) =>

@@ -182,6 +182,8 @@ export class ProgramRunner extends Context.Service<
     /** Takes one delivered input: P10's internal delivery, never a public request. */
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
+    /** Save the one alarm for newly arrived mail, without running or starting the recipient. */
+    readonly mailed: Effect.Effect<void, RunnerFailure>;
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
@@ -232,6 +234,7 @@ export class ProgramRunner extends Context.Service<
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
         let mailRetry: number | null = null;
+        let sendRetry: number | null = null;
         const permit = yield* Semaphore.make(1);
         let live: Live | null = null;
         let alarmAt: number | null | undefined;
@@ -295,10 +298,15 @@ export class ProgramRunner extends Context.Service<
             : s;
         /** One object alarm: program work is eligible only while live. */
         const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
-          const running = supervision === null || supervision.recovery._tag === "live";
+          const running =
+            supervision === null || (supervision.recovery._tag === "live" && (yield* manager.isLive(process.id)));
           const waited = waitUntil(supervision);
-          const until =
-            retryAt ?? (waited === null || mailRetry === null ? (waited ?? mailRetry) : Math.min(waited, mailRetry));
+          const owes = running && (live?.cmds.some((cmd) => cmd.mail === true) ?? false);
+          const now = yield* Clock.currentTimeMillis;
+          const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
+          sendRetry = !owes ? null : sendRetry !== null && sendRetry > now ? sendRetry : now + backoff;
+          const times = [waited, running ? mailRetry : null, sendRetry].filter((at) => at !== null);
+          const until = retryAt ?? (times.length === 0 ? null : Math.min(...times));
 
           // Loading supplies the live program's wake; do not clear it before then.
           if (running && live === null && until === null) {
@@ -1340,15 +1348,14 @@ export class ProgramRunner extends Context.Service<
           );
         });
 
-        /** Sets the alarm that tries a failed Send or drain again. The permit is held. */
+        /** Sets the alarm that tries a failed drain again. The permit is held. */
         const retryLater = Effect.gen(function* () {
           const backoff = supervision?.policy.backoff.minMs ?? defaultPolicy.backoff.minMs;
           mailRetry = (yield* Clock.currentTimeMillis) + backoff;
           yield* setAlarm();
         });
 
-        /** A Send runs once at a time, and only while still dispatched. A failure that is not its
-         *  answer sets the alarm that tries it again. */
+        /** A Send runs once at a time while dispatched; its owed entry keeps the retry alarm. */
         const sendOnce = (job: Dispatched): Effect.Effect<ReadonlyArray<Dispatched>, RunnerFailure> =>
           Effect.suspend(() => {
             if (sending.has(job.id) || live?.cmds.some((cmd) => cmd.id === job.id) !== true) {
@@ -1356,10 +1363,7 @@ export class ProgramRunner extends Context.Service<
             }
 
             sending.add(job.id);
-            return dispatch(job).pipe(
-              Effect.onError((cause) => (Cause.hasInterrupts(cause) ? Effect.void : permit.withPermit(retryLater))),
-              Effect.ensuring(Effect.sync(() => sending.delete(job.id))),
-            );
+            return dispatch(job).pipe(Effect.ensuring(Effect.sync(() => sending.delete(job.id))));
           });
 
         /** Runs Cmds in order, each one's follow-ups before the next. */
@@ -1417,6 +1421,15 @@ export class ProgramRunner extends Context.Service<
         const restart = call("runner.restart.request");
 
         return {
+          mailed: permit
+            .withPermit(
+              Effect.gen(function* () {
+                mailRetry = Math.min(mailRetry ?? Infinity, yield* Clock.currentTimeMillis);
+                yield* setAlarm();
+                yield* Effect.annotateCurrentSpan({ "fab.mail.to": process.name, "fab.mail.alarm": alarmAt });
+              }),
+            )
+            .pipe(Effect.withSpan("runner.mailed")),
           open: (client: string) =>
             open(
               Effect.gen(function* () {
