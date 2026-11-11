@@ -18,10 +18,11 @@ import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager } from "../access/ClientManager.ts";
+import type { NotGranted } from "../access/SessionManager.ts";
 import { SessionManager, Writer } from "../access/SessionManager.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Line, lineFor } from "../ledger/Log.ts";
 import { Connections } from "../presence/Connections.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -240,7 +241,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
       build: "b-1",
     };
     /** A valid `founded` line, then its body replaced by `body`. */
-    const memberLine = (body: Record<string, unknown>): Line => ({
+    const memberLine = (body: Line["body"]): Line => ({
       ...lineFor(writer, MemberEvent.cases.founded.make({ id: "person-1", name: "p", keys: [], window: null })),
       body,
     });
@@ -264,11 +265,11 @@ export const suite = (law: Law, fresh: () => Sql) => {
             ledger,
           );
           const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
-          const error = yield* Effect.flip(
+          const error = yield* Effect.flip<unknown, LedgerError | NotGranted, never>(
             reader === "authorization"
               ? Effect.provide(
                   appendAdmitted("SHA256:anyone", { stream: "notes:1", id: "w-1", line: memberLine({ note: 1 }) }),
-                  LedgerTransaction.layer(sql).pipe(Layer.provide(quiet)),
+                  LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
                 )
               : Effect.provide(
                   ClientManager.use((m) => m.members),
@@ -341,7 +342,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
           const sql = fresh();
           const manager = ProcessManager.layer({ ...brain(), by: BRAIN }, Effect.succeed(PROCESS)).pipe(
             Layer.provide(
-              LedgerTransaction.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+              LedgerTransactionSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
             ),
           );
           const dead = { tries: 3, limit: 3, m: "m-1", build: "b-1", errors: ["E", "E", "E"], [field]: bad };
@@ -367,6 +368,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
       machine: Machine.make({
         model: Model,
         msg: Msg,
+        cmds: [],
         init: (saved) => [saved ?? { n: 0 }, []],
         update: { inc: (s) => [{ n: s.n + 1 }, []] },
       }),
@@ -422,7 +424,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
             Effect.succeed(PROCESS),
           ),
         ),
-        Layer.provide(LedgerTransaction.layer(fresh()).pipe(Layer.provide(quiet))),
+        Layer.provide(LedgerTransactionSql.layer(fresh()).pipe(Layer.provide(quiet))),
       );
       return ProgramRunner.layer(
         { id: PROCESS, name: NAME, program: "cause", build: "test", owner },
@@ -510,6 +512,7 @@ export const suite = (law: Law, fresh: () => Sql) => {
             machine: Machine.make({
               model: Model,
               msg: Msg,
+              cmds: [],
               init: (saved) => [saved ?? { n: 0 }, []],
               update: { inc: (s) => [part === "view" ? { n: s.n + 1 } : wrong, []] },
             }),

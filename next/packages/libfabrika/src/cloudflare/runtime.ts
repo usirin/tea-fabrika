@@ -20,9 +20,11 @@ import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import type { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
+import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From } from "../processes/Mailbox.ts";
@@ -336,8 +338,8 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   });
   const ledgerLayer = Layer.mergeAll(
     LedgerSql.layer(sql, { reader: `project:${name}` }),
-    LedgerTransaction.layer(sql),
-    Referee.layer(sql),
+    LedgerTransactionSql.layer(sql),
+    RefereeSql.layer(sql),
   ).pipe(Layer.provide(bell));
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
   const managers = Layer.mergeAll(

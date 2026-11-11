@@ -27,7 +27,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 - **The step** is the one on the [doubling scale](../direction/agent-hours.md#h4-an-estimate-is-a-step-on-a-doubling-scale-and-too-big-means-split) (0.25, 0.5, 1, 2, 4, 8) that holds the middle of the row's range. Over 8 says split. The first row is already four PRs (A, B, C and E), so it splits as planned, and each PR gets its own estimate when its ticket is planned. A tier total is many tickets, so it gets no step. The middle-of-range rule is a choice made in this restatement, 70% sure: the upper end would push rows like backup (1.03) up a whole step.
 - **The steps stay, and nothing is cut to fit a date:** plan, test writer, build, mutation and one review, for each PR. [The mutation step](#the-mutation-step) changes under new direction.
 - **How the size is worked out now.** Product and test lines together, divided by the rate. Every line counts the same, copied ones too, so the rows marked copied are an upper bound. *Old way, wrong: written lines at "the plan's own rate, about 150 lines an hour", which had no source, and a copied line at a third of that time, about 450 an hour.* Tests on written code keep the ratio of about 1.06 to 1, which experiment 187 matched (1.10 on this repo).
-- **The doubt.** 600 comes from 11 whole lanes on demlik, with no test writer or mutation step, plus PR 267 here at 707. Across the rate's middle half (279 to 740 lines an hour) Tier 1 is 14 to 52 agent hours. The menu bar and launchd, which nobody has built here, and how many laws break on the new stage, are still the biggest unknowns. PR B's real `spent` settles the rate, and PR D's the rest. Sure of 17 to 24: 55%.
+- **The doubt.** 600 comes from 11 whole lanes on demlik, with no test writer or mutation step, plus PR 267 here at 707. Across the rate's middle half (279 to 740 lines an hour) Tier 1 is 14 to 52 agent hours. The menu bar and launchd, which nobody has built here, and how many laws break on the new instance, are still the biggest unknowns. PR B's real `spent` settles the rate, and PR D's the rest. Sure of 17 to 24: 55%.
 
 ## The biggest calls
 
@@ -42,8 +42,8 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 9. **A program declares its typed inputs and outputs now, and nothing carries them yet.** A program in `next/` today has `msg` and `view`, which face its window, and nothing that faces another program. Elm's answer is ports. `Program` gains `inputs` and `outputs`: named Effect schemas, both required, so every program says what it has, even if that is `{}`. A value on input `x` reaches the machine as the Msg `{type: "x", value}`, so `msg` stays the one list of what `update` takes. **Now something does carry inputs: MCP tools are made from them in PR D,** which also gives each input its `description`, `writes` and `personOnly`. Why: Tier 2's `tracker | ticket` then adds a wire, not a rewrite of each program. Pipes and `fabsh` are not in this plan. Cost: about 10 lines, and a small edit to `counter` and `chaos`. Sure: 75%. The doubt is whether one Msg per input is the right shape. Only `tracker | ticket` settles it, and if it is wrong, two programs change.
 10. **Notes land as their own PR, after Cloudflare and before chaos.** Why: PR C still proves the counter there, and chaos gets a real target from its first run. With chaos first, its target list, its driver and p39 would be written twice. Cost: chaos waits one more review. Sure: 85%.
 11. **A stale save offers "Keep mine as a new note".** Why: it asks for no reading and no decision while the person is mid-thought, and both texts survive. Saving over would take one click to bury the newer version. Cost: an extra note to tidy by hand. Sure: 80%. The doubt is how often this happens; use tells.
-12. **One small file says which stage the app dials:** `<home>/stage.json`. Why: the owner sets it once, and a menu choice would be a daily button for a thing that never changes. Cost: going back means deleting a file. Sure: 75%. The doubt is whether a person ever wants to switch often.
-13. **Chaos is not in the build on the real ledger.** Why: code not there cannot be reached, so no flag or slip can aim it at real notes. Cost: a second stage to deploy and remove for a cloud run. Sure: 85%.
+12. **One small file says which instance the app dials:** `<home>/instance.json`. Why: the owner sets it once, and a menu choice would be a daily button for a thing that never changes. Cost: going back means deleting a file. Sure: 75%. The doubt is whether a person ever wants to switch often.
+13. **Chaos is not in the build on the real ledger.** Why: code not there cannot be reached, so no flag or slip can aim it at real notes. Cost: a second instance to deploy and remove for a cloud run. Sure: 85%.
 14. **The window parses Markdown; the sealed program never does.** Why: the fact keeps raw text, blocks are derived, a wake would otherwise parse every note, and a program's box stays small. Cost: each window parses for itself. Sure: 90%.
 15. **The bridge is a client with a key, not a local socket with a name.** Why: a handshake lets an agent just say who it is, and real notes live on Cloudflare, where a local socket cannot reach. Cost: one Approve per agent name, and a key file. Sure: 85%.
 16. **On notes, an agent's "own run" is its own client, not its own process.** Today's rule gives each agent its own run because a run in a tile writes as the person. In `next/`, `by` comes from the checked key, so that danger is gone, and a process of its own would hide the agent's doc from the list. Cost: this differs from today's `drive.ts`, and a later program with private state gets a real process of its own. Sure: 75%. The doubt is the first such program, in Tier 2.
@@ -59,7 +59,7 @@ Three words to know. **Plan-115** is [ticket 115's plan](./ticket-115.md): laws 
 
 **A starting guess.** The brief's [order of work](./tier-1.md#the-order-of-work) says which parts of this order are fixed. New pull requests start from current main.
 
-- **PR A, door and plumbing:** T0 to T6, carrying PR 223. Demo: two tabs of one browser show one code, and one terminal command lets both in, on the local stage.
+- **PR A, door and plumbing:** T0 to T6, carrying PR 223. Demo: two tabs of one browser show one code, and one terminal command lets both in, on the local instance.
 - **PR B, the app:** T7, T8, T15, T9. Demo: the owner opens the app, types their own name (the person a grant's `for` points at), and gets a window. "Open in browser" brings a tab online, and a tab typed by hand comes in with Approve. Remove takes a let-in window out.
 - **PR C, cloud:** T10 and T11. Demo: the same on Cloudflare, with the same approval flow. It still proves the counter.
 - **PR D, notes:** a small exam PR, then T16, T17, T18, T20, T21 and T19. From here the Cloudflare ledger holds real notes. Its copied files land as a commit of their own, unchanged, so the review reads the fitting as a diff.
@@ -134,8 +134,8 @@ It asks the door for the ledger's name, prints what it will sign, calls `ssh-key
 **What differs between local and cloud:** nothing in the door, and the same approval flow. `saw.where` is "this Mac" on the laptop and comes from Cloudflare's `request.cf` on the cloud. The one extra check is local: the HTTP header `Host` must be the bound address. On Cloudflare, routing does that job. A knock gains nothing without Approve. Typed codes arrive in Tier 3.
 
 ```ts
-// A sketch of the stage value. One door; a union, so "cloud with an address check" cannot be said.
-const Stage = Schema.TaggedUnion({
+// A sketch of the instance value. One door; a union, so "cloud with an address check" cannot be said.
+const Instance = Schema.TaggedUnion({
 	local: {address: Schema.String, ledger: Schema.String, founder: Founder, chaos: Chaos},
 	cloud: {ledger: Schema.String, founder: Founder, chaos: Chaos}, // Chaos: see Chaos monkey
 });
@@ -184,7 +184,7 @@ const update = (m, msg) =>
 - **Why here, in PR B, and not in the Tier 3 tile:** otherwise the real app could let a window in and never take it out. Cost: 60 to 100 product lines, a guess at 50%. Sure of the shape: 85%, since it reuses the check, the signature and the fact.
 - **How Linear would do this, as opinion:** a device list under the account's settings, with a revoke and a confirm. We keep it in the panel, because that is where a window came in, and the finger is the confirm. The full list with last seen waits for Tier 3.
 
-**The one-time link stays.** It is made only when the person clicks "Open in browser" in the menu bar. It is single use, lasts 60 seconds, keeps its secret after the `#`, and works on both stages. No agent call can ask for one, because no brain method and no bridge call makes one: only the click does.
+**The one-time link stays.** It is made only when the person clicks "Open in browser" in the menu bar. It is single use, lasts 60 seconds, keeps its secret after the `#`, and works on both instances. No agent call can ask for one, because no brain method and no bridge call makes one: only the click does.
 
 ```text
 1 person clicks "Open in browser". Main picks a secret, keeps it in the menu's model with `until`,
@@ -342,21 +342,21 @@ const Box = Schema.TaggedUnion({
 
 **The stale screen.** It only shows in the box. Lean: "Keep mine as a new note", plus a way out. Keep writes a new note, `how: "kept"` and `from` naming the note and version it came from. Neither button has default focus. Drop is the only act here that loses text, the words say so, and it writes nothing. Why not save over: see biggest call 11. Cost: no delete in Tier 1, so a kept note stays. Sure: 80%.
 
-**`MOST` is 256 KB, a guess.** Why: a limit a person sees beats a socket that dies. It is checked in the pure program, so it is the same on both stages. Cloudflare's own frame limit is the thing to read before PR D sets it. Sure: 60%. The doubt is the true limit, and T17 reads it.
+**`MOST` is 256 KB, a guess.** Why: a limit a person sees beats a socket that dies. It is checked in the pure program, so it is the same on both instances. Cloudflare's own frame limit is the thing to read before PR D sets it. Sure: 60%. The doubt is the true limit, and T17 reads it.
 
 **Not in Tier 1:** formatted typing in place, tabs, comments, search, sharing, live co-editing, any CRDT, and deleting a note. Nothing is lost by waiting: a later `archived` fact can hide a note, and the raw text is what any later editor reads. See [Later tiers](#later-tiers).
 
-**Where real notes live.** On the Cloudflare copy, once PR D lands. The laptop stage stays for tests and development.
+**Where real notes live.** On the Cloudflare copy, once PR D lands. The laptop instance stays for tests and development.
 
 ```json
-// <home>/stage.json. One file, two shapes, read through a Schema.TaggedUnion. No file means local.
+// <home>/instance.json. One file, two shapes, read through a Schema.TaggedUnion. No file means local.
 {"_tag": "local"}
 {"_tag": "cloud", "url": "https://<the worker's address>"}
 ```
 
 - **Who writes it:** a deploy of `--stage cloud`, right after the owner's yes, since it knows the address. A deploy of `drill` never does. Agents and tests keep `--url` for one run, which wins and writes nothing. To go back, delete the file.
-- **What it changes:** the window dials that stage. On `cloud`, the app does not start the launchd brain, and Quit has none to stop. The founding screen, the keys and the home are the same for both.
-- **What the person sees:** the panel's status line and the tile's bottom line name the stage, as "Cloudflare" or "this Mac, for tests". So nobody types a real note in the wrong place by not knowing.
+- **What it changes:** the window dials that instance. On `cloud`, the app does not start the launchd brain, and Quit has none to stop. The founding screen, the keys and the home are the same for both.
+- **What the person sees:** the panel's status line and the tile's bottom line name the instance, as "Cloudflare" or "this Mac, for tests". So nobody types a real note in the wrong place by not knowing.
 - **Why not a menu choice:** see biggest call 12. **One command apart still holds:** one stack, one deploy, and the file is its result.
 
 **From PR D, this ledger is real.** `next/` stays a lab everywhere else. The cloud ledger is not wiped or renamed, the Worker keeps `RemovalPolicy.retain()`, and a change to a letter's shape only adds. Sure: 90%.
@@ -427,7 +427,7 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 **What was checked, and what it asks of the plan.**
 
 - **Dependencies.** All are already pinned exactly in the catalog, so `next/programs/notes/package.json` adds only `catalog:` lines: `@pierre/highlights` 0.3.0 (a beta, held exact), `mdast-util-from-markdown` 2.1.0, `mdast-util-gfm` 3.1.0, `micromark-extension-gfm` 3.0.0, `@types/mdast` 4.0.4, and `@manti-ui/react` 0.13.0 for `Kbd`, with the patch today's app uses. No new entry, and the `^19.0.0` range in `programs/markdown/package.json` does not come along. If a later highlighter breaks, code is plain, and nothing else depends on it.
-- **The page's content security policy.** `next/`'s page has none today, and agent-written text is drawn in a real tab, so PR D adds one, as a header from the brain, the same on both stages: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else. So `style.css` is served as a file, not put inline in the page. A span's color still works, since React sets it as a property. Today's `apps/fabrika/src/files.ts` shows the same policy without `connect-src`. Sure: 85%. The doubt is `connect-src 'self'` and the socket on a phone's browser; T19 tries it.
+- **The page's content security policy.** `next/`'s page has none today, and agent-written text is drawn in a real tab, so PR D adds one, as a header from the brain, the same on both instances: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. `'wasm-unsafe-eval'` lets in WebAssembly and nothing else. So `style.css` is served as a file, not put inline in the page. A span's color still works, since React sets it as a property. Today's `apps/fabrika/src/files.ts` shows the same policy without `connect-src`. Sure: 85%. The doubt is `connect-src 'self'` and the socket on a phone's browser; T19 tries it.
 - **The page script's size.** The slice's script was 664 KB, and today about 400 KiB of `programs/markdown`'s script is the highlighter. A phone should not fetch that for a note with no code. Lean: the highlighter is its own script, `/highlight.js`, kept in the one built file and fetched when the first code block with a language asks. It needs no third export on the package: the app's `build.ts` splits on the `import()` inside `@kampus/notes/window`. Why: today's own note says text draws first and colors come after anyway. Cost: Rolldown's split on a dynamic `import()` (this said esbuild's splitting until 2026-11-05; not tried with Rolldown here), carrying that chunk in the one built file, one route, and p33's law covers two scripts. Sure: 75%. T20 prints both sizes in the PR. No size blocks, since no bar is measured.
 - **The React rule.** `drawn.tsx` imports no tea React. Colors as data also remove its own `useSyncExternalStore`, so the one hook stays the one hook. React stays 19.3.1 from the catalog, and Strict Mode stays on, which `void loadColors()` in an effect would have run twice.
 - **`useState`, which A3 forbids.** Checked: `programs/markdown/src/window.tsx` has none. It uses `useMemo` for derived lines, and `useRef` and one `useEffect` to focus the page, which hold no state of ours. So the copy brings none in. Today's `frame.tsx`, `pop.tsx` and `desk.tsx` do use it, and they are not copied here.
@@ -461,11 +461,11 @@ yield* tools.call("notes_save", {value: {note: "n-7f3a", base: 3, body: "# Plan\
 **The shape, and where MCP stops.**
 
 ```text
-agent client  --MCP over stdio-->  the bridge  --the same WebSocket and door-->  the brain, on either stage
+agent client  --MCP over stdio-->  the bridge  --the same WebSocket and door-->  the brain, on either instance
                                    a headless client, `as: "agent"`
 ```
 
-MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[notes]`, and `fabrika` is a one-line command that calls that. The stage comes from `stage.json`, so an agent writes where real notes live, and `--url` wins for one run.
+MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[notes]`, and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
 
 **Let in once.** The first time a name is used, the bridge makes a key file in the app's home (`<home>/agents/<name>.key`, mode 0600) and knocks with `{label: "claude", as: "agent"}`. The menu bar shows the usual row: "Agent claude, this Mac, says code 482 109". **How often: once per agent name, one click on Approve with the same check as any row, never again.** The grant says `as: "agent"` and `for` the person, signed. Until then, every tool call answers in words:
 
@@ -608,12 +608,12 @@ export const Chaos = Schema.TaggedUnion({
 export type Chaos = typeof Chaos.Type;
 ```
 
-| Stage | Holds | Build | Who starts chaos |
+| Instance | Holds | Build | Who starts chaos |
 |---|---|---|---|
 | `cloud` | Real notes | Off | Nobody, unless on purpose, below |
 | `local`, the app's own | Tests and development | Off | Nobody |
 | A temp brain, `--chaos=throwaway` | Nothing kept: a temp folder and a fresh ledger | On | `node next/apps/fabrika/chaos-drill.ts` |
-| `drill`, its own Worker and objects | Nothing kept | On | `node next/apps/fabrika/chaos-drill.ts --stage drill` |
+| `drill`, its own Worker and objects | Nothing kept | On | `node next/apps/fabrika/chaos-drill.ts --instance drill` |
 
 **How a person starts a normal run.** `node next/apps/fabrika/chaos-drill.ts` starts the temp brain and founds it with the same keys as the app. The app dials it for that run with `--url`, and the bar says "throwaway". The chaos tile is there, and only there. The drill makes some notes and counter presses first, so a run has text to protect. Then it stops the brain and removes the folder. On the cloud: the owner reads `alchemy plan --stage drill` and says yes, the run goes the same way, and `alchemy destroy --stage drill` removes it afterward.
 
@@ -882,7 +882,7 @@ const Tile = ({run, id, shows, folded}: {run: DeskRun; id: TileId; shows: Shows;
 
 - **The page comes from the brain.** Main calls `loadURL(url + "/electron")`, so the origin check passes as a tab's does. No custom scheme, and no second copy of the page.
 - **The app starts the brain,** as [a plain launchd service](#the-menu-bar). `dev.ts` runs Alchemy's local stage, under launchd for the person and by hand for agents and tests. If the brain is down, main shows plain words and retries on a `Schedule`. Settled by the owner. Sure: 75%, for the spike.
-- **Which stage it dials:** `<home>/stage.json` from PR D, [as Notes says](#notes). With no file, local. `--url` points at another stage for one run, for agents, tests and the drill.
+- **Which instance it dials:** `<home>/instance.json` from PR D, [as Notes says](#notes). With no file, local. `--url` points at another instance for one run, for agents, tests and the drill.
 - **The founding screen and the panel come from local files,** since the first runs before a brain exists and the second must never come from the brain's page. Each gets a small preload of its own.
 - **Security flags as in today's `apps/fabrika/src/main.ts`:** `sandbox: true, contextIsolation: true, nodeIntegration: false`; `titleBarStyle: "hiddenInset"`, traffic lights at `{x: 14, y: 11}`; new windows denied; navigating off the brain's origin blocked.
 - **A small preload after all.** I first leaned to none, but the key in the note's T3 forces one. `contextBridge` gives `publicKey()` and `signHello({nonce, tab})`. Main builds the bytes itself, so the page cannot get arbitrary text signed. It also gives `has`, the list main worked out at start. `ipcMain.handle` checks `senderFrame`'s origin.
@@ -893,7 +893,7 @@ const Tile = ({run, id, shows, folded}: {run: DeskRun; id: TileId; shows: Shows;
 
 ## Cloudflare
 
-**The stack.** New `next/apps/fabrika/alchemy.run.ts`, one file for both stages. `brain-host.ts` goes away.
+**The stack.** New `next/apps/fabrika/alchemy.run.ts`, one file for both instances. `brain-host.ts` goes away.
 
 ```ts
 // A sketch, on Alchemy 2.0.0-beta.84, the names in exp 147 and today's packages/ledger-server/src/stack.ts.
@@ -902,7 +902,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 		const brain = yield* Cloudflare.Worker("Brain", {
 			name: "fabrika",
 			main: "dist/brain.mjs",
-			bundle: false,                        // served byte for byte on both stages
+			bundle: false,                        // served byte for byte on both instances
 			compatibility: {date: DATE},
 			observability: {enabled: true},
 			dev: {host: "127.0.0.1", port, strictPort: true},
@@ -911,7 +911,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 				PROCESS: Cloudflare.DurableObject("Process"),
 				PROJECT: Cloudflare.DurableObject("Project"),
 				LOADER: Cloudflare.WorkerLoader(),
-				STAGE: JSON.stringify(stage),      // under 5 KB; a public key, no secret
+				INSTANCE: JSON.stringify(instance),      // under 5 KB; a public key, no secret
 			},
 		}).pipe(RemovalPolicy.retain());
 		return {url: brain.url};
@@ -920,7 +920,7 @@ export default Alchemy.Stack("fabrika", {providers: Cloudflare.providers(), stat
 
 - **Does Worker Loader need anything on the account?** Yes, one thing: Cloudflare's plan must include Dynamic Workers ([docs](https://developers.cloudflare.com/dynamic-workers/)), and the account's plan does. Our `hash:pid` id is stable, so only a new build counts as a new one.
 - **The address:** Cloudflare's default address for a Worker. Why: no DNS to set up, and the door does the same job. Cost: a domain later means a new origin, so each browser asks again; the ledger's name stays a stable id, so grants stay good. Sure: 85%. Settled by my call, as the owner asked.
-- **The approval flow is the same here.** PR C gives the menu bar a second link, to the cloud stage, and each row says which stage it is from. `founded` on the cloud ledger names the same person key and window key, read from the app's home at deploy. The one-time link works here too. Remove works here too. When `stage.json` says `cloud`, the app starts no local brain and keeps only the cloud link.
+- **The approval flow is the same here.** PR C gives the menu bar a second link, to the cloud instance, and each row says which instance it is from. `founded` on the cloud ledger names the same person key and window key, read from the app's home at deploy. The one-time link works here too. Remove works here too. When `instance.json` says `cloud`, the app starts no local brain and keeps only the cloud link.
 - **A wait is data, so every object can sleep under it.** Decided by the owner on 2026-11-02, from [experiment 174](../../experiments/174-effect-on-cloudflare.md). Objects sleep after about 10 s, in Miniflare too, and whatever sits in memory goes: plan-115's `bells` in `data/project.ts`, a `ledger.wait` Promise, the waiting rows. So a call that waits is never a fiber or a timer. The socket's attachment holds the gateway's half, and the project's own SQLite holds who to ring. A waiting tab no longer repeats `gateway.knock` every 5 s. It knocks once, and again only when its row's `until` passes, a Sub in its link machine. `gateway.knock` itself stays.
 
 ```ts
@@ -957,7 +957,7 @@ const rung = (sockets: ReadonlyArray<BrainSocket>, stream: string, rev: number) 
   - **The waiting rows** move from memory into the project's own SQLite, beside the rings: still `Waiting` from `waiting.ts`, at most `most` rows, each gone at `until` or when its last tab leaves. Never in the log, so "lost on purpose" below still holds. The gateway keeps the row it showed in `waiting.row`, so a socket that closes leaves its row with no lookup.
   - **A call lost to an eviction.** `busy` is true while a call is being answered. A deploy or a crash can end the object mid-call. At the next wake, the gateway's constructor closes each socket still marked `busy` with 1012, so the client dials again and resends, and the id keeps it once. A ping never sets `busy`, since the runtime answers it. Alchemy's `RpcWebSocket.ts` does the same.
   - **The attachment holds 16,384 bytes** ([Cloudflare docs](https://developers.cloudflare.com/durable-objects/api/websockets/)). A `Wait` is about 40 to 100 bytes, so a cap of 64 waits a socket (a guess, like the row cap) leaves room, and a 65th is refused with `too_many_waits`.
-  - **Held by:** p15 gains two cases on the stage. A tab waits, both objects sleep, an append answers it. A gateway aborted mid-call closes with 1012, and the resent call lands once. T4 builds the gateway half, T2 the rings. Plants: a wait kept only in memory; a ring not dropped after it rang.
+  - **Held by:** p15 gains two cases on the instance. A tab waits, both objects sleep, an append answers it. A gateway aborted mid-call closes with 1012, and the resent call lands once. T4 builds the gateway half, T2 the rings. Plants: a wait kept only in memory; a ring not dropped after it rang.
   - **Cost:** about 40 lines, 1 agent hour. Sure: 85%. The doubt: 174 parked a wait in one object, not across a gateway and the project, and nothing has run on Cloudflare. T11's run shows it there.
 - **Commands:** the app for a person, `node next/apps/fabrika/dev.ts` for agents and tests. For cloud, `alchemy plan --stage cloud`, the owner reads it, then deploy after their yes, and `drill` the same way. No builder runs either. Never `Alchemy.remote()`.
 - **Local wording.** Alchemy's local stage runs workerd through its own runtime and a TCP relay (exp 171), not the `miniflare` package. All wire tests spawn `dev.ts`, so one runtime is under test. Exp 171's lean was to keep tests on Miniflare; I argue against it, because the owner's rule is one stack. Cost: start 1.2 to 1.4 s, 395 MB against 0.3 to 0.4 s, 285 MB. Sure: 75%. Doubt: load on the laptop; run with `--maxWorkers=3`, and if a suite takes over 3 minutes, share one brain per file.
@@ -1101,7 +1101,7 @@ class KeyDown extends Schema.TaggedError<KeyDown>()("KeyDown", {why: Schema.Stri
 
 | Shape | Its key | Why |
 |---|---|---|
-| A union we define: states, menu rows, faults, stages, wire messages we own, and facts on the ledger (ticket 32 tracks those) | `_tag`, through the schema tools | Makers, `match` and guards come with it |
+| A union we define: states, menu rows, faults, instances, wire messages we own, and facts on the ledger (ticket 32 tracks those) | `_tag`, through the schema tools | Makers, `match` and guards come with it |
 | A tea Msg or Cmd | `type` stays. Do not "fix" it. | tea's engine reads `msg.type` |
 | Someone else's shape: JSON-RPC's `method`, JSON Patch's `op`, mdast's `type`, MCP's fields, the HTTP `Host` header | Its own | It is not ours to rename |
 | A plain field, on a struct with the same fields every time | A plain word: `Host.platform`, `Saw.where`, `Who.as` | Nothing picks a shape by it, so it is no tag |
@@ -1318,7 +1318,7 @@ export const planRun: (a: {readonly seed: number; readonly most: number; readonl
 export type Checked = {readonly letters: number; readonly doubled: number; readonly gaps: number};
 export const check: (letters: ReadonlyArray<Letter>) => Checked;
 // `Chaos` is in app/nemesis.ts too, as the chaos section shows. Reading the flags is pure:
-export const chaosFrom: (a: {readonly flag: string | null; readonly stage: "local" | "cloud" | "drill"; readonly ledger: string}) =>
+export const chaosFrom: (a: {readonly flag: string | null; readonly instance: "local" | "cloud" | "drill"; readonly ledger: string}) =>
 	Chaos | {readonly why: "wrong_name" | "not_here"}; // no flag: off. "real:" with another name: wrong_name.
 
 // next/programs/notes/src/program.ts. As in the Notes section.
@@ -1411,8 +1411,8 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
 // node next/apps/fabrika/dev.ts --port=N --data=<folder> --founder=<key.pub | founder.json>                    "brain up: {...}"
 // node next/apps/fabrika/dev.ts --port=N --founder=<key.pub | founder.json> --chaos=throwaway                  a temp folder, a fresh ledger
 // node next/apps/fabrika/grant.ts client|revoke <url> <arg> [--code=N] [--label=L] [--as=window|agent] [--key=<path>]
-// node next/apps/fabrika/chaos-drill.ts [--stage drill]                                                        starts a run on a throwaway ledger
-// <home>/stage.json {_tag: "local"} | {_tag: "cloud", url}; no file means local; --url wins for one run
+// node next/apps/fabrika/chaos-drill.ts [--instance drill]                                                        starts a run on a throwaway ledger
+// <home>/instance.json {_tag: "local"} | {_tag: "cloud", url}; no file means local; --url wins for one run
 // GET /door -> {ledger}, never a person's name, since it answers before any hello. `grant.ts` takes `--for <name>`.
 // POST /grant -> {rev} | {why}; GET /, /electron, /browser.js, /electron.js
 // JSON-RPC: initialize, view.open, window.msg, ledger.read, ledger.wait, door.knock, door.watch, door.deny
@@ -1827,7 +1827,7 @@ The prepared step in 6 is a check: what is installed is the fold of the landed l
 
 ### P34 on the Worker, as built
 
-Built 2026-11-10, tracker ticket 402, [PR 760](https://github.com/usirin/tea-fabrika/pull/760). This is `next/`. [PR 535](https://github.com/usirin/tea-fabrika/pull/535) built P34's supervision in the runner and proved it on Node. The Worker never passed the runner its recovery options, so on the local stage a throw had no saved count and no supervised restart ([experiment 239](../../experiments/239-supervision-vs-otp.md) found the same gap). This pull request wires it.
+Built 2026-11-10, tracker ticket 402, [PR 760](https://github.com/usirin/tea-fabrika/pull/760). This is `next/`. [PR 535](https://github.com/usirin/tea-fabrika/pull/535) built P34's supervision in the runner and proved it on Node. The Worker never passed the runner its recovery options, so on the local instance a throw had no saved count and no supervised restart ([experiment 239](../../experiments/239-supervision-vs-otp.md) found the same gap). This pull request wires it.
 
 ```ts
 // The whole idea, as built, in next/packages/libfabrika/src/cloudflare/runtime.ts.
@@ -1840,12 +1840,12 @@ remoteProcessManager(manager); // processes/ProcessManager.ts, from a plain Proc
 ```
 
 - **Recovery is required.** `RunnerOptions` is exported and no longer optional in `ProgramRunner.layer` and `withLoader`, and both Layers require `ProcessManager`. The path that set recovery to null is gone; `policy` and `fault` stay optional. The type law is `runtime/RunnerOptions.test.ts`.
-- **One name, one storage owner.** A Process object is keyed by `[project, name]`, never by a process ID, so a successor reads the receipts, counts and checkpoints its name already has. The Project's `processObject(pid)` finds the name from history and refuses an unknown ID. Delivery, view opening and the private stage calls all route through it. The checked writer signs with the name's current process ID.
+- **One name, one storage owner.** A Process object is keyed by `[project, name]`, never by a process ID, so a successor reads the receipts, counts and checkpoints its name already has. The Project's `processObject(pid)` finds the name from history and refuses an unknown ID. Delivery, view opening and the private instance calls all route through it. The checked writer signs with the name's current process ID.
 - **The Project owns the one process table.** Eleven trusted Project calls carry `ProcessManager` to the Process object: `processObject`, `processStart`, `processExit`, `processStatus`, `processResolve`, `processDead`, `processIsLive`, `processMonitor`, `processDemonitor`, `processDown` and `processReceive`. A `ProcessError` crosses the RPC as reply data (`ProcessReplies` in `cloudflare/bindings.ts`); a transport failure stays a `LedgerError`. `processReceive` collects its letters and the Stream is rebuilt on the other side. The public JSON-RPC method set did not change.
-- **Trusted restart.** `stage.process(pid).restart({id, build})` goes through the private control allowlist, `ProcessClient.restart`, `Process.restart`, `ProcessService.restart` and `ProgramRunner.restart`, then the Project's exit and start. A repeated request ID makes one replacement.
+- **Trusted restart.** `instance.process(pid).restart({id, build})` goes through the private control allowlist, `ProcessClient.restart`, `Process.restart`, `ProcessService.restart` and `ProgramRunner.restart`, then the Project's exit and start. A repeated request ID makes one replacement.
 - **These twelve handoffs are methods on the plain classes** in `next/apps/fabrika/src/brain.ts`, each one line into its service. They move to Effect objects with ticket 502's port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)).
 - **Records.** No new event or recovery state. The Worker now writes the existing `dead`, `exited`, `started`, `restarted` and `down` events, and the existing `runner.throw`, `runner.dead`, `runner.restart` and `runner.recover` spans, with the real process ID on each.
-- **Tested.** `next/apps/fabrika/src/worker-supervision.test.ts` runs three scenarios on the real local stage (workerd, the real brain, alarms): a poison letter reaches `dead` at its limit of 2 and its sender is refused with `reason: "dead"`, then the successor accepts healthy mail and its counts survive a reopen; a trusted restart starts the new init once per request ID; a saved stepping marker becomes one interrupted recovery after an abort. `runtime-recovery.laws.test.ts` generates `RecoveryFlow` cases (limits 1 to 32, resends, reopen points, lost Project calls) against the real services on SQLite.
+- **Tested.** `next/apps/fabrika/src/worker-supervision.test.ts` runs three scenarios on the real local instance (workerd, the real brain, alarms): a poison letter reaches `dead` at its limit of 2 and its sender is refused with `reason: "dead"`, then the successor accepts healthy mail and its counts survive a reopen; a trusted restart starts the new init once per request ID; a saved stepping marker becomes one interrupted recovery after an abort. `runtime-recovery.laws.test.ts` generates `RecoveryFlow` cases (limits 1 to 32, resends, reopen points, lost Project calls) against the real services on SQLite.
 - **Not covered.** Cloud alarms, cloud eviction and a deploy are P24's. The 1 GiB receipt cap is a wiring choice, not a measure, and nothing cleans receipts yet. Mutation cannot reach code that runs only inside workerd. The retry policy after the brake is P34c's (ticket 404).
 
 ### The span sink, as P37 built it
@@ -1954,7 +1954,7 @@ import "./window/style.css";                 // only what the package lacks, cop
 | T3 the process | A | `runtime/Program.ts`, `runtime/Runner.ts`, `runtime/Entry.ts`, `app/process.ts`, `app/nemesis.ts`, `programs/counter/program.ts` for its ports |
 | T4 the door | A | `transport/*`, `brain.ts`, `window/machine.ts` |
 | T5 grant | A | `grant.ts`, `tuval/browser` only for its key, the waiting view in `window/main.tsx` |
-| T6 the stage | A | new `alchemy.run.ts`, `dev.ts`, `build.ts`, delete `brain-host.ts`, change `e2e.ts`; `README.md`; style; `docs/*.png` |
+| T6 the instance | A | new `alchemy.run.ts`, `dev.ts`, `build.ts`, delete `brain-host.ts`, change `e2e.ts`; `README.md`; style; `docs/*.png` |
 | T7 platforms | B | `desktop/services.ts`, `tuval/dom/*`, `tuval/browser/*`, `tuval/headless/*`, `entry/browser.tsx`, `entry/views.ts`, `window/main.tsx`. A catalog change comes from an exam PR, since `pnpm-workspace.yaml` is an exam file |
 | T8 the app, its keys and the brain | B | `entry/electron-main.ts`, `entry/electron.tsx`, `launchd.ts`, `tuval/electron/{preload,index,key,person-key,founding}.*`, signing setup in `README.md` |
 | T15 the menu bar, with Remove (done before T9) | B | `desktop/menu.ts`, `tuval/electron/{tray,panel,panel-preload,person-check,menu-cmds}.*`, `tuval/headless/*`, `entry/electron-main.ts`, `access/ClientManager.ts` for `Took` and `saw.has`, the waiting words in `window/main.tsx` |
@@ -1982,7 +1982,7 @@ Red to green, as plan-115: after the names of T1, T7, T15 and T16 everything com
 - **T3.** `ends`: local commit. Fixture: `ProgramRunner` with real `counter`. Scenario p22. Other: p14, p25, p35, p69. Criteria c2, c3.
 - **T4.** `ends`: local commit. Fixture: `answerFrame` with a fake `admit`. Scenario p26, p23. Other: p15, p42, p43, p67. Criterion c2.
 - **T5.** `ends`: local commit. Fixture: `sshsig` vectors made by real `ssh-keygen`, saved in `fixtures/next/` by the first exam PR, so the owner reads them ([answered 2026-11-02](./tier-1.md#open-questions); the test writer only adds `*.test.ts`). Scenario p27. Other: p29 (needs T6 to run). Strict Mode goes on here, with tea 0.23.0's `useRuntime`, whose `send` runs the Effect inside tea, so no window file joins the exam's edge list; [experiment 213](../../experiments/213-tea-react-select.md) ran it on the Effect engine under Strict Mode and the Compiler, 400 of 400 trials, sure 90%. *Changed 2026-11-05: this once put a stand-in hook in `window/use-model.ts`, with `Effect.runFork` on the edge list.* Spike first: does a non-extractable Ed25519 `CryptoKey` survive reload in IndexedDB in Chromium, on 127.0.0.1? *Done 2026-11-05, P3: yes, over a reload and a browser restart, in Chromium 156 ([experiment 215](../../experiments/215-browser-key-survives-reload.md)). The key belongs to the exact origin, port included, so the person's brain listens on one fixed port.*
-- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the stage. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new stage, on the base,** so caps are set from numbers. `build.ts` moves from esbuild to Rolldown ([experiment 195](../../experiments/195-oxc-toolchain.md); a lean at 85% until the owner made Rolldown `next/`'s one bundler on 2026-11-05, so the exam's `deps.test.ts` moves to Rolldown and `esbuild` leaves `next/apps/fabrika/package.json` in the test writer's commit of this task's pull request, P12, which the builder does not write), and runs the React Compiler on `.tsx` files only, through oxc's native port, `oxc-transform-react`, in a Rolldown plugin, with its purity check on. No Babel (owner, 2026-11-02). The build owns the check: one step compiles a file and returns its findings, and any finding fails the build, with no setting ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), decided 2026-11-03). The PR body gives the window bundle's build time with and without it.
+- **T6.** `ends`: PR A. Fixture: whole tree, two Chromium contexts, real `dev.ts`. Scenario p17 on the instance. Other: p24, p32, p29. Criteria c4, c5, c6, c7. **First step: measure 4 runs of the bar on the new instance, on the base,** so caps are set from numbers. `build.ts` moves from esbuild to Rolldown ([experiment 195](../../experiments/195-oxc-toolchain.md); a lean at 85% until the owner made Rolldown `next/`'s one bundler on 2026-11-05, so the exam's `deps.test.ts` moves to Rolldown and `esbuild` leaves `next/apps/fabrika/package.json` in the test writer's commit of this task's pull request, P12, which the builder does not write), and runs the React Compiler on `.tsx` files only, through oxc's native port, `oxc-transform-react`, in a Rolldown plugin, with its purity check on. No Babel (owner, 2026-11-02). The build owns the check: one step compiles a file and returns its findings, and any finding fails the build, with no setting ([the note](../direction/react-compiler.md#how-the-build-runs-the-compiler), decided 2026-11-03). The PR body gives the window bundle's build time with and without it.
 
 ### PR B
 
@@ -2005,7 +2005,7 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 - **T18.** `ends`: local commit. Scenario p57. Other: p58's window half. Criterion c14.
 - **T20.** `ends`: local commit. First commit: the copied files, unchanged, each with its comment. Scenario p61. Other: p62, p57's reading half. Criterion c16.
 - **T21.** `ends`: local commit. Fixture: the bridge against real `dev.ts`, with the SDK's own client. Scenario p63. Other: p64. Spike first: does Claude Code list the tools through `fabrika mcp --as claude` while waiting for Approve. Criterion c17.
-- **T19.** Scenario p58, p59. Criteria c9, c15. `ends`: PR D. Spike first: open the tile on the owner's phone, on the deployed stage, with the content security policy on. If its browser does not keep the key, tell the owner. The owner reads `alchemy plan` and says yes before the deploy that makes notes real, and an agent starts the app, and the owner clicks.
+- **T19.** Scenario p58, p59. Criteria c9, c15. `ends`: PR D. Spike first: open the tile on the owner's phone, on the deployed instance, with the content security policy on. If its browser does not keep the key, tell the owner. The owner reads `alchemy plan` and says yes before the deploy that makes notes real, and an agent starts the app, and the owner clicks.
 
 ### PR D2
 
@@ -2015,20 +2015,20 @@ Before it, a small exam PR. See [The exam PR](#the-exam-pr-not-in-this-plan).
 
 - **T12.** Scenario p34. Other: p36, p90. Criterion c11.
 - **T13.** Scenario p35's live half, p37, p38, p60, p91.
-- **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the stage is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
+- **T14.** Scenario p39, p41's chaos step. The owner reads `alchemy plan --stage drill` and says yes before the cloud run, and the instance is removed after it. The drill dials on PR D's `mcp/client.ts`, with its own key, and comes in by the same door. Criteria c9, c12. `ends`: PR E.
 
 ## Properties
 
-All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the real brain under `dev.ts`, over the wire. **p1 to p24 are plan-115's, unchanged in meaning,** and the test writer copies their full wording from it. There is no p40. The only changes:
+All have `tool: "test"`. Runtime: **node** is vitest on Node, **instance** is the real brain under `dev.ts`, over the wire. **p1 to p24 are plan-115's, unchanged in meaning,** and the test writer copies their full wording from it. There is no p40. The only changes:
 
 - **p6 and p7 wait for Tier 2.** They test the desk program, and T0 deletes it (biggest call 20), so they could not run here. They return with the desk. My call, since it follows from the owner's. *This plan once listed them under T1, which was wrong.*
 - **p4** reads the fixed layout: every pid in `tilesIn(layout)` is opened once per dial, and a new dial starts over. **p9** runs on `counter` and `notes`, and on `chaos` once it exists, not on `desk`.
 - **p5** adds: `waiting_grant` is not stuck. A `client.granted` moves it. A timer does not leave it. Plant: `client.granted` ignored.
-- **p10 to p15, p17** run on `stage`, not Miniflare. **p15** adds the checks of p26.
+- **p10 to p15, p17** run on `instance`, not Miniflare. **p15** adds the checks of p26.
 - **p17's bar is measured new** (T6). The old table's start numbers came from raw Miniflare. Known so far: restart 292 to 539 ms, first answer 1.2 to 1.4 s (exp 171). Same rule: base and head in one sitting, the laptop blocks, CI only prints.
 - **p18 and p20 are restated for a wait that answers at once** (P6, 2026-11-07, building the owner's call of 2026-11-02 that a wait is data). p18: a wait with news already there is `ready` with the stream's newest rev; a wait with none parks, and the first append to that stream past its `after` rings it once; an append to another stream, a resend or a refused line rings nothing. p20: a wait leaves nothing running, so `Effect.runSync` of a parking wait answers `parked`; and `LedgerError` gains `storage`, for a SQLite throw such as `SQLITE_FULL`. *p20 said: an interrupted wait ends and leaves no bell.*
 - **p10 and p18 refuse an id reused with another body** (owner, 2026-11-07). The same `(stream, id)` with another `by`, `for`, `parent`, `traceId`, `_tag` or `body` is `refused id_reused`, and nothing is written; `sentAt`, `seen` and `build` may differ on a resend. *They said: one line, the same answer, the first body kept, which dropped the second body with no trace.*
-- **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the stage, in P12.
+- **p21 moves to P9** (P6's plan, 2026-11-07). It tests `Mailbox`, `ProcessManager` and `CoordinationLayer`, which P9 builds. p10 to p13 stay with the instance, in P12.
 - **p21 is restated for P6's `append`** (P9, 2026-11-07). `send` writes one `{_tag: "send", body: {m}}` on `<to>/inbox` and answers P6's `Appended` as it is, `pos` included, so plan-115's extra read is gone; a resend gets its first placing. `receive` gives `Letter`s past `after` in rev order, every field from the entry, past one page; another `_tag` is skipped and stays in the log; a `send` with no `m` fails the Stream with `bad_row`. `start` writes one `started {program, hash}` per build under the hash; the same build again is its first placing, or `id_reused` from another input, and writes nothing. No Layer fails at build. Plants: a placing from the wrong line; a new id on each start; `for`, `parent` or `traceId` dropped from a Letter; an unknown tag that ends the Stream.
 - **p21's start rule is replaced** (P33, 2026-11-08, by an exam amendment in its test writer's commit). Each start is a new process with a new ID, and a retry of the same start request gets its first answer; P9's one `started {program, hash}` per build hash is gone, so starting the same build twice is two processes. `Mailbox.send` also answers `refused forbidden` for an inbox or id only the brain writes. The rest of p21 stands. *It said: one `started` per build under the hash; the same build again is its first placing.*
 - **p28 is widened** (owner, 2026-11-06, built by P9): equal device roots, the grant tree, one live sheet, the limits. Its full list is in [P9's row](./tier-1.md#the-pull-requests-one-at-a-time) and P9's tests, fast-check, seed 119120. Added plants: a dropped device whose tabs stay; a dropped device that takes another with it; a spent sheet used twice; two live sheets; an agent's approve accepted; a revoked key let back in by a new grant.
@@ -2050,7 +2050,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Why: rules checked on every hello. Plants: last fact wins for revoke; second `founded` accepted; `denied` blocks a later grant.
 - *Widened 2026-11-06 (owner: every device the person owns is a master):* any device's key may let in or remove any other device. The person's own devices are equal roots: a device never hangs under another, so dropping one device never drops another. Only tabs and agents hang under the device that let them in, and drop with it, folded from the ledger. A sheet belongs to the person: removing a device leaves the live sheet alone. `added` lets in what `Adds` says; a recovery key lets in one new device, once, and is then spent; making a new sheet spends the old one, so one sheet is live. An agent's key never approves or removes, and a browser tab's does not either (lean 70%, the brief's question 19). Plants: a dropped device whose tabs stay; a dropped device that takes another device with it; a removed device that spends the sheet; a spent sheet used twice; two live sheets; an agent's approve accepted.
 
-**p29, the first grant, real browser.** `new`, stage. s4, s3. e2e.
+**p29, the first grant, real browser.** `new`, instance. s4, s3. e2e.
 - A fresh tab shows the waiting screen with its code and fingerprint. `node next/apps/fabrika/grant.ts client` with a throwaway key brings it online without a reload. A reload needs no new grant, and the fingerprint stays. Two tabs of one profile are both online, with one `by`. Those two tabs show one code. A grant from another key leaves it waiting. Revoke closes the socket and shows "This window was removed", and Ask again makes a new key and a new wait.
 - Why: T5's flow, whole. Plants, once by hand on a temp copy: `client.granted` not sent; key made anew on reload.
 
@@ -2058,7 +2058,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - One suite on each Layer: `publicKey` is stable, `sign` verifies with `checkHello`, `cannot` is as W5 says, `Screen.resized` fires. Bundling `window/machine.ts`, `desktop/*`, `transport/*` for a browser with no Node or Electron shim passes, like today's `lint:browser`. The private key cannot be read: `exportKey` fails in a tab, and the page has no way to get it in Electron.
 - Plants: an extractable key; `node:fs` in the core.
 
-**p31, the demo.** `new`, real Electron, real Chromium, stage. s5, s3.
+**p31, the demo.** `new`, real Electron, real Chromium, instance. s5, s3.
 - The window is online from founding, and the tab comes in through the menu bar. Press in the window, the tab shows it, and the other way. Quit and reopen Electron: same key, no grant. Kill the brain: both show it, both come back, a press made while lost lands once. In the page, `process` and `require` are undefined, and navigation to another origin is blocked. The key file on disk does not contain the private key in the clear.
 - Plants, by hand: `safeStorage` skipped; preload signs anything.
 
@@ -2080,7 +2080,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Over any letters: repeats by id count in `doubled`, missing `pos` in `gaps`, and a clean stream gives zeros.
 - Plants: `gaps` counted from zero; `doubled` by rev.
 
-**p37, chaos answers to identity.** `new`, stage. s4, s7.
+**p37, chaos answers to identity.** `new`, instance. s4, s7.
 - An unknown key gets nothing, on any Msg. A revoked key stops at once. A forged `by` in params is dropped.
 - Plants: guard only on `start`; `by` read from params.
 
@@ -2088,7 +2088,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Its bytes hold no `chaos` program, no `abort(` method, no `Nemesis` fire path. Its counter demo still passes p17's first step, and a note saved on it reads back.
 - Plants: an abort method left in.
 
-**p39, a real run.** `new`, stage, and read on cloud. s7, s3.
+**p39, a real run.** `new`, instance, and read on cloud. s7, s3.
 - With a fixed seed, on a throwaway ledger, a driver presses in two real windows and saves notes in both while the run fires. At the end: every press a window got an `ok` for is there once, `doubled` 0, `gaps` 0, the counter's count equals presses, both windows online. The verdict shows on screen. Each fault named has its asked and did.
 - **Chaos never loses a saved version.** Every save a window got an `ok` for is in the log once, its text byte for byte, and a fresh fold shows the last one as the note. A save with no `ok` is either there once or still on that window's screen, never neither. A stale refusal under faults writes nothing.
 - The drill: `kill_brain` and `hang_brain` on local, and their results land as letters.
@@ -2096,8 +2096,8 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Honest: a failure here may be a real bug, and goes to the owner as a finding, not to be smoothed over.
 
 **p41, the cloud smoke.** A run, not in CI. s6.
-- On a stage the owner deployed: an agent starts the app, and the owner clicks. A tab in a browser that is not the default comes in by Approve, and the default browser by the one-time link. Tab and window, press both ways. Record first answer, press to count, reconnect, cold wake, isolate cold load. Every number goes to `field/` and the PR.
-- Its chaos step waits for chaos to exist, so it runs at T14, not T11: a short run on the `drill` stage ends green, with the same `check`, and the stage is removed after it. By then `cloud` holds real notes, so chaos does not run there.
+- On an instance the owner deployed: an agent starts the app, and the owner clicks. A tab in a browser that is not the default comes in by Approve, and the default browser by the one-time link. Tab and window, press both ways. Record first answer, press to count, reconnect, cold wake, isolate cold load. Every number goes to `field/` and the PR.
+- Its chaos step waits for chaos to exist, so it runs at T14, not T11: a short run on the `drill` instance ends green, with the same `check`, and the instance is removed after it. By then `cloud` holds real notes, so chaos does not run there.
 
 **p42, the facts.** `new`, node. s2, s7.
 - A `granted` fact holds text and signature that re-verify alone, and its text holds `as` and all of `saw`, `check` and `has` included. A `denied` fact holds `saw`, and `by` from the checked key. A hello fact holds `platform`, `has`, code hash, `sentAt`. `by` is never from params. A saved fact holds `_tag` and folds back through `MemberFact`; a line with a tag the fold does not know is skipped and kept.
@@ -2119,7 +2119,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - An empty home shows one name field and Start, from a local file. Start gives `founded {name, keys, window}`, and the window comes online with no approve and no prompt. Reopen: no founding screen, same keys, no second `founded`. With data there and a key that will not open: plain words, and no new key is made.
 - Plants: founding screen shown over data; a new key made on a failed open.
 
-**p47, the approval flow.** `new`, real Electron, real Chromium, stage, test `PersonCheck`. s8, s4.
+**p47, the approval flow.** `new`, real Electron, real Chromium, instance, test `PersonCheck`. s8, s4.
 - A tab typed by hand shows a code. The panel shows a row with the same code, Deny and Approve. The panel's own address is a local file. Enter does nothing, and nothing has focus on Approve. Approve with the check at yes: one `granted` fact, and the tab is online with no reload. With the check at no: no fact, and the row stays. Deny: one `denied` fact, and the tab says so, and Ask again gives a new row.
 - Plants, by hand: Enter approves; panel loaded from the brain.
 
@@ -2127,16 +2127,16 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Open starts the brain. Kill the app with `kill -9`: the brain lives, a granted tab's counter keeps working, and a new tab shows a code and waits. Reopen: the app finds the running brain and the row appears, and Approve works. Quit: the brain and its workerd are gone, and no plist is left loaded. CI runs the same steps on the test `BrainService` only, and the PR says so. With `childBrain`, the crash step is dropped and the law says so.
 - Plants, by hand: Quit leaves the brain; the app starts a second brain.
 
-**p49, the one-time link.** `new`. Pure half on node, live half on stage. s8.
+**p49, the one-time link.** `new`. Pure half on node, live half on instance. s8.
 - Pure, over any Msgs: a pass is used once, and 60 seconds on it is dead. Each makes a normal row. A row with a live pass signs with no `check` Cmd, `how: "link"`, `check: "none"`. Only `open_browser` makes a pass.
 - Live: the click opens the tab, it comes online with no row to click, the address no longer shows the secret, and a request log holds no secret in any URL. The same link used again shows a code. The list of brain methods and bridge calls holds nothing that makes a link.
 - Plants: a pass used twice; no time limit; secret in the query string.
 
-**p50, the window in React.** `new`, real Chromium, stage. s3, s5. `window/main.tsx`.
+**p50, the window in React.** `new`, real Chromium, instance. s3, s5. `window/main.tsx`.
 - Under Strict Mode: a patch to one of 16 tiles renders one tile. A folded tile keeps its state across a fold and unfold, sees no work while hidden, and is fresh when shown. Focus comes back from the model on reveal. The hook works with no DOM, by `renderToStaticMarkup`.
 - Plants: no `memo`; a tile that unmounts on fold; no third argument to the hook.
 
-**p51, Remove.** `new`. Pure half on node, pbt; live half on real Electron, real Chromium, stage, test `PersonCheck`. s10, s4. `desktop/menu.ts`, door.
+**p51, Remove.** `new`. Pure half on node, pbt; live half on real Electron, real Chromium, instance, test `PersonCheck`. s10, s4. `desktop/menu.ts`, door.
 - Pure, over any Msgs: `sign_revoked` comes only after `checked` for that key and that act. `not_checked` makes no Cmd. `enter` makes no Cmd. A client with `own` has no Remove in `menuView`. What was shown at the click is what gets signed.
 - Live: a let-in tab is in the panel's list. Remove with the check at yes: one `revoked` fact, its signed text holding `saw`, and the tab closes with 4003, then shows "This window was removed". It is gone from the list. With the check at no: no fact. A `revoked` signed by a window key is refused. An approve and a remove in flight for two keys do not cross.
 - Why: a mix-up here removes the wrong window. Plants: remove without the check; `own` shown with Remove; a revoke signed by a window key accepted; the act not kept, so a remove signs a grant.
@@ -2158,7 +2158,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - From the letters alone, with no other input: the list and each note's latest text come out the same, however many times it folds. `history` gives every version in order, with `by`, `arrivedAt`, `sentAt`. The fold never calls `refuse`. A saved letter from `fixtures/next/`, made by PR D's first code, folds forever, so a later change that breaks old letters fails here.
 - Plants: a fold that re-checks `base`; a list order from anything but the log; a letter skipped when its shape is unknown.
 
-**p56, a restart loses no saved text.** `new`, stage. s9, s3.
+**p56, a restart loses no saved text.** `new`, instance. s9, s3.
 - Save notes over the wire, kill the brain with `kill -9`, start it on the same folder: the list and every version read back byte for byte. Text with new lines, emoji and a right-to-left line comes back whole. A save made while the brain is down stays on the screen, and lands once when it is back.
 - Plants: a model kept only in memory; a body trimmed on save.
 
@@ -2166,17 +2166,17 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Over any Msgs: there is never a second save in flight for a note. A draft is never replaced by a view update, and only "Drop mine" clears it. A note opens as `reading`. `reading` follows a newer version. `e` gives `editing`, with the saved text as the draft. Done with a change saves and then reads; Done with none writes nothing. Reading can never send a save. Stale, too long and no link all keep the draft. `saving` resends with the same id. "Keep mine" sends a new note id, `base: 0`, `how: "kept"`, and `from` naming the note and its `base`. "Saved" shows only after an ok.
 - Plants: a draft overwritten by a patch; a new id on resend; a second save sent early; "Saved" shown at send.
 
-**p58, the demo, real windows.** `new`, real Electron, real Chromium, stage, and read on cloud. s9, s5.
+**p58, the demo, real windows.** `new`, real Electron, real Chromium, instance, and read on cloud. s9, s5.
 - An agent saves a doc through `notes_save`, and it shows drawn in the other window and the tab, with no button pressed. The owner presses `e`, changes a word and saves: it goes back to drawn, and the other window follows. The agent's next save on the old `base` is refused in words, and nothing is written. Its next save, after a read, lands. History names the agent, who it works for, and the owner. Two windows on version 3, both typing: one is refused, its text stays on screen, and nothing changes in the log. "Keep mine as a new note" gives a note with that text, and the first note keeps the other's. Leave a note right after typing: it saves. The empty state, the read failure and history each show as the table says. No button does nothing.
-- On a deployed stage, an agent starts the app, and the owner clicks: a phone tab comes in by Approve, and the agent's doc shows there drawn, and an edit there shows on the Mac. Record press to show, cold wake and the wake at the real letter count. Every number goes to `field/` and the PR.
+- On a deployed instance, an agent starts the app, and the owner clicks: a phone tab comes in by Approve, and the agent's doc shows there drawn, and an edit there shows on the Mac. Record press to show, cold wake and the wake at the real letter count. Every number goes to `field/` and the PR.
 - Plants, by hand: the view not sent to other watchers; "Keep mine" overwriting.
 
-**p59, which stage it dials.** `new`, real Electron, temp home. s9, s6.
-- No `stage.json`: the app dials local and starts the brain. `{_tag: "cloud", url}`: it dials that url and starts no brain, and Quit stops nothing. `--url` wins for one run and writes nothing. A file that does not parse gives plain words and no guess. The panel and the tile name the stage. A `drill` deploy's step leaves the file as it was.
+**p59, which instance it dials.** `new`, real Electron, temp home. s9, s6.
+- No `instance.json`: the app dials local and starts the brain. `{_tag: "cloud", url}`: it dials that url and starts no brain, and Quit stops nothing. `--url` wins for one run and writes nothing. A file that does not parse gives plain words and no guess. The panel and the tile name the instance. A `drill` deploy's step leaves the file as it was.
 - Plants: a bad file read as local; a brain started on `cloud`; `--url` written to the file.
 
-**p60, chaos and the real ledger.** `new`, node, plus a stage run. s9, s7. `chaosFrom`, `build.ts`, `alchemy.run.ts`.
-- No flag on any stage gives off, and off's bytes pass p38. `--chaos=throwaway` gives a fresh `throwaway-` ledger and a temp folder, never the app's home, and is refused on `cloud`. `--chaos=real:<name>` with any other name stops the start, and is refused off `cloud`. On a throwaway ledger the run works, and the app's home is the same, byte for byte, afterward. The real-ledger tile shows its red line.
+**p60, chaos and the real ledger.** `new`, node, plus an instance run. s9, s7. `chaosFrom`, `build.ts`, `alchemy.run.ts`.
+- No flag on any instance gives off, and off's bytes pass p38. `--chaos=throwaway` gives a fresh `throwaway-` ledger and a temp folder, never the app's home, and is refused on `cloud`. `--chaos=real:<name>` with any other name stops the start, and is refused off `cloud`. On a throwaway ledger the run works, and the app's home is the same, byte for byte, afterward. The real-ledger tile shows its red line.
 - Plants: off as a runtime check; throwaway reusing the given folder; a wrong name accepted.
 
 **p61, drawing is safe (scenario of T20).** `new`, node, ported from today's `markdown.test.ts` and `highlight.test.ts` by the test writer, plus what applies of `index.laws.test.ts`. s9. `programs/notes/root.ts`, `drawn.tsx`, `highlight.ts`.
@@ -2184,9 +2184,9 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - The same text gives the same blocks, and no fact holds a block. The box's bundle of `@kampus/notes` holds no `micromark`, `mdast`, `@pierre`, React or tuval.
 - Why: agent-written text is drawn in a real tab. Plants: `dangerouslySetInnerHTML`; `javascript:` kept; an `<img>` drawn; code through `codeToHtml`; `root.ts` imported in `program.ts`.
 
-**p62, the page's policy.** `new`, real Chromium, real Electron, stage, and read on cloud. s9, s5. `brain.ts`, `window/page.ts`.
-- On both stages, the page's header is the one policy. Under it: the page runs, the socket connects, `style.css` applies, a code block takes its colors, and an inline script in a note does not run. With WebAssembly blocked, code stays plain and nothing else breaks. `/highlight.js` is not fetched until a block with a language opens. Both script sizes are printed, and block nothing. Every `var(--x)` in `style.css` has a definition in it, since an unknown one fails silently.
-- Why: a law, not a hope, for what the copies need and what agent text must not do. Plants, by hand: no `'wasm-unsafe-eval'`; policy on one stage only; the highlighter in the first script; a `var(--ink)` left in.
+**p62, the page's policy.** `new`, real Chromium, real Electron, instance, and read on cloud. s9, s5. `brain.ts`, `window/page.ts`.
+- On both instances, the page's header is the one policy. Under it: the page runs, the socket connects, `style.css` applies, a code block takes its colors, and an inline script in a note does not run. With WebAssembly blocked, code stays plain and nothing else breaks. `/highlight.js` is not fetched until a block with a language opens. Both script sizes are printed, and block nothing. Every `var(--x)` in `style.css` has a definition in it, since an unknown one fails silently.
+- Why: a law, not a hope, for what the copies need and what agent text must not do. Plants, by hand: no `'wasm-unsafe-eval'`; policy on one instance only; the highlighter in the first script; a `var(--ink)` left in.
 
 **p63, an agent through MCP (scenario of T21).** `new`, node with the SDK's own client, and real `dev.ts`; ported where it applies from `agents.test.ts`. s11, s9. `mcp/tools.ts`, `mcp/serve.ts`, `mcp/drive.ts`, `mcp/client.ts`.
 - Tools are one per input, from its schema: `ps` first, `notes_list` and `notes_read` read-only, `notes_save` not. An input with `personOnly` has no tool, and a call to it is refused as an unknown tool. A value that does not fit is refused in words. No tool name holds grant, approve, remove, or chaos.
@@ -2246,7 +2246,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - C5's owed check: each of the above against OTP's own documentation, since experiment 99 came before experiment 107. *Done 2026-11-09: [experiment 239](../../experiments/239-supervision-vs-otp.md).*
 - Plants: a `DOWN` with no `to`; a monitor on a gone process that waits forever; `demonitor` leaving a `DOWN` behind; a name reused; a stale `DOWN` delivered to a new process.
 
-**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the stage. s3, s9. `runtime/Runner.ts`. *Added 2026-11-06 (owner).*
+**p80, a crash is not a refusal (scenario of P34; replaces p25's wake rule).** `new`, node and the instance. s3, s9. `runtime/Runner.ts`. *Added 2026-11-06 (owner).*
 - A fresh letter whose step throws gets no line; it is counted per letter id in the process's own storage. At its delivery limit, 3 by default, it moves to `<pid>/dead` with `dead {process, program, name, tries, limit, m, build, errors}`, and its sender gets `{why: "dead"}`, so the outbox stops resending. `errors` holds each throw's error class, one per try; the message goes only to the trace, where a person can delete it, since a message can quote a note (owner, 2026-11-07).
 - Owner decided 2026-11-08, ticket 319: one dead-letter stream per process start. The runner supplies `DeadInput`; `ProcessManager.dead` decodes it and fills `process`, `program` and `name` from the parent-checked historical life inside the write transaction. Caller identity is dropped. After replacement or storage reopen, a repeat keeps the same entry. Both schemas require one error class per try.
 - A process that crashes N times in T seconds goes `down {why, crashes, until}`, with backoff, and a resend does not wake it. `until` is when it tries again, on the referee's clock (owner, 2026-11-07). `[Restart]` exits it and starts it with the new `init`.
@@ -2254,7 +2254,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Plants: a try past the delivery limit; a poison letter that blocks the rest of the inbox; a saved letter moved to dead; a `down` process woken by a resend; a `dead` fact with fewer error classes than tries; a message in `errors`; a missing `process`, `program` or `name`; caller or successor identity on a historical process's dead letter; a `down` with no `until`, or one it does not wake at.
 - *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):* the restart half follows OTP's top-level supervisor. Inside intensity a crashed name restarts at once, with no backoff. Past intensity the root stops its children and itself, and the name is `failed`: written to the log, raised to the person as an ask, and started again only by a person's `[Restart]`. There is no `until` and no retry on a clock, so the `down {until}` bullet and its "one it does not wake at" plant above go. The dead-letter half is unchanged. P34c rewrites this law's restart bullets.
 
-**p81, the brain comes back (scenario of P12 and P19).** `new`, stage and real Electron. s3, s8. `dev.ts`, the launchd plist.
+**p81, the brain comes back (scenario of P12 and P19).** `new`, instance and real Electron. s3, s8. `dev.ts`, the launchd plist.
 - Under `dev.ts`: workerd killed with `kill -9` mid-burst comes back alone, with a start fact naming its build, and nothing acked is lost (with p13). A brain that dies in a loop stops at the brake, and says so. At the 500 MB mark it restarts.
 - Under launchd: the brain killed with `kill -9` comes back, and both windows come back to it. A clean Quit does not restart it.
 - Plants: a restart with no backoff; a restart after a clean exit; no start fact.
@@ -2275,12 +2275,12 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 - Each machine's laws files call `syncTest(`, or one of them says `// sync test left out: <why>` with a reason. The scan reads text; the helper lands in libfabrika's test kit in P11, until tea ships one.
 - Plants: laws with no sync test and no reason; a reason left empty. The sync test in a second laws file passes.
 
-**p90, a revoke stops a client at the door (scenario of P17).** `new`, stage, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
+**p90, a revoke stops a client at the door (scenario of P17).** `new`, instance, on a throwaway ledger. s4, s7. door, `ClientManager`. *New 2026-11-07 (owner).*
 - Checks: once a key's `revoked` fact lands, the brain refuses every write from that key, so nothing more from it reaches the ledger, even from a client still running old code.
 - The test: a seeded chaos run with a test client writing to the target. At a step the seed picks, the drill signs a `revoked` for that client's key with a key in `founded.keys`, as `grant.ts revoke` does. The client then plays old code: it ignores the 4003 close, keeps sending, and dials again with its old hello. Every later write is refused with its reason (`{why: "not_granted"}` at the hello, since `admitted` folds a revoked key out), and the ledger holds no letter `by` that key with an `arrivedAt` after the `revoked` fact's `arrivedAt`. The same seed gives the same step.
 - Why: a stop that relies on the client hearing a message fails on the client that matters most, the one that is stuck or old. Plants: the guard only at the hello, so an open socket keeps writing; the revoke read from a cached member list; a revoke that closes the socket and nothing more.
 
-**p91, nothing is lost (scenario of P27).** `new`, stage, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
+**p91, nothing is lost (scenario of P27).** `new`, instance, on a throwaway ledger. s7, s3. `check`, the JobRecord, `spans.read`. *New 2026-11-07 (owner): "nothing is lost" is a Tier 1 goal, and chaos is one of the most important programs.*
 - Checks: for every fault a seeded run fires, the record answers four questions from the ledger and the JobRecord alone: what broke, when, why, and how it recovered. "What" is the fault's target and the process or client it hit. "When" is the `tick` and the `did`'s `arrivedAt`. "Why" is the `did`'s `ok` or `why`, the span's error class, and any `dead`, `down` or failed Cmd's `why`. "How it recovered" is the `restarted`, the `down`'s `until` and the wake after it, or a client's next `gateway/hellos`. A fault that leaves any of the four blank fails the run.
 - The test reads only what is kept: no stderr, no Workers Logs, no Cloudflare trace. The same seed gives the same faults, and the answers are compared per fault.
 - Why: a fault nobody can explain after the fact teaches nothing, and a missing fact cannot be added to entries already written. Plants: `dead` with no error classes; `down` with no `until`; a failed Cmd dropped with no letter; a process's spans written to the raw health rows, which are pruned; a fault whose `did` never lands.
@@ -2360,16 +2360,16 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **stage** is the r
 
 ## Criteria
 
-- **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the stage.
+- **c1 to c6:** plan-115's, with oxlint in place of Biome, and c5's README also naming the instance.
 - **c7, T6, T20, T21.** Styling is what the styling section says: the colors, tokens and Manti mapping come from `@kampus/fabrika-design`, the copied rules match the named commit, and the meaning rule holds. From PR D the same read covers the other copies: each copied file has a comment naming its source path and commit, and nothing else was copied. Read: `style.css`, the copies, and shots. s5.
 - **c8, T7.** Core has no platform name; `entry/browser.tsx` and `entry/electron.tsx` are three lines; `window/main.tsx` has no socket code of its own. Read: the diff. s5.
 - **c9, T9, T14, T19.** PR carries real shots in five layouts, says what looks broken, and answers Linear's question per screen. Read: the PR body. s5, s7.
 - **c10, T11.** A run log: plan read, yes given, deploy, p41's numbers, dollars. The repo holds no account name or key. Read: `field/`, a grep. s6.
-- **c11, T12.** The chaos tile has no dead button; each fault shown can really fire on that stage. Read: the running tile. s7.
+- **c11, T12.** The chaos tile has no dead button; each fault shown can really fire on that instance. Read: the running tile. s7.
 - **c12, T14.** README teaches a run in one page, including how to read an old run back, how a run stays on a throwaway ledger, and how a person aims at real notes on purpose. s7.
 - **c13, T9.** README and PR B's body say once, in one plain sentence, that this tier does not defend against a person's own agents. The owner opens the built app twice and sees no prompt on opening. Read: the README, and the owner's word in `field/`. s8.
 - **c14, T18, T20.** The notes tile looks finished: no stub, no dead button, and empty, reading, editing, saving, no link, stale, too long, read failure and history are each real, in the meaning colors. Its style follows the styling section. Read: the running tile, and shots. s9.
-- **c15, T19.** README says where real notes live, what `stage.json` does, and how to go back. The PR says what's not in Tier 1. The cloud ledger has `RemovalPolicy.retain()`. The owner's first use, with an agent writing real docs, is logged in `field/`, whichever way it goes. Read: the README, the stack, `field/`. s9.
+- **c15, T19.** README says where real notes live, what `instance.json` does, and how to go back. The PR says what's not in Tier 1. The cloud ledger has `RemovalPolicy.retain()`. The owner's first use, with an agent writing real docs, is logged in `field/`, whichever way it goes. Read: the README, the stack, `field/`. s9.
 - **c16, T20.** A fresh real doc, long and with code and tables, reads well in one tile and at phone width. The PR says what the copies carried over and what was left behind, and what `q` became. Read: the running tile, the PR. s9.
 - **c17, T21.** README teaches `claude mcp add` in one page, including Approve once per name and what an agent cannot do. The PR says what moved up from Tier 5 and what stayed. Read: the README, the PR. s11.
 
@@ -2418,7 +2418,7 @@ An agent that is not the builder writes it. The owner reads it. It lands first, 
 
 **Dropped:**
 
-- "Behavior does not change." Hello, grant, client names, stage and style all change, on purpose.
+- "Behavior does not change." Hello, grant, client names, instance and style all change, on purpose.
 - Biome rules. They become oxlint JS plugin rules.
 - Raw Miniflare in `brain-host.ts` and `unsafeDirectSockets`.
 - The old speed caps' start numbers.
@@ -2536,12 +2536,12 @@ Plan-115's list stands, with these added:
 2. **What a test writer does with a Property that needs a person.** p41's deploy needs a yes, the real finger needs the owner, and only the owner can say no prompt appeared. Resolved: a test `PersonCheck` in the laws, and a run recorded in `field/` for the rest.
 3. **Rethink against "copy the styles".** A named exception has no marker a check could read. Resolved: a comment naming source and commit, read at c7.
 4. **A law on an outside tool.** `sshsig` vectors come from `ssh-keygen` once and are saved; p29 runs it live. The notes do not say which is right. Both, here.
-5. **Tests that hold a port across a stage.** Exp 171 says one process cannot reuse a port. Resolved: tests spawn `dev.ts`.
+5. **Tests that hold a port across an instance.** Exp 171 says one process cannot reuse a port. Resolved: tests spawn `dev.ts`.
 6. **Where a chaos finding goes.** It may be a real bug in another layer, in the middle of PR E. Resolved: a finding goes to the owner and `field/`; the builder does not fix it in place unless it is in the task's files.
 7. **A law that needs the laptop's own service manager.** p48 runs real launchd, and CI has none. Resolved: laptop only, the PR says so, and CI runs the steps on the test `BrainService`.
 8. **A later check with an end date.** `layers.test.ts` lives until demlik issue 763 lands. No note says who removes it. Resolved: the small exam PR that adopts the new code-graph.
 9. **A plan ahead of the notes.** The plan now differs from notes in `docs/direction/`, and the steps do not say which lands first. Resolved here: PR 269 changed those notes, before PR A, including real notes on the cloud, chaos on a throwaway ledger, and `refuse`.
-10. **When lab data turns real.** `next/` may be rough until a person opens it for real work, and no note says what happens when one job opens first. Notes make one ledger real while the rest stays a lab. Resolved: from PR D the cloud ledger is kept for good, and the laptop stage stays a lab.
+10. **When lab data turns real.** `next/` may be rough until a person opens it for real work, and no note says what happens when one job opens first. Notes make one ledger real while the rest stays a lab. Resolved: from PR D the cloud ledger is kept for good, and the laptop instance stays a lab.
 11. **A later PR changes an earlier law's meaning.** Notes change p22 and narrow p25, both written for PR A. Resolved: a small exam PR before PR D, not a builder's edit. No note says a law's old wording must stay readable.
 12. **"Only this process" when many windows share the process.** The three homes do not say whether state that looks per-process is really per-window. Which note is open looked like the first and is the second. Resolved: the window's machine. The note should ask "does each window want its own?".
 13. **A saved law must also bind to old data.** Every law so far tests code against today's shapes. Real notes need one against yesterday's letters. Resolved: `fixtures/next/` keeps PR D's first letters, which p55 reads forever. No note names this kind of fixture.
@@ -2564,7 +2564,7 @@ Plan-115's list stands, with these added:
 - **Whether a wait parked as data works on Cloudflare,** across a gateway and the project. Experiment 174 saw it in one object, in Miniflare. T11's run shows it on the cloud.
 - **React's memory with many hidden tiles, and all of it on Safari.** The probes covered Chromium, part of Firefox, and toy trees.
 - **What Cloudflare really does to this shape:** isolate cold load, `abort_all`, a redeploy mid-run. All first seen at p41 and p39.
-- **What the stage does to the speed bar.** Alchemy's relay adds little by exp 171's number, but this exact flow has not been measured.
+- **What the instance does to the speed bar.** Alchemy's relay adds little by exp 171's number, but this exact flow has not been measured.
 - **What the copied code carries over.** It was written for a program that showed one text and quit. Its tests come with it, so its bugs may too. Only use and the mutation sample tell.
 - **Whether reading then pressing edit is enough** to adjust what an agent wrote. Use of it will tell. If not, typing in place moves up from Tier 6.
 - **How often a stale save happens, and whether "Keep mine" feels right.** Use tells, as it does for how an agent takes a refusal in words.
@@ -2591,15 +2591,15 @@ The owner approved what Tier 1 builds on 2026-11-01. What is still open is in [t
 - **Backup:** yes, the backup sheet and recovery move up from Tier 3, to right after PR D, as PR D2.
 - **Q1, the PRs with the demo growing in each:** yes, with the menu bar in PR B. Four then, five with notes, and six with the backup. *Changed 2026-11-01: the demo order holds, and the count is the planner's to change.*
 - **Q2, the founder key:** the passphrase key is no longer needed in this tier. The founder's key is the app's person key. What stays is the condition, as a law: opening a let-in tab or Electron window, and reopening after a quit, shows no prompt of any kind. If the Keychain asks on open, the window key moves to WebCrypto, and the plan does not stop. Cost: a lost Mac means a new ledger until PR D2 brings recovery.
-- **Q3, how a new window comes in:** the menu bar's row, Approve and a finger, on both stages. The terminal command is the way in only until PR B brings Approve, and a developer path after that. QR is in Tier 7.
-- **Q4, chaos:** off on the real ledger, on a throwaway ledger by default, and on the real one only by a deploy with its name typed out. The owner settled the rule, and the shape is my call, 85%. This replaces the earlier "on, on both stages": notes are the real work that answer was waiting for.
+- **Q3, how a new window comes in:** the menu bar's row, Approve and a finger, on both instances. The terminal command is the way in only until PR B brings Approve, and a developer path after that. QR is in Tier 7.
+- **Q4, chaos:** off on the real ledger, on a throwaway ledger by default, and on the real one only by a deploy with its name typed out. The owner settled the rule, and the shape is my call, 85%. This replaces the earlier "on, on both instances": notes are the real work that answer was waiting for.
 - **Q5, the address:** Cloudflare's default address for a Worker. My call, 85%.
 - **Q6, the tiers:** seven, in a proposed order under [Later tiers](#later-tiers), not settled, 60% sure on Tiers 3 to 6. The first tile in Tier 2 runs `tracker | ticket`. The shell in `next/` is `fabsh`.
 - **Q7, the first real program:** notes, with the counter as the test. The owner settled what it does and what it leaves out, and that it is dogfooding: agents write, the owner reads and adjusts. Its order among the PRs and its stale screen are my calls, 85% and 80%.
 - **Q10, Markdown:** notes draw it in Tier 1, copied from `programs/markdown` by the owner's named exception. Reading and editing are two views.
 - **Q11, agents:** through MCP, as a headless client let in once per name. Today's MCP work may be copied as [Agents through MCP](#agents-through-mcp) says.
 - **Q8, Remove:** in the menu bar's panel, with the same check as Approve. The full list stays in Tier 3.
-- **Q9, where real notes live:** on the Cloudflare copy once it exists. The laptop stage stays for tests and development. The setting's shape is my call, 75%.
+- **Q9, where real notes live:** on the Cloudflare copy once it exists. The laptop instance stays for tests and development. The setting's shape is my call, 75%.
 - **Q12, the layout:** real packages under `next/`, in one workspace, with real names from day one. Today's two are `-old` and are deleted later, with no rename. Which names sit on which subpath is my call, 80%.
 - **Q13, where Tuval lives:** fabrika is the logic, and Tuval is the projection of it. `@kampus/tuval` holds all client logic and may import the library, never the other way. The app is only wiring and the deploy stack. The desk is a program in Tier 2, and Tier 1 has no desk process.
 - **Q14, hosts:** a host is a place hands can run: a Mac, a VM or a browser profile. Hands and window are jobs, not places. In Tier 1, `Backend` becomes `Host`, the hello's `has` carries each Layer's list, `saw` records it, and the menu bar shows hosts. The hello's `backend` and `Host`'s field becoming `platform` is my call, 80%. Tiers can be restructured, and size never pushes work out of one.

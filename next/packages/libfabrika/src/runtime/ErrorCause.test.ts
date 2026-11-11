@@ -73,6 +73,7 @@ const program = (faults: Faults) => ({
   machine: Machine.make({
     model: Model,
     msg: Msg,
+    cmds: [],
     init: (loaded) => [loaded ?? { count: 0 }, []],
     update: {
       inc: (s) => [(faults.model === undefined ? { count: s.count + 1 } : faults.model) as typeof s, []],
@@ -100,6 +101,7 @@ const seenProgram = (faults: Faults) => ({
   machine: Machine.make({
     model: Seen,
     msg: Msg,
+    cmds: [],
     init: (loaded) => [loaded ?? { count: 0, seen: {} }, []],
     update: {
       inc: (s) => [(faults.model === undefined ? { ...s, count: s.count + 1 } : faults.model) as typeof s, []],
@@ -246,7 +248,7 @@ describe("T695, a declaration that does not load keeps why", () => {
       Effect.gen(function* () {
         const expected = stepper(declared);
         expect(Result.isFailure(expected)).toBe(true);
-        const error = yield* Effect.flip(
+        const error = yield* Effect.flip<unknown, ProgramDown, never>(
           call === "execution"
             ? nodeExecution(declared).init(null)
             : Effect.provide(
@@ -303,7 +305,7 @@ law(
   }),
   ({ site, bad }) =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip(causedAt[site](bad));
+      const error = yield* Effect.flip<unknown, ProgramDown, never>(causedAt[site](bad));
       expect(error).toBeInstanceOf(ProgramDown);
       expect(error.cause, "the site keeps a cause in memory").toBeDefined();
       const before = new ProgramDown({ reason: error.reason }).errorClass;
@@ -361,7 +363,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
           const valueCore = `sntlv${value}`;
           const keyText = `${decor}${keyCore}${decor}`;
           const valueText = `${decor}${valueCore}${decor}`;
-          const error = yield* Effect.flip(feed(call, { [keyText]: valueText }));
+          const error = yield* Effect.flip<unknown, ProgramDown, never>(feed(call, { [keyText]: valueText }));
           expect(error).toBeInstanceOf(ProgramDown);
           const reply = JSON.stringify(executionFailure(error));
 

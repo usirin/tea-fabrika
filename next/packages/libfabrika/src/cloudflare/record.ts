@@ -80,7 +80,7 @@ export const RecordPartLive = RecordPart.make(
           limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
         }),
       ),
-    )(env.STAGE).pipe(
+    )(env.INSTANCE).pipe(
       Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
       Effect.map((config) => config.limits?.recordBytes),
       Effect.cached,

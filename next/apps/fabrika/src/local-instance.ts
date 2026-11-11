@@ -6,7 +6,7 @@ class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-export const localStage = Effect.fn("brain.localStage")(function* (
+export const localInstance = Effect.fn("brain.localInstance")(function* (
   built: Omit<import("./build.ts").Built, "assets">,
   options: Omit<import("./settings.ts").Settings, "build"> & { readonly home: string },
 ) {
@@ -16,7 +16,7 @@ export const localStage = Effect.fn("brain.localStage")(function* (
   // oxlint-disable-next-line fabrika/no-promises -- edge: load Alchemy only after disabling its telemetry
   const { startDev } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
-    try: () => import("./stage.ts"),
+    try: () => import("./instance.ts"),
     catch: (cause) => new BrainError({ reason: "storage", cause }),
   });
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary

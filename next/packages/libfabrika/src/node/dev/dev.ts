@@ -60,7 +60,7 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   };
 });
 
-export const startDev = Effect.fn("brain.stage")(function* <E, R>(
+export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   options: {
     readonly name: string;
     readonly port: number;

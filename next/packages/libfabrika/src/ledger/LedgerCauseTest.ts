@@ -13,6 +13,7 @@ import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { Appended, type Line, lineFor, Waited } from "./Log.ts";
 import { Referee } from "./Referee.ts";
+import * as RefereeSql from "./RefereeSql.ts";
 
 const READER = "connection:t1";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -161,7 +162,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
             Effect.gen(function* () {
               return yield* Referee;
             }),
-            Referee.layer(planted.sql).pipe(Layer.provide(ring)),
+            RefereeSql.layer(planted.sql).pipe(Layer.provide(ring)),
           );
           // The stub bridges to the real referee, as a Durable Object stub does: through a Promise.
           const calls: LedgerCalls = {

@@ -66,7 +66,9 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
     ({ steps, bytes }) =>
       Effect.gen(function* () {
         for (const { method, failure } of steps) {
-          const error = yield* Effect.flip(rejecting(method, failure, call(method, bytes)));
+          const error = yield* Effect.flip(
+            rejecting<unknown, Effect.Error<ReturnType<typeof call>>>(method, failure, call(method, bytes)),
+          );
           expect(error._tag).toBe("WebCryptoError");
           expect((error as { readonly cause?: unknown }).cause).toBe(failure);
         }

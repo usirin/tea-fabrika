@@ -145,7 +145,9 @@ describe("T695, the worker loader keeps why a program did not load", () => {
       Effect.gen(function* () {
         const Box = programBox({ name }, build);
         const box = new Box(undefined as never, undefined as never);
-        const error = yield* Effect.flip(Effect.tryPromise({ try: () => box.describe(), catch: (cause) => cause }));
+        const error = yield* Effect.flip(
+          Effect.tryPromise({ try: () => box.describe(), catch: (cause) => cause as ProgramDown }),
+        );
         expect(error).toBeInstanceOf(ProgramDown);
         expect((error as ProgramDown).reason).toBe("load");
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's failure").toBe(true);
@@ -268,7 +270,11 @@ describe("T695, the object adapters keep what failed", () => {
           kind === "process"
             ? Effect.acquireUseRelease(
                 Effect.sync(() => processRuntime(state, env, {})),
-                (runtime) => Effect.tryPromise({ try: () => runtime.runPromise(Effect.void), catch: (cause) => cause }),
+                (runtime) =>
+                  Effect.tryPromise({
+                    try: () => runtime.runPromise(Effect.void),
+                    catch: (cause) => cause as LedgerError,
+                  }),
                 (runtime) => Effect.promise(() => runtime.dispose()),
               )
             : Effect.scoped(Layer.build(connectionLayer(state, env, config))),

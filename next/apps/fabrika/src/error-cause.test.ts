@@ -1,6 +1,6 @@
 // T695, next/. The app's own wiring keeps the failure it translates (decision 0043 rule 12).
 // Audit sites: `build.ts:34` (finding the `.tsx` files the Compiler checks) and `runtime.ts:15`
-// (the stage's settings). `local-stage.ts:18` and `:24` translate a failed module import, which no
+// (the instance's settings). `local-instance.ts:20` and `:26` translate a failed module import, which no
 // generated input can cause in-process.
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
@@ -30,7 +30,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 );
 
 const valid = {
-  name: "stage",
+  name: "instance",
   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
   founder: "ssh-ed25519 AAAA",
   window: null,
@@ -55,15 +55,15 @@ describe("T695, the app's wiring keeps what failed", () => {
 
   // C3, runtime.ts:15. Plant: `Effect.mapError(() => new LedgerError({ reason: "bad_row" }))`.
   law(
-    "C3: stage settings with a damaged required field fail `bad_row` with the decoder's SchemaError",
+    "C3: instance settings with a damaged required field fail `bad_row` with the decoder's SchemaError",
     fc.record({
       field: fc.constantFrom("name", "person", "founder", "port", "build"),
       bad: fc.oneof(fc.constant(""), fc.constant(0), fc.constant(70_000), fc.boolean()),
     }),
     ({ field, bad }) =>
       Effect.gen(function* () {
-        const stage = JSON.stringify({ ...valid, [field]: bad });
-        const error = yield* Effect.flip(settings({ STAGE: stage } as Env));
+        const instance = JSON.stringify({ ...valid, [field]: bad });
+        const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
       }),
