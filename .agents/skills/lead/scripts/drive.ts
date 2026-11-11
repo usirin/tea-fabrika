@@ -1471,6 +1471,8 @@ export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: 
   join(env.BOXES, `${ask.box}-mutbox`),
   "--lock",
   dockerLock(env),
+  "--plan",
+  ask.plan,
 ];
 
 /** The one Docker box's lock, as mutbox.ts takes it and drive's start check reads it. */
