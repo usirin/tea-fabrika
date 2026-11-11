@@ -227,7 +227,171 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           'import {launchElectron} from "./electron-launch.ts";',
           "declare const page: any, cond: any, items: any[], other: any, url: string, risky: () => void;",
           "const app = await launchElectron({});",
+          "const hnd = await app.browserWindow(page);",
         ];
+        // A function reached through a local name and passed to evaluate takes the kinds an inline callback does.
+        // `owner` receives it; with `withPage` a page's evaluate gets it too, and the owner's kinds win.
+        const ways = (owner: string, withPage: boolean, body: string): string[] => {
+          const out: string[] = [];
+          const go = (x: string, m = "evaluate") => `${owner}.${m}(${x});`;
+          const both = (x: string) => (withPage ? `page.evaluate(${x}); ${go(x)}` : go(x));
+          const add = (make: (f: string, g: string, h: string) => string) => out.push(make(u("f"), u("g"), u("h")));
+          const arrow = (f: string) => `const ${f} = (M) => ${body};`;
+          const decl = (f: string) => `function ${f}(M) { ${body}; }`;
+          // Declaration used after and before; const, let and var holding an arrow or a function expression.
+          add((f) => `${go(f)} ${decl(f)}`);
+          add((f) => `${decl(f)} ${go(f)}`);
+          add((f) => `${arrow(f)} ${go(f)}`);
+          add((f) => `const ${f} = function (M) { ${body}; }; ${go(f)}`);
+          add((f) => `let ${f} = (M) => ${body}; ${go(f)}`);
+          add((f) => `var ${f} = function (M) { ${body}; }; ${go(f)}`);
+          add((f) => `${arrow(f)} ${go(f, "evaluateHandle")}`);
+          // Reassigned bindings, and aliases of each kind.
+          add((_f, g) => `let ${g}: any = () => 0; ${g} = (M) => ${body}; ${go(g)}`);
+          add((f, g) => `${decl(f)} let ${g}: any = () => 0; ${g} = ${f}; ${go(g)}`);
+          add((f, g) => `${arrow(f)} const ${g} = ${f}; ${go(g)}`);
+          add((f, g, h) => `${decl(f)} const ${g} = ${f}; const ${h} = ${g}; ${go(h)}`);
+          add((f, g) => `${arrow(f)} let ${g} = ${f}; ${go(g)}`);
+          add((f, g) => `${arrow(f)} var ${g}: any; ${g} = ${f}; ${go(g)}`);
+
+          // The arms of ?:, ??, || and &&, written in the call or in a binding.
+          for (const arm of [
+            "cond ? F : other",
+            "cond ? other : F",
+            "other ?? F",
+            "other || F",
+            "cond && F",
+            "F ?? other",
+          ]) {
+            add((f) => `${decl(f)} ${go(arm.replace("F", f))}`);
+          }
+
+          for (const arm of ["cond ? F : other", "other ?? F", "F || other", "cond && F"]) {
+            add((f, g) => `${arrow(f)} const ${g} = ${arm.replace("F", f)}; ${go(g)}`);
+          }
+
+          add((f, g) => `${arrow(f)} let ${g}: any; ${g} = cond ? ${f} : other; ${go(g)}`);
+
+          // TS wrappers, on the call or on an alias.
+          for (const wrap of ["F as any", "F!", "F satisfies unknown", "<any>F", "(F as any)!"]) {
+            add((f) => `${arrow(f)} ${go(wrap.replace("F", f))}`);
+            add((f, g) => `${decl(f)} const ${g} = ${wrap.replace("F", f)}; ${go(g)}`);
+          }
+
+          // Inline callbacks through arms and wrappers.
+          add(() => go(`cond ? (M) => ${body} : other`));
+          add(() => go(`((M) => ${body}) as any`));
+          // One function, passed to a page and to the owner.
+          add((f) => `${decl(f)} ${both(f)}`);
+          add((f) => `${arrow(f)} ${both(f)}`);
+          add((f) => `${arrow(f)} ${both(f)} ${go(f, "evaluateHandle")}`);
+          return out;
+        };
+        const named = [...ways("app", true, "M.BrowserWindow.fromId(1).focus()"), ...ways("hnd", true, "M.focus()")];
+        const namedTwins = [
+          ...ways("page", false, "M.BrowserWindow.fromId(1).focus()"),
+          ...ways("page", false, "M.focus()"),
+        ];
+        // Flows through local helpers and library helpers: one native plant each, and a page or DOM twin.
+        const fresh = (makers: Array<(a: string, b: string) => string>) => makers.map((make) => make(u("a"), u("b")));
+        const flows = fresh([
+          // Return values of local functions, closures and IIFEs.
+          (a) => `function ${a}() { return W.fromId(1); } ${a}().focus();`,
+          (a) => `const ${a} = () => W.fromId(1); ${a}().focus();`,
+          (a) => `const ${a} = function () { return new W(); }; ${a}().focus();`,
+          (a) => `{ const ${a} = () => W.getAllWindows(); const [${n}] = ${a}(); ${n}.focus(); }`,
+          () => "(() => W.fromId(1))().focus();",
+          () => "(function () { return W.fromId(1); })().focus();",
+          (a) =>
+            `function ${a}() { if (cond) { return page; } for (const x of items) { return W.fromId(1); } } ${a}().focus();`,
+          (a) => `async function ${a}() { return W.fromId(1); } (await ${a}()).focus();`,
+          (a) => `const ${a} = cond ? () => W.fromId(1) : other; ${a}().focus();`,
+          (a, b) => `const ${a} = () => W.fromId(1); const ${b} = ${a}; ${b}().focus();`,
+          (a) => `const ${a} = (x) => x; ${a}(W.fromId(1)).focus();`,
+          (a) => `function ${a}() { return cond ? ${a}() : W.fromId(1); } ${a}().focus();`,
+          // Arguments of local calls reach parameters.
+          (a) => `const ${a} = (w) => w.focus(); ${a}(W.fromId(1));`,
+          (a) => `function ${a}(w) { w.focus(); } ${a}(page); ${a}(new W());`,
+          () => "((w) => w.focus())(W.fromId(1));",
+          (a) => `const ${a} = (a1, w) => w.focus(); ${a}(page, W.fromId(1));`,
+          (a) => `let ${a}: any = () => 0; ${a} = (w) => w.focus(); ${a}(W.fromId(1));`,
+          // Array literal elements and Promise results.
+          () => `{ const [${n}] = [new W()]; ${n}.focus(); }`,
+          () => "[W.fromId(1)][0].focus();",
+          () => `{ const [${n}] = [page, W.fromId(1)]; ${n}.focus(); }`,
+          () => `{ const [, ${n}] = await Promise.all([page, W.fromId(1)]); ${n}.focus(); }`,
+          () =>
+            `{ const [${n}] = await Promise.all([launchElectron({})]); ${n}.evaluate((M) => new M.BrowserWindow().focus()); }`,
+          () =>
+            `{ const [${n}] = await Promise.all(items.map(() => launchElectron({}))); ${n}.evaluate((M) => new M.BrowserWindow().focus()); }`,
+          () => "(await Promise.race([W.fromId(1), other])).focus();",
+          () => "(await Promise.any([other, W.fromId(1)])).focus();",
+          // Library helpers beyond the listed array methods.
+          () => "Array.from(W.getAllWindows())[0].focus();",
+          () => "Array.from(W.getAllWindows(), (x) => x)[0].focus();",
+          () => "Object.values(W.getAllWindows())[0].focus();",
+          () => "Array.of(W.fromId(1))[0].focus();",
+          () => `for (const [, ${n}] of W.getAllWindows().entries()) { ${n}.focus(); }`,
+          () => `for (const [, ${n}] of Object.entries(W.getAllWindows())) { ${n}.focus(); }`,
+          () => `for (const [, ${n}] of Array.from(W.getAllWindows().entries())) { ${n}.focus(); }`,
+          () => `for (const ${n} of W.getAllWindows().values()) { ${n}.focus(); }`,
+          () => `for (const ${n} of Object.values(W.getAllWindows())) { ${n}.focus(); }`,
+          () => `{ const [[, ${n}]] = W.getAllWindows().entries(); ${n}.focus(); }`,
+          // Callback return values: map, flatMap, reduce and then.
+          () => "W.getAllWindows().map((w) => w)[0].focus();",
+          () => "W.getAllWindows().map(function (w) { return w; })[0].focus();",
+          () => "items.map(() => W.fromId(1))[0].focus();",
+          (a) => `const ${a} = (w) => w; W.getAllWindows().map(${a})[0].focus();`,
+          () => "W.getAllWindows().flatMap((w) => [w])[0].focus();",
+          () => "W.getAllWindows().reduce((acc, w) => w, null).focus();",
+          () => "W.getAllWindows().reduce((acc, w) => acc ?? w, null).focus();",
+          () => "items.reduce((acc, x) => [...acc, W.fromId(x)], [])[0].focus();",
+          () => "items.reduce((acc, x) => acc, W.fromId(1)).focus();",
+          (a) => `const ${a} = (acc, w) => w; W.getAllWindows().reduceRight(${a}, null).focus();`,
+          () => "(await launchElectron({}).then((a) => a)).evaluate((M) => new M.BrowserWindow().focus());",
+          () => "launchElectron({}).then((a) => a).then((a) => a.evaluate((M) => new M.BrowserWindow().focus()));",
+          (a) =>
+            `const ${a} = (a1) => a1; launchElectron({}).then(${a}).then((x) => x.evaluate((M) => new M.BrowserWindow().focus()));`,
+          // A name only assigned, never declared.
+          (a) => `${a} = new W(); ${a}.focus();`,
+          (a) => `function ${n}${a}() { ${a} = W.fromId(1); } ${a}.focus();`,
+          (a) => `[${a}] = W.getAllWindows(); ${a}.focus();`,
+          (a) => `({BrowserWindow: ${a}} = E); new ${a}().focus();`,
+          (a) => `${a} = page; ${a} ||= W.fromId(1); ${a}.focus();`,
+        ]);
+        const flowTwins = fresh([
+          (a) => `function ${a}() { const g = () => W.fromId(1); return page; } ${a}().focus();`,
+          (a) => `const ${a} = () => page.locator("a"); ${a}().focus();`,
+          () => "(() => page)().focus();",
+          (a) => `const ${a} = (x) => x; ${a}(page.locator("a")).focus();`,
+          (a) => `const ${a} = (w) => w.focus(); ${a}(page.locator("a")); ${a}(items[0]);`,
+          () => "((w) => w.focus())(page);",
+          (a) => `const ${a} = (a1, w) => w.focus(); ${a}(W.fromId(1), page);`,
+          () => `{ const [${n}] = [page.locator("a")]; ${n}.focus(); }`,
+          () => "[page][0].focus();",
+          () => `{ const [${n}] = await Promise.all([page, other]); ${n}.focus(); }`,
+          () => `{ const [${n}] = await Promise.all(items.map(() => page)); ${n}.focus(); }`,
+          () => "(await Promise.race([page, other])).focus();",
+          () => "Array.from(items)[0].focus();",
+          () => "Array.from(W.getAllWindows(), () => page)[0].focus();",
+          () => "Object.values(other)[0].focus();",
+          () => "Array.of(page)[0].focus();",
+          () => `for (const [, ${n}] of items.entries()) { ${n}.focus(); }`,
+          () => `for (const [${n}] of Object.entries(W.getAllWindows())) { ${n}.focus(); }`,
+          () => `for (const ${n} of items.values()) { ${n}.focus(); }`,
+          () => "items.map((x) => x)[0].focus();",
+          () => "W.getAllWindows().map(() => page)[0].focus();",
+          () => "items.flatMap((w) => [w])[0].focus();",
+          () => "items.reduce((acc, w) => w, null).focus();",
+          () => "W.getAllWindows().reduce((acc, w) => page, null).focus();",
+          () => "W.getAllWindows().reduce((acc, w) => acc, null).focus();",
+          () => "launchElectron({}).then(() => page).then((x) => x.focus());",
+          () => "fetch(url).then((r) => r).then((x) => x.focus());",
+          (a) => `${a} = page.locator("a"); ${a}.focus();`,
+          (a) => `function ${n}${a}() { ${a} = page; } ${a}.focus();`,
+          (a) => `[${a}] = items; ${a}.focus();`,
+          (a) => `${a} = new W(); function ${n}${a}(${a}: any) { ${a}.focus(); }`,
+        ]);
         const evalApp = "app.evaluate((M) => new M.BrowserWindow().focus())";
         const plants = [
           // Declarator and assignment patterns.
@@ -320,8 +484,12 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
           "(W.fromId(1)!.focus)();",
           `{ const ${n} = W.fromId(1); (${n}?.focus)(); }`,
           "(P._electron satisfies unknown).launch({});",
+          ...named,
+          ...flows,
         ];
         const twins = [
+          ...namedTwins,
+          ...flowTwins,
           `{ const {chromium: ${n} = page.locator("a")} = P; ${n}.focus(); }`,
           `{ const [${n} = page.locator("a")] = other; ${n}.focus(); }`,
           `{ const {...${n}} = other; ${n}.focus(); }`,
@@ -392,8 +560,17 @@ it("tracks supported native bindings, permits DOM focus and shadows, and reserve
         const fires = lint(files);
 
         // One report per plant line, so a lost kind names its row.
-        expect(fires(Code, "apps/fabrika/src/testing/forms.ts")).toEqual(plants.map((_, i) => header.length + i + 1));
-        expect(fires(Code, "apps/fabrika/src/testing/forms-allowed.ts")).toEqual([]);
+        const reported = fires(Code, "apps/fabrika/src/testing/forms.ts");
+        expect(
+          plants.filter((_, i) => !reported.includes(header.length + i + 1)),
+          "plants the rule missed",
+        ).toEqual([]);
+        expect(reported).toEqual(plants.map((_, i) => header.length + i + 1));
+        const allowedFires = fires(Code, "apps/fabrika/src/testing/forms-allowed.ts");
+        expect(
+          allowedFires.map((line) => [...header, ...twins][line - 1]),
+          "allowed twins the rule refused",
+        ).toEqual([]);
 
         for (let i = 0; i < imports.length; i++) {
           expect(fires(Code, `apps/fabrika/src/testing/import-${i}.ts`), imports[i]).toHaveLength(1);

@@ -7,6 +7,10 @@ type Kind =
   | "BrowserWindow"
   | "window"
   | "windows"
+  | "apps"
+  | "handles"
+  | "windowPairs"
+  | "windowPair"
   | "playwright"
   | "launcher"
   | "app"
@@ -66,6 +70,8 @@ export const e2eWindows: CreateRule = {
       return undefined;
     };
     type Binding = NonNullable<ReturnType<typeof binding>>;
+    type MemberNode = Extract<Node, { type: "MemberExpression" }>;
+    type CallNode = Extract<Node, { type: "CallExpression" }>;
     interface Write {
       readonly at: number;
       /** The declarator, assignment expression, loop or function that writes. */
@@ -136,84 +142,11 @@ export const e2eWindows: CreateRule = {
         "flatMap",
       ],
     };
-    /** The call a function expression is the first argument of, through casts and parentheses. */
-    const callbackOf = (fn: Node) => {
-      let at: Node = fn;
-      let parent = parentOf(at);
-
-      while (
-        parent &&
-        (parent.type === "ParenthesizedExpression" ||
-          parent.type === "TSAsExpression" ||
-          parent.type === "TSSatisfiesExpression" ||
-          parent.type === "TSNonNullExpression" ||
-          parent.type === "TSTypeAssertion")
-      ) {
-        at = parent;
-        parent = parentOf(at);
-      }
-
-      if (parent?.type !== "CallExpression" || parent.arguments[0]?.range[0] !== at.range[0]) {
-        return undefined;
-      }
-
-      const callee = strip(parent.callee);
-      return callee.type === "MemberExpression" ? { callee, method: member(callee) } : undefined;
-    };
-    /** Writes of a binding, in source order: its definitions, then every assignment and for-of head. */
-    const writesOf = (variable: Binding): Write[] => {
+    /** The writes an assignment, destructuring assignment or for-of head makes through these references. */
+    const refWrites = (refs: Iterable<{ identifier: Node }>): Write[] => {
       const writes: Write[] = [];
 
-      for (const def of variable.defs) {
-        if (def.node.type === "VariableDeclarator") {
-          const declarator = def.node;
-          const head = parentOf(parentOf(declarator) ?? declarator);
-          const loop = head?.type === "ForOfStatement" || head?.type === "ForInStatement" ? head : undefined;
-          const each = loop?.type === "ForOfStatement";
-          const from = each ? loop?.right : declarator.init;
-
-          writes.push({
-            at: declarator.range[0],
-            node: declarator,
-            pattern: declarator.id,
-            value: from,
-            each,
-            base: (seen) =>
-              loop?.type === "ForInStatement"
-                ? []
-                : each
-                  ? infer(from, seen).includes("windows")
-                    ? ["window"]
-                    : []
-                  : infer(from, seen),
-          });
-        }
-
-        if (def.type === "Parameter") {
-          const fn = def.node;
-
-          if (
-            fn.type === "ArrowFunctionExpression" ||
-            fn.type === "FunctionExpression" ||
-            fn.type === "FunctionDeclaration"
-          ) {
-            const index = fn.params.findIndex((p) => within(def.name.range, p.range));
-            const param = fn.params[index];
-
-            if (param) {
-              writes.push({
-                at: param.range[0],
-                node: fn,
-                pattern: param.type === "TSParameterProperty" ? param.parameter : param,
-                value: undefined,
-                base: (seen) => paramKinds(fn, index, seen),
-              });
-            }
-          }
-        }
-      }
-
-      for (const ref of variable.references) {
+      for (const ref of refs) {
         let child: Node = ref.identifier;
         let top: Node | undefined = parentOf(child);
 
@@ -261,10 +194,61 @@ export const e2eWindows: CreateRule = {
             pattern: top.left,
             value: right,
             each: true,
-            base: (seen) => (infer(right, seen).includes("windows") ? ["window"] : []),
+            base: (seen) => elementsOf(infer(right, seen)),
           });
         }
       }
+
+      return writes;
+    };
+    /** Writes of a binding, in source order: its definitions, then every assignment and for-of head. */
+    const writesOf = (variable: Binding): Write[] => {
+      const writes: Write[] = [];
+
+      for (const def of variable.defs) {
+        if (def.node.type === "VariableDeclarator") {
+          const declarator = def.node;
+          const head = parentOf(parentOf(declarator) ?? declarator);
+          const loop = head?.type === "ForOfStatement" || head?.type === "ForInStatement" ? head : undefined;
+          const each = loop?.type === "ForOfStatement";
+          const from = each ? loop?.right : declarator.init;
+
+          writes.push({
+            at: declarator.range[0],
+            node: declarator,
+            pattern: declarator.id,
+            value: from,
+            each,
+            base: (seen) =>
+              loop?.type === "ForInStatement" ? [] : each ? elementsOf(infer(from, seen)) : infer(from, seen),
+          });
+        }
+
+        if (def.type === "Parameter") {
+          const fn = def.node;
+
+          if (
+            fn.type === "ArrowFunctionExpression" ||
+            fn.type === "FunctionExpression" ||
+            fn.type === "FunctionDeclaration"
+          ) {
+            const index = fn.params.findIndex((p) => within(def.name.range, p.range));
+            const param = fn.params[index];
+
+            if (param) {
+              writes.push({
+                at: param.range[0],
+                node: fn,
+                pattern: param.type === "TSParameterProperty" ? param.parameter : param,
+                value: undefined,
+                base: (seen) => paramKinds(fn, index, seen),
+              });
+            }
+          }
+        }
+      }
+
+      writes.push(...refWrites(variable.references));
 
       return writes.sort((a, b) => a.at - b.at);
     };
@@ -414,6 +398,17 @@ export const e2eWindows: CreateRule = {
       );
     };
     const unique = (kinds: Kind[]): Kind[] => [...new Set(kinds)];
+    /** Lists hold one kind of element: windows, apps, handles, and a window list's `[index, window]` pairs. */
+    const listOf: Partial<Record<Kind, Kind>> = { window: "windows", app: "apps", handle: "handles" };
+    const elementOf: Partial<Record<Kind, Kind>> = {
+      windows: "window",
+      apps: "app",
+      handles: "handle",
+      windowPairs: "windowPair",
+    };
+    const elementsOf = (kinds: readonly Kind[]): Kind[] => unique(kinds.flatMap((k) => elementOf[k] ?? []));
+    const listsOf = (kinds: readonly Kind[]): Kind[] => unique(kinds.filter((k) => k in elementOf));
+    const lift = (kinds: readonly Kind[]): Kind[] => unique(kinds.flatMap((k) => listOf[k] ?? []));
     const propertyOf = (base: Kind, name: string | undefined): Kind | undefined => {
       if ((base === "electron" || base === "playwright" || base === "nodeModule") && name === "default") {
         return base;
@@ -435,11 +430,11 @@ export const e2eWindows: CreateRule = {
         return "createRequire";
       }
 
-      if (base === "windows") {
-        return "window";
+      if (base === "windowPair") {
+        return name === undefined || name === "1" ? "window" : undefined;
       }
 
-      return undefined;
+      return elementOf[base];
     };
     /** Every kind a property of any base kind can be. */
     const propertyKind = (bases: readonly Kind[], name: string | undefined): Kind[] =>
@@ -497,13 +492,20 @@ export const e2eWindows: CreateRule = {
       }
 
       if (pattern.type === "ArrayPattern") {
-        const windows = bases.includes("windows");
+        const elements = elementsOf(bases);
+        const rest = listsOf(bases);
+        const pair = bases.includes("windowPair");
         return unique(
-          pattern.elements.flatMap((item) =>
+          pattern.elements.flatMap((item, i) =>
             item?.type === "RestElement"
-              ? patternKind(item.argument, name, windows ? ["windows"] : [], seen)
+              ? patternKind(item.argument, name, rest, seen)
               : item
-                ? patternKind(item, name, windows ? ["window"] : [], seen)
+                ? patternKind(
+                    item,
+                    name,
+                    unique([...elements, ...(pair && i === 1 ? (["window"] as const) : [])]),
+                    seen,
+                  )
                 : [],
           ),
         );
@@ -519,44 +521,268 @@ export const e2eWindows: CreateRule = {
           : name === "node:module" || name === "module"
             ? ["nodeModule"]
             : [];
-    /** What a function parameter holds: a callback's argument, a typed handle, or its own default. */
-    const paramKinds = (fn: Node, index: number, seen: Set<Binding>): Kind[] => {
-      const call = callbackOf(fn);
-      const owners = call ? infer(call.callee.object, new Set(seen)) : [];
-      const param =
-        fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression" ? fn.params[index] : undefined;
-      const target = param?.type === "AssignmentPattern" ? param.left : param;
-
-      if (index === 0 && (call?.method === "evaluate" || call?.method === "evaluateHandle")) {
-        const passed: Kind[] = [];
-
-        if (owners.includes("handle")) {
-          passed.push("window");
+    const sameNode = (a: Node, b: Node) => a.range[0] === b.range[0] && a.range[1] === b.range[1];
+    interface Uses {
+      /** Calls with the function as an argument (the first, or `Array.from`'s second), and the member they call. */
+      readonly passed: Array<{ call: CallNode; callee: MemberNode; method: string | undefined; index: number }>;
+      /** Calls of the function itself. */
+      readonly called: CallNode[];
+    }
+    /**
+     * Where a function goes. It is written in a call, or held by a local name (declaration, `const`,
+     * `let`, `var`, reassignment, alias) and carried through casts, `?:`, `??`, `||` and `&&`. A function
+     * from another module stays unseen.
+     */
+    const usesOf = (fn: Node): Uses => {
+      const uses: Uses = { passed: [], called: [] };
+      const followed = new Set<Binding>();
+      const follow = (variable: Binding | undefined) => {
+        if (!variable || followed.has(variable)) {
+          return;
         }
 
-        // Electron evaluate callbacks expose BrowserWindow explicitly. DOM callbacks do not.
-        if (
-          owners.includes("app") ||
-          (target?.type === "ObjectPattern" &&
-            target.properties.some((p) => p.type === "Property" && propKey(p) === "BrowserWindow"))
+        followed.add(variable);
+
+        for (const ref of variable.references) {
+          land(ref.identifier);
+        }
+      };
+      const land = (start: Node) => {
+        let at = start;
+        let parent = parentOf(at);
+
+        while (parent) {
+          if (
+            inner(parent) === undefined &&
+            parent.type !== "ConditionalExpression" &&
+            parent.type !== "LogicalExpression" &&
+            parent.type !== "AssignmentExpression"
+          ) {
+            break;
+          }
+
+          if (parent.type === "SequenceExpression" && !sameNode(parent.expressions.at(-1) as Node, at)) {
+            break;
+          }
+
+          if (parent.type === "ConditionalExpression" && sameNode(parent.test, at)) {
+            break;
+          }
+
+          if (parent.type === "AssignmentExpression") {
+            if (!["=", "||=", "??=", "&&="].includes(parent.operator) || !sameNode(parent.right, at)) {
+              break;
+            }
+
+            if (parent.left.type === "Identifier") {
+              follow(binding(parent.left));
+            }
+          }
+
+          at = parent;
+          parent = parentOf(at);
+        }
+
+        if (parent?.type === "CallExpression") {
+          const callee = strip(parent.callee);
+
+          if (sameNode(parent.callee, at)) {
+            uses.called.push(parent);
+          } else if (callee.type === "MemberExpression") {
+            const method = member(callee);
+            const index = parent.arguments.findIndex((a) => sameNode(a, at));
+
+            if (index === 0 || (index === 1 && method === "from")) {
+              uses.passed.push({ call: parent, callee, method, index });
+            }
+          }
+        } else if (
+          parent?.type === "VariableDeclarator" &&
+          parent.init &&
+          sameNode(parent.init, at) &&
+          parent.id.type === "Identifier"
         ) {
-          passed.push("electron");
+          follow(binding(parent.id));
+        }
+      };
+
+      if (fn.type === "FunctionDeclaration") {
+        follow(fn.id ? binding(fn.id) : undefined);
+      } else {
+        land(fn);
+      }
+
+      return uses;
+    };
+    const isFunction = (node: Node) =>
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression";
+    /** The `return` arguments of one function, not of the functions inside it. */
+    const returnsIn = (node: Node, out: Node[]) => {
+      for (const [name, value] of Object.entries(node)) {
+        if (name === "parent" || name === "range") {
+          continue;
         }
 
-        return passed;
-      }
+        for (const child of Array.isArray(value) ? value : [value]) {
+          if (!child || typeof child !== "object" || typeof child.type !== "string") {
+            continue;
+          }
 
-      // A launch result's `.then` callback receives what the promise holds.
-      if (index === 0 && call?.method === "then") {
-        return owners;
+          if (child.type === "ReturnStatement") {
+            if (child.argument) {
+              out.push(child.argument);
+            }
+          } else if (!isFunction(child)) {
+            returnsIn(child, out);
+          }
+        }
       }
-
-      if (owners.includes("windows") && lists.callback.includes(call?.method ?? "")) {
-        return index === 0 ? ["window"] : index === 2 ? ["windows"] : [];
-      }
-
-      return [];
     };
+    /** The functions an expression can be: written there, or held by a local name through arms and casts. */
+    const functionsOf = (node: Node | null | undefined, seen = new Set<Binding>()): Node[] => {
+      if (!node) {
+        return [];
+      }
+
+      const at = strip(node);
+
+      if (at.type === "ConditionalExpression" || at.type === "LogicalExpression") {
+        return arms(at).flatMap((arm) => functionsOf(arm, seen));
+      }
+
+      if (isFunction(at)) {
+        return [at];
+      }
+
+      if (at.type !== "Identifier") {
+        return [];
+      }
+
+      const variable = binding(at);
+
+      if (!variable || seen.has(variable)) {
+        return [];
+      }
+
+      seen.add(variable);
+      return [
+        ...variable.defs.flatMap((def) => (def.node.type === "FunctionDeclaration" ? [def.node as Node] : [])),
+        ...reaching(variable, at).flatMap((w) =>
+          w.pattern.type === "Identifier" && !w.each ? functionsOf(w.value, seen) : [],
+        ),
+      ];
+    };
+    const running = new Set<string>();
+    /** What a local function hands back: an expression body, or every `return` in a block body. */
+    const returnKinds = (fn: Node, seen: Set<Binding>): Kind[] => {
+      if (!isFunction(fn)) {
+        return [];
+      }
+
+      const id = `${fn.range[0]}:${fn.range[1]}`;
+
+      if (running.has(id)) {
+        return [];
+      }
+
+      running.add(id);
+
+      try {
+        const returned: Node[] = [];
+
+        if (fn.body.type === "BlockStatement") {
+          returnsIn(fn.body, returned);
+        } else {
+          returned.push(fn.body);
+        }
+
+        return unique(returned.flatMap((value) => infer(value, new Set(seen))));
+      } finally {
+        running.delete(id);
+      }
+    };
+    /** The kinds of what a call's first-argument callbacks return. */
+    const callbackReturns = (call: CallNode, seen: Set<Binding>): Kind[] =>
+      unique(functionsOf(call.arguments[0]).flatMap((fn) => returnKinds(fn, seen)));
+    /** What a function parameter holds: a callback's argument, an argument of a local call, a typed handle, or its own default. */
+    const paramKinds = (fn: Node, index: number, seen: Set<Binding>): Kind[] => {
+      const uses = usesOf(fn);
+      const param =
+        fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression" || fn.type === "FunctionDeclaration"
+          ? fn.params[index]
+          : undefined;
+      const target = param?.type === "AssignmentPattern" ? param.left : param;
+      const kinds: Kind[] = [];
+
+      for (const { call, callee, method, index: at } of uses.passed) {
+        // `Array.from(list, map)` hands the map each element of its first argument.
+        if (at === 1) {
+          if (index === 0) {
+            kinds.push(...elementsOf(infer(call.arguments[0], new Set(seen))));
+          }
+
+          continue;
+        }
+
+        const owners = infer(callee.object, new Set(seen));
+
+        if (index === 0 && (method === "evaluate" || method === "evaluateHandle")) {
+          if (owners.includes("handle")) {
+            kinds.push("window");
+          }
+
+          // Electron evaluate callbacks expose BrowserWindow explicitly. DOM callbacks do not.
+          if (
+            owners.includes("app") ||
+            (target?.type === "ObjectPattern" &&
+              target.properties.some((p) => p.type === "Property" && propKey(p) === "BrowserWindow"))
+          ) {
+            kinds.push("electron");
+          }
+        }
+
+        // A launch result's `.then` callback receives what the promise holds.
+        if (index === 0 && method === "then") {
+          kinds.push(...owners);
+        }
+
+        if (lists.callback.includes(method ?? "")) {
+          kinds.push(...(index === 0 ? elementsOf(owners) : index === 2 ? listsOf(owners) : []));
+        }
+
+        // A reduce callback's accumulator starts as the initial value and then takes what the callback returns.
+        if (method === "reduce" || method === "reduceRight") {
+          if (index === 0) {
+            kinds.push(...infer(call.arguments[1], new Set(seen)), ...returnKinds(fn, seen));
+          } else if (index === 1) {
+            kinds.push(...elementsOf(owners));
+          } else if (index === 3) {
+            kinds.push(...listsOf(owners));
+          }
+        }
+      }
+
+      // A local function's parameter holds what its calls pass in that position.
+      for (const call of uses.called) {
+        const spread = call.arguments.findIndex((a) => a.type === "SpreadElement");
+
+        if (spread < 0 || index < spread) {
+          kinds.push(...infer(call.arguments[index], new Set(seen)));
+        }
+      }
+
+      return unique(kinds);
+    };
+    /** Writes to a name no scope declares: every unresolved reference to it that assigns. */
+    const globalWrites = (name: string): Write[] =>
+      refWrites(
+        (source.scopeManager?.globalScope?.through ?? []).filter((ref: { identifier: Node }) => {
+          const id = ref.identifier;
+          return id.type === "Identifier" && id.name === name;
+        }),
+      ).sort((a, b) => a.at - b.at);
     /** The set of every recognized kind that can reach an expression. */
     const infer = (node: Node | null | undefined, seen = new Set<Binding>()): Kind[] => {
       if (!node) {
@@ -582,11 +808,15 @@ export const e2eWindows: CreateRule = {
       }
 
       if (node.type === "ArrayExpression") {
-        return node.elements.some(
-          (e) => e?.type === "SpreadElement" && infer(e.argument, new Set(seen)).includes("windows"),
-        )
-          ? ["windows"]
-          : [];
+        return unique(
+          node.elements.flatMap((e) =>
+            e?.type === "SpreadElement"
+              ? listsOf(infer(e.argument, new Set(seen)))
+              : e
+                ? lift(infer(e, new Set(seen)))
+                : [],
+          ),
+        );
       }
 
       if (node.type === "ImportExpression" && node.source.type === "Literal") {
@@ -620,7 +850,7 @@ export const e2eWindows: CreateRule = {
         }
 
         if (callee.type === "MemberExpression") {
-          const owners = infer(callee.object, seen);
+          const owners = infer(callee.object, new Set(seen));
           const method = member(callee);
 
           if (owners.includes("BrowserWindow") && method === "getAllWindows") {
@@ -638,15 +868,79 @@ export const e2eWindows: CreateRule = {
             found.push("handle");
           }
 
-          if (owners.includes("windows")) {
-            if (lists.element.includes(method ?? "")) {
-              found.push("window");
-            }
-
-            if (lists.array.includes(method ?? "")) {
-              found.push("windows");
-            }
+          if (lists.element.includes(method ?? "")) {
+            found.push(...elementsOf(owners));
           }
+
+          if (lists.array.includes(method ?? "")) {
+            found.push(...listsOf(owners));
+          }
+
+          if (method === "values") {
+            found.push(...listsOf(owners));
+          }
+
+          if (method === "entries" && owners.includes("windows")) {
+            found.push("windowPairs");
+          }
+
+          // Callback return values: a mapped list, a folded value, or what a promise's `then` answers.
+          if (method === "map" || method === "flatMap") {
+            found.push(
+              ...lift(callbackReturns(node, seen)),
+              ...(method === "flatMap" ? listsOf(callbackReturns(node, seen)) : []),
+            );
+          }
+
+          if (method === "then" || method === "reduce" || method === "reduceRight") {
+            found.push(...callbackReturns(node, seen));
+          }
+
+          if (method === "reduce" || method === "reduceRight") {
+            found.push(...infer(node.arguments[1], new Set(seen)));
+          }
+
+          const object = strip(callee.object);
+          const library = object.type === "Identifier" && !binding(object)?.defs.length ? object.name : undefined;
+          const first = library ? infer(arg, new Set(seen)) : [];
+
+          // Library helpers that carry their argument's elements across.
+          if (library === "Promise" && method === "all") {
+            found.push(...listsOf(first));
+          }
+
+          if (library === "Promise" && (method === "race" || method === "any")) {
+            found.push(...elementsOf(first));
+          }
+
+          if (
+            node.arguments.length === 1 &&
+            ((library === "Array" && method === "from") || (library === "Object" && method === "values"))
+          ) {
+            found.push(...listsOf(first));
+          }
+
+          if (
+            node.arguments.length === 1 &&
+            library === "Object" &&
+            method === "entries" &&
+            first.includes("windows")
+          ) {
+            found.push("windowPairs");
+          }
+
+          if (library === "Array" && method === "from" && node.arguments.length === 2) {
+            found.push(...lift(unique(functionsOf(node.arguments[1]).flatMap((fn) => returnKinds(fn, seen)))));
+          }
+
+          if (library === "Array" && method === "of") {
+            found.push(...lift(node.arguments.flatMap((a) => infer(a, new Set(seen)))));
+          }
+        }
+
+        // A local function, or an immediately called one, hands back what it returns.
+        for (const fn of functionsOf(callee)) {
+          found.push(...returnKinds(fn, seen));
         }
 
         return unique(found);
@@ -659,8 +953,13 @@ export const e2eWindows: CreateRule = {
       const variable = binding(node);
 
       if (!variable || !variable.defs.length) {
-        // The global `require`, when no scope declares it.
-        return node.name === "require" ? ["require"] : [];
+        // The global `require`, when no scope declares it, and a name only ever assigned, never declared.
+        const written = unique(
+          globalWrites(node.name).flatMap((w) =>
+            patternKind(w.pattern, node.name, w.base(new Set(seen)), new Set(seen)),
+          ),
+        );
+        return node.name === "require" ? unique(["require", ...written]) : written;
       }
 
       if (seen.has(variable)) {

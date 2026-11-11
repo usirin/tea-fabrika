@@ -61,12 +61,17 @@ outside that claim. Hook behavior and real Electron checks belong to build and l
 
 ### Binding forms of `e2e-windows`, listed before the code (decision 0040)
 
-Four reviews each found one more binding form, so this is the list of every form oxlint
+Five reviews each found one more binding form, so this is the list of every form oxlint
 1.90.0's AST names, one row each. `infer` returns the **set** of kinds that can reach an
 expression; a kind is only dropped by a plain write that always runs first (see above).
 Each "recognized" row has a native plant in `e2e-windows.test.ts`, red on the rule at
-`7aa8ad2f`, and an allowed twin where one exists. A "named miss" is never planted as
-allowed, since a law that a miss passes would lock the gap in.
+`7aa8ad2f` (rows from review 5 on: red at `873a5a0a`), and an allowed twin where one
+exists. A "named miss" is never planted as allowed, since a law that a miss passes would
+lock the gap in. Every miss below rests on a reason the approved plan gives: values from
+helpers the file cannot see, object-field transfers, non-literal computed names,
+reflection, or imports through other modules. A helper written in the same file is not
+unknown, so its returns, arguments and callbacks are followed (review 5 found the plan
+never named those as misses, and the lead's brief had wrongly listed one).
 
 | Form | Example | Verdict |
 |---|---|---|
@@ -89,16 +94,18 @@ allowed, since a law that a miss passes would lock the gap in.
 | Array callbacks of windows | `forEach`, `map`, `filter`, `find`, `findLast`, `findIndex`, `findLastIndex`, `some`, `every`, `flatMap` | recognized: first parameter is a window, third is windows |
 | Wrappers | sequence (last value), `satisfies`, `<T>x`, `W<T>`, `x as T`, `x!`, `x?.y`, `(x)`, `(x = y)` | recognized: `inner` unwraps each. oxlint 1.90.0 parses with no `ParenthesizedExpression` (checked); the rule unwraps it if it ever appears, and the callee is unwrapped too |
 | Import styles | default, named, namespace, `{default as E}`, `import E = require("electron")`, `import L = P._electron`, `require`, `createRequire(import.meta.url)("electron")`, `const r = createRequire(...)`, `M.createRequire`, dynamic `import()` with `.default` | recognized: `electron`, `playwright` and `node:module` imports give kinds; `createRequire(...)` gives `require` |
-| Return values of local functions, closures and IIFEs | `const w = pick(); w.focus()`, `(() => W.fromId(1))().focus()` | named miss: an unknown helper's return needs a call graph |
+| A function reached through a local name and passed to `evaluate` or `evaluateHandle` on an app or a handle | `const inspect = (E) => E.BrowserWindow.fromId(1).focus(); await app.evaluate(inspect)` | recognized: `usesOf` follows the function from where it is written (a declaration, used before or after; a `const`, `let` or `var` holding an arrow or function expression; a reassigned binding; a local alias, `const f = inspect`; the arms of `?:`, `??`, `\|\|` and `&&`; `as`, `!`, `satisfies`, `<T>x`) to every call that takes it as first argument. Its first parameter gets the kinds an inline callback gets, from the union of every `evaluate` it reaches, so a function given to a page and to an app is checked as the app's |
+| A local function's returns, closures and IIFEs | `const pick = () => W.fromId(1); pick().focus()`, `(() => W.fromId(1))().focus()` | recognized: `functionsOf` resolves the callee as above; `returnKinds` infers an expression body or every `return` in a block body, not those of functions inside it, with a guard against recursion |
+| Arguments of a local call | `const hit = (w) => w.focus(); hit(W.fromId(1))`, `((w) => w.focus())(W.fromId(1))` | recognized: a parameter holds the kinds of the argument in its position at every call `usesOf` finds; a spread before it stops the match |
+| Array literal elements, `Promise.all`, `Promise.race`, `Promise.any`, `Array.of` | `const [w] = [new W()]`, `const [a] = await Promise.all([launchElectron()])` | recognized: lists exist for windows, apps and handles; an array literal holds the list of its native elements (one is enough), and these helpers carry their argument's list or element across |
+| `Array.from`, `Object.values`, `Object.entries`, `.entries()`, `.values()` of a list | `for (const [, w] of ws.entries())`, `Array.from(ws, (x) => x)` | recognized: the first two and `.values()` keep the list, `Array.from` with a mapper takes the mapper's returns, entries give pairs whose second slot is a window (the index stays nothing) |
+| `map`, `flatMap`, `reduce`, `reduceRight`, `.then` results | `ws.map((w) => w)[0].focus()`, `ws.reduce((acc, w) => w, null).focus()` | recognized: a callback's returns, written or named, lift to a list for `map` and `flatMap`; `reduce` gives its initial value and its returns, and its accumulator parameter takes both |
 | Class fields, `this.x`, object literal fields, object spread | `this.win = new W()`, `const o = {w}; o.w.focus()` | named miss: object-field transfers need a heap model |
-| Array literal elements, `Promise.all` results | `const [w] = [new W()]`, `const [a] = await Promise.all([...])` | named miss: element-wise tracking of arbitrary arrays |
-| `Array.from`, `.entries()`, `.values()`, `Object.values` of windows | `for (const [, w] of ws.entries())` | named miss: library helpers beyond the listed array methods |
-| `map` results, `reduce` accumulators | `ws.map((w) => w)[0].focus()` | named miss: callback return values |
 | A method pulled off a window, `.call`, `.apply`, `.bind` | `const {focus} = w; focus()`, `w.focus.call(w)` | named miss: reflection |
-| A named function passed as an evaluate callback | `app.evaluate(fn)` | named miss: needs the callee's declaration |
 | Non-literal computed keys and methods | `E[k]`, `w[m]()`, `{[k]: B} = E` | named miss: the name is not in the source |
 | Re-exports and imports through another module | `import {E} from "./electron-reexport.ts"` | named miss: no cross-file analysis |
-| Implicit globals | `w = new W()` with no declaration | named miss: no binding to follow |
+| Implicit globals | `w = new W(); w.focus()` with no declaration | recognized: the global scope's unresolved references name every write; they are read as maybe-run, in no order |
+| A helper the file cannot see | `import {pick} from "./pick.ts"; pick().focus()`, `this.pick().focus()`, a function imported from another module and passed to `evaluate` | named miss: unknown helper returns, and imports through other modules |
 | `execFile` of the Electron binary | see above | named miss: argument strings are not inspected |
 
 ## Effect property data advice
