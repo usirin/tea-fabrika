@@ -13,6 +13,10 @@
     "skills/lead/scripts/drive.test.ts",
     "skills/lead/scripts/flow/*.ts",
     "skills/lead/scripts/flow/flows/*.ts",
+    "skills/mutation/scripts/heartbeat.ts",
+    "skills/mutation/scripts/heartbeat.test.ts",
+    "skills/mutation/scripts/limit.ts",
+    "skills/mutation/scripts/limit.test.ts",
     "skills/mutation/scripts/scope.ts",
     "skills/mutation/scripts/scope.test.ts"
   ]
