@@ -9,7 +9,7 @@ import { Machine } from "@demlik/tea/effect";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
 import { Grant } from "@kampus/libfabrika/access/Access";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { type Envelope, SignRequest, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
@@ -242,7 +242,7 @@ const world = () => {
   const env = () =>
     Layer.mergeAll(
       data(),
-      ClientManager.layer(founder).pipe(Layer.provide(data())),
+      ClientManagerLedger.layer(founder).pipe(Layer.provide(data())),
       records,
       Archive.memory,
       A.Id.Generator.layer,

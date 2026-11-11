@@ -671,15 +671,24 @@ describe("planted breaks", () => {
   });
 });
 
-// Ticket 477, kind 2 (PR 9): each room has a pair of keys, `"./<room>/*": "./src/<room>/*.ts"` and
-// `"./<room>/internal/*": null`. The exam reads an exports map the way Node does: a pattern key holds
+// Ticket 477, kind 2 (PR 9): each module has a pair of keys, `"./<module>/*": "./src/<module>/*.ts"` and
+// `"./<module>/internal/*": null`. The exam reads an exports map the way Node does: a pattern key holds
 // one `*`, and `"./ledger/internal/*": null` beats `"./ledger/*"` because its part before the `*` is
 // longer. Fixed seed, as `layers.test.ts` and the lead scripts' laws use.
-describe("a room's front files and its internal/ in the exports map", () => {
+describe("a module's front files and its internal/ in the exports map", () => {
   const options = { seed: 119120, numRuns: 200 };
   const LIBRARY = "@kampus/libfabrika";
-  const ROOMS = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"] as const;
-  const room = fc.constantFrom(...ROOMS);
+  const MODULES = [
+    "telemetry",
+    "ledger",
+    "transport",
+    "processes",
+    "presence",
+    "access",
+    "runtime",
+    "gateway",
+  ] as const;
+  const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
   const real = () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === LIBRARY);
@@ -687,12 +696,12 @@ describe("a room's front files and its internal/ in the exports map", () => {
     return library!;
   };
 
-  // pinned: the pair the plan writes (PR 9), since each room's two keys are written by hand.
-  it("pinned: every room has the pair of keys the plan gives it", () => {
+  // pinned: the pair the plan writes (PR 9), since each module's two keys are written by hand.
+  it("pinned: every module has the pair of keys the plan gives it", () => {
     const exports = real().manifest.exports;
     const keys = typeof exports === "object" && exports !== null ? Object.fromEntries(Object.entries(exports)) : {};
 
-    for (const each of ROOMS) {
+    for (const each of MODULES) {
       expect(keys[`./${each}/*`], `./${each}/*`).toBe(`./src/${each}/*.ts`);
       expect(keys[`./${each}/internal/*`], `./${each}/internal/*`).toBeNull();
     }
@@ -702,7 +711,7 @@ describe("a room's front files and its internal/ in the exports map", () => {
   // `./ledger/*` before the null key lets `ledger/internal/ledgerStore` through.
   it("Node's rule: the longest pattern wins, and null refuses, whatever the order of the keys", () => {
     const sub = fc.tuple(
-      room,
+      module,
       fc.constantFrom("front", "internal"),
       name,
       fc.shuffledSubarray(["pattern", "null"], { minLength: 2 }),
@@ -725,9 +734,9 @@ describe("a room's front files and its internal/ in the exports map", () => {
   // The app imports a subpath of the library whose real `exports` is read from the real package. A
   // front file is reached. An internal file is refused even though it exists, and a name no file has
   // reaches nothing. Plant: `ledger/internal/ledgerStore` imported from the app, which must fail.
-  it("each room's front files are reached and its internal/ is refused to other packages", () => {
+  it("each module's front files are reached and its internal/ is refused to other packages", () => {
     fc.assert(
-      fc.property(room, fc.constantFrom("front", "internal", "missing"), name, (each, kind, stem) => {
+      fc.property(module, fc.constantFrom("front", "internal", "missing"), name, (each, kind, stem) => {
         const subpath = kind === "internal" ? `${each}/internal/${stem}` : `${each}/${stem}`;
         const tree = plant({
           "packages/libfabrika/package.json": manifest(LIBRARY, { exports: real().manifest.exports }),

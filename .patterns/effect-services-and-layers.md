@@ -91,6 +91,16 @@ Rules:
 - **Compose, never build.** No `Layer.build` then `Context.get` then `Effect.provideContext` on each
   call: that is what `Layer.provide` does. A service that needs another captures it once with
   `yield*` in its own Layer (`ledger/LedgerSql.ts:16`).
+- **Never provide inside a layer body.** A layer lists what it needs in its type and yields it. An
+  `Effect.provide(X.layer(...))` inside the `Effect.gen` hides the need and builds the dependency
+  where the caller cannot replace it. `LedgerSql.layer` yields `Referee` in the body (`:16`) and
+  composes `RefereeSql.layer(sql)` outside it, on the returned Layer (`:23`): the body only asks,
+  and the wiring is one `Layer.provide` a reader sees at the end. Effect's own cluster code does the same: `entityManager`'s `make` takes its
+  `storage` in its options and the caller picks it
+  (`effect/src/cluster/internal/entityManager.ts:141-145`).
+- **A needed service is in the type, never found at run time.** `Effect.serviceOption(X)` is for a
+  service that is truly optional. One that a path needs goes in the layer's requirements, so a
+  missing one is a type error, not an `Effect.die` or an `Option.getOrThrow` deep in a call.
 - **Ordered setup is `Layer.unwrap`.** When a Layer depends on a value read first (settings, a
   saved descriptor), read it in an Effect and return the Layer from it
   (`next/apps/fabrika/src/runtime.ts:20`, `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`).
@@ -112,16 +122,23 @@ Every service and every runtime in `next/`. Stops at tea: a program's state live
 ## Services awaiting their slice
 
 `Ledger` (ticket 702, slice 1), `Referee` and `LedgerTransaction` (ticket 723, slice 3) are
-converted so far. The rest still carry static layers, and each moves in its own slice. A search of
-`next/packages/libfabrika/src` outside tests finds 20 static Layer members, for example
+converted alongside ClientManager (ticket 731) so far. The rest still carry static layers, and each moves in its own slice. A search of
+`next/packages/libfabrika/src` outside tests finds 19 static Layer members, for example
 `Mailbox.layer` (`processes/Mailbox.ts:118`), `RecordManager.sql`, `.memory` and `.remote`
 (`telemetry/Records.ts:420-429`) and `Gateway.layer` (`gateway/Gateway.ts:1622`). The Node adapter,
 `next/packages/libfabrika/src/ledger/NodeSqlite.ts`, still sits in `ledger/`; slice 2 moves it. New
 code follows this doc now.
 
-`Layer.build` is still used in product code: `cloudflare/runtime.ts:355` and `:745`,
+`Layer.build` is still used in product code: `cloudflare/runtime.ts:357` and `:752`,
 `cloudflare/connection.ts:18` and `node/dev/dev-recording.ts:31`, each followed by
 `Effect.provideContext` (ticket 442).
+
+A layer still provides inside its own body in `next/packages/libfabrika/src/runtime/Runner.ts:218-221`:
+`RecoveryStore` and `Replies` are built from `RecoveryStore.layer(...)` and `RepliesSql.layer(...)`
+in the body, so they are missing from the layer's requirements (`:206-209`). The same file finds
+`SessionManager` at run time with `Effect.serviceOption` (`:229`), then `Effect.die` (`:1169`) or
+`Option.getOrThrow` (`:1174`) when a caused write needs it. `runtime/Built.ts:16` provides
+`Digest.layerWebCrypto` inside `hash`, the same shape at function size.
 
 ## Why it is not obvious
 
@@ -142,6 +159,17 @@ bundle exam's load hook and output module list).
 `Layer.build` plus `provideContext` works and passes every law, and it looks like control. It costs
 in reading: each call site must remember to provide, and a forgotten one is a missing-service defect
 at run time, not a type error.
+
+ClientManager keeps Founder, Written and its explicit service type in
+`next/packages/libfabrika/src/access/ClientManager.ts:9`. Its ledger implementation is
+`access/ClientManagerLedger.ts:83`, consumed as `ClientManagerLedger.layer(founder)`.
+Building captures Ledger without writing; founding, replay and write spans retain their timing.
+Gateway imports the sibling only as a type for its founder argument.
+
+Ticket 731's direct browser contract bundle loads **259** modules and keeps **79**, matching
+the approved sketch, against the plan's baseline **265/86** (Rolldown 1.2.13).
+The bundle exam inspects both loaded and kept ids for ClientManagerLedger, AccessFold,
+Referee, RefereeSql, LedgerTransactionSql and ledgerStore.
 
 ## Holds it
 

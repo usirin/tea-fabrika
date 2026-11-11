@@ -2,6 +2,10 @@
 
 Decided 2026-10-26 by the owner.
 
+Its decided rules are in: [0325](../../.decisions/0325-agents-behind-one-service-of-ours.md),
+[0326](../../.decisions/0326-the-agent-service-leaves-room-for-chat.md),
+[0327](../../.decisions/0327-a-login-is-lent-to-one-box.md).
+
 The goal: people bring their own plan with any provider, and a team of any
 size works in one fabrika project. The team shares the work, never a login.
 

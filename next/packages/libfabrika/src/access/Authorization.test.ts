@@ -21,6 +21,7 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
+import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
 let appendAdmitted: typeof import("./Authorization.ts").appendAdmitted;
 
@@ -149,7 +150,7 @@ const world = (path = join(folder, `${++homes}.db`), fail = false) => {
   const layer = Layer.mergeAll(
     ledger,
     observed,
-    ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+    ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
     SpanSink.layer(sql, { object: "process_01m6v5270hetdrt4r8h9vvjwjs" }),
     RecordManager.memory(1024 * 1024),
     Archive.memory,

@@ -1,4 +1,10 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./codexexec.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.ts?raw";
 import "./mutbox-entry.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -30,16 +36,27 @@ import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Stream } from "effect";
+import { Effect, Exit, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Answer, NO_SPENT } from "./agents.ts";
+import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
 import {
+  AGENT_CAP,
+  agentCapFull,
   agentsDraft,
   agentTail,
   ownedHead,
@@ -57,18 +74,24 @@ import {
   decide,
   dockerHolder,
   endName,
+  FINISH,
   firstEventAt,
-  freshBox,
+  freeLane,
   GC_EVERY,
   gcDue,
+  holdLane,
   holdsElectron,
+  laneRunning,
   machine,
   phasesIn,
   reportOf,
   rowOf,
   startedOf,
+  STEPS,
   Sweep,
+  tailFor,
 } from "./drive.ts";
+import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -552,6 +575,24 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   });
 });
 
+describe("the agent cap refuses a start once 12 agents run (0012), today's tooling", () => {
+  // Plants: compare with > instead of >=; keep the old cap of 8.
+  it("property: a start is refused exactly when the agents running reach AGENT_CAP", () => {
+    fc.assert(
+      fc.property(fc.nat({ max: 40 }), (agents) => {
+        expect(agentCapFull(agents)).toBe(agents >= AGENT_CAP);
+      }),
+      options,
+    );
+  });
+
+  it("pinned: the cap is 12, decision 0012's at most 12 code agents at once", () => {
+    expect(AGENT_CAP).toBe(12);
+    expect(agentCapFull(11)).toBe(false);
+    expect(agentCapFull(12)).toBe(true);
+  });
+});
+
 describe("T566 a mutation step while another Docker box runs is refused before its box, today's tooling", () => {
   const pid = fc.integer({ min: 1, max: 99_999 });
   const lock = fc.oneof(
@@ -1029,44 +1070,19 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 });
 
 describe("T383 drive never passes off an older run's report, today's tooling", () => {
-  const suffixes = [
-    "",
-    "-gitdata",
-    "-mutbox",
-    "-prompt.md",
-    ".md",
-    ".jsonl",
-    ".err",
-    ".log",
-    "-plan.md",
-    "-plan.jsonl",
-  ];
-  // Plants: check only the box folder and prompt, as before; skip a free number; start below n.
-  // p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
+  // Plants: count only the box folders; reuse the highest number taken. p12 review5, 2026-11-09: box.sh refused the run, and drive returned p12-review5.md from
   // 2026-11-08, written for another head, as the step's report (field note 2026-11-09-205).
-  it("picks the first box number from n up that no older file holds", () => {
-    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...suffixes)));
+  it("property: the next run id is held by no file an older run of that lane and step left", () => {
+    const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
-      fc.property(
-        fc.constantFrom("plan", "review", "build"),
-        fc.integer({ min: 1, max: 4 }),
-        left,
-        (step, n, files) => {
-          const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
-          const box = freshBox("p12", step, n, (name) => taken.has(name));
-          const i = Number(box.slice(`p12-${step}`.length));
-          expect(box).toBe(`p12-${step}${i}`);
-          expect(i).toBeGreaterThanOrEqual(n);
+      fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
+        const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
+        const box = RunId.next("p12", step, taken);
 
-          for (const suffix of suffixes) {
-            expect(taken.has(`${box}${suffix}`)).toBe(false);
-          }
-
-          for (let j = n; j < i; j += 1) {
-            expect(suffixes.some((suffix) => taken.has(`p12-${step}${j}${suffix}`))).toBe(true);
-          }
-        },
-      ),
+        for (const suffix of RunId.FILES) {
+          expect(taken.has(`${box}${suffix}`)).toBe(false);
+        }
+      }),
       options,
     );
   });
@@ -1181,6 +1197,42 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
   });
 });
 
+// 2026-11-11: a tests step on Codex answered send tests round after round, listing as unfinished
+// what no tests box can do. Plants: offer a step its own name; keep the static tests | build | plan
+// tail; leave the finish rule out of a boxed step's prompt.
+describe("a step is never offered itself as a send's to, today's tooling", () => {
+  const steps = fc.constantFrom(...STEPS);
+
+  it("property: the tail and the answer schema offer every send target but the step itself", () => {
+    fc.assert(
+      fc.property(steps, (step) => {
+        const offered = ["tests", "build", "plan"].filter((to) => to !== step);
+        expect(sendsFrom(step)).toEqual(offered);
+        expect(tailFor(step)).toContain(`  to:   ${offered.join(" | ")} when the verb is send, else null`);
+        const decode = Schema.decodeUnknownExit(answerFor(step));
+        const answer = (to: string) => ({ verb: "send", to, reason: "r", laws: null });
+        expect(Exit.isFailure(decode(answer(step)))).toBe(true);
+
+        for (const to of offered) {
+          expect(Exit.isSuccess(decode(answer(to)))).toBe(true);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("property: every boxed step's prompt carries the finish rule, and the plan's does not", () => {
+    fc.assert(
+      fc.property(steps, fc.boolean(), (step, electron) => {
+        expect(agentTail({ step, ticket: "1" }, electron).includes(FINISH)).toBe(step !== "plan");
+      }),
+      options,
+    );
+    expect(FINISH).toContain('"after build" or "lead runs it"');
+    expect(FINISH).toContain("does not block `done`");
+  });
+});
+
 describe("drive holds the Electron lock outside the box, today's tooling", () => {
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
@@ -1216,6 +1268,54 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
+  });
+});
+
+describe("one live process drives a lane, today's tooling", () => {
+  // Plants: never read the lock's owner; keep a dead owner's lock; free a lock another holds.
+  // p39s1, 2026-11-11: a second chain started 18 s after the first, and both took p39s1-tests2.
+  it("scenario: the lane is taken, refused to a live owner, taken over from a dead one, freed only by its own", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const lock = join(boxes, "state", "l.lock");
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    const live = process.ppid;
+
+    expect(holdLane(boxes, "l")).toBeNull();
+    expect(readFileSync(lock, "utf8")).toBe(String(process.pid));
+    expect(holdLane(boxes, "l")).toBeNull();
+    writeFileSync(lock, String(live));
+    expect(holdLane(boxes, "l")).toBe(live);
+    freeLane(boxes, "l");
+    expect(readFileSync(lock, "utf8")).toBe(String(live));
+    writeFileSync(lock, String(dead));
+    expect(holdLane(boxes, "l")).toBeNull();
+    freeLane(boxes, "l");
+    const gone = existsSync(lock);
+    rmSync(boxes, { recursive: true, force: true });
+    expect(gone).toBe(false);
+  });
+
+  it("scenario: a step started while another process drives its lane is refused before any box is made", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drive-lane-"));
+    const boxes = join(dir, "boxes");
+    const brief = join(dir, "brief.md");
+    writeFileSync(brief, "brief");
+    mkdirSync(join(boxes, "state"), { recursive: true });
+    writeFileSync(join(boxes, "state", "l.lock"), String(process.pid));
+    const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "tests", brief], {
+      encoding: "utf8",
+      env: { ...process.env, BOXES: boxes },
+    });
+    const made = readdirSync(boxes);
+    const still = readFileSync(join(boxes, "state", "l.lock"), "utf8");
+    rmSync(dir, { recursive: true, force: true });
+    expect(r.status).toBe(3);
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      outcome: "refused:lane_running",
+      reason: laneRunning("l", process.pid),
+    });
+    expect(made).toEqual(["state"]);
+    expect(still).toBe(String(process.pid));
   });
 });
 

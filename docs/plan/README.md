@@ -55,6 +55,11 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
+ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
+later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
+and 79 kept modules, matching the approved plan's sketch.
+
 **Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
@@ -121,6 +126,13 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
 build can start.
+
+`next/` naming sweep, ticket 688 (2026-11-11): libfabrika's folders are modules and their ranks
+are layers ([0091](../../.decisions/0091-modules-and-layers.md)). Each row of `layer-rules.json`
+says `layer` where it said `floor`, with the same twelve ranks; the lint rule `fabrika/rooms` is
+`fabrika/modules`, with the same checks; and oxlint's `eslint/id-denylist` keeps the old words out
+of names in `next/`. No import permission, rank or runtime behavior changes, and no Tier 1 row is
+done by it.
 
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`

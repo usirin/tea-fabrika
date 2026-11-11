@@ -339,9 +339,104 @@ describe("chain after the merge (p86 and p89)", () => {
   });
 
   // scenario: signed commits, squash and later log commits require a fixed real git history.
-  it("scenario: broken_chain: the last link's to is the head's tree, but the squash took a main that moved", () => {
+  // 0098 changed it: this was broken_chain, and a pull request that landed behind main is done.
+  it("scenario: done: the last link's to is the head's tree, and the squash took a main that moved", () => {
     const r = new Repo();
     const { squash, rows } = squashed(r, twoSteps(r), true);
+    log(r, rows);
+    expect(r.run(["chain", "--squash", squash])).toMatchObject({ code: 0, answers: [DONE] });
+  });
+
+  // scenario: a real squash behind main, logged without its last link, has a real gap at its end.
+  it("scenario: broken_chain: landed behind main, and the build's link is left out of the log", () => {
+    const r = new Repo();
+    const { squash, rows } = squashed(r, twoSteps(r), true);
+    log(r, [rows[0]!]);
+    expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
+  });
+
+  // scenario: a real squash behind main that holds more than the head brought: no link names its change.
+  it("scenario: broken_chain: landed behind main, and the squash holds a file the head never had", () => {
+    const r = new Repo();
+    const { rows } = squashed(r, twoSteps(r), true);
+    r.write("next/packages/x/src/extra.ts", "extra\n");
+    r.git("add", "-A");
+    r.git("commit", "-q", "--amend", "-m", "squash");
+    const squash = r.head();
+    const moved = rows.map((row) => ({
+      ...row,
+      attested: row.attested.map((l) => ({ ...l, squash })),
+    }));
+    log(r, moved);
+    expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
+  });
+
+  // scenario: a real lead merge of main, then main moves again before the squash: the pinned base
+  // (the first link's) still merges cleanly onto the newer main.
+  it("scenario: done: a head that took a lead merge of main, landed behind a main that moved again", () => {
+    const r = new Repo();
+    const c1 = r.change("a.ts");
+    const n1 = r.sign("tests");
+    r.git("checkout", "-q", "main");
+    r.write("docs/first.md", "1\n");
+    r.commit("main moves");
+    r.git("checkout", "-q", "pr");
+    r.git("merge", "-q", "--no-edit", "main");
+    const c2 = r.head();
+    const n2 = r.sign("lead");
+    const c3 = r.change("b.ts");
+    const n3 = r.sign("build");
+    const { squash, rows } = squashed(
+      r,
+      [
+        { note: n1, commit: c1 },
+        { note: n2, commit: c2 },
+        { note: n3, commit: c3 },
+      ],
+      true,
+    );
+    log(r, rows);
+    expect(r.run(["chain", "--squash", squash])).toMatchObject({ code: 0, answers: [DONE] });
+  });
+
+  // scenario: a row's commit is unsigned, so a real forged commit whose parent is a newer main must
+  // not pick the merge base. Plant: drop `--merge-base`, and the squash that reverts main's fix passes.
+  it("scenario: broken_chain: landed behind main, a forged row commit on main's fix hides its revert", () => {
+    const r = new Repo();
+    r.git("checkout", "-q", "main");
+    r.write("f.txt", "vuln\n");
+    const left = r.commit("main at A");
+    r.git("checkout", "-q", "pr");
+    r.git("reset", "-q", "--hard", left);
+    const steps = twoSteps(r);
+    const tree = r.head("HEAD^{tree}");
+    r.git("checkout", "-q", "main");
+    r.write("f.txt", "fixed\n");
+    const fix = r.commit("main fixes f");
+    r.write("docs/other.md", "o\n");
+    r.commit("main moves");
+    r.git("merge", "--squash", "-q", "pr");
+    r.write("f.txt", "vuln\n");
+    const squash = r.commit("squash that reverts the fix");
+    const forged = r.git("commit-tree", tree, "-p", fix, "-m", "forged").trim();
+    const rows = steps.map(({ note, commit }, i) => ({
+      date: "2026-11-11",
+      run: `r${i}`,
+      attested: [
+        {
+          ...note,
+          by: "agent:planted",
+          arrivedAt: "2026-11-11T10:00:00-08:00",
+          parent: null,
+          traceId: `trace-step-${i}`,
+          commit: i === steps.length - 1 ? forged : commit,
+          pr: "usirin/tea-fabrika#1",
+          base: left,
+          squash,
+          keys: r.base,
+        },
+      ],
+    }));
     log(r, rows);
     expect(r.run(["chain", "--squash", squash]).answers).toEqual([stuck("broken_chain", squash)]);
   });

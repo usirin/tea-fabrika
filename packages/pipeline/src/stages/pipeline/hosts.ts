@@ -4,6 +4,7 @@ import { foldLedger, planFor } from "../../asks/rules.ts";
 import { currentOf } from "../../criteria/book.ts";
 import { readTicketId } from "../../ids.ts";
 import { covers } from "../../tickets/approval.ts";
+import { readAnswer } from "../../tickets/ticket.ts";
 import { Tickets } from "../../tickets/tickets.ts";
 import { BuildHost } from "../build/services.ts";
 import { numberOf } from "../build/ticket.ts";
@@ -135,13 +136,15 @@ export const laneBuildHost = Layer.effect(
           const track = plan === null ? undefined : state.plans.get(plan);
           const tip = yield* work.main;
           const blob = (text: string | null) => (text === null ? null : { text });
-          const approved = t.timeline.some(
+          const approvals = yield* Effect.forEach(
+            t.timeline,
             (e) =>
-              e.by.kind === "user" &&
-              e.fact.type === "answered" &&
-              e.fact.ask.startsWith("a-approve-") &&
-              e.fact.pick === "approve",
+              e.by.kind === "user" && e.fact.type === "answered" && readAnswer(t.timeline, e.fact)?.pick === "approve"
+                ? covers(e.fact, t)
+                : Effect.succeed(false),
+            { concurrency: 1 },
           );
+          const approved = approvals.some(Boolean);
           return {
             url,
             number,
@@ -187,19 +190,21 @@ export const answerHeard = (number: number, ask: string, picks: readonly string[
         for (const entry of ticket.timeline) {
           const { fact } = entry;
 
-          if (entry.by.kind !== "user" || fact.type !== "answered" || fact.ask !== ask) {
+          if (entry.by.kind !== "user" || fact.type !== "answered") {
             continue;
           }
 
-          if (!picks.includes(fact.pick)) {
+          const answer = readAnswer(ticket.timeline, fact);
+
+          if (answer === null || answer.ask !== ask || !picks.includes(answer.pick)) {
             continue;
           }
 
-          if (fact.pick === "approve" && !(yield* covers(fact, ticket))) {
+          if (answer.pick === "approve" && !(yield* covers(fact, ticket))) {
             continue;
           }
 
-          return { ask, pick: fact.pick, note: fact.note, by: entry.by.id };
+          return { ask, pick: answer.pick, note: answer.note, by: entry.by.id };
         }
 
         return null;

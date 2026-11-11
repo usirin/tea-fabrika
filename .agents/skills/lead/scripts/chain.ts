@@ -4,7 +4,12 @@
 //
 //   node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>]
 //                 [--plan <approved plan>] [--claude tests,build] [--electron tests,build]
-//                 [--model sonnet|opus] [--start tests|build|mutation|review]
+//                 [--codex-exec tests,build,review] [--model sonnet|opus]
+//                 [--start tests|build|mutation|review]
+//
+// `--codex-exec` names the steps whose Codex runs as the installed `codex exec`, plainly, on the
+// user's own Codex config (./codexexec.ts), in place of Codex through ACP. `--claude` wins a step
+// both name. The judgment agent stays on the ACP row.
 //
 // The lane is a tea machine on the Effect engine. Each step runs drive.ts's pieces in this
 // process (`prepare`, then `driveStep`: one box, one agent turn, the reads, the push, the row),
@@ -84,7 +89,6 @@ import {
   appendFileSync,
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
   readFileSync,
   renameSync,
@@ -98,22 +102,28 @@ import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import {
+  type AgentName,
   type DrivePhase,
   driveStep,
   type Env,
   FAULTS,
   type Fault,
   faultFrom,
+  freeLane,
+  holdLane,
+  laneRunning,
   loadEnv,
   MUTATION_AGENT,
   prepare,
+  runNames,
   sh,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import * as Typecheck from "./flow/typecheck.ts";
-import { wipOf } from "./lane.ts";
+import { stepOf, wipOf } from "./lane.ts";
+import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
 /** Every step the chain can start at: the lane's steps, and mutation for a lane parked inside it. */
@@ -267,7 +277,9 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
     }
     case "send":
       if (isLaneStep(to)) {
-        return toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
+        // A step that sends the lane to itself is not done and not a send: another round of it
+        // only loops (2026-11-11), so judgment reads why, and sends it on or parks it.
+        return to === step ? toJudge : toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
       // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
@@ -384,9 +396,40 @@ export type Facts = {
   readonly head: string;
   readonly round: number;
   readonly heads: Partial<Record<StepName, string>>;
+  /** Every commit on the lane since its root, oldest first, with the step its note names; `null`
+   * when git could not list them. */
+  readonly commits: ReadonlyArray<StepCommit> | null;
   readonly note: string;
   /** The last host step's outcome and head, for a review; `null` for any other step. */
   readonly host: string | null;
+};
+
+/** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
+export type StepCommit = { readonly step: string; readonly sha: string };
+
+/**
+ * What the lane has committed, by step, in short shas. Heads fill only on a done, so a step that
+ * committed and then sent the lane on still shows here (2026-11-11: a lane read "No step has
+ * committed yet." over three partial commits).
+ */
+export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string => {
+  if (commits === null) {
+    return "The lane's step commits could not be read (git rev-list failed).";
+  }
+
+  if (commits.length === 0) {
+    return "No step has committed yet.";
+  }
+
+  const steps = [...new Set(commits.map((c) => c.step))];
+  const by = steps.map(
+    (s) =>
+      `${s} ${commits
+        .filter((c) => c.step === s)
+        .map((c) => c.sha.slice(0, 8))
+        .join(" ")}`,
+  );
+  return `Step commits since the lane left main, oldest first: ${by.join("; ")}.`;
 };
 
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
@@ -400,7 +443,8 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     "---",
     `Lane facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the lane left main at ${short(f.root)}.`,
-    heads.length > 0 ? `Heads so far: ${heads.join(", ")}.` : "No step has committed yet.",
+    committedLine(f.commits),
+    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
     ...(f.note ? [`Last round: ${f.note}`] : []),
   ];
 
@@ -993,6 +1037,8 @@ type Setup = {
   readonly plan: string;
   readonly brief: ReturnType<typeof sectionsOf>;
   readonly claude: ReadonlySet<StepName>;
+  /** Steps whose Codex runs as plain `codex exec` (`--codex-exec`). */
+  readonly exec: ReadonlySet<StepName>;
   readonly electron: ReadonlySet<StepName>;
   readonly model: string;
   /** The `## host` section's commands; none skips the host step. */
@@ -1015,7 +1061,14 @@ or review) and a note of one or two sentences for that step, or answer "park" wi
 why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
-person is involved, or the same step already failed the same way.
+person is involved, or the same step already failed the same way.${
+  line.outcome.startsWith(`send:${step}:`)
+    ? `
+The ${step} step sent the lane to itself, which chain.ts never runs as one more round. When what it
+lists as left needs another step's code, a typecheck or --changed, send the next step with that
+list in the note. Park when the step itself is not done.`
+    : ""
+}
 
 ---
 The lane's state file, its last lines:
@@ -1122,6 +1175,23 @@ const handlers = (s: Setup) => {
 
     return heads;
   };
+  /** The lane's commits from its root to its head, oldest first, each with its note's step. */
+  const laneCommits = (root: string, head: string): StepCommit[] | null => {
+    if (root === "" || head === "") {
+      return [];
+    }
+
+    const listed = sh("git", ["-C", env.MAIN, "rev-list", "--reverse", `${root}..${head}`]);
+    return listed.code !== 0
+      ? null
+      : listed.out
+          .split("\n")
+          .filter(Boolean)
+          .map((sha) => {
+            const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+            return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
+          });
+  };
   return {
     step_run: (cmd: typeof Run.Type) =>
       Effect.gen(function* () {
@@ -1135,6 +1205,7 @@ const handlers = (s: Setup) => {
           head: lane.head ?? "",
           round,
           heads: headsOf(),
+          commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
           host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
         };
@@ -1143,7 +1214,8 @@ const handlers = (s: Setup) => {
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
         // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
         // runs it only for a lane started at mutation (0066).
-        const claude = (cmd.step === "mutation" && MUTATION_AGENT === "claude") || s.claude.has(cmd.step);
+        const agent = stepAgent(cmd.step, s.claude, s.exec);
+        const claude = agent === "claude";
         const entry: StepRecord = {
           round,
           step: cmd.step,
@@ -1154,9 +1226,7 @@ const handlers = (s: Setup) => {
           judged: null,
         };
         saveStep(entry);
-        note(
-          `round ${round}: starting ${cmd.step} on ${claude ? "claude" : "codex"}${cmd.note ? ` (${cmd.note})` : ""}`,
-        );
+        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note ? ` (${cmd.note})` : ""}`);
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
         // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
@@ -1168,7 +1238,7 @@ const handlers = (s: Setup) => {
             lane: s.lane,
             step: cmd.step,
             brief,
-            agent: claude ? "claude" : "codex",
+            agent,
             model: claude ? s.model : undefined,
             electron: claude && s.electron.has(cmd.step),
             ticket: s.ticket,
@@ -1260,7 +1330,7 @@ const handlers = (s: Setup) => {
       }),
     judge: (cmd: { step: StepName; line: Line; round: number }) =>
       Effect.gen(function* () {
-        const box = `${s.lane}-judge${earlier + cmd.round}`;
+        const box = RunId.next(s.lane, "judge", runNames(env.BOXES, s.lane));
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
         s.beats.enter("judge", at(".jsonl"));
@@ -1288,7 +1358,7 @@ const handlers = (s: Setup) => {
         appendFileSync(
           join(env.BOXES, `${s.lane}-rows.jsonl`),
           stepRow({
-            run: `t${s.ticket}-judge${earlier + cmd.round}`,
+            run: box,
             ticket: s.ticket,
             step: cmd.step,
             provider: "codex-read",
@@ -1370,6 +1440,7 @@ const handlers = (s: Setup) => {
           `Ran end to end by \`chain.ts ${s.lane}\`: no lead agent held the lane. Each step was its own agent through the fabrika agents package on ACP (${providers(
             saved().steps.map((e) => e.step),
             s.claude,
+            s.exec,
           )}); the lead agent wrote no step's work. Steps and dollars:`,
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
@@ -1455,7 +1526,8 @@ const handlers = (s: Setup) => {
         };
         saveStep(entry);
         s.beats.enter("host", null);
-        note(`round ${round}: starting host at ${head.slice(0, 8)} (${s.host.length} commands)`);
+        const name = RunId.next(s.lane, "host", runNames(env.BOXES, s.lane));
+        note(`round ${round}: starting host ${name} at ${head.slice(0, 8)} (${s.host.length} commands)`);
         const args = {
           main: env.MAIN,
           boxes: env.BOXES,
@@ -1464,7 +1536,7 @@ const handlers = (s: Setup) => {
           branch: s.branch,
           plan: s.plan,
           head,
-          round,
+          name,
           commands: s.host,
           minutes: yield* HostMinutes,
         };
@@ -1482,7 +1554,7 @@ const handlers = (s: Setup) => {
           head: hosted.head,
           reason: hosted.outcome.reason,
           report: hosted.log,
-          box: `${s.lane}-host${round}`,
+          box: name,
           exit: hosted.outcome._tag === "stuck" ? 30 : 0,
           // A host stuck is the tool's (git, the signer, the push); the host step runs no agent.
           fault: hosted.outcome._tag === "stuck" ? "tool" : null,
@@ -1516,12 +1588,28 @@ const handlers = (s: Setup) => {
  * Which agent ran the lane's steps, for the PR body. It names only steps the lane ran, so a lane
  * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
  */
-export const providers = (ran: readonly string[], claude: ReadonlySet<StepName>): string => {
-  const onClaude = STEPS.filter(
-    (s) => ran.includes(s) && (s === "mutation" ? MUTATION_AGENT === "claude" : claude.has(s)),
-  );
-  return onClaude.length === 0 ? "Codex in a box" : `Codex in a box, or Claude for ${onClaude.join(", ")}`;
+export const providers = (
+  ran: readonly string[],
+  claude: ReadonlySet<StepName>,
+  exec: ReadonlySet<StepName> = new Set(),
+): string => {
+  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+  const onExec = on("codex-exec");
+  const onClaude = on("claude");
+  return [
+    "Codex in a box",
+    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
+    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
+  ].join(", ");
 };
+
+/**
+ * Which agent a step runs on: mutation on drive's `MUTATION_AGENT`; else Claude for a step
+ * `--claude` names, plain `codex exec` for one `--codex-exec` names, and Codex through ACP for the
+ * rest. `--claude` wins a step both name.
+ */
+export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
+  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
 
 /** One table row per step the lane ran, with its list-price dollars from the rows file. */
 export const stepsTable = (
@@ -1575,12 +1663,23 @@ export const chainMain = (args: string[], env: Env) =>
 
     if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(briefPath)) {
       console.error(
-        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--model sonnet|opus] [--start tests|build|mutation|review]",
+        "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] [--model sonnet|opus] [--start tests|build|mutation|review]",
       );
       process.exit(2);
     }
 
-    mkdirSync(join(env.BOXES, "state"), { recursive: true });
+    // One live process drives a lane: a second chain, or a chain beside a step run alone, stops
+    // here, before any box is made. The scope gives the lane back however the chain ends.
+    const running = yield* Effect.acquireRelease(
+      Effect.sync(() => holdLane(env.BOXES, lane)),
+      (held) => (held === null ? Effect.sync(() => freeLane(env.BOXES, lane)) : Effect.void),
+    );
+
+    if (running !== null) {
+      console.error(`chain.ts: ${laneRunning(lane, running)}`);
+      process.exit(3);
+    }
+
     const statePath = join(env.BOXES, "state", `${lane}.json`);
     const saved: { ticket?: string; branch?: string; plan?: string } = existsSync(statePath)
       ? JSON.parse(readFileSync(statePath, "utf8"))
@@ -1629,6 +1728,7 @@ export const chainMain = (args: string[], env: Env) =>
       plan,
       brief,
       claude: stepSet(flag(args, "--claude")),
+      exec: stepSet(flag(args, "--codex-exec")),
       electron: stepSet(flag(args, "--electron")),
       model: flag(args, "--model") ?? "sonnet",
       host,
@@ -1641,7 +1741,7 @@ export const chainMain = (args: string[], env: Env) =>
       backstop,
     };
     const machine = makeMachine(limits);
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const handle = yield* run(machine, {
       ctx: undefined,
       interpret: handlers({ ...setup, agents }),

@@ -7,10 +7,10 @@ import { Ledger, streams } from "@kampus/fabrika-old";
 import { Duration, Effect, Fiber, Layer } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { memoryLedger } from "../../asks/ledger.ts";
-import { hashOf, textOf } from "../../tickets/approval.ts";
-import { factsOf, nameOf } from "../../tickets/ticket.ts";
+import { factsOf, nameOf, picksOf } from "../../tickets/ticket.ts";
 import { Tickets, ticketsOnLedger } from "../../tickets/tickets.ts";
 import { fakeEnv, makeLaneHome } from "./lane-fixture.ts";
+import { answerAsk } from "./lane-harness.ts";
 import { laneLayer, runLane } from "./layer.ts";
 
 // Today's version. Before a build round, an exam file that fails the repository's format check gets a
@@ -132,7 +132,6 @@ const file = Effect.gen(function* () {
 /** Answers every ask as a person, with `picks[kind]` or its first pick, until the fiber is stopped. */
 const answering = (picks: Readonly<Record<string, string>>) =>
   Effect.gen(function* () {
-    const ledger = yield* Ledger;
     const done = new Set<string>();
 
     for (;;) {
@@ -146,17 +145,18 @@ const answering = (picks: Readonly<Record<string, string>>) =>
         }
 
         done.add(fact.ask);
-        yield* ledger.send(streams(nameOf(NUMBER)).inbox, `answer-${fact.ask}`, {
-          kind: "answered",
-          writer: OWNER,
-          data: {
-            type: "answered",
-            ask: fact.ask,
-            pick: picks[fact.ask.split("-")[1] ?? ""] ?? fact.picks[0],
-            note: "",
-            text: yield* hashOf(textOf(ticket)),
-          },
-        });
+
+        if (!("format" in fact)) {
+          return yield* Effect.die(new Error(`The test's person needs a sealed ask: ${fact.ask}`));
+        }
+
+        const pick = picks[fact.ask.split("-")[1] ?? ""] ?? picksOf(fact)[0];
+
+        if (pick === undefined) {
+          return yield* Effect.die(new Error("The ask has no pick"));
+        }
+
+        yield* answerAsk(NUMBER, fact, pick);
       }
 
       yield* Effect.sleep("50 millis");
@@ -179,8 +179,9 @@ describe("an exam file that fails the format check before a build round", () => 
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // scenario: run the real formatter and local builder on a temporary git repository's second round.
   it(
-    "before round 2 gets a code commit, the builder's head is on it, and its diff does not count it as exam_touched",
+    "scenario: before round 2 gets a code commit, the builder's head is on it, and its diff does not count it as exam_touched",
     { timeout: 300_000 },
     async () => {
       const { home, seed } = makeLaneHome({
@@ -300,70 +301,75 @@ describe("a test the mutants' writer adds that fails the format check", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("gets a code commit after the answers, and the review is handed that head", { timeout: 300_000 }, async () => {
-    const formatter = crashesOnce(join(dir, "seen"));
-    const { home, seed } = makeLaneHome({
-      dir,
-      nodeModules: MODULES,
-      reads: [dirname(dirname(dirname(MODULES)))],
-      mainFiles: [formatter],
-    });
-    nameFormatter(seed, formatter.path);
-    writeFileSync(
-      join(dir, "script.json"),
-      JSON.stringify({
-        answers: { mutants: [{ with: { files: [{ path: ANSWER, text: ANSWER_SPACES }] } }] },
-      }),
-    );
+  // scenario: a real formatter process fails once, then the local lane commits and reviews its output.
+  it(
+    "scenario: gets a code commit after the answers, and the review is handed that head",
+    { timeout: 300_000 },
+    async () => {
+      const formatter = crashesOnce(join(dir, "seen"));
+      const { home, seed } = makeLaneHome({
+        dir,
+        nodeModules: MODULES,
+        reads: [dirname(dirname(dirname(MODULES)))],
+        mainFiles: [formatter],
+      });
+      nameFormatter(seed, formatter.path);
+      writeFileSync(
+        join(dir, "script.json"),
+        JSON.stringify({
+          answers: { mutants: [{ with: { files: [{ path: ANSWER, text: ANSWER_SPACES }] } }] },
+        }),
+      );
 
-    for (const [key, value] of Object.entries(fakeEnv(dir))) {
-      vi.stubEnv(key, value);
-    }
+      for (const [key, value] of Object.entries(fakeEnv(dir))) {
+        vi.stubEnv(key, value);
+      }
 
-    const lines: string[] = [];
-    const say = (said: string) => Effect.sync(() => void lines.push(said));
-    const log = join(dir, "codex.log");
-    // The review's brief is all this needs, so the lane stops once the review has started.
-    const over = () =>
-      (existsSync(log) && readFileSync(log, "utf8").includes('"step":"review"')) ||
-      lines.some((said) => said.startsWith(`#${NUMBER} ended`));
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        yield* file;
-        yield* Effect.forkScoped(answering({ step: "go_on", merge: "no" }));
-        const running = yield* Effect.forkScoped(
-          runLane(NUMBER, say).pipe(
-            Effect.provide(laneLayer({ home, checkout: seed, briefs: BRIEFS, person: "owner" })),
-          ),
-        );
-        yield* Effect.gen(function* () {
-          while (!over()) {
-            yield* Effect.sleep("50 millis");
-          }
-        }).pipe(Effect.timeoutOption(Duration.seconds(240)));
-        yield* Fiber.interrupt(running);
-      }).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
-    );
+      const lines: string[] = [];
+      const say = (said: string) => Effect.sync(() => void lines.push(said));
+      const log = join(dir, "codex.log");
+      // The review's brief is all this needs, so the lane stops once the review has started.
+      const over = () =>
+        (existsSync(log) && readFileSync(log, "utf8").includes('"step":"review"')) ||
+        lines.some((said) => said.startsWith(`#${NUMBER} ended`));
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* file;
+          yield* Effect.forkScoped(answering({ step: "go_on", merge: "no" }));
+          const running = yield* Effect.forkScoped(
+            runLane(NUMBER, say).pipe(
+              Effect.provide(laneLayer({ home, checkout: seed, briefs: BRIEFS, person: "owner" })),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            while (!over()) {
+              yield* Effect.sleep("50 millis");
+            }
+          }).pipe(Effect.timeoutOption(Duration.seconds(240)));
+          yield* Fiber.interrupt(running);
+        }).pipe(Effect.scoped, Effect.provide(Layer.fresh(memoryLedger().layer))),
+      );
 
-    const said = lines.join("\n");
-    const tree = join(home, "work", "trees", String(NUMBER));
-    const git = (...args: readonly string[]) =>
-      execFileSync("git", args, { cwd: tree, encoding: "utf8", stdio: "pipe" }).trim();
-    // The answers' commit as written, then the code's format commit, which holds that file alone.
-    const touching = git("log", "--format=%H", "HEAD", "--", ANSWER).split("\n");
-    expect(touching, said).toHaveLength(2);
-    const [formatted = "", answered = ""] = touching;
-    expect(git("show", `${answered}:${ANSWER}`)).toBe(ANSWER_SPACES.trim());
-    expect(git("show", "--format=", "--name-only", formatted)).toBe(ANSWER);
-    expect(git("show", `${formatted}:${ANSWER}`)).toBe(ANSWER_TABS.trim());
+      const said = lines.join("\n");
+      const tree = join(home, "work", "trees", String(NUMBER));
+      const git = (...args: readonly string[]) =>
+        execFileSync("git", args, { cwd: tree, encoding: "utf8", stdio: "pipe" }).trim();
+      // The answers' commit as written, then the code's format commit, which holds that file alone.
+      const touching = git("log", "--format=%H", "HEAD", "--", ANSWER).split("\n");
+      expect(touching, said).toHaveLength(2);
+      const [formatted = "", answered = ""] = touching;
+      expect(git("show", `${answered}:${ANSWER}`)).toBe(ANSWER_SPACES.trim());
+      expect(git("show", "--format=", "--name-only", formatted)).toBe(ANSWER);
+      expect(git("show", `${formatted}:${ANSWER}`)).toBe(ANSWER_TABS.trim());
 
-    // The review's diff holds the formatted test, not the one as written.
-    const review = readFileSync(log, "utf8")
-      .trim()
-      .split("\n")
-      .map((row) => JSON.parse(row) as { readonly step: string; readonly diff: string | null })
-      .find((run) => run.step === "review");
-    expect(review?.diff, said).toContain('+\texpect(lower(" Ab ")).toBe("ab");');
-    expect(review?.diff).not.toContain('+  expect(lower(" Ab ")).toBe("ab");');
-  });
+      // The review's diff holds the formatted test, not the one as written.
+      const review = readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map((row) => JSON.parse(row) as { readonly step: string; readonly diff: string | null })
+        .find((run) => run.step === "review");
+      expect(review?.diff, said).toContain('+\texpect(lower(" Ab ")).toBe("ab");');
+      expect(review?.diff).not.toContain('+  expect(lower(" Ab ")).toBe("ab");');
+    },
+  );
 });

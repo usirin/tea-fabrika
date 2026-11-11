@@ -4,7 +4,7 @@ import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
 import { Saw } from "@kampus/libfabrika/access/Access";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
@@ -161,7 +161,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     by: root.sshFingerprint,
     build: "test-build",
   };
-  const clients = ClientManager.layer(founder).pipe(Layer.provideMerge(ledger));
+  const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   const parts = new Map<string, ReturnType<typeof nodeSql>>();
   const records = RecordManager.sql((name) => {
     let part = parts.get(name);

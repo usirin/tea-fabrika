@@ -2,6 +2,7 @@ import { applyCell } from "@demlik/tea";
 import type { MsgOf } from "@kampus/fabrika-old";
 import type { Entry, Fact } from "@kampus/pipeline/tickets/ticket";
 import { describe, expect, it } from "vitest";
+import { property, ticketNumber } from "../../../fixtures/ask-desk/property.ts";
 import {
   type Asks,
   asksMachine,
@@ -26,7 +27,6 @@ const NOON = new Date(2026, 9, 30, 12).getTime();
 
 type Msg = MsgOf<typeof asksMachine>;
 type Load = ReturnType<typeof load>;
-
 const step = (s: Asks, m: Msg): readonly [Asks, readonly Load[]] => applyCell<Asks, Msg, Load>(asksMachine, s, m);
 
 /** Facts as the ledger would hold them, a minute apart from noon, on the tickets named. */
@@ -87,15 +87,19 @@ const facts = entriesOf(
 );
 
 describe("the asks", () => {
-  it("counts each open ask and each stuck run, oldest first, and nothing answered or closed", () => {
-    const now = asksNow(loaded(facts));
-    expect(now.asks.map((a) => [a.key, a.ticket, a.kind, a.what])).toEqual([
-      ["7/a-1", 7, "ask", "approve plan"],
-      ["8/stuck/r-1", 8, "stuck", "read failed"],
-    ]);
-    expect(now.asks.map((a) => a.title)).toEqual(["Login fails", "Dark mode"]);
-    expect(now.reach).toBe("ok");
-  });
+  property(
+    "counts each open ask and each stuck run by oldest kind, then oldest ask, and nothing answered or closed",
+    { offset: ticketNumber },
+    ({ offset }) => {
+      const now = asksNow(loaded(facts.map((e) => ({ ...e, at: e.at + offset }))));
+      expect(now.asks.map((a) => [a.key, a.ticket, a.kind, a.what])).toEqual([
+        ["7/a-1", 7, "ask", "approve plan"],
+        ["8/stuck/r-1", 8, "stuck", "read failed"],
+      ]);
+      expect(now.asks.map((a) => a.title)).toEqual(["Login fails", "Dark mode"]);
+      expect(now.reach).toBe("ok");
+    },
+  );
 
   it("takes an ask set aside out of the count, shows it as later, and brings it back", () => {
     const [aside] = step(loaded(facts), { type: "later", key: "7/a-1" });
@@ -106,25 +110,31 @@ describe("the asks", () => {
     expect(asksNow(back).asks.map((a) => a.key)).toEqual(["7/a-1", "8/stuck/r-1"]);
   });
 
-  it("marks every ask seen once the list opens, and a newer one comes unseen", () => {
-    const [seen] = step(loaded(facts), { type: "seen" });
-    expect(asksNow(seen).asks.every((a) => a.seen)).toBe(true);
-    const more = entriesOf(...facts.map((e) => [e.ticket, e.by, e.fact] as const), asked(11, "a-2", "merge?"));
-    const [busy, cmds] = step(seen, { type: "moved" });
-    const cmd = cmds[0];
+  property(
+    "marks every ask seen once the list opens, and a newer one comes unseen",
+    { offset: ticketNumber },
+    ({ offset }) => {
+      const [seen] = step(loaded(facts.map((e) => ({ ...e, at: e.at + offset }))), { type: "seen" });
+      expect(asksNow(seen).asks.every((a) => a.seen)).toBe(true);
+      const more = entriesOf(...facts.map((e) => [e.ticket, e.by, e.fact] as const), asked(11, "a-2", "merge?")).map(
+        (e) => ({ ...e, at: e.at + offset }),
+      );
+      const [busy, cmds] = step(seen, { type: "moved" });
+      const cmd = cmds[0];
 
-    if (cmd === undefined) {
-      throw new Error("news asks for a load");
-    }
+      if (cmd === undefined) {
+        throw new Error("news asks for a load");
+      }
 
-    const [read] = step(busy, load.ok(cmd, { entries: more.slice(facts.length), last: more.length }, 0));
-    const now = asksNow(read);
-    expect(now.asks.map((a) => [a.key, a.seen])).toEqual([
-      ["7/a-1", true],
-      ["8/stuck/r-1", true],
-      ["11/a-2", false],
-    ]);
-  });
+      const [read] = step(busy, load.ok(cmd, { entries: more.slice(facts.length), last: more.length }, 0));
+      const now = asksNow(read);
+      expect(now.asks.map((a) => [a.key, a.seen])).toEqual([
+        ["7/a-1", true],
+        ["11/a-2", false],
+        ["8/stuck/r-1", true],
+      ]);
+    },
+  );
 
   it("loads once at a time: news while a load is out asks for one more after it", () => {
     const s = loaded([]);

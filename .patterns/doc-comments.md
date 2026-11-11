@@ -75,6 +75,23 @@ and each one is visible in the installed source:
   `export * as Duration from "./Duration.ts"` (`node_modules/effect/src/index.ts:190-195`).
 - **A member's doc is optional.** When present it takes `@since` and `@default`, never
   `@category`.
+- **One doc block per export.** A tool reads only the block right above the export, so a
+  description in one block and `@internal` in a second loses the description. Put both in one block:
+
+  ```ts
+  // next/packages/libfabrika/src/processes/internal/processTable.ts:66-71
+  /**
+   * The canonical (recipient, ref) key a watch is held under.
+   *
+   * @internal
+   */
+  export const watchKey = (to: To, ref: string): string => JSON.stringify([canonical(to), ref]);
+  ```
+
+- **No plan codes, no history.** A comment never cites a plan row, a law number or a flag (`P6`,
+  `law p92`, `flag 13`, `Tier 1`), and never points at a past version ("as before"). A stranger
+  cannot read them, and they rot when the plan moves. Keep the reason in words; a decision number
+  such as `(0095)` may stay, since the record lasts. Effect's source cites no ticket.
 
 ## Intended scope
 
@@ -84,6 +101,16 @@ either. Today no file in `next/` has a `@since` tag, and Effect's checker finds 
 `next/packages/libfabrika/src` that need a block or its tags. `@since` carries the library's own
 version, which is `0.0.0` while it is unpublished; [0023](../.decisions/0023-next-follows-effects-code-style.md)
 leaves that value open.
+
+Not yet, in `next/packages/libfabrika/src`:
+
+- Doubled blocks: `ledger/internal/ledgerPages.ts:7-8`, `ledger/internal/ledgerTrace.ts:3-4` and
+  `processes/internal/processMail.ts:9-14`, each a description block followed by a second
+  `/** @internal */` block.
+- Plan codes: a regex count on main `4cc93a8a0` finds 89 comment lines in 52 product files, for
+  example `ledger/Log.ts:1-2` ("Tier 1, P6 (laws p68 and p92)"), `processes/Mailbox.ts:2-3` and
+  `ledger/internal/ledgerStore.ts:20` ("(flag 13)"). A count, not a list.
+- History: `processes/internal/processMail.ts:10` ("Historical mailbox replay stays unchanged").
 
 ## Decision
 
@@ -107,6 +134,9 @@ and doc comment structure.
   `@param` or `@returns`: all false alarms, so they stay off.
 - **`@effect/docgen` 4.1.2 is on npm**, but it builds a docs site and checks less: `@since` and a
   description per export, not the section order.
+- **No check finds plan codes or doubled blocks.** Two small rules of ours are proposed in the Effect
+  code guidelines study (experiment 262, not on main yet): a word list on comments, and a rule on
+  two doc blocks above one export. Their false alarms get counted before either can block.
 - Lean, a guess, about 70% sure: a small rule of ours in `oxlint-plugins/` for presence, tag set
   and tag order, since it needs no type information, plus Effect's checker run by hand for the
   section rules until a block from it is measured on more of our tree. What would settle it: the

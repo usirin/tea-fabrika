@@ -1,11 +1,12 @@
 import { Schema } from "effect";
-import { Line } from "../../ledger/Log.ts";
-import { Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
 
-const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
-const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const Text = Schema.NonEmptyString;
+/** @internal */
+export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+/** @internal */
+export const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+/** @internal */
+export const Text = Schema.NonEmptyString;
 /** How many times one letter is tried before it moves to the dead letters: 1 to 32. */
 /** @internal */
 export const Deliveries = Count.check(Schema.isLessThanOrEqualTo(32));
@@ -42,7 +43,8 @@ export const Policy = Schema.Struct({
 /** @internal */
 export type Policy = typeof Policy.Type;
 
-const AttemptFields = { process: ProcessId, letter: Text, build: Text, seq: Count };
+/** @internal */
+export const AttemptFields = { process: ProcessId, letter: Text, build: Text, seq: Count };
 
 /** @internal */
 export const Failure = Schema.TaggedUnion({
@@ -54,29 +56,7 @@ export const Failure = Schema.TaggedUnion({
 export type Failure = typeof Failure.Type;
 
 /** @internal */
-export const Recovery = Schema.TaggedUnion({
-  live: { process: ProcessId },
-  ending: { process: ProcessId, failure: Failure },
-  down: { process: ProcessId, reason: Text, crashes: Count, until: Millis },
-  starting: { after: ProcessId, request: Start.cases.again },
-});
-
-const Action = Schema.Struct({
-  type: Schema.Literals(["dead", "exit", "down", "start", "checkpoint"]),
-  process: ProcessId,
-  id: Schema.optionalKey(Text),
-  from: Schema.optionalKey(Line.mapFields(({ _tag, body: _body, ...fields }) => fields)),
-  after: Schema.optionalKey(ProcessId),
-  until: Schema.optionalKey(Millis),
-});
-
-const Attempt = Schema.Struct({
-  ...AttemptFields,
-  phase: Schema.Literals(["fresh", "saved"]),
-  at: Millis,
-});
-
-const Observation = Schema.Struct({
+export const Observation = Schema.Struct({
   seq: Count,
   process: ProcessId,
   letter: Text,
@@ -101,26 +81,5 @@ export const Receipt = Schema.Struct({
       : "a failed delivery keeps its input; an accepted delivery keeps its digest",
   ),
 );
-
 /** @internal */
-export const Supervision = Schema.Struct({
-  v: Schema.Literal(1),
-  name: Text,
-  policy: Policy,
-  seq: Millis,
-  recovery: Recovery,
-  pending: Schema.NullOr(Action),
-  attempt: Schema.NullOr(Attempt),
-  build: Text,
-  restarts: Schema.Array(Millis),
-  observations: Schema.Array(Observation),
-  receipts: Schema.Array(Receipt),
-  /** The program's own delivery limit, from its declaration. It wins over the policy's. */
-  maxDeliveries: Schema.optionalKey(Deliveries),
-  crashes: Schema.optionalKey(Millis),
-  healthyAt: Schema.optionalKey(Millis),
-  restart: Schema.optionalKey(Schema.Struct({ id: Text, build: Text })),
-  requests: Schema.optionalKey(Schema.Array(Schema.Struct({ id: Text, build: Text, process: ProcessId }))),
-});
-/** @internal */
-export type Supervision = typeof Supervision.Type;
+export type Receipt = typeof Receipt.Type;
