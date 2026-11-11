@@ -4,6 +4,7 @@ import type { Plugin } from "@oxlint/plugins";
 import { doorIsLibrary } from "./door-is-library.ts";
 import { edgeComment } from "./edge-comment.ts";
 import { effectFunctions } from "./effect-functions.ts";
+import { lawShape } from "./law-shape.ts";
 import { noBareDisable } from "./no-bare-disable.ts";
 import { noBareTell } from "./no-bare-tell.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
@@ -42,6 +43,7 @@ const plugin: Plugin = {
     "door-is-library": doorIsLibrary,
     "edge-comment": edgeComment,
     "effect-functions": effectFunctions,
+    "law-shape": lawShape,
     "no-bare-disable": noBareDisable,
     "no-bare-tell": noBareTell,
     "no-clock-in-view": noClockInView,

@@ -5,9 +5,15 @@ import "../../lead/scripts/mutbox-entry.sh?raw";
 import "../../lead/scripts/mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./plancheck.sh?raw";
 import "../../lead/scripts/leakgrep.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../lead/scripts/sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import "../../lead/scripts/box.sh?raw";
@@ -930,6 +936,27 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
   }
 };
 
+describe("T686 size advice in the draft check, today's tooling", () => {
+  // Plant: let a slice over the cap fail the draft, or drop the advice. 0087 says it advises until
+  // the replay, so the exit code is the same either way, and only a slice over 600 is named.
+  it("property: the draft names each slice over 600 product lines and never changes the exit code", () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 1, max: 1200 }), { minLength: 1, maxLength: 4 }), (slices) => {
+        const listed = slices.map((lines, at) => `${at + 1}. **Slice ${at + 1}: ${lines} lines.**`).join("\n");
+        const body = complete().replace(
+          "Size: 1 agent hour, 80 lines. Confidence: 85%.",
+          `Size: 1 agent hour. Confidence: 85%.\n\n${listed}`,
+        );
+        const ran = modeCheck(`\nPlancheck-Version: 2\n${body}`, "--draft");
+        expect(ran.code, ran.text).toBe(0);
+        const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
+        expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
+      }),
+      { seed: 686, numRuns: 4 },
+    );
+  });
+});
+
 describe("T321 K11 sections and K2 approval, today's tooling", () => {
   // Plant: count required content inside fences. Each deletion is tried alone.
   it("K11 requires each section outside fences and a whole opening code block", () => {
@@ -1021,6 +1048,35 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
         },
       ),
       { seed: 321, numRuns: 6 },
+    );
+  });
+
+  // Plants: let an anchored path, a bare anchor or a note word through as an owner key, or refuse
+  // a plain path, a root file or a folder. stepcommit matches keys to staged paths exactly
+  // (ticket 425, lane t411: `serve.test.ts:162`, `:537` and `new` became keys).
+  it("property: --draft fails a files-table path that is no repo path, naming its row", () => {
+    fc.assert(
+      fc.property(word, fc.integer({ min: 1, max: 999 }), (name, line) => {
+        const path = `src/${name}.test.ts`;
+        const at = (cell: string) =>
+          complete().replace("| src/plain.ts | build |", `| src/plain.ts | build |\n| ${cell} | tests |`);
+
+        for (const [cell, key] of [
+          [`\`${path}:${line}\``, `${path}:${line}`],
+          [`\`${path}\`, \`:${line}\``, `:${line}`],
+          [`\`${path}\`, new`, "new"],
+        ] as const) {
+          const bad = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          expect(bad.code, bad.text).toBe(1);
+          expect(bad.text).toContain(`${key} is not a repo path`);
+        }
+
+        for (const cell of [`\`${path}\``, "`README.md`", `\`src/${name}/\``]) {
+          const good = modeCheck(`\nPlancheck-Version: 2\n${at(cell)}`, "--draft");
+          expect(good.code, `${cell}\n${good.text}`).toBe(0);
+        }
+      }),
+      { seed: 425, numRuns: 3 },
     );
   });
 

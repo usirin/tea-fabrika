@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Referee } from "../ledger/Referee.ts";
@@ -136,7 +137,7 @@ describe("P12 Connection attachment laws", () => {
         const sql = nodeSql(db);
         let ring: Connection["ring"] = () => Effect.void;
         const bell = Layer.succeed(Doorbell, { ring: (_reader, stream, rev) => ring(stream, rev) });
-        const layer = Layer.mergeAll(Referee.layer(sql), Ledger.sql(sql, { reader: "writer" })).pipe(
+        const layer = Layer.mergeAll(Referee.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
         );
         yield* Effect.gen(function* () {

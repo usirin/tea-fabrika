@@ -5,7 +5,11 @@ import "./mutbox-entry.sh?raw";
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./chain.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -30,7 +34,21 @@ import "./botpush.mjs?raw";
 import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Outcome.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Beat.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Runners.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Step.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/host.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/typecheck.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -42,8 +60,15 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
 import {
+  backstopFrom,
   briefOf,
+  type Budget,
   ChainRecord,
+  estimateIn,
+  type Limits,
+  type Mark,
+  markFrom,
+  stopReason,
   roundsIn,
   exitOf,
   judgedOf,
@@ -65,6 +90,7 @@ import {
   type StepName,
   stepsTable,
 } from "./chain.ts";
+import { FAULTS, faultFrom } from "./drive.ts";
 
 // Today's tooling. The lane machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
@@ -85,14 +111,41 @@ const outcome = fc.oneof(
   fc.constantFrom("stuck:timeout", "stuck:no_answer", "stuck:crash", "stuck:fetch_failed"),
 );
 
-const line = (o: string, head: string, reason = "why"): Line => ({
+const line = (o: string, head: string, reason = "why", listUsd: number | null = null): Line => ({
   outcome: o,
   head,
   reason,
+  fault: faultFrom(o, reason),
   report: null,
   box: "b",
   exit: 0,
+  listUsd,
 });
+
+/** The machine's limits: 0076's intensity of 3 in 5, and a backstop only when one is given. */
+const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3): Limits => ({
+  maxSteps,
+  maxStucks,
+  intensity: { count: 3, within: 5 },
+  backstop,
+});
+
+type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
+
+/** A host step answered skip, as for a lane brief with no `## host`; any other state stays. */
+const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
+  m.phase === "hosting"
+    ? machine.update.host_run_ok(m, {
+        type: "host_run_ok",
+        value: { outcome: "skip", head: "", reason: "no host section" },
+      } as never)
+    : [m, cmds];
+
+/** The host typecheck answered green; any other state stays. */
+const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
+  m.phase === "typechecking"
+    ? machine.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value: { _tag: "green" } } as never)
+    : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
   // 0066: a lane's steps are tests -> build -> review; a mutation step (a lane started there)
@@ -261,6 +314,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
           round,
           heads: { tests: head },
           note,
+          host: s === "review" ? `done at ${head}: 2 host commands passed` : null,
         });
         expect(text).toContain("Shared: ticket 7");
         expect(text).toContain(cut.sections[s] ?? "nothing");
@@ -278,6 +332,7 @@ describe("T341 the lane brief is cut into one brief per step, today's tooling", 
 
         // A review gets the two full SHAs its template needs; a mutation its build range.
         if (s === "review") {
+          expect(text).toContain(`: done at ${head}: 2 host commands passed`);
           expect(text).toContain(`Reviewed head: fabrikalfa/x-wip at ${head}`);
           expect(text).toContain(`Parent base: origin/main at ${root}`);
         }
@@ -325,7 +380,16 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
     fc.assert(
       fc.property(outcome, sha, word, fc.integer({ min: 0, max: 40 }), (o, head, reason, exit) => {
         const out = `keep box x: busy\n${JSON.stringify({ outcome: "plan-only" })}\n${JSON.stringify({ outcome: o, head, reason, report: null, box: "b", exit })}\n`;
-        expect(lineOf(out, 1)).toEqual({ outcome: o, head, reason, report: null, box: "b", exit });
+        expect(lineOf(out, 1)).toEqual({
+          outcome: o,
+          head,
+          reason,
+          fault: faultFrom(o, reason),
+          report: null,
+          box: "b",
+          exit,
+          listUsd: null,
+        });
         expect(lineOf("nothing here\n", 30)).toBeNull();
       }),
       options,
@@ -334,13 +398,17 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
 });
 
 describe("T341 the lane machine, stepped by hand, today's tooling", () => {
-  const machine = makeMachine({ maxSteps: 16, maxStucks: 3 });
+  const machine = makeMachine(limits(16));
   const start = () => {
     const [idle] = machine.init(null, undefined);
     return machine.update.start(idle, { type: "start", step: "tests" });
   };
+  // Every review hosts first; these laws are about the other steps, so the host step skips.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
-    machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+    typechecked(
+      machine,
+      hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never)),
+    );
 
   it("scenario: a clean lane runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
@@ -450,7 +518,8 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "mutation", round: 1 })]);
         [m, cmds] = ran(m, line(o, head));
         expect(m).toMatchObject({ phase: "stepping", step: "review" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 2 })]);
+        // Round 2 is the host step's.
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
         [m, cmds] = ran(m, line("done", head));
         expect(m.phase).toBe("opening");
       }),
@@ -465,7 +534,8 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
         [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
         expect(m).toMatchObject({ phase: "stepping", step: to });
-        expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: 3 });
+        // A review hosts first, in round 3.
+        expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: to === "review" ? 4 : 3 });
 
         if (cmds[0]?.type === "step_run") {
           expect(cmds[0].note).toContain(why);
@@ -482,10 +552,13 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         [m, cmds] = ran(m, line("stuck:timeout", "", why));
         expect(m.phase).toBe("judging");
         expect(cmds[0]).toMatchObject({ type: "judge", step: "tests" });
-        const [sent, after] = machine.update.judge_ok(m, {
-          type: "judge_ok",
-          value: { text: `answer: send ${to} ${why}` },
-        } as never);
+        const [sent, after] = hostSkipped(
+          machine,
+          machine.update.judge_ok(m, {
+            type: "judge_ok",
+            value: { text: `answer: send ${to} ${why}` },
+          } as never),
+        );
         expect(sent).toMatchObject({ phase: "stepping", step: to });
         expect(after[0]).toMatchObject({ type: "step_run", step: to });
         const [parked] = machine.update.judge_ok(m, {
@@ -530,7 +603,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   });
 
   it("the step cap parks the lane as ask, never loops forever", () => {
-    const small = makeMachine({ maxSteps: 2, maxStucks: 3 });
+    const small = makeMachine(limits(2));
     const [idle] = small.init(null, undefined);
     let [m] = small.update.start(idle, { type: "start", step: "tests" });
     [m] = small.update.step_run_ok(m, {
@@ -545,15 +618,225 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
   });
 });
 
+describe("the host step runs before every review of a new head, today's tooling", () => {
+  const machine = makeMachine(limits(16));
+  const stepped = (m: Stepped[0], l: Line) => machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+  const hosted = (m: Stepped[0], outcome: "done" | "skip" | "send" | "stuck", head: string, reason = "why") =>
+    machine.update.host_run_ok(m, { type: "host_run_ok", value: { outcome, head, reason } } as never);
+  /** A lane started at build whose build answered done at `head`. */
+  const built = (head: string) => {
+    const [idle] = machine.init(null, undefined);
+    const [m] = machine.update.start(idle, { type: "start", step: "build" });
+    return stepped(m, line("done", head));
+  };
+
+  // Plants: build hands straight to review; the host step takes no round; it runs at another head.
+  it("property: a done build hosts at its head in its own round before review, and review runs at the host step's head", () => {
+    fc.assert(
+      fc.property(sha, sha, fc.constantFrom("done", "skip"), (head, after, outcome) => {
+        const [m, cmds] = built(head);
+        expect(m.phase).toBe("hosting");
+        expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head, round: 2 })]);
+        const next = outcome === "done" ? after : head;
+        const [r, rcmds] = hosted(m, outcome, outcome === "done" ? after : "");
+        expect(r).toMatchObject({ phase: "stepping", step: "review", lane: { head: next, hosted: next } });
+        expect(rcmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
+      }),
+      options,
+    );
+  });
+
+  // The owner's ruling: a failed host run is a red check. Plants: send it to review; drop the lines.
+  it("property: a host send goes back to build with the command's last lines in its note, and no review runs", () => {
+    fc.assert(
+      fc.property(sha, word, (head, said) => {
+        const [m] = built(head);
+        const [b, cmds] = hosted(m, "send", "", `host: \`node e2e.ts\` exited 1:\n${said}`);
+        expect(b).toMatchObject({ phase: "stepping", step: "build" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "build" })]);
+        expect(cmds.flatMap((c) => (c.type === "step_run" ? [c.note] : []))[0]).toContain(said);
+        expect(b.lane.hosted).toBeNull();
+      }),
+      options,
+    );
+  });
+
+  it("property: a review sent again at the same head does not host again; a new head does", () => {
+    fc.assert(
+      fc.property(sha, sha, (head, other) => {
+        const [m] = built(head);
+        const [r] = hosted(m, "skip", "");
+        const [again, cmds] = stepped(r, line("send:review:step_said", head));
+        expect(again).toMatchObject({ phase: "stepping", step: "review" });
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review" })]);
+        const [b] = stepped(r, line("send:build:step_said", head));
+        const [moved, mcmds] = stepped(b, line("done", other));
+        expect(moved.phase).toBe(other === head ? "stepping" : "hosting");
+        expect(mcmds[0]?.type).toBe(other === head ? "step_run" : "host_run");
+      }),
+      options,
+    );
+  });
+
+  // 0076 with the host step: its round is a step and its send a send back. Plants: give the host
+  // step no round; leave its mark out of the window; count a host stuck against the lane.
+  it("scenario: a host send is a send back in the budget's window, and the host round counts toward the backstop", () => {
+    const h = "a".repeat(40);
+    let [m] = built(h);
+
+    for (let i = 0; i < 2; i++) {
+      [m] = hosted(m, "send", "", "e2e red");
+      expect(m).toMatchObject({ phase: "stepping", step: "build" });
+      [m] = stepped(m, line("done", h));
+      expect(m.phase).toBe("hosting");
+    }
+
+    // The window is now send, pass, send, pass: a third host send trips 3 in 5.
+    const [sent] = hosted(m, "send", "", "e2e red");
+    expect(sent).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+    expect(sent.lane.window).toEqual(["send", "pass", "send", "pass", "send"]);
+    // A host stuck is the tool's: marked, never counted, and the lane ends stuck.
+    const [stuck] = hosted(m, "stuck", "", "botpush failed");
+    expect(stuck).toMatchObject({ phase: "over", end: { kind: "stuck" } });
+    expect(stuck.lane.window.at(-1)).toBe("tool");
+
+    // Backstop of 2 steps: build is round 1, the host step round 2, so the review never starts.
+    const small = makeMachine(limits(16, { steps: 2, dollars: 100 }));
+    const [idle] = small.init(null, undefined);
+    let [b, cmds] = small.update.start(idle, { type: "start", step: "build" });
+    [b, cmds] = small.update.step_run_ok(b, { type: "step_run_ok", value: line("done", h) } as never);
+    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", round: 2 })]);
+    [b, cmds] = small.update.host_run_ok(b, {
+      type: "host_run_ok",
+      value: { outcome: "skip", head: "", reason: "no section" },
+    } as never);
+    expect(cmds).toEqual([]);
+    expect(b).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "backstop", passed: "steps" } } });
+  });
+
+  it("scenario: a host stuck ends the lane stuck (exit 30), and a lane started at review hosts first", () => {
+    const [m] = built("a".repeat(40));
+    const [over] = hosted(m, "stuck", "", "git worktree add failed");
+    expect(over).toMatchObject({ phase: "over", end: { kind: "stuck", reason: "host: git worktree add failed" } });
+
+    if (over.phase === "over") {
+      expect(exitOf(over.end)).toBe(30);
+    }
+
+    const [idle] = machine.init(null, undefined);
+    const [started, cmds] = machine.update.start(idle, { type: "start", step: "review" });
+    expect(started.phase).toBe("hosting");
+    // The machine has no head yet: the handler reads the lane's state file for it.
+    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head: "", round: 1 })]);
+  });
+});
+
+describe("one host typecheck runs before the pull request opens, today's tooling", () => {
+  const machine = makeMachine(limits(16));
+  type Machine = typeof machine;
+  // A lane whose review said merge-ready at `head`, after `sends` sends back: the typecheck is next.
+  const reviewed = (head: string, sends = 0, on: Machine = machine) => {
+    const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+    const [idle] = on.init(null, undefined);
+    let [m] = on.update.start(idle, { type: "start", step: "build" });
+
+    for (let i = 0; i < sends; i++) {
+      [m] = ran(m, line("send:build:step_said", head));
+    }
+
+    [m] = hostSkipped(on, ran(m, line("done", head)));
+    return ran(m, line("done", head));
+  };
+  const answered = (m: Stepped[0], value: unknown, on: Machine = machine) =>
+    on.update.typecheck_run_ok(m, { type: "typecheck_run_ok", value } as never);
+  const lines = fc.array(word, { minLength: 1, maxLength: 30 });
+
+  it("property: a merge-ready review runs the typecheck at its head, and nothing opens before it", () => {
+    fc.assert(
+      fc.property(sha, (head) => {
+        const [m, cmds] = reviewed(head);
+        expect(m.phase).toBe("typechecking");
+        expect(cmds).toEqual([expect.objectContaining({ type: "typecheck_run", head })]);
+      }),
+      options,
+    );
+  });
+
+  it("property: green opens the PR; one that did not run opens it too, and the lane keeps why", () => {
+    fc.assert(
+      fc.property(sha, word, (head, why) => {
+        const [m] = reviewed(head);
+        const [green, opens] = answered(m, { _tag: "green" });
+        expect(green).toMatchObject({ phase: "opening", lane: { unchecked: null } });
+        expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        const [skipped, also] = answered(m, { _tag: "skipped", reason: why });
+        expect(skipped).toMatchObject({ phase: "opening", lane: { unchecked: why } });
+        expect(also).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        const [threw, again] = machine.update.typecheck_run_err(m, {
+          type: "typecheck_run_err",
+          error: { _tag: "unknown" },
+        } as never);
+        expect(threw).toMatchObject({ phase: "opening", lane: { unchecked: "the typecheck threw" } });
+        expect(again).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+      }),
+      options,
+    );
+  });
+
+  it("property: red sends the lane to the step it names with every error line, as a send back", () => {
+    const to = fc.constantFrom("tests" as const, "build" as const);
+    fc.assert(
+      fc.property(sha, to, lines, (head, step, ls) => {
+        const [m] = reviewed(head);
+        const [sent, cmds] = answered(m, { _tag: "red", to: step, lines: ls });
+        expect(sent).toMatchObject({ phase: "stepping", step, lane: { unchecked: null } });
+        expect(sent.lane.window.at(-1)).toBe("send");
+        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step })]);
+
+        if (cmds[0]?.type === "step_run") {
+          for (const l of ls) {
+            expect(cmds[0].note).toContain(l);
+          }
+        }
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a red typecheck that fills the intensity window stops the lane (0076)", () => {
+    // 2 in 5 here, so one earlier send and the red one trip it.
+    const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
+    const [m] = reviewed("a".repeat(40), 1, tight);
+    expect(m.phase).toBe("typechecking");
+    const red = { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] };
+    const [stopped, cmds] = answered(m, red, tight);
+    expect(cmds).toEqual([]);
+    expect(stopped).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+  });
+
+  it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
+    const [idle] = machine.init(null, undefined);
+    const [same, cmds] = answered(idle, { _tag: "green" });
+    expect(same).toBe(idle);
+    expect(cmds).toEqual([]);
+  });
+});
+
 describe("T590 loosening.sh runs after review and before catch-up, today's tooling", () => {
-  const machine = makeMachine({ maxSteps: 16, maxStucks: 3 });
+  const machine = makeMachine(limits(16));
   // A lane whose review said merge-ready and whose PR is open: the loosening Cmd is next.
   const opened = (pr: number, head: string) => {
     const [idle] = machine.init(null, undefined);
     let [m] = machine.update.start(idle, { type: "start", step: "tests" });
 
     for (const _ of LANE_STEPS) {
-      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never);
+      [m] = typechecked(
+        machine,
+        hostSkipped(
+          machine,
+          machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
+        ),
+      );
     }
 
     return machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
@@ -917,5 +1200,278 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
     });
     expect(String(row.why)).toContain("ticket 485");
     expect(Object.keys(row)).toContain("date");
+  });
+});
+
+describe("T675 a lane stops at its budget (0076), today's tooling", () => {
+  const big = 1_000;
+  const stepOn = (limit: Limits) => {
+    const machine = makeMachine(limit);
+    const [idle] = machine.init(null, undefined);
+    return { machine, first: machine.update.start(idle, { type: "start", step: "tests" }) };
+  };
+  const again = JSON.stringify({ _tag: "step", step: "tests", note: "again" });
+
+  // vector: the sort, reason by reason, read from the stuck rows in the boxes folder on 2026-11-11.
+  it("vector: each stuck reason drive writes gets its fault, and an agent's own stuck reads its reason", () => {
+    const cases: readonly (readonly [string, string, "tool" | "work"])[] = [
+      ["stuck:fetch_failed", "fetch: stepcommit: not_owner: a.test.ts", "tool"],
+      ["stuck:agent_failed", "codex contain: Codex's box would need 1188 lines", "tool"],
+      ["stuck:box_failed", "box.sh new: stuck base_not_signed", "tool"],
+      ["stuck:no_answer", "no answer line in the report", "tool"],
+      ["stuck:push_failed", "botpush: rejected", "tool"],
+      ["stuck:record_failed", "redact.sh failed", "tool"],
+      ["stuck:crash", "Error: boom", "tool"],
+      ["stuck:worktree_unreadable", "git worktree list failed", "tool"],
+      ["stuck:RetriesExhausted", "agent_cap: 8 agents", "tool"],
+      ["stuck:step_said", "mutbox: docker_busy: another Docker box is running (pid 4038); one at a time", "tool"],
+      ["stuck:step_said", "both laws test files fail in this sandbox with `listen EPERM 127.0.0.1`", "tool"],
+      ["stuck:step_said", "Network is blocked, so `pnpm patch` could not run", "tool"],
+      ["stuck:step_said", "cannot verify the required typecheck guard because pgrep cannot list processes", "tool"],
+      ["stuck:step_said", "typecheck fails at door.test.ts:2989: string is not assignable to SinkError", "work"],
+      ["stuck:step_said", "approved plan ownership must cover both files before stepcommit can commit them", "work"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; stale_link d1ea03a7 step lead", "tool"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; and 5 more", "tool"],
+      ["stuck:unsigned", "and 5 more", "work"],
+      ["stuck:unsigned", "commits check: build_touched_exam a7ff4ee8 next/apps/fabrika/tsconfig.json", "work"],
+      ["stuck:unsigned", "commits check: stale_link 62865b7f step lead; build_touched_exam a7ff4ee8 x", "work"],
+      ["stuck:unsigned", "3fda8c62 has no step note", "work"],
+      ["stuck:timeout", "stopped after 60 minutes", "work"],
+      ["stuck:no_commit", "answered done with no commit", "work"],
+      ["stuck:leak", "added lines leak, nothing pushed", "work"],
+      ["stuck:review_committed", "the review left 2 files changed in its box", "work"],
+      ["stuck:something_new", "a stuck name nobody sorted", "work"],
+    ];
+
+    for (const [outcome, reason, fault] of cases) {
+      expect([outcome, reason, faultFrom(outcome, reason)]).toEqual([outcome, reason, fault]);
+    }
+  });
+
+  // Plants: give a send or a done a fault; let a stuck with an odd reason have none.
+  it("property: only a stuck outcome has a fault, and every stuck outcome has one of the two", () => {
+    fc.assert(
+      fc.property(outcome, fc.string({ maxLength: 80 }), (o, reason) => {
+        const fault = faultFrom(o, reason);
+        expect(fault === null).toBe(!o.startsWith("stuck"));
+
+        if (fault !== null) {
+          expect(FAULTS).toContain(fault);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("property: a step's mark is send for a send, its fault for a stuck, and pass for anything else", () => {
+    fc.assert(
+      fc.property(outcome, word, (o, reason) => {
+        const l = line(o, "h", reason);
+        const mark = markFrom(l);
+        const [verb] = o.split(":");
+        expect(mark).toBe(verb === "send" ? "send" : verb === "stuck" ? l.fault : "pass");
+      }),
+      options,
+    );
+  });
+
+  // The steps a run may feed, with the mark each makes. None is a done, so the lane never opens a PR.
+  const fed = fc.constantFrom(
+    { o: "send:tests:step_said", reason: "a law misses a case", mark: "send" as Mark },
+    { o: "send:build:step_said", reason: "a law is red", mark: "send" as Mark },
+    { o: "ask:lead:question", reason: "which form?", mark: "pass" as Mark },
+    { o: "stuck:fetch_failed", reason: "fetch failed", mark: "tool" as Mark },
+    { o: "stuck:step_said", reason: "mutbox: docker_busy: another Docker box", mark: "tool" as Mark },
+    { o: "stuck:no_commit", reason: "answered done with no commit", mark: "work" as Mark },
+  );
+
+  // Plants: count tool stucks; check the window only after a judgment; keep the whole lane, not its
+  // last 5; stop at 2 in 5 or 3 in 6.
+  it("property: the chain stops at the first step where 3 of the last 5 were sent back or stuck on the work, never on tool stucks", () => {
+    fc.assert(
+      fc.property(fc.array(fed, { minLength: 1, maxLength: 30 }), (steps) => {
+        const { machine, first } = stepOn(limits(big, null, big));
+        let [m] = first;
+        const marks: Mark[] = [];
+        const trips = (i: number) =>
+          marks.slice(Math.max(0, i - 4), i + 1).filter((k) => k === "send" || k === "work").length >= 3;
+        const expected = steps.findIndex((_, i) => {
+          marks[i] = steps[i]?.mark ?? "pass";
+          return trips(i);
+        });
+
+        for (const [i, s] of steps.entries()) {
+          expect(m.phase).toBe("stepping");
+          [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line(s.o, "", s.reason) } as never);
+
+          if (i === expected) {
+            expect(m).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+            return;
+          }
+
+          expect(m.phase).not.toBe("over");
+
+          if (m.phase === "judging") {
+            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+          }
+        }
+
+        expect(expected).toBe(-1);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a stop's question holds the counts, the tool stucks it left out and what was spent", () => {
+    const { machine, first } = stepOn(limits(big, null, big));
+    let [m] = first;
+    const run = [
+      line("send:build:step_said", "", "a law is red", 1.5),
+      line("stuck:fetch_failed", "", "fetch failed", 0.5),
+      line("send:tests:step_said", "", "a law misses a case", 2),
+      line("stuck:no_commit", "", "answered done with no commit", 1),
+    ];
+
+    for (const l of run) {
+      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+
+      if (m.phase === "judging") {
+        [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0.25 } } as never);
+      }
+    }
+
+    expect(m.phase).toBe("over");
+
+    if (m.phase === "over") {
+      expect(exitOf(m.end)).toBe(20);
+      expect(m.end.stop).toEqual({
+        _tag: "intensity",
+        count: 3,
+        within: 5,
+        window: ["send", "tool", "send", "work"],
+        steps: 4,
+        dollars: 5.25,
+      });
+      expect(m.end.reason).toBe(
+        "intensity: 3 of the last 4 steps were sent back or stuck on the work (2 sent back, 1 stuck on the work; 1 stuck on a tool, not counted; the limit is 3 in 5). Spent so far: 4 steps, $5.25. Answer redo, cut scope or drop (0076).",
+      );
+    }
+  });
+
+  // Plants: check the backstop after the step starts; count only steps or only dollars; keep MaxSteps
+  // over the backstop.
+  it("property: with a backstop, the chain stops before the next step or judgment once the lane ran its steps or spent its dollars", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 12 }),
+        fc.integer({ min: 1, max: 40 }),
+        fc.array(fc.integer({ min: 0, max: 900 }), { minLength: 1, maxLength: 30 }),
+        (steps, dollars, cents) => {
+          const backstop = { steps, dollars };
+          // MaxSteps of 1 would park at once; with a backstop it does not hold.
+          const { machine, first } = stepOn(limits(1, backstop, big));
+          let [m] = first;
+          let spent = 0;
+
+          for (const [i, c] of cents.entries()) {
+            spent += c / 100;
+            [m] = machine.update.step_run_ok(m, {
+              type: "step_run_ok",
+              value: line("ask:lead:question", "", "which form?", c / 100),
+            } as never);
+            const round = i + 1;
+
+            if (round >= steps || spent >= dollars) {
+              expect(m).toMatchObject({
+                phase: "over",
+                end: { kind: "ask", stop: { _tag: "backstop", passed: round >= steps ? "steps" : "dollars" } },
+              });
+              return;
+            }
+
+            expect(m.phase).toBe("judging");
+            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+            expect(m.phase).toBe("stepping");
+          }
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: an estimate line in steps and dollars is read wherever it sits, and the backstop is twice it", () => {
+    fc.assert(
+      fc.property(
+        fc.array(word, { maxLength: 6 }),
+        fc.array(word, { maxLength: 6 }),
+        fc.integer({ min: 1, max: 200 }),
+        fc.integer({ min: 1, max: 500 }),
+        (before, after, steps, dollars) => {
+          const text = [...before, `Estimate: ${steps} steps, $${dollars}, 70% sure`, ...after].join("\n");
+          expect(estimateIn(text)).toEqual({ steps, dollars });
+          expect(backstopFrom({ steps, dollars }, 2)).toEqual({ steps: 2 * steps, dollars: 2 * dollars });
+          expect(estimateIn([...before, ...after].join("\n"))).toBeNull();
+        },
+      ),
+      options,
+    );
+  });
+
+  // format: the one form the chain reads; a plan in agent hours alone has no estimate for it.
+  it("format: an estimate in hours, or one without steps or dollars, is none", () => {
+    expect(estimateIn("## Size\n\nEstimate: 2 agent hours, 70% sure.")).toBeNull();
+    expect(estimateIn("Estimate: 12 steps, 70% sure.")).toBeNull();
+    expect(estimateIn("Estimate: $15.")).toBeNull();
+    expect(estimateIn("We ran 12 steps for $15 last time.")).toBeNull();
+    expect(estimateIn("estimate 12 steps and $15.50")).toEqual({ steps: 12, dollars: 15.5 });
+  });
+
+  // pinned: chain records on disk from before 0076 carry no fault, no dollars and no stop.
+  it("pinned: a chain record written before 0076 still reads, with no fault and no dollars", () => {
+    const old = {
+      lane: "p14",
+      pr: null,
+      landed: null,
+      steps: [
+        {
+          round: 1,
+          step: "tests",
+          note: "",
+          startedAt: "2026-11-09T23:36:00.000Z",
+          endedAt: "2026-11-09T23:37:00.000Z",
+          line: { outcome: "stuck:fetch_failed", head: "", reason: "fetch failed", report: null, box: "b", exit: 30 },
+          judged: null,
+        },
+      ],
+    };
+    const read = Schema.decodeUnknownSync(ChainRecord)(old);
+    expect(read.steps[0]?.line).toMatchObject({ fault: null, listUsd: null });
+    expect(read.stop).toBeUndefined();
+  });
+
+  it("property: drive's line gives its fault and dollars, and a line without a fault gets one from its outcome", () => {
+    fc.assert(
+      fc.property(outcome, word, fc.option(fc.integer({ min: 0, max: 9_999 })), (o, reason, usd) => {
+        const fault = faultFrom(o, reason);
+        const sent = lineOf(JSON.stringify({ outcome: o, reason, fault, listUsd: usd }), 0);
+        expect(sent).toMatchObject({ fault, listUsd: usd });
+        expect(lineOf(JSON.stringify({ outcome: o, reason }), 0)).toMatchObject({ fault, listUsd: null });
+      }),
+      options,
+    );
+  });
+
+  it("scenario: a backstop's question names the limit it passed and what was spent", () => {
+    expect(
+      stopReason({
+        _tag: "backstop",
+        passed: "dollars",
+        backstop: { steps: 24, dollars: 30 },
+        steps: 9,
+        dollars: 31.4,
+      }),
+    ).toBe(
+      "backstop: the lane reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
+    );
   });
 });

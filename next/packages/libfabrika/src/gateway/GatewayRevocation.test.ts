@@ -18,6 +18,7 @@ import { ClientManager } from "../access/ClientManager.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -173,7 +174,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
             (args[0] === "gateway/hellos" ? beforeWrite : Effect.void).pipe(Effect.andThen(ledger.append(...args))),
         })),
       ),
-    ).pipe(Layer.provide(Ledger.sql(saved.sql, { reader: "p17" })), Layer.provide(quiet));
+    ).pipe(Layer.provide(LedgerSql.layer(saved.sql, { reader: "p17" })), Layer.provide(quiet));
     const transaction = Layer.effect(
       LedgerTransaction,
       LedgerTransaction.pipe(

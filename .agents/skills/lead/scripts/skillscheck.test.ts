@@ -1,11 +1,20 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./land.ts?raw";
+import "./catchup.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./freshmain.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.ts?raw";
 import "./mutbox-entry.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./skillscheck.sh?raw";
 import "./leakgrep.sh?raw";
 import "./loosening.sh?raw";
@@ -27,6 +36,8 @@ import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
@@ -61,7 +72,7 @@ const answer = [
   "Give every finding in that answer, grouped by class, most serious first.",
   "Name each checked decided note and say where the change follows or breaks it.",
   "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-  "Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl unchanged. Do not start another review round for it.",
+  "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
   "End with exactly one answer: line, as the last line.",
 ];
 
@@ -87,6 +98,7 @@ const sections: Record<string, Record<string, string[]>> = {
       "Saved plans, reports, logs and state/ remain.",
       ...exam,
     ],
+    "## Lane brief template": ["End with `node .agents/skills/lead/scripts/land.ts ready <lane> --tree <path>`."],
   },
   "AGENTS.md": {
     "- **Every pull request, next/ or today's, goes through the pipeline's steps:**": exam,
@@ -364,6 +376,50 @@ describe("skillscheck, today's tooling", () => {
         },
       ),
       { seed: 319, numRuns: 4 },
+    );
+  });
+});
+
+describe("skillscheck brief templates, today's tooling", () => {
+  // Ticket 652: the permission check refuses a subagent the lead key, so a brief template that
+  // hands an agent a lead-only step stops the lane. Each lead-only command, in any template, fails;
+  // an unsigned lead commit and the ready handover stay allowed.
+  it("T652 property: a lead-only step in any brief template fails, and the unsigned lead commit passes", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          template: fc.constantFrom("## Review brief template\n", "## Lane brief template\n"),
+          space: fc.constantFrom(" ", "\n  "),
+        }),
+        ({ template, space }) => {
+          const dir = mkdtempSync(join(tmpdir(), "templates-"));
+
+          try {
+            for (const [phrase, code] of [
+              ["pnpm commits sign --step lead --ticket 1 --key k", 1],
+              ["Read ~/.fabrika/step-keys/lead first.", 1],
+              ["node .agents/skills/lead/scripts/botpush.mjs . fabrikalfa/x", 1],
+              ["sh .agents/skills/lead/scripts/catchup.sh 1 1", 1],
+              ["node .agents/skills/lead/scripts/land.ts run lane 1", 1],
+              ["stepcommit.sh lead 1 subject file", 1],
+              ["stepcommit.sh --commit-only lead 1 subject file", 0],
+              ["Say ready to land with the state file.", 0],
+            ] as const) {
+              tree(dir, space);
+              const file = join(dir, ".agents/skills/lead/SKILL.md");
+              writeFileSync(
+                file,
+                readFileSync(file, "utf8").replace(template, `${template}${phrase.split(" ").join(space)}\n`),
+              );
+              const got = run(dir);
+              expect(got.status, `${phrase}: ${got.stderr}`).toBe(code);
+            }
+          } finally {
+            rmSync(dir, { recursive: true, force: true });
+          }
+        },
+      ),
+      { seed: 652, numRuns: 4 },
     );
   });
 });

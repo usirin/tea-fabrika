@@ -9,7 +9,15 @@
   // Each rule is named here, so a new oxlint release adds none on its own.
   "categories": { "correctness": "off" },
   "options": { "reportUnusedDisableDirectives": "error" },
-  "ignorePatterns": ["**/fixtures/**", "**/experiments/results/**", "unreachable-ledger.json", "agents-ledger.json"],
+  // `.claude/skills/*` are symlinks into `.agents/skills/`: walked there too, a file of `.agents/` is
+  // read a second time outside its override, where an edge comment looks unused and fails.
+  "ignorePatterns": [
+    "**/fixtures/**",
+    "**/experiments/results/**",
+    "unreachable-ledger.json",
+    "agents-ledger.json",
+    ".claude/**"
+  ],
   "rules": {
     // "warn" here only advises: lint.ts prints these two and does not fail on them. They were
     // wrong too often to block (experiment 125). Any other warning fails.
@@ -699,6 +707,16 @@
             ]
           }
         ]
+      }
+    },
+    {
+      // Each law is a property or a labeled example (0093). "warn" only advises: lint.ts prints it
+      // and does not fail on it until its false alarms on main are counted at about 0%. A shared
+      // suite (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
+      // next/, and .agents/ follows next/'s rules (0033).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", ".agents/**/*.test.ts"],
+      "rules": {
+        "fabrika/law-shape": "warn"
       }
     },
     {

@@ -5,7 +5,11 @@ import "./mutbox-entry.sh?raw";
 import "./mutbox.Dockerfile?raw";
 import "../../mutation/scripts/run.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/limit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/sample.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../../mutation/scripts/scope.ts?raw";
 import "./box.sh?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
@@ -21,6 +25,8 @@ import "./clauderow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./lane.ts?raw";
 import "../../plan/scripts/plancheck.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
@@ -36,6 +42,7 @@ import { NO_SPENT } from "./agents.ts";
 import {
   agentsDraft,
   agentTail,
+  ownedHead,
   boxChanges,
   caseRenames,
   changedFiles,
@@ -50,12 +57,17 @@ import {
   decide,
   dockerHolder,
   endName,
+  firstEventAt,
   freshBox,
+  GC_EVERY,
+  gcDue,
   holdsElectron,
   machine,
+  phasesIn,
   reportOf,
   rowOf,
   startedOf,
+  Sweep,
 } from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
@@ -1100,6 +1112,42 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
   });
 });
 
+describe("a step is told its owned paths first, today's tooling (ticket 430)", () => {
+  const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
+    "plan" | "tests" | "build" | "mutation" | "review"
+  >;
+  const owner = fc.constantFrom("tests", "build", "mutation", "lead");
+  const owners = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.ts$/), owner, { maxKeys: 6 });
+
+  // Plants: list a path another step owns, drop one this step owns, keep mutation off tests' paths,
+  // or tell a plan or review step anything.
+  it("property: lists exactly the paths stepcommit lets the step commit, and asks for any other", () => {
+    fc.assert(
+      fc.property(steps, owners, (step, given) => {
+        const head = ownedHead(step, given);
+
+        if (step === "plan" || step === "review") {
+          expect(head).toBe("");
+          return;
+        }
+
+        const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+        const allowed = Object.keys(given).filter(
+          (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
+        );
+        expect(listed).toEqual(allowed.toSorted());
+        expect(head).toContain("answer ask");
+        expect(head.endsWith("---\n\n")).toBe(true);
+      }),
+      options,
+    );
+  });
+
+  it("scenario: no plan drive can read tells the step nothing", () => {
+    expect(ownedHead("build", null)).toBe("");
+  });
+});
+
 describe("drive holds the Electron lock outside the box, today's tooling", () => {
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
@@ -1447,5 +1495,59 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("RELATED=<paths>");
+  });
+});
+
+describe("T673 a step's start is timed and sweeps at most once in 30 minutes, today's tooling", () => {
+  const MIN = 60_000;
+  // Plant: sweep on every start, never sweep on a low or unreadable disk, or skip once the period
+  // passed. The low_disk refusal must always follow a fresh sweep.
+  it("T673 gcDue runs on a low or unreadable disk, with no sweep recorded, or once GC_EVERY passed", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 10 ** 13 }),
+        fc.option(fc.integer({ min: -3 * GC_EVERY, max: 3 * GC_EVERY }), { nil: null }),
+        fc.option(fc.integer({ min: 0, max: 500 }), { nil: null }),
+        (now, ago, free) => {
+          const last = ago === null ? null : now - ago;
+          const due = gcDue(now, last, free);
+          const low = free === null || free < 20;
+          const fresh = ago !== null && ago >= 0 && ago < GC_EVERY;
+          expect(due._tag).toBe(low || !fresh ? "run" : "skip");
+        },
+      ),
+      options,
+    );
+  });
+
+  // vector: the boundary minute and the reason a skip prints.
+  it("T673 vector: a sweep 29 min ago is skipped with its age, one 30 min ago runs", () => {
+    expect(gcDue(100 * MIN, 71 * MIN, 50)).toEqual(
+      Sweep.cases.skip.make({ reason: "the last sweep started 29 min ago" }),
+    );
+    expect(gcDue(100 * MIN, 70 * MIN, 50)._tag).toBe("run");
+    expect(gcDue(100 * MIN, 99 * MIN, 19)).toEqual(Sweep.cases.run.make({ reason: "19 GB free" }));
+  });
+
+  // Plant: drop a phase line, reorder them, or read a line that only starts like one.
+  it("T673 phasesIn reads every phase line box.sh prints, in order, and nothing else", () => {
+    const name = fc.stringMatching(/^[a-z_]{1,12}$/);
+    const noise = fc.constantFrom("", "refused shared_ticket: 1 on x", "phase Bad 1", "phase x 1 more", "stuck y");
+    fc.assert(
+      fc.property(fc.array(fc.tuple(name, fc.nat(), noise)), (parts) => {
+        const text = parts.map(([n, ms, junk]) => `${junk}\nphase ${n} ${ms}`).join("\n");
+        expect(phasesIn(text)).toEqual(parts.map(([n, ms]) => ({ name: n, ms })));
+      }),
+      options,
+    );
+  });
+
+  // format: the first line of an agent's event log, as agents.ts writes it, or none.
+  it("T673 format: firstEventAt reads the first event's time, and null from an empty or untimed log", () => {
+    const line = '{"at":"2026-11-11T08:21:58.342Z","_tag":"started","session":"s"}';
+    expect(firstEventAt(`${line}\n{"at":"2026-11-11T09:00:00.000Z"}\n`)).toBe(Date.parse("2026-11-11T08:21:58.342Z"));
+    expect(firstEventAt("")).toBeNull();
+    expect(firstEventAt("null\n")).toBeNull();
+    expect(firstEventAt('{"_tag":"started"}\n')).toBeNull();
   });
 });
