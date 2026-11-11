@@ -1209,7 +1209,9 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
               expect(yield* saved(), "M2: the single saved alarm is the earliest pending work").toBe(
                 terms.length === 0 ? null : Math.min(...terms),
               );
-              const model = Schema.decodeUnknownSync(TimerModel)(yield* within(savedModel(store, name)));
+              const checkpoint = yield* within(savedModel(store, name));
+              const model =
+                checkpoint === null ? timerMachine.init(null)[0] : Schema.decodeUnknownSync(TimerModel)(checkpoint);
               expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
               expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
             }

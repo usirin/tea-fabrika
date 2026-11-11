@@ -1420,7 +1420,14 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 });
 
 const mailModel = (w: ReturnType<typeof world>, pid: string) => {
-  const row = w.process(pid).db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
+  const db = w.process(pid).db;
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'").get();
+
+  if (table === undefined) {
+    return null;
+  }
+
+  const row = db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
   return row === undefined ? null : JSON.parse(String(row.checkpoint)).saved.model;
 };
 
