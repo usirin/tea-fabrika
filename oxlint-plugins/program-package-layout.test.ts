@@ -1,9 +1,23 @@
-// P16's real oxlint rule, generated packages and each package-layout plant.
+// P16's real oxlint rule, generated packages and each package-layout plant. Each plant runs in
+// process through oxlint's RuleTester, and one oxlint run per law then lints every plant the law
+// made, through the repo's own config, and must find the same.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import type { CreateRule } from "@oxlint/plugins";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { RuleTester } from "oxlint/plugins-dev";
+import { afterEach, describe, expect, it } from "vitest";
+import { programPackageLayout } from "./program-package-layout.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const runs = { seed: 119120, numRuns: 8 };
@@ -40,45 +54,102 @@ const asIs: NonNullable<Package["manifest"]> = (fields) => fields;
 
 type Finding = { readonly code?: string; readonly message: string; readonly filename: string };
 
+const CODE = "fabrika(program-package-layout)";
+
+// RuleTester runs each file at once, so a failure throws into fast-check, which shrinks it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+const tester = new RuleTester();
+
+// Every plant gets a scratch home of its own, `<scratch>/<i>`. A home holds only its own plant, so
+// the paths a plant names (`../../../shared`, `<home>`) stay its own. Answers each plant's files that
+// oxlint lints, from the scratch folder.
+const write = (scratch: string, plants: readonly Plant[]): readonly (readonly string[])[] =>
+  plants.map(({ name, exports, sources, package: { manifest = asIs, links = {} } = {} }, i) => {
+    const home = join(scratch, `${i}`);
+    const pkg = `${i}/next/programs/${name}`;
+    mkdirSync(join(scratch, pkg), { recursive: true });
+    const written = manifest({ name: `@p16/${name}`, type: "module", exports });
+    writeFileSync(join(scratch, pkg, "package.json"), typeof written === "string" ? written : JSON.stringify(written));
+
+    for (const [path, text] of Object.entries(sources)) {
+      mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
+      writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
+    }
+
+    for (const [path, target] of Object.entries(links)) {
+      const at = join(scratch, pkg, path);
+      mkdirSync(dirname(at), { recursive: true });
+      symlinkSync(relative(dirname(at), join(scratch, pkg, target)), at);
+    }
+
+    // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
+    // outside it is outside the rule too.
+    return Object.keys(sources)
+      .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"))
+      .map((path) => `${pkg}/${path}`);
+  });
+
+/**
+ * The rule with each report kept, not judged. These laws state what a package's files report
+ * together, not what each file reports, so RuleTester runs each file as valid and the reports
+ * come back here.
+ */
+const recording = (found: Finding[], filename: string): CreateRule => ({
+  ...programPackageLayout,
+  create: (context) =>
+    // oxlint freezes the context, so the rule gets one that inherits it and reports here.
+    programPackageLayout.create(
+      Object.create(context, {
+        report: {
+          value: ({ message }: { readonly message: string }) => {
+            found.push({ code: CODE, message, filename });
+          },
+        },
+      }),
+    ),
+});
+
+/** In process, RuleTester: each plant's findings, from its files as they lie in a scratch home. */
+const inProcess = (plants: readonly Plant[]): Finding[][] => {
+  const scratch = realpathSync(mkdtempSync("/tmp/p16-lint-"));
+
+  try {
+    return write(scratch, plants).map((files) => {
+      const found: Finding[] = [];
+
+      for (const file of files) {
+        try {
+          tester.run(CODE, recording(found, file), {
+            valid: [{ code: readFileSync(join(scratch, file), "utf8"), filename: join(scratch, file) }],
+            invalid: [],
+          });
+        } catch (error) {
+          // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
+          // parse, so that file has no finding here either; the law's oxlint run checks the same.
+          if (!(error instanceof Error && error.message === "Parsing failed")) {
+            throw error;
+          }
+        }
+      }
+
+      return found;
+    });
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+};
+
 // Ticket 558: each oxlint start loads the JS plugins again, about 120 ms here and more on a busy
-// CI runner, and a law that started one per plant ran past vitest's 60 s. So every plant gets a
-// scratch home of its own, `<scratch>/<i>`, and one oxlint start lints them all. A home holds
-// only its own plant, so the paths a plant names (`../../../shared`, `<home>`) stay its own.
-const lint = (plants: readonly Plant[]): Finding[][] => {
+// CI runner, and a law that started one per plant ran past vitest's 60 s. So one oxlint start
+// lints every plant, each in its own home.
+const cli = (plants: readonly Plant[]): Finding[][] => {
   const scratch = realpathSync(mkdtempSync("/tmp/p16-lint-"));
 
   try {
     copyFileSync(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
     symlinkSync(join(ROOT, "oxlint-plugins"), join(scratch, "oxlint-plugins"));
-
-    const linted = plants.flatMap(({ name, exports, sources, package: { manifest = asIs, links = {} } = {} }, i) => {
-      const home = join(scratch, `${i}`);
-      const pkg = `${i}/next/programs/${name}`;
-      mkdirSync(join(scratch, pkg), { recursive: true });
-      const written = manifest({ name: `@p16/${name}`, type: "module", exports });
-      writeFileSync(
-        join(scratch, pkg, "package.json"),
-        typeof written === "string" ? written : JSON.stringify(written),
-      );
-
-      for (const [path, text] of Object.entries(sources)) {
-        mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
-        writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
-      }
-
-      for (const [path, target] of Object.entries(links)) {
-        const at = join(scratch, pkg, path);
-        mkdirSync(dirname(at), { recursive: true });
-        symlinkSync(relative(dirname(at), join(scratch, pkg, target)), at);
-      }
-
-      // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
-      // outside it is outside the rule too.
-      return Object.keys(sources)
-        .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"))
-        .map((path) => `${pkg}/${path}`);
-    });
-
+    const linted = write(scratch, plants).flat();
     const result = spawnSync(
       join(ROOT, "node_modules/.bin/oxlint"),
       [
@@ -96,7 +167,7 @@ const lint = (plants: readonly Plant[]): Finding[][] => {
     // oxlint lints each path it is given once and nothing else, so the total says every plant's
     // files were linted.
     expect(report.number_of_files).toBe(linted.length);
-    const findings = report.diagnostics.filter((d) => d.code === "fabrika(program-package-layout)");
+    const findings = report.diagnostics.filter((d) => d.code === CODE);
     // Every finding sits in one plant's home; the rest of the scratch folder holds no source.
     expect(findings.filter((d) => !/^\d+\//.test(d.filename))).toEqual([]);
     return plants.map((_, i) => findings.filter((d) => d.filename.startsWith(`${i}/`)));
@@ -105,8 +176,36 @@ const lint = (plants: readonly Plant[]): Finding[][] => {
   }
 };
 
+/** Each plant a law linted in process, with what it found, for the law's one oxlint run. */
+let seen: { readonly plant: Plant; readonly found: readonly Finding[] }[] = [];
+
+const lint = (plants: readonly Plant[]): Finding[][] => {
+  const found = inProcess(plants);
+  seen.push(...plants.map((plant, i) => ({ plant, found: found[i]! })));
+  return found;
+};
+
 const run = (name: string, exports: unknown, sources: Readonly<Record<string, string>>, setup: Package = {}) =>
   lint([{ name, exports, sources, package: setup }])[0] ?? [];
+
+/** A plant's findings as one oxlint run and RuleTester can both say them: its home's number aside. */
+const plain = (found: readonly Finding[]) =>
+  found
+    .map(({ code, message, filename }) => ({ code, message, filename: filename.replace(/^\d+\//, "") }))
+    .sort((a, b) => `${a.filename}\n${a.message}`.localeCompare(`${b.filename}\n${b.message}`));
+
+// One oxlint run per law, through the repo's own config, over every plant the law linted in
+// process: each plant's findings must be the same. The real tree's law plants nothing.
+afterEach(() => {
+  const plants = seen;
+  seen = [];
+
+  if (plants.length === 0) {
+    return;
+  }
+
+  expect(cli(plants.map(({ plant }) => plant)).map(plain)).toEqual(plants.map(({ found }) => plain(found)));
+});
 
 describe("fabrika/program-package-layout", () => {
   // Review 7 of P16b: the platform packages the laws draw are declared, as a program would declare
