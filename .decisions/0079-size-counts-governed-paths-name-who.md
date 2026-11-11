@@ -1,7 +1,7 @@
 ---
 id: 0079
 title: A change's size sets how many people must look at it and its governed paths set who, both read from fabrika's own settings and never from the code host, as a trial
-status: accepted
+status: amended-in-part by [0082](0082-approvals-is-a-floor-for-every-run.md)
 date: 2026-11-10
 tags: [risk-tier, review, attention, person, governed, settings, next, trial]
 ---
@@ -121,6 +121,8 @@ trial (owner, 2026-11-10).**
   the size and its cut, and the governed paths it touched.
 - Not decided here:
   - The size cuts, and the count of people for each cut.
+    *2026-11-10: [0082](0082-approvals-is-a-floor-for-every-run.md) names the base count, the repo
+    setting `approvals`, a floor no run goes under; size moves the count from there.*
   - How the settings name a governed path's owners. That is a design for the settings study and
     Tier 1's row P38 ([the Tier 1 plan](../docs/plan/tier-1.md#the-pull-requests-one-at-a-time)).
   - Whether today's `[ship] approval = codeowners` stays as one option.
