@@ -24,6 +24,8 @@ export interface Setting<A, S extends Scope = Scope> extends Config.Config<A> {
   readonly doc: string;
   readonly scope: S;
   readonly reload: Reload;
+  /** The release that introduced the key, as `0.1.0`: a release fact, never a person's choice. */
+  readonly since: string;
 }
 
 export const make = <A, const S extends Scope>(
@@ -34,6 +36,7 @@ export const make = <A, const S extends Scope>(
     readonly doc: string;
     readonly scope: S;
     readonly reload: Reload;
+    readonly since: string;
   },
 ): Setting<A, S> => {
   // Effect reads a string path as one key, so the dotted path is split here.
