@@ -20,5 +20,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "yaml": "catalog:"
+  },
+  "volta": {
+    "extends": "../package.json"
   }
 }
