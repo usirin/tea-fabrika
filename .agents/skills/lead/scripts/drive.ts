@@ -506,7 +506,8 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
         `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
         `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
         "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
-        `commit pnpm-lock.yaml as a lead commit with stepcommit.sh, push it with botpush.mjs, ` +
+        "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
+        "session signs it and pushes it to -wip (the lead skill's ready handover, ticket 652), " +
         `then run ${ask.step} again`,
     };
   }
