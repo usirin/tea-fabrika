@@ -121,6 +121,10 @@ export type Setup = {
   // merged, `moved` (a newer head, 409) or `refused` (GitHub's own rules, 405).
   behind?: boolean;
   rest?: "merged" | "moved" | "refused";
+  // The first check read that answers (0097: catch-up's own look at a head that lacks main) finds
+  // `check` red or still running, or `e2e` missing because CI never ran it; later reads are as the
+  // rest of the setup says.
+  before?: "red" | "running" | "missing";
 };
 
 export const green: Setup = {
@@ -176,13 +180,16 @@ if (cmd === "gh") {
     die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
   if (key === "checks") {
     const pending = n - setup.failures[index] < setup.pending;
+    const before = n === setup.failures[index] ? setup.before : undefined;
     if (setup.checks) {
       for (const check of setup.checks) console.log(check.name + "\t" + check.status + "\t" + check.conclusion);
     } else for (const name of ["check", "e2e", "commits", ...${JSON.stringify(nextNames)}, "next"]) {
-      const red = setup.answer === "red" && name === "check";
+      if (before === "missing" && name === "e2e") continue;
+      const red = (setup.answer === "red" || before === "red") && name === "check";
+      const running = pending || (before === "running" && name === "check");
       // Existing non-waiter laws also provide a skipped bare job while the waiter changes.
       // T376's isolated laws below never add this compatibility check to a matrix answer.
-      console.log(name + "\t" + (pending ? "in_progress\t" : "completed\t" + (red ? "failure" : name === "next" ? "skipped" : "success")));
+      console.log(name + "\t" + (running ? "in_progress\t" : "completed\t" + (red ? "failure" : name === "next" ? "skipped" : "success")));
     }
   }
   if (key === "trust") {
