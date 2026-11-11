@@ -6,7 +6,7 @@ import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient } from "../processes/Process.ts";
@@ -47,7 +47,7 @@ const services = (inbox: Sql, manager: Sql) =>
         recipient: Recipient.cases.client.make({ client: "brain", session: SESSION }),
       },
       Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer), Effect.orDie),
-    ).pipe(Layer.provide(LedgerTransaction.layer(manager).pipe(Layer.provide(quiet)))),
+    ).pipe(Layer.provide(LedgerTransactionSql.layer(manager).pipe(Layer.provide(quiet)))),
   );
 
 RepliesTest.suite(Effect.map(files, (open) => open("replies")));
