@@ -201,6 +201,7 @@ jobs:
           path: ${{ runner.temp }}/e2e-shots/aria-received
           if-no-files-found: ignore
 
+  # T554: lane files run one at a time, before other tests, to avoid CPU crowding.
   # The tests, split by file over six machines (vitest's `--shard`, each machine
   # given about the same seconds by vitest.shards.ts). The lane's tests were one
   # file run in order, 27 min on one machine; as 18 files of 20 to 158 s they ran
@@ -268,19 +269,33 @@ jobs:
       # read the whole repo themselves, which an import walk never picks: the
       # app's bundles, and the law that every machine has laws. Main's run catches
       # what a pull request's run could not see, one merge late.
-      - name: test
+      - name: lane tests, one file at a time
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           SHARD: ${{ matrix.shard }}/6
         run: |
           if [ -n "$BASE" ]; then
-            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts
+            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --changed "$BASE" --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
+          else
+            pnpm exec vitest run packages/pipeline/src/stages/pipeline/lane. --shard "$SHARD" --passWithNoTests --maxWorkers=1 --exclude 'next/**' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/lanes.json"
+          fi
+      - name: test
+        if: ${{ !cancelled() }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SHARD: ${{ matrix.shard }}/6
+        run: |
+          if [ -n "$BASE" ]; then
+            pnpm exec vitest run --changed "$BASE" --shard "$SHARD" --passWithNoTests --exclude 'next/**' --exclude apps/fabrika/src/bundles.test.ts --exclude packages/pipeline/src/laws/standard.test.ts --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
             if [ "${{ matrix.shard }}" = 1 ]; then
-              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**'
+              pnpm exec vitest run apps/fabrika/src/bundles.test.ts packages/pipeline/src/laws/standard.test.ts --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/forced.json"
             fi
           else
-            pnpm exec vitest run --shard "$SHARD" --exclude 'next/**'
+            pnpm exec vitest run --shard "$SHARD" --exclude 'next/**' --exclude 'packages/pipeline/src/stages/pipeline/lane.*.test.ts' --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/rest.json"
           fi
+      - name: shard times
+        if: ${{ !cancelled() }}
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/lanes.json" "$RUNNER_TEMP/rest.json" "$RUNNER_TEMP/forced.json"
 
   # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected:
   # the exam's tests read files and the later ones start a brain, so `--changed` in the test job,
