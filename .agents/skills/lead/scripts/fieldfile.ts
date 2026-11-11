@@ -11,9 +11,9 @@
 //   notes                 its `id`, which must already be the date plus a slug
 //   findings, a finding   its `id`, the same
 //   findings, a rating    `<date>-rated-<finding>`: the rating's own date, then the finding it rates
-//   runs                  its `run`. A lane's run id has no date (drive's `t562-tests1`), so the row's
-//                         date goes in front, in the file name and in `run` alike:
-//                         `2026-11-11-t562-tests1`. Not decided in 0090; the plain reading.
+//   runs                  its `run`. A lane's run id has no date (lane + step + n: `p39s1-tests2`), so
+//                         the row's date goes in front, in the file name and in `run` alike:
+//                         `2026-11-11-p39s1-tests2`. Not decided in 0090; the plain reading.
 //
 // Nothing is written unless every row has a name, no two rows share one, and no file of that name
 // exists: a clash is a refusal on stderr and exit 1, never a row written over another. Each file
