@@ -1,7 +1,7 @@
 ---
 id: 0083
 title: Every program in next/ belongs to a pack, a repo's own included, and a pack declares one settings schema that all its programs read, never a settings table per program
-status: accepted
+status: amended-in-part by [0084](0084-own-pack-listed-by-path.md)
 date: 2026-11-10
 tags: [packs, programs, settings, fabrika-toml, core-pack, libfabrika, next]
 ---
@@ -106,6 +106,11 @@ program in it reads; a program has no settings of its own.**
 - **No loose program.** A program is always in a pack. A repo's own program lives in a pack in the
   repo's own `.fabrika/packs/<name>/`, the folder decided on 2026-10-31 for packs a repo offers.
   So a repo's own pack and a pack it offers to others are one thing in one folder.
+
+  *Changed 2026-11-10 by [0084](0084-own-pack-listed-by-path.md):* a repo's own pack is listed in
+  `fabrika.toml` with `from` a path that starts with a dot, and that path is what counts;
+  `.fabrika/packs/<name>/` is the usual place, not a forced one. This also answers the first "not
+  decided" item below. The rest of this record holds.
 - **One spelling.** A program is named `<pack>/<program>`, a repo's own included. A4's third
   spelling, a path such as `./programs/deploy`, goes.
 - **libfabrika is the syntax, and the core pack is the standard library.** What ships with
