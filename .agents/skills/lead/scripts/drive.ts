@@ -95,6 +95,7 @@ import {
   type Turned,
 } from "./agents.ts";
 import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import { pgrepAnswer, skipLine } from "./pgrep.ts";
 
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
@@ -2007,10 +2008,17 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     started: Date.now(),
   };
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
-  const count = (pattern: string) => sh("pgrep", ["-f", pattern]).out.split("\n").filter(Boolean).length;
-  const agents = count("codex-acp/dist/index.js") + count("claude-agent-acp/dist/index.js") + count("^codex exec");
+  // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
+  const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
+    const r = sh("pgrep", ["-f", pattern]);
+    return pgrepAnswer(r.code, r.out);
+  });
+  const refused = counts.some((c) => c._tag === "refused");
+  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
-  if (agents >= 8) {
+  if (refused) {
+    console.error(skipLine("agent cap"));
+  } else if (agents >= 8) {
     return refusal({
       outcome: endName({ kind: "refused", check: "agent_cap" }),
       reason: `${agents} agents running (the ACP harnesses drive started); the cap is 8`,
@@ -2150,8 +2158,22 @@ export const driveStep = (
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
+    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
+    // typecheck` still takes its own lock (scripts/typecheck.sh).
     if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
-      while (sh("pgrep", ["-x", "tsgo"]).code === 0) {
+      for (;;) {
+        const r = sh("pgrep", ["-x", "tsgo"]);
+        const tsgo = pgrepAnswer(r.code, r.out);
+
+        if (tsgo._tag === "refused") {
+          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+          break;
+        }
+
+        if (tsgo.count === 0) {
+          break;
+        }
+
         yield* Effect.sleep("20 seconds");
       }
     }
@@ -2276,7 +2298,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;

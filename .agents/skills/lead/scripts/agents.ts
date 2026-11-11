@@ -8,7 +8,7 @@
 // commits, signing, pushes and rows stay with the caller
 // (.decisions/0028-the-parent-holds-every-right.md).
 //
-//   const agents = yield* makeStepAgents();            // the provider table, once per process
+//   const agents = yield* makeStepAgents(sessions, main); // the provider table, once per process
 //   const turned = yield* runTurn(agents, {provider: "codex", folder: box, prompt, answer: Answer, ...});
 //   // every update as one JSON line in `events`, the last message in `report`, the typed answer back
 //
@@ -22,6 +22,7 @@ import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import { boxEnv } from "./boxnode.ts";
 
 export const PROVIDERS = ["codex", "codex-read", "claude"] as const;
 export type Provider = (typeof PROVIDERS)[number];
@@ -177,15 +178,19 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
     }
   }).pipe(Effect.provide(nodeServices));
 
-/** The provider table on the ACP rows, the session map and the reaper. One per process. */
-export const makeStepAgents = (sessionsDir: string) =>
+/**
+ * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
+ * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first.
+ */
+export const makeStepAgents = (sessionsDir: string, main: string) =>
   Effect.gen(function* () {
     yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
+    const env = yield* boxEnv(main, process.env);
     const adapters = {
-      codex: yield* acpAdapter({ name: "codex", access: "write" }),
-      "codex-read": yield* acpAdapter({ name: "codex", access: "read" }),
-      claude: yield* acpAdapter("claude"),
+      codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
+      "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
+      claude: yield* acpAdapter("claude", env),
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
   }).pipe(Effect.provide(nodeServices));
