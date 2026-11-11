@@ -1,10 +1,11 @@
 // P13 slice 1, next/. The reply machine is insert-only: empty + remember -> remembered(first reply),
 // remembered + remember -> unchanged, and no move runs a Cmd. Each walk proposes its next reply from
 // the state it has reached: a new reply while empty, then the stored reply with one field changed.
-import { applyCell, type Machine } from "@demlik/tea";
+import { applyCell, type Machine, type Sub } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
+import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";
 
 const SEED = 119120;
@@ -12,7 +13,7 @@ const SEED = 119120;
 type Reply = {
   readonly name: string;
   readonly id: string;
-  readonly parent: string;
+  readonly parent: InputId;
   readonly by: string;
   readonly for: string;
   readonly digest: string;
@@ -23,7 +24,8 @@ type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonl
 type Msg = { readonly type: "remember"; readonly reply: Reply };
 
 type Subject = {
-  readonly reply: Machine<Model, Msg, never, never, unknown>;
+  /** `Sub<never>`: no Subs, as `Machine.make` types a machine that declares none. */
+  readonly reply: Machine<Model, Msg, never, Sub<never>, unknown>;
   readonly Model: Schema.Codec<Model, unknown>;
 };
 
@@ -35,7 +37,7 @@ const text = fc.string({ minLength: 1, maxLength: 12 });
 
 const inputId = fc
   .tuple(fc.constantFrom(...ALPHABET), fc.constantFrom(...ALPHABET))
-  .map(([a, b]) => `input_0000000000e0080000000000${a}${b}`);
+  .map(([a, b]) => InputId.make(`input_0000000000e0080000000000${a}${b}`));
 
 const answer = fc.record(
   {
