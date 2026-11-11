@@ -176,6 +176,9 @@ export const storage = () => {
   const path = join(folder, `${++files}.db`);
   const open = () => {
     const db = new DatabaseSync(path);
+    // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
+    // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
+    db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
     opened.push(db);
     return db;
   };
