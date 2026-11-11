@@ -268,6 +268,10 @@ if (cmd === "node" && args[0].endsWith("/sizecap.ts")) {
   console.log("size: 7 product lines, within the cap of 600, 593 to spare");
   process.exit(0);
 }
+if (cmd === "node" && args[0].endsWith("/gcloop.ts")) {
+  // The box cleanup kick after a merge (0101), with its own laws in gcloop.test.ts: here it only starts.
+  process.exit(0);
+}
 if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
   // The last look at main, with its own laws in freshmain.test.ts: here it only passes or refuses.
   if (setup.stale) die("pr 900: merge refused at the lint check: planted");

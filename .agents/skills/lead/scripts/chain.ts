@@ -1232,7 +1232,8 @@ const handlers = (s: Setup) => {
         // One drive run, in this process: prepare (the start checks) and, when they pass, the step.
         // A slot refusal is a typed failure the schedule retries.
         const once = Effect.gen(function* () {
-          // prepare runs box.sh gc and the start checks in this thread: a hung one stops the beat.
+          // prepare runs the start checks in this thread: a hung one stops the beat. Box cleanup is
+          // not among them (gcloop.ts, 0101).
           s.beats.enter("cleanup", null);
           const prepared = prepare(env, {
             lane: s.lane,

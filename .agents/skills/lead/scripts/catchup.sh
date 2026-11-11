@@ -35,6 +35,8 @@
 #   - ends at once on a pull request that is not open and ready: on start and on every round of
 #     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
 #     a bound and ends with a line naming what it waited for
+#   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
+#     background and the merge's own exit never waits on it
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -544,4 +546,7 @@ if cd "$MAIN"; then
 else
 	echo "kept cleanup: cannot leave catch-up checkout"
 fi
+# One box cleanup sweep after each merge (0101). kick returns at once and the sweep runs on, so
+# trouble here prints a line and never turns a landed merge red.
+node "$LEAD/gcloop.ts" kick --trigger merge || echo "pr $pr: box cleanup not started"
 exit 0
