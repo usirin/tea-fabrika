@@ -421,6 +421,10 @@ const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
 const accepts = (schema: unknown, value: unknown): boolean =>
   isDeclared(schema) && Result.isSuccess(Schema.decodeUnknownResult(schema)(value));
 
+/** An error a Cmd settles with carries a string `_tag`. */
+const isTagged = (u: unknown): boolean =>
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "_tag") && Predicate.isString(u._tag);
+
 /** A settled Cmd Msg (`<name>_ok` or `<name>_err`) of a declared Cmd, checked by its schemas. */
 const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<boolean> => {
   const typed = decodeTyped(msg);
@@ -448,9 +452,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const error = Predicate.hasProperty(msg, "error") ? msg.error : undefined;
-  return Option.some(
-    Predicate.isObjectOrArray(error) && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag),
-  );
+  return Option.some(isTagged(error));
 };
 
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {

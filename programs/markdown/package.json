@@ -39,5 +39,8 @@
     "react-dom": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "volta": {
+    "extends": "../../package.json"
   }
 }

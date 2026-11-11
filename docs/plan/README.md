@@ -78,7 +78,10 @@ setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-o
 into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
 [0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
 only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
-`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. → the lead lands each slice once its
+`Sql` adapter moves to `cloudflare/`; slice 1 merged as
+[PR 891](https://github.com/usirin/tea-fabrika/pull/891). Its slice 3 (ticket 723) is being built:
+`Referee.ts` and `LedgerTransaction.ts` hold only their contracts, and their layers are
+`RefereeSql.ts` and `LedgerTransactionSql.ts`. No Tier 1 row changes. → the lead lands each slice once its
 steps pass
 
 *2026-11-09:* the local instance, P12, landed as
@@ -118,6 +121,13 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 `fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
 must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
 build can start.
+
+`next/` naming sweep, ticket 688 (2026-11-11): libfabrika's folders are modules and their ranks
+are layers ([0091](../../.decisions/0091-modules-and-layers.md)). Each row of `layer-rules.json`
+says `layer` where it said `floor`, with the same twelve ranks; the lint rule `fabrika/rooms` is
+`fabrika/modules`, with the same checks; and oxlint's `eslint/id-denylist` keeps the old words out
+of names in `next/`. No import permission, rank or runtime behavior changes, and no Tier 1 row is
+done by it.
 
 `next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
 RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`

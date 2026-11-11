@@ -2,7 +2,7 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Result, Schema, SchemaIssue } from "effect";
+import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -728,6 +728,12 @@ const oldTyped = (u: unknown): u is { readonly type: string } =>
 
 const oldCode = (u: unknown) => typeof u === "function";
 
+/** A made program's `machine`. A value Reflect.get cannot read fails the law, as its throw did. */
+const madeMachine = (made: unknown): unknown => {
+  expect(Predicate.isObjectKeyword(made)).toBe(true);
+  return Predicate.isObjectKeyword(made) ? Reflect.get(made, "machine") : undefined;
+};
+
 class Shaped {
   readonly extra = 1;
 }
@@ -893,7 +899,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         expect(Exit.isSuccess(made)).toBe(ok && schemasOk);
 
         if (Exit.isSuccess(made)) {
-          expect(Reflect.get(made.value, "machine")).toBe(m);
+          expect(madeMachine(made.value)).toBe(m);
         }
 
         seen.add(`${ok}:${recipe.container}:${recipe.update}`);
@@ -1059,7 +1065,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         expect(value !== undefined).toBe(cycle === 1);
 
         if (value !== undefined) {
-          expect(Reflect.get(value, "machine")).toBe(fields.machine);
+          expect(madeMachine(value)).toBe(fields.machine);
         }
 
         seen.add(`${cycle}:${effect}`);
