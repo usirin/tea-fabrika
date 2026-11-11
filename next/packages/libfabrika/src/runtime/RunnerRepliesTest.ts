@@ -478,6 +478,17 @@ const walk = (
       } else if (move === "restart") {
         yield* live.runner.restart({ id: `restart-${n}`, build: "test" });
         yield* live.runner.open("watch");
+      } else if (move === "flush" && intact.length > 0 && step.kind % 3 === 2) {
+        // A duplicate of an accepted or refused letter whose flush fails: no answer, then the first.
+        const prior = nth(intact, step.pick);
+        const before = yield* observe();
+        control.flush = true;
+        yield* failed(prior.letter);
+        expect(control.flush, "the armed flush was reached").toBe(false);
+        expect(yield* live.runner.msg(prior.letter), "a duplicate's retry answers the first answer").toEqual(
+          prior.first,
+        );
+        expect(yield* observe(), "a failed duplicate adds no letter, patch or version").toEqual(before);
       } else if (move === "flush" || move === "fault") {
         // The next answer cannot be kept: the call fails, and its retry returns what committed.
         const future = move === "fault" || step.kind % 2 === 0;
