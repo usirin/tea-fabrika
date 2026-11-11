@@ -60,9 +60,10 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 19 of Tier 1's 39 rows have merged
+`next/` is on main, and 19 of Tier 1's 43 rows have merged
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
-added P38, [0069](./.decisions/0069-choices-are-settings.md)). Everything
+added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
