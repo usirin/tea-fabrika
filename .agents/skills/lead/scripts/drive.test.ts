@@ -1,4 +1,8 @@
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pgrep.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxnode.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./mutbox.ts?raw";
 import "./mutbox-entry.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -38,7 +42,7 @@ import { nameOf } from "@kampus/pipeline/stages/outcome";
 import { Effect, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { NO_SPENT } from "./agents.ts";
+import { type Answer, NO_SPENT } from "./agents.ts";
 import {
   AGENT_CAP,
   agentCapFull,
@@ -110,8 +114,16 @@ const left = fc.array(fc.constantFrom("10 uncommitted files", "2 commits off fab
   maxLength: 2,
 });
 
+type Recorded = { keep: boolean; reason: string; plants?: unknown };
+
 /** The record command the machine ends on, stepping through the backup push when it asks one. */
-const recorded = (report: string, commits: number, held: readonly string[]) => {
+const recorded = (
+  report: string,
+  commits: number,
+  held: readonly string[],
+  typed: Answer | null = null,
+  pushed = true,
+) => {
   const value = {
     head: commits > 0 ? "c".repeat(40) : ask.base,
     commits,
@@ -125,20 +137,20 @@ const recorded = (report: string, commits: number, held: readonly string[]) => {
     report,
     problem: null,
   };
-  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
+  const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
   } as never);
 
   if (read.phase !== "pushing") {
-    return { state: read, cmd: cmds[0] as { keep: boolean; reason: string } };
+    return { state: read, cmd: cmds[0] as Recorded };
   }
 
   const [state, after] = machine.update.backup_push_ok(read, {
     type: "backup_push_ok",
-    value: { ok: true, detail: "" },
+    value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
-  return { state, cmd: after[0] as { keep: boolean; reason: string } };
+  return { state, cmd: after[0] as Recorded };
 };
 
 describe("drive keeps a box that holds work, today's tooling", () => {
@@ -166,6 +178,29 @@ describe("drive keeps a box that holds work, today's tooling", () => {
         if (held.length === 0) {
           expect(cmd.reason).not.toContain("box kept");
         }
+      }),
+      options,
+    );
+  });
+
+  // 0093: the plants a step's typed answer names reach its record, so its field row, whatever the
+  // outcome. Plants run once, both red: drop them on the backup push; drop them on a failed push.
+  it("records the plants the typed answer names, through a push or a failed one, and none when it names none", () => {
+    const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
+    const typed = fc.record({
+      verb: fc.constantFrom("done", "send", "ask", "skip", "stuck"),
+      reason: fc.string(),
+      plants: fc.option(fc.array(plant, { maxLength: 6 }), { nil: undefined }),
+    });
+    fc.assert(
+      fc.property(typed, fc.nat({ max: 2 }), left, fc.boolean(), (said, commits, held, pushed) => {
+        const to = said.verb === "send" ? "tests" : null;
+        const { plants, ...rest } = said;
+        const answer: Answer = { ...rest, to, laws: "a.test.ts", ...(plants && { plants }) };
+        const { state, cmd } = recorded("", commits, held, answer, pushed);
+        expect(state.phase).toBe("recording");
+        expect(cmd.plants).toEqual(plants);
+        expect("plants" in cmd).toBe(plants !== undefined);
       }),
       options,
     );

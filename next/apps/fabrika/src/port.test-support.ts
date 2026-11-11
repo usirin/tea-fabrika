@@ -2,7 +2,7 @@
 //
 // The old way asked the OS for a free port, closed it and passed the number on. dev.ts builds for
 // seconds before it binds, and in that time the OS may hand the same number to anyone: another
-// test's stage, or this stage's own workerd, which asks for OS-assigned ports too.
+// test's instance, or this instance's own workerd, which asks for OS-assigned ports too.
 //
 // Two rules remove that:
 // - The port is below every default OS-assigned range (Linux starts at 32768, macOS at 49152), so
@@ -17,7 +17,7 @@ const FIRST = 20000;
 const PAIRS = 6000;
 
 // Start at a different pair per process, so parallel test files rarely meet at all. Then move on
-// after every pair handed out: a stage that runs inside the test process leaves the runtime's own
+// after every pair handed out: an instance that runs inside the test process leaves the runtime's own
 // note that its port is taken, for 30 seconds, so one process never gets the same pair twice in a row.
 let cursor = process.pid % PAIRS;
 

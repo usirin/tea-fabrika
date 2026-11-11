@@ -10,7 +10,7 @@ import { Effect, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Entry, Row } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -176,6 +176,9 @@ export const storage = () => {
   const path = join(folder, `${++files}.db`);
   const open = () => {
     const db = new DatabaseSync(path);
+    // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
+    // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
+    db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
     opened.push(db);
     return db;
   };
@@ -234,7 +237,7 @@ export type Storage = ReturnType<typeof storage>;
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const data = (sql: Sql, bell = quiet) =>
-  Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransaction.layer(sql)).pipe(
+  Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(bell),
   );
 

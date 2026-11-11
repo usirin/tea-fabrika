@@ -259,7 +259,9 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   when this run wrote none, as when box.sh refused it before the agent started. The commits check reads the whole lane, from where it left main, so each earlier step's
   newest link is in its chain. After a lead merge of main it starts at the merge-base with
   `origin/main` instead, so main's own commits are not judged as the lane's. A tests, build or mutation step waits while `pgrep -x tsgo` finds
-  one. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
+  one; where pgrep cannot list processes, that wait and the agent cap are skipped with one line
+  each (`pgrep.ts`). A box finds the Node the repo pins first on its PATH, with pnpm run on it
+  (`boxnode.ts`), so a brief writes a plain `node` and `pnpm`, never `volta run`. `DRIVE_MINUTES` (default 60) stops a step that runs too long.
 
 ## Run a whole lane with chain.ts
 

@@ -105,7 +105,8 @@ Each added row must be a valid JSON object. The measured core fields and types i
 - If present on a run, `run` is a string; `started`, `ended` and `parent` are
   string or null; and `driver_caused` is boolean. `active`, `costUsd`, `listUsd`,
   `billed`, `inputTokens`, `cachedTokens` and `outputTokens` are finite,
-  nonnegative numbers or null.
+  nonnegative numbers or null. `plants` is an array of `{law, plant, result}`, two strings and
+  `red` or `green`.
 - A findings row has `_tag` `finding` or `rated`. A finding requires every field in
   [its table](#a-finding): `rule` from the closed list; `location` as `{path, line}`, with text
   for the path and a whole number from 1 for the line; `says`, `proof`, `cost` and `by` with
@@ -167,6 +168,7 @@ stricter wording does not add blocking rules.
 | `jev` | on a `machine` row only: the Jev calls it made |
 | `replay`, `name` | on a `reviewer` row only. `replay: true`: not today's fabrika. It is tea-fabrika's own review piece (`src/stages/review/`), run alone on a head today's reviewer had already reviewed. It only read and posted nothing. `name` is the outcome's name it printed. `model: null` on such a row: its gate stopped it before any agent started. `minutes` is the agent's own time, or the whole run where no agent ran. `tools` counts the one call that hands the answer back. Leave these rows out of any baseline of today's reviewer. On a `planner` row too: tea-fabrika's plan program (`wip/src/stages/plan/`), run read-only on a closed ticket at its PR's base commit (experiment 86). `tools` there is `null` and `minutes` sums its drafts. In experiment 136 it is the plan stage's planner options (`packages/pipeline/src/stages/plan/planner.ts`), asked only whether a closed ticket's first title and body join an open ticket (or, in part B, what its pull request should carry), with no plan written; `tools` counts its Read, Grep and Glob calls, `tokens` is its context at the last turn, and `name` is `null`. On a `triager` row too: tea-fabrika's sort (experiments 88 and 92; 92's `why` names which brief), one call with no tools on a closed ticket's first title and body. `name` is what it said (`plan`, `ruling`, `research`, `no` or `dup`); `tokens` and `billed` are that one call's. In experiments 133 and 133b it is today's sort brief and Check (`packages/pipeline/src/stages/sort/`), up to two calls, and `name` is the outcome's name, such as `send:plan:fold`. Leave these out of any baseline of today's triager |
 | `attested` | on a `next/` step's row from P32 on: the links the step signed, one per commit it made, in commit order. See [A step's links](#a-steps-links). Added 2026-11-07 |
+| `plants` | on a `step` row whose agent ran plants ([0093](../.decisions/0093-laws-walk-plants-run-once.md)): each break it planted once and undid, as `{law, plant, result}`. `law` is the law it tested (`file:line` or its title), `plant` what it broke (`file:line` and how), and `result` is `red` when the law failed on it or `green` when the law did not catch it. drive.ts copies them from the `plants` key of the step's typed answer, the JSON object that ends its report; a row with none leaves the key out. Added 2026-11-11 |
 
 ### A step's links
 
