@@ -370,6 +370,14 @@ it("scenario: a stage given key commands hands the checked key file to the brain
       });
       expect((call.args[0] as { id: string }).id).toMatch(/^keys-/);
     }
+
+    // The plan's records table keeps `keys.publish` in the stage's durable recording, so a saved file
+    // that never reached a tab can be traced. Mutation 6 (seed 119120) found nothing read its name.
+    const published = calls
+      .filter((call) => call.target === "record" && call.method === "write")
+      .flatMap((call) => (call.args[2] as Array<{ span: { name: string; ok: boolean } }>) ?? [])
+      .filter(({ span }) => span.name === "keys.publish" && span.ok);
+    expect(published.length, "the publish is recorded as keys.publish").toBeGreaterThan(0);
   } finally {
     fetch.mockRestore();
     kill.mockRestore();
