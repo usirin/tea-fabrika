@@ -34,10 +34,21 @@
 // judgment agent. A start refusal for a full laptop (agent_cap, low_disk) is retried on one named
 // Effect Schedule (`slotSchedule`); any other refusal parks. Every limit is a Context.Reference with
 // an overridable default (the defaults: a step retried every 5 minutes, 6 times; 3 stucks in a row
-// on one step; 16 steps a lane), and `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS` and
-// `CHAIN_STEPS` override them from outside. Running out of retries is a typed `RetriesExhausted`,
-// reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0 landed, 20 parked
-// (ask), 30 stuck, 2 usage.
+// on one step; 16 steps a lane with no backstop), and `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`,
+// `CHAIN_STUCKS` and `CHAIN_STEPS` override them from outside. Running out of retries is a typed
+// `RetriesExhausted`, reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0
+// landed, 20 parked (ask), 30 stuck, 2 usage.
+//
+// The lane's budget (.decisions/0076). Every stuck step carries its fault, `tool` or `work`
+// (drive's `faultFrom`). The machine keeps the marks of the lane's last 5 steps; when 3 of them were
+// sent back or stuck on the work, it stops with an ask that holds the counts: redo, cut scope or
+// drop. A tool stuck is marked and never counted. The backstop is twice the estimate a line such
+// as `Estimate: 12 steps, $15` gives in the approved plan, else in the lane brief; at its steps or
+// its dollars the chain stops the same way, before the next step or judgment. With no estimate, one
+// printed line says so and `MaxSteps` holds. `CHAIN_INTENSITY`, `CHAIN_WITHIN` and `CHAIN_BACKSTOP`
+// override the 3, the 5 and the 2. The stop, its rule and what was spent, goes in the chain record.
+// No agent sees these numbers. The window counts this process's steps: a lane started again after
+// a person's answer starts a fresh window. The tool budget shared by all lanes is not built here.
 //
 // Each step's record is a Schema value (`StepRecord`) written to `state/<lane>-chain.json` before
 // the step starts and again when it ends, so a resume (`--start <step>`) needs nothing in memory.
@@ -67,8 +78,8 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { Context, Duration, Effect, Schedule, Schema } from "effect";
-import { type Agents, Judgment, makeStepAgents, runTurn, stepRow } from "./agents.ts";
-import { driveStep, type Env, loadEnv, MUTATION_AGENT, prepare, sh } from "./drive.ts";
+import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
+import { driveStep, type Env, FAULTS, type Fault, faultFrom, loadEnv, MUTATION_AGENT, prepare, sh } from "./drive.ts";
 import { wipOf } from "./lane.ts";
 
 const HERE = import.meta.dirname;
@@ -89,8 +100,14 @@ export const WaitMinutes = Context.Reference<number>("chain/WaitMinutes", { defa
 export const MaxWaits = Context.Reference<number>("chain/MaxWaits", { defaultValue: () => 6 });
 /** Stucks in a row on one step before the lane parks without asking. */
 export const MaxStucks = Context.Reference<number>("chain/MaxStucks", { defaultValue: () => 3 });
-/** Steps a lane may run before it parks. */
+/** Steps a lane may run before it parks, when its plan and brief give no estimate for a backstop. */
 export const MaxSteps = Context.Reference<number>("chain/MaxSteps", { defaultValue: () => 16 });
+/** The lane's intensity (0076): this many sends or work stucks... */
+export const IntensityCount = Context.Reference<number>("chain/IntensityCount", { defaultValue: () => 3 });
+/** ...within this many of its last steps stop the chain and ask a person. */
+export const IntensityWithin = Context.Reference<number>("chain/IntensityWithin", { defaultValue: () => 5 });
+/** The backstop is this many times the estimate the plan or the lane brief gives (0076). */
+export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { defaultValue: () => 2 });
 
 /** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
 export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
@@ -121,12 +138,18 @@ export type Line = {
   readonly outcome: string;
   readonly head: string;
   readonly reason: string;
+  /** A stuck step's fault, `tool` or `work` (0076); `null` for any other outcome. */
+  readonly fault: Fault | null;
   readonly report: string | null;
   readonly box: string;
   readonly exit: number;
+  /** The step's list-price dollars, `null` when none were priced. */
+  readonly listUsd: number | null;
 };
 
 const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const FaultS = Schema.Literals(FAULTS);
+const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
@@ -144,13 +167,17 @@ export const lineOf = (out: string, exit: number): Line | null => {
     }
 
     const o = d as Record<string, unknown>;
+    const outcome = str(o.outcome);
+    const reason = str(o.reason);
     return {
-      outcome: str(o.outcome),
+      outcome,
       head: str(o.head),
-      reason: str(o.reason),
+      reason,
+      fault: isFault(o.fault) ? o.fault : faultFrom(outcome, reason),
       report: typeof o.report === "string" ? o.report : null,
       box: str(o.box),
       exit: typeof o.exit === "number" ? o.exit : exit,
+      listUsd: typeof o.listUsd === "number" ? o.listUsd : null,
     };
   }
 
@@ -349,6 +376,87 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
   return `${lines.join("\n")}\n`;
 };
 
+// ---------------------------------------------------------------- the budget
+
+/**
+ * How one step ended, as the lane's intensity counts it (0076): `pass` (done, skip or ask), `send`
+ * (sent back), `work` (stuck on the work) or `tool` (stuck on a tool, never counted against the lane).
+ */
+export const MARKS = ["pass", "send", "work", "tool"] as const;
+export type Mark = (typeof MARKS)[number];
+
+export const markFrom = (line: Line): Mark => {
+  const [verb] = line.outcome.split(":");
+  return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
+};
+
+/** The marks the intensity counts against the lane: sends and work stucks. */
+const counted = (window: readonly Mark[]) => ({
+  sends: window.filter((m) => m === "send").length,
+  work: window.filter((m) => m === "work").length,
+});
+
+/** A lane's size in steps and dollars: the estimate a plan or brief gives, or the backstop from it. */
+const Budget = Schema.Struct({ steps: Schema.Number, dollars: Schema.Number });
+export type Budget = typeof Budget.Type;
+
+/**
+ * The estimate in a plan or lane brief: the first line that says `estimate` and then `<n> steps`
+ * and `$<d>`, as in `Estimate: 12 steps, $15`. An estimate in agent hours alone is none.
+ */
+export const estimateIn = (text: string): Budget | null => {
+  for (const line of text.split("\n")) {
+    const m = /\bestimate\b.*?\b(\d+)\s+steps?\b.*?\$\s?(\d+(?:\.\d+)?)/i.exec(line);
+    const steps = Number(m?.[1]);
+    const dollars = Number(m?.[2]);
+
+    if (m !== null && steps > 0 && dollars > 0) {
+      return { steps, dollars };
+    }
+  }
+
+  return null;
+};
+
+/** The backstop: `times` the estimate, steps rounded up. */
+export const backstopFrom = (estimate: Budget, times: number): Budget => ({
+  steps: Math.ceil(estimate.steps * times),
+  dollars: estimate.dollars * times,
+});
+
+/** Why the chain stopped to ask a person to redo, cut scope or drop (0076), kept in its record. */
+export const Stop = Schema.TaggedUnion({
+  intensity: {
+    count: Schema.Number,
+    within: Schema.Number,
+    window: Schema.Array(Schema.Literals(MARKS)),
+    steps: Schema.Number,
+    dollars: Schema.Number,
+  },
+  backstop: {
+    passed: Schema.Literals(["steps", "dollars"]),
+    backstop: Budget,
+    steps: Schema.Number,
+    dollars: Schema.Number,
+  },
+});
+export type Stop = typeof Stop.Type;
+
+/** The stop's question, with its counts, for the lead. */
+export const stopReason = (stop: Stop): string => {
+  const spent = `Spent so far: ${stop.steps} steps, $${stop.dollars.toFixed(2)}.`;
+  const ask = "Answer redo, cut scope or drop (0076).";
+
+  if (stop._tag === "intensity") {
+    const { sends, work } = counted(stop.window);
+    const tools = stop.window.filter((m) => m === "tool").length;
+    return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
+  }
+
+  const limit = stop.passed === "steps" ? `${stop.backstop.steps} steps` : `$${stop.backstop.dollars.toFixed(2)}`;
+  return `backstop: the lane reached ${limit}, its backstop (${stop.backstop.steps} steps, $${stop.backstop.dollars.toFixed(2)}). ${spent} ${ask}`;
+};
+
 // ---------------------------------------------------------------- the machine
 
 const Run = Schema.Struct({
@@ -357,13 +465,24 @@ const Run = Schema.Struct({
   round: Schema.Number,
 });
 
-const LineS = Schema.Struct({
+const lineFields = {
   outcome: Schema.String,
   head: Schema.String,
   reason: Schema.String,
+  fault: Schema.NullOr(FaultS),
   report: Schema.NullOr(Schema.String),
   box: Schema.String,
   exit: Schema.Number,
+  listUsd: Schema.NullOr(Schema.Number),
+};
+
+const LineS = Schema.Struct(lineFields);
+
+// `fault` and `listUsd` came with 0076: a record written before them reads them as null.
+const SavedLine = Schema.Struct({
+  ...lineFields,
+  fault: lineFields.fault.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  listUsd: lineFields.listUsd.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 
 const Done = Schema.Struct({ ok: Schema.Boolean, detail: Schema.String });
@@ -377,7 +496,7 @@ export const StepRecord = Schema.Struct({
   note: Schema.String,
   startedAt: Schema.String,
   endedAt: Schema.NullOr(Schema.String),
-  line: Schema.NullOr(LineS),
+  line: Schema.NullOr(SavedLine),
   /** The judgment agent's box and answer after this step, when one was asked. */
   judged: Schema.NullOr(Schema.Struct({ box: Schema.String, answer: Schema.String })),
 });
@@ -389,6 +508,8 @@ export const ChainRecord = Schema.Struct({
   pr: Schema.NullOr(Schema.Number),
   landed: Schema.NullOr(Schema.String),
   steps: Schema.Array(StepRecord),
+  /** Why the chain last stopped to ask a person (0076), when it did. */
+  stop: Schema.optionalKey(Stop),
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
@@ -400,7 +521,7 @@ export const roundsIn = (record: ChainRecord): number => record.steps.reduce((mo
 
 const judge = Cmd.make("judge", {
   input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Number }),
-  ok: Schema.Struct({ text: Schema.String }),
+  ok: Schema.Struct({ text: Schema.String, listUsd: Schema.NullOr(Schema.Number) }),
   err: ["unknown"],
 });
 
@@ -429,8 +550,8 @@ type Cmds =
   | ReturnType<typeof loosen>
   | ReturnType<typeof land>;
 
-/** How the lane ends: landed, parked for the lead, or stuck. */
-export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string };
+/** How the lane ends: landed, parked for the lead, or stuck; a stop of 0076 says which rule fired. */
+export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string; readonly stop?: Stop };
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
 
 /**
@@ -455,10 +576,22 @@ type Lane = {
   readonly head: string;
   readonly heads: Partial<Record<StepName, string>>;
   readonly stucks: number;
+  /** The last steps' marks, at most `intensity.within` of them (0076). */
+  readonly window: readonly Mark[];
+  /** List-price dollars this chain spent, steps and judgments. */
+  readonly dollars: number;
 };
 
-/** The limits the machine reads, from the References, once at start. */
-export type Limits = { readonly maxSteps: number; readonly maxStucks: number };
+/**
+ * The limits the machine reads, from the References, once at start. With a backstop, its steps
+ * take `maxSteps`'s place; with none (no estimate), `maxSteps` holds.
+ */
+export type Limits = {
+  readonly maxSteps: number;
+  readonly maxStucks: number;
+  readonly intensity: { readonly count: number; readonly within: number };
+  readonly backstop: Budget | null;
+};
 
 type Model =
   | { readonly phase: "idle"; readonly lane: Lane }
@@ -479,6 +612,27 @@ type Step = readonly [Model, readonly Cmds[]];
 
 const stay = (s: Model): Step => [s, []];
 const over = (lane: Lane, end: End): Step => [{ phase: "over", lane, end }, []];
+const stopped = (lane: Lane, stop: Stop): Step => over(lane, { kind: "ask", reason: stopReason(stop), stop });
+
+/** The intensity, pure: the window holds `count` sends or work stucks (0076). */
+const intensityStop = (lane: Lane, { count, within }: Limits["intensity"]): Stop | null => {
+  const { sends, work } = counted(lane.window);
+  return sends + work >= count
+    ? Stop.cases.intensity.make({ count, within, window: lane.window, steps: lane.round, dollars: lane.dollars })
+    : null;
+};
+
+/** The backstop, pure: the lane ran its steps or spent its dollars (0076). */
+const backstopStop = (lane: Lane, backstop: Budget | null): Stop | null => {
+  if (backstop === null) {
+    return null;
+  }
+
+  const passed = lane.round >= backstop.steps ? "steps" : lane.dollars >= backstop.dollars ? "dollars" : null;
+  return passed === null
+    ? null
+    : Stop.cases.backstop.make({ passed, backstop, steps: lane.round, dollars: lane.dollars });
+};
 
 const runStep = (lane: Lane, step: StepName, note: string): Step => {
   const round = lane.round + 1;
@@ -487,10 +641,20 @@ const runStep = (lane: Lane, step: StepName, note: string): Step => {
   return [{ phase: "stepping", lane: next, step, note }, [asked]];
 };
 
-/** Take a move: a step, the judgment agent, the pull request or a park. */
-const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): Step => {
-  if (move._tag === "step" && lane.round >= max) {
-    return over(lane, { kind: "ask", reason: `${max} steps ran (MaxSteps); the lane parks` });
+/**
+ * Take a move: a step, the judgment agent, the pull request or a park. Before a step or a judgment,
+ * the backstop, or with none `MaxSteps`, may stop the lane.
+ */
+const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits): Step => {
+  const spends = move._tag === "step" || move._tag === "judge";
+  const backstop = spends ? backstopStop(lane, limits.backstop) : null;
+
+  if (backstop !== null) {
+    return stopped(lane, backstop);
+  }
+
+  if (move._tag === "step" && limits.backstop === null && lane.round >= limits.maxSteps) {
+    return over(lane, { kind: "ask", reason: `${limits.maxSteps} steps ran (MaxSteps); the lane parks` });
   }
 
   switch (move._tag) {
@@ -505,11 +669,14 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, max: number): 
   }
 };
 
-export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
+export const makeMachine = (limits: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
     cmds: [stepRun, judge, prOpen, loosen, land],
-    init: (): Step => [{ phase: "idle", lane: { round: 0, head: "", heads: {}, stucks: 0 } }, []],
+    init: (): Step => [
+      { phase: "idle", lane: { round: 0, head: "", heads: {}, stucks: 0, window: [], dollars: 0 } },
+      [],
+    ],
     update: {
       start: (s, m): Step => (s.phase === "idle" ? runStep(s.lane, m.step, "") : stay(s)),
       step_run_ok: (s, m): Step => {
@@ -525,8 +692,17 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
           head: accepted && line.head ? line.head : s.lane.head,
           heads: verb === "done" && line.head ? { ...s.lane.heads, [s.step]: line.head } : s.lane.heads,
           stucks: verb === "stuck" ? s.lane.stucks + 1 : 0,
+          window: [...s.lane.window, markFrom(line)].slice(-limits.intensity.within),
+          dollars: s.lane.dollars + (line.listUsd ?? 0),
         };
-        return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, maxStucks), maxSteps);
+        // 0076: the window is checked before any move, so a tripped lane starts nothing more.
+        const intensity = intensityStop(lane, limits.intensity);
+
+        if (intensity !== null) {
+          return stopped(lane, intensity);
+        }
+
+        return take(lane, s.step, line, moveOf(s.step, line, lane.stucks, limits.maxStucks), limits);
       },
       // A typed RetriesExhausted (the slot schedule ran out) or any other failure: stuck, with why.
       step_run_err: (s, m): Step =>
@@ -545,7 +721,8 @@ export const makeMachine = ({ maxSteps, maxStucks }: Limits) =>
         }
 
         const move = moveFrom(m.value.text);
-        return take(s.lane, s.step, s.line, move, maxSteps);
+        const lane = { ...s.lane, dollars: s.lane.dollars + (m.value.listUsd ?? 0) };
+        return take(lane, s.step, s.line, move, limits);
       },
       judge_err: (s): Step =>
         s.phase === "judging"
@@ -679,6 +856,20 @@ The ${step} step's report:
 ${report}
 `;
 
+/** The chain record, a Schema value read and written whole: what a resume needs is on disk. */
+const chainFile = (path: string, lane: string) => {
+  const readRecord = (): ChainRecord =>
+    existsSync(path)
+      ? Schema.decodeUnknownSync(ChainRecord)(JSON.parse(readFileSync(path, "utf8")))
+      : { lane, pr: null, landed: null, steps: [] };
+  const writeRecord = (r: ChainRecord) => {
+    const text = JSON.stringify(Schema.encodeSync(ChainRecord)(r), null, "\t");
+    writeFileSync(`${path}.tmp`, `${text}\n`);
+    renameSync(`${path}.tmp`, path);
+  };
+  return { readRecord, writeRecord };
+};
+
 const handlers = (s: Setup) => {
   const { env } = s;
   const state = join(env.BOXES, "state", `${s.lane}.json`);
@@ -691,16 +882,7 @@ const handlers = (s: Setup) => {
     root?: string;
     steps: { step: string; outcome: string; head: string }[];
   } => (existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { steps: [] });
-  // The chain record, a Schema value read and written whole: what a resume needs is on disk.
-  const readRecord = (): ChainRecord =>
-    existsSync(chainState)
-      ? Schema.decodeUnknownSync(ChainRecord)(JSON.parse(readFileSync(chainState, "utf8")))
-      : { lane: s.lane, pr: null, landed: null, steps: [] };
-  const writeRecord = (r: ChainRecord) => {
-    const text = JSON.stringify(Schema.encodeSync(ChainRecord)(r), null, "\t");
-    writeFileSync(`${chainState}.tmp`, `${text}\n`);
-    renameSync(`${chainState}.tmp`, chainState);
-  };
+  const { readRecord, writeRecord } = chainFile(chainState, s.lane);
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
     const r = readRecord();
@@ -786,9 +968,11 @@ const handlers = (s: Setup) => {
               outcome: prepared.outcome,
               head: "",
               reason: prepared.reason,
+              fault: faultFrom(prepared.outcome, prepared.reason),
               report: null,
               box: "",
               exit: prepared.exit,
+              listUsd: null,
             } satisfies Line;
           }
 
@@ -797,9 +981,11 @@ const handlers = (s: Setup) => {
             outcome: ran.outcome,
             head: ran.head,
             reason: ran.reason,
+            fault: ran.fault,
             report: ran.report,
             box: ran.box,
             exit: ran.exit,
+            listUsd: ran.listUsd,
           } satisfies Line;
         });
         const line = yield* once.pipe(
@@ -822,9 +1008,11 @@ const handlers = (s: Setup) => {
                   outcome: `stuck:${e._tag}`,
                   head: "",
                   reason: e.reason,
+                  fault: faultFrom(`stuck:${e._tag}`, e.reason),
                   report: null,
                   box: "",
                   exit: 30,
+                  listUsd: null,
                 },
               });
               note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
@@ -893,7 +1081,7 @@ const handlers = (s: Setup) => {
           saveStep({ ...last, judged: { box, answer } });
         }
 
-        return { text: JSON.stringify(move) };
+        return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
@@ -1137,7 +1325,13 @@ export const chainMain = (args: string[], env: Env) =>
       electron: stepSet(flag(args, "--electron")),
       model: flag(args, "--model") ?? "sonnet",
     };
-    const limits: Limits = { maxSteps: yield* MaxSteps, maxStucks: yield* MaxStucks };
+    const backstop = yield* backstopFor(plan, briefPath);
+    const limits: Limits = {
+      maxSteps: yield* MaxSteps,
+      maxStucks: yield* MaxStucks,
+      intensity: { count: yield* IntensityCount, within: yield* IntensityWithin },
+      backstop,
+    };
     const machine = makeMachine(limits);
     const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"));
     const handle = yield* run(machine, {
@@ -1153,6 +1347,14 @@ export const chainMain = (args: string[], env: Env) =>
       return yield* Effect.die(`chain stopped in ${end.phase}`);
     }
 
+    const { stop } = end.end;
+
+    // The stop goes in the chain record with the rule that fired and what was spent (0076).
+    if (stop !== undefined) {
+      const file = chainFile(join(env.BOXES, "state", `${lane}-chain.json`), lane);
+      file.writeRecord({ ...file.readRecord(), stop });
+    }
+
     console.log(
       JSON.stringify({
         outcome: end.end.kind,
@@ -1160,10 +1362,40 @@ export const chainMain = (args: string[], env: Env) =>
         rounds: end.lane.round,
         head: end.lane.head,
         reason: end.end.reason,
+        dollars: Math.round(end.lane.dollars * 100) / 100,
+        ...(stop === undefined ? {} : { stop }),
         exit: exitOf(end.end),
       }),
     );
     return end.end;
+  });
+
+/**
+ * The lane's backstop: `BackstopTimes` the estimate in the approved plan, else in the lane brief.
+ * With none, one printed line says the backstop is skipped and `MaxSteps` holds. The numbers go to
+ * stderr only, never into a step's brief or the state file a judgment reads (0076).
+ */
+const backstopFor = (plan: string, brief: string) =>
+  Effect.gen(function* () {
+    const times = yield* BackstopTimes;
+    const maxSteps = yield* MaxSteps;
+    const found = [plan, brief].flatMap((path) => {
+      const estimate = existsSync(path) ? estimateIn(readFileSync(path, "utf8")) : null;
+      return estimate === null ? [] : [{ path, estimate }];
+    })[0];
+
+    if (found === undefined) {
+      console.error(
+        `chain.ts: no estimate in steps and dollars in ${plan} or ${brief}; the backstop is skipped, and MaxSteps (${maxSteps}) holds`,
+      );
+      return null;
+    }
+
+    const backstop = backstopFrom(found.estimate, times);
+    console.error(
+      `chain.ts: backstop ${backstop.steps} steps, $${backstop.dollars.toFixed(2)}: ${times} times the estimate in ${found.path}`,
+    );
+    return backstop;
   });
 
 /** A limit's override from the environment, when set and a number. */
@@ -1187,6 +1419,9 @@ const main = () => {
       overridden(MaxWaits, "CHAIN_WAITS"),
       overridden(MaxStucks, "CHAIN_STUCKS"),
       overridden(MaxSteps, "CHAIN_STEPS"),
+      overridden(IntensityCount, "CHAIN_INTENSITY"),
+      overridden(IntensityWithin, "CHAIN_WITHIN"),
+      overridden(BackstopTimes, "CHAIN_BACKSTOP"),
     ),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));

@@ -328,6 +328,12 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
   with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
   ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
+- **The lane's budget** ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)): each stuck
+  step carries its fault, `tool` or `work`. When 3 of the last 5 steps were sent back or stuck on
+  the work, the chain ends `ask` with the counts and the stop in its record; you answer redo, cut
+  scope or drop. Tool stucks never count. Put `Estimate: <n> steps, $<d>` in the plan or the lane
+  brief: twice it is the backstop and replaces `MaxSteps`. With none, the chain prints that it
+  skipped the backstop. Never put these numbers in a step's brief.
 - **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
   checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
   lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again

@@ -54,6 +54,9 @@
 //  22. with --plan, the sample reached none of     stuck no_build_reach, naming them; a plan
 //      the plan's build-owned files that have      plancheck cannot read is stuck bad_plan
 //      a mutant on their changed lines
+//  23. a Docker call never answers                 stopped at its DOCKER_SECONDS bound (TERM,
+//                                                  then KILL), stuck docker_timeout; in gc, one
+//                                                  line and exit 0, so the chain goes on
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
 // file with zero mutants (ticket 655).
 
@@ -79,10 +82,39 @@ export const LIMITS = { cpus: 4, memory: "4g", pids: 512 } as const;
 /** One arm is run.sh's own 300 s cap plus the install and the baseline; two arms with a base. */
 export const secondsFor = (base: boolean) => (base ? 900 : 480);
 
+/**
+ * How long one Docker call may take before it is stopped. On 2026-11-10 a `docker ps` in gc never
+ * returned, and two lanes sat 1 h 50 min with no agent alive. No saved row times a single Docker
+ * call; the bounds come from whole runs in the boxes folder's mutbox.json files. The shortest,
+ * t589-mutation1, did every quick call (version, ps, image inspect, rm) and the container's own
+ * sample in 22 s, so `call` is 30 s, past anything a working Docker gave us. The one image build
+ * timed took 81 s (field note 2026-11-10-01), so `build` is 600 s. `prune` deletes image layers and
+ * has no timing: 120 s is a guess. `docker run` keeps its own bound, secondsFor.
+ */
+export const DOCKER_SECONDS = { call: 30, prune: 120, build: 600 } as const;
+
+/** After SIGTERM, a stopped command's time to exit before SIGKILL: a hung client may ignore TERM. */
+export const KILL_GRACE_SECONDS = 2;
+
+/**
+ * The most `mutbox gc` can take with every call hung: version, ps, rm and prune, each with its
+ * kill grace, plus 10 s to start and stop Node. gc.ts stops it past this, as a second guard.
+ */
+export const GC_SECONDS = 3 * DOCKER_SECONDS.call + DOCKER_SECONDS.prune + 4 * KILL_GRACE_SECONDS + 10;
+
 class Stuck extends Schema.TaggedError<Stuck>()("Stuck", {
   reason: Schema.String,
   detail: Schema.String,
 }) {}
+
+/** A command passed its time limit and was stopped; nothing it would have said was read. */
+export class CallTimeout extends Schema.TaggedError<CallTimeout>()("CallTimeout", {
+  command: Schema.String,
+  seconds: Schema.Number,
+}) {}
+
+/** The one line a timed-out call leaves in a report. Pure. */
+export const timeoutLine = (e: CallTimeout) => `${e.command} passed its ${e.seconds} s limit and was stopped`;
 
 /** The related test paths, or `null` when one is not a plain test file path. */
 export const parseRelated = (text: string): ReadonlyArray<string> | null => {
@@ -562,14 +594,21 @@ export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0
 
 const text = (stream: Stream.Stream<Uint8Array, unknown>) => stream.pipe(Stream.decodeText(), Stream.mkString);
 
-/** Run one command to its end. A command that cannot start answers 127. */
+/**
+ * Run one command to its end. A command that cannot start answers 127. The child lives in this
+ * call's scope: interrupted (a time limit), its process group gets SIGTERM, then SIGKILL after
+ * KILL_GRACE_SECONDS, and the scope closes only once it is gone (0061).
+ */
 const sh = Effect.fnUntraced(
-  function* (cmd: string, args: ReadonlyArray<string>, stdin?: string) {
+  function* (cmd: string, args: ReadonlyArray<string>, stdin?: string | Stream.Stream<Uint8Array>) {
     const ran = yield* ChildProcess.make(cmd, args, {
       extendEnv: true,
       // No hooks, no repo-set or user-set git helpers: nothing a checkout holds runs as us.
       env: { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" },
-      ...(stdin === undefined ? {} : { stdin: Stream.make(new TextEncoder().encode(stdin)) }),
+      forceKillAfter: `${KILL_GRACE_SECONDS} seconds`,
+      ...(stdin === undefined
+        ? {}
+        : { stdin: typeof stdin === "string" ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
     });
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
       concurrency: 3,
@@ -579,6 +618,26 @@ const sh = Effect.fnUntraced(
   Effect.scoped,
   Effect.catch(() => Effect.succeed({ out: "", err: "the command could not start", code: 127 })),
 );
+
+/**
+ * Run one command, stopped past `seconds`: its child is killed as `sh` says, and the call fails
+ * with CallTimeout. A Docker call never waits without a bound.
+ */
+export const bounded = (
+  cmd: string,
+  args: ReadonlyArray<string>,
+  seconds: number,
+  stdin?: string | Stream.Stream<Uint8Array>,
+) =>
+  sh(cmd, args, stdin).pipe(
+    Effect.timeoutOrElse({
+      duration: `${seconds} seconds`,
+      orElse: () => Effect.fail(new CallTimeout({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
+    }),
+  );
+
+/** One Docker call under its bound (DOCKER_SECONDS). */
+const docker = (args: ReadonlyArray<string>, seconds: number = DOCKER_SECONDS.call) => bounded("docker", args, seconds);
 
 const tail = (s: string) => s.trim().split("\n").slice(-3).join(" | ").slice(-400);
 
@@ -630,18 +689,18 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
 
 /** Every container a run under this lock made. Whoever holds the lock may remove them. */
 const sweepContainers = Effect.fnUntraced(function* (lock: string) {
-  const listed = yield* sh("docker", ["ps", "-aq", "--filter", `label=${OWNER}=${lock}`]);
+  const listed = yield* docker(["ps", "-aq", "--filter", `label=${OWNER}=${lock}`]);
   const ids = listed.out.split("\n").filter(Boolean);
 
   if (ids.length > 0) {
-    yield* sh("docker", ["rm", "-f", ...ids]);
+    yield* docker(["rm", "-f", ...ids]);
   }
 
   return ids.length;
 });
 
 const dockerReady = Effect.fnUntraced(function* () {
-  const server = yield* sh("docker", ["version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"]);
+  const server = yield* docker(["version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"]);
 
   if (server.code !== 0) {
     return yield* new Stuck({
@@ -935,7 +994,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   const image = imageTag(hash.out.trim());
 
-  if ((yield* sh("docker", ["image", "inspect", "--format", "{{.Id}}", image])).code !== 0) {
+  if ((yield* docker(["image", "inspect", "--format", "{{.Id}}", image])).code !== 0) {
     const context = yield* fs.makeTempDirectoryScoped({ prefix: "mutbox-" });
     const patches = (yield* git("ls-tree", "-r", "--name-only", "build", "patches/")).out.split("\n").filter(Boolean);
     yield* fs.makeDirectory(path.join(context, "patches"), { recursive: true });
@@ -948,18 +1007,10 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     }
 
     // The only step with a network: Docker's builder, reading the lockfile's exact versions.
-    const built = yield* sh("docker", [
-      "build",
-      "--platform",
-      PLATFORM,
-      "--build-arg",
-      `PNPM=${pnpm}`,
-      "--label",
-      LABEL,
-      "--tag",
-      image,
-      context,
-    ]);
+    const built = yield* docker(
+      ["build", "--platform", PLATFORM, "--build-arg", `PNPM=${pnpm}`, "--label", LABEL, "--tag", image, context],
+      DOCKER_SECONDS.build,
+    );
 
     if (built.code !== 0) {
       return yield* new Stuck({ reason: "image_build_failed", detail: tail(built.err) });
@@ -968,7 +1019,8 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   // The run. A finalizer removes the container whatever happens: a time limit, a signal, a crash.
   const name = `fabrika-mutbox-${ask.ticket}-${process.pid}`;
-  yield* Effect.addFinalizer(() => sh("docker", ["rm", "-f", name]));
+  // A hung rm here is stopped at its bound; gc's sweep finds the container by its label later.
+  yield* Effect.addFinalizer(() => docker(["rm", "-f", name]).pipe(Effect.ignore));
   const ran = yield* sh(
     "docker",
     runArgs({
@@ -984,7 +1036,8 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   ).pipe(Effect.timeoutOption(`${limit} seconds`));
 
   if (Option.isNone(ran)) {
-    yield* sh("docker", ["kill", name]);
+    // The time limit is the answer; a hung kill is stopped at its bound, and the rm finalizer follows.
+    yield* docker(["kill", name]).pipe(Effect.ignore);
     return yield* new Stuck({
       reason: "time_limit",
       detail: `the container passed ${limit} s and was killed; no report was read`,
@@ -1065,7 +1118,9 @@ const run = Command.make(
         Effect.succeed(
           e._tag === "Stuck"
             ? stuckSummary(ask, started, e.reason, e.detail)
-            : stuckSummary(ask, started, "crash", "a file or folder the run needs could not be read or written"),
+            : e._tag === "CallTimeout"
+              ? stuckSummary(ask, started, "docker_timeout", timeoutLine(e))
+              : stuckSummary(ask, started, "crash", "a file or folder the run needs could not be read or written"),
         ),
       ),
     );
@@ -1077,36 +1132,36 @@ const run = Command.make(
   }),
 );
 
-/** The lead's gc calls this: no container, and no image older than a week, is left to grow. */
+/**
+ * The lead's gc calls this: no container, and no image older than a week, is left to grow. It is
+ * best effort: a Docker call past its bound ends it with one line and exit 0, so the chain goes on.
+ */
 const gc = Command.make(
   "gc",
   { lock: Flag.String("lock") },
-  Effect.fn("mutbox.gc")(function* ({ lock }) {
-    if ((yield* sh("docker", ["version", "--format", "{{.Server.Os}}"])).code !== 0) {
-      return yield* Console.log("mutbox gc: Docker is not running; nothing checked");
-    }
+  Effect.fn("mutbox.gc")(
+    function* ({ lock }) {
+      if ((yield* docker(["version", "--format", "{{.Server.Os}}"])).code !== 0) {
+        return yield* Console.log("mutbox gc: Docker is not running; nothing checked");
+      }
 
-    const owner = yield* heldBy(lock);
+      const owner = yield* heldBy(lock);
 
-    if (owner !== null) {
-      return yield* Console.log(`keep mutbox: a run holds the Docker lock (pid ${owner})`);
-    }
+      if (owner !== null) {
+        return yield* Console.log(`keep mutbox: a run holds the Docker lock (pid ${owner})`);
+      }
 
-    const containers = yield* sweepContainers(lock);
-    // Docker's own cleanup: images with our label that no container uses, made over a week ago.
-    const pruned = yield* sh("docker", [
-      "image",
-      "prune",
-      "--all",
-      "--force",
-      "--filter",
-      `label=${LABEL}`,
-      "--filter",
-      "until=168h",
-    ]);
-    const images = pruned.out.split("\n").filter((l) => l.startsWith("untagged: ")).length;
-    yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);
-  }),
+      const containers = yield* sweepContainers(lock);
+      // Docker's own cleanup: images with our label that no container uses, made over a week ago.
+      const pruned = yield* docker(
+        ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
+        DOCKER_SECONDS.prune,
+      );
+      const images = pruned.out.split("\n").filter((l) => l.startsWith("untagged: ")).length;
+      yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);
+    },
+    Effect.catchTag("CallTimeout", (e) => Console.log(`mutbox gc: ${timeoutLine(e)}; the rest waits for the next gc`)),
+  ),
 );
 
 const mutbox = Command.make("mutbox").pipe(Command.withSubcommands([run, gc]));
