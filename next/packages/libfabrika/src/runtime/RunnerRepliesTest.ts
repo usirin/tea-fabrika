@@ -8,13 +8,12 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
+import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
-import type { Ledger } from "../ledger/Ledger.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { SinkError } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
@@ -31,13 +30,16 @@ const CAPACITY = 1024 ** 3;
 export const BRAIN = "SHA256:brain";
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 
+/** What the runner's process store reads from the context: the inbox's ledger. Named through the
+ *  store's layer, so this app file names no data module (0043). */
+type StoreNeeds = Layer.Services<ReturnType<typeof ProcessStore.layer>>;
+
 /** What the module owning the driver supplies: real database files, and the ledger-backed
- *  services a runner names, over the inbox's and the process table's connections. The inbox's
- *  `Ledger` stays in the context: the runner's process store reads it. */
+ *  services a runner names, over the inbox's and the process table's connections. */
 export type Harness = {
   /** A fresh folder; each run of the result opens the named database in it again. */
   readonly files: Effect.Effect<(name: string) => Effect.Effect<Sql, never, Scope.Scope>, never, Scope.Scope>;
-  readonly services: (inbox: Sql, manager: Sql) => Layer.Layer<Ledger | Mailbox | ProcessManager>;
+  readonly services: (inbox: Sql, manager: Sql) => Layer.Layer<StoreNeeds | Mailbox | ProcessManager>;
 };
 
 /** The tables main's runner, inbox and process table write. Any other table a runner writes here
