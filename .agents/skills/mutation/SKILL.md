@@ -11,9 +11,10 @@ main, on the changed lines of what merged since the last run, in the container, 
 beside the changed files. No new merge, no run. A merge never waits on it.
 
 - **The hourly run** changes nothing in the repo. It sorts each survivor (step 3 below), files a
-  real gap as one tracker ticket per file, at most three a day, and counts noise without filing it.
+  real gap as one tracker ticket per file, at most three a day, with its category
+  ([below](#a-gaps-category)), and counts noise without filing it.
   A narrowing (arm a kills, arm b lets live) is filed as a ticket marked loosening. It logs its
-  counts: sampled, killed, survived, real, noise, tickets, minutes.
+  counts: sampled, killed, survived, real, noise, tickets, minutes, and each real gap's category.
 - **A lane parked inside its mutation step before 0066** finishes it with the steps below, as the
   ticket's test writer, test files only; then the lane goes on to review.
 
@@ -145,6 +146,28 @@ range's base as arm a, and the tests beside the changed files as `--related`.
 
 A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
 run's base is the `build` in this run's `mutbox.json`.
+
+## A gap's category
+
+Each real gap the hourly run files gets one category
+([0077](../../../.decisions/0077-mutation-gaps-carry-a-category.md)). The tracker tickets are the
+record: keep no other file. No script holds this yet, so do these steps by hand.
+
+1. **Pick one category** by the test that is missing. The mutator is a hint, not the rule. The
+   closed list is in 0077's table: `error_branch`, `boundary`, `condition`, `return_value`,
+   `call_order`, `fallback`, `other`. A gap that fits none is `other`; never coin a new word.
+2. **File the gap** with the title `mutation gap (<category>): <file>`. The body names each
+   mutant's line, mutator and change.
+3. **Count.** Skip this for `other`. List `tracker_query` `{status: "all", find: "mutation gap
+   (<category>)"}` and `{status: "all", find: "tests step: catch <category> gaps"}`. Count the gap
+   tickets filed after the newest tests-step ticket of that category, or all of them if there is
+   none.
+4. **At two or more,** if that tests-step ticket is still open, comment the new gap on it.
+   Otherwise file one ticket, `tests step: catch <category> gaps`, naming the gaps. It asks, in
+   order, for a code check that would have caught the category (a lint rule, a plancheck rule, a
+   test helper), else a row the plan's laws table must carry, and skill prose only if neither can
+   hold it. It is not one of the three gap tickets a day.
+5. **One gap alone** changes nothing but its own test.
 
 ## Outside your task
 
