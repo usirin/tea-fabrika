@@ -6,7 +6,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
-import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
+import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { addText, Change, grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
@@ -93,7 +93,7 @@ const world = Effect.fnUntraced(function* () {
   const env = Layer.mergeAll(
     ledger,
     LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
-    ClientManager.layer(founder).pipe(Layer.provide(ledger)),
+    ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
     SpanSink.layer(sql, { object: pid }),
     RecordManager.memory(4 * 1024 * 1024),
     Archive.memory,

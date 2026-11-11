@@ -2,13 +2,14 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude]
+//   node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
-// (.decisions/0026, 0028). The box's git data sits outside the box, where the harness lets no
+// (.decisions/0026, 0028). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
+// the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
 // commits them as one signed step commit through stepcommit, with main's own signer. A mutation
@@ -85,6 +86,8 @@ import { ChildProcess } from "effect/process";
 import {
   type Agents,
   Answer,
+  answerFor,
+  sendsFrom,
   Ended,
   listUsd,
   makeStepAgents,
@@ -102,12 +105,25 @@ import { pgrepAnswer, skipLine } from "./pgrep.ts";
 const HERE = import.meta.dirname;
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
-const AGENTS = ["codex", "claude"] as const;
+const AGENTS = ["codex", "codex-exec", "claude"] as const;
 export type AgentName = (typeof AGENTS)[number];
 
-/** The provider row a step's agent runs on: Codex only reads for a plan or a review. */
-export const stepProvider = (agent: AgentName, step: StepName): Provider =>
-  agent === "claude" ? "claude" : step === "plan" || step === "review" ? "codex-read" : "codex";
+/**
+ * The provider row a step's agent runs on: Codex only reads for a plan or a review. `codex` is
+ * Codex through ACP; `codex-exec` is the installed `codex exec`, plain (./codexexec.ts).
+ */
+export const stepProvider = (agent: AgentName, step: StepName): Provider => {
+  const reads = step === "plan" || step === "review";
+
+  switch (agent) {
+    case "claude":
+      return "claude";
+    case "codex":
+      return reads ? "codex-read" : "codex";
+    case "codex-exec":
+      return reads ? "codex-exec-read" : "codex-exec";
+  }
+};
 
 // ---------------------------------------------------------------- the outcome
 
@@ -1479,8 +1495,13 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}`;
+  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
 };
+
+/** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
+ * round, listing as unfinished the parts no tests box can do). */
+export const FINISH =
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
@@ -1559,7 +1580,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
     folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
-    answer: Answer,
+    answer: answerFor(ask.step),
     model: ask.model,
     effort: ask.effort,
     minutes: ask.minutes,
@@ -1728,12 +1749,13 @@ type Lane = {
 
 // ---------------------------------------------------------------- the command
 
-const TAIL = `
+/** drive's answer tail for one step: its `to` choices are every step but itself (`sendsFrom`). */
+export const tailFor = (step: StepName) => `
 
 ---
 drive.ts reads your report, then one JSON object at its very end (its schema follows this prompt):
   verb: done | send | ask | skip | stuck
-  to:   tests | build | plan when the verb is send, else null
+  to:   ${sendsFrom(step).join(" | ")} when the verb is send, else null
   reason: one or two sentences: what to tell the next step, the one question for the lead, why there is
         nothing here for this step, or why you are stuck
   laws: for a build that needed no change, because every law is already green at its start, the
@@ -1836,7 +1858,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <lane> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -1942,7 +1964,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("--electron is for --agent claude; a Codex box cannot start Electron");
   }
 
-  if (agent === "codex" && p.model !== undefined) {
+  if (agent !== "claude" && p.model !== undefined) {
     return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
   }
 
@@ -2130,7 +2152,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
-      TAIL +
+      tailFor(step) +
       verdict,
   );
   return Start.cases.prepared.make({ ask, electron, phases });
