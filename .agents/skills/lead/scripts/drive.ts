@@ -85,6 +85,8 @@ import { ChildProcess } from "effect/process";
 import {
   type Agents,
   Answer,
+  answerFor,
+  sendsFrom,
   Ended,
   listUsd,
   makeStepAgents,
@@ -1477,8 +1479,13 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}`;
+  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
 };
+
+/** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
+ * round, listing as unfinished the parts no tests box can do). */
+export const FINISH =
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's
@@ -1557,7 +1564,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
     folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
-    answer: Answer,
+    answer: answerFor(ask.step),
     model: ask.model,
     effort: ask.effort,
     minutes: ask.minutes,
@@ -1726,12 +1733,13 @@ type Lane = {
 
 // ---------------------------------------------------------------- the command
 
-const TAIL = `
+/** drive's answer tail for one step: its `to` choices are every step but itself (`sendsFrom`). */
+export const tailFor = (step: StepName) => `
 
 ---
 drive.ts reads your report, then one JSON object at its very end (its schema follows this prompt):
   verb: done | send | ask | skip | stuck
-  to:   tests | build | plan when the verb is send, else null
+  to:   ${sendsFrom(step).join(" | ")} when the verb is send, else null
   reason: one or two sentences: what to tell the next step, the one question for the lead, why there is
         nothing here for this step, or why you are stuck
   laws: for a build that needed no change, because every law is already green at its start, the
@@ -2128,7 +2136,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       planTail(step, plan, existsSync(plan) ? readFileSync(plan, "utf8") : null) +
       mutationTail(step, saved?.steps ?? [], (path) => (existsSync(path) ? readFileSync(path, "utf8") : null)) +
       agentTail(ask, electron) +
-      TAIL +
+      tailFor(step) +
       verdict,
   );
   return Start.cases.prepared.make({ ask, electron, phases });

@@ -39,10 +39,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Stream } from "effect";
+import { Effect, Exit, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { type Answer, NO_SPENT } from "./agents.ts";
+import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
 import {
   agentsDraft,
   agentTail,
@@ -61,6 +61,7 @@ import {
   decide,
   dockerHolder,
   endName,
+  FINISH,
   firstEventAt,
   freshBox,
   GC_EVERY,
@@ -71,7 +72,9 @@ import {
   reportOf,
   rowOf,
   startedOf,
+  STEPS,
   Sweep,
+  tailFor,
 } from "./drive.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
@@ -1180,6 +1183,42 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
 
   it("scenario: no plan drive can read tells the step nothing", () => {
     expect(ownedHead("build", null)).toBe("");
+  });
+});
+
+// 2026-11-11: a tests step on Codex answered send tests round after round, listing as unfinished
+// what no tests box can do. Plants: offer a step its own name; keep the static tests | build | plan
+// tail; leave the finish rule out of a boxed step's prompt.
+describe("a step is never offered itself as a send's to, today's tooling", () => {
+  const steps = fc.constantFrom(...STEPS);
+
+  it("property: the tail and the answer schema offer every send target but the step itself", () => {
+    fc.assert(
+      fc.property(steps, (step) => {
+        const offered = ["tests", "build", "plan"].filter((to) => to !== step);
+        expect(sendsFrom(step)).toEqual(offered);
+        expect(tailFor(step)).toContain(`  to:   ${offered.join(" | ")} when the verb is send, else null`);
+        const decode = Schema.decodeUnknownExit(answerFor(step));
+        const answer = (to: string) => ({ verb: "send", to, reason: "r", laws: null });
+        expect(Exit.isFailure(decode(answer(step)))).toBe(true);
+
+        for (const to of offered) {
+          expect(Exit.isSuccess(decode(answer(to)))).toBe(true);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("property: every boxed step's prompt carries the finish rule, and the plan's does not", () => {
+    fc.assert(
+      fc.property(steps, fc.boolean(), (step, electron) => {
+        expect(agentTail({ step, ticket: "1" }, electron).includes(FINISH)).toBe(step !== "plan");
+      }),
+      options,
+    );
+    expect(FINISH).toContain('"after build" or "lead runs it"');
+    expect(FINISH).toContain("does not block `done`");
   });
 });
 
