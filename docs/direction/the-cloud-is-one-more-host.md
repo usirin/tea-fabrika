@@ -542,6 +542,10 @@ pipeline/build       # from a pack the project lists and locks
 ./programs/deploy    # this repo's own, a path from its .fabrika folder
 ```
 
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* the third spelling
+goes: a repo's own program is in a pack in `.fabrika/packs/<name>/`, named `<pack>/<program>` like any
+other, and `fabrika/tracker` is the core pack's, the pack named `fabrika`.
+
 - **Where packs come from (decided).** Copy Cargo and Go. The project lists
   its packs in `fabrika.toml` and commits `fabrika.lock` beside it, with each
   pack's commit and code hash. `~/.fabrika/packs` is only a shared cache, keyed

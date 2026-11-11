@@ -2493,6 +2493,7 @@ No fact is lost by waiting on any of these. Each adds a kind of fact, and old sa
 - Agent grants in wider use. **The first real use moved up to Tier 1,** on notes only; `as` is why old grants say what they let in.
 - Spend, limits, the `claude` and `codex` programs, hands running agents, chat tile (not a copy of regular chat; noted 2026-11-05: [talk where you work](../direction/talk-where-you-work.md) decided one thread tile that opens only from a spot, and this changes with it once that note settles), asks list. All stay, and limits are a proposal; `by` and `for` on each letter are kept now, so nothing is lost.
 - Repo programs, in `.fabrika/programs`, lean about 60%. Records no fact from Tier 1's time; nothing lost.
+  *Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* they are a pack in `.fabrika/packs/<name>/`, still in Tier 5.
 
 **Tier 6, daily use.**
 
