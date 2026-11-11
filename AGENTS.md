@@ -160,7 +160,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
   owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
-- **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
+- **One fresh agent per step** (owner, 2026-11-09), and the lead drives with flows, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md)). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
