@@ -112,3 +112,8 @@ const [draft, dispatch] = useMachine(Draft);
 - **Manti's own parts** keep their Zag.js machines inside
   ([UI on Manti](./ui-on-manti.md)). What our code keeps never lives in them.
   Proposed.
+
+*Added 2026-11-09, for `next/`: state outside a window follows the same idea.
+[0037](../../.decisions/0037-implicit-state-machines-made-explicit.md) makes every state machine
+explicit, and [0046](../../.decisions/0046-one-tea-machine-per-file.md) makes a tea machine with
+Msgs its form, always.*

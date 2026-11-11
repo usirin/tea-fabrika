@@ -9,25 +9,22 @@
 //   <dir>/home               the app's home: the lane writes its work here, and reads nothing
 //   <dir>/bin/codex          the fake Codex, first on the path that `fakeEnv` gives
 
-import {execFileSync} from "node:child_process";
-import {chmodSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
-import {dirname, join} from "node:path";
-import {fileURLToPath} from "node:url";
-import {Schema} from "effect";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
 
 const IDENTITY = {
-	GIT_AUTHOR_NAME: "fixture",
-	GIT_AUTHOR_EMAIL: "fixture@fabrika.invalid",
-	GIT_COMMITTER_NAME: "fixture",
-	GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
+  GIT_AUTHOR_NAME: "fixture",
+  GIT_AUTHOR_EMAIL: "fixture@fabrika.invalid",
+  GIT_COMMITTER_NAME: "fixture",
+  GIT_COMMITTER_EMAIL: "fixture@fabrika.invalid",
 };
 
-const FAKE_CODEX = fileURLToPath(
-	new URL("../../../../../fixtures/pipeline-lane/codex.mjs", import.meta.url),
-);
-const FAKE_GH = fileURLToPath(
-	new URL("../../../../../fixtures/pipeline-lane/gh.mjs", import.meta.url),
-);
+const FAKE_CODEX = fileURLToPath(new URL("../../../../../fixtures/pipeline-lane/codex.mjs", import.meta.url));
+
+const FAKE_GH = fileURLToPath(new URL("../../../../../fixtures/pipeline-lane/gh.mjs", import.meta.url));
 
 /** The repository a toy lane names. Nothing reads this name on a real code host. */
 export const LANE_REPO = "example/lane";
@@ -40,9 +37,9 @@ const GITHUB_ORIGIN = `https://github.com/${LANE_REPO}.git`;
  * of programs goes first on the path, so the `codex` a lane runs is the fake.
  */
 export const fakeEnv = (dir: string) => ({
-	HOME: join(dir, "user"),
-	CODEX_HOME: join(dir, "user", ".codex"),
-	PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`,
+  HOME: join(dir, "user"),
+  CODEX_HOME: join(dir, "user", ".codex"),
+  PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`,
 });
 
 /**
@@ -55,207 +52,201 @@ export const shWord = (text: string): string => `'${text.replaceAll("'", `'\\''`
 export const checkoutFor = (home: string) => join(dirname(home), "seed");
 
 export function makeLaneHome({
-	dir,
-	nodeModules,
-	reads = [],
-	host = "local",
-	rubrics = "docs/rubrics",
-	github,
-	mainFiles = [],
-	alsoCheck,
-	sendBack,
+  dir,
+  nodeModules,
+  reads = [],
+  host = "local",
+  rubrics = "docs/rubrics",
+  github,
+  mainFiles = [],
+  alsoCheck,
+  sendBack,
 }: {
-	readonly dir: string;
-	readonly nodeModules: string;
-	readonly reads?: readonly string[];
-	/** Which host the checkout's origin names. `github`: put a stand-in `gh` on the path first (`makeFakeGh`). */
-	readonly host?: "local" | "github";
-	/** `[review] rubrics`. `null`: the file leaves the table out. */
-	readonly rubrics?: string | null;
-	/** `[checks] github`. Left out: the file does not say. */
-	readonly github?: "every" | "required" | "none";
-	/** More files on main from the first commit. */
-	readonly mainFiles?: readonly {readonly path: string; readonly text: string}[];
-	/** One more `[[checks.run]]`: `sh -c <this>`. */
-	readonly alsoCheck?: string;
-	/** `[build] send_back`. Left out: the file does not say. */
-	readonly sendBack?: boolean;
+  readonly dir: string;
+  readonly nodeModules: string;
+  readonly reads?: readonly string[];
+  /** Which host the checkout's origin names. `github`: put a stand-in `gh` on the path first (`makeFakeGh`). */
+  readonly host?: "local" | "github";
+  /** `[review] rubrics`. `null`: the file leaves the table out. */
+  readonly rubrics?: string | null;
+  /** `[checks] github`. Left out: the file does not say. */
+  readonly github?: "every" | "required" | "none";
+  /** More files on main from the first commit. */
+  readonly mainFiles?: readonly { readonly path: string; readonly text: string }[];
+  /** One more `[[checks.run]]`: `sh -c <this>`. */
+  readonly alsoCheck?: string;
+  /** `[build] send_back`. Left out: the file does not say. */
+  readonly sendBack?: boolean;
 }) {
-	const git = (cwd: string, ...args: readonly string[]) =>
-		execFileSync("git", args, {cwd, env: {...process.env, ...IDENTITY}, stdio: "pipe"});
-	const remote = join(dir, `${LANE_REPO}.git`);
-	const seed = join(dir, "seed");
-	const home = join(dir, "home");
-	mkdirSync(remote, {recursive: true});
-	mkdirSync(seed, {recursive: true});
-	mkdirSync(home, {recursive: true});
-	mkdirSync(join(dir, "user", ".codex"), {recursive: true});
-	writeFileSync(join(dir, "user", ".codex", "auth.json"), '{"auth_mode": "chatgpt"}\n');
-	chmodSync(FAKE_CODEX, 0o755);
-	mkdirSync(join(dir, "bin"), {recursive: true});
-	const codex = join(dir, "bin", "codex");
-	writeFileSync(
-		codex,
-		`#!/bin/sh\nFAKE_CODEX_LOG=${shWord(join(dir, "codex.log"))} exec ${shWord(process.execPath)} ${shWord(FAKE_CODEX)} "$@"\n`,
-	);
-	chmodSync(codex, 0o755);
+  const git = (cwd: string, ...args: readonly string[]) =>
+    execFileSync("git", args, { cwd, env: { ...process.env, ...IDENTITY }, stdio: "pipe" });
+  const remote = join(dir, `${LANE_REPO}.git`);
+  const seed = join(dir, "seed");
+  const home = join(dir, "home");
+  mkdirSync(remote, { recursive: true });
+  mkdirSync(seed, { recursive: true });
+  mkdirSync(home, { recursive: true });
+  mkdirSync(join(dir, "user", ".codex"), { recursive: true });
+  writeFileSync(join(dir, "user", ".codex", "auth.json"), '{"auth_mode": "chatgpt"}\n');
+  chmodSync(FAKE_CODEX, 0o755);
+  mkdirSync(join(dir, "bin"), { recursive: true });
+  const codex = join(dir, "bin", "codex");
+  writeFileSync(
+    codex,
+    `#!/bin/sh\nFAKE_CODEX_LOG=${shWord(join(dir, "codex.log"))} exec ${shWord(process.execPath)} ${shWord(FAKE_CODEX)} "$@"\n`,
+  );
+  chmodSync(codex, 0o755);
 
-	git(remote, "init", "--quiet", "--bare", "--initial-branch=main");
-	git(seed, "init", "--quiet", "--initial-branch=main");
-	const put = (path: string, text: string) => {
-		const to = join(seed, path);
-		mkdirSync(join(to, ".."), {recursive: true});
-		writeFileSync(to, text);
-	};
-	const link = `ln -s ${shWord(nodeModules)} node_modules`;
-	put(".gitignore", "node_modules\n");
-	put(
-		"tsconfig.json",
-		`${JSON.stringify(
-			{
-				compilerOptions: {
-					target: "es2024",
-					module: "nodenext",
-					moduleResolution: "nodenext",
-					allowImportingTsExtensions: true,
-					strict: true,
-					noEmit: true,
-					skipLibCheck: true,
-					types: [],
-				},
-				include: ["src"],
-			},
-			null,
-			2,
-		)}\n`,
-	);
-	put(
-		"src/slug.ts",
-		'export function slug(name: string): string {\n\treturn name.replaceAll(" ", "-");\n}\n',
-	);
-	put(
-		"src/slug.test.ts",
-		'import {expect, it} from "vitest";\nimport {slug} from "./slug.ts";\n\nit("cuts on spaces", () => {\n\texpect(slug("a b")).toBe("a-b");\n});\n',
-	);
-	put("docs/rubrics/code.md", "Code that does what its ticket says.\n");
-	put("docs/rubrics/doc.md", "Words that say what is true.\n");
-	put("docs/rubrics/skill.md", "A skill that does one job.\n");
-	for (const {path, text} of mainFiles) put(path, text);
-	put(
-		".fabrika/fabrika.toml",
-		[
-			"[agents.triage]",
-			'harness = "codex"',
-			'model = "gpt-6-astra"',
-			'effort = "high"',
-			"",
-			"[build]",
-			`install = ["ln", "-s", ${JSON.stringify(nodeModules)}, "node_modules"]`,
-			// Code runs these itself after every build. The JSON report names each failing test, so a
-			// red head goes back to the builder with them; the builder's brief leaves the report out.
-			'checks = [["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]]',
-			...(sendBack === undefined ? [] : [`send_back = ${sendBack}`]),
-			"",
-			"[test_writer]",
-			'includes = ["**/*.test.ts"]',
-			// The box may only read the shared node_modules, and vitest 5.0.5 writes its module cache
-			// there by default. On Linux the write fails and a test file does not load.
-			'run = ["node_modules/.bin/vitest", "run", "--no-fsModuleCache", "--reporter=json", "--outputFile={out}"]',
-			`reads = ${JSON.stringify([nodeModules, ...reads])}`,
-			"",
-			"[mutation]",
-			// The JSON report names each failing test, so a red head goes back to the builder with them.
-			'tests = ["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]',
-			'typecheck = ["node_modules/.bin/tsc", "--noEmit"]',
-			"",
-			...(rubrics === null ? [] : ["[review]", `rubrics = ${JSON.stringify(rubrics)}`, ""]),
-			...(github === undefined ? [] : ["[checks]", `github = ${JSON.stringify(github)}`, ""]),
-			"[[checks.run]]",
-			'name = "test"',
-			`run = ["sh", "-c", ${JSON.stringify(`${link} && node_modules/.bin/vitest run`)}]`,
-			"",
-			...(alsoCheck === undefined
-				? []
-				: [
-						"[[checks.run]]",
-						'name = "also"',
-						`run = ["sh", "-c", ${JSON.stringify(alsoCheck)}]`,
-						"",
-					]),
-		].join("\n"),
-	);
-	git(seed, "add", "-A");
-	git(seed, "commit", "--quiet", "-m", "first");
-	git(seed, "remote", "add", "origin", remote);
-	git(seed, "push", "--quiet", "origin", "main");
-	if (host === "github") {
-		git(seed, "remote", "set-url", "origin", GITHUB_ORIGIN);
-		writeFileSync(
-			join(dir, "user", ".gitconfig"),
-			`[url ${JSON.stringify(remote)}]\n\tinsteadOf = ${GITHUB_ORIGIN}\n`,
-		);
-	}
-	return {home, remote, seed};
+  git(remote, "init", "--quiet", "--bare", "--initial-branch=main");
+  git(seed, "init", "--quiet", "--initial-branch=main");
+  const put = (path: string, text: string) => {
+    const to = join(seed, path);
+    mkdirSync(join(to, ".."), { recursive: true });
+    writeFileSync(to, text);
+  };
+  const link = `ln -s ${shWord(nodeModules)} node_modules`;
+  put(".gitignore", "node_modules\n");
+  put(
+    "tsconfig.json",
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          target: "es2024",
+          module: "nodenext",
+          moduleResolution: "nodenext",
+          allowImportingTsExtensions: true,
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+          types: [],
+        },
+        include: ["src"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  put("src/slug.ts", 'export function slug(name: string): string {\n\treturn name.replaceAll(" ", "-");\n}\n');
+  put(
+    "src/slug.test.ts",
+    'import {expect, it} from "vitest";\nimport {slug} from "./slug.ts";\n\nit("cuts on spaces", () => {\n\texpect(slug("a b")).toBe("a-b");\n});\n',
+  );
+  put("docs/rubrics/code.md", "Code that does what its ticket says.\n");
+  put("docs/rubrics/doc.md", "Words that say what is true.\n");
+  put("docs/rubrics/skill.md", "A skill that does one job.\n");
+
+  for (const { path, text } of mainFiles) {
+    put(path, text);
+  }
+
+  put(
+    ".fabrika/fabrika.toml",
+    [
+      "[agents.triage]",
+      'harness = "codex"',
+      'model = "gpt-6-astra"',
+      'effort = "high"',
+      "",
+      "[build]",
+      `install = ["ln", "-s", ${JSON.stringify(nodeModules)}, "node_modules"]`,
+      // Code runs these itself after every build. The JSON report names each failing test, so a
+      // red head goes back to the builder with them; the builder's brief leaves the report out.
+      'checks = [["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]]',
+      ...(sendBack === undefined ? [] : [`send_back = ${sendBack}`]),
+      "",
+      "[test_writer]",
+      'includes = ["**/*.test.ts"]',
+      // The box may only read the shared node_modules, and vitest 5.0.5 writes its module cache
+      // there by default. On Linux the write fails and a test file does not load.
+      'run = ["node_modules/.bin/vitest", "run", "--no-fsModuleCache", "--reporter=json", "--outputFile={out}"]',
+      `reads = ${JSON.stringify([nodeModules, ...reads])}`,
+      "",
+      "[mutation]",
+      // The JSON report names each failing test, so a red head goes back to the builder with them.
+      'tests = ["node_modules/.bin/vitest", "run", "--reporter=json", "--outputFile={out}"]',
+      'typecheck = ["node_modules/.bin/tsc", "--noEmit"]',
+      "",
+      ...(rubrics === null ? [] : ["[review]", `rubrics = ${JSON.stringify(rubrics)}`, ""]),
+      ...(github === undefined ? [] : ["[checks]", `github = ${JSON.stringify(github)}`, ""]),
+      "[[checks.run]]",
+      'name = "test"',
+      `run = ["sh", "-c", ${JSON.stringify(`${link} && node_modules/.bin/vitest run`)}]`,
+      "",
+      ...(alsoCheck === undefined
+        ? []
+        : ["[[checks.run]]", 'name = "also"', `run = ["sh", "-c", ${JSON.stringify(alsoCheck)}]`, ""]),
+    ].join("\n"),
+  );
+  git(seed, "add", "-A");
+  git(seed, "commit", "--quiet", "-m", "first");
+  git(seed, "remote", "add", "origin", remote);
+  git(seed, "push", "--quiet", "origin", "main");
+
+  if (host === "github") {
+    git(seed, "remote", "set-url", "origin", GITHUB_ORIGIN);
+    writeFileSync(join(dir, "user", ".gitconfig"), `[url ${JSON.stringify(remote)}]\n\tinsteadOf = ${GITHUB_ORIGIN}\n`);
+  }
+
+  return { home, remote, seed };
 }
 
 /** One check on GitHub, as the stand-in `gh` tells it. `ends`: how it ends once the checks settle. */
 export interface FakeCheck {
-	readonly name: string;
-	readonly ends: "SUCCESS" | "FAILURE";
+  readonly name: string;
+  readonly ends: "SUCCESS" | "FAILURE";
 }
 
 /** What the stand-in `gh` plays. Everything left out is a plain repository with no CI and no rules. */
 export interface GhStory {
-	/** Left out, or none: no check has reported, and GraphQL's rollup is `null`. */
-	readonly checks?: readonly FakeCheck[];
-	/** How many times the checks wait must ask before they finish. 0: finished from the start. */
-	readonly settleAfter?: number;
-	/** The base branch's rule. `refuses`: GitHub refuses the merge. `allows`: it merges by GitHub's own merge. */
-	readonly rule?: "none" | "refuses" | "allows";
-	/**
-	 * A person pushes one more commit: at the first facts read, or just as the merge is about to be
-	 * written. `tree`: `same` keeps the code as it was (an empty commit), `changed` edits one file.
-	 */
-	readonly moveHead?: {readonly at: "facts" | "merge_read"; readonly tree: "same" | "changed"};
-	/**
-	 * A person merges by hand, on a new head of theirs when `newHead`. `next_read`: after the lane first
-	 * read the facts, before its next read. `merge_read`: just as the merge is about to be written.
-	 */
-	readonly mergedByAPerson?: {readonly newHead: boolean; readonly at: "next_read" | "merge_read"};
-	/** The merge's ref moves, and GitHub has not marked the pull request merged by the end of the run. */
-	readonly marksLate?: boolean;
-	/** A fork has a pull request open from a branch of this name, into this repository. */
-	readonly forkOn?: string;
-	/** What `gh pr create` prints, in place of the new pull request's url. */
-	readonly createSays?: string;
-	/** A rule of the repository's keeps its branches: GitHub refuses to delete one. */
-	readonly refusesBranchDelete?: boolean;
+  /** Left out, or none: no check has reported, and GraphQL's rollup is `null`. */
+  readonly checks?: readonly FakeCheck[];
+  /** How many times the checks wait must ask before they finish. 0: finished from the start. */
+  readonly settleAfter?: number;
+  /** The base branch's rule. `refuses`: GitHub refuses the merge. `allows`: it merges by GitHub's own merge. */
+  readonly rule?: "none" | "refuses" | "allows";
+  /**
+   * A person pushes one more commit: at the first facts read, or just as the merge is about to be
+   * written. `tree`: `same` keeps the code as it was (an empty commit), `changed` edits one file.
+   */
+  readonly moveHead?: { readonly at: "facts" | "merge_read"; readonly tree: "same" | "changed" };
+  /**
+   * A person merges by hand, on a new head of theirs when `newHead`. `next_read`: after the lane first
+   * read the facts, before its next read. `merge_read`: just as the merge is about to be written.
+   */
+  readonly mergedByAPerson?: { readonly newHead: boolean; readonly at: "next_read" | "merge_read" };
+  /** The merge's ref moves, and GitHub has not marked the pull request merged by the end of the run. */
+  readonly marksLate?: boolean;
+  /** A fork has a pull request open from a branch of this name, into this repository. */
+  readonly forkOn?: string;
+  /** What `gh pr create` prints, in place of the new pull request's url. */
+  readonly createSays?: string;
+  /** A rule of the repository's keeps its branches: GitHub refuses to delete one. */
+  readonly refusesBranchDelete?: boolean;
 }
 
 const GhCall = Schema.Struct({
-	/** Which call it was: `pr_create`, `facts`, `ref_move` and so on. `unknown`: it was not known. */
-	kind: Schema.String,
-	/** Its arguments, with a query's text left out. */
-	args: Schema.Array(Schema.String),
-	/** GraphQL's rollup as the call left it. `null`: none reported. */
-	rollup: Schema.NullOr(Schema.String),
-	refused: Schema.Boolean,
-	says: Schema.optional(Schema.String),
+  /** Which call it was: `pr_create`, `facts`, `ref_move` and so on. `unknown`: it was not known. */
+  kind: Schema.String,
+  /** Its arguments, with a query's text left out. */
+  args: Schema.Array(Schema.String),
+  /** GraphQL's rollup as the call left it. `null`: none reported. */
+  rollup: Schema.NullOr(Schema.String),
+  refused: Schema.Boolean,
+  says: Schema.optional(Schema.String),
 });
 export type GhCall = typeof GhCall.Type;
 const readCall = Schema.decodeUnknownSync(Schema.fromJsonString(GhCall));
 
 const GhPull = Schema.Struct({
-	number: Schema.Number,
-	branch: Schema.String,
-	state: Schema.Literals(["OPEN", "MERGED"]),
-	mergedHead: Schema.NullOr(Schema.String),
-	mergeCommit: Schema.NullOr(Schema.String),
-	comments: Schema.Array(Schema.Struct({body: Schema.String})),
+  number: Schema.Number,
+  branch: Schema.String,
+  state: Schema.Literals(["OPEN", "MERGED"]),
+  mergedHead: Schema.NullOr(Schema.String),
+  mergeCommit: Schema.NullOr(Schema.String),
+  comments: Schema.Array(Schema.Struct({ body: Schema.String })),
 });
-const readPulls = Schema.decodeUnknownSync(
-	Schema.fromJsonString(Schema.Struct({pulls: Schema.Array(GhPull)})),
-);
+
+const readPulls = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ pulls: Schema.Array(GhPull) })));
 
 /**
  * A stand-in `gh` over the bare remote, in a folder of its own. `env` is what a test must stub: its
@@ -263,55 +254,55 @@ const readPulls = Schema.decodeUnknownSync(
  * still have nothing to sign in with. Nothing here touches GitHub.
  */
 export function makeFakeGh({
-	dir,
-	remote,
-	story = {},
+  dir,
+  remote,
+  story = {},
 }: {
-	readonly dir: string;
-	readonly remote: string;
-	readonly story?: GhStory;
+  readonly dir: string;
+  readonly remote: string;
+  readonly story?: GhStory;
 }) {
-	const folder = join(dir, "gh");
-	const bin = join(dir, "bin");
-	mkdirSync(folder, {recursive: true});
-	mkdirSync(bin, {recursive: true});
-	const state = join(folder, "state.json");
-	const calls = join(folder, "calls.jsonl");
-	const gh = join(bin, "gh");
-	writeFileSync(
-		state,
-		JSON.stringify({
-			repo: LANE_REPO,
-			remote,
-			story,
-			pulls: [],
-			checkReads: 0,
-			factsReads: 0,
-			attempt: 1,
-			moved: false,
-			handMerged: false,
-		}),
-	);
-	writeFileSync(calls, "");
-	writeFileSync(
-		gh,
-		`#!/bin/sh\nFAKE_GH_DIR=${shWord(folder)} exec ${shWord(process.execPath)} ${shWord(FAKE_GH)} "$@"\n`,
-	);
-	chmodSync(gh, 0o755);
-	return {
-		gh,
-		env: {
-			PATH: `${bin}:${process.env.PATH ?? ""}`,
-			GH_CONFIG_DIR: folder,
-			GH_TOKEN: "",
-			GITHUB_TOKEN: "",
-		},
-		/** Every call so far, in order. */
-		calls: (): readonly GhCall[] =>
-			readFileSync(calls, "utf8")
-				.split("\n")
-				.filter((row) => row !== "")
-				.map((row) => readCall(row)),
-		pulls: () => readPulls(readFileSync(state, "utf8")).pulls,
-	};
+  const folder = join(dir, "gh");
+  const bin = join(dir, "bin");
+  mkdirSync(folder, { recursive: true });
+  mkdirSync(bin, { recursive: true });
+  const state = join(folder, "state.json");
+  const calls = join(folder, "calls.jsonl");
+  const gh = join(bin, "gh");
+  writeFileSync(
+    state,
+    JSON.stringify({
+      repo: LANE_REPO,
+      remote,
+      story,
+      pulls: [],
+      checkReads: 0,
+      factsReads: 0,
+      attempt: 1,
+      moved: false,
+      handMerged: false,
+    }),
+  );
+  writeFileSync(calls, "");
+  writeFileSync(
+    gh,
+    `#!/bin/sh\nFAKE_GH_DIR=${shWord(folder)} exec ${shWord(process.execPath)} ${shWord(FAKE_GH)} "$@"\n`,
+  );
+  chmodSync(gh, 0o755);
+  return {
+    gh,
+    env: {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      GH_CONFIG_DIR: folder,
+      GH_TOKEN: "",
+      GITHUB_TOKEN: "",
+    },
+    /** Every call so far, in order. */
+    calls: (): readonly GhCall[] =>
+      readFileSync(calls, "utf8")
+        .split("\n")
+        .filter((row) => row !== "")
+        .map((row) => readCall(row)),
+    pulls: () => readPulls(readFileSync(state, "utf8")).pulls,
+  };
 }

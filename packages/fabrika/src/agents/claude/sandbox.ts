@@ -1,6 +1,6 @@
-import {existsSync, readFileSync, realpathSync} from "node:fs";
-import {homedir, tmpdir} from "node:os";
-import {basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep} from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 // The sandbox a Claude Code agent works inside, as plain functions: its tool
 // list, the folders its commands may read and write (the Agent SDK's
@@ -16,65 +16,59 @@ import {basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep} 
 
 /** Is `path` the folder, or under it? */
 export const inside = (folder: string, path: string) => {
-	const rel = relative(folder, path);
-	// By the first part, not by its text: a child named `..y` is inside.
-	return rel.split(sep)[0] !== ".." && !isAbsolute(rel);
+  const rel = relative(folder, path);
+  // By the first part, not by its text: a child named `..y` is inside.
+  return rel.split(sep)[0] !== ".." && !isAbsolute(rel);
 };
 
 /** A path with its links followed, as far as it is there: `/copy/out/x` where `out` links elsewhere is that elsewhere's `x`. */
 const realOf = (path: string): string => {
-	const parent = dirname(path);
-	try {
-		return realpathSync(path);
-	} catch {
-		return parent === path ? path : join(realOf(parent), basename(path));
-	}
+  const parent = dirname(path);
+
+  try {
+    return realpathSync(path);
+  } catch {
+    return parent === path ? path : join(realOf(parent), basename(path));
+  }
 };
 
 /** The temp folders, by their real paths: on some systems the one named is a link. */
 export const temps = (): readonly string[] => {
-	const real = (p: string) => {
-		// A folder that is not there is left out; nothing is guessed about it.
-		try {
-			return [realpathSync(p)];
-		} catch {
-			return [];
-		}
-	};
-	return [...new Set([...real(tmpdir()), ...real("/tmp")])];
+  const real = (p: string) => {
+    // A folder that is not there is left out; nothing is guessed about it.
+    try {
+      return [realpathSync(p)];
+    } catch {
+      return [];
+    }
+  };
+  return [...new Set([...real(tmpdir()), ...real("/tmp")])];
 };
 
 /** The files a login lives in, under the home folder. No folder the builder may read holds one. */
 export const LOGIN_FILES = [
-	".git-credentials",
-	".config/gh",
-	".ssh",
-	".netrc",
-	".npmrc",
-	".aws",
-	".cargo/credentials",
-	".cargo/credentials.toml",
+  ".git-credentials",
+  ".config/gh",
+  ".ssh",
+  ".netrc",
+  ".npmrc",
+  ".aws",
+  ".cargo/credentials",
+  ".cargo/credentials.toml",
 ];
 
 /** Folders under home that many programs keep things in: opening one opens them all. */
-const SHARED = [
-	".local",
-	".local/share",
-	".config",
-	".cache",
-	"Library",
-	"Library/Application Support",
-];
+const SHARED = [".local", ".local/share", ".config", ".cache", "Library", "Library/Application Support"];
 
 /** What a tool's own folder calls a login: `.gem` has `credentials`, a `.pulumi` has `credentials.json`. */
 const LOGIN_NAMES = [
-	"credentials",
-	"credentials.toml",
-	"credentials.json",
-	"auth.json",
-	".npmrc",
-	".netrc",
-	".git-credentials",
+  "credentials",
+  "credentials.toml",
+  "credentials.json",
+  "auth.json",
+  ".npmrc",
+  ".netrc",
+  ".git-credentials",
 ];
 
 /**
@@ -84,25 +78,22 @@ const LOGIN_NAMES = [
  * reason to open `~/.cargo`, where `credentials.toml` is.
  */
 export const toolRoot = (program: string, home: string): string => {
-	const holder = dirname(program);
-	const above = dirname(holder);
-	const tooMuch =
-		SHARED.some((shared) => above === join(home, shared)) ||
-		opens(above, home, LOGIN_FILES) ||
-		LOGIN_NAMES.some((name) => existsSync(join(above, name)));
-	return tooMuch ? holder : above;
+  const holder = dirname(program);
+  const above = dirname(holder);
+  const tooMuch =
+    SHARED.some((shared) => above === join(home, shared)) ||
+    opens(above, home, LOGIN_FILES) ||
+    LOGIN_NAMES.some((name) => existsSync(join(above, name)));
+  return tooMuch ? holder : above;
 };
 
 /** Where the system would find `name` on this PATH. A relative entry means no fixed place, so it never counts. */
-export const onPath = (
-	name: string,
-	env: Readonly<Record<string, string | undefined>>,
-): string | undefined =>
-	(env.PATH ?? "")
-		.split(delimiter)
-		.filter((dir) => isAbsolute(dir))
-		.map((dir) => join(dir, name))
-		.find((path) => existsSync(path));
+export const onPath = (name: string, env: Readonly<Record<string, string | undefined>>): string | undefined =>
+  (env.PATH ?? "")
+    .split(delimiter)
+    .filter((dir) => isAbsolute(dir))
+    .map((dir) => join(dir, name))
+    .find((path) => existsSync(path));
 
 /**
  * The folders under home the builder's commands run from: where `node` and
@@ -111,21 +102,25 @@ export const onPath = (
  * Node's here: `process.execPath`, the PATH and `process.platform`.
  */
 export const toolchain = (
-	env: Readonly<Record<string, string | undefined>> = process.env,
-	exec: string = process.execPath,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  exec: string = process.execPath,
 ): readonly string[] => {
-	const home = homedir();
-	const programs = [onPath("node", env), onPath("pnpm", env), exec].flatMap((p) =>
-		p === undefined ? [] : [p, realOf(p)],
-	);
-	const roots = programs.flatMap((program) => {
-		const holder = dirname(program);
-		if (!inside(home, holder) || holder === home) return [];
-		return [toolRoot(program, home)];
-	});
-	return [...new Set([...roots, pnpmHome(env)])].filter(
-		(root, _, all) => inside(home, root) && !all.some((o) => o !== root && inside(o, root)),
-	);
+  const home = homedir();
+  const programs = [onPath("node", env), onPath("pnpm", env), exec].flatMap((p) =>
+    p === undefined ? [] : [p, realOf(p)],
+  );
+  const roots = programs.flatMap((program) => {
+    const holder = dirname(program);
+
+    if (!inside(home, holder) || holder === home) {
+      return [];
+    }
+
+    return [toolRoot(program, home)];
+  });
+  return [...new Set([...roots, pnpmHome(env)])].filter(
+    (root, _, all) => inside(home, root) && !all.some((o) => o !== root && inside(o, root)),
+  );
 };
 
 /**
@@ -133,10 +128,17 @@ export const toolchain = (
  * kept there, and its store. `PNPM_HOME`, or pnpm's default for the system.
  */
 const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => {
-	const home = homedir();
-	if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") return env.PNPM_HOME;
-	if (process.platform === "darwin") return join(home, "Library", "pnpm");
-	return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "pnpm");
+  const home = homedir();
+
+  if (env.PNPM_HOME !== undefined && env.PNPM_HOME !== "") {
+    return env.PNPM_HOME;
+  }
+
+  if (process.platform === "darwin") {
+    return join(home, "Library", "pnpm");
+  }
+
+  return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "pnpm");
 };
 
 /**
@@ -149,19 +151,22 @@ const pnpmHome = (env: Readonly<Record<string, string | undefined>>): string => 
  * can write is open to it already.
  */
 export const gitOf = (tree: string): readonly string[] => {
-	try {
-		const line = readFileSync(join(tree, ".git"), "utf8").match(/^gitdir:\s*(.+)$/m);
-		if (line?.[1] === undefined) return [];
-		const own = resolve(tree, line[1].trim());
-		const common = resolve(own, readFileSync(join(own, "commondir"), "utf8").trim());
-		const back = resolve(own, readFileSync(join(own, "gitdir"), "utf8").trim());
-		const isOurs =
-			dirname(own) === join(common, "worktrees") && realOf(back) === realOf(join(tree, ".git"));
-		return isOurs ? [common] : [];
-	} catch {
-		// A plain clone, or no git at all: nothing outside the copy to open.
-		return [];
-	}
+  try {
+    const line = readFileSync(join(tree, ".git"), "utf8").match(/^gitdir:\s*(.+)$/m);
+
+    if (line?.[1] === undefined) {
+      return [];
+    }
+
+    const own = resolve(tree, line[1].trim());
+    const common = resolve(own, readFileSync(join(own, "commondir"), "utf8").trim());
+    const back = resolve(own, readFileSync(join(own, "gitdir"), "utf8").trim());
+    const isOurs = dirname(own) === join(common, "worktrees") && realOf(back) === realOf(join(tree, ".git"));
+    return isOurs ? [common] : [];
+  } catch {
+    // A plain clone, or no git at all: nothing outside the copy to open.
+    return [];
+  }
 };
 
 /**
@@ -172,22 +177,17 @@ export const gitOf = (tree: string): readonly string[] => {
  * stay readable. A folder that would open home or a login file is left out,
  * so a wrong toolchain fails a build instead of opening it.
  */
-export const filesOf = (
-	tree: string,
-	temp: readonly string[] = temps(),
-	tools: readonly string[] = toolchain(),
-) => {
-	return {
-		allowWrite: [tree, ...temp],
-		denyRead: [homedir()],
-		allowRead: [tree, ...gitOf(tree), ...temp, ...tools].filter((path) => !opensHome(path)),
-	};
+export const filesOf = (tree: string, temp: readonly string[] = temps(), tools: readonly string[] = toolchain()) => {
+  return {
+    allowWrite: [tree, ...temp],
+    denyRead: [homedir()],
+    allowRead: [tree, ...gitOf(tree), ...temp, ...tools].filter((path) => !opensHome(path)),
+  };
 };
 
 /** Would reading this folder open `home`, or one of `logins` under it? */
 export const opens = (path: string, home: string, logins: readonly string[]) =>
-	inside(path, home) ||
-	logins.some((login) => inside(path, join(home, login)) || inside(join(home, login), path));
+  inside(path, home) || logins.some((login) => inside(path, join(home, login)) || inside(join(home, login), path));
 
 /** Would reading this folder open the home folder, or a file a login lives in? */
 export const opensHome = (path: string) => opens(path, homedir(), LOGIN_FILES);
@@ -210,20 +210,20 @@ export const opensHome = (path: string) => opens(path, homedir(), LOGIN_FILES);
  *     setting is not found all the same.
  */
 export const fencedEnv = (
-	env: Readonly<Record<string, string>>,
-	tools: readonly string[] = toolchain(env),
+  env: Readonly<Record<string, string>>,
+  tools: readonly string[] = toolchain(env),
 ): Record<string, string> => {
-	const home = homedir();
-	const path = (env.PATH ?? "")
-		.split(delimiter)
-		.filter((dir) => isAbsolute(dir) && (!inside(home, dir) || tools.some((t) => inside(t, dir))));
-	return {
-		...env,
-		...(env.PATH === undefined ? {} : {PATH: path.join(delimiter)}),
-		GIT_CONFIG_GLOBAL: "/dev/null",
-		NPM_CONFIG_USERCONFIG: "/dev/null",
-		XDG_CONFIG_HOME: "/var/empty",
-	};
+  const home = homedir();
+  const path = (env.PATH ?? "")
+    .split(delimiter)
+    .filter((dir) => isAbsolute(dir) && (!inside(home, dir) || tools.some((t) => inside(t, dir))));
+  return {
+    ...env,
+    ...(env.PATH === undefined ? {} : { PATH: path.join(delimiter) }),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    NPM_CONFIG_USERCONFIG: "/dev/null",
+    XDG_CONFIG_HOME: "/var/empty",
+  };
 };
 
 /** The builder's tools: the whole list it has, and the only ones it may use. */

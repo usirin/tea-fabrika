@@ -1,5 +1,5 @@
-import {Duration, Effect, Schedule} from "effect";
-import {Ledger} from "./ledger.ts";
+import { Duration, Effect, Schedule } from "effect";
+import { Ledger } from "./ledger.ts";
 
 // A hosted name's job, and so its trace. A job is what one start made: a root name and every
 // name it started, like a Unix process group. On the ledger the registry is the process table
@@ -23,15 +23,21 @@ const DEEPEST = 64;
  * not know leads its own. Each read is tried again until the ledger answers.
  */
 export const leaderOf = (name: string): Effect.Effect<string, never, Ledger> =>
-	Effect.gen(function* () {
-		const ledger = yield* Ledger;
-		let at = name;
-		for (let depth = 0; depth < DEEPEST; depth++) {
-			const info = yield* ledger
-				.processInfo(at)
-				.pipe(Effect.retry(Schedule.spaced(Duration.millis(100))), Effect.orDie);
-			if (info === null || info.parent === null) return at;
-			at = info.parent;
-		}
-		return yield* Effect.die(new Error(`${name} has more than ${DEEPEST} parents`));
-	});
+  Effect.gen(function* () {
+    const ledger = yield* Ledger;
+    let at = name;
+
+    for (let depth = 0; depth < DEEPEST; depth++) {
+      const info = yield* ledger
+        .processInfo(at)
+        .pipe(Effect.retry(Schedule.spaced(Duration.millis(100))), Effect.orDie);
+
+      if (info === null || info.parent === null) {
+        return at;
+      }
+
+      at = info.parent;
+    }
+
+    return yield* Effect.die(new Error(`${name} has more than ${DEEPEST} parents`));
+  });

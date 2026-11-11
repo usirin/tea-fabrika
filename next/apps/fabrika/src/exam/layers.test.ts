@@ -6,21 +6,28 @@
 // A folder of the same package is named by its folder, another package by its import name, so the
 // exports map carries the rule across. `next/apps/*` has no row: it is the wiring. A program's
 // files that its `.` export reaches are what the box loads; the rest of the program is its window.
+//
+// A library file's part is read from the rule file's rows (`layer-rules.json`), the list `pnpm
+// lint:layers` reads too, so the exam keeps no second list of the library's paths (ticket 477, PR
+// 0). `rows.ts` picks the row the way code-graph does, and `rowParts` maps a row to its part. A
+// library file under `src/` that no row claims fails: it cannot pass by having no row.
 import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	realpathSync,
-	rmSync,
-	statSync,
-	writeFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
-import {tmpdir} from "node:os";
-import {dirname, join, relative, resolve, sep} from "node:path";
-import {Schema} from "effect";
-import {afterAll, describe, expect, it} from "vitest";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { Schema } from "effect";
+import fc from "fast-check";
+import { afterAll, describe, expect, it } from "vitest";
+import { type Row, rowsAt } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -33,140 +40,161 @@ const NEXT = resolve(import.meta.dirname, "../../../..");
 const GROUPS = ["packages", "programs", "apps"] as const; // pnpm-workspace.yaml's next/ globs
 
 const Names = Schema.optional(Schema.Record(Schema.String, Schema.String));
+
 const Manifest = Schema.Struct({
-	name: Schema.String,
-	version: Schema.optional(Schema.String),
-	private: Schema.optional(Schema.Boolean),
-	sideEffects: Schema.optional(Schema.Unknown),
-	scripts: Names,
-	exports: Schema.optional(Schema.Unknown),
-	dependencies: Names,
-	devDependencies: Names,
-	peerDependencies: Names,
-	optionalDependencies: Names,
+  name: Schema.String,
+  version: Schema.optional(Schema.String),
+  private: Schema.optional(Schema.Boolean),
+  sideEffects: Schema.optional(Schema.Unknown),
+  scripts: Names,
+  exports: Schema.optional(Schema.Unknown),
+  dependencies: Names,
+  devDependencies: Names,
+  peerDependencies: Names,
+  optionalDependencies: Names,
 });
+
 type Package = {
-	readonly dir: string;
-	readonly group: (typeof GROUPS)[number];
-	readonly manifest: typeof Manifest.Type;
+  readonly dir: string;
+  readonly group: (typeof GROUPS)[number];
+  readonly manifest: typeof Manifest.Type;
 };
+
 const readManifest = Schema.decodeUnknownSync(Manifest);
 
 /** Every package under `next`: a child folder of a group that holds a `package.json`. */
 const packagesIn = (next: string): ReadonlyArray<Package> =>
-	GROUPS.flatMap((group) => {
-		const folder = join(next, group);
-		if (!existsSync(folder)) return [];
-		return readdirSync(folder, {withFileTypes: true})
-			.filter(
-				(entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "package.json")),
-			)
-			.map((entry) => ({
-				dir: join(folder, entry.name),
-				group,
-				manifest: readManifest(
-					JSON.parse(readFileSync(join(folder, entry.name, "package.json"), "utf8")),
-				),
-			}));
-	});
+  GROUPS.flatMap((group) => {
+    const folder = join(next, group);
+
+    if (!existsSync(folder)) {
+      return [];
+    }
+
+    return readdirSync(folder, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "package.json")))
+      .map((entry) => ({
+        dir: join(folder, entry.name),
+        group,
+        manifest: readManifest(JSON.parse(readFileSync(join(folder, entry.name, "package.json"), "utf8"))),
+      }));
+  });
 
 /** Every `.ts` and `.tsx` file below `dir`, leaving out `node_modules`, `dist` and dot folders. */
 const codeFiles = (dir: string): ReadonlyArray<string> =>
-	!existsSync(dir)
-		? []
-		: readdirSync(dir, {withFileTypes: true}).flatMap((entry) => {
-				const path = join(dir, entry.name);
-				if (!entry.isDirectory()) return /\.tsx?$/.test(entry.name) ? [path] : [];
-				const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
-				return skip ? [] : codeFiles(path);
-			});
+  !existsSync(dir)
+    ? []
+    : readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+
+        if (!entry.isDirectory()) {
+          return /\.tsx?$/.test(entry.name) ? [path] : [];
+        }
+
+        const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
+        return skip ? [] : codeFiles(path);
+      });
 
 const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
 
 const IMPORTS = [
-	/^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
-	/^[ \t]*import\s*["']([^"']+)["']/gm,
-	/\bimport\(\s*["']([^"']+)["']\s*\)/g,
+  /^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
+  /^[ \t]*import\s*["']([^"']+)["']/gm,
+  /\bimport\(\s*["']([^"']+)["']\s*\)/g,
 ];
+
 const importsIn = (text: string): ReadonlyArray<string> =>
-	IMPORTS.flatMap((pattern) =>
-		[...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
-	);
-const importsInFile = (file: string): ReadonlyArray<string> =>
-	importsIn(readFileSync(file, "utf8"));
+  IMPORTS.flatMap((pattern) => [...text.matchAll(pattern)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])));
+
+const importsInFile = (file: string): ReadonlyArray<string> => importsIn(readFileSync(file, "utf8"));
+
 const isRelative = (spec: string): boolean => spec.startsWith(".");
 
 /** `@kampus/libfabrika/transport` is `{name: "@kampus/libfabrika", subpath: "./transport"}`. */
-const packageAt = (spec: string): {readonly name: string; readonly subpath: string} => {
-	const parts = spec.split("/");
-	const size = spec.startsWith("@") ? 2 : 1;
-	const rest = parts.slice(size);
-	return {
-		name: parts.slice(0, size).join("/"),
-		subpath: rest.length === 0 ? "." : `./${rest.join("/")}`,
-	};
+const packageAt = (spec: string): { readonly name: string; readonly subpath: string } => {
+  const parts = spec.split("/");
+  const size = spec.startsWith("@") ? 2 : 1;
+  const rest = parts.slice(size);
+  return {
+    name: parts.slice(0, size).join("/"),
+    subpath: rest.length === 0 ? "." : `./${rest.join("/")}`,
+  };
 };
 
 /** The file a relative import names, as Node and the bundlers find it, or where it points if none. */
 const pointsAt = (from: string, spec: string): string => {
-	const base = join(dirname(from), spec);
-	const tries = [
-		base,
-		`${base}.ts`,
-		`${base}.tsx`,
-		join(base, "index.ts"),
-		base.replace(/\.js$/, ".ts"),
-	];
-	return tries.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
+  const base = join(dirname(from), spec);
+  const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), base.replace(/\.js$/, ".ts")];
+  return tries.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
 };
 
 /** A package's `exports` map, each key with the file it points at. */
 const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
-	const target = (value: unknown): string | undefined => {
-		if (typeof value === "string") return join(pkg.dir, value);
-		if (typeof value !== "object" || value === null) return undefined;
-		const conditions = new Map(Object.entries(value));
-		return target(conditions.get("import") ?? conditions.get("default"));
-	};
-	const exports = pkg.manifest.exports;
-	if (typeof exports !== "object" || exports === null) {
-		return exports === undefined ? new Map() : new Map([[".", target(exports)]]);
-	}
-	const entries = Object.entries(exports);
-	if (!entries.every(([key]) => key.startsWith("."))) return new Map([[".", target(exports)]]);
-	return new Map(entries.map(([key, value]) => [key, target(value)]));
+  const target = (value: unknown): string | undefined => {
+    if (typeof value === "string") {
+      return join(pkg.dir, value);
+    }
+
+    if (typeof value !== "object" || value === null) {
+      return undefined;
+    }
+
+    const conditions = new Map(Object.entries(value));
+    return target(conditions.get("import") ?? conditions.get("default"));
+  };
+  const exports = pkg.manifest.exports;
+
+  if (typeof exports !== "object" || exports === null) {
+    return exports === undefined ? new Map() : new Map([[".", target(exports)]]);
+  }
+
+  const entries = Object.entries(exports);
+
+  if (!entries.every(([key]) => key.startsWith("."))) {
+    return new Map([[".", target(exports)]]);
+  }
+
+  return new Map(entries.map(([key, value]) => [key, target(value)]));
 };
 
 const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
-	packages.find((pkg) => file.startsWith(`${pkg.dir}${sep}`));
+  packages.find((pkg) => file.startsWith(`${pkg.dir}${sep}`));
 
 /** A path as the messages show it: relative to `from`, with `/`. */
 const shown = (from: string, file: string): string => relative(from, file).split(sep).join("/");
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
 const planted: Array<string> = [];
+
 const plant = (files: Readonly<Record<string, string | object>>): string => {
-	const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
-	planted.push(root);
-	for (const [path, body] of Object.entries(files)) {
-		mkdirSync(dirname(join(root, path)), {recursive: true});
-		writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
-	}
-	return root;
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
+  planted.push(root);
+
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+  }
+
+  return root;
 };
+
 afterAll(() => {
-	for (const root of planted.splice(0)) rmSync(root, {recursive: true, force: true});
+  for (const root of planted.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
+
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
+
 /** A `package.json` the way p65 wants one; `extra` overrides or adds fields. */
 const manifest = (name: string, extra: object = {}): object => ({
-	name,
-	version: "0.0.0",
-	private: true,
-	sideEffects: false,
-	scripts: {typecheck: "tsc --noEmit"},
-	exports: {".": "./src/index.ts"},
-	...extra,
+  name,
+  version: "0.0.0",
+  private: true,
+  sideEffects: false,
+  scripts: { typecheck: "tsc --noEmit" },
+  exports: { ".": "./src/index.ts" },
+  ...extra,
 });
 
 const LIBRARY = "@kampus/libfabrika";
@@ -174,230 +202,627 @@ const TUVAL = "@kampus/tuval";
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
-	id: [],
-	"id-test-support": ["id"],
-	"libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door"],
-	transport: ["id"],
-	data: ["id"],
-	coordination: ["data", "id"],
-	app: ["coordination", "id"],
-	node: ["app", "coordination", "data", "id"],
-	workers: ["app", "coordination", "data", "transport", "id"],
-	door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
-	mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
-	desktop: [LIBRARY], // the app layer's names, nothing lower
-	window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
-	dom: ["desktop"],
-	browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
-	electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
-	headless: ["desktop"],
-	program: [LIBRARY], // `.`, what the box loads: no tuval and no React
-	"program-window": [LIBRARY, TUVAL], // `./window`: public names only
+  id: [],
+  "id-test-support": ["id"],
+  "libfabrika-entry": ["id", "transport", "data", "coordination", "app", "mcp", "door"],
+  transport: ["id"],
+  data: ["id"],
+  coordination: ["data", "id"],
+  app: ["coordination", "id"],
+  node: ["app", "coordination", "data", "id"],
+  workers: ["app", "coordination", "data", "transport", "id"],
+  door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
+  mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
+  desktop: [LIBRARY], // the app layer's names, nothing lower
+  window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
+  dom: ["desktop"],
+  browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
+  electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
+  headless: ["desktop"],
+  program: [LIBRARY], // `.`, what the box loads: no tuval and no React
+  "program-window": [LIBRARY, TUVAL], // `./window`: public names only
 };
 
-/** The folders under `src/` of the two library packages, each a part above. */
+/** The folders under `src/` of tuval, each a part above. The library's come from the rule file. */
 const FOLDERS: Readonly<Record<string, ReadonlyArray<string>>> = {
-	[LIBRARY]: ["transport", "data", "coordination", "app", "mcp", "door", "node", "workers"],
-	[TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
+  [TUVAL]: ["desktop", "window", "dom", "browser", "electron", "headless"],
+};
+
+/** The part each of the library's rows in the rule file is, in the table above. */
+const rowParts: Readonly<Record<string, string>> = {
+  "next-id": "id",
+  "next-id-test-support": "id-test-support",
+  "next-libfabrika-entry": "libfabrika-entry",
+  "next-transport": "transport",
+  "next-data": "data",
+  "next-coordination": "coordination",
+  "next-app": "app",
+  "next-mcp": "mcp",
+  "next-door": "door",
+  "next-node": "node",
+  "next-workers": "workers",
+};
+
+const RuleFile = Schema.Struct({
+  layers: Schema.Array(Schema.Struct({ name: Schema.String, paths: Schema.Array(Schema.String) })),
+});
+
+/** The rule file's rows, as `pnpm lint:layers` reads them. Their paths start at the top of the repo. */
+const REAL: ReadonlyArray<Row> = Schema.decodeUnknownSync(RuleFile)(
+  JSON.parse(readFileSync(resolve(NEXT, "../layer-rules.json"), "utf8")),
+).layers;
+
+/** A file's path as the rule file names it: `next` stands for the repo's `next/` folder. */
+const ruled = (next: string, file: string): string => `next/${shown(next, file)}`;
+
+/** The library part of a file, when exactly one row claims it and that row is a library part. */
+const libraryPart = (rows: ReadonlyArray<Row>, next: string, file: string): string | null => {
+  const [row, ...more] = rowsAt(rows, ruled(next, file));
+  return row === undefined || more.length > 0 ? null : (rowParts[row] ?? null);
 };
 
 /** The files a program's `.` export reaches by relative imports: what the box loads. */
 const boxFor = (pkg: Package): ReadonlySet<string> => {
-	const seen = new Set<string>();
-	const walk = (file: string): void => {
-		if (seen.has(file)) return;
-		seen.add(file);
-		for (const spec of importsInFile(file).filter(isRelative)) {
-			const next = pointsAt(file, spec);
-			if (existsSync(next) && statSync(next).isFile()) walk(next);
-		}
-	};
-	const entry = exportMap(pkg).get(".");
-	if (entry !== undefined && existsSync(entry)) walk(entry);
-	return seen;
+  const seen = new Set<string>();
+  const walk = (file: string): void => {
+    if (seen.has(file)) {
+      return;
+    }
+
+    seen.add(file);
+
+    for (const spec of importsInFile(file).filter(isRelative)) {
+      const next = pointsAt(file, spec);
+
+      if (existsSync(next) && statSync(next).isFile()) {
+        walk(next);
+      }
+    }
+  };
+  const entry = exportMap(pkg).get(".");
+
+  if (entry !== undefined && existsSync(entry)) {
+    walk(entry);
+  }
+
+  return seen;
 };
 
 /** The folder under `src/` a library file sits in, or null for an entry file at `src/` itself. */
 const folderAt = (pkg: Package, file: string): string | null => {
-	const src = join(pkg.dir, "src");
-	if (!file.startsWith(`${src}${sep}`)) return null;
-	const inside = file.slice(src.length + 1).split(sep);
-	return inside.length === 1 ? null : (inside[0] ?? null);
+  const src = join(pkg.dir, "src");
+
+  if (!file.startsWith(`${src}${sep}`)) {
+    return null;
+  }
+
+  const inside = file.slice(src.length + 1).split(sep);
+  return inside.length === 1 ? null : (inside[0] ?? null);
 };
 
 /** The part a file of `pkg` belongs to, or null when the table has no row for it. */
-const partAt = (pkg: Package, box: ReadonlySet<string>, file: string): string | null => {
-	if (pkg.group === "programs") return box.has(file) ? "program" : "program-window";
-	if (pkg.manifest.name === LIBRARY) {
-		if (file === join(pkg.dir, "src/id.ts")) return "id";
-		if (file === join(pkg.dir, "src/id.test-support.ts")) return "id-test-support";
-		if (file === join(pkg.dir, "src/testing.ts")) return "app";
-		if (file === join(pkg.dir, "src/index.ts")) return "libfabrika-entry";
-	}
-	const folder = folderAt(pkg, file);
-	return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
+const partAt = (
+  rows: ReadonlyArray<Row>,
+  next: string,
+  pkg: Package,
+  box: ReadonlySet<string>,
+  file: string,
+): string | null => {
+  if (pkg.group === "programs") {
+    return box.has(file) ? "program" : "program-window";
+  }
+
+  if (pkg.manifest.name === LIBRARY) {
+    return libraryPart(rows, next, file);
+  }
+
+  const folder = folderAt(pkg, file);
+  return folder !== null && FOLDERS[pkg.manifest.name]?.includes(folder) === true ? folder : null;
 };
 
 /** Every import in `next` that breaks the table, or that the library makes upward. */
-const faults = (next: string): ReadonlyArray<string> => {
-	const packages = packagesIn(next);
-	const above = new Set(
-		packages
-			.filter((pkg) => pkg.group !== "packages" || pkg.manifest.name === TUVAL)
-			.map((pkg) => pkg.manifest.name),
-	);
-	return codeFiles(next).flatMap((file) => {
-		const pkg = ownerAt(packages, file);
-		if (pkg === undefined) return [];
-		const where = shown(next, file);
-		const found: Array<string> = [];
-		// Across the whole library, tests included: nothing imports tuval, a program or the app.
-		if (pkg.manifest.name === LIBRARY) {
-			for (const spec of importsInFile(file).filter((s) => !isRelative(s))) {
-				if (above.has(packageAt(spec).name))
-					found.push(`${where} imports "${spec}": the library imports nothing above it`);
-			}
-		}
-		if (isTest(file)) return found;
-		const folders = FOLDERS[pkg.manifest.name];
-		const folder = folderAt(pkg, file);
-		if (folders !== undefined && folder !== null && !folders.includes(folder)) {
-			return [...found, `${where}: the folder "${folder}" has no row in the exam's table`];
-		}
-		const part = partAt(pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file);
-		if (part === null) return found; // the wiring, or an entry file at src/
-		const may = allowed[part] ?? [];
-		for (const spec of importsInFile(file)) {
-			if (isRelative(spec)) {
-				if (pkg.group === "programs") continue; // a program's own files, box and window alike
-				const target = pointsAt(file, spec);
-				if (!target.startsWith(`${pkg.dir}${sep}`)) continue; // leaving the package: deps.test.ts
-				const there = partAt(pkg, new Set(), target) ?? "an entry file";
-				if (there !== part && !may.includes(there)) {
-					found.push(`${where} imports "${spec}": ${part} may not import ${there}`);
-				}
-			} else if (packageAt(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
-				found.push(`${where} imports "${spec}": ${part} may not import it`);
-			}
-		}
-		return found;
-	});
+const faults = (next: string, rows: ReadonlyArray<Row> = REAL): ReadonlyArray<string> => {
+  const packages = packagesIn(next);
+  const above = new Set(
+    packages.filter((pkg) => pkg.group !== "packages" || pkg.manifest.name === TUVAL).map((pkg) => pkg.manifest.name),
+  );
+  return codeFiles(next).flatMap((file) => {
+    const pkg = ownerAt(packages, file);
+
+    if (pkg === undefined) {
+      return [];
+    }
+
+    const where = shown(next, file);
+    const found: Array<string> = [];
+
+    // Across the whole library, tests included: nothing imports tuval, a program or the app.
+    if (pkg.manifest.name === LIBRARY) {
+      for (const spec of importsInFile(file).filter((s) => !isRelative(s))) {
+        if (above.has(packageAt(spec).name)) {
+          found.push(`${where} imports "${spec}": the library imports nothing above it`);
+        }
+      }
+    }
+
+    if (isTest(file)) {
+      return found;
+    }
+
+    const folders = FOLDERS[pkg.manifest.name];
+    const folder = folderAt(pkg, file);
+
+    if (folders !== undefined && folder !== null && !folders.includes(folder)) {
+      return [...found, `${where}: the folder "${folder}" has no row in the exam's table`];
+    }
+
+    const part = partAt(rows, next, pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file);
+
+    // A library file under `src/` needs exactly one row, and that row must be a part of the table.
+    if (part === null && pkg.manifest.name === LIBRARY && file.startsWith(`${join(pkg.dir, "src")}${sep}`)) {
+      const claimed = rowsAt(rows, ruled(next, file));
+      const what =
+        folder !== null && claimed.length === 0
+          ? `the folder "${folder}" has no row in the exam's table`
+          : `the rule file's rows that claim it are [${claimed.join(", ")}], and a library file needs exactly one that is a part`;
+      return [...found, `${where}: ${what}`];
+    }
+
+    if (part === null) {
+      return found;
+    } // the wiring, or an entry file at src/
+
+    const may = allowed[part] ?? [];
+
+    for (const spec of importsInFile(file)) {
+      if (isRelative(spec)) {
+        if (pkg.group === "programs") {
+          continue;
+        } // a program's own files, box and window alike
+
+        const target = pointsAt(file, spec);
+
+        if (!target.startsWith(`${pkg.dir}${sep}`)) {
+          continue;
+        } // leaving the package: deps.test.ts
+
+        const there = partAt(rows, next, pkg, new Set(), target) ?? "an entry file";
+
+        if (there !== part && !may.includes(there)) {
+          found.push(`${where} imports "${spec}": ${part} may not import ${there}`);
+        }
+      } else if (packageAt(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
+        found.push(`${where} imports "${spec}": ${part} may not import it`);
+      }
+    }
+
+    return found;
+  });
 };
 
 describe("the real next/", () => {
-	it("keeps every part to the imports the table allows", () => {
-		expect(faults(NEXT)).toEqual([]);
-	});
+  it("keeps every part to the imports the table allows", () => {
+    expect(faults(NEXT)).toEqual([]);
+  });
 });
 
 describe("planted breaks", () => {
-	it("P17a: the door composes lower parts; lower parts cannot import it", () => {
-		const tree = plant({
-			"packages/libfabrika/package.json": manifest(LIBRARY),
-			"packages/libfabrika/src/door/door.ts": lines(
-				'import {run} from "../app/runner.ts";',
-				'import {member} from "../coordination/member.ts";',
-				'import {log} from "../data/log.ts";',
-				'import {wire} from "../transport/wire.ts";',
-			),
-			...Object.fromEntries(
-				["app", "coordination", "data", "transport"].map((part) => [
-					`packages/libfabrika/src/${part}/up.ts`,
-					lines('import {Door} from "../door/door.ts";'),
-				]),
-			),
-		});
-		expect([...faults(tree)].sort()).toEqual(
-			["app", "coordination", "data", "transport"]
-				.map(
-					(part) =>
-						`packages/libfabrika/src/${part}/up.ts imports "../door/door.ts": ${part} may not import door`,
-				)
-				.sort(),
-		);
-	});
-	const lib = (extra: object = {}) =>
-		manifest(LIBRARY, {
-			exports: {
-				".": "./src/index.ts",
-				"./transport": "./src/transport/index.ts",
-				"./coordination": "./src/coordination/index.ts",
-				"./data": "./src/data/index.ts",
-			},
-			...extra,
-		});
-	const tree = plant({
-		"packages/libfabrika/package.json": lib(),
-		"packages/libfabrika/src/index.ts": lines('export {run} from "./app/runner.ts";'),
-		"packages/libfabrika/src/transport/wire.ts": lines('import {log} from "../data/log.ts";'),
-		"packages/libfabrika/src/data/log.ts": lines('import {view} from "@kampus/tuval";'),
-		"packages/libfabrika/src/data/log.test.ts": lines('import {counter} from "@kampus/counter";'),
-		"packages/libfabrika/src/coordination/mailbox.ts": lines('import {log} from "../data/log.ts";'),
-		"packages/libfabrika/src/app/runner.ts": lines(
-			'import {mailbox} from "../coordination/mailbox.ts";',
-			'import {log} from "../data/log.ts";',
-		),
-		"packages/libfabrika/src/mcp/tools.ts": lines(
-			'import {run} from "../app/runner.ts";',
-			'import type {Wire} from "../transport/wire.ts";',
-		),
-		"packages/libfabrika/src/sync/merge.ts": lines("export const merge = 1;"),
-		"packages/tuval/package.json": manifest(TUVAL),
-		"packages/tuval/src/index.ts": lines('export {fold} from "./desktop/fold.ts";'),
-		"packages/tuval/src/desktop/layout.ts": lines('import {run} from "@kampus/libfabrika";'),
-		"packages/tuval/src/desktop/fold.ts": lines('import {log} from "@kampus/libfabrika/data";'),
-		"packages/tuval/src/window/main.ts": lines(
-			'import {layout} from "../desktop/layout.ts";',
-			'import {wire} from "@kampus/libfabrika/transport";',
-		),
-		"packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
-		"packages/tuval/src/browser/key.ts": lines(
-			'import {root} from "../dom/root.ts";',
-			'import {wire} from "@kampus/libfabrika/transport";',
-		),
-		"packages/tuval/src/electron/menu.ts": lines(
-			'import {grant} from "@kampus/libfabrika/coordination";',
-		),
-		"packages/tuval/src/headless/run.ts": lines('import {main} from "../window/main.ts";'),
-		"programs/notes/package.json": manifest("@kampus/notes", {
-			exports: {".": "./src/program.ts", "./window": "./src/view.tsx"},
-		}),
-		"programs/notes/src/program.ts": lines(
-			'import {root} from "./root.ts";',
-			'import {defineProgram} from "@kampus/libfabrika";',
-		),
-		"programs/notes/src/root.ts": lines('import {send} from "@kampus/tuval";'),
-		"programs/notes/src/view.tsx": lines(
-			'import {notes} from "./program.ts";',
-			'import {useModel} from "@kampus/tuval";',
-		),
-		"programs/notes/src/tile.ts": lines('import {wire} from "@kampus/libfabrika/transport";'),
-		"programs/counter/package.json": manifest("@kampus/counter"),
-		"programs/counter/src/index.ts": lines('import {defineProgram} from "@kampus/libfabrika";'),
-		"apps/fabrika/package.json": manifest("@kampus/fabrika"),
-		"apps/fabrika/src/brain.ts": lines(
-			'import {log} from "@kampus/libfabrika/data";',
-			'import {fold} from "@kampus/tuval";',
-		),
-	});
+  it("P17a: the door composes lower parts; lower parts cannot import it", () => {
+    const tree = plant({
+      "packages/libfabrika/package.json": manifest(LIBRARY),
+      "packages/libfabrika/src/door/door.ts": lines(
+        'import {run} from "../app/runner.ts";',
+        'import {member} from "../coordination/member.ts";',
+        'import {log} from "../data/log.ts";',
+        'import {wire} from "../transport/wire.ts";',
+      ),
+      ...Object.fromEntries(
+        ["app", "coordination", "data", "transport"].map((part) => [
+          `packages/libfabrika/src/${part}/up.ts`,
+          lines('import {Door} from "../door/door.ts";'),
+        ]),
+      ),
+    });
+    expect([...faults(tree)].sort()).toEqual(
+      ["app", "coordination", "data", "transport"]
+        .map((part) => `packages/libfabrika/src/${part}/up.ts imports "../door/door.ts": ${part} may not import door`)
+        .sort(),
+    );
+  });
+  const lib = (extra: object = {}) =>
+    manifest(LIBRARY, {
+      exports: {
+        ".": "./src/index.ts",
+        "./transport": "./src/transport/index.ts",
+        "./coordination": "./src/coordination/index.ts",
+        "./data": "./src/data/index.ts",
+      },
+      ...extra,
+    });
+  const tree = plant({
+    "packages/libfabrika/package.json": lib(),
+    "packages/libfabrika/src/index.ts": lines('export {run} from "./app/runner.ts";'),
+    "packages/libfabrika/src/transport/wire.ts": lines('import {log} from "../data/log.ts";'),
+    "packages/libfabrika/src/data/log.ts": lines('import {view} from "@kampus/tuval";'),
+    "packages/libfabrika/src/data/log.test.ts": lines('import {counter} from "@kampus/counter";'),
+    "packages/libfabrika/src/coordination/mailbox.ts": lines('import {log} from "../data/log.ts";'),
+    "packages/libfabrika/src/app/runner.ts": lines(
+      'import {mailbox} from "../coordination/mailbox.ts";',
+      'import {log} from "../data/log.ts";',
+    ),
+    "packages/libfabrika/src/mcp/tools.ts": lines(
+      'import {run} from "../app/runner.ts";',
+      'import type {Wire} from "../transport/wire.ts";',
+    ),
+    "packages/libfabrika/src/sync/merge.ts": lines("export const merge = 1;"),
+    "packages/tuval/package.json": manifest(TUVAL),
+    "packages/tuval/src/index.ts": lines('export {fold} from "./desktop/fold.ts";'),
+    "packages/tuval/src/desktop/layout.ts": lines('import {run} from "@kampus/libfabrika";'),
+    "packages/tuval/src/desktop/fold.ts": lines('import {log} from "@kampus/libfabrika/data";'),
+    "packages/tuval/src/window/main.ts": lines(
+      'import {layout} from "../desktop/layout.ts";',
+      'import {wire} from "@kampus/libfabrika/transport";',
+    ),
+    "packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
+    "packages/tuval/src/browser/key.ts": lines(
+      'import {root} from "../dom/root.ts";',
+      'import {wire} from "@kampus/libfabrika/transport";',
+    ),
+    "packages/tuval/src/electron/menu.ts": lines('import {grant} from "@kampus/libfabrika/coordination";'),
+    "packages/tuval/src/headless/run.ts": lines('import {main} from "../window/main.ts";'),
+    "programs/notes/package.json": manifest("@kampus/notes", {
+      exports: { ".": "./src/program.ts", "./window": "./src/view.tsx" },
+    }),
+    "programs/notes/src/program.ts": lines(
+      'import {root} from "./root.ts";',
+      'import {defineProgram} from "@kampus/libfabrika";',
+    ),
+    "programs/notes/src/root.ts": lines('import {send} from "@kampus/tuval";'),
+    "programs/notes/src/view.tsx": lines(
+      'import {notes} from "./program.ts";',
+      'import {useModel} from "@kampus/tuval";',
+    ),
+    "programs/notes/src/tile.ts": lines('import {wire} from "@kampus/libfabrika/transport";'),
+    "programs/counter/package.json": manifest("@kampus/counter"),
+    "programs/counter/src/index.ts": lines('import {defineProgram} from "@kampus/libfabrika";'),
+    "apps/fabrika/package.json": manifest("@kampus/fabrika"),
+    "apps/fabrika/src/brain.ts": lines(
+      'import {log} from "@kampus/libfabrika/data";',
+      'import {fold} from "@kampus/tuval";',
+    ),
+  });
 
-	// Everything else in the tree is clean, the named exceptions included: mcp, the window, the
-	// browser key and the electron menu reach transport; the menu reaches coordination; a program's
-	// window imports its own program; the app imports anything.
-	it("fires on each planted break, and on nothing else", () => {
-		expect([...faults(tree)].sort()).toEqual(
-			[
-				'packages/libfabrika/src/transport/wire.ts imports "../data/log.ts": transport may not import data',
-				'packages/libfabrika/src/data/log.ts imports "@kampus/tuval": the library imports nothing above it',
-				'packages/libfabrika/src/data/log.ts imports "@kampus/tuval": data may not import it',
-				'packages/libfabrika/src/data/log.test.ts imports "@kampus/counter": the library imports nothing above it',
-				'packages/libfabrika/src/app/runner.ts imports "../data/log.ts": app may not import data',
-				'packages/libfabrika/src/sync/merge.ts: the folder "sync" has no row in the exam\'s table',
-				'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
-				'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
-				'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
-				'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
-			].sort(),
-		);
-	});
+  // Everything else in the tree is clean, the named exceptions included: mcp, the window, the
+  // browser key and the electron menu reach transport; the menu reaches coordination; a program's
+  // window imports its own program; the app imports anything.
+  it("fires on each planted break, and on nothing else", () => {
+    expect([...faults(tree)].sort()).toEqual(
+      [
+        'packages/libfabrika/src/transport/wire.ts imports "../data/log.ts": transport may not import data',
+        'packages/libfabrika/src/data/log.ts imports "@kampus/tuval": the library imports nothing above it',
+        'packages/libfabrika/src/data/log.ts imports "@kampus/tuval": data may not import it',
+        'packages/libfabrika/src/data/log.test.ts imports "@kampus/counter": the library imports nothing above it',
+        'packages/libfabrika/src/app/runner.ts imports "../data/log.ts": app may not import data',
+        'packages/libfabrika/src/sync/merge.ts: the folder "sync" has no row in the exam\'s table',
+        'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
+        'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
+        'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
+        'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
+      ].sort(),
+    );
+  });
+});
+
+// Ticket 477, PR 0: the laws of the row reader. Fixed seed, as the lead scripts' laws use.
+const options = { seed: 119120, numRuns: 500 };
+
+describe("the rule file's rows give a file its part", () => {
+  // The tool's rule, written a second way, by segments and with no regex over the whole path, so
+  // the reader is checked against the rule and not against itself.
+  const one = (segment: string, name: string): boolean => {
+    const [head = "", ...rest] = segment.split("*");
+
+    if (rest.length === 0) {
+      return head === name;
+    }
+
+    let at = head.length;
+
+    if (!name.startsWith(head)) {
+      return false;
+    }
+
+    for (const piece of rest.slice(0, -1)) {
+      const next = name.indexOf(piece, at);
+
+      if (next < 0) {
+        return false;
+      }
+
+      at = next + piece.length;
+    }
+
+    const tail = rest.at(-1) ?? "";
+    return name.length - tail.length >= at && name.endsWith(tail) && name.length > 0;
+  };
+  const claims = (pattern: ReadonlyArray<string>, path: ReadonlyArray<string>): boolean => {
+    const [segment, ...rest] = pattern;
+
+    if (segment === undefined) {
+      return true;
+    }
+
+    if (segment === "**") {
+      return claims(rest, path) || (path.length > 0 && claims(pattern, path.slice(1)));
+    }
+
+    const [name, ...below] = path;
+    return name !== undefined && one(segment, name) && claims(rest, below);
+  };
+  const weight = (pattern: string): number => {
+    const segments = pattern.split("/");
+    const count = (keep: (segment: string) => boolean) => segments.filter(keep).length;
+    // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
+    return (
+      count((s) => s !== "**") * 1_000_000 +
+      count((s) => !s.includes("*")) * 1_000 +
+      [...pattern].filter((c) => c !== "*" && c !== "/").length
+    );
+  };
+  const expected = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
+    const found = rows.flatMap((row) =>
+      row.paths
+        .filter((pattern) => claims(pattern.split("/"), path.split("/")))
+        .map((pattern) => ({ name: row.name, weight: weight(pattern) })),
+    );
+    const top = Math.max(...found.map((f) => f.weight));
+    return [...new Set(found.filter((f) => f.weight === top).map((f) => f.name))].sort();
+  };
+
+  const folder = fc.constantFrom("src", "app", "data", "door", "runtime", "internal");
+  const file = fc.constantFrom("Log.ts", "log.ts", "index.ts", "ProcessStore.ts", "Log.test.ts");
+  const segment = fc.oneof(
+    { arbitrary: folder, weight: 6 },
+    { arbitrary: fc.constantFrom("*", "**", "d*", "*a", "*t*"), weight: 2 },
+  );
+  const pattern = fc
+    .tuple(
+      fc.array(segment, { minLength: 1, maxLength: 4 }),
+      fc.option(fc.oneof(file, fc.constantFrom("*.ts", "ProcessStore*", "*.test.ts")), {
+        nil: undefined,
+      }),
+    )
+    .map(([folders, last]) => [...folders, ...(last === undefined ? [] : [last])].join("/"));
+  const rows: fc.Arbitrary<ReadonlyArray<Row>> = fc
+    .array(fc.array(pattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
+    .map((each) => each.map((paths, n) => ({ name: `row-${n}`, paths })));
+  const path = fc
+    .tuple(fc.array(folder, { minLength: 1, maxLength: 4 }), file)
+    .map(([folders, last]) => [...folders, last].join("/"));
+
+  // Plant: pick the first row whose pattern matches, in the rule file's order, and not the most
+  // specific. Then `src/runtime/ProcessStore*` in a later row loses to `src/runtime` in an earlier
+  // one, and a file the plan keeps in coordination reads as app.
+  it("the rows for a file are the ones code-graph's rule gives, for any rows and any path", () => {
+    fc.assert(
+      fc.property(fc.tuple(rows, path), ([given, at]) => {
+        expect([...rowsAt(given, at)].sort()).toEqual(expected(given, at));
+      }),
+      {
+        ...options,
+        numRuns: 3000,
+        examples: [
+          // pinned: the plan's own case (ticket 477, PR 5). The longer pattern is in the later row.
+          [
+            [
+              [
+                { name: "row-0", paths: ["src/runtime"] },
+                { name: "row-1", paths: ["src/runtime/ProcessStore*"] },
+              ],
+              "src/runtime/ProcessStore.ts",
+            ],
+          ],
+        ],
+      },
+    );
+  });
+
+  // Plant: the same as above. The order of the rows, and of the paths in a row, changes nothing.
+  it("the answer does not depend on the order of the rows", () => {
+    fc.assert(
+      fc.property(
+        fc
+          .tuple(rows, path)
+          .chain(([given, at]) =>
+            fc.tuple(fc.constant(given), fc.shuffledSubarray([...given], { minLength: given.length }), fc.constant(at)),
+          ),
+        ([given, shuffled, at]) => {
+          expect([...rowsAt(shuffled, at)].sort()).toEqual([...rowsAt(given, at)].sort());
+        },
+      ),
+      options,
+    );
+  });
+
+  // vector: answers of code-graph 0.15.0 on the real rule file, worked out from its built source
+  // (`src/layers/classify.ts`), since `pnpm lint:layers` runs that tool on these same rows and the
+  // exam must name the same row. A file pattern beats its folder, a deeper folder beats a higher
+  // one, and a folder claims only at a `/`.
+  it("vector: the real rule file gives the rows code-graph gives", () => {
+    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude.ts")).toEqual(["fabrika-entry"]);
+    expect(rowsAt(REAL, "packages/fabrika/src/agents/claude/rules.ts")).toEqual(["fabrika-agents"]);
+    expect(rowsAt(REAL, "packages/pipeline/src/laws/explore.ts")).toEqual(["own-search"]);
+    expect(rowsAt(REAL, "packages/pipeline/src/laws/walk.ts")).toEqual(["pipeline"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/app/runner.ts")).toEqual(["next-app"]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/apple/runner.ts")).toEqual([]);
+    expect(rowsAt(REAL, "next/packages/libfabrika/src/testing.tsx")).toEqual([]);
+  });
+});
+
+describe("every library file has exactly one row", () => {
+  const under = "next/packages/libfabrika/src/";
+  /** The library's folders the real rule file names: every row's folder pattern under `src/`. */
+  const folders = REAL.flatMap((row) => row.paths)
+    .filter((pattern) => pattern.startsWith(under) && !pattern.endsWith(".ts"))
+    .map((pattern) => pattern.slice(under.length));
+  const tops = ["id", "testing", "index"];
+  const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9-]{0,8}$/);
+  // A Mac's disk ignores case, so a made-up name may not differ from a real one by case alone.
+  const unlisted = (taken: ReadonlyArray<string>) => name.filter((n) => !taken.includes(n.toLowerCase()));
+
+  // Plant: let a library file with no row pass, as the reader did before for a file at the top of
+  // `src/` (it answered "an entry file" and checked nothing). Then `src/sync/Merge.ts` and a new
+  // top file import anything.
+  it("a file in a row's folder has one row; a file no row claims fails, wherever it is", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...folders),
+        fc.constantFrom("", "internal/"),
+        name,
+        unlisted(folders),
+        unlisted(tops),
+        (folder, inner, file, stray, loose) => {
+          const src = "packages/libfabrika/src";
+          const tree = plant({
+            "packages/libfabrika/package.json": manifest(LIBRARY),
+            [`${src}/${folder}/${inner}${file}.ts`]: lines("export const a = 1;"),
+            [`${src}/${stray}/${inner}${file}.ts`]: lines("export const a = 1;"),
+            [`${src}/${stray}/${file}.test.ts`]: lines("export const a = 1;"),
+            [`${src}/${loose}.ts`]: lines("export const a = 1;"),
+            [`${src}/${loose}.test.ts`]: lines("export const a = 1;"),
+          });
+
+          expect(rowsAt(REAL, `next/${src}/${folder}/${inner}${file}.ts`)).toHaveLength(1);
+          // Which files fail, not what the message says.
+          expect(faults(tree).map((fault) => fault.split(/:| imports /)[0])).toEqual(
+            [`${src}/${stray}/${inner}${file}.ts`, `${src}/${loose}.ts`].sort(),
+          );
+        },
+      ),
+      {
+        ...options,
+        numRuns: 60,
+        // pinned: the plan's plant (ticket 477), a new folder with no row, and a new top file.
+        examples: [["data", "", "Merge", "sync", "Loose"]],
+      },
+    );
+  });
+
+  // scenario: two rows that claim one file equally, since code-graph stops on that file and names
+  // no row, and the exam must not pick one for it.
+  it("scenario: a file two rows claim equally fails", () => {
+    const tree = plant({
+      "packages/libfabrika/package.json": manifest(LIBRARY),
+      "packages/libfabrika/src/data/log.ts": lines("export const a = 1;"),
+    });
+    const twice = [...REAL, { name: "next-app", paths: ["next/packages/libfabrika/src/data"] }];
+    expect(faults(tree)).toEqual([]);
+    expect(faults(tree, twice)).toHaveLength(1);
+  });
+});
+
+describe("planted breaks in the room folders", () => {
+  const src = "next/packages/libfabrika/src";
+  const add = (name: string, paths: ReadonlyArray<string>) => (row: Row) =>
+    row.name === name ? { name, paths: [...row.paths, ...paths.map((p) => `${src}/${p}`)] } : row;
+  // The rule file as the move leaves it before the floors (the plan's config table, PRs 1 to 5):
+  // each old row gains its rooms' paths, and three patterns keep three runtime files in coordination.
+  const rooms = (runtime: "next-app" | "next-coordination"): ReadonlyArray<Row> =>
+    REAL.map(add("next-id", ["Id.ts", "ProcessId.ts", "Sql.ts", "Rev.ts"]))
+      .map(add("next-data", ["telemetry", "ledger"]))
+      .map(
+        add("next-coordination", [
+          "processes",
+          "presence",
+          "access",
+          "runtime/ProcessStore*",
+          "runtime/RecoveryStore*",
+          "runtime/internal/recovery.ts",
+        ]),
+      )
+      .map(add(runtime, ["runtime"]))
+      .map(add("next-app", ["Testing.ts"]));
+  const tree = plant({
+    "packages/libfabrika/package.json": manifest(LIBRARY),
+    "packages/libfabrika/src/Id.ts": lines("export const id = 1;"),
+    "packages/libfabrika/src/telemetry/Sink.ts": lines('import {id} from "../Id.ts";'),
+    "packages/libfabrika/src/ledger/Log.ts": lines('import {sink} from "../telemetry/Sink.ts";'),
+    "packages/libfabrika/src/ledger/Ledger.ts": lines('import {mailbox} from "../processes/Mailbox.ts";'),
+    "packages/libfabrika/src/transport/Wire.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/processes/Mailbox.ts": lines(
+      'import {log} from "../ledger/Log.ts";',
+      'import {Door} from "../door/Door.ts";',
+    ),
+    "packages/libfabrika/src/access/Members.ts": lines(
+      'import {mailbox} from "../processes/Mailbox.ts";',
+      'import {run} from "../runtime/Runner.ts";',
+    ),
+    "packages/libfabrika/src/runtime/Runner.ts": lines(
+      'import {mailbox} from "../processes/Mailbox.ts";',
+      'import {store} from "./ProcessStore.ts";',
+      'import {log} from "../ledger/Log.ts";',
+      'import {wire} from "../transport/Wire.ts";',
+    ),
+    "packages/libfabrika/src/runtime/ProcessStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/RecoveryStore.ts": lines('import {log} from "../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/internal/recovery.ts": lines('import {log} from "../../ledger/Log.ts";'),
+    "packages/libfabrika/src/runtime/internal/supervisor.ts": lines('import {log} from "../../ledger/Log.ts";'),
+    "packages/libfabrika/src/door/Door.ts": lines(
+      'import {run} from "../runtime/Runner.ts";',
+      'import {members} from "../access/Members.ts";',
+      'import {log} from "../ledger/Log.ts";',
+      'import {wire} from "../transport/Wire.ts";',
+    ),
+    "packages/libfabrika/src/door/internal/waiting.ts": lines('import {wire} from "../../transport/Wire.ts";'),
+  });
+
+  // scenario: each line is one named wall of today's table, met in a room folder, since the move
+  // (PRs 2 to 5) must leave every wall standing: the ledger may not import processes, transport may
+  // not import the ledger, processes and access may not import the door or the runtime, and the
+  // runtime may not import the ledger or transport. Three runtime files stay coordination by
+  // pattern, so their ledger imports pass until PR 12 cuts them.
+  // Plant: map `runtime` to the coordination part (`rooms("next-coordination")`). Then the runner's
+  // ledger import passes.
+  it("scenario: every upward or skipped-part import fires in the room folders, and nothing else", () => {
+    const at = (file: string) => `packages/libfabrika/src/${file}`;
+    expect([...faults(tree, rooms("next-app"))].sort()).toEqual(
+      [
+        `${at("ledger/Ledger.ts")} imports "../processes/Mailbox.ts": data may not import coordination`,
+        `${at("transport/Wire.ts")} imports "../ledger/Log.ts": transport may not import data`,
+        `${at("processes/Mailbox.ts")} imports "../door/Door.ts": coordination may not import door`,
+        `${at("access/Members.ts")} imports "../runtime/Runner.ts": coordination may not import app`,
+        `${at("runtime/Runner.ts")} imports "../ledger/Log.ts": app may not import data`,
+        `${at("runtime/Runner.ts")} imports "../transport/Wire.ts": app may not import transport`,
+        `${at("runtime/internal/supervisor.ts")} imports "../../ledger/Log.ts": app may not import data`,
+      ].sort(),
+    );
+  });
+
+  // scenario: the room folders have no row on main yet, since no file has moved. Until a move PR
+  // adds the paths, a file planted in a room fails for having no row, so a move cannot land ahead
+  // of its rule file change.
+  it("scenario: on main's rule file a room folder has no row", () => {
+    const at = (file: string) => `packages/libfabrika/src/${file}`;
+    const unclaimed = faults(tree)
+      .filter((fault) => !fault.includes(" imports "))
+      .map((fault) => fault.split(": ")[0]);
+    expect(unclaimed.sort()).toEqual(
+      [
+        "Id.ts",
+        "telemetry/Sink.ts",
+        "ledger/Log.ts",
+        "ledger/Ledger.ts",
+        "processes/Mailbox.ts",
+        "access/Members.ts",
+        "runtime/Runner.ts",
+        "runtime/ProcessStore.ts",
+        "runtime/RecoveryStore.ts",
+        "runtime/internal/recovery.ts",
+        "runtime/internal/supervisor.ts",
+      ]
+        .map(at)
+        .sort(),
+    );
+  });
 });

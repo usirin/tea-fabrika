@@ -1,4 +1,4 @@
-import type {Cmd, TimerDeps} from "@demlik/tea";
+import type { Cmd, TimerDeps } from "@demlik/tea";
 
 // Poll: a clock wakes the child, code reads something, and the child reports
 // a change only when the read differs from the last one it reported. For
@@ -31,14 +31,14 @@ import type {Cmd, TimerDeps} from "@demlik/tea";
 // Every Cmd, Sub and Msg carries the child's `key`.
 
 /** The read: a Gather Cmd that carries the child's key and the tick it was sent for, so its answer finds its way back. */
-export type Keyed = Cmd & {readonly key: string; readonly tick: number};
+export type Keyed = Cmd & { readonly key: string; readonly tick: number };
 
 /** How fast a poll goes, both in ms and both required: no number is made up here. */
 export interface Pace {
-	/** From the end of one read to the next tick. */
-	readonly every: number;
-	/** How long a read may take before it counts as failed. */
-	readonly limit: number;
+  /** From the end of one read to the next tick. */
+  readonly every: number;
+  /** How long a read may take before it counts as failed. */
+  readonly limit: number;
 }
 
 /**
@@ -49,11 +49,11 @@ export interface Pace {
  * read is built from it.
  */
 export interface Polling<I> extends Pace {
-	readonly phase: "waiting" | "reading";
-	readonly key: string;
-	readonly tick: number;
-	readonly last: string | null;
-	readonly input: I;
+  readonly phase: "waiting" | "reading";
+  readonly key: string;
+  readonly tick: number;
+  readonly last: string | null;
+  readonly input: I;
 }
 
 /**
@@ -63,17 +63,17 @@ export interface Polling<I> extends Pace {
  * apart when `every` and `limit` are the same number.
  */
 export interface Tick<T extends string> {
-	readonly type: T;
-	readonly key: string;
-	readonly tick: number;
-	readonly phase: "waiting" | "reading";
+  readonly type: T;
+  readonly key: string;
+  readonly tick: number;
+  readonly phase: "waiting" | "reading";
 }
 
 /** What a poll hands its parent when a read changed. `tick` names the write, the same on every replay. */
 export interface Changed<V> {
-	readonly key: string;
-	readonly tick: number;
-	readonly value: V;
+  readonly key: string;
+  readonly tick: number;
+  readonly value: V;
 }
 
 /**
@@ -84,69 +84,81 @@ export interface Changed<V> {
  * a read that differs only elsewhere is no change.
  */
 export function createPoll<const N extends string, I, R extends Keyed, V>(config: {
-	readonly name: N;
-	readonly read: (key: string, tick: number, input: I) => R;
-	readonly by: (value: V) => string;
+  readonly name: N;
+  readonly read: (key: string, tick: number, input: I) => R;
+  readonly by: (value: V) => string;
 }) {
-	const tickType = `${config.name}_tick` as const;
-	type State = Polling<I>;
-	type Step = readonly [State, Changed<V> | null];
+  const tickType = `${config.name}_tick` as const;
+  type State = Polling<I>;
+  type Step = readonly [State, Changed<V> | null];
 
-	/** Start waiting for the first tick. Nothing is read until the clock says so. */
-	const start = (key: string, input: I, pace: Pace): State => ({
-		phase: "waiting",
-		key,
-		every: pace.every,
-		limit: pace.limit,
-		tick: 0,
-		last: null,
-		input,
-	});
+  /** Start waiting for the first tick. Nothing is read until the clock says so. */
+  const start = (key: string, input: I, pace: Pace): State => ({
+    phase: "waiting",
+    key,
+    every: pace.every,
+    limit: pace.limit,
+    tick: 0,
+    last: null,
+    input,
+  });
 
-	const readOf = (s: State): R => config.read(s.key, s.tick, s.input);
+  const readOf = (s: State): R => config.read(s.key, s.tick, s.input);
 
-	const next = (s: State, last: string | null): State => ({
-		...s,
-		phase: "waiting",
-		tick: s.tick + 1,
-		last,
-	});
+  const next = (s: State, last: string | null): State => ({
+    ...s,
+    phase: "waiting",
+    tick: s.tick + 1,
+    last,
+  });
 
-	/** The read this answer belongs to is the one out now. */
-	const current = (s: State, read: R): boolean =>
-		s.phase === "reading" && read.key === s.key && read.tick === s.tick;
+  /** The read this answer belongs to is the one out now. */
+  const current = (s: State, read: R): boolean => s.phase === "reading" && read.key === s.key && read.tick === s.tick;
 
-	/**
-	 * The clock woke the child. Set while waiting: read. Set while reading: the
-	 * read took too long, so it counts as failed. A clock set for another tick,
-	 * another phase, or another child changes nothing.
-	 */
-	function ticked(s: State, m: Tick<typeof tickType>): readonly [State, readonly R[]] {
-		if (m.key !== s.key || m.tick !== s.tick || m.phase !== s.phase) return [s, []];
-		if (s.phase === "reading") return [next(s, s.last), []];
-		const reading: State = {...s, phase: "reading"};
-		return [reading, [readOf(reading)]];
-	}
+  /**
+   * The clock woke the child. Set while waiting: read. Set while reading: the
+   * read took too long, so it counts as failed. A clock set for another tick,
+   * another phase, or another child changes nothing.
+   */
+  function ticked(s: State, m: Tick<typeof tickType>): readonly [State, readonly R[]] {
+    if (m.key !== s.key || m.tick !== s.tick || m.phase !== s.phase) {
+      return [s, []];
+    }
 
-	/** The read answered: a change when `by` differs from the last one reported, else nothing. An answer for a read given up changes nothing. */
-	function answered(s: State, read: R, value: V): Step {
-		if (!current(s, read)) return [s, null];
-		const seen = config.by(value);
-		if (seen === s.last) return [next(s, s.last), null];
-		return [next(s, seen), {key: s.key, tick: s.tick, value}];
-	}
+    if (s.phase === "reading") {
+      return [next(s, s.last), []];
+    }
 
-	/** The read failed: wait for the next tick. Each read is fresh, so a missed one loses nothing. */
-	const failed = (s: State, read: R): State => (current(s, read) ? next(s, s.last) : s);
+    const reading: State = { ...s, phase: "reading" };
+    return [reading, [readOf(reading)]];
+  }
 
-	/** The clock this state asks for: always on, `every` between reads and `limit` during one. */
-	const clock = (s: State): TimerDeps<Tick<typeof tickType>> => ({
-		ms: s.phase === "waiting" ? s.every : s.limit,
-		msg: {type: tickType, key: s.key, tick: s.tick, phase: s.phase},
-	});
+  /** The read answered: a change when `by` differs from the last one reported, else nothing. An answer for a read given up changes nothing. */
+  function answered(s: State, read: R, value: V): Step {
+    if (!current(s, read)) {
+      return [s, null];
+    }
 
-	/** What a restart sends again: the read, if one was out. A Gather, so asking twice is safe. */
-	const inFlight = (s: State): R | null => (s.phase === "reading" ? readOf(s) : null);
+    const seen = config.by(value);
 
-	return {name: config.name, tickType, start, ticked, answered, failed, clock, inFlight} as const;
+    if (seen === s.last) {
+      return [next(s, s.last), null];
+    }
+
+    return [next(s, seen), { key: s.key, tick: s.tick, value }];
+  }
+
+  /** The read failed: wait for the next tick. Each read is fresh, so a missed one loses nothing. */
+  const failed = (s: State, read: R): State => (current(s, read) ? next(s, s.last) : s);
+
+  /** The clock this state asks for: always on, `every` between reads and `limit` during one. */
+  const clock = (s: State): TimerDeps<Tick<typeof tickType>> => ({
+    ms: s.phase === "waiting" ? s.every : s.limit,
+    msg: { type: tickType, key: s.key, tick: s.tick, phase: s.phase },
+  });
+
+  /** What a restart sends again: the read, if one was out. A Gather, so asking twice is safe. */
+  const inFlight = (s: State): R | null => (s.phase === "reading" ? readOf(s) : null);
+
+  return { name: config.name, tickType, start, ticked, answered, failed, clock, inFlight } as const;
 }

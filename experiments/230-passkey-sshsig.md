@@ -114,8 +114,8 @@ env -u TYPESAFE_API_KEY nice -n 19 node experiments/230-check.ts
 ```
 
 This completed with exit 0. The real fixture passed WebCrypto and OpenSSH.
-[The public assertion](./results/230-assertion.json) keeps the exact browser
-bytes. [The results](./results/230-checks.json) keep its SHA-256, every tested
+[The public assertion](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/230-assertion.json) keeps the exact browser
+bytes. [The results](https://github.com/usirin/tea-fabrika/blob/423fb9cf2b7d5affd7fd10bf131659a242f43510/experiments/results/230-checks.json) keep its SHA-256, every tested
 SSHSIG, the public signer line, both answers and the independent CLI output.
 The script makes no browser or network call. It deletes its temporary CLI
 files after the checks.

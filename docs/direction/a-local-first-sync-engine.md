@@ -12,6 +12,7 @@
   that sync by gossip, [why the design already allows it](#why-the-design-already-allows-it)
   and [open](#open). [The hard part](#the-hard-part-a-claim)'s leases were decided
   central first, as layer 3's C3. The first pass's W3C `traceparent` stays proposed.
+- **Renamed 2026-11-10 for `next/`:** the per-client gateway object is now a connection, and the door is the gateway ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
 
 *Written 2026-11-05: this header said the whole note was "a vision ... not planned,
 not sized", which was wrong for the parts above since 2026-10-19 and 2026-10-31.* It
@@ -122,6 +123,13 @@ has no single place that can say who was first.
 
 The owner walked the architecture one layer at a time on 2026-10-30 and
 2026-10-31. It ended with five layers. Each one uses only the layer below it.
+
+*Changed 2026-11-09 (owner, [0043](../../.decisions/0043-rooms-on-floors.md)): in
+`next/packages/libfabrika/src` the layers are no longer folders. A folder is one subject, a room,
+and a layer is a floor: a line in `layer-rules.json` that says which rooms a room may import.
+There is no `coordination/` folder; its files sit in `processes/`, `presence/`, `access/` and
+`runtime/`, and `data/` is `ledger/` and `telemetry/`. The five layers below stay as the way the
+design is told.*
 
 ```ts
 // A sketch. Bottom to top. Ticket #7, one line per layer.
@@ -413,7 +421,9 @@ after about 10 s and drops what waits in memory.*
   room for a copy on each client, a browser too.
 - **D6, the services:** today's `Ledger` (about 25 methods, all three layers
   mixed) splits into small services, one Effect Layer per level. A service
-  name is never plural; one that holds many of a thing is `<Thing>Manager`.
+  name is never plural; one that holds many of a thing is `<Thing>Manager`. *Changed 2026-11-09:
+  one that holds many is plural, as Effect names them (`Leases`;
+  [0029](../../.decisions/0029-format-and-names-follow-effect.md)).*
 
   ```ts
   // data
@@ -498,6 +508,10 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   Kubernetes-style backoff. Past intensity the root stops its children and itself; the brain marks
   the name `failed`, logs it and asks the person, and only a person restarts it. The `down {until}`
   retry above goes. P34c builds it. Sibling strategies, nested trees and links still wait for Tier 4.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* not one root per brain. Each program is its
+  own OTP application with its own top-level supervisor, under the brain as the node. Past
+  intensity only that program stops and asks the person; every other program keeps running. Fault
+  isolation per program is required from the first version.
 - **C5, which OTP calls stay:** coordination sits where OTP sits, so it
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
@@ -544,6 +558,8 @@ found them with no written reason; these are the reasons. Paths are under
   the supervisor becomes one root per brain, in the project object beside the process tree, so a
   restart is counted in the same transaction as the `exited` and `started` facts it causes. The
   receipts and dead letters stay in the program's object. P34c writes the new reason.
+  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* one top-level supervisor per program, not one
+  per brain, so one program's crash loop never stops another.
 - **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
   ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
   canceled watch's `DOWN` is dropped every time (`coordination/process.ts:423-429`): once the

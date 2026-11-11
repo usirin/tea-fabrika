@@ -1,18 +1,18 @@
-import type {Ended} from "@kampus/fabrika-old";
-import {Cause} from "effect";
-import type {FactOf} from "../../tickets/ticket.ts";
-import {inert} from "../build/body.ts";
-import type {Item} from "../build/ticket.ts";
-import type {ExamChange} from "../exam/machine.ts";
-import {textOf} from "../plan/plan.ts";
-import {questionLines} from "../plan/render.ts";
-import type {Finding} from "../review/sheet.ts";
-import type {Found} from "../test-writer/checked.ts";
-import type {MutantAnswer} from "../test-writer/mutants.ts";
-import {Surprise} from "../test-writer/outcome.ts";
-import type {Answer} from "../test-writer/written.ts";
-import {fenced, listed} from "./briefs.ts";
-import type {Carry, Through, Untested} from "./machine.ts";
+import type { Ended } from "@kampus/fabrika-old";
+import { Cause } from "effect";
+import type { FactOf } from "../../tickets/ticket.ts";
+import { inert } from "../build/body.ts";
+import type { Item } from "../build/ticket.ts";
+import type { ExamChange } from "../exam/machine.ts";
+import { textOf } from "../plan/plan.ts";
+import { questionLines } from "../plan/render.ts";
+import type { Finding } from "../review/sheet.ts";
+import type { Found } from "../test-writer/checked.ts";
+import type { MutantAnswer } from "../test-writer/mutants.ts";
+import { Surprise } from "../test-writer/outcome.ts";
+import type { Answer } from "../test-writer/written.ts";
+import { fenced, listed } from "./briefs.ts";
+import type { Carry, Through, Untested } from "./machine.ts";
 
 // What a step found, in the words a person or an agent reads it in. Today's version. All pure: the
 // lane's program writes these on the ticket, in a pull request's body and in a brief.
@@ -23,84 +23,79 @@ import type {Carry, Through, Untested} from "./machine.ts";
 //   - Three titles are converted: No inputs.
 
 const HEADS: Readonly<Record<Surprise, string>> = {
-	cannot_test: "The test writer says no test can check these:",
-	already_passes: "These new tests already pass on the code as it is, so they show nothing yet:",
-	fails_on_base: "These tests of what should already work fail on the code as it is:",
+  cannot_test: "The test writer says no test can check these:",
+  already_passes: "These new tests already pass on the code as it is, so they show nothing yet:",
+  fails_on_base: "These tests of what should already work fail on the code as it is:",
 };
 
-type Named = {readonly id: string; readonly when: string};
+type Named = { readonly id: string; readonly when: string };
 
-const NOTHING: Through = {findings: [], mutants: []};
+const NOTHING: Through = { findings: [], mutants: [] };
 
 /** Each Property the writer says no test can check, and its reason. */
-export const untestedRows = (
-	properties: readonly Named[],
-	answers: readonly Answer[],
-): readonly Untested[] =>
-	answers.flatMap((answer) =>
-		answer.kind === "cannot"
-			? [
-					{
-						when: properties.find((p) => p.id === answer.property)?.when ?? answer.property,
-						why: answer.why,
-					},
-				]
-			: [],
-	);
+export const untestedRows = (properties: readonly Named[], answers: readonly Answer[]): readonly Untested[] =>
+  answers.flatMap((answer) =>
+    answer.kind === "cannot"
+      ? [
+          {
+            when: properties.find((p) => p.id === answer.property)?.when ?? answer.property,
+            why: answer.why,
+          },
+        ]
+      : [],
+  );
 
 /** What the test writer found, each surprise under its own sentence. Nothing found: nothing said. */
 export const foundWords = (
-	properties: readonly Named[],
-	found: readonly Found[],
-	answers: readonly Answer[],
+  properties: readonly Named[],
+  found: readonly Found[],
+  answers: readonly Answer[],
 ): readonly string[] =>
-	Surprise.literals.flatMap((surprise) => {
-		const rows = found
-			.filter((row) => row.for === surprise)
-			.map((row) => {
-				const when = properties.find((p) => p.id === row.property)?.when ?? row.property;
-				const said = answers.find((a) => a.kind === "cannot" && a.property === row.property);
-				return inert(said?.kind === "cannot" ? `${when}: ${said.why}` : when);
-			});
-		return rows.length === 0 ? [] : [HEADS[surprise], listed(rows)];
-	});
+  Surprise.literals.flatMap((surprise) => {
+    const rows = found
+      .filter((row) => row.for === surprise)
+      .map((row) => {
+        const when = properties.find((p) => p.id === row.property)?.when ?? row.property;
+        const said = answers.find((a) => a.kind === "cannot" && a.property === row.property);
+        return inert(said?.kind === "cannot" ? `${when}: ${said.why}` : when);
+      });
+    return rows.length === 0 ? [] : [HEADS[surprise], listed(rows)];
+  });
 
 /** Why the mutants' writer says no test can tell these mutants from the code. */
 export const mutantWords = (answers: readonly MutantAnswer[]): readonly string[] => {
-	const rows = answers.flatMap((a) =>
-		a.answer === "cannot" ? [inert(`\`${a.mutant}\`: ${a.why}`)] : [],
-	);
-	return rows.length === 0
-		? []
-		: ["These mutants lived, and the test writer says no test can see the change:", listed(rows)];
+  const rows = answers.flatMap((a) => (a.answer === "cannot" ? [inert(`\`${a.mutant}\`: ${a.why}`)] : []));
+  return rows.length === 0
+    ? []
+    : ["These mutants lived, and the test writer says no test can see the change:", listed(rows)];
 };
 
 /** The Properties a person let through, for the ticket and the pull request. */
 export const untestedWords = (rows: readonly Untested[]): readonly string[] =>
-	rows.length === 0
-		? []
-		: [
-				"No test checks these properties. A person said to go on without one:",
-				listed(rows.map((row) => inert(`${row.when}: ${row.why}`))),
-			];
+  rows.length === 0
+    ? []
+    : [
+        "No test checks these properties. A person said to go on without one:",
+        listed(rows.map((row) => inert(`${row.when}: ${row.why}`))),
+      ];
 
 /**
  * The findings and mutants a person let through, for the merge question and the pull request.
  * Nothing let through: nothing said.
  */
-export const throughWords = ({findings, mutants}: Through = NOTHING): readonly string[] => [
-	...(findings.length === 0
-		? []
-		: [
-				"A person let these findings through, on a call that their decision stands:",
-				listed(findings.map((row) => inert(row.fault))),
-			]),
-	...(mutants.length === 0
-		? []
-		: [
-				"A person let these mutants live, as no test can see the change:",
-				listed(mutants.map((row) => inert(`\`${row.mutant}\`: ${row.why}`))),
-			]),
+export const throughWords = ({ findings, mutants }: Through = NOTHING): readonly string[] => [
+  ...(findings.length === 0
+    ? []
+    : [
+        "A person let these findings through, on a call that their decision stands:",
+        listed(findings.map((row) => inert(row.fault))),
+      ]),
+  ...(mutants.length === 0
+    ? []
+    : [
+        "A person let these mutants live, as no test can see the change:",
+        listed(mutants.map((row) => inert(`\`${row.mutant}\`: ${row.why}`))),
+      ]),
 ];
 
 /**
@@ -109,89 +104,81 @@ export const throughWords = ({findings, mutants}: Through = NOTHING): readonly s
  * (CommonMark 0.31, code spans). Still made inert, so no reference in it reaches a code host. Pure.
  */
 export const codeSpan = (text: string): string => {
-	const line = inert(text.replace(/\s+/g, " "));
-	const fence = "`".repeat(
-		Math.max(0, ...[...line.matchAll(/`+/g)].map((run) => run[0].length)) + 1,
-	);
-	const pad = line.startsWith("`") || line.endsWith("`") ? " " : "";
-	return `${fence}${pad}${line}${pad}${fence}`;
+  const line = inert(text.replace(/\s+/g, " "));
+  const fence = "`".repeat(Math.max(0, ...[...line.matchAll(/`+/g)].map((run) => run[0].length)) + 1);
+  const pad = line.startsWith("`") || line.endsWith("`") ? " " : "";
+  return `${fence}${pad}${line}${pad}${fence}`;
 };
 
 /** An open item as a person reads it: a failing test's name, the repository's text, as code. Pure. */
-const itemWords = (item: Item): string =>
-	item.from === "tests" ? codeSpan(item.text) : inert(item.text);
+const itemWords = (item: Item): string => (item.from === "tests" ? codeSpan(item.text) : inert(item.text));
 
 /** What is still open as the rounds run out, for the person asked whether once more. Nothing open: nothing said. */
 export const openWords = (open: readonly Item[]): readonly string[] =>
-	open.length === 0 ? [] : ["Still open:", listed(open.map(itemWords))];
+  open.length === 0 ? [] : ["Still open:", listed(open.map(itemWords))];
 
 /** What the builder is told of a red head: each failing test, or with no name, the head as a whole. Pure. */
 export const redItems = (failed: readonly string[], tail: string): readonly Item[] =>
-	failed.length === 0
-		? [
-				{
-					criterion: null,
-					text: "The repository's own tests fail at the build's head.",
-					says: tail === "" ? "No test was named." : tail,
-					where: [],
-					wants: [],
-				},
-			]
-		: failed.map((name) => ({
-				criterion: null,
-				text: name,
-				says: "This test fails at the build's head.",
-				where: [name.split(" > ")[0] ?? name],
-				wants: [],
-			}));
+  failed.length === 0
+    ? [
+        {
+          criterion: null,
+          text: "The repository's own tests fail at the build's head.",
+          says: tail === "" ? "No test was named." : tail,
+          where: [],
+          wants: [],
+        },
+      ]
+    : failed.map((name) => ({
+        criterion: null,
+        text: name,
+        says: "This test fails at the build's head.",
+        where: [name.split(" > ")[0] ?? name],
+        wants: [],
+      }));
 
 /**
  * What is open after a red head: what a review left open stays, beside each test that fails now. A
  * last red's names go: only what fails now is open. Pure.
  */
-export const withRed = (
-	open: readonly Item[],
-	failed: readonly string[],
-	tail: string,
-): readonly Item[] => [
-	...open.filter((item) => item.from !== "tests"),
-	...redItems(failed, tail).map((item) => ({...item, from: "tests" as const})),
+export const withRed = (open: readonly Item[], failed: readonly string[], tail: string): readonly Item[] => [
+  ...open.filter((item) => item.from !== "tests"),
+  ...redItems(failed, tail).map((item) => ({ ...item, from: "tests" as const })),
 ];
 
 /** The ticket's comment on a red head: each failing test by name, and the first lines of why. Pure. */
 export const redWords = (failed: readonly string[], tail: string, most: number): string =>
-	[
-		"The repository's own tests fail at this head:",
-		listed(failed.slice(0, most).map(codeSpan), "No test was named."),
-		...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
-		...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
-	].join("\n");
+  [
+    "The repository's own tests fail at this head:",
+    listed(failed.slice(0, most).map(codeSpan), "No test was named."),
+    ...(failed.length > most ? [`And ${failed.length - most} more.`] : []),
+    ...(tail === "" ? [] : ["", "The first lines of why:", fenced(inert(tail))]),
+  ].join("\n");
 
 /** Dollars as a person reads them. `null`: a price nobody knows, never read as free. */
-export const money = (usd: number | null) =>
-	usd === null ? "price unknown" : `$${usd.toFixed(2)}`;
+export const money = (usd: number | null) => (usd === null ? "price unknown" : `$${usd.toFixed(2)}`);
 
 /**
  * What the runs on a ticket cost so far, from their `ended` facts, at list price where a rate is
  * known. A run whose price nobody knows is counted as unknown, so the sum never reads as free. Pure.
  */
 export const spentWords = (ends: readonly FactOf<"ended">[]): string => {
-	const prices = ends.map((e) =>
-		e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null),
-	);
-	const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
-	const total = known.reduce((sum, usd) => sum + usd, 0);
-	const unknown = prices.length - known.length;
-	if (unknown === 0) return `The runs on this ticket have cost ${money(total)} so far.`;
-	const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
-	return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
+  const prices = ends.map((e) => (e.listUsd === undefined ? e.usd : (e.listUsd ?? e.billed ?? null)));
+  const known = prices.flatMap((usd) => (usd === null ? [] : [usd]));
+  const total = known.reduce((sum, usd) => sum + usd, 0);
+  const unknown = prices.length - known.length;
+
+  if (unknown === 0) {
+    return `The runs on this ticket have cost ${money(total)} so far.`;
+  }
+
+  const rest = total > 0 ? `, and ${money(total)} for the rest` : "";
+  return `What the runs on this ticket have cost so far: price unknown for ${unknown} of them${rest}.`;
 };
 
 /** The line for a lane's program that broke, so it never ends without a word. Any other end: none. */
 export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>
-	end.kind === "failed"
-		? [`#${n} broke: ${Cause.pretty(end.cause).split("\n")[0] ?? "no reason given"}`]
-		: [];
+  end.kind === "failed" ? [`#${n} broke: ${Cause.pretty(end.cause).split("\n")[0] ?? "no reason given"}`] : [];
 
 /**
  * A path as one code span. A plan's Check refuses a backtick in a path, but a lane saved before that
@@ -200,16 +187,16 @@ export const brokeWords = (n: number, end: Ended<unknown>): readonly string[] =>
  * blank line would end the span.
  */
 const pathSpan = (path: string): string => {
-	const flat = path.replace(/\s+/g, " ");
-	const longest = Math.max(0, ...(flat.match(/`+/g) ?? []).map((run) => run.length));
-	const fence = "`".repeat(longest + 1);
-	const pad = longest > 0 ? " " : "";
-	return `${fence}${pad}${flat}${pad}${fence}`;
+  const flat = path.replace(/\s+/g, " ");
+  const longest = Math.max(0, ...(flat.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  const pad = longest > 0 ? " " : "";
+  return `${fence}${pad}${flat}${pad}${fence}`;
 };
 
 /** Each rule change, as the plan says it: which file, what changes, and why. */
 export const ruleChangeLines = (changes: readonly ExamChange[]): readonly string[] =>
-	changes.map((c) => `- ${pathSpan(c.path)}: ${inert(c.change)} Why: ${inert(c.why)}`);
+  changes.map((c) => `- ${pathSpan(c.path)}: ${inert(c.change)} Why: ${inert(c.why)}`);
 
 /**
  * What a person decided at the plan, for a brief: each question with its lean, under its id, and
@@ -217,56 +204,49 @@ export const ruleChangeLines = (changes: readonly ExamChange[]): readonly string
  * with no ids, so no finding can name one. Pure.
  */
 export const decidedWords = (carry: Pick<Carry, "plan" | "decided">): string => {
-	const questions = carry.decided?.questions ?? [];
-	const leans =
-		questions.length > 0
-			? questionLines({questions})
-			: (carry.plan?.questions ?? []).map((q) => `- ${q.ask} Lean: ${q.lean}`);
-	const said = carry.decided?.said ?? [];
-	if (leans.length === 0 && said.length === 0) return "None.";
-	return [
-		...(leans.length === 0
-			? []
-			: [
-					"A person approved the plan, and that yes took the lean on each question here:",
-					...leans,
-				]),
-		...(said.length === 0 ? [] : ["What the person wrote beside their answers:", listed(said)]),
-	].join("\n");
+  const questions = carry.decided?.questions ?? [];
+  const leans =
+    questions.length > 0
+      ? questionLines({ questions })
+      : (carry.plan?.questions ?? []).map((q) => `- ${q.ask} Lean: ${q.lean}`);
+  const said = carry.decided?.said ?? [];
+
+  if (leans.length === 0 && said.length === 0) {
+    return "None.";
+  }
+
+  return [
+    ...(leans.length === 0
+      ? []
+      : ["A person approved the plan, and that yes took the lean on each question here:", ...leans]),
+    ...(said.length === 0 ? [] : ["What the person wrote beside their answers:", listed(said)]),
+  ].join("\n");
 };
 
 /** Both sides of each finding against a decision, for the person who made it. Pure. */
-export const againstWords = (
-	carry: Pick<Carry, "decided">,
-	against: readonly Finding[],
-): readonly string[] => [
-	"The review says a decision you made on the plan is wrong.",
-	...against.flatMap((finding) => {
-		const {from} = finding;
-		const question =
-			from.source === "decision"
-				? carry.decided?.questions.find((q) => q.id === from.id)
-				: undefined;
-		return [
-			"",
-			...(question === undefined
-				? []
-				: [`You decided: ${inert(question.ask)} ${inert(question.lean)}`]),
-			`The review says: ${inert(finding.fault)}`,
-			`What it shows: ${inert(finding.proof)}`,
-			`What it wants: ${inert(finding.wants)}`,
-		];
-	}),
-	...((carry.decided?.said ?? []).length === 0
-		? []
-		: ["", "You also wrote:", listed((carry.decided?.said ?? []).map(inert))]),
+export const againstWords = (carry: Pick<Carry, "decided">, against: readonly Finding[]): readonly string[] => [
+  "The review says a decision you made on the plan is wrong.",
+  ...against.flatMap((finding) => {
+    const { from } = finding;
+    const question = from.source === "decision" ? carry.decided?.questions.find((q) => q.id === from.id) : undefined;
+    return [
+      "",
+      ...(question === undefined ? [] : [`You decided: ${inert(question.ask)} ${inert(question.lean)}`]),
+      `The review says: ${inert(finding.fault)}`,
+      `What it shows: ${inert(finding.proof)}`,
+      `What it wants: ${inert(finding.wants)}`,
+    ];
+  }),
+  ...((carry.decided?.said ?? []).length === 0
+    ? []
+    : ["", "You also wrote:", listed((carry.decided?.said ?? []).map(inert))]),
 ];
 
 /** Each task's job, and the plan's own: the whole thing a user does, with its real values. */
 export const jobsList = (plan: Carry["plan"]): string =>
-	listed(
-		[
-			...(plan?.tasks ?? []).map((task) => ({title: task.title, job: task.job})),
-			...(plan?.goal === undefined ? [] : [{title: "The whole plan", job: plan.goal.job}]),
-		].map(({title, job}) => `${title}: ${textOf(job)} (Fixture: ${job.fixture})`),
-	);
+  listed(
+    [
+      ...(plan?.tasks ?? []).map((task) => ({ title: task.title, job: task.job })),
+      ...(plan?.goal === undefined ? [] : [{ title: "The whole plan", job: plan.goal.job }]),
+    ].map(({ title, job }) => `${title}: ${textOf(job)} (Fixture: ${job.fixture})`),
+  );

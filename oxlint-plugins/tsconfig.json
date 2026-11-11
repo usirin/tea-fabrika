@@ -1,5 +1,5 @@
 {
-	"extends": "../tsconfig.base.json",
-	"compilerOptions": { "allowJs": true, "checkJs": true },
-	"include": ["*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "include": ["*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
 }

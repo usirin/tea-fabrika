@@ -7,6 +7,8 @@ by invite and approval ([a key per client](./a-key-per-client-and-no-github-trus
 the owner 2026-11-05; this said GitHub as a keys source came in Tier 3). Tier 1 has one person: a new client comes in by the menu bar's
 Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
 
+*Renamed 2026-11-10 for `next/`: the door is the gateway, and one client's object is a connection ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).*
+
 **Decided 2026-10-25: two people share one fabrika.** They work the same
 tickets, and their agents talk to each other across the two machines. This is
 a core goal now, not a later team feature. Cost is not a blocker: a Workers

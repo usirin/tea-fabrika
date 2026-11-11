@@ -38,6 +38,23 @@ the rest.
      operation orders, refusals and failures. Inspect every named output, including encoded URL
      forms. Plant a leak into each output and see the property fail. A scenario may supplement
      the property, never replace it. Send a missing marker or flow law back to plan unsigned.
+   - **Test through public entry points only:** an exported name another package or a client can
+     call, a machine's real `init` and reducer, a protocol message, a command. If a law has to
+     reach past them, either the behavior is not worth a law or the entry point is missing. Say
+     which in your report and send it back to plan.
+   - **Assert the behavior, never the wording or the number behind it.** No law checks prompt
+     wording, log or status text, a version number or a tuning default: these change on purpose,
+     and a law that breaks when they do is noise. Check what they cause, such as "a refused send
+     is not retried", not "the message says refused". The one exception is a `format:` law, for
+     text the code must write or read exactly.
+   - **A bug fix gets a `pinned:` case only when the bug shows at a public entry point.**
+   - **Extend an existing law before adding one.** A pinned case goes into the `examples` of the
+     property that covers its class, and a new case of a rule goes into that rule's generator.
+     Write a new law only when no law covers the class.
+
+   These four come from how
+   [tim-smart/asphodel briefs its agents](https://github.com/tim-smart/asphodel/blob/main/AGENTS.md)
+   ("Writing tests").
 3. **See each new law fail for the right reason:** the product does not do it yet. A typo, a
    missing import or a type error in the test is your bug, not a red. Every older law stays green.
 4. **Fix test-side type errors** the build's product edits cause (a `// @ts-expect-error <why>` on a
@@ -47,11 +64,25 @@ the rest.
 6. **Report** each new law with `file:line` and how you saw it fail, anything
    in the plan you found wrong, and any red that is a sandbox limit.
 
+## Outside your task
+
+Something wrong that your task does not cover is one finding row with proof, then keep going:
+never a fix, a ticket or only a mention, and never a security hole.
+[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
+counts as proof.
+
+Outside means no law in the approved plan covers it. Something wrong in the plan is not a
+finding: it goes back to plan (step 6).
+Put the row in your report as one JSON line. The lead adds it to `field/findings.jsonl` unchanged.
+
 ## Go easy on the machine
 
 The test config and typecheck.sh hold worker, home and typecheck limits.
 
 - Run `pnpm lint` once. Step-commit checks staged formatting.
+- A law never reads the person's home folder or app data, not even to guard against it. A law that
+  breaks on one machine is fixed by removing what it leaned on, never by catching the error
+  ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
   that hits, and do not count it as red or green.
 

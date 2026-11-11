@@ -1,0 +1,684 @@
+{
+	"entries": [
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { execFileSync } from \"node:child_process\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { createSign } from \"node:crypto\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { fileURLToPath } from \"node:url\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-promises)",
+			"code": "const api = async (path, init = {}, auth = `Bearer ${jwt}`) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-promises)",
+			"code": "const r = await fetch(`https://api.github.com${path}`, {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-promises)",
+			"code": "const inst = await api(`/repos/${REPO}/installation`);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.mjs",
+			"rule": "fabrika(no-promises)",
+			"code": "const tok = await api(`/app/installations/${inst.id}/access_tokens`, {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/botpush.test.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const tipOf = () =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-effect-run-outside-edge)",
+			"code": "Effect.runPromise("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "_tag: \"RetriesExhausted\" as const,"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { join } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { spawn } from \"node:child_process\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "} from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { join } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const lineOf = (out: string, exit: number): Line | null => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const judgedOf = (text: string): Judged => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const sectionsOf = (text: string): { head: string; sections: Record<string, string> } => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const exitOf = (e: End): number => (e.kind === \"done\" ? 0 : e.kind === \"ask\" ? 20 : 30);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const headsOf = () => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/chain.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "Effect.runPromise("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "const note = JSON.parse(r.out) as { _tag?: string; step?: string; ticket?: string };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { join } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "} from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { homedir } from \"node:os\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { join } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const exitOf = (o: End): number => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const rowOf = (outcome: string): string =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const greenOf = (report: string) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const reportOf = (path: string, started: number, mtime: number | null): string | null =>"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const startedOf = (code: number, err: string): typeof Started.Type => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const holderOf = (porcelain: string, branch: string): string | null => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "| { readonly _tag: \"keep\"; readonly reason: string }"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "| { readonly _tag: \"remove\"; readonly reason: \"merged\" | \"on_remote\" }"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "| { readonly _tag: \"backup\"; readonly to: readonly string[] };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"not a git checkout\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `a process is working in it (pid ${s.busy.join(\", \")})` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `touched ${Math.round(s.idle / 60_000)} min ago` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"no HEAD commit\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"its files could not be read\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `${s.dirty} uncommitted files` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"remove\", reason: \"merged\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"remove\", reason: \"on_remote\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"backup\", to: backupsOf(s.name, s.git.branch) };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"locked\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `a process is working in it (pid ${w.busy.join(\", \")})` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `touched ${Math.round(w.idle / 60_000)} min ago` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"no branch checked out\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"its files could not be read\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: `${w.dirty} uncommitted files` };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"its pull request is open\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"remove\", reason: \"merged\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"remove\", reason: \"closed\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-hand-tag)",
+			"code": "return { _tag: \"keep\", reason: \"no pull request yet\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { existsSync, readdirSync, readFileSync, rmSync, statSync } from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { isAbsolute, join, resolve } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { spawnSync } from \"node:child_process\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { spawnSync } from \"node:child_process\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { existsSync, readdirSync, readFileSync, rmSync, statSync } from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { isAbsolute, join, resolve } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const backupsOf = (name: string, branch: string | null): string[] => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const gitDirOf = (box: string): string | null => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/gc.ts",
+			"rule": "fabrika(no-of)",
+			"code": "const prsOf = new Map<string, PrState[]>();"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/lane.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { dirname, matchesGlob } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/lane.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { dirname, matchesGlob } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/lane.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, \"\")}-wip`;"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/lane.ts",
+			"rule": "fabrika(no-of)",
+			"code": "export const stepOf = (note: string): string[] => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { readFileSync, writeFileSync } from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-filesystem)",
+			"code": "import { resolve } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { execFileSync } from \"node:child_process\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { readFileSync, writeFileSync } from \"node:fs\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { createRequire } from \"node:module\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { resolve } from \"node:path\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { pathToFileURL } from \"node:url\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-node-imports)",
+			"code": "import { parseArgs } from \"node:util\";"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const { Instrumenter } = await import(pathToFileURL(require.resolve(\"@stryker-mutator/instrumenter\")).href);"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const { Instrumenter } = await import(pathToFileURL(require.resolve(\"@stryker-mutator/instrumenter\")).href);"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/sample.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const result = await new Instrumenter(logger).instrument(files, {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<{ code: number | null; signal: NodeJS.Signals | null; text: string }>((resolve, reject) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"K1 overlapping fetches preserve both branches' independently verified links\", async () => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.boolean(), async (reverse) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<{ code: number | null; text: string }>((resolve, reject) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!)))) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!)))) {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"K3 SIGTERM releases the slot and records the interrupted run without usage\", async () => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.boolean(), async (usage) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const got = await signalRun(b);"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "async (runner) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(word, async (value) => {"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const got = await signalRun(b, runner);"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 stops a worker the child leaves behind when it exits on its own\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.integer({ min: 0, max: 5 }), async (exit) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 signals remove the temporary config and stop the whole child group\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await fc.assert("
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "fc.asyncProperty(fc.constantFrom(\"SIGTERM\", \"SIGINT\"), async (signal) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const done = new Promise<number | null>((resolve) => child.once(\"exit\", resolve));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const code = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const code = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<string>((r) => setTimeout(() => r(\"still running\"), 3_000)),"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((r) => setTimeout(r, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await done;"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "it(\"T300 package imports reach a discovered test and a real tested mutant\", async () => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "const done = new Promise<number | null>((resolve, reject) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "status = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "status = await Promise.race(["
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "new Promise<\"deadline\">((resolve) => {"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 100));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 100));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await done;"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 10));"
+		},
+		{
+			"file": ".agents/skills/mutation/scripts/run.test.ts",
+			"rule": "fabrika(no-promises)",
+			"code": "await new Promise((resolve) => setTimeout(resolve, 10));"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "exam.push({ glob: \"src/a.ts\", why: \"this fixture's signed tests change\" });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: \"recorded fixture result\","
+		},
+		{
+			"file": ".agents/skills/lead/scripts/box.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: \"drive.ts mutation fixture row\","
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.test.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "expect(s.outcome).toEqual({ kind: \"skip\", why: \"step_said\" });"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: { kind: \"stuck\", why },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: { kind: \"send\", to: \"tests\", why: \"exam_paths\" },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: { kind: \"send\", to: \"plan\", why: \"plancheck\" },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "return { outcome: { kind: \"send\", to, why: \"step_said\" }, reason: said.reason };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "return { outcome: { kind: \"skip\", why: \"step_said\" }, reason: said.reason };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "const outcome: Outcome = { kind: \"stuck\", why: \"record_failed\" };"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "outcome: { kind: \"stuck\", why: \"record_failed\" },"
+		},
+		{
+			"file": ".agents/skills/lead/scripts/drive.ts",
+			"rule": "fabrika(no-why-key)",
+			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
+		}
+	]
+}

@@ -1,5 +1,5 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
-import {Effect, Path, Predicate} from "effect";
+import { Effect, Path, Predicate } from "effect";
 
 // Where the host's socket is, and whether a host answers on it. Shared by the host (host/run.ts),
 // which cleans up a socket left by a crash before it listens, and the app (attach.ts), which
@@ -20,57 +20,64 @@ import {Effect, Path, Predicate} from "effect";
 
 /** The host's files in a home. */
 export interface HostPaths {
-	readonly dir: string;
-	readonly sock: string;
-	/** The agents' socket: MCP, after a handshake that names the agent. */
-	readonly mcp: string;
-	readonly pid: string;
-	readonly lock: string;
-	readonly log: string;
+  readonly dir: string;
+  readonly sock: string;
+  /** The agents' socket: MCP, after a handshake that names the agent. */
+  readonly mcp: string;
+  readonly pid: string;
+  readonly lock: string;
+  readonly log: string;
 }
 
 /** The longest socket path macOS takes, in bytes (`sun_path`, less its closing zero). */
 export const MAX_SOCKET_PATH = 103;
 
 export const pathsOf = (home: string) =>
-	Effect.gen(function* () {
-		const path = yield* Path.Path;
-		const dir = path.join(home, "host");
-		const paths: HostPaths = {
-			dir,
-			sock: path.join(dir, "sock"),
-			mcp: path.join(dir, "mcp"),
-			pid: path.join(dir, "pid"),
-			lock: path.join(dir, "lock"),
-			log: path.join(dir, "log"),
-		};
-		if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH)
-			return yield* Effect.die(
-				`the host's socket path is longer than ${MAX_SOCKET_PATH} bytes: use a shorter home`,
-			);
-		return paths;
-	});
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const dir = path.join(home, "host");
+    const paths: HostPaths = {
+      dir,
+      sock: path.join(dir, "sock"),
+      mcp: path.join(dir, "mcp"),
+      pid: path.join(dir, "pid"),
+      lock: path.join(dir, "lock"),
+      log: path.join(dir, "log"),
+    };
+
+    if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH) {
+      return yield* Effect.die(`the host's socket path is longer than ${MAX_SOCKET_PATH} bytes: use a shorter home`);
+    }
+
+    return paths;
+  });
 
 /** What answers on a socket path: a host, nothing at all, or a file left by a host that is gone. */
 export type Reached = "live" | "absent" | "stale";
 
-const codeOf = (cause: unknown): unknown =>
-	Predicate.hasProperty(cause, "code") ? cause.code : undefined;
+const codeOf = (cause: unknown): unknown => (Predicate.hasProperty(cause, "code") ? cause.code : undefined);
 
 /** Does a host answer on `sock`? It opens a connection and closes it at once. */
 export const reach = (sock: string): Effect.Effect<Reached> =>
-	Effect.gen(function* () {
-		const socket = yield* NodeSocket.makeNet({path: sock, openTimeout: "2 seconds"});
-		return yield* Effect.scoped(socket.reader).pipe(
-			Effect.as<Reached>("live"),
-			Effect.catch((e) => {
-				const cause = e.reason._tag === "SocketOpenError" ? e.reason.cause : undefined;
-				const code = codeOf(cause);
-				if (code === "ENOENT") return Effect.succeed<Reached>("absent");
-				// A socket file no one listens on: its host crashed, or was killed. Or a file that is no
-				// socket at all, in a folder only the user can write.
-				if (code === "ECONNREFUSED" || code === "ENOTSOCK") return Effect.succeed<Reached>("stale");
-				return Effect.die(e);
-			}),
-		);
-	});
+  Effect.gen(function* () {
+    const socket = yield* NodeSocket.makeNet({ path: sock, openTimeout: "2 seconds" });
+    return yield* Effect.scoped(socket.reader).pipe(
+      Effect.as<Reached>("live"),
+      Effect.catch((e) => {
+        const cause = e.reason._tag === "SocketOpenError" ? e.reason.cause : undefined;
+        const code = codeOf(cause);
+
+        if (code === "ENOENT") {
+          return Effect.succeed<Reached>("absent");
+        }
+
+        // A socket file no one listens on: its host crashed, or was killed. Or a file that is no
+        // socket at all, in a folder only the user can write.
+        if (code === "ECONNREFUSED" || code === "ENOTSOCK") {
+          return Effect.succeed<Reached>("stale");
+        }
+
+        return Effect.die(e);
+      }),
+    );
+  });

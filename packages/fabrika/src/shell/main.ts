@@ -1,25 +1,25 @@
-import {mkdirSync, readFileSync, rmSync, writeFile, writeFileSync} from "node:fs";
-import {homedir} from "node:os";
-import {join} from "node:path";
+import { mkdirSync, readFileSync, rmSync, writeFile, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import * as readline from "node:readline";
-import {PassThrough} from "node:stream";
-import {type Cause, Effect, Fiber, Queue, Ref, Stream} from "effect";
-import {HostJobs, openJobs} from "../host/host-jobs.ts";
-import {EMPTY} from "../host/jobs.ts";
-import {start} from "../program/program.ts";
-import {fileStorage} from "../program/storage-node.ts";
-import {memoryStorage} from "../program/storage.ts";
-import {complete} from "./complete.ts";
-import {runIdOf} from "./execute.ts";
-import {homeOf, linesOf, type Source, showOf, sourceOf, USAGE} from "./launch.ts";
-import {type ProgramList, Programs} from "./programs.ts";
-import {begin, keyOf, keysIn, type Search, shown, step} from "./search.ts";
-import {type Printed, type Ready, tsh} from "./shell.ts";
-import type {Show} from "./short.ts";
-import {ANSI, paint, plain, type Table, tableLines} from "./table.ts";
-import {type Short, Shorten} from "./title.ts";
-import {endpointOf, tracing} from "./trace/otel.ts";
-import type {Viewing} from "./trace/view.ts";
+import { PassThrough } from "node:stream";
+import { type Cause, Effect, Fiber, Queue, Ref, Stream } from "effect";
+import { HostJobs, openJobs } from "../host/host-jobs.ts";
+import { EMPTY } from "../host/jobs.ts";
+import { start } from "../program/program.ts";
+import { fileStorage } from "../program/storage-node.ts";
+import { memoryStorage } from "../program/storage.ts";
+import { complete } from "./complete.ts";
+import { runIdOf } from "./execute.ts";
+import { homeOf, linesOf, type Source, showOf, sourceOf, USAGE } from "./launch.ts";
+import { type ProgramList, Programs } from "./programs.ts";
+import { begin, keyOf, keysIn, type Search, shown, step } from "./search.ts";
+import { type Printed, type Ready, tsh } from "./shell.ts";
+import type { Show } from "./short.ts";
+import { ANSI, paint, plain, type Table, tableLines } from "./table.ts";
+import { type Short, Shorten } from "./title.ts";
+import { endpointOf, tracing } from "./trace/otel.ts";
+import type { Viewing } from "./trace/view.ts";
 
 // The launcher: tsh on a terminal, or on a script. tsh itself (./shell.ts)
 // is lines in, lines out, with no terminal in it; this file is the terminal.
@@ -46,9 +46,9 @@ import type {Viewing} from "./trace/view.ts";
 
 /** What tsh said, in its order. */
 type Said =
-	| {readonly kind: "printed"; readonly printed: Printed}
-	| {readonly kind: "table"; readonly table: Table}
-	| {readonly kind: "ready"; readonly ready: Ready};
+  | { readonly kind: "printed"; readonly printed: Printed }
+  | { readonly kind: "table"; readonly table: Table }
+  | { readonly kind: "ready"; readonly ready: Ready };
 
 /** The width a table is laid out at when stdout is no terminal: tsh's short form's. */
 const NO_TERMINAL_WIDTH = 100;
@@ -58,12 +58,12 @@ const NO_TERMINAL_WIDTH = 100;
  * color, unless `NO_COLOR` is set (no-color.org); anywhere else, at 100 columns and plain.
  */
 const tableText = (table: Table): string => {
-	const terminal = process.stdout.isTTY === true;
-	const lines = tableLines(table, terminal ? process.stdout.columns : NO_TERMINAL_WIDTH);
-	return terminal && process.env.NO_COLOR === undefined ? paint(lines, ANSI) : plain(lines);
+  const terminal = process.stdout.isTTY === true;
+  const lines = tableLines(table, terminal ? process.stdout.columns : NO_TERMINAL_WIDTH);
+  return terminal && process.env.NO_COLOR === undefined ? paint(lines, ANSI) : plain(lines);
 };
 
-type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly kind: "running"}>;
+type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, { readonly kind: "running" }>;
 
 /**
  * Ctrl-C, told at Node's edge, never waiting. `signal` is a control input, so
@@ -71,342 +71,391 @@ type Started = Extract<Effect.Success<ReturnType<typeof startTsh>>, {readonly ki
  * holds interrupts tsh has not handled, so this one is let go.
  */
 const interruptOf = (started: Started) => () =>
-	Effect.runSync(
-		started.run.tell("signal", "interrupt").pipe(
-			Effect.asVoid,
-			Effect.catchTag("MailboxFull", () => Effect.void),
-		),
-	);
+  Effect.runSync(
+    started.run.tell("signal", "interrupt").pipe(
+      Effect.asVoid,
+      Effect.catchTag("MailboxFull", () => Effect.void),
+    ),
+  );
 
-const startTsh = (
-	list: ProgramList,
-	home: string,
-	show: Show,
-	said: Queue.Queue<Said, Cause.Done>,
-) =>
-	Effect.gen(function* () {
-		// On a terminal the launcher is tsh's host: it keeps the jobs, in the home, and tsh shows them.
-		const jobs = yield* openJobs(fileStorage(join(home, "storage")));
-		// A fresh run each time: what outlives one tsh is the host's job table and its jobs, in the
-		// job storage. tsh's own run is never started again, so it keeps its record in memory, and
-		// the folder does not fill with one record per session.
-		const id = yield* runIdOf("tsh");
-		return yield* start(
-			tsh,
-			{show},
-			{
-				printed: (printed) => Queue.offerUnsafe(said, {kind: "printed", printed}),
-				table: ({table}) => Queue.offerUnsafe(said, {kind: "table", table}),
-				ready: (ready) => Queue.offerUnsafe(said, {kind: "ready", ready}),
-			},
-			{id, storage: memoryStorage()},
-		).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
-	});
+const startTsh = (list: ProgramList, home: string, show: Show, said: Queue.Queue<Said, Cause.Done>) =>
+  Effect.gen(function* () {
+    // On a terminal the launcher is tsh's host: it keeps the jobs, in the home, and tsh shows them.
+    const jobs = yield* openJobs(fileStorage(join(home, "storage")));
+    // A fresh run each time: what outlives one tsh is the host's job table and its jobs, in the
+    // job storage. tsh's own run is never started again, so it keeps its record in memory, and
+    // the folder does not fill with one record per session.
+    const id = yield* runIdOf("tsh");
+    return yield* start(
+      tsh,
+      { show },
+      {
+        printed: (printed) => Queue.offerUnsafe(said, { kind: "printed", printed }),
+        table: ({ table }) => Queue.offerUnsafe(said, { kind: "table", table }),
+        ready: (ready) => Queue.offerUnsafe(said, { kind: "ready", ready }),
+      },
+      { id, storage: memoryStorage() },
+    ).pipe(Effect.provideService(Programs, list), Effect.provideService(HostJobs, jobs));
+  });
 
 /** One tsh per home: two would each run the jobs of one table. */
 const takeLock = (home: string) =>
-	Effect.gen(function* () {
-		const file = join(home, "lock");
-		const claim = Effect.try({
-			try: () => writeFileSync(file, String(process.pid), {flag: "wx"}),
-			catch: () => "taken" as const,
-		});
-		const free = yield* claim.pipe(
-			Effect.as(true),
-			Effect.orElseSucceed(() => false),
-		);
-		if (free) return {kind: "mine" as const, file};
-		const holder = Number(
-			yield* Effect.try(() => readFileSync(file, "utf8")).pipe(Effect.orElseSucceed(() => "")),
-		);
-		// `kill(pid, 0)` sends nothing: it only asks whether that process is there.
-		const alive =
-			Number.isInteger(holder) &&
-			holder > 0 &&
-			(yield* Effect.try(() => process.kill(holder, 0)).pipe(
-				Effect.as(true),
-				Effect.orElseSucceed(() => false),
-			));
-		if (alive) return {kind: "held" as const, holder};
-		// Its holder is gone (killed, crashed): the lock is stale. Take it once; a race lost is held.
-		yield* Effect.try(() => rmSync(file, {force: true})).pipe(Effect.ignore);
-		const now = yield* claim.pipe(
-			Effect.as(true),
-			Effect.orElseSucceed(() => false),
-		);
-		return now ? {kind: "mine" as const, file} : {kind: "held" as const, holder};
-	});
+  Effect.gen(function* () {
+    const file = join(home, "lock");
+    const claim = Effect.try({
+      try: () => writeFileSync(file, String(process.pid), { flag: "wx" }),
+      catch: () => "taken" as const,
+    });
+    const free = yield* claim.pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
 
-const write = (to: "out" | "err", text: string) =>
-	(to === "out" ? process.stdout : process.stderr).write(`${text}\n`);
+    if (free) {
+      return { kind: "mine" as const, file };
+    }
+
+    const holder = Number(yield* Effect.try(() => readFileSync(file, "utf8")).pipe(Effect.orElseSucceed(() => "")));
+    // `kill(pid, 0)` sends nothing: it only asks whether that process is there.
+    const alive =
+      Number.isInteger(holder) &&
+      holder > 0 &&
+      (yield* Effect.try(() => process.kill(holder, 0)).pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      ));
+
+    if (alive) {
+      return { kind: "held" as const, holder };
+    }
+
+    // Its holder is gone (killed, crashed): the lock is stale. Take it once; a race lost is held.
+    yield* Effect.try(() => rmSync(file, { force: true })).pipe(Effect.ignore);
+    const now = yield* claim.pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+    return now ? { kind: "mine" as const, file } : { kind: "held" as const, holder };
+  });
+
+const write = (to: "out" | "err", text: string) => (to === "out" ? process.stdout : process.stderr).write(`${text}\n`);
 
 /** What tsh said that shows: a line on out or err, or a table on out. */
-const shownOf = (s: Exclude<Said, {readonly kind: "ready"}>) =>
-	s.kind === "printed" ? s.printed : {to: "out" as const, text: tableText(s.table)};
+const shownOf = (s: Exclude<Said, { readonly kind: "ready" }>) =>
+  s.kind === "printed" ? s.printed : { to: "out" as const, text: tableText(s.table) };
 
 /** Lines from a text or a file, or from stdin as they come; each told in order, then `line` closed. */
 const batch = (started: Started, said: Queue.Queue<Said, Cause.Done>, source: Source) =>
-	Effect.gen(function* () {
-		const last = yield* Ref.make(0);
-		const drawer = yield* Stream.fromQueue(said).pipe(
-			Stream.runForEach((s) => {
-				if (s.kind === "ready") return Ref.set(last, s.ready.status);
-				const shown = shownOf(s);
-				return Effect.sync(() => write(shown.to, shown.text));
-			}),
-			Effect.forkScoped,
-		);
-		const interrupt = interruptOf(started);
-		process.on("SIGINT", interrupt);
-		if (source.kind === "stdin") {
-			// Node at the edge: readline. A line the shell's mailbox cannot hold yet (its tell fails
-			// `MailboxFull`) is offered, and stdin waits paused until every offered line is in, so a long
-			// piped script is neither dropped nor held whole in memory. Lines keep their order: once
-			// one waits, the rest wait behind it, and the close comes after the last.
-			const rl = readline.createInterface({input: process.stdin, terminal: false});
-			let waiting = 0;
-			let over = false;
-			const closeAtEnd = () => {
-				if (over && waiting === 0) started.close("line");
-			};
-			const told = (line: string) =>
-				Effect.runSync(
-					started.run.tell("line", line).pipe(
-						Effect.as(true),
-						Effect.catchTag("MailboxFull", () => Effect.succeed(false)),
-					),
-				);
-			rl.on("line", (line) => {
-				if (waiting === 0 && told(line)) return;
-				waiting++;
-				rl.pause();
-				Effect.runFork(
-					started.run.offer("line", line).pipe(
-						Effect.ensuring(
-							Effect.sync(() => {
-								waiting--;
-								if (waiting > 0) return;
-								rl.resume();
-								closeAtEnd();
-							}),
-						),
-					),
-				);
-			});
-			rl.on("close", () => {
-				over = true;
-				closeAtEnd();
-			});
-			yield* started.run.ended;
-			rl.close();
-		} else {
-			const text =
-				source.kind === "text"
-					? source.text
-					: yield* Effect.try(() =>
-							source.kind === "file" ? readFileSync(source.path, "utf8") : "",
-						).pipe(Effect.option);
-			if (typeof text !== "string" && text._tag === "None") {
-				process.off("SIGINT", interrupt);
-				write("err", `tsh: cannot read ${source.kind === "file" ? source.path : "the script"}`);
-				return 127;
-			}
-			const lines = linesOf(typeof text === "string" ? text : text.value);
-			// Offered: a script longer than the input holds waits for the shell to read it.
-			for (const line of lines) yield* started.run.offer("line", line);
-			started.close("line");
-			yield* started.run.ended;
-		}
-		process.off("SIGINT", interrupt);
-		Queue.endUnsafe(said);
-		yield* Fiber.join(drawer);
-		return yield* Ref.get(last);
-	});
+  Effect.gen(function* () {
+    const last = yield* Ref.make(0);
+    const drawer = yield* Stream.fromQueue(said).pipe(
+      Stream.runForEach((s) => {
+        if (s.kind === "ready") {
+          return Ref.set(last, s.ready.status);
+        }
+
+        const shown = shownOf(s);
+        return Effect.sync(() => write(shown.to, shown.text));
+      }),
+      Effect.forkScoped,
+    );
+    const interrupt = interruptOf(started);
+    process.on("SIGINT", interrupt);
+
+    if (source.kind === "stdin") {
+      // Node at the edge: readline. A line the shell's mailbox cannot hold yet (its tell fails
+      // `MailboxFull`) is offered, and stdin waits paused until every offered line is in, so a long
+      // piped script is neither dropped nor held whole in memory. Lines keep their order: once
+      // one waits, the rest wait behind it, and the close comes after the last.
+      const rl = readline.createInterface({ input: process.stdin, terminal: false });
+      let waiting = 0;
+      let over = false;
+      const closeAtEnd = () => {
+        if (over && waiting === 0) {
+          started.close("line");
+        }
+      };
+      const told = (line: string) =>
+        Effect.runSync(
+          started.run.tell("line", line).pipe(
+            Effect.as(true),
+            Effect.catchTag("MailboxFull", () => Effect.succeed(false)),
+          ),
+        );
+      rl.on("line", (line) => {
+        if (waiting === 0 && told(line)) {
+          return;
+        }
+
+        waiting++;
+        rl.pause();
+        Effect.runFork(
+          started.run.offer("line", line).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                waiting--;
+
+                if (waiting > 0) {
+                  return;
+                }
+
+                rl.resume();
+                closeAtEnd();
+              }),
+            ),
+          ),
+        );
+      });
+      rl.on("close", () => {
+        over = true;
+        closeAtEnd();
+      });
+      yield* started.run.ended;
+      rl.close();
+    } else {
+      const text =
+        source.kind === "text"
+          ? source.text
+          : yield* Effect.try(() => (source.kind === "file" ? readFileSync(source.path, "utf8") : "")).pipe(
+              Effect.option,
+            );
+
+      if (typeof text !== "string" && text._tag === "None") {
+        process.off("SIGINT", interrupt);
+        write("err", `tsh: cannot read ${source.kind === "file" ? source.path : "the script"}`);
+        return 127;
+      }
+
+      const lines = linesOf(typeof text === "string" ? text : text.value);
+
+      // Offered: a script longer than the input holds waits for the shell to read it.
+      for (const line of lines) {
+        yield* started.run.offer("line", line);
+      }
+
+      started.close("line");
+      yield* started.run.ended;
+    }
+
+    process.off("SIGINT", interrupt);
+    Queue.endUnsafe(said);
+    yield* Fiber.join(drawer);
+    return yield* Ref.get(last);
+  });
 
 /** A terminal session: readline, history, completion, Ctrl-R, Ctrl-C, Ctrl-D. */
-const terminal = (
-	started: Started,
-	said: Queue.Queue<Said, Cause.Done>,
-	list: ProgramList,
-	home: string,
-) =>
-	Effect.gen(function* () {
-		const historyFile = join(home, "history");
-		const kept = yield* Effect.try(() => readFileSync(historyFile, "utf8")).pipe(
-			Effect.orElseSucceed(() => ""),
-		);
-		// readline holds its history newest first; the file keeps it oldest first, like bash's.
-		let history: readonly string[] = linesOf(kept).toReversed();
-		const keys = new PassThrough();
-		const rl = readline.createInterface({
-			input: keys,
-			output: process.stdout,
-			terminal: true,
-			history: [...history],
-			historySize: 1000,
-			removeHistoryDuplicates: true,
-			prompt: "tsh$ ",
-			completer: (line: string) => {
-				const done = complete(line, list, started.run.machines.jobs.state() ?? EMPTY);
-				return [[...done.candidates], done.word];
-			},
-		});
-		rl.on("history", (now: string[]) => {
-			history = [...now];
-			writeFile(historyFile, `${[...now].reverse().join("\n")}\n`, () => {});
-		});
+const terminal = (started: Started, said: Queue.Queue<Said, Cause.Done>, list: ProgramList, home: string) =>
+  Effect.gen(function* () {
+    const historyFile = join(home, "history");
+    const kept = yield* Effect.try(() => readFileSync(historyFile, "utf8")).pipe(Effect.orElseSucceed(() => ""));
+    // readline holds its history newest first; the file keeps it oldest first, like bash's.
+    let history: readonly string[] = linesOf(kept).toReversed();
+    const keys = new PassThrough();
+    const rl = readline.createInterface({
+      input: keys,
+      output: process.stdout,
+      terminal: true,
+      history: [...history],
+      historySize: 1000,
+      removeHistoryDuplicates: true,
+      prompt: "tsh$ ",
+      completer: (line: string) => {
+        const done = complete(line, list, started.run.machines.jobs.state() ?? EMPTY);
+        return [[...done.candidates], done.word];
+      },
+    });
+    rl.on("history", (now: string[]) => {
+      history = [...now];
+      writeFile(historyFile, `${[...now].reverse().join("\n")}\n`, () => {});
+    });
 
-		// Lines told and not yet `ready`: the prompt is up only when none is.
-		let waiting = 0;
-		let search: Search | null = null;
-		const clearRow = () => {
-			readline.clearLine(process.stdout, 0);
-			readline.cursorTo(process.stdout, 0);
-		};
-		const drawSearch = (now: Search) => {
-			clearRow();
-			process.stdout.write(shown(history, now));
-		};
+    // Lines told and not yet `ready`: the prompt is up only when none is.
+    let waiting = 0;
+    let search: Search | null = null;
+    const clearRow = () => {
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+    };
+    const drawSearch = (now: Search) => {
+      clearRow();
+      process.stdout.write(shown(history, now));
+    };
 
-		/** One key while a search is up. */
-		const searchKey = (now: Search, key: string) => {
-			const stepped = step(history, now, keyOf(key));
-			if (stepped.kind === "searching") {
-				search = stepped.search;
-				drawSearch(stepped.search);
-				return;
-			}
-			search = null;
-			clearRow();
-			rl.prompt(true);
-			// Ctrl-E Ctrl-U: to the end of the line, then clear it; then the line found, typed.
-			if (stepped.line !== null) keys.write(`\x05\x15${stepped.line}`);
-			if (stepped.run) keys.write("\r");
-			if (stepped.replay !== null) keys.write(stepped.replay);
-		};
-		const onKeys = (chunk: Buffer) => {
-			let raw = chunk.toString("utf8");
-			while (raw !== "") {
-				if (search === null) {
-					// Up to a Ctrl-R, the chunk goes to readline as it came: a pasted Tab stays a Tab.
-					const at = waiting === 0 ? raw.indexOf("\x12") : -1;
-					if (at === -1) {
-						keys.write(raw);
-						return;
-					}
-					if (at > 0) keys.write(raw.slice(0, at));
-					search = begin;
-					drawSearch(search);
-					raw = raw.slice(at + 1);
-					continue;
-				}
-				const [key = ""] = keysIn(raw);
-				raw = raw.slice(key.length);
-				searchKey(search, key);
-			}
-		};
-		process.stdin.setRawMode(true);
-		process.stdin.on("data", onKeys);
-		process.stdin.resume();
+    /** One key while a search is up. */
+    const searchKey = (now: Search, key: string) => {
+      const stepped = step(history, now, keyOf(key));
 
-		const interrupt = interruptOf(started);
-		rl.on("line", (line) => {
-			waiting += 1;
-			// Offered, not told: a line a person typed is never dropped, even on a full input. Offers keep their order.
-			Effect.runFork(started.run.offer("line", line));
-		});
-		rl.on("SIGINT", () => {
-			if (waiting > 0) {
-				process.stdout.write("^C\n");
-				interrupt();
-				return;
-			}
-			// Nothing runs: leave what is typed on its row, and start a fresh, empty one, as a shell does.
-			process.stdout.write("^C\n");
-			rl.write(null, {ctrl: true, name: "e"});
-			rl.write(null, {ctrl: true, name: "u"});
-		});
-		// tsh has no stop-and-continue of itself: Ctrl-Z does nothing.
-		rl.on("SIGTSTP", () => {});
-		rl.on("close", () => started.close("line"));
+      if (stepped.kind === "searching") {
+        search = stepped.search;
+        drawSearch(stepped.search);
+        return;
+      }
 
-		const last = yield* Ref.make(0);
-		const drawer = yield* Stream.fromQueue(said).pipe(
-			Stream.runForEach((s) =>
-				Effect.gen(function* () {
-					if (s.kind === "ready") {
-						yield* Ref.set(last, s.ready.status);
-						waiting = Math.max(0, waiting - 1);
-						if (waiting === 0) rl.prompt();
-						return;
-					}
-					const shown = shownOf(s);
-					if (waiting > 0) {
-						write(shown.to, shown.text);
-						return;
-					}
-					// The prompt is up: draw the line above it, then the prompt and what is typed again.
-					clearRow();
-					write(shown.to, shown.text);
-					if (search === null) rl.prompt(true);
-					else drawSearch(search);
-				}),
-			),
-			Effect.forkScoped,
-		);
+      search = null;
+      clearRow();
+      rl.prompt(true);
 
-		rl.prompt();
-		yield* started.run.ended;
-		// Draw all tsh said before the terminal is let go: its last `ready` may still be on its way
-		// when its run ends, and readline draws nothing once closed.
-		Queue.endUnsafe(said);
-		yield* Fiber.join(drawer);
-		process.stdin.off("data", onKeys);
-		process.stdin.setRawMode(false);
-		process.stdin.pause();
-		rl.close();
-		return yield* Ref.get(last);
-	});
+      // Ctrl-E Ctrl-U: to the end of the line, then clear it; then the line found, typed.
+      if (stepped.line !== null) {
+        keys.write(`\x05\x15${stepped.line}`);
+      }
+
+      if (stepped.run) {
+        keys.write("\r");
+      }
+
+      if (stepped.replay !== null) {
+        keys.write(stepped.replay);
+      }
+    };
+    const onKeys = (chunk: Buffer) => {
+      let raw = chunk.toString("utf8");
+
+      while (raw !== "") {
+        if (search === null) {
+          // Up to a Ctrl-R, the chunk goes to readline as it came: a pasted Tab stays a Tab.
+          const at = waiting === 0 ? raw.indexOf("\x12") : -1;
+
+          if (at === -1) {
+            keys.write(raw);
+            return;
+          }
+
+          if (at > 0) {
+            keys.write(raw.slice(0, at));
+          }
+
+          search = begin;
+          drawSearch(search);
+          raw = raw.slice(at + 1);
+          continue;
+        }
+
+        const [key = ""] = keysIn(raw);
+        raw = raw.slice(key.length);
+        searchKey(search, key);
+      }
+    };
+    process.stdin.setRawMode(true);
+    process.stdin.on("data", onKeys);
+    process.stdin.resume();
+
+    const interrupt = interruptOf(started);
+    rl.on("line", (line) => {
+      waiting += 1;
+      // Offered, not told: a line a person typed is never dropped, even on a full input. Offers keep their order.
+      Effect.runFork(started.run.offer("line", line));
+    });
+    rl.on("SIGINT", () => {
+      if (waiting > 0) {
+        process.stdout.write("^C\n");
+        interrupt();
+        return;
+      }
+
+      // Nothing runs: leave what is typed on its row, and start a fresh, empty one, as a shell does.
+      process.stdout.write("^C\n");
+      rl.write(null, { ctrl: true, name: "e" });
+      rl.write(null, { ctrl: true, name: "u" });
+    });
+    // tsh has no stop-and-continue of itself: Ctrl-Z does nothing.
+    rl.on("SIGTSTP", () => {});
+    rl.on("close", () => started.close("line"));
+
+    const last = yield* Ref.make(0);
+    const drawer = yield* Stream.fromQueue(said).pipe(
+      Stream.runForEach((s) =>
+        Effect.gen(function* () {
+          if (s.kind === "ready") {
+            yield* Ref.set(last, s.ready.status);
+            waiting = Math.max(0, waiting - 1);
+
+            if (waiting === 0) {
+              rl.prompt();
+            }
+
+            return;
+          }
+
+          const shown = shownOf(s);
+
+          if (waiting > 0) {
+            write(shown.to, shown.text);
+            return;
+          }
+
+          // The prompt is up: draw the line above it, then the prompt and what is typed again.
+          clearRow();
+          write(shown.to, shown.text);
+
+          if (search === null) {
+            rl.prompt(true);
+          } else {
+            drawSearch(search);
+          }
+        }),
+      ),
+      Effect.forkScoped,
+    );
+
+    rl.prompt();
+    yield* started.run.ended;
+    // Draw all tsh said before the terminal is let go: its last `ready` may still be on its way
+    // when its run ends, and readline draws nothing once closed.
+    Queue.endUnsafe(said);
+    yield* Fiber.join(drawer);
+    process.stdin.off("data", onKeys);
+    process.stdin.setRawMode(false);
+    process.stdin.pause();
+    rl.close();
+    return yield* Ref.get(last);
+  });
 
 /**
  * What whoever starts tsh may hand it beside its programs: how its traces
  * read them. Both are optional; the programs are not, and come as a service.
  */
 export interface Options {
-	/** How its traces are shown (./trace/view.ts). */
-	readonly viewing?: Viewing;
-	/** How a value told on a line is shortened in a trace's title (./title.ts). */
-	readonly short?: Short;
+  /** How its traces are shown (./trace/view.ts). */
+  readonly viewing?: Viewing;
+  /** How a value told on a line is shortened in a trace's title (./title.ts). */
+  readonly short?: Short;
 }
 
 const main = (list: ProgramList) =>
-	Effect.gen(function* () {
-		const {show, rest} = showOf(process.argv.slice(2));
-		const source = sourceOf(rest, process.stdin.isTTY === true);
-		if (source.kind === "usage") {
-			write("err", `tsh: ${source.why}\n${USAGE}`);
-			return 2;
-		}
-		const home = homeOf(process.env, homedir());
-		yield* Effect.try(() => mkdirSync(home, {recursive: true})).pipe(Effect.orDie);
-		const lock = yield* takeLock(home);
-		if (lock.kind === "held") {
-			write(
-				"err",
-				`tsh: another tsh (process ${lock.holder}) is using ${home}. One tsh per home: its job table is one.`,
-			);
-			return 2;
-		}
-		yield* Effect.addFinalizer(() =>
-			Effect.try(() => rmSync(lock.file, {force: true})).pipe(Effect.ignore),
-		);
-		const said = yield* Queue.unbounded<Said, Cause.Done>();
-		const started = yield* startTsh(list, home, show, said);
-		if (started.kind !== "running") return 2;
-		return source.kind === "terminal"
-			? yield* terminal(started, said, list, home)
-			: yield* batch(started, said, source);
-	}).pipe(Effect.scoped);
+  Effect.gen(function* () {
+    const { show, rest } = showOf(process.argv.slice(2));
+    const source = sourceOf(rest, process.stdin.isTTY === true);
+
+    if (source.kind === "usage") {
+      write("err", `tsh: ${source.why}\n${USAGE}`);
+      return 2;
+    }
+
+    const home = homeOf(process.env, homedir());
+    yield* Effect.try(() => mkdirSync(home, { recursive: true })).pipe(Effect.orDie);
+    const lock = yield* takeLock(home);
+
+    if (lock.kind === "held") {
+      write(
+        "err",
+        `tsh: another tsh (process ${lock.holder}) is using ${home}. One tsh per home: its job table is one.`,
+      );
+      return 2;
+    }
+
+    yield* Effect.addFinalizer(() => Effect.try(() => rmSync(lock.file, { force: true })).pipe(Effect.ignore));
+    const said = yield* Queue.unbounded<Said, Cause.Done>();
+    const started = yield* startTsh(list, home, show, said);
+
+    if (started.kind !== "running") {
+      return 2;
+    }
+
+    return source.kind === "terminal"
+      ? yield* terminal(started, said, list, home)
+      : yield* batch(started, said, source);
+  }).pipe(Effect.scoped);
 
 /**
  * tsh on this process, from its command line and environment: its exit
@@ -419,13 +468,13 @@ const main = (list: ProgramList) =>
  *   );
  */
 export const runTsh = (options: Options = {}) =>
-	Effect.gen(function* () {
-		const list = yield* Programs;
-		const run = main(list).pipe(Effect.provideService(Shorten, options.short ?? (() => null)));
-		// Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
-		// or exporter is built and Effect's tracer is turned off, so every span is a no-op.
-		const endpoint = endpointOf(process.env);
-		return yield* endpoint === null
-			? run.pipe(Effect.withTracerEnabled(false))
-			: run.pipe(Effect.provide(tracing(endpoint, options.viewing)));
-	});
+  Effect.gen(function* () {
+    const list = yield* Programs;
+    const run = main(list).pipe(Effect.provideService(Shorten, options.short ?? (() => null)));
+    // Tracing, from `TSH_TRACE` (./launch.ts): each line one trace, out over OTLP. Off, no provider
+    // or exporter is built and Effect's tracer is turned off, so every span is a no-op.
+    const endpoint = endpointOf(process.env);
+    return yield* endpoint === null
+      ? run.pipe(Effect.withTracerEnabled(false))
+      : run.pipe(Effect.provide(tracing(endpoint, options.viewing)));
+  });

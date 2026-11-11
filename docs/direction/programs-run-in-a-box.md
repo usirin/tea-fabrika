@@ -44,8 +44,16 @@ test:
     container for each job), `Sandbox.os` (Anthropic's
     [sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime),
     for machines that cannot run Docker) or `Sandbox.none` (today's way).
+  - *Added 2026-11-09
+    ([0045](../../.decisions/0045-test-steps-run-in-containers.md)):* the lead tooling's steps get
+    the same kind of box first. A step that needs ports, sockets or its own processes runs in a
+    container with its own network, starting with the mutation step. The OS sandbox is never
+    opened to let a step listen.
   - fabrika's own part is a runner inside the box and the host's side of the
     line format. The program's code is the same in all three.
+  - Requirement (owner, 2026-11-09): the `Sandbox` service removes a job's box and its files when
+    the job's lane lands, saving its work first; no person cleans up or frees disk
+    ([0019](../../.decisions/0019-nothing-stale.md)).
   - A program already has a command line's shape
     ([tea-program](./tea-program.md)): flags are argv, inputs are stdin,
     outputs are events. They cross the wall as one JSON line each, checked by

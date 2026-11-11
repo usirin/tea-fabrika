@@ -1,8 +1,8 @@
-import type {JobTable} from "@kampus/fabrika-old";
-import {JobAnswer, KeptLines} from "@kampus/fabrika-old/mcp";
-import {Effect} from "effect";
-import type {TileId} from "./desk/layout/index.ts";
-import type {JobEnded, JobNews} from "./tile-jobs.ts";
+import type { JobTable } from "@kampus/fabrika-old";
+import { JobAnswer, KeptLines } from "@kampus/fabrika-old/mcp";
+import { Effect } from "effect";
+import type { TileId } from "./desk/layout/index.ts";
+import type { JobEnded, JobNews } from "./tile-jobs.ts";
 
 // What the host knows of each job beyond its table: the lines tsh printed for it, and, once it
 // has ended, how. The table (`openJobs`) says which jobs there are and whether each runs; it keeps
@@ -48,14 +48,14 @@ const JOBS_KEPT = 100;
 const State = JobAnswer.fields.state;
 
 export interface JobLines {
-	/** What one tile's tsh says of its jobs as each begins and ends (tile-jobs.ts). */
-	readonly news: (tile: TileId) => JobNews;
-	/** tsh printed `text` for job `n`. */
-	readonly printed: (n: number, text: string) => void;
-	/** Job n now, with every line kept of it; `null`: the host knows none. */
-	readonly job: (n: number) => JobAnswer | null;
-	/** Done with job n as `job` answers it once its tile has said it ended: at once, if it has. */
-	readonly ended: (n: number) => Effect.Effect<JobAnswer>;
+  /** What one tile's tsh says of its jobs as each begins and ends (tile-jobs.ts). */
+  readonly news: (tile: TileId) => JobNews;
+  /** tsh printed `text` for job `n`. */
+  readonly printed: (n: number, text: string) => void;
+  /** Job n now, with every line kept of it; `null`: the host knows none. */
+  readonly job: (n: number) => JobAnswer | null;
+  /** Done with job n as `job` answers it once its tile has said it ended: at once, if it has. */
+  readonly ended: (n: number) => Effect.Effect<JobAnswer>;
 }
 
 /**
@@ -64,128 +64,170 @@ export interface JobLines {
  * `null`: no key since the host started.
  */
 export const jobLines = (table: JobTable, idle: () => number | null = () => null) =>
-	Effect.gen(function* () {
-		const services = yield* Effect.context<never>();
-		const log = (message: string, fields: Readonly<Record<string, unknown>>) => {
-			Effect.runForkWith(services)(Effect.logInfo(message).pipe(Effect.annotateLogs(fields)));
-		};
-		/** Who started each job this host saw begin, by `%n`, until its end is said. */
-		const writers = new Map<number, string>();
-		/** `by=`, when the table knows who: a job kept before jobs had a writer says none. */
-		const byOf = (by: string | null | undefined) => (by == null ? {} : {by});
+  Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
+    const log = (message: string, fields: Readonly<Record<string, unknown>>) => {
+      Effect.runForkWith(services)(Effect.logInfo(message).pipe(Effect.annotateLogs(fields)));
+    };
+    /** Who started each job this host saw begin, by `%n`, until its end is said. */
+    const writers = new Map<number, string>();
+    /** `by=`, when the table knows who: a job kept before jobs had a writer says none. */
+    const byOf = (by: string | null | undefined) => (by == null ? {} : { by });
 
-		// A stop as it is asked, before the end it asks for: once per job. The stops already in the
-		// table when the host starts were said by the host that took them.
-		const stopped = new Set(
-			table
-				.getState()
-				.jobs.filter((job) => job.stop !== null)
-				.map((job) => job.n),
-		);
-		const stops = () => {
-			const jobs = table.getState().jobs;
-			for (const job of jobs) {
-				if (job.stop === null || stopped.has(job.n)) continue;
-				stopped.add(job.n);
-				const since = idle();
-				log("job_stopped", {
-					n: job.n,
-					by: job.stop.by,
-					...(job.stop.why === null ? {} : {why: job.stop.why}),
-					// Whose it was beside who stopped it, and how long the person had been away: does an
-					// agent stop work the person is in the middle of?
-					...(job.by === null ? {} : {whose: job.by}),
-					...(since === null ? {} : {idle_ms: since}),
-				});
-			}
-			for (const n of stopped) if (!jobs.some((job) => job.n === n)) stopped.delete(n);
-		};
-		const unsubscribe = table.subscribe(stops);
-		yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
-		/** Each job's lines, by `%n`, oldest job first: numbers only grow. */
-		const kept = new Map<number, KeptLines>();
-		/** How each job ended, as its tile saw it, oldest first. */
-		const ended = new Map<number, {readonly tile: TileId; readonly job: JobEnded}>();
-		const inTable = (n: number) => table.getState().jobs.some((job) => job.n === n);
-		/** Who waits for each job's end (`ended`), by `%n`: each is told once, as the tile says it. */
-		const waiting = new Map<number, Set<(job: JobAnswer) => void>>();
+    // A stop as it is asked, before the end it asks for: once per job. The stops already in the
+    // table when the host starts were said by the host that took them.
+    const stopped = new Set(
+      table
+        .getState()
+        .jobs.filter((job) => job.stop !== null)
+        .map((job) => job.n),
+    );
+    const stops = () => {
+      const jobs = table.getState().jobs;
 
-		/** Forget the oldest jobs past `JOBS_KEPT`, but none the table still holds. */
-		const forget = () => {
-			for (const n of ended.keys()) {
-				if (ended.size <= JOBS_KEPT) break;
-				ended.delete(n);
-			}
-			for (const n of kept.keys()) {
-				if (kept.size <= JOBS_KEPT) break;
-				if (!inTable(n)) kept.delete(n);
-			}
-		};
+      for (const job of jobs) {
+        if (job.stop === null || stopped.has(job.n)) {
+          continue;
+        }
 
-		const lines: JobLines = {
-			news: (tile) => ({
-				began: (job) => {
-					const by = table.getState().jobs.find((row) => row.n === job.n)?.by ?? null;
-					if (by !== null) writers.set(job.n, by);
-					log("job_began", {n: job.n, text: job.text, tile, ...byOf(by)});
-				},
-				ended: (job) => {
-					ended.set(job.n, {tile, job});
-					forget();
-					const by = writers.get(job.n);
-					writers.delete(job.n);
-					log("job_ended", {n: job.n, text: job.text, tile, how: job.how, ...byOf(by)});
-					const heard = waiting.get(job.n);
-					const now = lines.job(job.n);
-					waiting.delete(job.n);
-					if (now !== null) for (const tell of heard ?? []) tell(now);
-				},
-			}),
-			printed: (n, text) => {
-				const one = kept.get(n);
-				if (one !== undefined) return one.push(text);
-				const fresh = new KeptLines();
-				fresh.push(text);
-				kept.set(n, fresh);
-				forget();
-			},
-			job: (n) => {
-				const shown = [...(kept.get(n)?.lines ?? [])];
-				const row = table.getState().jobs.find((job) => job.n === n);
-				if (row !== undefined)
-					return {
-						n,
-						text: row.text,
-						tile: row.owner,
-						state:
-							row.state === "running"
-								? State.cases.running.make({})
-								: State.cases.detached.make({}),
-						lines: shown,
-					};
-				const end = ended.get(n);
-				if (end === undefined) return null;
-				return {
-					n,
-					text: end.job.text,
-					tile: end.tile,
-					state: State.cases.ended.make({how: end.job.how}),
-					lines: shown,
-				};
-			},
-			ended: (n) =>
-				Effect.callback<JobAnswer>((resume) => {
-					const now = lines.job(n);
-					if (now?.state._tag === "ended") return resume(Effect.succeed(now));
-					const one = (job: JobAnswer) => resume(Effect.succeed(job));
-					const all = waiting.get(n) ?? new Set();
-					all.add(one);
-					waiting.set(n, all);
-					return Effect.sync(() => {
-						all.delete(one);
-						if (all.size === 0 && waiting.get(n) === all) waiting.delete(n);
-					});
-				}),
-		};
-		return lines;
-	});
+        stopped.add(job.n);
+        const since = idle();
+        log("job_stopped", {
+          n: job.n,
+          by: job.stop.by,
+          ...(job.stop.why === null ? {} : { why: job.stop.why }),
+          // Whose it was beside who stopped it, and how long the person had been away: does an
+          // agent stop work the person is in the middle of?
+          ...(job.by === null ? {} : { whose: job.by }),
+          ...(since === null ? {} : { idle_ms: since }),
+        });
+      }
+
+      for (const n of stopped) {
+        if (!jobs.some((job) => job.n === n)) {
+          stopped.delete(n);
+        }
+      }
+    };
+    const unsubscribe = table.subscribe(stops);
+    yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+    /** Each job's lines, by `%n`, oldest job first: numbers only grow. */
+    const kept = new Map<number, KeptLines>();
+    /** How each job ended, as its tile saw it, oldest first. */
+    const ended = new Map<number, { readonly tile: TileId; readonly job: JobEnded }>();
+    const inTable = (n: number) => table.getState().jobs.some((job) => job.n === n);
+    /** Who waits for each job's end (`ended`), by `%n`: each is told once, as the tile says it. */
+    const waiting = new Map<number, Set<(job: JobAnswer) => void>>();
+
+    /** Forget the oldest jobs past `JOBS_KEPT`, but none the table still holds. */
+    const forget = () => {
+      for (const n of ended.keys()) {
+        if (ended.size <= JOBS_KEPT) {
+          break;
+        }
+
+        ended.delete(n);
+      }
+
+      for (const n of kept.keys()) {
+        if (kept.size <= JOBS_KEPT) {
+          break;
+        }
+
+        if (!inTable(n)) {
+          kept.delete(n);
+        }
+      }
+    };
+
+    const lines: JobLines = {
+      news: (tile) => ({
+        began: (job) => {
+          const by = table.getState().jobs.find((row) => row.n === job.n)?.by ?? null;
+
+          if (by !== null) {
+            writers.set(job.n, by);
+          }
+
+          log("job_began", { n: job.n, text: job.text, tile, ...byOf(by) });
+        },
+        ended: (job) => {
+          ended.set(job.n, { tile, job });
+          forget();
+          const by = writers.get(job.n);
+          writers.delete(job.n);
+          log("job_ended", { n: job.n, text: job.text, tile, how: job.how, ...byOf(by) });
+          const heard = waiting.get(job.n);
+          const now = lines.job(job.n);
+          waiting.delete(job.n);
+
+          if (now !== null) {
+            for (const tell of heard ?? []) {
+              tell(now);
+            }
+          }
+        },
+      }),
+      printed: (n, text) => {
+        const one = kept.get(n);
+
+        if (one !== undefined) {
+          return one.push(text);
+        }
+
+        const fresh = new KeptLines();
+        fresh.push(text);
+        kept.set(n, fresh);
+        forget();
+      },
+      job: (n) => {
+        const shown = [...(kept.get(n)?.lines ?? [])];
+        const row = table.getState().jobs.find((job) => job.n === n);
+
+        if (row !== undefined) {
+          return {
+            n,
+            text: row.text,
+            tile: row.owner,
+            state: row.state === "running" ? State.cases.running.make({}) : State.cases.detached.make({}),
+            lines: shown,
+          };
+        }
+
+        const end = ended.get(n);
+
+        if (end === undefined) {
+          return null;
+        }
+
+        return {
+          n,
+          text: end.job.text,
+          tile: end.tile,
+          state: State.cases.ended.make({ how: end.job.how }),
+          lines: shown,
+        };
+      },
+      ended: (n) =>
+        Effect.callback<JobAnswer>((resume) => {
+          const now = lines.job(n);
+
+          if (now?.state._tag === "ended") {
+            return resume(Effect.succeed(now));
+          }
+
+          const one = (job: JobAnswer) => resume(Effect.succeed(job));
+          const all = waiting.get(n) ?? new Set();
+          all.add(one);
+          waiting.set(n, all);
+          return Effect.sync(() => {
+            all.delete(one);
+
+            if (all.size === 0 && waiting.get(n) === all) {
+              waiting.delete(n);
+            }
+          });
+        }),
+    };
+    return lines;
+  });

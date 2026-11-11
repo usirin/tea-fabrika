@@ -62,8 +62,17 @@ export const noNumericDuration: CreateRule = {
 
   Why one run and not two: a disable comment for a rule that is off counts as unused, and unused ones
   fail. A second run for the advice rules would fail the first on their own comments.
+- **A blank line stands between top-level statements and class members, and around every `if`,
+  loop, `switch` and `try`; every body has braces.** Oxfmt keeps blank lines but never adds one, and
+  oxlint has no padding rule, so `fabrika/padding-line-between-statements` blocks a missing one,
+  `eslint/curly` `"all"` blocks a missing brace, and `pnpm format` adds both
+  ([0021](../../.decisions/0021-a-blank-line-between-top-level-statements.md)).
 - **Oxfmt keeps the old settings:** tabs, 100 columns, no bracket spacing, imports sorted. It leaves
-  Markdown, YAML and fixtures alone, as Biome did.
+  Markdown, YAML and fixtures alone, as Biome did. *Superseded 2026-11-09 for indent, width,
+  semicolons, trailing commas and bracket spacing: the format follows Effect's settings
+  ([0029](../../.decisions/0029-format-and-names-follow-effect.md)), except that semicolons and
+  trailing commas stay
+  ([0039](../../.decisions/0039-keep-semicolons-and-es5-commas.md)). Oxfmt and the import sort stay.*
 
 ## Why it can be trusted
 

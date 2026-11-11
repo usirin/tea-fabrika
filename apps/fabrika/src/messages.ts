@@ -1,10 +1,10 @@
-import {Cause, Effect, Exit, Schema} from "effect";
-import {AskKey, AsksNow} from "./asks.ts";
-import {DeskSchema, TileIdSchema} from "./desk/desk.ts";
-import {Does, KeyName, Keys} from "./desk/keymap.ts";
-import {SHOWS} from "./desk/keys.ts";
-import {Change, Edit} from "./keys/program.ts";
-import {ProjectRow, ProjectSchema, Recent} from "./projects.ts";
+import { Cause, Effect, Exit, Schema } from "effect";
+import { AskKey, AsksNow } from "./asks.ts";
+import { DeskSchema, TileIdSchema } from "./desk/desk.ts";
+import { Does, KeyName, Keys } from "./desk/keymap.ts";
+import { SHOWS } from "./desk/keys.ts";
+import { Change, Edit } from "./keys/program.ts";
+import { ProjectRow, ProjectSchema, Recent } from "./projects.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -37,42 +37,42 @@ import {ProjectRow, ProjectSchema, Recent} from "./projects.ts";
 // refuses a message from a window that does not read; it never passes one on.
 
 /** A terminal's width or height, in cells. */
-const Cells = Schema.Int.check(Schema.isBetween({minimum: 2, maximum: 1000}));
+const Cells = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1000 }));
 
 /**
  * What a tile's terminal is told: bytes to draw, and, for a screen reader, which the canvas is
  * blank to, a job's status (`null`: none any more) and a line to say, such as an agent's reply.
  */
 export const ToTerminal = Schema.Union([
-	Schema.Struct({type: Schema.Literal("write"), data: Schema.String}),
-	Schema.Struct({type: Schema.Literal("status"), text: Schema.NullOr(Schema.String)}),
-	Schema.Struct({type: Schema.Literal("said"), text: Schema.String}),
+  Schema.Struct({ type: Schema.Literal("write"), data: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("status"), text: Schema.NullOr(Schema.String) }),
+  Schema.Struct({ type: Schema.Literal("said"), text: Schema.String }),
 ]);
 export type ToTerminal = typeof ToTerminal.Type;
 
 const FromTerminal = Schema.Union([
-	// A paste is one message: 64 KiB is a long one. Past it, the message is refused whole.
-	Schema.Struct({
-		type: Schema.Literal("keys"),
-		data: Schema.String.check(Schema.isMaxLength(65536)),
-	}),
-	Schema.Struct({type: Schema.Literal("size"), cols: Cells, rows: Cells}),
+  // A paste is one message: 64 KiB is a long one. Past it, the message is refused whole.
+  Schema.Struct({
+    type: Schema.Literal("keys"),
+    data: Schema.String.check(Schema.isMaxLength(65536)),
+  }),
+  Schema.Struct({ type: Schema.Literal("size"), cols: Cells, rows: Cells }),
 ]);
 type FromTerminal = typeof FromTerminal.Type;
 
 export const ToWindow = Schema.Struct({
-	type: Schema.Literal("view"),
-	/** The program's name, which picks the window that draws it. */
-	program: Schema.String,
-	/** Its view's data, which only its own schema reads. */
-	data: Schema.Unknown,
+  type: Schema.Literal("view"),
+  /** The program's name, which picks the window that draws it. */
+  program: Schema.String,
+  /** Its view's data, which only its own schema reads. */
+  data: Schema.Unknown,
 });
 export type ToWindow = typeof ToWindow.Type;
 
 const FromWindow = Schema.Struct({
-	type: Schema.Literal("msg"),
-	/** One of the run's inputs, `{type, value}`: read by its program, not here. */
-	msg: Schema.Unknown,
+  type: Schema.Literal("msg"),
+  /** One of the run's inputs, `{type, value}`: read by its program, not here. */
+  msg: Schema.Unknown,
 });
 type FromWindow = typeof FromWindow.Type;
 
@@ -80,13 +80,10 @@ type FromWindow = typeof FromWindow.Type;
 const PressId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** What waits on the person, as the host folded it (asks.ts): on the desk's port, to every app. */
-const AsksMessage = Schema.Struct({type: Schema.Literal("asks"), now: AsksNow});
+const AsksMessage = Schema.Struct({ type: Schema.Literal("asks"), now: AsksNow });
 
 /** A size on the page, in whole px: no screen is wider than this. */
-const Pixels = Schema.Int.check(
-	Schema.isGreaterThanOrEqualTo(0),
-	Schema.isLessThanOrEqualTo(100_000),
-);
+const Pixels = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(100_000));
 
 /**
  * What the app found of the host on its home, once a try to attach answered: the window's
@@ -99,27 +96,27 @@ const Pixels = Schema.Int.check(
  * `theirs: null` in `build`: the host named no build, as one built before builds were named.
  */
 export const Found = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("up")}),
-	Schema.Struct({kind: Schema.Literal("version"), theirs: Schema.Int, ours: Schema.Int}),
-	Schema.Struct({
-		kind: Schema.Literal("build"),
-		theirs: Schema.NullOr(Schema.String),
-		ours: Schema.String,
-	}),
+  Schema.Struct({ kind: Schema.Literal("up") }),
+  Schema.Struct({ kind: Schema.Literal("version"), theirs: Schema.Int, ours: Schema.Int }),
+  Schema.Struct({
+    kind: Schema.Literal("build"),
+    theirs: Schema.NullOr(Schema.String),
+    ours: Schema.String,
+  }),
 ]);
 export type Found = typeof Found.Type;
 
 /** What the app found when it is attached: this build, or another. */
-export type Attached = Extract<Found, {readonly kind: "up" | "build"}>;
+export type Attached = Extract<Found, { readonly kind: "up" | "build" }>;
 
 /**
  * The link while the app is not on a host: it is reconnecting, it stopped trying and waits for
  * Try again, or it is stopping the old host to start its own (the restart).
  */
 const Lost = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("reconnecting"), why: Schema.String}),
-	Schema.Struct({kind: Schema.Literal("stopped"), why: Schema.String}),
-	Schema.Struct({kind: Schema.Literal("restarting")}),
+  Schema.Struct({ kind: Schema.Literal("reconnecting"), why: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("stopped"), why: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("restarting") }),
 ]);
 type Lost = typeof Lost.Type;
 
@@ -132,13 +129,13 @@ const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 /** An agent attached to the host's agents' socket now (host/agents.ts): its name, and since when. */
 export const AgentOn = Schema.Struct({
-	name: Schema.String,
-	since: Millis,
-	/**
-	 * The agent's own tile, or `null`: it ran no line yet. A host from before agents had tiles
-	 * sends none.
-	 */
-	tile: Schema.NullOr(TileIdSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+  name: Schema.String,
+  since: Millis,
+  /**
+   * The agent's own tile, or `null`: it ran no line yet. A host from before agents had tiles
+   * sends none.
+   */
+  tile: Schema.NullOr(TileIdSchema).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 export type AgentOn = typeof AgentOn.Type;
 
@@ -147,12 +144,12 @@ export type AgentOn = typeof AgentOn.Type;
  * does now, and since when. Ours to dismiss, unlike one attached over the agents' socket.
  */
 export const SummonedOn = Schema.Struct({
-	name: Schema.String,
-	agent: Schema.String,
-	model: Schema.NullOr(Schema.String),
-	effort: Schema.NullOr(Schema.String),
-	state: Schema.Literals(["opening", "idle", "turn", "asking", "down"]),
-	since: Millis,
+  name: Schema.String,
+  agent: Schema.String,
+  model: Schema.NullOr(Schema.String),
+  effort: Schema.NullOr(Schema.String),
+  state: Schema.Literals(["opening", "idle", "turn", "asking", "down"]),
+  since: Millis,
 });
 export type SummonedOn = typeof SummonedOn.Type;
 
@@ -161,8 +158,8 @@ export type SummonedOn = typeof SummonedOn.Type;
  * ledger server, by its address and the login the host signs in as.
  */
 export const LedgerLink = Schema.Union([
-	Schema.Struct({kind: Schema.Literal("own")}),
-	Schema.Struct({kind: Schema.Literal("server"), address: Schema.String, login: Schema.String}),
+  Schema.Struct({ kind: Schema.Literal("own") }),
+  Schema.Struct({ kind: Schema.Literal("server"), address: Schema.String, login: Schema.String }),
 ]);
 export type LedgerLink = typeof LedgerLink.Type;
 
@@ -171,9 +168,9 @@ export type LedgerLink = typeof LedgerLink.Type;
  * agent's `restart` says why; the person's, from the window, says none.
  */
 const Restarted = Schema.Struct({
-	by: Schema.String,
-	why: Schema.NullOr(Schema.String),
-	at: Millis,
+  by: Schema.String,
+  why: Schema.NullOr(Schema.String),
+  at: Millis,
 });
 
 /**
@@ -185,15 +182,15 @@ const Restarted = Schema.Struct({
  * sends none, and the app still attaches to it, so a `HostNow` without it reads.
  */
 export const HostNow = Schema.Struct({
-	pid: Schema.Int.check(Schema.isGreaterThan(0)),
-	since: Millis,
-	/** Its build (build-id.ts), or `null`: it names none, as a host built before builds were named. */
-	build: Schema.NullOr(Schema.String),
-	ledger: LedgerLink,
-	agents: Schema.NullOr(Schema.Array(AgentOn)),
-	restarted: Schema.optionalKey(Schema.NullOr(Restarted)),
-	/** The agents summoned here, oldest first. A host from before summon sends none. */
-	summoned: Schema.optionalKey(Schema.Array(SummonedOn)),
+  pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  since: Millis,
+  /** Its build (build-id.ts), or `null`: it names none, as a host built before builds were named. */
+  build: Schema.NullOr(Schema.String),
+  ledger: LedgerLink,
+  agents: Schema.NullOr(Schema.Array(AgentOn)),
+  restarted: Schema.optionalKey(Schema.NullOr(Restarted)),
+  /** The agents summoned here, oldest first. A host from before summon sends none. */
+  summoned: Schema.optionalKey(Schema.Array(SummonedOn)),
 });
 export type HostNow = typeof HostNow.Type;
 
@@ -205,14 +202,12 @@ export type HostNow = typeof HostNow.Type;
  *   {_tag: "project", project: {root: "~/code/demlik", key: "3f9a…"}, name: "demlik"}
  */
 export const WindowLook = Schema.Union([
-	Schema.Struct({
-		_tag: Schema.Literal("welcome"),
-		recent: Schema.Array(Recent),
-		refusal: Schema.NullOr(
-			Schema.Struct({_tag: Schema.Literals(["folder", "migration"]), why: Schema.String}),
-		),
-	}),
-	Schema.Struct({_tag: Schema.Literal("project"), project: ProjectSchema, name: Schema.String}),
+  Schema.Struct({
+    _tag: Schema.Literal("welcome"),
+    recent: Schema.Array(Recent),
+    refusal: Schema.NullOr(Schema.Struct({ _tag: Schema.Literals(["folder", "migration"]), why: Schema.String })),
+  }),
+  Schema.Struct({ _tag: Schema.Literal("project"), project: ProjectSchema, name: Schema.String }),
 ]);
 export type WindowLook = typeof WindowLook.Type;
 
@@ -249,49 +244,49 @@ export type WindowLook = typeof WindowLook.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("keys"),
-		...Keys.fields,
-		version: Schema.optionalKey(Schema.String),
-		changes: Schema.optionalKey(Schema.Array(Change)),
-	}),
-	Schema.Struct({
-		type: Schema.Literal("keys.saved"),
-		request: Schema.String,
-		version: Schema.String,
-	}),
-	Schema.Struct({type: Schema.Literal("keys.failed"), request: Schema.String, why: Schema.String}),
-	Schema.Struct({type: Schema.Literal("keys.opened"), run: Schema.String}),
-	Schema.Struct({type: Schema.Literal("keys.closed"), run: Schema.String}),
-	Schema.Struct({type: Schema.Literal("host"), now: HostNow}),
-	Schema.Struct({
-		type: Schema.Literal("programs"),
-		programs: Schema.Array(
-			Schema.Struct({
-				name: Schema.String,
-				takes: Schema.Array(Schema.String),
-				sends: Schema.Array(Schema.String),
-			}),
-		),
-	}),
-	AsksMessage,
-	Schema.Struct({
-		type: Schema.Literal("show"),
-		what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"]),
-	}),
-	Schema.Struct({
-		type: Schema.Literal("desk"),
-		desk: DeskSchema,
-		takes: Schema.Struct({all: Schema.Boolean, keys: Schema.Array(KeyName)}),
-	}),
-	Schema.Struct({type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean}),
-	Schema.Struct({type: Schema.Literal("link"), now: LinkNow}),
-	// The app's own, from main (ticket 276): what this window shows, welcome or one project.
-	Schema.Struct({type: Schema.Literal("window"), look: WindowLook}),
-	/** The projects box's rows, sent again as windows open and close. */
-	Schema.Struct({type: Schema.Literal("project_rows"), rows: Schema.Array(ProjectRow)}),
-	/** Cmd-O, File > Open Project…: the box opens, or welcome selects its first row. */
-	Schema.Struct({type: Schema.Literal("projects")}),
+  Schema.Struct({
+    type: Schema.Literal("keys"),
+    ...Keys.fields,
+    version: Schema.optionalKey(Schema.String),
+    changes: Schema.optionalKey(Schema.Array(Change)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("keys.saved"),
+    request: Schema.String,
+    version: Schema.String,
+  }),
+  Schema.Struct({ type: Schema.Literal("keys.failed"), request: Schema.String, why: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("keys.opened"), run: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("keys.closed"), run: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("host"), now: HostNow }),
+  Schema.Struct({
+    type: Schema.Literal("programs"),
+    programs: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        takes: Schema.Array(Schema.String),
+        sends: Schema.Array(Schema.String),
+      }),
+    ),
+  }),
+  AsksMessage,
+  Schema.Struct({
+    type: Schema.Literal("show"),
+    what: Schema.Literals([...SHOWS, "focus-next", "focus-previous"]),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("desk"),
+    desk: DeskSchema,
+    takes: Schema.Struct({ all: Schema.Boolean, keys: Schema.Array(KeyName) }),
+  }),
+  Schema.Struct({ type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean }),
+  Schema.Struct({ type: Schema.Literal("link"), now: LinkNow }),
+  // The app's own, from main (ticket 276): what this window shows, welcome or one project.
+  Schema.Struct({ type: Schema.Literal("window"), look: WindowLook }),
+  /** The projects box's rows, sent again as windows open and close. */
+  Schema.Struct({ type: Schema.Literal("project_rows"), rows: Schema.Array(ProjectRow) }),
+  /** Cmd-O, File > Open Project…: the box opens, or welcome selects its first row. */
+  Schema.Struct({ type: Schema.Literal("projects") }),
 ]);
 export type ToPage = typeof ToPage.Type;
 
@@ -304,18 +299,18 @@ export type ToPage = typeof ToPage.Type;
  *   {type: "restart"}
  */
 export const ToApp = Schema.Union([
-	Schema.Struct({type: Schema.Literal("again")}),
-	Schema.Struct({type: Schema.Literal("restart")}),
-	/** A recent project picked, in welcome or the box, by its key, and where it was picked. */
-	Schema.Struct({
-		type: Schema.Literal("open"),
-		key: Schema.String,
-		source: Schema.Literals(["welcome", "box"]),
-	}),
-	/** Open Folder…: the system's folder sheet, over this window. */
-	Schema.Struct({type: Schema.Literal("folder"), source: Schema.Literals(["welcome", "box"])}),
-	/** Try Again, after the old desk did not move. */
-	Schema.Struct({type: Schema.Literal("retry")}),
+  Schema.Struct({ type: Schema.Literal("again") }),
+  Schema.Struct({ type: Schema.Literal("restart") }),
+  /** A recent project picked, in welcome or the box, by its key, and where it was picked. */
+  Schema.Struct({
+    type: Schema.Literal("open"),
+    key: Schema.String,
+    source: Schema.Literals(["welcome", "box"]),
+  }),
+  /** Open Folder…: the system's folder sheet, over this window. */
+  Schema.Struct({ type: Schema.Literal("folder"), source: Schema.Literals(["welcome", "box"]) }),
+  /** Try Again, after the old desk did not move. */
+  Schema.Struct({ type: Schema.Literal("retry") }),
 ]);
 export type ToApp = typeof ToApp.Type;
 
@@ -342,55 +337,57 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
-	Schema.Struct({
-		type: Schema.Literal("keys.edit"),
-		request: Schema.String,
-		edit: Edit,
-		said: Schema.Number,
-	}),
-	Schema.Struct({type: Schema.Literal("keys.open")}),
-	Schema.Struct({type: Schema.Literal("keys.close")}),
-	Schema.Struct({type: Schema.Literal("press"), id: PressId, key: KeyName}),
-	Schema.Struct({type: Schema.Literal("click"), tile: TileIdSchema}),
-	Schema.Struct({
-		type: Schema.Literal("resize"),
-		container: Schema.String,
-		sizes: Schema.Record(Schema.String, Schema.Number),
-	}),
-	Schema.Struct({type: Schema.Literal("fold"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("unfold"), node: Schema.String}),
-	Schema.Struct({type: Schema.Literal("area"), width: Pixels, height: Pixels}),
-	Schema.Struct({type: Schema.Literal("go"), tile: TileIdSchema}),
-	Schema.Struct({type: Schema.Literal("pick"), workspace: Schema.String}),
-	Schema.Struct({
-		type: Schema.Literal("run"),
-		does: Does,
-		via: Schema.optionalKey(Schema.Struct({keys: Schema.String})),
-	}),
-	Schema.Struct({type: Schema.Literal("later"), key: AskKey}),
-	Schema.Struct({type: Schema.Literal("back"), key: AskKey}),
-	Schema.Struct({type: Schema.Literal("seen")}),
-	Schema.Struct({type: Schema.Literal("dismiss"), name: Schema.String}),
+  Schema.Struct({
+    type: Schema.Literal("keys.edit"),
+    request: Schema.String,
+    edit: Edit,
+    said: Schema.Number,
+  }),
+  Schema.Struct({ type: Schema.Literal("keys.open") }),
+  Schema.Struct({ type: Schema.Literal("keys.close") }),
+  Schema.Struct({ type: Schema.Literal("press"), id: PressId, key: KeyName }),
+  Schema.Struct({ type: Schema.Literal("click"), tile: TileIdSchema }),
+  Schema.Struct({
+    type: Schema.Literal("resize"),
+    container: Schema.String,
+    sizes: Schema.Record(Schema.String, Schema.Number),
+  }),
+  Schema.Struct({ type: Schema.Literal("fold"), tile: TileIdSchema }),
+  Schema.Struct({ type: Schema.Literal("unfold"), node: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("area"), width: Pixels, height: Pixels }),
+  Schema.Struct({ type: Schema.Literal("go"), tile: TileIdSchema }),
+  Schema.Struct({ type: Schema.Literal("pick"), workspace: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("run"),
+    does: Does,
+    via: Schema.optionalKey(Schema.Struct({ keys: Schema.String })),
+  }),
+  Schema.Struct({ type: Schema.Literal("later"), key: AskKey }),
+  Schema.Struct({ type: Schema.Literal("back"), key: AskKey }),
+  Schema.Struct({ type: Schema.Literal("seen") }),
+  Schema.Struct({ type: Schema.Literal("dismiss"), name: Schema.String }),
 ]);
 export type FromPage = typeof FromPage.Type;
 
 /** A message read: what it says, or why it was refused, in the schema's words. */
-export type Read<T> =
-	| {readonly kind: "read"; readonly msg: T}
-	| {readonly kind: "refused"; readonly why: string};
+export type Read<T> = { readonly kind: "read"; readonly msg: T } | { readonly kind: "refused"; readonly why: string };
 
 /**
  * A reader for one of the message types: strict, so a key the schema does not name is refused.
  * What it reads may be older than what it answers: a desk from a host before letters (desk.ts).
  */
 export const reader = <T, E>(schema: Schema.Codec<T, E>) => {
-	const decode = Schema.decodeUnknownExit(schema);
-	return (raw: unknown): Read<T> => {
-		const exit = decode(raw, {onExcessProperty: "error"});
-		if (Exit.isSuccess(exit)) return {kind: "read", msg: exit.value};
-		const failure = Cause.squash(exit.cause);
-		return {kind: "refused", why: failure instanceof Error ? failure.message : String(failure)};
-	};
+  const decode = Schema.decodeUnknownExit(schema);
+  return (raw: unknown): Read<T> => {
+    const exit = decode(raw, { onExcessProperty: "error" });
+
+    if (Exit.isSuccess(exit)) {
+      return { kind: "read", msg: exit.value };
+    }
+
+    const failure = Cause.squash(exit.cause);
+    return { kind: "refused", why: failure instanceof Error ? failure.message : String(failure) };
+  };
 };
 
 /** What the host reads from the terminal. */

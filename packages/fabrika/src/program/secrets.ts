@@ -1,4 +1,4 @@
-import {Redacted} from "effect";
+import { Redacted } from "effect";
 
 // A kept state never holds a secret (docs/direction/secrets-are-redacted.md). Storage asks this
 // before every save, on every storage, and refuses a state that holds one.
@@ -20,22 +20,49 @@ import {Redacted} from "effect";
 
 /** `value`, or anything inside it, is a `Redacted`. */
 export const holdsSecret = (value: unknown): boolean => {
-	const seen = new Set<object>();
-	const walk = (v: unknown): boolean => {
-		if (typeof v !== "object" || v === null) return false;
-		if (Redacted.isRedacted(v)) return true;
-		if (seen.has(v)) return false;
-		seen.add(v);
-		if (v instanceof Map) {
-			for (const [k, inner] of v) if (walk(k) || walk(inner)) return true;
-			return false;
-		}
-		if (v instanceof Set || Array.isArray(v)) {
-			for (const inner of v) if (walk(inner)) return true;
-			return false;
-		}
-		for (const inner of Object.values(v)) if (walk(inner)) return true;
-		return false;
-	};
-	return walk(value);
+  const seen = new Set<object>();
+  const walk = (v: unknown): boolean => {
+    if (typeof v !== "object" || v === null) {
+      return false;
+    }
+
+    if (Redacted.isRedacted(v)) {
+      return true;
+    }
+
+    if (seen.has(v)) {
+      return false;
+    }
+
+    seen.add(v);
+
+    if (v instanceof Map) {
+      for (const [k, inner] of v) {
+        if (walk(k) || walk(inner)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    if (v instanceof Set || Array.isArray(v)) {
+      for (const inner of v) {
+        if (walk(inner)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    for (const inner of Object.values(v)) {
+      if (walk(inner)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+  return walk(value);
 };

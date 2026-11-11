@@ -1,115 +1,114 @@
-import {Cause, Schema} from "effect";
-import {describe, expect, it} from "vitest";
-import {make} from "../../entity.ts";
-import {QuestionId} from "../../ids.ts";
-import type {FactOf} from "../../tickets/ticket.ts";
-import {BREAK} from "../build/body.ts";
-import {planProblems} from "../plan/check.ts";
-import {HeldDraft, PlanDraft, PlanQuestion} from "../plan/plan.ts";
-import type {Finding} from "../review/sheet.ts";
-import {PropertyId} from "../test-writer/brief.ts";
+import { Cause, Schema } from "effect";
+import { describe, expect, it } from "vitest";
+import { make } from "../../entity.ts";
+import { QuestionId } from "../../ids.ts";
+import type { FactOf } from "../../tickets/ticket.ts";
+import { BREAK } from "../build/body.ts";
+import { planProblems } from "../plan/check.ts";
+import { HeldDraft, PlanDraft, PlanQuestion } from "../plan/plan.ts";
+import type { Finding } from "../review/sheet.ts";
+import { PropertyId } from "../test-writer/brief.ts";
 import {
-	againstWords,
-	brokeWords,
-	decidedWords,
-	foundWords,
-	jobsList,
-	mutantWords,
-	redItems,
-	redWords,
-	ruleChangeLines,
-	spentWords,
-	untestedWords,
+  againstWords,
+  brokeWords,
+  decidedWords,
+  foundWords,
+  jobsList,
+  mutantWords,
+  redItems,
+  redWords,
+  ruleChangeLines,
+  spentWords,
+  untestedWords,
 } from "./found.ts";
-import {Carry, EMPTY} from "./machine.ts";
+import { Carry, EMPTY } from "./machine.ts";
 
 // Today's version. What a brief says a person decided, on a lane saved before `decided` was kept and
 // on one saved after.
 
 const QUESTION = {
-	ask: "Which ledger do we read?",
-	options: [],
-	lean: "The app's own.",
-	why: "One.",
+  ask: "Which ledger do we read?",
+  options: [],
+  lean: "The app's own.",
+  why: "One.",
 };
+
 const PLAN = Schema.decodeUnknownSync(HeldDraft)({
-	summary: "One form.",
-	stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
-	tasks: [],
-	pointers: [],
-	questions: [QUESTION],
+  summary: "One form.",
+  stories: [{ id: "reader", who: "a reader", want: "one form", why: "names match" }],
+  tasks: [],
+  pointers: [],
+  questions: [QUESTION],
 });
 
 describe("a lane's program that broke", () => {
-	it("says so in a line, and any other end says nothing here", () => {
-		const unread = {};
-		const failed = {kind: "failed", cause: Cause.die(new Error("the disk broke")), unread} as const;
-		expect(brokeWords(7, failed).join("\n")).toMatch(/^#7 broke: .*the disk broke/);
-		expect(brokeWords(7, {kind: "ended", unread})).toEqual([]);
-		expect(brokeWords(7, {kind: "stopped", unread})).toEqual([]);
-	});
+  it("says so in a line, and any other end says nothing here", () => {
+    const unread = {};
+    const failed = { kind: "failed", cause: Cause.die(new Error("the disk broke")), unread } as const;
+    expect(brokeWords(7, failed).join("\n")).toMatch(/^#7 broke: .*the disk broke/);
+    expect(brokeWords(7, { kind: "ended", unread })).toEqual([]);
+    expect(brokeWords(7, { kind: "stopped", unread })).toEqual([]);
+  });
 });
 
 describe("the jobs the test writer and the mutants' writer are told", () => {
-	const job = (when: string, fixture: string) => ({
-		when,
-		result: "it reads each name in one form",
-		check: {how: "test", what: "a test reads them"},
-		serves: ["reader"],
-		fixture,
-	});
+  const job = (when: string, fixture: string) => ({
+    when,
+    result: "it reads each name in one form",
+    check: { how: "test", what: "a test reads them" },
+    serves: ["reader"],
+    fixture,
+  });
 
-	it("say each task's job, and the whole plan's with its fixture", () => {
-		const plan = Schema.decodeUnknownSync(HeldDraft)({
-			summary: "One form.",
-			stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
-			tasks: [
-				{
-					title: "Read a name",
-					ends: "pr",
-					job: job("a name comes in", "three names"),
-					criteria: [],
-				},
-			],
-			goal: {job: job("a whole list comes in", "a list of a thousand names"), criteria: []},
-			pointers: [],
-			questions: [],
-		});
-		const jobs = jobsList(plan);
-		expect(jobs).toContain(
-			"Read a name: When a name comes in, it reads each name in one form (Fixture: three names)",
-		);
-		expect(jobs).toContain(
-			"The whole plan: When a whole list comes in, it reads each name in one form (Fixture: a list of a thousand names)",
-		);
-	});
+  it("say each task's job, and the whole plan's with its fixture", () => {
+    const plan = Schema.decodeUnknownSync(HeldDraft)({
+      summary: "One form.",
+      stories: [{ id: "reader", who: "a reader", want: "one form", why: "names match" }],
+      tasks: [
+        {
+          title: "Read a name",
+          ends: "pr",
+          job: job("a name comes in", "three names"),
+          criteria: [],
+        },
+      ],
+      goal: { job: job("a whole list comes in", "a list of a thousand names"), criteria: [] },
+      pointers: [],
+      questions: [],
+    });
+    const jobs = jobsList(plan);
+    expect(jobs).toContain("Read a name: When a name comes in, it reads each name in one form (Fixture: three names)");
+    expect(jobs).toContain(
+      "The whole plan: When a whole list comes in, it reads each name in one form (Fixture: a list of a thousand names)",
+    );
+  });
 });
 
 describe("what a brief says a person decided", () => {
-	it("a lane saved before `decided` was kept still says its plan's leans, with no ids", () => {
-		const saved = Schema.decodeUnknownSync(Carry)({...EMPTY, plan: PLAN});
-		const words = decidedWords(saved);
-		expect(words).toContain(QUESTION.ask);
-		expect(words).toContain(QUESTION.lean);
-		expect(words).not.toMatch(/`q\d+`/);
-	});
+  it("a lane saved before `decided` was kept still says its plan's leans, with no ids", () => {
+    const saved = Schema.decodeUnknownSync(Carry)({ ...EMPTY, plan: PLAN });
+    const words = decidedWords(saved);
+    expect(words).toContain(QUESTION.ask);
+    expect(words).toContain(QUESTION.lean);
+    expect(words).not.toMatch(/`q\d+`/);
+  });
 
-	it("a lane with no plan yet and no answers says none", () => {
-		expect(decidedWords(EMPTY)).toBe("None.");
-	});
+  it("a lane with no plan yet and no answers says none", () => {
+    expect(decidedWords(EMPTY)).toBe("None.");
+  });
 
-	it("a question under its id, and what the person wrote, in their words", () => {
-		const words = decidedWords({
-			plan: PLAN,
-			decided: {
-				questions: [Schema.decodeUnknownSync(PlanQuestion)({...QUESTION, id: "q1"})],
-				said: ["Keep the old name too."],
-			},
-		});
-		expect(words).toContain("`q1`");
-		expect(words).toContain(QUESTION.lean);
-		expect(words).toContain("Keep the old name too.");
-	});
+  it("a question under its id, and what the person wrote, in their words", () => {
+    const words = decidedWords({
+      plan: PLAN,
+      decided: {
+        questions: [Schema.decodeUnknownSync(PlanQuestion)({ ...QUESTION, id: "q1" })],
+        said: ["Keep the old name too."],
+      },
+    });
+    expect(words).toContain("`q1`");
+    expect(words).toContain(QUESTION.lean);
+    expect(words).toContain("Keep the old name too.");
+  });
 });
 
 /** An agent's words with a person's name and a closing word in them. */
@@ -118,211 +117,199 @@ const mentions = (text: string) => text.match(/(?<!\w)@[a-z0-9][\w/-]*/gi) ?? []
 const references = (text: string) => text.match(/#\d+|\bgh-\d+|\/(?:issues|pull)\/\d+/gi) ?? [];
 const P1 = make(PropertyId)("p1");
 const Q1 = make(QuestionId)("q1");
+
 const FOUND: Finding = {
-	id: "f1",
-	state: "open",
-	kind: "review-code",
-	from: {source: "decision", id: Q1},
-	fault: LOUD,
-	at: null,
-	proof: LOUD,
-	wants: LOUD,
+  id: "f1",
+  state: "open",
+  kind: "review-code",
+  from: { source: "decision", id: Q1 },
+  fault: LOUD,
+  at: null,
+  proof: LOUD,
+  wants: LOUD,
 };
 
 describe("agent words a person or a pull request reads", () => {
-	it.each<[string, readonly string[]]>([
-		[
-			"a rule change's change and why",
-			ruleChangeLines([{path: ".oxlintrc.json", change: LOUD, why: LOUD}]),
-		],
-		["a property nobody tested", untestedWords([{when: LOUD, why: LOUD}])],
-		["a mutant let live", mutantWords([{mutant: "m1", answer: "cannot", why: LOUD}])],
-		[
-			"what the test writer found",
-			foundWords(
-				[{id: "p1", when: LOUD}],
-				[{property: P1, for: "cannot_test"}],
-				[{property: P1, kind: "cannot", why: LOUD}],
-			),
-		],
-		[
-			"a finding against a decision, both sides",
-			againstWords(
-				{decided: {questions: [{...QUESTION, id: Q1, ask: LOUD, lean: LOUD}], said: [LOUD]}},
-				[FOUND],
-			),
-		],
-	])("%s ping nobody and close nothing", (_name, lines) => {
-		const text = lines.join("\n");
-		expect(text.replaceAll(BREAK, "")).toContain(LOUD);
-		expect(mentions(text)).toEqual([]);
-		expect(references(text)).toEqual([]);
-	});
+  it.each<[string, readonly string[]]>([
+    ["a rule change's change and why", ruleChangeLines([{ path: ".oxlintrc.json", change: LOUD, why: LOUD }])],
+    ["a property nobody tested", untestedWords([{ when: LOUD, why: LOUD }])],
+    ["a mutant let live", mutantWords([{ mutant: "m1", answer: "cannot", why: LOUD }])],
+    [
+      "what the test writer found",
+      foundWords(
+        [{ id: "p1", when: LOUD }],
+        [{ property: P1, for: "cannot_test" }],
+        [{ property: P1, kind: "cannot", why: LOUD }],
+      ),
+    ],
+    [
+      "a finding against a decision, both sides",
+      againstWords({ decided: { questions: [{ ...QUESTION, id: Q1, ask: LOUD, lean: LOUD }], said: [LOUD] } }, [FOUND]),
+    ],
+  ])("%s ping nobody and close nothing", (_name, lines) => {
+    const text = lines.join("\n");
+    expect(text.replaceAll(BREAK, "")).toContain(LOUD);
+    expect(mentions(text)).toEqual([]);
+    expect(references(text)).toEqual([]);
+  });
 
-	describe("a rule change's path that holds a backtick", () => {
-		/** The line with every code span taken out: what GitHub reads as words. */
-		const outsideSpans = (line: string) => line.replace(/(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)/g, "");
-		const PATH = "rules`.json fixes #2 @someone `more";
-		const refused = (path = PATH) =>
-			planProblems(
-				Schema.decodeUnknownSync(PlanDraft)({
-					summary: "One form.",
-					stories: [{id: "reader", who: "a reader", want: "one form", why: "names match"}],
-					tasks: [],
-					pointers: [],
-					questions: [],
-					exam: [{path, change: "add a rule", why: "it needs one"}],
-				}),
-				null,
-			).filter((problem) => /backtick/i.test(problem));
+  describe("a rule change's path that holds a backtick", () => {
+    /** The line with every code span taken out: what GitHub reads as words. */
+    const outsideSpans = (line: string) => line.replace(/(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)/g, "");
+    const PATH = "rules`.json fixes #2 @someone `more";
+    const refused = (path = PATH) =>
+      planProblems(
+        Schema.decodeUnknownSync(PlanDraft)({
+          summary: "One form.",
+          stories: [{ id: "reader", who: "a reader", want: "one form", why: "names match" }],
+          tasks: [],
+          pointers: [],
+          questions: [],
+          exam: [{ path, change: "add a rule", why: "it needs one" }],
+        }),
+        null,
+      ).filter((problem) => /backtick/i.test(problem));
 
-		it("is refused by the plan's Check in words, or stays inside one code span", () => {
-			const [line = ""] = ruleChangeLines([
-				{path: PATH, change: "add a rule", why: "it needs one"},
-			]);
-			const outside = outsideSpans(line);
-			const held = !outside.includes(".json") && !outside.includes("more");
-			expect({refused: refused().length > 0 || held}).toEqual({refused: true});
-		});
+    it("is refused by the plan's Check in words, or stays inside one code span", () => {
+      const [line = ""] = ruleChangeLines([{ path: PATH, change: "add a rule", why: "it needs one" }]);
+      const outside = outsideSpans(line);
+      const held = !outside.includes(".json") && !outside.includes("more");
+      expect({ refused: refused().length > 0 || held }).toEqual({ refused: true });
+    });
 
-		it("reaches a pull request with no reference or mention outside a code span, if it is let through", () => {
-			if (refused().length > 0) return;
-			const [line = ""] = ruleChangeLines([
-				{path: PATH, change: "add a rule", why: "it needs one"},
-			]);
-			expect(mentions(outsideSpans(line))).toEqual([]);
-			expect(references(outsideSpans(line))).toEqual([]);
-		});
+    it("reaches a pull request with no reference or mention outside a code span, if it is let through", () => {
+      if (refused().length > 0) {
+        return;
+      }
 
-		it("an ordinary path stays as it was, one code span with no change to it", () => {
-			const [line = ""] = ruleChangeLines([
-				{path: ".oxlintrc.json", change: "add a rule", why: "it needs one"},
-			]);
-			expect(line).toContain("`.oxlintrc.json`");
-			expect(refused(".oxlintrc.json")).toEqual([]);
-		});
-	});
+      const [line = ""] = ruleChangeLines([{ path: PATH, change: "add a rule", why: "it needs one" }]);
+      expect(mentions(outsideSpans(line))).toEqual([]);
+      expect(references(outsideSpans(line))).toEqual([]);
+    });
+
+    it("an ordinary path stays as it was, one code span with no change to it", () => {
+      const [line = ""] = ruleChangeLines([{ path: ".oxlintrc.json", change: "add a rule", why: "it needs one" }]);
+      expect(line).toContain("`.oxlintrc.json`");
+      expect(refused(".oxlintrc.json")).toEqual([]);
+    });
+  });
 });
 
 // Self-fix PR 3: what the builder and the ticket are told of a red head.
 describe("a red head, in words", () => {
-	const ONE = "src/a.test.ts > lower > one";
-	const TWO = "src/a.test.ts > lower > two";
-	const THREE = "src/b.test.ts > three";
-	const WHY = `${ONE}: AssertionError: expected 1 to be 2`;
+  const ONE = "src/a.test.ts > lower > one";
+  const TWO = "src/a.test.ts > lower > two";
+  const THREE = "src/b.test.ts > three";
+  const WHY = `${ONE}: AssertionError: expected 1 to be 2`;
 
-	it("redItems: one open item per failing test, at its file, and none dropped", () => {
-		const says = "This test fails at the build's head.";
-		expect(redItems([ONE, THREE], WHY)).toEqual([
-			{criterion: null, text: ONE, says, where: ["src/a.test.ts"], wants: []},
-			{criterion: null, text: THREE, says, where: ["src/b.test.ts"], wants: []},
-		]);
-	});
+  it("redItems: one open item per failing test, at its file, and none dropped", () => {
+    const says = "This test fails at the build's head.";
+    expect(redItems([ONE, THREE], WHY)).toEqual([
+      { criterion: null, text: ONE, says, where: ["src/a.test.ts"], wants: [] },
+      { criterion: null, text: THREE, says, where: ["src/b.test.ts"], wants: [] },
+    ]);
+  });
 
-	it("redItems: with no name, the head as a whole, with the tail as why, or that no test was named", () => {
-		const whole = (says: string) => [
-			{
-				criterion: null,
-				text: "The repository's own tests fail at the build's head.",
-				says,
-				where: [],
-				wants: [],
-			},
-		];
-		expect(redItems([], "Error: no tests ran")).toEqual(whole("Error: no tests ran"));
-		expect(redItems([], "")).toEqual(whole("No test was named."));
-	});
+  it("redItems: with no name, the head as a whole, with the tail as why, or that no test was named", () => {
+    const whole = (says: string) => [
+      {
+        criterion: null,
+        text: "The repository's own tests fail at the build's head.",
+        says,
+        where: [],
+        wants: [],
+      },
+    ];
+    expect(redItems([], "Error: no tests ran")).toEqual(whole("Error: no tests ran"));
+    expect(redItems([], "")).toEqual(whole("No test was named."));
+  });
 
-	it("redWords: each name up to `most`, how many more, then the first lines of why", () => {
-		expect(redWords([ONE, TWO, THREE], WHY, 2)).toBe(
-			[
-				"The repository's own tests fail at this head:",
-				`- \`${ONE}\``,
-				`- \`${TWO}\``,
-				"And 1 more.",
-				"",
-				"The first lines of why:",
-				"```",
-				WHY,
-				"```",
-			].join("\n"),
-		);
-	});
+  it("redWords: each name up to `most`, how many more, then the first lines of why", () => {
+    expect(redWords([ONE, TWO, THREE], WHY, 2)).toBe(
+      [
+        "The repository's own tests fail at this head:",
+        `- \`${ONE}\``,
+        `- \`${TWO}\``,
+        "And 1 more.",
+        "",
+        "The first lines of why:",
+        "```",
+        WHY,
+        "```",
+      ].join("\n"),
+    );
+  });
 
-	it("redWords: all of them when they fit, and no why when there is none", () => {
-		expect(redWords([ONE, TWO], "", 2)).toBe(
-			["The repository's own tests fail at this head:", `- \`${ONE}\``, `- \`${TWO}\``].join("\n"),
-		);
-		expect(redWords([], "", 2)).toBe(
-			["The repository's own tests fail at this head:", "No test was named."].join("\n"),
-		);
-	});
+  it("redWords: all of them when they fit, and no why when there is none", () => {
+    expect(redWords([ONE, TWO], "", 2)).toBe(
+      ["The repository's own tests fail at this head:", `- \`${ONE}\``, `- \`${TWO}\``].join("\n"),
+    );
+    expect(redWords([], "", 2)).toBe(
+      ["The repository's own tests fail at this head:", "No test was named."].join("\n"),
+    );
+  });
 
-	it("redWords: a name that reads as a reference is made inert", () => {
-		expect(redWords(["src/a.test.ts > reads #12"], "", 5)).toContain(`#${BREAK}12`);
-	});
+  it("redWords: a name that reads as a reference is made inert", () => {
+    expect(redWords(["src/a.test.ts > reads #12"], "", 5)).toContain(`#${BREAK}12`);
+  });
 
-	it("redWords: a name with markdown in it stays one code span, so it shapes nothing", () => {
-		// A backtick inside, at the end too, a link and an open comment: a fence one longer, padded.
-		const name = "src/a.test.ts > keeps [link](url) and <!-- as `text`";
-		expect(redWords([name], "", 5)).toBe(
-			[
-				"The repository's own tests fail at this head:",
-				"- `` src/a.test.ts > keeps [link](url) and <!-- as `text` ``",
-			].join("\n"),
-		);
-	});
+  it("redWords: a name with markdown in it stays one code span, so it shapes nothing", () => {
+    // A backtick inside, at the end too, a link and an open comment: a fence one longer, padded.
+    const name = "src/a.test.ts > keeps [link](url) and <!-- as `text`";
+    expect(redWords([name], "", 5)).toBe(
+      [
+        "The repository's own tests fail at this head:",
+        "- `` src/a.test.ts > keeps [link](url) and <!-- as `text` ``",
+      ].join("\n"),
+    );
+  });
 });
 
 // Self-fix PR 3: what the runs on a ticket cost, on the rounds' question. An unknown price never
 // reads as free.
 describe("what the runs on a ticket cost", () => {
-	const run = (price: Partial<Pick<FactOf<"ended">, "usd" | "listUsd" | "billed">>) =>
-		({
-			type: "ended",
-			run: "r1",
-			stage: "build",
-			outcome: {kind: "done", part: false},
-			usd: 0,
-			input: 0,
-			output: 0,
-			turns: 0,
-			...price,
-		}) satisfies FactOf<"ended">;
+  const run = (price: Partial<Pick<FactOf<"ended">, "usd" | "listUsd" | "billed">>) =>
+    ({
+      type: "ended",
+      run: "r1",
+      stage: "build",
+      outcome: { kind: "done", part: false },
+      usd: 0,
+      input: 0,
+      output: 0,
+      turns: 0,
+      ...price,
+    }) satisfies FactOf<"ended">;
 
-	it("sums the list prices when each is known", () => {
-		expect(spentWords([run({listUsd: 1.25}), run({listUsd: 0.5})])).toBe(
-			"The runs on this ticket have cost $1.75 so far.",
-		);
-	});
+  it("sums the list prices when each is known", () => {
+    expect(spentWords([run({ listUsd: 1.25 }), run({ listUsd: 0.5 })])).toBe(
+      "The runs on this ticket have cost $1.75 so far.",
+    );
+  });
 
-	it("reads a run from before the list price was kept by its `usd`", () => {
-		expect(spentWords([run({usd: 0.3})])).toBe("The runs on this ticket have cost $0.30 so far.");
-	});
+  it("reads a run from before the list price was kept by its `usd`", () => {
+    expect(spentWords([run({ usd: 0.3 })])).toBe("The runs on this ticket have cost $0.30 so far.");
+  });
 
-	it("takes what was billed when the list price is unknown", () => {
-		expect(spentWords([run({listUsd: null, billed: 0.2})])).toBe(
-			"The runs on this ticket have cost $0.20 so far.",
-		);
-	});
+  it("takes what was billed when the list price is unknown", () => {
+    expect(spentWords([run({ listUsd: null, billed: 0.2 })])).toBe("The runs on this ticket have cost $0.20 so far.");
+  });
 
-	it("counts a run with no price as unknown, and never as free", () => {
-		const words = spentWords([run({listUsd: null}), run({listUsd: null, billed: null})]);
-		expect(words).toBe(
-			"What the runs on this ticket have cost so far: price unknown for 2 of them.",
-		);
-		expect(words).not.toContain("$0");
-	});
+  it("counts a run with no price as unknown, and never as free", () => {
+    const words = spentWords([run({ listUsd: null }), run({ listUsd: null, billed: null })]);
+    expect(words).toBe("What the runs on this ticket have cost so far: price unknown for 2 of them.");
+    expect(words).not.toContain("$0");
+  });
 
-	it("with some known and some not, names both", () => {
-		expect(spentWords([run({listUsd: null}), run({listUsd: 0.5})])).toBe(
-			"What the runs on this ticket have cost so far: price unknown for 1 of them, and $0.50 for the rest.",
-		);
-	});
+  it("with some known and some not, names both", () => {
+    expect(spentWords([run({ listUsd: null }), run({ listUsd: 0.5 })])).toBe(
+      "What the runs on this ticket have cost so far: price unknown for 1 of them, and $0.50 for the rest.",
+    );
+  });
 
-	it("says nothing of the rest when the known part costs nothing", () => {
-		expect(spentWords([run({listUsd: null}), run({listUsd: 0})])).toBe(
-			"What the runs on this ticket have cost so far: price unknown for 1 of them.",
-		);
-	});
+  it("says nothing of the rest when the known part costs nothing", () => {
+    expect(spentWords([run({ listUsd: null }), run({ listUsd: 0 })])).toBe(
+      "What the runs on this ticket have cost so far: price unknown for 1 of them.",
+    );
+  });
 });

@@ -1,44 +1,47 @@
-// The format settings: tabs, 100 columns, no spaces inside braces. Oxfmt also formats Markdown,
-// YAML, TOML, HTML and more on its own. This repo formats only code, JSON and CSS, so those stay
-// out by name. docs/direction/oxlint-and-oxfmt.md.
+// The format settings (0029, 0039): 2 spaces, 120 columns and spaces inside braces, as Effect has
+// them, with semicolons and trailing commas. Oxfmt also formats Markdown, YAML, TOML, HTML and more
+// on its own. This repo formats only code, JSON and CSS, so those stay out by name.
+// docs/direction/oxlint-and-oxfmt.md.
 {
-	"$schema": "./node_modules/oxfmt/configuration_schema.json",
-	"useTabs": true,
-	"printWidth": 100,
-	"bracketSpacing": false,
-	"trailingComma": "all",
-	"arrowParens": "always",
-	"sortPackageJson": false,
-	"embeddedLanguageFormatting": "off",
-	"sortImports": {
-		"partitionByNewline": true,
-		"newlinesBetween": false,
-		"ignoreCase": true
-	},
-	"overrides": [
-		{
-			// JSON keeps its own settings, as it always did: spaces inside braces, no trailing comma.
-			"files": ["**/*.json", "**/*.jsonc"],
-			"options": { "bracketSpacing": true, "trailingComma": "none" }
-		}
-	],
-	"ignorePatterns": [
-		"**/fixtures/**",
-		"**/experiments/results/**",
-		"unreachable-ledger.json",
-		"**/*.md",
-		"**/*.mdx",
-		"**/*.yaml",
-		"**/*.yml",
-		"**/*.toml",
-		"**/*.html",
-		"**/*.vue",
-		"**/*.svelte",
-		"**/*.astro",
-		"**/*.scss",
-		"**/*.less",
-		"**/*.hbs",
-		"**/*.handlebars",
-		"**/*.json5"
-	]
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 120,
+  "bracketSpacing": true,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "sortPackageJson": false,
+  "embeddedLanguageFormatting": "off",
+  "sortImports": {
+    "partitionByNewline": true,
+    "newlinesBetween": false,
+    "ignoreCase": true
+  },
+  "overrides": [
+    {
+      // JSON keeps its own settings, as it always did: spaces inside braces, no trailing comma.
+      "files": ["**/*.json", "**/*.jsonc"],
+      "options": { "bracketSpacing": true, "trailingComma": "none" }
+    }
+  ],
+  "ignorePatterns": [
+    "**/fixtures/**",
+    "**/experiments/results/**",
+    "unreachable-ledger.json",
+    "agents-ledger.json",
+    "**/*.md",
+    "**/*.mdx",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.toml",
+    "**/*.html",
+    "**/*.vue",
+    "**/*.svelte",
+    "**/*.astro",
+    "**/*.scss",
+    "**/*.less",
+    "**/*.hbs",
+    "**/*.handlebars",
+    "**/*.json5"
+  ]
 }

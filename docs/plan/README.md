@@ -53,17 +53,45 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
-**Tier 1, dated 2026-11-09.** 18 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-09.** 19 of [its 38 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, so `next/` is on main now: the exams (P1, P2, P30, P32, P35), the spikes and the
-sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12, with
-P33, P34 and P37. The local stage, P12, landed today as
+sheet's design pass (P3 to P5), the design package (P31), and the layers from P6 to P12 and P16,
+with P33, P34 and P37. The local stage, P12, landed today as
 [PR 530](https://github.com/usirin/tea-fabrika/pull/530). P17a, half of the chaos row, landed too
-([PR 537](https://github.com/usirin/tea-fabrika/pull/537)). → next: P16, one built file, is open
-as [PR 536](https://github.com/usirin/tea-fabrika/pull/536); P13, P15, P17b, P18 to P20, P23 to
+([PR 537](https://github.com/usirin/tea-fabrika/pull/537)). P16, one built file, is built as
+[PR 687](https://github.com/usirin/tea-fabrika/pull/687): each program and its window scripts ride
+inside the brain, and the local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)).
+→ next: P13, P15, P17b, P18 to P20, P23 to
 P25, P27a and P36 have tests on their branches and wait for builds; P28's tests are in, and its
 build waits on P19, P21 and P26.
 P34c, new today ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
 turns P34 into OTP's top-level supervisor; its plan is drafted and waits on the owner's read.
+*2026-11-10:* P34 now runs on the Worker path too (ticket 402,
+[PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local stage saves delivery counts,
+writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
+*2026-11-10:* libfabrika's files move into rooms (ticket 477,
+[0043](../../.decisions/0043-rooms-on-floors.md) and [0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
+PR 0's exam landed ([PR 732](https://github.com/usirin/tea-fabrika/pull/732)), and PR 1 gives the shared names
+`ProcessId`, `Sql` and `Rev` files of their own ([PR 773](https://github.com/usirin/tea-fabrika/pull/773)).
+→ next: one move PR (every file to its room, then floors and fronts, then 0051's renames), then
+the runner and gateway splits side by side, then the error PRs.
+Its first open question is answered
+([0018](../../.decisions/0018-one-application-per-program.md)): each program is its own OTP
+application, so one program past its restart limit stops alone. Isolation gets hard walls
+([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
+supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
+
+*2026-11-10:* P8, the notes small exam, is in (ticket 274): saved notes letters frozen in
+`fixtures/next/notes-letters.jsonl`, and the notes, drawing, agent and bytes laws that P13, P22 and P25
+must pass. 55 run green now; 25 wait, marked `not built`, until those rows add their code. → P13's
+build can start.
+
+`next/` naming sweep, ticket 337 (2026-11-09): product fields, saved JSON, deletion SQL,
+RPC replies and span keys now say `reason`; ledger event types and write payloads say `Event`
+and `event`. Reason values, tags, streams, ids and clocks stay the same. The new
+`fabrika/no-why-key` rule checks declarations in `next/`, tests included. Use fresh isolated lab
+storage for these saved shapes; this change does not migrate old lab stores. Today's version
+keeps `why`. → lands once its steps pass
 
 Today's hand-run tooling, ticket 318: [review, cleanup and saved waits](../direction/hand-run-review-and-cleanup.md)
 is decided 2026-11-08. Review sweeps every law and decided note and answers once. Drivers save
@@ -163,7 +191,7 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; mutation shows no law got narrower; nothing loosens. Zero hits from `loosening.sh` and the mutation arm-a vs arm-b narrowing list show that; the PR writes its removed/replacement mapping table and both outputs. The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
 - **A docs-only pull request that writes down a decision** (owner, 2026-11-09) is opened the turn it is decided and merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows. Code pull requests keep their steps.
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
-- **CI wastes no time** (owner, 2026-11-09). A pull request that changes only field rows runs a seconds-long row schema check instead of the full check job, and each lane carries its own field rows. Then every CI job's time is audited for more cuts. The build is in progress (tracker ticket 342). Ticket 375 (PR A) makes skill prose skip the heavy jobs and runs only the tests a skill script reaches; ticket 376 (PR B) puts next on three machines.
+- **CI wastes no time** (owner, 2026-11-09). A pull request that changes only field rows runs a seconds-long row schema check instead of the full check job, and each lane carries its own field rows. Then every CI job's time is audited for more cuts. The build is in progress (tracker ticket 342). Ticket 375 (PR A) makes skill prose skip the heavy jobs and runs only the tests a skill script reaches; ticket 376 (PR B) puts next on six machines, built 2026-11-10 as [PR 653](https://github.com/usirin/tea-fabrika/pull/653). *It said: three machines. The approved plan chose six, as the `test` job has, and split the one 248 s test file in four so no machine is held by it.*
 - **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds decided notes, merges as above. A new design call still gets the owner's yes ([the steps](../direction/next-is-a-pipeline-pre-run.md)). *It said: they still get the owner's yes.*
 - **A pull request that changes only Markdown or images:** no CI wait when no check reads them. Shared skill instructions are read by `skillscheck.sh`, so wait for that check. A broken relative link can slip through.
 - **To bring a branch up to date:** merge `main` in (`git merge origin/main`), never a rebase, a force-push or `gh pr update-branch` (GitHub makes that merge commit, so no step key signs it). In `next/`, the merge is a `lead` commit, signed like any step's ([P32](./tier-1.md#the-pull-requests-one-at-a-time)). A stacked child is the one exception: [0004](../../.decisions/0004-squash-merges-and-native-stacks.md). The commit check's up-to-date rule stays. One command merges `main` in as the bot, signs it as `lead`, and pushes the commit and its notes together, so CI starts on its own; a person's pull request gets its `lead` merge from the same command (owner, 2026-11-08). Checks still rerun on the final commit. *Changed 2026-11-07: it said "rebase and force-push with a lease, never a merge commit or `gh pr update-branch`", and that the diff's `git patch-id --stable` stays the same, so a review holds. That was wrong: it clashed with [done is per criterion](../direction/done-is-per-criterion.md) and [read fresh, run alone](../direction/read-fresh-run-alone.md), a rebase changes every tree a step signed, and a review binds to the diff by replay, not by patch-id ([a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md)).*

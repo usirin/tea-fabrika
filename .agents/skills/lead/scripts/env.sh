@@ -10,7 +10,7 @@ REMOTE=${REMOTE:-$(git -C "$MAIN" remote get-url origin)}
 GH_REPO=${GH_REPO:-$(printf '%s\n' "$REMOTE" | sed -E 's#^(https://github.com/|git@github.com:)##; s#\.git$##')}
 # The person rides as Co-authored-by on the bot's commits.
 FABRIKA_COAUTHOR=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git config --global user.email)>"}
-# The model a box runs, at its list price in experiments/lib/list-price.ts.
-CODEX_MODEL=${CODEX_MODEL:-gpt-6.1-sol}
-CODEX_EFFORT=${CODEX_EFFORT:-xhigh}
+# The model a box runs and its effort (owner, 2026-11-09, decision 0022). fieldrow.py prices it.
+CODEX_MODEL=${CODEX_MODEL:-gpt-6-astra}
+CODEX_EFFORT=${CODEX_EFFORT:-medium}
 export MAIN BOXES REMOTE GH_REPO FABRIKA_COAUTHOR CODEX_MODEL CODEX_EFFORT

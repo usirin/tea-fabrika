@@ -1,344 +1,359 @@
-import {existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
-import {layer as nodeServices} from "@effect/platform-node/NodeServices";
-import {describe, expect, it} from "@effect/vitest";
-import type {ReadableSpan} from "@opentelemetry/sdk-trace-base";
-import {Duration, Effect, type FileSystem, type Path, type Scope} from "effect";
-import type {ChildProcessSpawner} from "effect/process";
-import {ear} from "../../program/ear.ts";
-import {type Given, start, tell} from "../../program/program.ts";
-import {memoryStorage, type Storage} from "../../program/storage.ts";
-import {memoryTracing} from "../../shell/trace/otel.ts";
-import {KEPT_OUT} from "../trace/agent.ts";
-import {acpProgram} from "./program.ts";
-import {type Transcript, turnShapes} from "./transcript.ts";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import { describe, expect, it } from "@effect/vitest";
+import type { ReadableSpan } from "@opentelemetry/sdk-trace-base";
+import { Duration, Effect, type FileSystem, type Path, type Scope } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
+import { ear } from "../../program/ear.ts";
+import { type Given, start, tell } from "../../program/program.ts";
+import { memoryStorage, type Storage } from "../../program/storage.ts";
+import { memoryTracing } from "../../shell/trace/otel.ts";
+import { KEPT_OUT } from "../trace/agent.ts";
+import { acpProgram } from "./program.ts";
+import { type Transcript, turnShapes } from "./transcript.ts";
 
 // The acp program on the fake agent (./fake-agent.ts): a real child process
 // spoken to over ACP, with no model. The user's job first: three turns, read
 // two files, answer, follow up. Then the mechanism rows.
 
 type Flags = Given<(typeof acpProgram)["flags"]>;
+
 type Heard = {
-	readonly opened: ReturnType<typeof ear<unknown>>;
-	readonly said: ReturnType<typeof ear<string>>;
-	readonly told: ReturnType<typeof ear<{readonly turn: number}>>;
-	readonly result: ReturnType<typeof ear<{readonly stop: string; readonly turn: number}>>;
-	readonly ask: ReturnType<typeof ear<{readonly ask: string; readonly answer: string}>>;
+  readonly opened: ReturnType<typeof ear<unknown>>;
+  readonly said: ReturnType<typeof ear<string>>;
+  readonly told: ReturnType<typeof ear<{ readonly turn: number }>>;
+  readonly result: ReturnType<typeof ear<{ readonly stop: string; readonly turn: number }>>;
+  readonly ask: ReturnType<typeof ear<{ readonly ask: string; readonly answer: string }>>;
 };
 
 /** A scratch folder with two files to read, outside any repository. */
 const scratch = () => {
-	const folder = realpathSync(mkdtempSync(join(tmpdir(), "acp-fake-")));
-	writeFileSync(join(folder, "a.txt"), "The river is called Kura.\n");
-	writeFileSync(join(folder, "b.txt"), "The bridge has 7 arches.\n");
-	return folder;
+  const folder = realpathSync(mkdtempSync(join(tmpdir(), "acp-fake-")));
+  writeFileSync(join(folder, "a.txt"), "The river is called Kura.\n");
+  writeFileSync(join(folder, "b.txt"), "The bridge has 7 arches.\n");
+  return folder;
 };
 
 /** What the fake agent noted of each prompt it was sent: `prompt <session> <n> <first word>`. */
 const promptsSent = (folder: string) => {
-	const at = join(folder, ".fake-acp", "log");
-	return existsSync(at) ? readFileSync(at, "utf8").split("\n").filter(Boolean) : [];
+  const at = join(folder, ".fake-acp", "log");
+  return existsSync(at) ? readFileSync(at, "utf8").split("\n").filter(Boolean) : [];
 };
 
 let runs = 0;
+
 /** One start of the acp program, kept under `id` in `storage`. */
 const life = (flags: Flags, storage: Storage, id: string) =>
-	Effect.gen(function* () {
-		const heard: Heard = {opened: ear(), said: ear(), told: ear(), result: ear(), ask: ear()};
-		const started = yield* start(
-			acpProgram,
-			flags,
-			{
-				opened: heard.opened.hear,
-				said: heard.said.hear,
-				told: heard.told.hear,
-				result: heard.result.hear,
-				ask: heard.ask.hear,
-			},
-			{id, storage},
-		);
-		if (started.kind !== "running") return yield* Effect.die(`acp did not start: ${started.why}`);
-		const transcript = () => started.run.machines.transcript.state() as Transcript | null;
-		return {started, heard, transcript};
-	});
+  Effect.gen(function* () {
+    const heard: Heard = { opened: ear(), said: ear(), told: ear(), result: ear(), ask: ear() };
+    const started = yield* start(
+      acpProgram,
+      flags,
+      {
+        opened: heard.opened.hear,
+        said: heard.said.hear,
+        told: heard.told.hear,
+        result: heard.result.hear,
+        ask: heard.ask.hear,
+      },
+      { id, storage },
+    );
+
+    if (started.kind !== "running") {
+      return yield* Effect.die(`acp did not start: ${started.why}`);
+    }
+
+    const transcript = () => started.run.machines.transcript.state() as Transcript | null;
+    return { started, heard, transcript };
+  });
 
 const fake = (folder: string, more: Partial<Flags> = {}): Flags => ({
-	agent: "fake",
-	folder,
-	model: undefined,
-	effort: undefined,
-	mode: undefined,
-	permissions: undefined,
-	reopen: undefined,
-	budget: undefined,
-	...more,
+  agent: "fake",
+  folder,
+  model: undefined,
+  effort: undefined,
+  mode: undefined,
+  permissions: undefined,
+  reopen: undefined,
+  budget: undefined,
+  ...more,
 });
 
 const until = (check: () => boolean, what: string) =>
-	Effect.gen(function* () {
-		while (!check()) yield* Effect.sleep(Duration.millis(10));
-	}).pipe(
-		// Stopped mid-wait (the test's time limit, or a cancel): say what it waited for.
-		Effect.onInterrupt(() => Effect.logError(`waited for ${what}`)),
-	);
+  Effect.gen(function* () {
+    while (!check()) {
+      yield* Effect.sleep(Duration.millis(10));
+    }
+  }).pipe(
+    // Stopped mid-wait (the test's time limit, or a cancel): say what it waited for.
+    Effect.onInterrupt(() => Effect.logError(`waited for ${what}`)),
+  );
 
 type Node = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
 const onNode = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
-	effect.pipe(Effect.scoped, Effect.provide(nodeServices));
+  effect.pipe(Effect.scoped, Effect.provide(nodeServices));
 
-const run = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) =>
-	Effect.runPromise(onNode(effect));
+const run = <A, E>(effect: Effect.Effect<A, E, Node | Scope.Scope>) => Effect.runPromise(onNode(effect));
 
 describe("acp on the fake agent", () => {
-	it("sets the requested permission mode before reporting opened", async () => {
-		const opened = await run(
-			Effect.gen(function* () {
-				const {started, heard} = yield* life(
-					fake(scratch(), {mode: "plan"}),
-					memoryStorage(),
-					"acp:initial-mode",
-				);
-				return yield* Effect.race(heard.opened.upTo(1), Effect.as(started.run.ended, []));
-			}),
-		);
-		expect(opened).toMatchObject([{mode: "plan"}]);
-	});
+  it("sets the requested permission mode before reporting opened", async () => {
+    const opened = await run(
+      Effect.gen(function* () {
+        const { started, heard } = yield* life(fake(scratch(), { mode: "plan" }), memoryStorage(), "acp:initial-mode");
+        return yield* Effect.race(heard.opened.upTo(1), Effect.as(started.run.ended, []));
+      }),
+    );
+    expect(opened).toMatchObject([{ mode: "plan" }]);
+  });
 
-	it("reports elapsed turn time, not a wall-clock timestamp", async () => {
-		const before = Date.now();
-		const results = await run(
-			Effect.gen(function* () {
-				const result = ear<{ms: number}>();
-				const started = yield* start(
-					acpProgram,
-					fake(scratch()),
-					{result: result.hear},
-					{
-						id: "acp:elapsed",
-						storage: memoryStorage(),
-					},
-				);
-				if (started.kind !== "running") return yield* Effect.die("acp did not start");
-				yield* tell(started.run, "prompt", "hello");
-				return yield* result.upTo(1);
-			}),
-		);
-		expect(results).toHaveLength(1);
-		expect(results[0]?.ms).toBeGreaterThanOrEqual(0);
-		expect(results[0]?.ms).toBeLessThanOrEqual(Date.now() - before);
-	});
+  it("reports elapsed turn time, not a wall-clock timestamp", async () => {
+    const before = Date.now();
+    const results = await run(
+      Effect.gen(function* () {
+        const result = ear<{ ms: number }>();
+        const started = yield* start(
+          acpProgram,
+          fake(scratch()),
+          { result: result.hear },
+          {
+            id: "acp:elapsed",
+            storage: memoryStorage(),
+          },
+        );
 
-	it("accepts refuse as a permission setting and rejects an empty setting", () => {
-		expect(acpProgram.flags.permissions.shape.check("refuse")).toBe(true);
-		expect(acpProgram.flags.permissions.shape.check("")).toBe(false);
-	});
-	it("three turns (read two files and answer, then two follow-ups): three answers, one transcript of three whole turns", async () => {
-		const folder = scratch();
-		const {said, shapes, opened} = await run(
-			Effect.gen(function* () {
-				runs += 1;
-				const {started, heard, transcript} = yield* life(
-					fake(folder, {model: "fake-large", effort: "low"}),
-					memoryStorage(),
-					`acp:test-${runs}`,
-				);
-				for (const prompt of [
-					"Read a.txt and b.txt, then say what each says.",
-					"Which of the two files names a number?",
-					"Say it in one word.",
-				])
-					expect(yield* tell(started.run, "prompt", prompt)).toBe("queued");
-				started.close("prompt");
-				const end = yield* started.run.ended;
-				expect(end.kind).toBe("ended");
-				const s = transcript();
-				return {
-					said: heard.said.values,
-					shapes: s === null ? [] : turnShapes(s),
-					opened: heard.opened.values,
-				};
-			}),
-		);
-		expect(opened).toMatchObject([{how: "new", model: "fake-large", mode: "auto", resent: 0}]);
-		expect(said[0]).toBe("a.txt: The river is called Kura.\nb.txt: The bridge has 7 arches.");
-		expect(said).toHaveLength(3);
-		expect(shapes).toEqual([
-			{
-				turn: 1,
-				prompts: 1,
-				said: true,
-				tools: ["completed", "completed"],
-				stop: "end_turn",
-				usage: true,
-			},
-			{turn: 2, prompts: 1, said: true, tools: [], stop: "end_turn", usage: true},
-			{turn: 3, prompts: 1, said: true, tools: [], stop: "end_turn", usage: true},
-		]);
-		expect(promptsSent(folder)).toHaveLength(3);
-	});
+        if (started.kind !== "running") {
+          return yield* Effect.die("acp did not start");
+        }
 
-	it("a permission ask is shown and refused by default: the file is not written", async () => {
-		const folder = scratch();
-		const asks = await run(
-			Effect.gen(function* () {
-				runs += 1;
-				const {started, heard} = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
-				yield* tell(started.run, "prompt", "write it");
-				started.close("prompt");
-				yield* started.run.ended;
-				return heard.ask.values;
-			}),
-		);
-		expect(asks).toMatchObject([{ask: "ask-1", tool: "Write", kind: "edit", answer: "refused"}]);
-		expect(existsSync(join(folder, "written.txt"))).toBe(false);
-	});
+        yield* tell(started.run, "prompt", "hello");
+        return yield* result.upTo(1);
+      }),
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0]?.ms).toBeGreaterThanOrEqual(0);
+    expect(results[0]?.ms).toBeLessThanOrEqual(Date.now() - before);
+  });
 
-	it("with --permissions ask it waits, and is allowed only when told: allow-once, never always", async () => {
-		const folder = scratch();
-		const asks = await run(
-			Effect.gen(function* () {
-				runs += 1;
-				const {started, heard} = yield* life(
-					fake(folder, {permissions: "ask"}),
-					memoryStorage(),
-					`acp:test-${runs}`,
-				);
-				yield* tell(started.run, "prompt", "write it");
-				yield* tell(started.run, "prompt", "write it again");
-				started.close("prompt");
-				const first = (yield* heard.ask.upTo(1))[0];
-				expect(first?.answer).toBe("waiting");
-				expect(existsSync(join(folder, "written.txt"))).toBe(false);
-				yield* tell(started.run, "allow", "ask-1");
-				yield* heard.ask.upTo(3);
-				yield* tell(started.run, "refuse", "ask-2");
-				yield* started.run.ended;
-				return heard.ask.values.map((a) => `${a.ask} ${a.answer}`);
-			}),
-		);
-		expect(asks).toEqual(["ask-1 waiting", "ask-1 allowed", "ask-2 waiting", "ask-2 refused"]);
-		expect(readFileSync(join(folder, "written.txt"), "utf8")).toBe("written\n");
-	});
+  it("accepts refuse as a permission setting and rejects an empty setting", () => {
+    expect(acpProgram.flags.permissions.shape.check("refuse")).toBe(true);
+    expect(acpProgram.flags.permissions.shape.check("")).toBe(false);
+  });
+  it("three turns (read two files and answer, then two follow-ups): three answers, one transcript of three whole turns", async () => {
+    const folder = scratch();
+    const { said, shapes, opened } = await run(
+      Effect.gen(function* () {
+        runs += 1;
+        const { started, heard, transcript } = yield* life(
+          fake(folder, { model: "fake-large", effort: "low" }),
+          memoryStorage(),
+          `acp:test-${runs}`,
+        );
 
-	it.live("cancel: the turn running ends cancelled, and the next one runs", () =>
-		Effect.gen(function* () {
-			const folder = scratch();
-			const {results, transcript} = yield* onNode(
-				Effect.gen(function* () {
-					runs += 1;
-					const {started, heard, transcript} = yield* life(
-						fake(folder),
-						memoryStorage(),
-						`acp:test-${runs}`,
-					);
-					yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
-					yield* tell(started.run, "prompt", "and now?");
-					started.close("prompt");
-					yield* until(() => promptsSent(folder).length === 1, "the first prompt");
-					yield* tell(started.run, "cancel", "now");
-					yield* started.run.ended;
-					return {results: heard.result.values, transcript: transcript()};
-				}),
-			);
-			expect(results.map((r) => r.stop)).toEqual(["cancelled", "end_turn"]);
-			expect(transcript?.turns.map((t) => t.stop)).toEqual(["cancelled", "end_turn"]);
-		}),
-	);
+        for (const prompt of [
+          "Read a.txt and b.txt, then say what each says.",
+          "Which of the two files names a number?",
+          "Say it in one word.",
+        ]) {
+          expect(yield* tell(started.run, "prompt", prompt)).toBe("queued");
+        }
 
-	for (const reopen of ["load", "resume"] as const)
-		it.live(
-			`stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`,
-			() =>
-				Effect.gen(function* () {
-					const folder = scratch();
-					const storage = memoryStorage();
-					runs += 1;
-					const id = `acp:test-${runs}`;
-					const flags = fake(folder, {reopen});
-					yield* onNode(
-						Effect.gen(function* () {
-							const {started, heard} = yield* life(flags, storage, id);
-							yield* tell(started.run, "prompt", "Read a.txt and say what it says.");
-							yield* tell(started.run, "prompt", "slowly read b.txt");
-							started.close("prompt");
-							yield* heard.result.upTo(1);
-							yield* until(() => promptsSent(folder).length === 2, "the second prompt");
-							yield* started.stop;
-						}),
-					);
-					const again = yield* onNode(
-						Effect.gen(function* () {
-							const {started, heard, transcript} = yield* life(flags, storage, id);
-							yield* started.run.ended;
-							return {
-								opened: heard.opened.values,
-								told: heard.told.values,
-								results: heard.result.values,
-								transcript: transcript(),
-							};
-						}),
-					);
-					const sent = promptsSent(folder);
-					// The same session, both starts; the cut prompt sent twice, the answered one once.
-					expect(new Set(sent.map((l) => l.split(" ")[1])).size).toBe(1);
-					expect(sent.map((l) => l.split(" ")[3])).toEqual(["Read", "slowly", "slowly"]);
-					expect(again.opened).toMatchObject([{how: reopen, earlier: 1, resent: 1}]);
-					expect(again.results).toMatchObject([{turn: 2, stop: "end_turn"}]);
-					// The resent prompt is told once more under its own number, for a job that waits on it.
-					expect(again.told).toEqual([{turn: 2}]);
-					// Loaded, the transcript comes back from the replay; resumed, only what came after.
-					const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
-					if (reopen === "load") expect(replayed).toBeGreaterThan(0);
-					else expect(replayed).toBe(0);
-				}),
-		);
+        started.close("prompt");
+        const end = yield* started.run.ended;
+        expect(end.kind).toBe("ended");
+        const s = transcript();
+        return {
+          said: heard.said.values,
+          shapes: s === null ? [] : turnShapes(s),
+          opened: heard.opened.values,
+        };
+      }),
+    );
+    expect(opened).toMatchObject([{ how: "new", model: "fake-large", mode: "auto", resent: 0 }]);
+    expect(said[0]).toBe("a.txt: The river is called Kura.\nb.txt: The bridge has 7 arches.");
+    expect(said).toHaveLength(3);
+    expect(shapes).toEqual([
+      {
+        turn: 1,
+        prompts: 1,
+        said: true,
+        tools: ["completed", "completed"],
+        stop: "end_turn",
+        usage: true,
+      },
+      { turn: 2, prompts: 1, said: true, tools: [], stop: "end_turn", usage: true },
+      { turn: 3, prompts: 1, said: true, tools: [], stop: "end_turn", usage: true },
+    ]);
+    expect(promptsSent(folder)).toHaveLength(3);
+  });
 
-	it("a folder in a repository is refused before any harness starts", async () => {
-		const inRepo = await run(
-			Effect.gen(function* () {
-				runs += 1;
-				const {started} = yield* life(fake(process.cwd()), memoryStorage(), `acp:test-${runs}`);
-				return yield* started.run.ended;
-			}),
-		);
-		expect(JSON.stringify(inRepo)).toContain("inside a git repository");
-	});
+  it("a permission ask is shown and refused by default: the file is not written", async () => {
+    const folder = scratch();
+    const asks = await run(
+      Effect.gen(function* () {
+        runs += 1;
+        const { started, heard } = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
+        yield* tell(started.run, "prompt", "write it");
+        started.close("prompt");
+        yield* started.run.ended;
+        return heard.ask.values;
+      }),
+    );
+    expect(asks).toMatchObject([{ ask: "ask-1", tool: "Write", kind: "edit", answer: "refused" }]);
+    expect(existsSync(join(folder, "written.txt"))).toBe(false);
+  });
 
-	it("traced: the turn is an agent span with its tool calls under it, and no prompt, answer or file text is in any span", async () => {
-		const folder = scratch();
-		/** Spans as made (`raw`), and as a viewer is shown them. */
-		const traced = async (raw: boolean) => {
-			// Only what an agent's spans keep out matters here. The pipeline's whole viewing
-			// (`FABRIKA_VIEWING`) also colours a stage outcome, and no stage runs in this test.
-			const {spans, layer} = memoryTracing({raw, viewing: {keptOut: KEPT_OUT}});
-			await run(
-				Effect.gen(function* () {
-					runs += 1;
-					const {started} = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
-					yield* tell(started.run, "prompt", "Read a.txt and b.txt, plan it, think, secretword");
-					started.close("prompt");
-					yield* started.run.ended;
-				}).pipe(Effect.provide(layer)),
-			);
-			return spans;
-		};
-		const text = (s: ReadableSpan) =>
-			JSON.stringify([s.name, s.attributes, s.events.map((e) => [e.name, e.attributes])]);
-		const raw = await traced(true);
-		const shown = await traced(false);
-		for (const spans of [raw, shown]) {
-			const all = spans.map(text).join("\n");
-			for (const words of ["secretword", "Kura", "arches", "a.txt"])
-				expect(all).not.toContain(words);
-		}
-		const names = raw.map((s) => s.name);
-		expect(names).toContain("acp transcript");
-		expect(names).toContain("acp session");
-		expect(names).toContain("acp turn");
-		// Made: each tool call a span of its own. Shown: the agent run folded into its turn.
-		expect(names.filter((n) => n.includes("Read"))).toHaveLength(2);
-		expect(shown.map((s) => s.name)).toContain("acp turn · 1 turn");
-	});
+  it("with --permissions ask it waits, and is allowed only when told: allow-once, never always", async () => {
+    const folder = scratch();
+    const asks = await run(
+      Effect.gen(function* () {
+        runs += 1;
+        const { started, heard } = yield* life(
+          fake(folder, { permissions: "ask" }),
+          memoryStorage(),
+          `acp:test-${runs}`,
+        );
+        yield* tell(started.run, "prompt", "write it");
+        yield* tell(started.run, "prompt", "write it again");
+        started.close("prompt");
+        const first = (yield* heard.ask.upTo(1))[0];
+        expect(first?.answer).toBe("waiting");
+        expect(existsSync(join(folder, "written.txt"))).toBe(false);
+        yield* tell(started.run, "allow", "ask-1");
+        yield* heard.ask.upTo(3);
+        yield* tell(started.run, "refuse", "ask-2");
+        yield* started.run.ended;
+        return heard.ask.values.map((a) => `${a.ask} ${a.answer}`);
+      }),
+    );
+    expect(asks).toEqual(["ask-1 waiting", "ask-1 allowed", "ask-2 waiting", "ask-2 refused"]);
+    expect(readFileSync(join(folder, "written.txt"), "utf8")).toBe("written\n");
+  });
+
+  it.live("cancel: the turn running ends cancelled, and the next one runs", () =>
+    Effect.gen(function* () {
+      const folder = scratch();
+      const { results, transcript } = yield* onNode(
+        Effect.gen(function* () {
+          runs += 1;
+          const { started, heard, transcript } = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
+          yield* tell(started.run, "prompt", "slowly read a.txt and b.txt");
+          yield* tell(started.run, "prompt", "and now?");
+          started.close("prompt");
+          yield* until(() => promptsSent(folder).length === 1, "the first prompt");
+          yield* tell(started.run, "cancel", "now");
+          yield* started.run.ended;
+          return { results: heard.result.values, transcript: transcript() };
+        }),
+      );
+      expect(results.map((r) => r.stop)).toEqual(["cancelled", "end_turn"]);
+      expect(transcript?.turns.map((t) => t.stop)).toEqual(["cancelled", "end_turn"]);
+    }),
+  );
+
+  for (const reopen of ["load", "resume"] as const) {
+    it.live(
+      `stopped mid turn and started again (${reopen}): the same session opens again, the cut prompt is sent again, nobody retells it`,
+      () =>
+        Effect.gen(function* () {
+          const folder = scratch();
+          const storage = memoryStorage();
+          runs += 1;
+          const id = `acp:test-${runs}`;
+          const flags = fake(folder, { reopen });
+          yield* onNode(
+            Effect.gen(function* () {
+              const { started, heard } = yield* life(flags, storage, id);
+              yield* tell(started.run, "prompt", "Read a.txt and say what it says.");
+              yield* tell(started.run, "prompt", "slowly read b.txt");
+              started.close("prompt");
+              yield* heard.result.upTo(1);
+              yield* until(() => promptsSent(folder).length === 2, "the second prompt");
+              yield* started.stop;
+            }),
+          );
+          const again = yield* onNode(
+            Effect.gen(function* () {
+              const { started, heard, transcript } = yield* life(flags, storage, id);
+              yield* started.run.ended;
+              return {
+                opened: heard.opened.values,
+                told: heard.told.values,
+                results: heard.result.values,
+                transcript: transcript(),
+              };
+            }),
+          );
+          const sent = promptsSent(folder);
+          // The same session, both starts; the cut prompt sent twice, the answered one once.
+          expect(new Set(sent.map((l) => l.split(" ")[1])).size).toBe(1);
+          expect(sent.map((l) => l.split(" ")[3])).toEqual(["Read", "slowly", "slowly"]);
+          expect(again.opened).toMatchObject([{ how: reopen, earlier: 1, resent: 1 }]);
+          expect(again.results).toMatchObject([{ turn: 2, stop: "end_turn" }]);
+          // The resent prompt is told once more under its own number, for a job that waits on it.
+          expect(again.told).toEqual([{ turn: 2 }]);
+          // Loaded, the transcript comes back from the replay; resumed, only what came after.
+          const replayed = again.transcript?.messages.filter((m) => m.turn === null).length ?? 0;
+
+          if (reopen === "load") {
+            expect(replayed).toBeGreaterThan(0);
+          } else {
+            expect(replayed).toBe(0);
+          }
+        }),
+    );
+  }
+
+  it("a folder in a repository is refused before any harness starts", async () => {
+    const inRepo = await run(
+      Effect.gen(function* () {
+        runs += 1;
+        const { started } = yield* life(fake(process.cwd()), memoryStorage(), `acp:test-${runs}`);
+        return yield* started.run.ended;
+      }),
+    );
+    expect(JSON.stringify(inRepo)).toContain("inside a git repository");
+  });
+
+  it("traced: the turn is an agent span with its tool calls under it, and no prompt, answer or file text is in any span", async () => {
+    const folder = scratch();
+    /** Spans as made (`raw`), and as a viewer is shown them. */
+    const traced = async (raw: boolean) => {
+      // Only what an agent's spans keep out matters here. The pipeline's whole viewing
+      // (`FABRIKA_VIEWING`) also colours a stage outcome, and no stage runs in this test.
+      const { spans, layer } = memoryTracing({ raw, viewing: { keptOut: KEPT_OUT } });
+      await run(
+        Effect.gen(function* () {
+          runs += 1;
+          const { started } = yield* life(fake(folder), memoryStorage(), `acp:test-${runs}`);
+          yield* tell(started.run, "prompt", "Read a.txt and b.txt, plan it, think, secretword");
+          started.close("prompt");
+          yield* started.run.ended;
+        }).pipe(Effect.provide(layer)),
+      );
+      return spans;
+    };
+    const text = (s: ReadableSpan) =>
+      JSON.stringify([s.name, s.attributes, s.events.map((e) => [e.name, e.attributes])]);
+    const raw = await traced(true);
+    const shown = await traced(false);
+
+    for (const spans of [raw, shown]) {
+      const all = spans.map(text).join("\n");
+
+      for (const words of ["secretword", "Kura", "arches", "a.txt"]) {
+        expect(all).not.toContain(words);
+      }
+    }
+
+    const names = raw.map((s) => s.name);
+    expect(names).toContain("acp transcript");
+    expect(names).toContain("acp session");
+    expect(names).toContain("acp turn");
+    // Made: each tool call a span of its own. Shown: the agent run folded into its turn.
+    expect(names.filter((n) => n.includes("Read"))).toHaveLength(2);
+    expect(shown.map((s) => s.name)).toContain("acp turn · 1 turn");
+  });
 });

@@ -1,5 +1,5 @@
-import {Brand, Context, Effect, Schema} from "effect";
-import {isDesk} from "./files.ts";
+import { Brand, Context, Effect, Schema } from "effect";
+import { isDesk } from "./files.ts";
 
 // What leaves the window: a link, to the person's own browser, and nothing else.
 //
@@ -24,9 +24,7 @@ type Outside = string & Brand.Brand<"Outside">;
 const Outside = Brand.nominal<Outside>();
 
 /** What becomes of a URL a page asks to open: it opens outside, or it is refused, and why. */
-type Outward =
-	| {readonly kind: "open"; readonly url: Outside}
-	| {readonly kind: "refused"; readonly why: string};
+type Outward = { readonly kind: "open"; readonly url: Outside } | { readonly kind: "refused"; readonly why: string };
 
 const SCHEMES: ReadonlySet<string> = new Set(["http:", "https:"]);
 
@@ -35,31 +33,41 @@ const SCHEMES: ReadonlySet<string> = new Set(["http:", "https:"]);
  * parser writes it back, so the URL checked is the URL opened, its scheme first.
  */
 export const outsideOf = (url: string): Outward => {
-	const parsed = URL.parse(url);
-	if (parsed === null) return {kind: "refused", why: "not a URL"};
-	if (!SCHEMES.has(parsed.protocol))
-		return {kind: "refused", why: `${parsed.protocol} is not http or https`};
-	return {kind: "open", url: Outside(parsed.href)};
+  const parsed = URL.parse(url);
+
+  if (parsed === null) {
+    return { kind: "refused", why: "not a URL" };
+  }
+
+  if (!SCHEMES.has(parsed.protocol)) {
+    return { kind: "refused", why: `${parsed.protocol} is not http or https` };
+  }
+
+  return { kind: "open", url: Outside(parsed.href) };
 };
 
 /** The browser did not open a URL: the system had nothing to open it with, or said no. */
 export class NotOpened extends Schema.TaggedError<NotOpened>()("NotOpened", {
-	url: Schema.String,
-	why: Schema.String,
+  url: Schema.String,
+  why: Schema.String,
 }) {}
 
 /** The person's own browser. It opens only an `Outside`: a URL `outsideOf` let through. */
 export class Browser extends Context.Service<
-	Browser,
-	{readonly open: (url: Outside) => Effect.Effect<void, NotOpened>}
+  Browser,
+  { readonly open: (url: Outside) => Effect.Effect<void, NotOpened> }
 >()("@kampus/fabrika-app-old/Browser") {}
 
 /** A page asks to open `url`, as a link's new window: from the desk page, http or https opens outside. */
-export const openOutside = (asked: {readonly url: string; readonly from: string}) =>
-	Effect.gen(function* () {
-		const out: Outward = isDesk(asked.from)
-			? outsideOf(asked.url)
-			: {kind: "refused", why: `${asked.from} is not the app's own page`};
-		if (out.kind === "open") yield* (yield* Browser).open(out.url);
-		return out;
-	});
+export const openOutside = (asked: { readonly url: string; readonly from: string }) =>
+  Effect.gen(function* () {
+    const out: Outward = isDesk(asked.from)
+      ? outsideOf(asked.url)
+      : { kind: "refused", why: `${asked.from} is not the app's own page` };
+
+    if (out.kind === "open") {
+      yield* (yield* Browser).open(out.url);
+    }
+
+    return out;
+  });

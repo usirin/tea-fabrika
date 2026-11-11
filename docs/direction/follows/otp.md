@@ -8,7 +8,7 @@ changes one of these behaviors updates its row in the same pull request
 
 Seeded 2026-11-09 from [experiment 239](../../../experiments/239-supervision-vs-otp.md), checked
 against main at `5b1171ed`. OTP's side is its documentation as read that day:
-[supervisor behaviour][sup], [`supervisor`][supref], [processes][proc] and [`erlang`][erl].
+[supervisor behaviour][sup], [`supervisor`][supref], [processes][proc], [`erlang`][erl] and [`application`][app].
 
 | Behavior | What OTP does | What we do | Same or differs |
 |---|---|---|---|
@@ -33,21 +33,30 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | Who supervises | A supervisor process, linked to its children ([sup]) | A tea machine (`app/supervisor.ts:59`) stepped inside the program's own object (`app/runner.ts:310-431`) | differs, because its receipts sit beside the step in the object's SQLite (C5) |
 | Strategies | `one_for_one`, `one_for_all`, `rest_for_one`, `simple_one_for_one` ([sup]) | `one_for_one` with one child; the rest not built, Tier 4 | differs, because Tier 1 has one child |
 | Restart types | `permanent`, `transient`, `temporary` ([sup]) | In effect `transient`: only a throw restarts (`app/supervisor.ts:84-131`); no choice yet, Tier 4 | differs, because a program has no normal exit in Tier 1 |
+| A child that fails during start | `start_link` fails: the supervisor "first terminates all already started child processes with reason `shutdown` and then terminate itself", and restart strategies apply to children that started ([supref], read 2026-11-10) | The local stage's brain (workerd): if it dies before the stage's ready line, `startStage` fails with a `ControlError` and no replacement is started (`node/stage.ts:322-334`, `next/apps/fabrika/dev.ts:81-84`); restarts and the brake apply after it (`node/stage.ts:286-318`) | same; [0044](../../../.decisions/0044-a-brain-that-dies-starting-fails.md) writes it down, and no law checks the "no replacement" half yet (ticket 512) |
 | Restart intensity | 1 in 5 s by default; more than MaxR in MaxT gives up ([supref]) | 5 in 5,000 ms by default (`app/supervisor.ts:6-11`), with the edge counted (`coordination/process.ts:127-132`) | differs, because intensity must be at least the delivery limit, or a bad letter trips the brake before it is dead (`coordination/recovery.ts:19`) |
 | Restart backoff | None: OTP restarts at once ([sup]) | 100 ms doubling to 800 ms, reset after 5 s live (`app/supervisor.ts:11`, `:103-107`, `:147-149`) | differs, because a restart here is a wake, writes and a load ([experiment 100](../../../experiments/100-supervision-tree.md)) |
 | Past the limit | Ends its children and itself with `shutdown`; the parent decides ([sup]) | `down {why, crashes, until}`, then a new start at `until`, forever (`app/supervisor.ts:116-136`) | differs, because Tier 1 has no parent (C4); about 276,000 entries a day for a program that always throws; 0016 closes it |
+| Applications | A node runs many applications, each with its own top-level supervisor ([sup]); a `temporary` one that stops "is reported but no other applications are terminated" ([app]) | No applications yet; each program's supervisor sits in its own object (`app/supervisor.ts:59`, `app/runner.ts:310-431`), so one name's crash loop touches no other name | same in effect; [0018](../../../.decisions/0018-one-application-per-program.md) makes it explicit: one application per program, and no program's failure may stop another |
 | Shutdown | `brutal_kill`, a timeout or `infinity`; reverse start order ([sup]) | Exit is at once (`coordination/process-manager.ts:182-214`); later writes are refused (`door/door.ts:1350`, `:1356`) | differs, because steps are serial (`app/runner.ts:224`), so nothing is half-written (C5) |
+| A busy process | The scheduler preempts each process after a count of reductions, so one busy loop cannot stall the others ([proc]) | Each process runs in its own Worker Loader isolate (`workers/index.ts:25`), but `limits.cpuMs` is unset and a local workerd runs them on one thread: a 300 ms spin stalls every process ([experiment 173](../../../experiments/173-worker-loader.md)) | differs, because nothing caps a step yet; [0020](../../../.decisions/0020-programs-get-hard-walls.md) sets `cpuMs` from a measured step and a local step watchdog, built by P34c |
 
-Count: 25 rows, 7 same, 18 differ. Of the 18, 4 are not built yet (links, trap exit, three of the
+Count: 28 rows, 9 same, 19 differ. Of the 19, 4 are not built yet (links, trap exit, three of the
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
-reasons (ticket 406). One is an open call: past the limit (ticket 404).
+reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
 Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
 makes Tier 1's supervision OTP's top-level supervisor, built by P34c. The rows above say what is on
-main today. P34c's pull request updates the rows for who supervises, restart types, intensity,
-backoff, past the limit and exit reasons.
+main today. [0018](../../../.decisions/0018-one-application-per-program.md) amends it: each program is its own
+application with its own top-level supervisor, so one program past its limit stops alone. P34c's
+pull request updates the rows for who supervises, restart types, intensity, backoff, past the
+limit, applications, exit reasons and a busy process.
+[0020](../../../.decisions/0020-programs-get-hard-walls.md) amends 0018: each program's supervisor
+lives in its own object and learns of a crash by a letter, as OTP's supervisor learns of a death by
+message, and isolation gets hard walls: quotas per program and a CPU limit per isolate.
 
 [sup]: https://www.erlang.org/doc/system/sup_princ.html
 [supref]: https://www.erlang.org/doc/apps/stdlib/supervisor.html
 [proc]: https://www.erlang.org/doc/system/ref_man_processes.html
 [erl]: https://www.erlang.org/doc/apps/erts/erlang.html
+[app]: https://www.erlang.org/doc/apps/kernel/application.html

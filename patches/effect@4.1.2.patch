@@ -1,0 +1,35 @@
+diff --git a/dist/internal/arbitrary/model.js b/dist/internal/arbitrary/model.js
+--- a/dist/internal/arbitrary/model.js
++++ b/dist/internal/arbitrary/model.js
+@@ -124,8 +124,10 @@
+ }
+ /** @internal */
+ export function sampleFromShrink(value, shrink) {
+-  const values = shrink(value);
+-  return makeSample(value, values.length === 0 ? undefined : Effect.map(pullFromArray(values), value => sampleFromShrink(value, shrink)));
++  return makeSampleWithLazyShrinks(value, () => {
++    const values = shrink(value);
++    return values.length === 0 ? undefined : Effect.map(pullFromArray(values), value => sampleFromShrink(value, shrink));
++  });
+ }
+ /** @internal */
+ export function sampleFromValidatedShrink(value, shrink, validate) {
+diff --git a/src/internal/arbitrary/model.ts b/src/internal/arbitrary/model.ts
+--- a/src/internal/arbitrary/model.ts
++++ b/src/internal/arbitrary/model.ts
+@@ -240,11 +240,10 @@
+ 
+ /** @internal */
+ export function sampleFromShrink<A>(value: A, shrink: (value: A) => ReadonlyArray<A>): Sample<A> {
+-  const values = shrink(value)
+-  return makeSample(
+-    value,
+-    values.length === 0 ? undefined : Effect.map(pullFromArray(values), (value) => sampleFromShrink(value, shrink))
+-  )
++  return makeSampleWithLazyShrinks(value, () => {
++    const values = shrink(value)
++    return values.length === 0 ? undefined : Effect.map(pullFromArray(values), (value) => sampleFromShrink(value, shrink))
++  })
+ }
+ 
+ /** @internal */

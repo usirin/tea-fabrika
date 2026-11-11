@@ -1,0 +1,156 @@
+{
+	"experiment": 241,
+	"date": "2026-11-09",
+	"ticket": "282",
+	"row": "P16",
+	"driver": "experiments/238-local-stage-speed-bar.ts on branch fabrikalfa/exp241-script",
+	"base": "a1327577 (main after P12)",
+	"head": "6c6b24c3 (P16 tests round 4 on the build)",
+	"session": "2026-11-09-p16b-1",
+	"capsFrom": "experiments/241: ticket-115's rule on this sitting's 4 base runs (a guess)",
+	"caps": {
+		"acceptedSend": 39.7,
+		"publication": 26.8,
+		"lostLink": 13.5,
+		"restart": 535.9,
+		"reconnect": 307.0,
+		"startup": 6232.2,
+		"rss": 177.0
+	},
+	"units": {
+		"acceptedSend": "ms",
+		"publication": "ms",
+		"restart": "ms",
+		"reconnect": "ms",
+		"lostLink": "ms",
+		"rss": "MB",
+		"startup": "ms"
+	},
+	"load": [
+		"11.77",
+		"14.35",
+		"14.20",
+		"13.87",
+		"11.34",
+		"10.59",
+		"9.98",
+		"9.58",
+		"9.22"
+	],
+	"headBrainSha256": "a3739d6583c1b230904a7cb940d1bd4c0dba39b9be2a008ed88dec7caf4c0615",
+	"baseBrainSha256": "1adce4b7ff28e3d430a9fc38737b2e85c36be5dede1e49e4a53e7f5c15a8a8e4",
+	"sizes": {
+		"base": {
+			"brain": 1503580
+		},
+		"head": {
+			"brain": 1504648,
+			"programs": 467455,
+			"window": 0
+		}
+	},
+	"baseRuns": [
+		{
+			"acceptedSend": 13.2,
+			"publication": 10.6,
+			"restart": 405.0,
+			"reconnect": 236.2,
+			"lostLink": 7.0,
+			"rss": 136.1,
+			"startup": 10002.2
+		},
+		{
+			"acceptedSend": 14.6,
+			"publication": 8.9,
+			"restart": 492.7,
+			"reconnect": 244.9,
+			"lostLink": 4.5,
+			"rss": 136.6,
+			"startup": 4794.0
+		},
+		{
+			"acceptedSend": 12.0,
+			"publication": 7.4,
+			"restart": 412.2,
+			"reconnect": 73.9,
+			"lostLink": 4.2,
+			"rss": 126.4,
+			"startup": 1905.5
+		},
+		{
+			"acceptedSend": 11.8,
+			"publication": 7.1,
+			"restart": 407.2,
+			"reconnect": 66.9,
+			"lostLink": 4.0,
+			"rss": 125.5,
+			"startup": 1805.5
+		}
+	],
+	"baseMedian": {
+		"acceptedSend": 13.2,
+		"publication": 8.9,
+		"restart": 412.2,
+		"reconnect": 236.2,
+		"lostLink": 4.5,
+		"rss": 136.1,
+		"startup": 4794.0
+	},
+	"headRuns": [
+		{
+			"acceptedSend": 12.8,
+			"publication": 7.9,
+			"restart": 402.1,
+			"reconnect": 76.3,
+			"lostLink": 6.4,
+			"rss": 128.6,
+			"startup": 2600.8
+		},
+		{
+			"acceptedSend": 11.8,
+			"publication": 7.7,
+			"restart": 406.6,
+			"reconnect": 74.0,
+			"lostLink": 4.5,
+			"rss": 129.2,
+			"startup": 1794.8
+		},
+		{
+			"acceptedSend": 10.4,
+			"publication": 7.0,
+			"restart": 397.5,
+			"reconnect": 67.2,
+			"lostLink": 4.4,
+			"rss": 133.0,
+			"startup": 1796.7
+		},
+		{
+			"acceptedSend": 9.9,
+			"publication": 7.3,
+			"restart": 394.2,
+			"reconnect": 66.6,
+			"lostLink": 4.1,
+			"rss": 126.8,
+			"startup": 1795.2
+		},
+		{
+			"acceptedSend": 12.1,
+			"publication": 6.9,
+			"restart": 403.3,
+			"reconnect": 63.9,
+			"lostLink": 5.9,
+			"rss": 132.2,
+			"startup": 1883.8
+		}
+	],
+	"headMedian": {
+		"acceptedSend": 11.8,
+		"publication": 7.3,
+		"restart": 402.1,
+		"reconnect": 67.2,
+		"lostLink": 4.5,
+		"rss": 129.2,
+		"startup": 1796.7
+	},
+	"headUnderCaps": true
+}

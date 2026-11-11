@@ -13,7 +13,7 @@
 // Where it reports, and why there: at the very start of the file, with the real line in the message.
 // A report on the comment's own line would be silenced by that same comment. Oxlint never silences
 // an empty range at offset 0, and `plants.test.ts` fails if a new version does.
-import type {CreateRule} from "@oxlint/plugins";
+import type { CreateRule } from "@oxlint/plugins";
 
 // No word boundary after the keyword: oxlint reads `oxlint-disablefoo` as naming a rule `foo`.
 const DISABLE = /^\s*(oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
@@ -22,27 +22,39 @@ const DISABLE = /^\s*(oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
 const NAME = String.raw`[\w@./]+(?:-[\w@./]+)*`;
 const NAMED_WITH_WHY = new RegExp(String.raw`^\s+${NAME}(?:\s*,\s*${NAME})*\s+--\s+\S`, "s");
 
-const START = {line: 1, column: 0};
+const START = { line: 1, column: 0 };
 
 const problem = (comment: string): string | null => {
-	const found = DISABLE.exec(comment);
-	if (found === null) return null;
-	const [, tool = "", rest = ""] = found;
-	if (tool === "eslint") return "says `eslint-disable`. Write `oxlint-disable`, the one spelling";
-	return NAMED_WITH_WHY.test(rest) ? null : "needs its rules and a reason";
+  const found = DISABLE.exec(comment);
+
+  if (found === null) {
+    return null;
+  }
+
+  const [, tool = "", rest = ""] = found;
+
+  if (tool === "eslint") {
+    return "says `eslint-disable`. Write `oxlint-disable`, the one spelling";
+  }
+
+  return NAMED_WITH_WHY.test(rest) ? null : "needs its rules and a reason";
 };
 
 export const noBareDisable: CreateRule = {
-	create: (context) => ({
-		Program() {
-			for (const comment of context.sourceCode.getAllComments()) {
-				const wrong = problem(comment.value);
-				if (wrong === null) continue;
-				context.report({
-					loc: {start: START, end: START},
-					message: `The ignore comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: \`// oxlint-disable-next-line <rule> -- <why>\`.`,
-				});
-			}
-		},
-	}),
+  create: (context) => ({
+    Program() {
+      for (const comment of context.sourceCode.getAllComments()) {
+        const wrong = problem(comment.value);
+
+        if (wrong === null) {
+          continue;
+        }
+
+        context.report({
+          loc: { start: START, end: START },
+          message: `The ignore comment on line ${context.sourceCode.getLocFromIndex(comment.range[0]).line} ${wrong}: \`// oxlint-disable-next-line <rule> -- <why>\`.`,
+        });
+      }
+    },
+  }),
 };
