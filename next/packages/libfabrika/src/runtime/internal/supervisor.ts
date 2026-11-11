@@ -7,24 +7,10 @@ import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
-import type { Observation } from "./recovery.ts";
-import {
-  Attempt,
-  Count,
-  Deliveries,
-  Failure,
-  Journal,
-  Millis,
-  Origin,
-  Policy,
-  Receipt,
-  StartTiming,
-  Supervision,
-  Text,
-} from "./recovery.ts";
+import { AttemptFields, Count, Deliveries, Failure, Millis, Observation, Policy, Receipt, Text } from "./recovery.ts";
 
 /** @internal */
-export { Policy, Supervision };
+export { Policy };
 
 /** @internal */
 export const defaultPolicy: Policy = {
@@ -33,6 +19,94 @@ export const defaultPolicy: Policy = {
   periodMs: 5000,
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
+
+const Attempt = Schema.Struct({ ...AttemptFields, phase: Schema.Literals(["fresh", "saved"]), at: Millis });
+const RestartRequest = Schema.Struct({ id: Text, build: Text });
+const DownRecord = Schema.Struct({ process: ProcessId, reason: Text, crashes: Count, until: Millis });
+
+/** Why a process is being replaced: a captured crash, or a person's restart request. */
+const Origin = Schema.TaggedUnion({
+  crash: { failure: Failure, reason: ExitReason },
+  manual: { request: RestartRequest },
+});
+type Origin = typeof Origin.Type;
+
+const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Millis } });
+
+const Journal = Schema.TaggedUnion({
+  idle: { process: ProcessId },
+  stepping: { attempt: Attempt },
+  writing_dead: { failure: Failure.cases.fresh, reason: ExitReason, from: From },
+  writing_exit: { process: ProcessId, origin: Origin, from: From },
+  writing_down: { recovery: DownRecord, origin: Origin, from: From },
+  waiting_recovery: { recovery: DownRecord, origin: Origin },
+  waiting_start: { request: Start.cases.again, origin: Origin, timing: StartTiming, from: From },
+  checkpointing: { after: ProcessId, process: ProcessId, origin: Origin },
+});
+
+/** @internal */
+export const Supervision = Schema.Struct({
+  v: Schema.Literal(2),
+  name: Text,
+  policy: Policy,
+  seq: Millis,
+  journal: Journal,
+  build: Text,
+  restarts: Schema.Array(Millis),
+  observations: Schema.Array(Observation),
+  receipts: Schema.Array(Receipt),
+  /** The program's own delivery limit, from its declaration. It wins over the policy's. */
+  maxDeliveries: Schema.optionalKey(Deliveries),
+  crashes: Millis,
+  healthyAt: Millis,
+  /** Completed person restarts, so a repeated request completes once. */
+  requests: Schema.Array(Schema.Struct({ id: Text, build: Text, process: ProcessId })),
+}).check(
+  Schema.makeFilter((s) => {
+    const j = s.journal;
+
+    // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
+    if (j._tag === "writing_dead") {
+      return (
+        s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
+        "dead work keeps its terminal receipt"
+      );
+    }
+
+    if (j._tag === "checkpointing" && j.after === j.process) {
+      return "a checkpoint's successor is not its predecessor";
+    }
+
+    // The process this journal replaces, which a crash origin's failure must name.
+    const replaced =
+      j._tag === "writing_exit"
+        ? j.process
+        : j._tag === "writing_down" || j._tag === "waiting_recovery"
+          ? j.recovery.process
+          : j._tag === "waiting_start"
+            ? j.request.after
+            : j._tag === "checkpointing"
+              ? j.after
+              : null;
+
+    if (replaced === null || !("origin" in j)) {
+      return true;
+    }
+
+    if (j.origin._tag === "crash") {
+      return j.origin.failure.process === replaced || "a crash origin names the process it replaces";
+    }
+
+    // A person's restart starts with its own saved request ID and build.
+    return (
+      j._tag !== "waiting_start" ||
+      (j.request.id === j.origin.request.id && j.request.code.hash === j.origin.request.build) ||
+      "a person's restart starts with its saved request"
+    );
+  }),
+);
+/** @internal */
+export type Supervision = typeof Supervision.Type;
 
 const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: F) =>
   Schema.Struct({ type: Schema.Literal(type), ...fields });

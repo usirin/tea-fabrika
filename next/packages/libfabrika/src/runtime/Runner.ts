@@ -38,7 +38,6 @@ import {
   ProcessStore,
   ProcessManager,
   type ProcessError,
-  RecoveryStore,
   RuntimeRecord,
   RunnerMail,
   SessionManager,
@@ -63,9 +62,10 @@ import {
 } from "./Entry.ts";
 import { fromFailure } from "./internal/exitReason.ts";
 import { Failure, Policy } from "./internal/recovery.ts";
-import { defaultPolicy, supervisor, type Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
+import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { diff } from "./Patch.ts";
 import { ProgramDown, Refusal, Step, Write } from "./Program.ts";
+import { recoveryStore } from "./RecoveryStore.ts";
 
 export { defaultPolicy } from "./internal/supervisor.ts";
 
@@ -201,9 +201,7 @@ export class ProgramRunner extends Context.Service<
         let store = rootStore;
         let process = initial;
         const manager = yield* ProcessManager;
-        const recovery = yield* RecoveryStore.pipe(
-          Effect.provide(RecoveryStore.layer(options.recovery.sql, options.recovery)),
-        );
+        const recovery = recoveryStore(options.recovery.sql, { ...options.recovery, schema: Supervision });
         let supervision: Supervision | null = null;
         let woke = false;
         const mailbox = yield* Mailbox;
