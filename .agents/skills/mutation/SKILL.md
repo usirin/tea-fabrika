@@ -107,6 +107,36 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
 
+## The hourly run, in CI
+
+The hourly run on main ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)) runs in
+GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. Nothing starts it but a
+hand dispatch: no push, pull request or cron. It runs the command above with `--ticket 0`, the
+range's base as arm a, and the tests beside the changed files as `--related`.
+
+1. **Start it** with the commit the last run ended at. `head` is main's head unless you give one:
+
+   ```sh
+   gh workflow run mutation.yaml -f base=<sha>
+   ```
+
+2. **Find it.** The newest row is yours; a second dispatch waits until the first ends:
+
+   ```sh
+   gh run list --workflow mutation.yaml --limit 1 --json databaseId,status,conclusion,headSha
+   gh run watch <id> --exit-status
+   ```
+
+3. **Read it.** The job summary has the range and the counts. The whole answer is the artifact
+   `mutbox`, with `mutbox.json` at its top:
+
+   ```sh
+   gh run download <id> --name mutbox --dir <folder>
+   ```
+
+A run with survivors passes. The job fails only when mutbox says `stuck`: the run broke. The next
+run's base is the `build` in this run's `mutbox.json`.
+
 ## Outside your task
 
 Something wrong that your task does not cover is one finding row with proof, then keep going:
