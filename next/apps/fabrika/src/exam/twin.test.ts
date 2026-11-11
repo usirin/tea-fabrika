@@ -289,7 +289,7 @@ describe("P12 local twin lint", () => {
       `import * as ${alias} from "@alchemy.run/cloudflare";`,
       // A generated name may be the host's, so include its binding.
       `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
-      `const bucket = ${alias}.R2.Bucket("Health", {name: "health"});`,
+      `const bucket = ${alias}.R2.Bucket("Measurements", {name: "measurements"});`,
     ].join("\n");
     expect(scan("plant.ts", body)).toEqual([]);
   });

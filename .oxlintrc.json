@@ -632,10 +632,9 @@
     {
       // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
       // another room's names, `src/` holds only what is listed here, every export in an `internal/`
-      // file is `@internal`, and the `values` files hold no service and no error. `folders` and
-      // `files` also name what main holds today (`data`, `coordination`, `app`, `id`, `testing`), so
-      // the rule fires on nothing before a file moves. Each old name leaves in the pull request that
-      // empties it. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
+      // file is `@internal`, and the `values` files hold no service and no error. `folders` also
+      // names what the product files still hold (`coordination`, until its `index.ts` goes) and the
+      // platform folders. `data` left with `data/index.ts`. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
       //
       // Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
       // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
@@ -646,23 +645,9 @@
           "error",
           {
             "src": "next/packages/libfabrika/src",
-            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "door"],
-            "folders": ["node", "workers", "data", "coordination", "app"],
-            "files": [
-              "index",
-              "Id",
-              "Testing",
-              "ProcessId",
-              "Sql",
-              "Rev",
-              "id",
-              "testing",
-              "build",
-              "compiler",
-              "build-modules",
-              "build-assets",
-              "build-one-file"
-            ],
+            "rooms": ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"],
+            "folders": ["node", "cloudflare", "coordination"],
+            "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev"],
             "values": ["ProcessId", "Sql", "Rev"]
           }
         ],
@@ -697,15 +682,17 @@
     },
     {
       // A room's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
-      // oxlint's own rule (0040). Only the six rooms with no file on main are named, so it fires on
-      // nothing today: `transport` joins in the pull request that renames its files, and `door` in its own.
+      // oxlint's own rule (0040). Every room is named, `transport` and `gateway` too, now that their
+      // files are renamed and their barrels are gone.
       "files": [
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/runtime/**"
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/libfabrika/src/gateway/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -717,7 +704,9 @@
         "next/packages/libfabrika/src/processes/internal/**",
         "next/packages/libfabrika/src/presence/internal/**",
         "next/packages/libfabrika/src/access/internal/**",
-        "next/packages/libfabrika/src/runtime/internal/**"
+        "next/packages/libfabrika/src/runtime/internal/**",
+        "next/packages/libfabrika/src/transport/internal/**",
+        "next/packages/libfabrika/src/gateway/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },
@@ -725,7 +714,7 @@
       // T502: object names must not load their implementations. Type imports erase at build time.
       // Last, so it replaces the libfabrika rooms override's options for this one file; "**" with the
       // Alchemy negations also covers that override's Radix and internal/ bans.
-      "files": ["next/packages/libfabrika/src/workers/objects.ts"],
+      "files": ["next/packages/libfabrika/src/cloudflare/objects.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",

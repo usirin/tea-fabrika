@@ -1,7 +1,7 @@
 // T502 PR 2, next/. Records through the normal local stage control socket.
 import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
-import { SinkError } from "@kampus/libfabrika/data";
+import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";

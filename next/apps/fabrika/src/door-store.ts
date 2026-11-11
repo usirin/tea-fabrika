@@ -1,1 +1,1 @@
-export { doorStore } from "@kampus/libfabrika/door";
+export { gatewayStore } from "@kampus/libfabrika/gateway/GatewayStore";

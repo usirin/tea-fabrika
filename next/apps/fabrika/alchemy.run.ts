@@ -29,8 +29,8 @@ export const stack = (
     },
     Effect.gen(function* () {
       const stage = yield* setting(JSON.stringify(settings));
-      const health = yield* Cloudflare.R2.Bucket("Health", {
-        name: "fabrika-health",
+      const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
+        name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
@@ -44,11 +44,11 @@ export const stack = (
         env: {
           PROJECT: Cloudflare.DurableObject("Project"),
           PROCESS: Cloudflare.DurableObject("Process"),
-          GATEWAY: Cloudflare.DurableObject("Gateway"),
+          CONNECTION: Cloudflare.DurableObject("Connection"),
           RECORD: Cloudflare.DurableObject("RecordPart"),
           RecordPart: Cloudflare.DurableObject("RecordPart"),
           LOADER: Cloudflare.WorkerLoader(),
-          HEALTH: health,
+          MEASUREMENTS: measurements,
           STAGE: stage,
         },
       });

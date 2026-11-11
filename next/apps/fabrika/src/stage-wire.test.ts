@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
-import { Entry, PAGE } from "@kampus/libfabrika/data";
+import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -174,7 +174,7 @@ const stage = async (saved?: { key: ReturnType<typeof identity>; home: string; p
 };
 
 // Read only the named public metadata tables. Never inspect general storage or key rows.
-const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
+const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
   const rows: Array<Record<string, unknown>> = [];
 
   for (const entry of readdirSync(home, { recursive: true, withFileTypes: true })) {
@@ -192,9 +192,9 @@ const savedRows = (home: string, table: "door_bindings" | "stage_clients") => {
       rows.push(
         ...db
           .prepare(
-            table === "door_bindings"
-              ? "SELECT letter,value FROM door_bindings"
-              : "SELECT client,gateway FROM stage_clients",
+            table === "gateway_bindings"
+              ? "SELECT letter,value FROM gateway_bindings"
+              : "SELECT client,connection FROM dev_clients",
           )
           .all(),
       );
@@ -353,14 +353,14 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
     const first = await stage(),
       c = await connected(first);
-    const starts = (await read(c, "door/brain")).filter((row) => row._tag === "started");
+    const starts = (await read(c, "gateway/brain")).filter((row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
     first.child.kill("SIGTERM");
     await new Promise<void>((done) => first.child.once("exit", () => done()));
     const second = await stage(first),
       reopened = await connected(second, "reopened");
-    const now = (await read(reopened, "door/brain")).filter((row) => row._tag === "started");
+    const now = (await read(reopened, "gateway/brain")).filter((row) => row._tag === "started");
     expect(now).toHaveLength(2);
     expect(now[1]!.body).toMatchObject({ after: (starts[0]!.body as { start: string }).start });
   });
@@ -379,8 +379,8 @@ describe("P12 real dev.ts wire", () => {
     const otherKey = identity(),
       other = new Client(s.url, otherKey, "other-key");
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
-    const knocked = await other.call("door.knock", { label: "Other client" });
-    const { grantText } = await import("@kampus/libfabrika/coordination");
+    const knocked = await other.call("gateway.knock", { label: "Other client" });
+    const { grantText } = await import("@kampus/libfabrika/access/Text");
     const text = grantText({
       id: "grant-other",
       key: otherKey.raw,
@@ -428,7 +428,7 @@ describe("P12 real dev.ts wire", () => {
     );
     expect(accepted.map((a) => a.pos)).toEqual(Array.from({ length: PAGE + 3 }, (_, n) => n + 1));
     expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
-    // Door input events occupy the intervening global revisions.
+    // Gateway input events occupy the intervening global revisions.
     expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
   });
   it("scenario: a parked wire wait receives the next append and a ready wait answers now", async () => {
@@ -488,7 +488,7 @@ describe("P12 real dev.ts wire", () => {
     // Every routed call is recorded, so reader c's own reads add rows here. Only rows
     // written by anyone other than c's key could come from a stranger.
     const notC = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((r) => r.by !== s.key.fingerprint);
-    const before = await read(c, "door/inputs");
+    const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const strangerKey = identity(),
       unknownKey = identity(),
@@ -505,13 +505,13 @@ describe("P12 real dev.ts wire", () => {
     expect((await Effect.runPromise(bad.hello(nonce, { signed: "not a proof" }))).error?.data?.reason).toBe(
       "bad_signature",
     );
-    const inputs = await read(c, "door/inputs");
+    const inputs = await read(c, "gateway/inputs");
     expect(inputs.length).toBeGreaterThan(before.length);
     expect(notC(inputs)).toEqual(notC(before));
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
-    const connections = savedRows(s.home, "stage_clients").filter((row) =>
-      keys.some((key) => String(row.gateway).includes(encodeURIComponent(key.fingerprint))),
+    const connections = savedRows(s.home, "dev_clients").filter((row) =>
+      keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
     );
     expect(connections).toHaveLength(3);
     const identities = [
@@ -533,7 +533,7 @@ describe("P12 real dev.ts wire", () => {
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
     const accepted = placing(await send(c, pid, "metadata", { type: "inc" }, seen));
-    const original = savedRows(s.home, "door_bindings").find((row) => row.letter === `${pid}/metadata`);
+    const original = savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`);
     expect(original).toBeDefined();
     const binding = JSON.parse(String(original!.value));
     // P17a saves the completed answer before replying; a retry reuses this settled binding.
@@ -546,7 +546,7 @@ describe("P12 real dev.ts wire", () => {
     });
     await send(c, pid, "later", { type: "dec" });
     expect(placing(await send(c, pid, "metadata", { type: "inc" }, seen))).toEqual(accepted);
-    expect(savedRows(s.home, "door_bindings").find((row) => row.letter === `${pid}/metadata`)).toEqual(original);
+    expect(savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`)).toEqual(original);
     const rows = await read(c, "counter:1/inbox");
     const row = rows.find((r) => r.id === "metadata")!;
     expect(row).toMatchObject({
@@ -557,7 +557,7 @@ describe("P12 real dev.ts wire", () => {
       traceId: binding.span.traceId,
     });
     expect(row.traceId).toMatch(/^[0-9a-f]{32}$/);
-    const inputs = await read(c, "door/inputs");
+    const inputs = await read(c, "gateway/inputs");
     expect(inputs.find((r) => r.id === row.parent)).toMatchObject({ traceId: row.traceId });
     const records = await c.call("spans.read", { chain: { _tag: "job", process: pid }, after: 0 });
     expect(records.result.spans.some((r: any) => r.traceId === row.traceId && r.name.includes("runner"))).toBe(true);
@@ -629,7 +629,7 @@ describe("P12 real dev.ts wire", () => {
     const s = await stage(),
       c = await connected(s),
       pid = await counter(c);
-    const first = (await read(c, "door/brain")).find((row) => row._tag === "started")!;
+    const first = (await read(c, "gateway/brain")).find((row) => row._tag === "started")!;
     const firstStart = (first.body as { start: string }).start;
     const accepted = new Map<string, { rev: number; pos: number }>();
     const pending = Array.from({ length: 20 }, (_, n) => {
@@ -692,7 +692,7 @@ describe("P12 real dev.ts wire", () => {
     // The enclosing test's existing timeout bounds this wait.
     for (;;) {
       signal.throwIfAborted();
-      starts = (await read(resumed, "door/brain")).filter((r) => r._tag === "started");
+      starts = (await read(resumed, "gateway/brain")).filter((r) => r._tag === "started");
 
       if (starts.some((row) => (row.body as { after: string | null }).after === firstStart)) {
         break;
