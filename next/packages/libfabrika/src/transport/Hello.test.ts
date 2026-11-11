@@ -338,3 +338,102 @@ describe("P10 hello", () => {
     });
   }
 });
+
+// T737 D1, next/. The origin check decodes its URL with Effect Schema now. An independent copy of the
+// check before that change is the oracle: the same answer for every generated origin, allowlist and
+// host relation, in the same order of checks (host first, then null, then the URL).
+const oldSameOrigin = (a: Parameters<typeof sameOrigin>[0]): boolean => {
+  if (a.localHost !== undefined && a.host !== a.localHost) {
+    return false;
+  }
+
+  if (a.origin === null) {
+    return true;
+  }
+
+  if (!URL.canParse(a.origin)) {
+    return false;
+  }
+
+  const url = new URL(a.origin);
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") && url.origin === a.origin && a.origins.includes(url.origin)
+  );
+};
+
+/** What the URL parser makes of a text, or the text itself when it does not parse. */
+const normalized = (text: string) => (URL.canParse(text) ? new URL(text).origin : text);
+
+const Canonical = fc
+  .record({
+    protocol: fc.constantFrom("https", "http", "ftp", "ws", "file", "javascript", "blob"),
+    host: fc.oneof(fc.domain(), fc.constantFrom("127.0.0.1", "[::1]", "localhost", "fabrika.test")),
+    port: fc.option(fc.integer({ min: 0, max: 65_535 }), { nil: undefined }),
+  })
+  .map(({ protocol, host, port }) => `${protocol}://${host}${port === undefined ? "" : `:${port}`}`);
+
+/** Mutations around the boundaries the old check drew: empty, relative, port, path, case, credentials, protocol. */
+const Origin = fc.oneof(
+  Canonical,
+  fc.webUrl(),
+  fc
+    .tuple(Canonical, fc.constantFrom("/", "/path", "?q", "#h", ":80", ":443", ":", " ", "\n", "%2e"))
+    .map(([origin, tail]) => `${origin}${tail}`),
+  Canonical.map((origin) => origin.toUpperCase()),
+  Canonical.map((origin) => origin.replace("://", "://user:pass@")),
+  Canonical.map((origin) => origin.replace("://", ":")),
+  Canonical.map((origin) => ` ${origin}`),
+  fc.constantFrom("", "null", "/", "/relative", "//fabrika.test", "fabrika.test", "https:", "https://", "not a URL"),
+  fc.string(),
+);
+
+const Origins = fc.record({
+  origin: fc.option(Origin, { nil: null }),
+  others: fc.array(Origin, { maxLength: 3 }),
+  // Whether the allowlist holds the text as given, its normalized origin, both or neither.
+  allow: fc.constantFrom("given", "normalized", "both", "neither"),
+  host: fc.constantFrom("127.0.0.1:8123", "evil.test:8123", ""),
+  localHost: fc.option(fc.constantFrom("127.0.0.1:8123", "evil.test:8123", ""), { nil: undefined }),
+  forwardedHost: fc.option(fc.constantFrom("127.0.0.1:8123", "evil.test:8123"), { nil: undefined }),
+});
+
+describe("T737 D1 origin acceptance equals the old check, next/", () => {
+  it("sameOrigin answers as the old URL check did for generated origins, allowlists and hosts", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(Origins, ({ origin, others, allow, host, localHost, forwardedHost }) => {
+        const given = origin === null ? [] : [origin];
+        const norm = origin === null ? [] : [normalized(origin)];
+        const origins = [
+          ...others,
+          ...(allow === "given" || allow === "both" ? given : []),
+          ...(allow === "normalized" || allow === "both" ? norm : []),
+        ];
+        const a = {
+          origin,
+          host,
+          origins,
+          ...(localHost === undefined ? {} : { localHost }),
+          ...(forwardedHost === undefined ? {} : { forwardedHost }),
+        };
+        const expected = oldSameOrigin(a);
+        expect(sameOrigin(a)).toBe(expected);
+        seen.add(
+          `${expected}:${origin === null ? "null" : origin === normalized(origin) ? "canonical" : "other"}:${allow}`,
+        );
+      }),
+      { seed: 119120, numRuns: 2_000 },
+    );
+
+    // The boundaries the plants need: a canonical allowed origin, a refused non-canonical one whose
+    // normalized form is allowed, a null origin, and a host mismatch that refuses first.
+    for (const side of [
+      "true:canonical:given",
+      "false:other:normalized",
+      "true:null:neither",
+      "false:canonical:both",
+    ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+});

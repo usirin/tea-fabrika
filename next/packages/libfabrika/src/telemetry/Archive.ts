@@ -35,7 +35,7 @@ export class Archive extends Context.Service<
      *  no file there, which proves no copy. */
     readonly put: (key: string, body: Uint8Array) => Effect.Effect<{ readonly sha256: string | null }, SinkError>;
   }
->()("@kampus/libfabrika/Archive") {
+>()("@kampus/libfabrika/telemetry/Archive") {
   /** In memory, for tests: it holds what it was given, so its hash always matches. */
   static readonly memory: Layer.Layer<Archive> = Layer.sync(Archive)(() => {
     const files = new Map<string, Uint8Array>();

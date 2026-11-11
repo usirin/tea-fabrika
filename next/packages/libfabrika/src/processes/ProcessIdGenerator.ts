@@ -7,7 +7,7 @@ export class ProcessIdGenerator extends Context.Service<
   {
     readonly next: Effect.Effect<typeof ProcessId.Type>;
   }
->()("@kampus/libfabrika/ProcessIdGenerator") {
+>()("@kampus/libfabrika/processes/ProcessIdGenerator") {
   static readonly layer = Layer.effect(
     ProcessIdGenerator,
     Effect.map(Id.Generator, (generator) => {
