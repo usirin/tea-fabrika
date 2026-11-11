@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchrono
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
 import * as Id from "../Id.ts";
-import { Doorbell, Ledger } from "../ledger/Ledger.ts";
+import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
