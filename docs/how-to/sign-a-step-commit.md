@@ -52,7 +52,8 @@ git config --global commit.gpgsign true
 Your commits need no step note. The check verifies their Git signature against the base's person
 keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
 A person's signed commit is itself a link, from its parent's tree to its own. After the squash, the
-lead writes it in `field/runs.jsonl` as a row with `step: "person"`, as for every other link.
+lead writes it as a row with `step: "person"`, as for every other link
+([a step's links](../../field/README.md#a-steps-links)).
 Squash drops the person's signature, so this verification runs on the pull request's commits.
 
 ## A step signs

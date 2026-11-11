@@ -75,8 +75,8 @@ Give every finding in that answer, grouped by class, most serious first.
 Name each checked decided note and say where the change follows or breaks it.
 Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
 mention, and never a security hole.
-Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
-unchanged. Do not start another review round for it.
+Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in
+field/findings/. Do not start another review round for it.
 End with exactly one answer: line, as the last line.
 Keep the four reason labels in the review skill. A missed case in a named class checks the law;
 it does not reopen every test's merits.
@@ -155,8 +155,9 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
 | `catchup.sh <pr> <ticket>` | merge `main` in as the bot, sign `lead`, push, check that exact head, look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
-| `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs.jsonl` row from a Codex run's events |
-| `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs.jsonl` row from a Claude subagent's transcript, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
+| `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs/` row from a Codex run's events, printed for `fieldfile.ts` |
+| `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs/` row from a Claude subagent's transcript, printed for `fieldfile.ts`, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
+| `fieldfile.ts <log> <rows>` | save each JSON line of `rows` as its own row file, `field/<log>/<date>-<slug>.json`, named by its id; a lane's run id gets the row's date in front; a taken or missing name writes nothing (0090) |
 
 box.sh run and runplan.sh strip secret settings and redact saved output.
 fetch --sign checks owners and signs missing notes in MAIN.
@@ -207,7 +208,8 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   main moved on. A plan reads the main checkout and takes no `--from`.
 - `box.sh new` refuses `shared_ticket` only when another live branch carries a link for the same
   ticket: one with an open PR, or one a box on disk names. A branch the base already holds, one
-  with neither, or one whose change is only `field/*.jsonl` rows, does not block.
+  with neither, or one whose change is only field rows (`field/*.jsonl`, or row files in
+  `field/notes/`, `field/runs/` and `field/findings/`), does not block.
 - It runs the agent with the brief and an `answer:` line it asks for, waits with no agent, fetches,
   and checks: `pnpm commits check` and this step's name on every new commit, no exam path in any
   build commit, the leak grep on each commit's added lines, a review committing nothing, and
@@ -326,6 +328,12 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
   (`CHAIN_STUCKS`), `MaxSteps` 16 (`CHAIN_STEPS`). Proven against the real `drive.ts` on 2026-11-09
   with the disk under the 20 GB floor: the step was tried, retried on the schedule, and the lane
   ended `stuck` with `RetriesExhausted` and drive's reason, exit 30.
+- **The lane's budget** ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)): each stuck
+  step carries its fault, `tool` or `work`. When 3 of the last 5 steps were sent back or stuck on
+  the work, the chain ends `ask` with the counts and the stop in its record; you answer redo, cut
+  scope or drop. Tool stucks never count. Put `Estimate: <n> steps, $<d>` in the plan or the lane
+  brief: twice it is the backstop and replaces `MaxSteps`. With none, the chain prints that it
+  skipped the backstop. Never put these numbers in a step's brief.
 - **Judgment** (an `ask:lead:question`, or a `stuck`): the chain runs one turn in the main
   checkout on the agents package's read-only Codex row, which cannot change the checkout, with the
   lane's state file and the step's report in its prompt. It answers one JSON object: `send` with a step and a note runs that step again
@@ -399,8 +407,9 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
-   one `field/runs.jsonl` row (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
-   driver included, once it has finished), and one `field/notes.jsonl` note for anything that
+   one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
+   driver included, once it has finished, or drive's `BOXES/<lane>-rows.jsonl`, each saved with
+   `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
@@ -500,9 +509,11 @@ counts as proof. The CI `field` job checks each added row's shape.
 
 - **Every brief says it in one line,** for an agent that reads no skill: outside work is a finding
   row, see `field/README.md`.
-- **A step hands its rows over** in its report or answer, one JSON line each. Add each to
-  `field/findings.jsonl` unchanged the same day, in the pull request it was found during or a
-  rows-only one. Change only an `id` that is already taken. Never drop a row because you disagree
+- **A step hands its rows over** in its report or answer, one JSON line each. Save each unchanged
+  as its own file the same day with `fieldfile.ts findings <rows>`, in the pull request it was found
+  during or a rows-only one. Its id is its file name, the date and a short slug
+  ([0090](../../../.decisions/0090-each-field-row-is-a-file.md)). Change only an `id` that is
+  already taken or that is not that shape (an old `<date>-f<nn>` counter). Never drop a row because you disagree
   with it: a wrong one is rated `noise`.
 - **Never rate a row.** A person does. When the owner rates one, write the `rated` row as their
   call, and for a `fix` file its ticket with `tracker_file` and put the number in that row.

@@ -62,8 +62,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 
    Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
    mention, and never a security hole.
-   Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
-   unchanged. Do not start another review round for it.
+   Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in
+   field/findings/. Do not start another review round for it.
    End with exactly one answer: line, as the last line.
    It reads `answer: done <why>` when merge-ready, else `answer: send build <why>` (or `send tests`,
    `send plan`). The verdict is never the answer.
