@@ -3,6 +3,7 @@
 // Worker adapters serve them; both read these shapes from here, so nothing here needs a platform.
 import { Effect, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
+import { ProgramName } from "../packs/ProgramName.ts";
 
 /** Why a build stopped: its `reason` names the phase (`table`, `read`, `compiler`, `bundle`, `publish`). */
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
@@ -44,11 +45,14 @@ export type Asset = typeof Asset.Type;
 
 /** An HTTP route under the brain's origin: slash-led names, no empty, `.` or `..` segment. */
 const ROUTE = /^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/;
+const isProgramName = Schema.is(ProgramName);
 
 export const Built = Schema.Struct({
   // A refined key would drop a bad name or route quietly, so each record checks its keys instead.
   programs: Schema.Record(Schema.String, BuiltProgram).check(
-    Schema.makeFilter((programs) => !Object.hasOwn(programs, "") || "a program has no name"),
+    Schema.makeFilter(
+      (programs) => Object.keys(programs).every(isProgramName) || "a program's name is not `pack/program`",
+    ),
   ),
   assets: Schema.Record(Schema.String, Asset).check(
     Schema.makeFilter(
