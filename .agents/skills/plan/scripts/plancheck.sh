@@ -11,7 +11,8 @@
 # Version 3, the one a draft must carry, also needs one `Estimate: <n> steps, $<d>` line ending the
 # Size section in draft and approved modes; plans approved at version 2 keep passing. Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
-# `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit.
+# `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit,
+# and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
 set -eu
 draft=0
 case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --owners-json) draft=owners; shift;; esac
@@ -191,6 +192,10 @@ for i, l in enumerate(lines):
     if not owner: bad.append(f"line {i + 1}: a files table row with no owner"); continue
     for p in paths(row[path]) if path is not None else []:
         p = norm(p)
+        # stepcommit matches owner keys to staged paths exactly, so a key that is no repo path owns
+        # nothing: a `:line` anchor, a bare `:537`, or a word such as `new` (ticket 425).
+        if draft == "1" and (":" in p or not ("/" in p or "." in p)):
+            bad.append(f"line {i + 1}: {p} is not a repo path; anchors and notes go in another column")
         # A later files row can amend ownership without erasing the earlier plan.
         owned[p] = owner
         file_paths.add(p)
