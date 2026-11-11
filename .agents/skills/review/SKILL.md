@@ -63,6 +63,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    Give each row as one JSON line in the answer. The lead adds it to field/findings.jsonl
    unchanged. Do not start another review round for it.
    End with exactly one answer: line, as the last line.
+   It reads `answer: done <why>` when merge-ready, else `answer: send build <why>` (or `send tests`,
+   `send plan`). The verdict is never the answer.
    Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why, and
    [A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
    counts as proof. Other means it is wrong but blocks nothing by the rule in step 3, in this diff
