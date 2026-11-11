@@ -4,6 +4,7 @@ import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.
 import { lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
+import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
 import { processMail } from "./internal/processMail.ts";
 import { type From, type Letter, Mailbox } from "./Mailbox.ts";
 import {
@@ -12,6 +13,7 @@ import {
   Dead,
   DeadInput,
   Down,
+  NoProc,
   ProcessError,
   ProcessEvent,
   type ProcessInfo,
@@ -41,7 +43,7 @@ export class ProcessManager extends Context.Service<
   ProcessManager,
   {
     readonly start: (request: Start, from: From) => Effect.Effect<StartAnswer, Failure>;
-    readonly exit: (process: string, reason: string, from: From) => Effect.Effect<void, Failure>;
+    readonly exit: (process: string, reason: ExitReason, from: From) => Effect.Effect<void, Failure>;
     readonly info: Effect.Effect<ReadonlyArray<ProcessInfo>, LedgerError>;
     readonly status: (name: string) => Effect.Effect<
       {
@@ -86,7 +88,7 @@ export class ProcessManager extends Context.Service<
           turn: LedgerTurn,
           watch: { readonly ref: string; readonly round: number },
           process: string,
-          reason: string,
+          reason: (typeof Down.Type)["reason"],
           to: (typeof Down.Type)["to"],
           from: From,
         ) => {
@@ -186,8 +188,12 @@ export class ProcessManager extends Context.Service<
           });
           return answer;
         }, Effect.tapError(failed));
-        const exit = Effect.fn("process.exit")(function* (process: string, reason: string, from: From) {
+        const exit = Effect.fn("process.exit")(function* (process: string, input: ExitReason, from: From) {
           yield* Effect.annotateCurrentSpan({ "fab.process": process });
+          // The reason is decoded before the turn opens: text, an unknown tag or noproc writes nothing.
+          const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
+            Effect.mapError(() => new ProcessError({ reason: "bad_text" })),
+          );
           yield* checked((table, turn) => {
             const life = table.exit(process, reason, caller.owner);
 
@@ -250,7 +256,15 @@ export class ProcessManager extends Context.Service<
             );
 
             if (!table.isLive(process)) {
-              signal(table, turn, { ref, round: round.success.value }, process, "noproc", caller.recipient, from);
+              signal(
+                table,
+                turn,
+                { ref, round: round.success.value },
+                process,
+                NoProc.make({}),
+                caller.recipient,
+                from,
+              );
             }
 
             return Result.succeed(undefined);
