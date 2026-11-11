@@ -121,6 +121,8 @@ const OURS = {
      at its next turn, or the next step does when none runs. It never cuts a turn off. The comment's
      fact records `during`, the run that was live when it was written, filled in by code (what the
      person saw, recorded now). A "reply to this step" view is later a filter on `during`. 80%.
+     In `next/`, a lane's room is a second way in, and a person's line there may answer an ask
+     ([0073](../../.decisions/0073-a-lane-has-a-room.md)); the ticket comment's rules here hold.
   3. **Red goes back on its own, by default.** Linear makes it a loop each team turns on. Here it is
      on, with a repository setting to turn it off. 70%.
 
