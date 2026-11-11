@@ -17,6 +17,11 @@ outside a thin slice.*
 *Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
 outside fabrika's own source get a thin slice before Tier 5; its shape is not decided yet.
 
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* in `next/`, every
+program is in a pack, so a repo's own programs are a pack in `.fabrika/packs/<name>/`, not
+`programs/deploy/` or `.fabrika/programs`; "one pack's own settings; the pack checks them" is now
+the only place a program's settings live.
+
 ## Where the files live (2026-10-30)
 
 Decided: the repo's file moves into a `.fabrika/` folder, and a person's own

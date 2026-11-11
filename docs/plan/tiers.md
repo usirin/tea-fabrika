@@ -43,6 +43,10 @@ Tier 6, and Tier 1's plan says how thin each is. No row below has moved.
 tier checks its slice of programs written outside fabrika's source with a cold agent as the author.
 Every place it gets stuck is a gap, and each run is an experiment (ticket 665).
 
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* every program is in
+a pack, so Tier 5's repo programs are a pack in the repo's `.fabrika/packs/<name>/`, not
+`.fabrika/programs`. The tier each lands in does not move, so no row below has moved.
+
 | Tier | Transport | Data | Coordination | App | Desktop (Tuval) |
 |---|---|---|---|---|---|
 | **1. It works** | Signed hello, unknown keys refused, code and Approve, one-time link | Ledger behind a service; `granted` with `saw` and `as`; `denied`; revoke; each note's saved versions, with a check against stale saves; a backup sheet, recovery on a new Mac and `added`; email recovery on the cloud, with a 24-hour wait any device can cancel (decided 2026-11-06); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health rows for about 2 weeks and hourly summaries forever, and nothing a chaos fault does left unexplained (owner, 2026-11-07) | Mailbox, who belongs, window and agent grants, every device a master with its grant tree; a slice of C2 to C5: dead letters, one crashed program restarted with a brake and backoff, exit, info and monitors, each start a new process with its own id, who is online, and the brain restarted (decided by the owner, 2026-11-06) | Sealed programs, notes drawn as Markdown that agents write through MCP, each agent approved once, a counter as the test, chaos monkey | One core; Electron, browser and headless; menu bar with Approve and Remove |
