@@ -15,7 +15,8 @@
 // typecheck, and runs under `nice -n 19`, each command within a time limit.
 
 import { Duration, Effect, FileSystem, Option, Path, Schema } from "effect";
-import { commandArgv, exec, type Ran, repoNode, worktree } from "./host.ts";
+import { repoNode } from "../boxnode.ts";
+import { commandArgv, exec, type Ran, worktree } from "./host.ts";
 
 /** The result: passed, failed with where the work goes back to, or could not run and why. */
 export const Verdict = Schema.TaggedUnion({
