@@ -192,7 +192,9 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 
 ### P4: resume, never redo
 
-**Decided 2026-11-01.**
+**Decided 2026-11-01.** Amended in part on 2026-11-10 by
+[0072](../../.decisions/0072-a-churning-lane-is-redone.md): a change that points the wrong way, or
+is sent back too often, is redone on a fresh branch; a crash or a stuck still resumes as below.
 
 - **What it means.** A stuck or crashed lane is a crash recovery case. It goes on from the step that
   broke, with the carry it had, and keeps every step that ended `done`. It never starts the lane
