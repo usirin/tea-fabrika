@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 // left unnamed, not a second runner. All stepping, counts and replacement are product code.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema } from "effect";
+import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -446,6 +446,28 @@ const recover = (w: ReturnType<typeof world>) =>
     yield* ProgramRunner.use((r) => r.due(deadline!)).pipe(Effect.provide(w.layer()));
   });
 
+/** P37's real recording: a runner layer given `layer` keeps its spans as job records. */
+const traced = () => {
+  const sink = storage();
+  const parts = new Map<string, ReturnType<typeof storage>>();
+  const records = RecordManager.sql((name) => {
+    let part = parts.get(name);
+
+    if (part === undefined) {
+      part = storage();
+      parts.set(name, part);
+    }
+
+    return part.sql;
+  }, 1024 ** 3);
+  const store = Layer.mergeAll(SpanSink.layer(sink.sql, { object: A }), records, Archive.memory);
+  return {
+    layer: Recording.layer.pipe(Layer.provideMerge(store)),
+    rows: (process: string) =>
+      RecordManager.use((r) => Stream.runCollect(r.read({ _tag: "job", process }))).pipe(Effect.provide(records)),
+  };
+};
+
 describe("T337 down event identity, next/", () => {
   /** A down record's policy fields, as the journal's writing-down case saves them. */
   const DownPolicy = Schema.Struct({
@@ -820,9 +842,16 @@ describe("P34 runner supervision", () => {
                   } else if (path === "Restart live") {
                     w.controls.build = `build-${id}`;
                     w.controls.wakeAt = time;
+                    const trace = traced();
                     yield* ProgramRunner.use((r) => r.restart({ id: `restart-${id}`, build: w.controls.build })).pipe(
-                      Effect.provide(w.layer()),
+                      Effect.provide(w.layer(trace.layer)),
                     );
+                    // The restart span names the build being started, not the replaced process's build.
+                    expect(
+                      (yield* trace.rows(A))
+                        .filter((row) => row.name === "runner.restart")
+                        .map((row) => row.attributes),
+                    ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                   } else {
                     const earlyCut = ["after_observation", "after_exit", "after_down"].includes(path);
 
@@ -872,9 +901,16 @@ describe("P34 runner supervision", () => {
                     if (path === "Restart down") {
                       w.controls.build = `build-${id}`;
                       w.controls.wakeAt = time;
+                      const trace = traced();
                       yield* ProgramRunner.use((r) => r.restart({ id: `restart-${id}`, build: w.controls.build })).pipe(
-                        Effect.provide(w.layer()),
+                        Effect.provide(w.layer(trace.layer)),
                       );
+                      // The restart span names the build being started, not the replaced process's build.
+                      expect(
+                        (yield* trace.rows(A))
+                          .filter((row) => row.name === "runner.restart")
+                          .map((row) => row.attributes),
+                      ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                     } else if (path === "external adoption") {
                       yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
                         Effect.provide(w.manager()),
