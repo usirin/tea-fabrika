@@ -16,7 +16,24 @@
 import { Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
@@ -34,6 +51,7 @@ import * as MailDeliveryLive from "./MailDeliveryLive.ts";
 import { MailWakeups, MailWakeupsError } from "./MailWakeups.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
+import * as RepliesTest from "./RepliesTest.ts";
 import { ProgramRunner } from "./Runner.ts";
 import { Queued, send, SendInput } from "./Send.ts";
 
@@ -174,6 +192,52 @@ const Cell = fc.record({
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 const Tape = fc.array(Cell, { minLength: 6, maxLength: 24, size: "max" });
 
+const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
+  const captured = RepliesTest.capture();
+  const spans: Array<Tracer.Span> = [];
+  const errors: Array<string> = [];
+  const logs: Array<string> = [];
+  const wakes: Array<{ span: string; name: string; at: number | null }> = [];
+  const tracer = Tracer.make({
+    span(options) {
+      const span = captured.tracer.span(options);
+      spans.push(span);
+      return span;
+    },
+  });
+  const logger = Logger.layer([
+    Logger.make((options) => {
+      logs.push(JSON.stringify(options.message), JSON.stringify([...options.annotations]), Cause.pretty(options.cause));
+    }),
+  ]);
+  const check = () => {
+    RepliesTest.unleaked([...captured.text(), ...logs, ...errors], secrets);
+
+    if (!trace) {
+      return;
+    }
+
+    for (const span of spans) {
+      if (span.name !== "mail_delivery.send" || span.status._tag !== "Ended" || !Exit.isSuccess(span.status.exit)) {
+        continue;
+      }
+
+      const queued = Schema.decodeUnknownSync(Queued)(span.status.exit.value);
+      expect(span.attributes.get("fab.mail.receipt"), "T1a: queued is tied to its receipt").toBe(queued.id);
+      const wake = wakes.find((w) => w.span === span.spanId);
+      expect(wake, "T1a: every queued Send saved its target alarm").toBeDefined();
+      expect(span.attributes.get("fab.mail.to")).toBe(wake?.name);
+      const children = spans.filter(
+        (s) => s.name === "runner.mailed" && Option.getOrUndefined(s.parent)?.spanId === span.spanId,
+      );
+      expect(children).toHaveLength(1);
+      expect(children[0]?.attributes.get("fab.mail.to")).toBe(wake?.name);
+      expect(children[0]?.attributes.get("fab.mail.alarm")).toBe(wake?.at);
+    }
+  };
+  return { secrets, tracer, logger, errors, wakes, check, spans };
+};
+
 type Move =
   | "start"
   | "start_forbidden"
@@ -205,6 +269,7 @@ type Request = {
 /** What the fold knows, from its own moves only: never read back from the product, except which
  *  letters an inbox holds after a call whose outcome a fault made unknown. */
 type World = {
+  readonly records?: ReturnType<typeof records>;
   readonly timers?: boolean;
   /** Each requester's current request, once its start letter is in its inbox. */
   readonly current: Map<Pair, Request>;
@@ -321,10 +386,31 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         }
 
         yield* target.mailed;
+
+        if (world.records !== undefined) {
+          const span = yield* Effect.currentSpan;
+          world.records.wakes.push({
+            span: span.spanId,
+            name,
+            at: (yield* store.alarms.saved).find((a) => a.name === name)?.at ?? null,
+          });
+        }
       }),
   });
   const shared = MailDeliveryLive.layer.pipe(
-    Layer.provideMerge(Layer.mergeAll(ProgramMailLedger.layer({ grants: GRANTS }), wakeups)),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ProgramMailLedger.layer({
+          grants: {
+            ...GRANTS,
+            ...Object.fromEntries(
+              (world.records?.secrets ?? []).map((secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
+            ),
+          },
+        }),
+        wakeups,
+      ),
+    ),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
@@ -423,11 +509,13 @@ const walk = (
   pairs: ReadonlyArray<Pair>,
   moves: ReadonlyArray<Move>,
   done: Set<Move>,
+  recorded?: ReturnType<typeof records>,
 ) =>
   Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
+      records: recorded,
       current: new Map(),
       history: new Map(),
       stopped: new Set(),
@@ -466,6 +554,15 @@ const walk = (
     /** A call that may fail at a planted boundary; it must still answer, never hang. */
     const call = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
       effect.pipe(
+        Effect.onError((cause) =>
+          Effect.sync(() => {
+            recorded?.errors.push(
+              String(Cause.squash(cause)),
+              JSON.stringify(Cause.squash(cause)),
+              Cause.pretty(cause),
+            );
+          }),
+        ),
         Effect.result,
         Effect.timeoutOption("20 seconds"),
         Effect.map((answer) => {
@@ -529,6 +626,8 @@ const walk = (
 
     /** The invariants every prefix keeps. */
     const check = Effect.fnUntraced(function* () {
+      recorded?.check();
+
       for (const k of pairs) {
         if (moves.includes("wakeDuringDrain")) {
           for (const name of [requesterName(k), responderName(k)]) {
@@ -651,7 +750,7 @@ const walk = (
             cell.pick,
           );
           const other = pairs.find((p) => p !== k) ?? k;
-          const ref = `ref-${k}-${++world.n}`;
+          const ref = `${recorded?.secrets[k - 1] ?? "ref"}-${k}-${++world.n}`;
           const kind =
             move === "start" || move === "wakeDuringDrain" || move === "holdAlarm"
               ? "normal"
@@ -1233,6 +1332,59 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P41: a request and its answer between two real runners", () => {
+    for (const trace of [false, true]) {
+      it.effect(
+        trace ? "T1a: receipt traces join each saved wake" : "T1a [secrets]: records hold no mail",
+        () =>
+          Effect.gen(function* () {
+            const done = new Set<Move>();
+            let sends = 0;
+            const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>, seed: number) {
+              const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 2 });
+              const observed = records(secrets, trace);
+              const run = walk(
+                open,
+                [1, 2],
+                [
+                  "start",
+                  "start_forbidden",
+                  "start_missing",
+                  "stall",
+                  "evict",
+                  "cut_mail",
+                  "lose_ack",
+                  "fail_wake",
+                  "fire",
+                  "settle",
+                ],
+                done,
+                observed,
+              );
+              yield* Effect.scoped(run(tape)).pipe(Effect.withTracer(observed.tracer), Effect.provide(observed.logger));
+              observed.check();
+              sends += observed.spans.filter((s) => s.name === "mail_delivery.send").length;
+            });
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
+            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => Effect.runPromise(once(tape, seed)));
+            // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its property result
+            yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+            expect(sends).toBeGreaterThan(0);
+            expect([...done]).toEqual(
+              expect.arrayContaining([
+                "start",
+                "start_forbidden",
+                "start_missing",
+                "evict",
+                "cut_mail",
+                "lose_ack",
+                "fail_wake",
+              ]),
+            );
+          }),
+        600_000,
+      );
+    }
+
     alarmLaw(open, false);
     alarmLaw(open, true);
     prop(

@@ -100,7 +100,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     open: (client: string) => run((p) => p.open(client)),
     msg: (input: unknown) => run((p) => p.msg(input)),
-    mailed: () => run((p) => p.mailed),
+    mailed: (trace?: { readonly traceId: string; readonly spanId: string }) => run((p) => p.mailed(trace)),
     due: (at: number) => run((p) => p.due(at)),
     restart: (request: { id: string; build: string }) => run((p) => p.restart(request)),
     alarm: () => run((p) => p.alarm()),
