@@ -560,6 +560,11 @@
       // edge rules off for a `next/` file that is not a test, and `edge-comment.test.ts` checks it.
       // The `.agents/` override below repeats this rule block: change both together
       // (`edge-comment.test.ts` checks they are equal).
+      //
+      // T664, L15: nothing imports the TOML parser but `settings/TomlParser.ts`, and no program or
+      // window chooses the TOML adapter. An override replaces a rule's options, so the Radix entry
+      // of the base rule is repeated here. next/apps and libfabrika's own overrides below replace
+      // this rule there.
       "files": ["next/**"],
       "rules": {
         "fabrika/no-promises": "error",
@@ -573,7 +578,40 @@
         "fabrika/no-why-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
-        "fabrika/no-stage-word": "error"
+        "fabrika/no-stage-word": "error",
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -595,7 +633,72 @@
         "fabrika/no-why-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
-        "fabrika/no-stage-word": "error"
+        "fabrika/no-stage-word": "error",
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // A folder of libfabrika is a module and its rank is a layer (0091), so the old words do not
+      // come back as names in next/, tests included. oxlint's own rule (0040) reads declarations and
+      // object keys only: a call such as `Math.floor(n)`, a property read, a comment and a string pass,
+      // and those stay review work. A conversation room, which 0091 keeps, takes a local
+      // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
+      // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`).
+      "files": ["next/**/*"],
+      "rules": {
+        "eslint/id-denylist": [
+          "error",
+          "room",
+          "rooms",
+          "Room",
+          "Rooms",
+          "ROOM",
+          "ROOMS",
+          "floor",
+          "floors",
+          "Floor",
+          "Floors",
+          "FLOOR",
+          "FLOORS",
+          "otherRoom",
+          "floorsByName",
+          "floorRank",
+          "floored",
+          "unfloored"
+        ]
       }
     },
     {
@@ -642,47 +745,6 @@
       }
     },
     {
-      // T664, L15: outside libfabrika, nothing in next/ imports the TOML parser, and no program or
-      // window chooses the TOML adapter. libfabrika's own rule is in the rooms override below,
-      // which replaces this one there.
-      "files": ["next/**"],
-      "rules": {
-        "eslint/no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@radix-ui/colors",
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-              },
-              {
-                "name": "toml-eslint-parser",
-                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
-              }
-            ],
-            "patterns": [
-              {
-                "group": ["@radix-ui/colors/*"],
-                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
-              },
-              {
-                "group": ["toml-eslint-parser/**"],
-                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
-              },
-              {
-                "group": [
-                  "**/settings/TomlParser.ts",
-                  "**/settings/TomlParser",
-                  "@kampus/libfabrika/settings/TomlParser"
-                ],
-                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
       // T664, L15: start code in next/apps selects the settings Layers, the TOML adapter included.
       "files": ["next/apps/**"],
       "rules": {
@@ -724,13 +786,13 @@
       }
     },
     {
-      // libfabrika's rooms (0043, ticket 477). `fabrika/rooms` holds four laws: no room re-exports
-      // another room's names, `src/` holds only what is listed here, every export in an `internal/`
+      // libfabrika's modules (0043, ticket 477). `fabrika/modules` holds four laws: no module re-exports
+      // another module's names, `src/` holds only what is listed here, every export in an `internal/`
       // file is `@internal`, and the `values` files hold no service and no error. `folders` also
       // names what the product files still hold (`coordination`, until its `index.ts` goes) and the
       // platform folders. `data` left with `data/index.ts`. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
       //
-      // Nobody outside a room imports its `internal/`: oxlint's own rule says it (0040). A room's own
+      // Nobody outside a module imports its `internal/`: oxlint's own rule says it (0040). A module's own
       // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
       // so the Radix entry of the base rule is repeated here.
       //
@@ -739,11 +801,11 @@
       // loader under `node/settings/` take that adapter; the two overrides after this one say so.
       "files": ["next/packages/libfabrika/src/**"],
       "rules": {
-        "fabrika/rooms": [
+        "fabrika/modules": [
           "error",
           {
             "src": "next/packages/libfabrika/src",
-            "rooms": [
+            "modules": [
               "telemetry",
               "ledger",
               "transport",
@@ -789,7 +851,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -806,7 +868,7 @@
     },
     {
       // T664, L15: the settings module and its Node loader take the TOML adapter. It comes after the
-      // libfabrika rooms override, so it replaces that rule's options here, and repeats the rest.
+      // libfabrika modules override, so it replaces that rule's options here, and repeats the rest.
       "files": ["next/packages/libfabrika/src/settings/**", "next/packages/libfabrika/src/node/settings/**"],
       "rules": {
         "eslint/no-restricted-imports": [
@@ -839,7 +901,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
               }
             ]
           }
@@ -872,7 +934,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a room imports its internal/ (0043, rule 8). Import the room's front file."
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
               }
             ]
           }
@@ -880,8 +942,8 @@
       }
     },
     {
-      // A room's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
-      // oxlint's own rule (0040). Every room is named, `transport` and `gateway` too, now that their
+      // A module's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
+      // oxlint's own rule (0040). Every module is named, `transport` and `gateway` too, now that their
       // files are renamed and their barrels are gone.
       "files": [
         "next/packages/libfabrika/src/telemetry/**",
@@ -897,7 +959,7 @@
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
     {
-      // A room's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
+      // A module's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
       "files": [
         "next/packages/libfabrika/src/telemetry/internal/**",
         "next/packages/libfabrika/src/ledger/internal/**",
@@ -913,7 +975,7 @@
     },
     {
       // T502: object names must not load their implementations. Type imports erase at build time.
-      // Last, so it replaces the libfabrika rooms override's options for this one file; "**" with the
+      // Last, so it replaces the libfabrika modules override's options for this one file; "**" with the
       // Alchemy negations also covers that override's Radix and internal/ bans.
       "files": ["next/packages/libfabrika/src/cloudflare/objects.ts"],
       "rules": {

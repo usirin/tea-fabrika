@@ -1,5 +1,5 @@
 // movecheck.ts: says where a pull request did more than move. Lead tooling for ticket 477, run on our
-// own laptop; it is not product. libfabrika's files move into rooms over 16 pull requests (decision
+// own laptop; it is not product. libfabrika's files move into modules over 16 pull requests (decision
 // 0043), and a move must change no line of logic.
 //
 //   movecheck <base> <head> --moves <table>      a move PR: only the table's renames, files that only
@@ -113,7 +113,7 @@ const firstChange = (before: string, after: string): string => {
 
 // The one line a move may add besides specifiers (ticket 591): exactly `/** @internal */` at the
 // start of its line, right above a line that starts with `export`, in a file under an `internal/`
-// folder, so `fabrika/rooms`' rule 3 holds for a file that moved there.
+// folder, so `fabrika/modules`' rule 3 holds for a file that moved there.
 const TAG = /^\/\*\* @internal \*\/\n(?=export\b)/gm;
 
 /** Whether a path is under an `internal/` folder, at any depth. */
