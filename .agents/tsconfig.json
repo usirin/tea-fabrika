@@ -14,6 +14,8 @@
     "skills/lead/scripts/flow/*.ts",
     "skills/lead/scripts/flow/flows/*.ts",
     "skills/lead/scripts/sizecap.ts",
-    "skills/lead/scripts/sizecap.test.ts"
+    "skills/lead/scripts/sizecap.test.ts",
+    "skills/mutation/scripts/scope.ts",
+    "skills/mutation/scripts/scope.test.ts"
   ]
 }

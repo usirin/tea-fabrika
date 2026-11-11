@@ -37,6 +37,7 @@ export const testConfig = {
       "scripts/*.test.ts",
       // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as 0089's hourly
       // mutation run reads them (`flow/**/*.test.ts`).
+      // A skill's `fixtures/` is excluded below.
       ".agents/skills/*/scripts/**/*.test.ts",
       // Keep next/ for its own job and local runs. Today's CI excludes it on the CLI.
       // Its end-to-end tests sit outside `src/`, in
@@ -45,6 +46,8 @@ export const testConfig = {
       "next/programs/*/src/**/*.test.{ts,tsx}",
       "next/apps/*/src/**/*.test.{ts,tsx}",
     ],
+    // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
+    exclude: [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**"],
     // One time limit for every test, chosen from measured times, not vitest's 5 s default,
     // which turned main red 6 times for slow tests and found no bug (experiment 125).
     // Measured on 2026-10-24: the slowest test in 128 CI runs took 17.9 s (60 s is 3.3 times
