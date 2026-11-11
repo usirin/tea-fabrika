@@ -1025,6 +1025,27 @@
       }
     },
     {
+      // Ticket 737 (decision 0023): next/ decodes input with Effect Schema, so a bare JSON.parse is
+      // reported, and a service ID carries the package and its file's path. "warn" only advises:
+      // lint.ts prints both and does not fail on them until their false alarms are counted
+      // (oxlint-plugins/README.md). A test oracle may keep a parse with a line exception and a reason.
+      // The ID rule reads only libfabrika's source folder, so its glob can stay wide. Its glob is
+      // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
+      // `.agents/` repeats (0033), and this advice holds next/ alone.
+      "files": ["next/**/*"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Advice, does not block: decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          }
+        ],
+        "fabrika/service-id": ["warn", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
+      }
+    },
+    {
       // Ticket 649, L6: trace's speed laws count work through the built-ins
       // (programs/trace/src/work.test-support.ts), which cannot see a hand index loop. This catches
       // the plain one that only reads `a[i]`. A `while` loop, or an index loop that does arithmetic

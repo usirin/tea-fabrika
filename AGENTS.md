@@ -60,10 +60,11 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
-`next/` is on main, and 20 of Tier 1's 43 rows have merged, plus P17a, half of P17
+`next/` is on main, and 20 of Tier 1's 44 rows have merged, plus P17a, half of P17
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
-added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
-P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
+added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), and 44 since the merge queue's first stage, P43,
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -242,7 +243,8 @@ discovery contract
 ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
 
 Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
-when called: `drive.ts` runs `box.sh gc` itself on start.
+when called. Box cleanup (`box.sh gc`) runs on a launchd timer and after each merge, never on a
+step's start ([0101](./.decisions/0101-box-cleanup-runs-on-a-timer.md)): `gcloop.ts`.
 
 Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
 GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).

@@ -1619,7 +1619,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 });
 
 export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
-  "@kampus/libfabrika/Gateway",
+  "@kampus/libfabrika/gateway/Gateway",
 ) {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>
     Layer.effect(Gateway, make(options));

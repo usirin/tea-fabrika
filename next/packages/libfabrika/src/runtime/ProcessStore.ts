@@ -84,7 +84,9 @@ type ProcessStorage = {
   readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 
-export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()("@kampus/libfabrika/ProcessStore") {
+export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
+  "@kampus/libfabrika/runtime/ProcessStore",
+) {
   static readonly layer = (
     sql: Sql,
     options: {

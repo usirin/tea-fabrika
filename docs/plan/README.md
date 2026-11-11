@@ -60,10 +60,12 @@ ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink 
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
 
-**Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-11.** 20 of [its 44 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
-from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* No Tier 1
+from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
+(owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
+stage, joined Tier 1, so it has 44 rows; it said 43.* No Tier 1
 row merged on 2026-11-11.
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
@@ -108,7 +110,8 @@ read; see 2026-11-11 above.*
 to come; see 2026-11-11 above.*
 *2026-11-10:* all six core ideas get their thin slice in Tier 1
 ([0088](../../.decisions/0088-six-slices-in-tier-1.md)), so P39 to P42 were added, to be planned,
-and Tier 1 has 43 rows.
+and Tier 1 had 43 rows. *2026-11-11:* P43, the merge queue's first stage, made 44
+([0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)).
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local instance saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
@@ -203,7 +206,7 @@ much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-
 - **Effect on Cloudflare, [experiment 174](../../experiments/174-effect-on-cloudflare.md).** Walked 2026-11-02, two rulings. [tea is the engine](../direction/tea-is-the-engine.md): no Effect `Workflow`, cluster not now. Tier 1 takes its one change: a wait is data on the socket, and a waiting tab stops knocking every 5 s ([Tier 1, Cloudflare](./tier-1-detail.md#cloudflare)). → nothing
 - **demlik.** Epics landed, no release yet. The three issues that waited have rulings as of 2026-11-01: [756](https://github.com/kamp-us/demlik/issues/756#issuecomment-6564399911), [782](https://github.com/kamp-us/demlik/issues/782#issuecomment-6564266885) and [777](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162). → demlik's agents build them, and the release stays the owner's call
 - **Copying for the app and Tuval in `next/`.** Settled: rethink stays the default, with copies only where the owner names them. Tier 1 names three (styling, `programs/markdown`, the MCP tools; [Tier 1](./tier-1.md)). Tier 2's named copies come with its plan. → nothing now
-- **People before agents in `next/`.** Settled by [the tier order](./tiers.md): a few people is Tier 3 (it said two people until the owner widened it, 2026-11-07), agents Tier 5. → nothing
+- **People before agents in `next/`.** Settled by [the tier order](./tiers.md): a few people is Tier 3 (it said two people until the owner widened it, 2026-11-07), agents Tier 5. An agent fabrika starts still gets a thin slice in Tier 1 ([0078](../../.decisions/0078-agent-and-flow-slices-start-early.md)). → nothing
 - **Conversation branches.** Saved, not designed. → when the agents tier is next
 - **Left for later.** The third step of going through the two trackers with the owner, and whether popovers use the browser's own `<dialog>` or a library.
 

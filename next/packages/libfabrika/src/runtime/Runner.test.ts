@@ -258,7 +258,9 @@ type Runner = {
 
 // Decode this test program's view at its client, so changing the public View to unknown
 // cannot force the builder to edit these laws.
-class ViewedRunner extends Context.Service<ViewedRunner, Runner>()("test/P11ViewedRunner") {}
+class ViewedRunner extends Context.Service<ViewedRunner, Runner>()(
+  "@kampus/libfabrika/runtime/Runner.test.ViewedRunner",
+) {}
 
 type Update =
   | { readonly type: "whole"; readonly rev: number; readonly view: Model }

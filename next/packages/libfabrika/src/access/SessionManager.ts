@@ -36,7 +36,7 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused>()("Signin
 export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
 
 export class SignRequest extends Context.Service<SignRequest, { readonly id: string }>()(
-  "@kampus/libfabrika/SignRequest",
+  "@kampus/libfabrika/access/SessionManager.SignRequest",
 ) {}
 
 const InputRecord = Schema.Struct({
@@ -98,7 +98,7 @@ export class SessionManager extends Context.Service<
       kind: string,
     ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError>;
   }
->()("@kampus/libfabrika/SessionManager") {
+>()("@kampus/libfabrika/access/SessionManager") {
   static readonly layer = <R>(
     sql: Sql,
     membership: (key: string) => Effect.Effect<Writer, NotGranted | LedgerError, R>,
