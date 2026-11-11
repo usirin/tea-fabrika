@@ -8,6 +8,8 @@
 # reaches a file by its package name (`@tea-fabrika/tracker`) never sees a mutant (ticket 457).
 # BASELINE, when set, names vitest's JSON report of a plain run of the same tests here: the test
 # and hook limit is then limit.ts's answer for it, else the fast check's 10 s (ticket 605).
+# With IN_PLACE=1, recheck.ts then writes each mutant no test killed over its file alone and runs the
+# related tests that start a process, which Stryker's runner never hands a mutant (ticket 265).
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
@@ -18,6 +20,9 @@ export T BUILD RELATED IN_PLACE BASELINE
 exec node --input-type=module -e '
 import {spawn} from "node:child_process";
 import {rmSync} from "node:fs";
+// The second pass reads when this cap fires, to stop in time (ticket 265).
+const limit = 300_000;
+process.env.DEADLINE = String(Date.now() + limit);
 const child = spawn("sh", ["-eu"], {detached: true, stdio: "inherit"});
 const kill = (signal) => { try { process.kill(-child.pid, signal); } catch (e) {
   if (e.code !== "ESRCH") throw e;
@@ -30,7 +35,7 @@ const stop = () => {
   kill("SIGTERM");
   hard = setTimeout(() => kill("SIGKILL"), 1000);
 };
-const cap = setTimeout(stop, 300_000);
+const cap = setTimeout(stop, limit);
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 child.once("exit", (code) => {
@@ -84,4 +89,10 @@ JSON
 set --
 [ "${FINAL:-1}" = 0 ] || set -- --force
 node "$S/core/bin/stryker.js" run "$M/stryker.json" "$@" > "$M/log.txt" 2>&1
+# Stryker's vitest runner never hands the mutant to a process a test starts, so this pass runs each
+# mutant no test killed against the related tests that start one, and marks what they kill. It
+# writes over the checkout, so only a throwaway one (IN_PLACE) gets it.
+[ "$IN_PLACE" = false ] || [ ! -f "$M/report.json" ] ||
+  node .agents/skills/mutation/scripts/recheck.ts --report "$M/report.json" \
+    --related "$RELATED" --deadline "$DEADLINE" --summary "$M/recheck.json"
 SH

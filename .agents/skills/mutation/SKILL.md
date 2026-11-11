@@ -156,6 +156,13 @@ Each arm's test and hook limit is the fast check's 10 s, raised to three times t
 file set-up in that arm's plain run in the box, and at most 60 s (`scripts/limit.ts`, ticket 605).
 A fixed 10 s stopped the dry run on one slow law, and then no mutant ran.
 
+Stryker's vitest runner never hands a mutant to a process a test starts, so such a mutant reads
+NoCoverage or Survived (ticket 265). In the box, `scripts/recheck.ts` then writes each of those, up
+to 20 and within the five minutes, over its file alone, runs the related tests that start a process
+and puts the file back. One a test fails on becomes Killed, its `statusReason` starting `recheck:`.
+`recheck.json`, beside the report, names the cap and every mutant it skipped, with why: quote its
+counts in the report.
+
 ## A gap's category
 
 Each real gap the hourly run files gets one category

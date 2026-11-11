@@ -21,6 +21,8 @@
     "skills/mutation/scripts/heartbeat.test.ts",
     "skills/mutation/scripts/limit.ts",
     "skills/mutation/scripts/limit.test.ts",
+    "skills/mutation/scripts/recheck.ts",
+    "skills/mutation/scripts/recheck.test.ts",
     "skills/lead/scripts/sizecap.ts",
     "skills/lead/scripts/sizecap.test.ts",
     "skills/mutation/scripts/scope.ts",

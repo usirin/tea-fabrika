@@ -33,7 +33,7 @@ arm() {
 	mkdir -p "/out/$1"
 	code=0
 	BASELINE=$3 T=$2 sh .agents/skills/mutation/scripts/run.sh > "/out/$1/run.txt" 2>&1 || code=$?
-	for f in report.json sample.json log.txt events; do
+	for f in report.json recheck.json sample.json log.txt events; do
 		[ ! -e "/tmp/mut-$2/$f" ] || cp -R "/tmp/mut-$2/$f" "/out/$1/"
 	done
 	echo "$code" > "/out/$1/exit"

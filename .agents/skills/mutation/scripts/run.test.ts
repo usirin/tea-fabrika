@@ -4,6 +4,8 @@ import "./sample.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./limit.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./recheck.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./scope.ts?raw";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -36,8 +38,13 @@ if (args[0]?.endsWith("/limit.ts")) {
   process.stdout.write(setup.limit?.out ?? "10000\n");
   process.exit(setup.limit?.exit ?? 0);
 }
+if (args[0]?.endsWith("/recheck.ts")) {
+  fs.appendFileSync(path.join(dir, "recheck-calls.jsonl"), JSON.stringify({args, at: Date.now()}) + "\n");
+  process.exit(0);
+}
 if (args[0]?.endsWith("/core/bin/stryker.js")) {
   const config = JSON.parse(fs.readFileSync(args[2], "utf8"));
+  if (setup.report) fs.writeFileSync(config.jsonReporter.fileName, "{}");
   const vitest = fs.readFileSync(path.join(dir, config.vitest.configFile), "utf8");
   fs.writeFileSync(path.join(dir, "invoked.json"), JSON.stringify({args, config, vitest, limit: process.env.TEST_LIMIT}));
   if (setup.orphan) {
@@ -59,6 +66,8 @@ type Setup = {
   orphan?: boolean;
   /** What the stand-in limit.ts prints and its exit code. */
   limit?: { out: string; exit: number };
+  /** Whether the stand-in Stryker writes its JSON report, as a finished run does. */
+  report?: boolean;
 };
 
 const defaults: Setup = { ranges: ['"src/math.ts:1:0-1:30"'], sampleExit: 0, exit: 0, hold: false };
@@ -76,7 +85,7 @@ const fixture = (setup: Setup, inputs: Inputs) => {
   writeFileSync(join(dir, "tool.cjs"), helper);
   writeFileSync(
     join(bin, "node"),
-    `#!/bin/sh\ncase "$1" in\n*/sample.ts|*/limit.ts|*/core/bin/stryker.js) exec '${process.execPath}' '${join(dir, "tool.cjs")}' "$@";;\n*) exec '${process.execPath}' "$@";;\nesac\n`,
+    `#!/bin/sh\ncase "$1" in\n*/sample.ts|*/limit.ts|*/recheck.ts|*/core/bin/stryker.js) exec '${process.execPath}' '${join(dir, "tool.cjs")}' "$@";;\n*) exec '${process.execPath}' "$@";;\nesac\n`,
     { mode: 0o755 },
   );
   // nice is blocked in the box. If retained outside it, only this local shim can run.
@@ -147,7 +156,14 @@ const run = (setup: Setup, inputs: Inputs) => {
     expect(ran.signal).toBeNull();
     const sample = join(f.dir, "sample-calls.jsonl");
     const limits = join(f.dir, "limit-calls.jsonl");
+    const rechecks = join(f.dir, "recheck-calls.jsonl");
     return {
+      rechecks: existsSync(rechecks)
+        ? readFileSync(rechecks, "utf8")
+            .trim()
+            .split("\n")
+            .map((s) => JSON.parse(s) as { args: string[]; at: number })
+        : [],
       code: ran.status,
       text: ran.stdout + ran.stderr,
       invocation: invoked(f.dir),
@@ -436,6 +452,35 @@ console.log(JSON.stringify(resolved.test));
         },
       ),
       { ...options, numRuns: 12 },
+    );
+  });
+
+  // Plants: call the second pass without IN_PLACE, before Stryker, without a report, or with
+  // another report, tests or deadline.
+  it("T265 runs the second pass after Stryker's report, in place only, before the run's cap", () => {
+    fc.assert(
+      fc.property(fc.constantFrom(undefined, "0", "1"), fc.boolean(), (flag, report) => {
+        const before = Date.now();
+        const related = "a.test.ts,b/c.test.ts";
+        const got = run({ ...defaults, report }, { T: "265", BUILD: "abc1234", RELATED: related, IN_PLACE: flag });
+        expect(got.code, got.text).toBe(0);
+
+        if (flag !== "1" || !report) {
+          expect(got.rechecks).toEqual([]);
+          return;
+        }
+
+        expect(got.rechecks).toHaveLength(1);
+        const [call] = got.rechecks;
+        const flagValue = (name: string) => call!.args[call!.args.indexOf(name) + 1];
+        expect(flagValue("--report")).toMatch(/\/mut-265\/report\.json$/);
+        expect(flagValue("--summary")).toMatch(/\/mut-265\/recheck\.json$/);
+        expect(flagValue("--related")).toBe(related);
+        const deadline = Number(flagValue("--deadline"));
+        expect(deadline).toBeGreaterThanOrEqual(before + 300_000);
+        expect(deadline).toBeLessThanOrEqual(call!.at + 300_000);
+      }),
+      { ...options, numRuns: 6 },
     );
   });
 
