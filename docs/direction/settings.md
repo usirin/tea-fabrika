@@ -191,14 +191,14 @@ a constant nobody varies   no person would choose differently          a 50 ms s
 ```toml
 # .fabrika/fabrika.toml
 [review]
-approvals = 2
+human-approvals = 2
 ```
 
 ```ts
-export const approvals = Setting.make("review.approvals", {
+export const humanApprovals = Setting.make("review.human-approvals", {
   schema: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   default: 1,
-  doc: "How many people must approve a change. 0 means this repo has no floor.",
+  doc: "How many people must approve a change; an agent's review does not count. 0 means no floor.",
   scope: ["repo"],
   reload: "restart",
 });
@@ -611,11 +611,11 @@ export class Toml extends Context.Service<
 ```toml
 # .fabrika/fabrika.toml, read at the change's base and at its head, joined
 [review]
-approvals = 1                                                  # the floor; 0 means no floor
+human-approvals = 1                                            # the floor; 0 means no floor
 governed = [".github/", "next/packages/libfabrika/src/gateway/"]  # an owner of these rules is among them
 ```
 
-- `review.approvals` is the floor for every run. A flow may ask for more review steps, never fewer;
+- `review.human-approvals` is the floor for every run. A flow may ask for more review steps, never fewer;
   one under the floor is refused before its first step runs (0082).
 - A change's size moves the count up from the floor, and its governed paths set who must be among
   the people, read from fabrika's own settings, never from the code host (0079, a trial until its
@@ -624,7 +624,7 @@ governed = [".github/", "next/packages/libfabrika/src/gateway/"]  # an owner of 
   and anything a change or a flow could use to lower its own floor. An agent cannot write
   `.fabrika/` (principle 5).
 - Today's version has `[ship] approval` (`codeowners` or `none`) and `[review] governed` and `ui`;
-  `approvals` is new.
+  `human-approvals` is new.
 
 ### Docs from the declaration
 
@@ -707,7 +707,7 @@ from = "./fixtures"
 fabrika-version = "0.4.0"
 
 [review]
-approvals = 1
+human-approvals = 1
 
 [pack.fabrika.settings]
 ```
@@ -717,10 +717,10 @@ approvals = 1
   A port is a whole number from 1 to 65535. The instance did not start.
 
 $ fabrika settings              # once line 5 says port = 18800
-fabrika-version   0.4.0        .fabrika/fabrika.toml:2
-review.approvals  1            .fabrika/fabrika.toml:5
-instance.port     18800        ~/.fabrika/fabrika.toml:5
-pack.fixtures     ./fixtures   ~/.fabrika/fabrika.toml:7
+fabrika-version         0.4.0        .fabrika/fabrika.toml:2
+review.human-approvals  1            .fabrika/fabrika.toml:5
+instance.port           18800        ~/.fabrika/fabrika.toml:5
+pack.fixtures           ./fixtures   ~/.fabrika/fabrika.toml:7
 ```
 
 - **The editor** underlines `70000` before a save, from `person.json`.
@@ -773,7 +773,8 @@ Not filed. One small fix the owner may pick:
 - **`~/.fabrika/packs`** as the cache in [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
   is now `~/.fabrika/cache/packs/`, keyed by commit ([0085](../../.decisions/0085-pack-cache-under-cache-folder.md)).
 - **0082's sketch** writes `scope: "repo"` as a string. Here `scope` is a list, required and never
-  empty, with no "both" and no default.
+  empty, with no "both" and no default. Fixed by 0082's amendment of 2026-11-10, which also renames
+  its setting `review.human-approvals`.
 - **"The pack checks them"** (the 2026-10-05 note): the core runs the schema the pack declares, at
   load. The pack still owns the rules.
 - **The glossary's `setting` row** says a setting "does not change during a run". A `live` setting

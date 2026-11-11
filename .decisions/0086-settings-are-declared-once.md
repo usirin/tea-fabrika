@@ -78,7 +78,7 @@ The calls from the walk:
   `toml-eslint-parser` 1.0.3, which replaces smol-toml in `next/`; a write is a text splice.
 - **Settings per pack,** in `[pack.<name>.settings]`, declared by the pack as one group, read through
   a provider scoped to that pack. Both files may list packs; on the same name the repo's wins.
-- **`review.approvals`** is the example of a repo setting; a flow holds the step order, and the file
+- **`review.human-approvals`** is the example of a repo setting; a flow holds the step order, and the file
   holds the floor.
 - **`fabrika-version`** in the repo's file names the oldest fabrika it works with, is read first, and
   exists from the first version. No format number.
