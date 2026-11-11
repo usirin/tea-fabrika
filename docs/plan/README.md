@@ -78,7 +78,10 @@ setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-o
 into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
 [0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
 only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
-`Sql` adapter moves to `cloudflare/`; no Tier 1 row changes. → the lead lands each slice once its
+`Sql` adapter moves to `cloudflare/`; slice 1 merged as
+[PR 891](https://github.com/usirin/tea-fabrika/pull/891). Its slice 3 (ticket 723) is being built:
+`Referee.ts` and `LedgerTransaction.ts` hold only their contracts, and their layers are
+`RefereeSql.ts` and `LedgerTransactionSql.ts`. No Tier 1 row changes. → the lead lands each slice once its
 steps pass
 
 *2026-11-09:* the local instance, P12, landed as
