@@ -23,8 +23,12 @@ const heavy = { check: true, test: true, next: true, e2e: true };
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
+// Decision 0090: a new row is its own file in a log's folder, as safe as a line in the old file.
+const logs = fc.constantFrom("notes", "runs", "findings");
+
 const safe = fc.oneof(
   word.map((s) => `field/${s}.jsonl`),
+  fc.tuple(logs, word).map(([log, s]) => `field/${log}/2026-11-11-${s}.json`),
   word.map((s) => `docs/${s}.md`),
   word.map((s) => `field/${s}.md`),
 );
@@ -46,6 +50,8 @@ const shared = fc.oneof(
     "field/nested/a.jsonl",
     "tools/field/a.jsonl",
     "field/a.jsonl.ts",
+    "field/other/2026-11-11-a.json",
+    "tools/field/runs/2026-11-11-a.json",
   ),
 );
 
@@ -108,7 +114,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
         test: false,
         next: false,
         e2e: false,
-        field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p)),
+        field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p) || /^field\/(?:notes|runs|findings)\//.test(p)),
       });
     }),
     options,

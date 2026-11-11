@@ -58,8 +58,8 @@ counts as proof.
 
 Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
 goes in the plan.
-Put the row in a last section of the plan, `## Findings`, as one JSON line in a fence. The lead
-adds it to `field/findings.jsonl` unchanged.
+Put the row in a last section of the plan, `## Findings`, as one JSON line in a fence. Its `id` is
+the date and a short slug. The lead saves it unchanged as its own file in `field/findings/`.
 
 ## Never
 
