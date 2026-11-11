@@ -59,8 +59,8 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 19 of Tier 1's 43 rows have merged
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
+`next/` is on main, and 20 of Tier 1's 43 rows have merged, plus P17a, half of P17
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
 added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
 P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
@@ -187,7 +187,7 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   its cause kept, and `runtime/` never imports `ledger/`. A new file goes in its module now, before
   the move lands ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the layers too,
   with no exemption: a module whose laws need a real database writes them as a suite, read through
-  its namespace as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
+  its module as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
   two modules share sits on a layer both may import
   ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
