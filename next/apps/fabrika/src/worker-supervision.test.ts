@@ -3,7 +3,6 @@
 // No directly constructed runner and no raw Miniflare instance stand in for the stage.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -11,6 +10,7 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
+import { heldPort } from "./port.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -98,18 +98,6 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
   process.env.FABRIKA_HOME = home;
 
   try {
-    const listener = createServer();
-    await new Promise<void>((done, fail) => {
-      listener.once("error", fail);
-      listener.listen(0, "127.0.0.1", done);
-    });
-    const at = listener.address();
-
-    if (at === null || typeof at === "string") {
-      throw new Error("no TCP port");
-    }
-
-    await new Promise<void>((done) => listener.close(() => done()));
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
     const poison = join(home, "poison.ts");
     writeFileSync(poison, poisonSource);
@@ -120,6 +108,8 @@ const world = async (test: (stage: Stage, key: Key, fixture: Fixture) => Promise
     expect(code, "the fixture program must be built").toBeDefined();
     await Effect.runPromise(
       Effect.gen(function* () {
+        // Held until the scope closes, after the stage that binds it (finalizers run in reverse).
+        const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
         const stage = yield* localStage(built, {
           home,
           name: PROJECT,
