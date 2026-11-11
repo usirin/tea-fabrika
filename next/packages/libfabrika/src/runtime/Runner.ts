@@ -394,7 +394,8 @@ export class ProgramRunner extends Context.Service<
                   Effect.withSpan("runner.restart", {
                     attributes: {
                       ...timing,
-                      [tag("build")]: s.build,
+                      // The build being started, which a manual restart may change from the current one.
+                      [tag("build")]: j.request.code.hash,
                       [tag("crashes")]: s.crashes,
                     },
                   }),
