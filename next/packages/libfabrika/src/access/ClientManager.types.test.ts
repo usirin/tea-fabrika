@@ -27,8 +27,8 @@ it("scenario: ClientManager keeps its exact contract and sibling layer requireme
 // The lead and CI run the compiler; Vitest does not typecheck this callback.
 it("scenario: rejects static layers, incomplete founders and a changed error channel", () => {
   type AssertFalse<T extends false> = T;
-  // @ts-expect-error A restored static layer must violate the contract-only shape.
   expectTypeOf<
+    // @ts-expect-error A restored static layer must violate the contract-only shape.
     AssertFalse<"layer" extends keyof (typeof Contract.ClientManager & { layer: unknown }) ? true : false>
   >();
   // @ts-expect-error Dropping build cannot satisfy the required founder input.
