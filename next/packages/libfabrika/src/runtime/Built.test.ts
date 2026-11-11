@@ -34,7 +34,9 @@ const load = async () => {
 };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
-const types = ["text/javascript; charset=utf-8", "text/css; charset=utf-8"] as const;
+// P14 slice 1: a tab's page is one more checked asset type, generated beside scripts and stylesheets.
+// The refusals below keep a bare `text/html` and every other type out.
+const types = ["text/javascript; charset=utf-8", "text/css; charset=utf-8", "text/html; charset=utf-8"] as const;
 
 const rows = fc.uniqueArray(
   fc.record({
@@ -56,7 +58,7 @@ const routes = fc.uniqueArray(
   { minLength: 1, maxLength: 4, selector: (a) => a.route },
 );
 
-const runs = { seed: 119120, numRuns: 20 };
+const runs = { seed: 119120, numRuns: 100 };
 
 const failed = async (api: Api, raw: unknown) => {
   // A throwing decode rejects here instead of returning a typed Failure.

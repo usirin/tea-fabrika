@@ -2,6 +2,10 @@
 // root and explicit program selections. Implementation owns those signature adjustments.
 // Builder contract: `libfabrika/src/build.ts` exports `build(options)`, an Effect that needs
 // FileSystem and Path and fails with BuildError's `reason`.
+// P14 slice 1 (ticket 698): `build` also takes `tab: {entry, styles}`, a browser entry and its
+// stylesheets in the order the page applies them. The tab's own Rolldown call compiles the entry
+// into `/window.js` and emits the page at `/index.html` (`text/html; charset=utf-8`), which embeds
+// every stylesheet in order and loads `/window.js`. Without `tab` neither route exists.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -19,8 +23,9 @@ import {
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Tracer } from "effect";
 import * as fc from "fast-check";
+import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -60,6 +65,7 @@ type Build = {
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
+    readonly tab?: { readonly entry: string; readonly styles: readonly string[] };
   }) => Effect.Effect<Built, unknown>;
 };
 
@@ -411,6 +417,517 @@ describe("P16 p33 one-file build", () => {
           expect(() => embedded(source, [source])).toThrow("compiled text changed");
         }),
         { ...runs, numRuns: 8 },
+      );
+    },
+  );
+});
+
+// P14 slice 1 (ticket 698): S1.1, S1.2 and S1.7. Each is a generated walk from a fixture with no
+// output yet. Every step reads the walk's state (the tab's files now, the last good output, which
+// faults the files hold) and picks a move that state allows; the build runs for real each time.
+// Build walks are slow (a tab build bundles Effect and React's JSX runtime), so each runs a small
+// fixed count: 4 walks of up to 4 builds, about a minute on a laptop.
+const walks = { seed: 119120, numRuns: 4 };
+const walkTimeout = buildTimeout(walks.numRuns * 5);
+const HTML = "text/html; charset=utf-8";
+const JS = "text/javascript; charset=utf-8";
+const PAGE = "/index.html";
+const SCRIPT = "/window.js";
+const utf8 = (s: string) => Buffer.byteLength(s, "utf8");
+
+/** A module specifier naming a `node:` module: an import, a re-export, a dynamic import, a require
+ *  or Node's `getBuiltinModule`, as Effect's async-hooks probe names one. A minified `{node:n}` key is not. */
+const NODE_NAME = /(?:\b(?:from|import|require|getBuiltinModule)\s*\(?\s*|\?\.\s*\(\s*)["'`]node:/;
+
+const parsedRules = (css: string): unknown => {
+  let rules: Rule[] = [];
+  transform({
+    filename: "law.css",
+    code: Buffer.from(css),
+    visitor: {
+      StyleSheet: (sheet) => {
+        rules = sheet.rules;
+      },
+    },
+  });
+  return JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
+};
+
+/** The rules of every `<style>` in the page, in document order, as one list. */
+const pageRules = (page: string): unknown =>
+  parsedRules([...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n"));
+
+const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
+// A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
+const STYLE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
+
+/** One Rolldown call as the build made it: its input and every file it emitted, by name. */
+type Call = {
+  readonly input: unknown;
+  readonly files: ReadonlyArray<{ readonly fileName: string; readonly type: string; readonly text: string }>;
+};
+
+// The real Rolldown, observed per call. A page made after the tab's call is in no call's output.
+const observeCalls = async () => {
+  const calls: Call[] = [];
+  const native = await vi.importActual<{
+    rolldown: (o: RolldownOptions) => Promise<{
+      generate: (o: OutputOptions) => Promise<RolldownOutput>;
+      close: () => Promise<void>;
+    }>;
+  }>("rolldown");
+  vi.doMock("rolldown", () => ({
+    ...native,
+    rolldown: async (options: RolldownOptions) => {
+      const handle = await native.rolldown(options);
+      return {
+        ...handle,
+        generate: async (o: OutputOptions) => {
+          const out = await handle.generate(o);
+          calls.push({
+            input: options.input,
+            files: out.output.map((item) => ({
+              fileName: item.fileName,
+              type: item.type,
+              text:
+                item.type === "chunk"
+                  ? item.code
+                  : typeof item.source === "string"
+                    ? item.source
+                    : new TextDecoder().decode(item.source),
+            })),
+          });
+          return out;
+        },
+        close: () => handle.close(),
+      };
+    },
+  }));
+  vi.resetModules();
+  return calls;
+};
+
+/** Every span a build opened, with its attributes, events and end, as plain data. */
+const tracing = () => {
+  const spans: Array<Tracer.NativeSpan> = [];
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options);
+      spans.push(span);
+      return span;
+    },
+  });
+  return { spans, tracer };
+};
+
+const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.Tracer) => {
+  const work = (await api()).build(options);
+  return Effect.runPromise(
+    Effect.result(tracer === undefined ? work : work.pipe(Effect.withTracer(tracer))).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+};
+
+/** A stylesheet of the walk: its mark, and whether its text tries to end its `<style>` element. */
+type Style = { readonly mark: string; readonly trap: boolean };
+/** The tab's files now: the label its view shows and its stylesheets in page order. */
+type Tab = { readonly label: string; readonly styles: ReadonlyArray<Style> };
+
+const styleText = (style: Style, n: number) =>
+  `.${style.mark} { --p14-order: ${n}; }\n.${style.mark} b { color: red; }\n${
+    style.trap
+      ? `/* </style><script>globalThis.__p14Escaped = 1</script><style> */\n.${style.mark}-t { order: ${n}; }\n`
+      : ""
+  }`;
+
+/** A fixture with one program window and a tab folder whose files the walk rewrites. */
+const tabHome = (value: string) => {
+  const f = fixture(value);
+  const dir = join(f.home, "tab");
+  mkdirSync(dir);
+  const view = join(dir, "view.tsx");
+  const entry = join(dir, "entry.tsx");
+  const write = (tab: Tab) => {
+    writeFileSync(view, `export const Tip = () => <b>{${JSON.stringify(tab.label)}}</b>;`);
+    writeFileSync(
+      entry,
+      `import {Effect} from "effect"; import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(tab.label)})];`,
+    );
+    return tab.styles.map((style, n) => {
+      const file = join(dir, `s${n}.css`);
+      writeFileSync(file, styleText(style, n));
+      return file;
+    });
+  };
+  return { ...f, dir, view, entry, write };
+};
+
+/** The temporary folders a build makes beside `out`; none may outlive the build. */
+const leftovers = (home: string) =>
+  readdirSync(home).filter((n) => n.startsWith(".fabrika-build-") || n.endsWith(".old"));
+
+const outFiles = (out: string) => (existsSync(out) ? snapshot(out) : []);
+
+const snapshot = (dir: string) =>
+  readdirSync(dir)
+    .sort()
+    .map((name) => [name, readFileSync(join(dir, name)).toString("base64")]);
+
+/** S1.1's check of one successful build against the walk's state. */
+const checkCarried = (
+  built: Built,
+  state: { readonly tab: Tab | null; readonly entry: string; readonly styles: readonly string[] },
+  calls: ReadonlyArray<Call>,
+  spans: ReadonlyArray<Tracer.NativeSpan>,
+  out: string,
+) => {
+  expect(readdirSync(out), "only the brain is published").toEqual(["brain.mjs"]);
+  const brain = readFileSync(built.brain);
+  expect(sha(brain), "the build is its brain's hash").toBe(built.build);
+
+  for (const [route, asset] of Object.entries(built.assets)) {
+    expect(asset.hash, `${route}'s hash is its own body's`).toBe(sha(asset.body));
+  }
+
+  embedded(brain.toString("utf8"), [
+    ...Object.values(built.programs).map((p) => p.source),
+    ...Object.values(built.assets).map((a) => a.body),
+  ]);
+  const tabCalls = calls.filter((c) => c.input === state.entry);
+
+  if (state.tab === null) {
+    expect(Object.keys(built.assets), "without a tab there is no page").not.toContain(PAGE);
+    expect(Object.keys(built.assets), "without a tab there is no tab script").not.toContain(SCRIPT);
+    expect(tabCalls).toEqual([]);
+  } else {
+    const script = built.assets[SCRIPT],
+      page = built.assets[PAGE];
+    expect(script?.type, "the tab's script is carried").toBe(JS);
+    expect(page?.type, "the page is carried").toBe(HTML);
+    expect(script!.body).toContain(state.tab.label);
+    expect(script!.body, "the tab's script names no node: module").not.toMatch(NODE_NAME);
+    // The page comes out of the tab's own call: that one call emitted exactly the carried script and page.
+    expect(tabCalls, "one Rolldown call built the tab").toHaveLength(1);
+    const [tab] = tabCalls;
+    const chunks = tab!.files.filter((x) => x.type === "chunk"),
+      pages = tab!.files.filter((x) => x.type === "asset" && x.fileName === "index.html");
+    expect(
+      chunks.map((c) => c.text),
+      "the carried script is the tab call's one chunk",
+    ).toEqual([script!.body]);
+    expect(
+      pages.map((p) => p.text),
+      "the carried page is the tab call's own asset",
+    ).toEqual([page!.body]);
+    expect(tab!.files, "the tab's call emitted nothing the brain does not carry").toHaveLength(2);
+    expect(
+      calls.filter((c) => c !== tab && c.files.some((x) => x.text === page!.body)),
+      "no other call emitted the page",
+    ).toEqual([]);
+    // Its stylesheets in the given order, each element closed only by itself, and one script: /window.js.
+    const given = state.tab.styles.map((_, n) => readFileSync(state.styles[n]!, "utf8"));
+    expect(pageRules(page!.body), "the page holds every stylesheet's rules, in order").toEqual(
+      parsedRules(given.join("\n")),
+    );
+    const markup = page!.body.replace(STYLE, "");
+    expect(count(page!.body, STYLE), "one style element per stylesheet").toBe(given.length);
+    expect(count(markup, /<\/?style\b/gi), "no stylesheet text ends its element early").toBe(0);
+    expect(count(markup, /<script\b/gi), "the page's one script").toBe(1);
+    expect(page!.body).toMatch(/<script\b(?=[^>]*\btype="module")(?=[^>]*\bsrc="\/window\.js")[^>]*>/);
+    // Byte accounting: the measured tab call holds the page, and the published window bytes hold it too.
+    const tabBytes = tab!.files.reduce((total, x) => total + utf8(x.text), 0);
+    const bundles = spans.filter((s) => s.name === "build.bundle");
+    expect(
+      bundles.some((s) => s.attributes.get("output.bytes") === tabBytes && s.attributes.get("output.files") === 2),
+      "the tab's measured call counts its script and its page",
+    ).toBe(true);
+  }
+
+  const emit = spans.find((s) => s.name === "build.emit");
+  expect(emit?.attributes.get("window.bytes"), "the published window bytes are every carried file's").toBe(
+    Object.values(built.assets).reduce((total, a) => total + utf8(a.body), 0),
+  );
+};
+
+const word = fc.stringMatching(/^[a-z][a-z0-9]{2,10}$/);
+const choices = fc.array(fc.record({ move: fc.nat(), word }), { minLength: 2, maxLength: 4 });
+
+describe("P14 slice 1: the tab's page and script ride in the one build", () => {
+  it(
+    "S1.1 generated build walks: a complete tab build carries exactly its emitted page, script and styles; hashes, types and bytes agree",
+    { timeout: walkTimeout },
+    async () => {
+      const reached = new Set<string>();
+      await fc.assert(
+        fc.asyncProperty(word, choices, async (value, steps) => {
+          const calls = await observeCalls();
+          const f = tabHome(value);
+          let tab: Tab | null = null;
+          let last: string | null = null;
+
+          for (const { move, word } of steps) {
+            // The moves this state allows: a tab can be added, or a present one edited, restyled,
+            // reordered, trapped, dropped or rebuilt unchanged.
+            const allowed =
+              tab === null
+                ? (["add", "bare"] as const)
+                : ([
+                    "label",
+                    ...(tab.styles.length < 3 ? (["style"] as const) : []),
+                    ...(tab.styles.length > 1 ? (["reorder"] as const) : []),
+                    "trap",
+                    "drop",
+                    "same",
+                  ] as const);
+            const chosen = allowed[move % allowed.length]!;
+            reached.add(chosen);
+            const before = tab;
+            tab =
+              chosen === "add"
+                ? { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: move % 2 === 0 }] }
+                : chosen === "bare" || chosen === "drop"
+                  ? null
+                  : chosen === "label"
+                    ? { ...tab!, label: `p14-${word}-${tab!.label.length}` }
+                    : chosen === "style"
+                      ? { ...tab!, styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }] }
+                      : chosen === "reorder"
+                        ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
+                        : chosen === "trap"
+                          ? {
+                              ...tab!,
+                              styles: tab!.styles.map((s, n) =>
+                                n === move % tab!.styles.length ? { ...s, trap: !s.trap } : s,
+                              ),
+                            }
+                          : tab;
+            const styles = tab === null ? [] : f.write(tab);
+
+            if (tab?.styles.some((s) => s.trap) === true) {
+              reached.add("trapped");
+            }
+
+            const { spans, tracer } = tracing();
+            const start = calls.length;
+            const result = await runBuild(
+              { ...f.options, ...(tab === null ? {} : { tab: { entry: f.entry, styles } }) },
+              tracer,
+            );
+            expect(result._tag, `${chosen} builds`).toBe("Success");
+            const built = (result as { readonly success: Built }).success;
+            checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
+
+            if (chosen === "same") {
+              expect(brainBytes(built.brain), "the same inputs build the same bytes").toBe(last);
+            }
+
+            if (chosen === "label" && before !== null) {
+              expect(built.assets[SCRIPT]?.body, "an edited view replaces the script").not.toContain(
+                JSON.stringify(before.label),
+              );
+            }
+
+            last = brainBytes(built.brain);
+          }
+        }),
+        walks,
+      );
+      // A run that never reached a tab cannot claim this law.
+      expect(reached.has("add"), "the walks built a tab").toBe(true);
+      expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
+      expect([...reached].filter((m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
+    },
+  );
+
+  it(
+    "S1.2 generated failure walks: a failed compile, bundle or read keeps the last good brain and leaves no temporary output",
+    { timeout: walkTimeout },
+    async () => {
+      const reached = new Set<string>();
+      await fc.assert(
+        fc.asyncProperty(word, choices, async (value, steps) => {
+          const f = tabHome(value);
+          // The walk's state: the tab files as written (with any fault they hold), and the last good output.
+          let tab: Tab | null = null;
+          let fault: "compiler" | "bundle" | "read" | null = null;
+          let good: Array<Array<string>> | null = null;
+
+          for (const { move, word } of steps) {
+            // A fault targets a phase this build reaches: a tab's compile, bundle or stylesheet
+            // read only once a tab exists; a bad selection table always.
+            const allowed = [
+              "build",
+              ...(tab === null ? (["add"] as const) : (["compiler", "bundle", "read"] as const)),
+              "table",
+            ] as const;
+            const chosen = allowed[move % allowed.length]!;
+            let styles: readonly string[] = [];
+
+            if (chosen === "add") {
+              tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
+            }
+
+            if (tab !== null) {
+              styles = f.write(tab);
+              fault = chosen === "compiler" || chosen === "bundle" || chosen === "read" ? chosen : null;
+
+              if (fault === "compiler") {
+                // A purity error in the tab's TSX: the Compiler check finds it even with `files: []`.
+                writeFileSync(f.view, "export const Tip = () => <b>{Date.now()}</b>;");
+              }
+
+              if (fault === "bundle") {
+                writeFileSync(f.entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
+              }
+
+              if (fault === "read") {
+                styles = [...styles, join(f.dir, `missing-${word}.css`)];
+              }
+            }
+
+            const options = {
+              ...f.options,
+              ...(chosen === "table" ? { programs: [f.options.programs[0]!, f.options.programs[0]!] } : {}),
+              ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
+            };
+            const result = await runBuild(options);
+            const fails = chosen === "table" || fault !== null;
+            reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
+
+            if (fails) {
+              expect(result, `${chosen} fails typed`).toMatchObject({
+                _tag: "Failure",
+                failure: { _tag: "BuildError", ...(chosen === "bundle" ? {} : { reason: chosen }) },
+              });
+              expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
+            } else {
+              expect(result._tag, `${chosen} builds`).toBe("Success");
+              good = outFiles(f.options.out);
+              expect(good.map(([name]) => name)).toEqual(["brain.mjs"]);
+            }
+
+            expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
+          }
+        }),
+        walks,
+      );
+      expect(
+        ["compiler", "bundle", "read"].some((fault) => reached.has(`${fault}-after-good`)),
+        "a tab fault was reached after a good build",
+      ).toBe(true);
+    },
+  );
+
+  it(
+    "S1.7 [secrets] generated build and request walks: output, responses, errors and spans copy no unrelated credential",
+    { timeout: walkTimeout },
+    async () => {
+      const { fetch } = await import("../../cloudflare/fetch.ts");
+      const secrets = fc.record({
+        token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
+        name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
+      });
+      const reached = new Set<string>();
+      await fc.assert(
+        fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
+          const f = tabHome(value);
+          // The credentials sit where a build could pick them up: the environment, a token file in
+          // the root and a key file beside the tab's entry. Nothing imports them.
+          vi.stubEnv(name, token);
+          writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
+          writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
+          const forms = [
+            token,
+            encodeURIComponent(token),
+            Buffer.from(token).toString("base64"),
+            Buffer.from(token).toString("base64url"),
+            Buffer.from(token).toString("hex"),
+          ];
+          const clean = (output: string, label: string) => {
+            for (const form of forms) {
+              expect(output.includes(form), `${label} copies no credential`).toBe(false);
+            }
+          };
+          const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
+
+          for (const { move, word } of steps) {
+            // A failed attempt is possible from any state; a good one repairs the files first.
+            const fail = move % 3 === 0;
+            const styles = f.write(tab);
+
+            if (fail) {
+              writeFileSync(f.view, `export const Tip = () => <b>{Date.now()} ${word}</b>;`);
+            }
+
+            const { spans, tracer } = tracing();
+            const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
+            const seen = JSON.stringify(
+              spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
+              (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+            );
+
+            if (result._tag === "Failure") {
+              reached.add("failure");
+              clean(JSON.stringify(result.failure), "an error");
+              clean(String(result.failure), "an error's text");
+              // Spans last: a span that holds a leaked output fails here too, after the output itself.
+              clean(seen, "a span");
+              continue;
+            }
+
+            const built = (result as { readonly success: Built }).success;
+            const page = built.assets[PAGE]?.body ?? "";
+
+            for (const [, url] of page.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
+              clean(url!, "a page URL");
+              clean(decodeURIComponent(url!), "a decoded page URL");
+            }
+
+            for (const [route, asset] of Object.entries(built.assets)) {
+              clean(route, "a route");
+              clean(asset.body, `${route}`);
+            }
+
+            clean(readFileSync(built.brain, "latin1"), "the brain");
+
+            // Every carried route as the brain answers it, by its plain and its encoded URL.
+            const port = 8787;
+            // A file route reaches no object: each binding answers nothing but the name lookup.
+            const binding = { getByName: () => ({}) };
+            // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
+            const env = {
+              PROJECT: binding,
+              CONNECTION: binding,
+              PROCESS: binding,
+              RECORD: binding,
+            } as unknown as Parameters<typeof fetch>[1];
+            const config = { name: "p14", port, person: "p", founder: "f", window: null, build: built.build };
+
+            for (const route of ["/", ...Object.keys(built.assets)]) {
+              for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
+                const response = await Effect.runPromise(
+                  fetch(
+                    new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
+                    env,
+                    config,
+                    built.assets,
+                  ),
+                );
+                reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
+                clean(response.url, "a response URL");
+                clean(JSON.stringify([...response.headers]), "response headers");
+                clean(await response.text(), `the answer at ${url}`);
+              }
+            }
+
+            clean(seen, "a span");
+          }
+        }),
+        walks,
+      );
+      expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
+        expect.arrayContaining(["failure", "page"]),
       );
     },
   );
