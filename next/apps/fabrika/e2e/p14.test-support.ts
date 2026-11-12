@@ -7,13 +7,15 @@
 // `P14_E2E_TRACE` to a file the fixture appends each acquisition (with its pid, port or home) and
 // release to, and `P14_E2E_FAULT` to `{at, kind}`: right after acquiring `at`, fail setup (`setup`),
 // fail the test (`test`), or wait to be interrupted (`hold`). Without them the fixture runs plainly.
-import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { type ChildProcess as NodeChildProcess, execFileSync, spawn } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket } from "playwright";
 import { heldPort } from "../src/port.test-support.ts";
 
@@ -41,6 +43,8 @@ class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Sc
 class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
 
 class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", { output: Schema.String }) {}
+
+class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Number }) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
@@ -97,17 +101,31 @@ const childEnv = (home: string, extra: Readonly<Record<string, string>>) => {
 };
 
 /** A temp home with its own person key, made by ssh-keygen as a person makes one. */
-export const home = owned(
-  "home",
-  Effect.sync(() => {
-    const dir = mkdtempSync("/tmp/fw.");
-    const key = join(dir, "person");
-    execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
-    return { dir, key, publicKey: readFileSync(`${key}.pub`, "utf8").trim() };
-  }),
-  (h) => Effect.sync(() => rmSync(h.dir, { recursive: true, force: true })),
-  (h) => ({ home: h.dir }),
-);
+export const home = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const dir = yield* owned(
+    "home",
+    fs.makeTempDirectory({ directory: "/tmp", prefix: "fw." }),
+    (dir) => fs.remove(dir, { recursive: true, force: true }),
+    (dir) => ({ home: dir }),
+  );
+  const key = join(dir, "person");
+  const child = yield* spawner.spawn(
+    ChildProcess.make("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key], {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    }),
+  );
+  const exitCode = yield* child.exitCode;
+
+  if (exitCode !== 0) {
+    return yield* new KeygenFailed({ exitCode });
+  }
+
+  return { dir, key, publicKey: (yield* fs.readFileString(`${key}.pub`)).trim() };
+}).pipe(Effect.provide(NodeServices.layer));
 
 export type Home = Effect.Success<typeof home>;
 
@@ -139,7 +157,7 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         c.stderr?.on("data", (b: Buffer) => out.push(b.toString()));
         return c;
       }),
-      (c: ChildProcess) =>
+      (c: NodeChildProcess) =>
         Effect.callback<void>((resume) => {
           if (c.exitCode !== null || c.signalCode !== null) {
             return resume(Effect.void);
