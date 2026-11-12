@@ -8,6 +8,8 @@ tsc lets only a `personOnly` input's Msg into a `personOnly` event's write (the 
 probe); the two copied answers per write (`_ok`, `_err`) are accepted as a tea problem for now;
 and the event knows its stream.
 
+Its decided rules are in: [0257](../../.decisions/0257-a-programs-api-has-one-way.md), [0258](../../.decisions/0258-inputs-are-plain-data.md), [0259](../../.decisions/0259-each-event-brings-its-write.md), [0260](../../.decisions/0260-an-output-is-a-model-value.md).
+
 **The rule (owner, 2026-11-08).** In a program's API, one word means one thing only, and there is
 only one way to do each job. A shape that offers two ways (a string or an object for an input,
 `make` or `makeEffect`, a read input made differently from a write input, init's Cmds or a setup
