@@ -475,20 +475,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       policy,
       isLive: processes.isLive,
       audit: Effect.fn("project.audit")(function* (pid: string, message: unknown) {
-        const program = yield* Effect.gen(function* () {
-          const life = yield* resolved(pid);
-          const program = yield* loader.load(life.state.code.program, life.state.process);
-
-          if (program.hash !== life.state.code.hash) {
-            return yield* new Audit.AuditError({ reason: new Audit.Transport({}) });
-          }
-
-          return program;
-        }).pipe(
-          Effect.mapError((cause) =>
-            Schema.is(Audit.AuditError)(cause)
-              ? cause
-              : new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
+        // Like processLogic, load this target's available build; its start record may name an older build.
+        const program = yield* resolved(pid).pipe(
+          Effect.flatMap((life) => loader.load(life.state.code.program, life.state.process)),
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
           ),
         );
         return yield* program.execution.audit(message);
