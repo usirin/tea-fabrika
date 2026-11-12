@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p14c-lead-host-browser",
+  "ticket": "828",
+  "pr": "1028",
+  "started": "2026-11-12T04:20:00-08:00",
+  "ended": "2026-11-12T05:22:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "fail",
+  "why": "next/ only. The lead's host run of the browser laws and the shots for P14c slice 2 at c973c780e, by one helper agent, on the real dev.ts with a temp home and headless Chromium. L3 and L14 are green and each plant turned them red. L11, L15, L16 and L17 are red on the branch head. The cause for L15 and L17: on the real dev.ts only the first press of a fresh brain lands. Every later process.send is answered unreachable and resent on the same socket without end, a reload after the first press never opens the view, and a second profile granted after it never gets the add field. Seen 6 times. A guess, not proven: the checklist's wake 0 stamp after the first add leaves the process unreachable. L11's baseline is red on a 10 s timeout at the close wait; a probe saw no close event on the tab's socket after page.close(), and the test starts waiting only after the close. L11's Strict Mode half checks nothing, because the tab bundle is React's production build, where Strict Mode does not mount twice. L16 is red because its child is L11. 136 shots are saved: five app states and three checklist states, 8 layouts in light and dark plus one forced-colors shot each. The states open-items, refusal and checked (51 shots) could not be made: each needs a second press. No sideways scroll and no clipped text in any shot. The two zoom layouts are 1x images of the zoomed viewport, not 2x and 4x renders. First render: fresh tab to waiting screen 135 ms; grant to add field 431 ms; reload to add field 47 to 100 ms over five reloads. Lint and typecheck did not run here. The lane goes back to tests and build. Tokens are the subagent total; no dollar figure was reported.",
+  "tokens": 305115,
+  "tools": 94,
+  "minutes": 62,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": 305115,
+  "plants": [
+    { "law": "L3, next/packages/tuval/src/browser/key.laws.test.ts:228", "plant": "next/packages/tuval/src/browser/key.ts, the write step always stores its own candidate", "result": "red" },
+    { "law": "L3, next/packages/tuval/src/browser/key.laws.test.ts:285", "plant": "next/packages/tuval/src/browser/key.ts, the key is generated extractable", "result": "red" },
+    { "law": "L3, next/packages/tuval/src/browser/key.laws.test.ts:250", "plant": "next/packages/tuval/src/browser/key.ts, both rejected compares changed to a null check", "result": "red" },
+    { "law": "L14, first-window.test.ts:310", "plant": "next/packages/libfabrika/src/gateway/Gateway.ts:944, the client.granted notify removed", "result": "red" },
+    { "law": "L14, first-window.test.ts:319", "plant": "next/packages/tuval/src/browser/key.ts, a reload treats the stored key as rejected", "result": "red" },
+    { "law": "L11, first-window.test.ts:269", "plant": "next/apps/fabrika/src/entry/browser.tsx, the page fork moved into a useEffect under StrictMode", "result": "green" },
+    { "law": "L15, first-window.test.ts:382", "plant": "next/packages/tuval/src/window/main.tsx, a resent letter gets a fresh letter id", "result": "red" }
+  ]
+}
