@@ -1,27 +1,110 @@
 // P36, next/: 0138 applies the email addition and its drops in one Access fold.
 import { expect, it } from "@effect/vitest";
-import {
-  EPOCH,
-  LEDGER,
-  PERSON,
-  AuthorityFlow,
-  MembershipFlow,
-  VerificationFlow,
-  added,
-  initial,
-  input,
-  signed,
-  pureModule,
-  PURE,
-  type Flow,
-  type Row,
-} from "../email/Email.test-support.ts";
-import type { MemberEvent } from "./Access.ts";
+import { beforeAll } from "@effect/vitest";
+import { Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import type { Add, Signed, MemberEvent } from "./Access.ts";
+
+const EPOCH = 1_800_000_000_000;
+const PURE = { arbitrary: { seed: 119120, runs: 100, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 } };
+const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
+
+const Flow = Schema.Struct({
+  live: integer(1, 4),
+  devices: integer(1, 4),
+  skew: integer(-604800000, 604800000),
+  label: Schema.String.check(Schema.isMaxLength(64)),
+  location: Schema.String.check(Schema.isMaxLength(128)),
+  capabilities: Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(16))).check(
+    Schema.isMaxLength(4),
+  ),
+  old: Schema.Literals(["lost", "kept"]),
+});
+type Flow = typeof Flow.Type;
+const VerificationFlow = Arbitrary.schema(Flow);
+const MembershipFlow = VerificationFlow;
+const AuthorityFlow = VerificationFlow;
+type Row = { readonly fact: unknown; readonly arrivedAt: number | null; readonly parent: string | null };
+
+function pureModule<A>(load: () => Promise<A>): () => A {
+  let loaded: A;
+  beforeAll(async () => {
+    loaded = await load();
+  });
+  return () => loaded;
+}
+
+const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+const LEDGER = "ledger_01m6v5270hf3c8x2q7w9z4k5mn";
+const input = (n: number) => `in-process_01m6v5270hf3c8x2q7w9z4k5mn-${n}`;
+
+const signed = (signer: string): typeof Signed.Type => ({
+  signer,
+  text: "checked by test door",
+  armored: "test-only",
+});
+
+const added = (flow: Flow, n = 0): typeof Add.Type => ({
+  id: input(100 + n),
+  for: PERSON,
+  to: LEDGER,
+  adds: {
+    _tag: "person",
+    key: `new-person-${n % flow.devices}`,
+    window: `new-window-${n % flow.devices}`,
+  },
+  drops: flow.old === "lost" ? ["person-0"] : [],
+  verified: input(1),
+  saw: {
+    method: "email",
+    label: flow.label,
+    check: "touch",
+    location: flow.location,
+    has: flow.capabilities,
+    typed: false,
+    kept: null,
+    old: flow.old,
+  },
+  sentAt: new Date(EPOCH + flow.skew).toISOString(),
+});
+
+const founded = (flow: Flow): MemberEvent => ({
+  _tag: "founded",
+  id: PERSON,
+  name: "test home",
+  keys: Array.from({ length: flow.live }, (_, n) => `person-${n}`),
+  window: "window-0",
+});
+
+const initial = (flow: Flow): ReadonlyArray<MemberEvent> => [
+  founded(flow),
+  ...Array.from({ length: flow.live }, (_, n) => ({
+    _tag: "granted",
+    grant: {
+      id: input(10 + n),
+      for: PERSON,
+      to: LEDGER,
+      key: `agent-${n}`,
+      as: "agent",
+      sentAt: new Date(EPOCH).toISOString(),
+      saw: {
+        code: "",
+        label: flow.label,
+        location: flow.location,
+        method: "command",
+        check: "none",
+        has: flow.capabilities,
+      },
+    },
+    signed: signed(`person-${n}`),
+  })),
+];
 
 const access = pureModule(() => import("./Access.ts"));
 const fold = pureModule(() => import("./AccessFold.ts"));
-const domain = pureModule(() => import("../email/Email.ts"));
+const domain = pureModule(() => import("./Text.ts"));
 const EMAIL = "email-key";
+
 const verification = (flow: Flow) => ({
   _tag: "verified" as const,
   verified: {
@@ -34,10 +117,12 @@ const verification = (flow: Flow) => ({
   },
   signed: signed("person-0"),
 });
+
 const history = (flow: Flow): Row[] => [
   ...initial(flow).map((fact) => ({ fact, arrivedAt: EPOCH - 2, parent: null })),
   { fact: verification(flow), arrivedAt: EPOCH - 1, parent: null },
 ];
+
 const addition = (flow: Flow): Row => ({
   fact: { _tag: "added", add: added(flow), signed: signed(EMAIL) },
   arrivedAt: EPOCH,
@@ -57,6 +142,7 @@ it.prop(
         .keys.get("new-person-0")?.live,
     ).toBe(true);
     const verified = rows.pop()!;
+
     for (const arrivedAt of [EPOCH - 1, EPOCH, EPOCH + 1]) {
       // Equal referee clocks are legal; the ledger's order still decides earlier.
       const before = fold().foldAccessEntries([...rows, { ...verified, arrivedAt }, add], LEDGER);
@@ -64,6 +150,7 @@ it.prop(
       const after = fold().foldAccessEntries([...rows, add, { ...verified, arrivedAt }], LEDGER);
       expect(after.keys.has("new-person-0")).toBe(false);
     }
+
     expect(
       fold()
         .foldAccessEntries([...rows, add], LEDGER)
@@ -94,12 +181,14 @@ it.prop(
       as: "window",
     });
     expect(members.keys.get("new-person-0")).toEqual({ rank: "person", live: true, under: null });
+
     for (let n = 0; n < flow.live; n++) {
       const live = flow.old === "kept" || n !== 0;
       expect(members.keys.get(`person-${n}`)?.live).toBe(live);
       expect("as" in access().admitted(members, `agent-${n}`)).toBe(live);
       expect(members.keys.get(`person-${n}`)?.under).toBeNull();
     }
+
     expect("as" in access().admitted(members, "window-0")).toBe(flow.old === "kept");
     expect(members.person).toBe(PERSON);
     expect(members.name).toBe("test home");
@@ -145,6 +234,7 @@ it.prop(
         signed: signed(EMAIL),
       },
     ];
+
     for (const fact of forbidden) {
       const members = fold().foldAccessEntries([...rows, { fact, arrivedAt: EPOCH, parent: null }], LEDGER);
       expect(members).toEqual(baseline);
@@ -176,6 +266,7 @@ it.prop(
   ({ flow }) => {
     const rows = history(flow);
     const email = fold().foldAccessEntries([...rows, addition(flow)], LEDGER);
+
     for (const method of ["device", "recovery"] as const) {
       const add = { ...added(flow), verified: undefined, saw: { ...added(flow).saw, method } };
       const sheet: Row = {
@@ -210,6 +301,7 @@ it.prop(
       );
       expect(email.keys.get("new-person-0")).toEqual(person.keys.get("new-person-0"));
     }
+
     expect([...email.keys].filter(([key, value]) => key === "new-person-0" && value.live)).toEqual([
       ["new-person-0", { rank: "person", under: null, live: true }],
     ]);
@@ -238,6 +330,7 @@ it.prop(
     });
     const before = fold().foldAccessEntries(rows, LEDGER);
     expect("as" in access().admitted(before, "new-agent")).toBe(true);
+
     for (const signer of [EMAIL, ...Array.from({ length: flow.live }, (_, n) => `person-${n}`)]) {
       const revoke = {
         _tag: "revoked",
@@ -252,8 +345,11 @@ it.prop(
         signed: signed(signer),
       };
       const after = fold().foldAccessEntries([...rows, { fact: revoke, arrivedAt: EPOCH + 2, parent: null }], LEDGER);
-      for (const key of ["new-window-0", "new-agent"])
+
+      for (const key of ["new-window-0", "new-agent"]) {
         expect("as" in access().admitted(after, key)).toBe(signer === EMAIL);
+      }
+
       expect(after.keys.get("new-person-0")?.live).toBe(signer === EMAIL);
     }
   },

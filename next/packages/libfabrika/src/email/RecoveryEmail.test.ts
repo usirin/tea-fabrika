@@ -1,8 +1,8 @@
 // P36, next/: the asking-device child starts at init and waits only for an appended added.
 import { acceptedTypes, applyCell } from "@demlik/tea";
-import { arbMsg, arbMsgSequence, type MsgArbitraryTable } from "@demlik/tea/pbt";
+import { arbMsg, arbGuidedSequence, type MsgArbitraryTable } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import {
   EPOCH,
@@ -18,6 +18,7 @@ import {
 import type { Msg } from "./RecoveryEmail.ts";
 
 const email = pureModule(() => import("./RecoveryEmail.ts"));
+
 // A strict table means a new message needs a generator before CI accepts it.
 const messages: MsgArbitraryTable<Msg> = {
   recover: fc.constant({ type: "recover" }),
@@ -35,31 +36,70 @@ const messages: MsgArbitraryTable<Msg> = {
   }),
   tick: fc.record({ type: fc.constant("tick"), now: fc.integer() }),
 };
+
 const msg = arbMsg(messages);
+
+// Plant after build: init resets a saved failed/asking/checking/in state.
+pureLaw(
+  "P36.10 RecoveryEmail restores every saved state without admitting another device",
+  RecoveryFlow,
+  email,
+  (flow) => {
+    const machine = email().recoveryEmail;
+    const states = [
+      { _tag: "off" },
+      { _tag: "asking", challenge: input(1), until: EPOCH + 600000 + flow.skew },
+      { _tag: "checking", challenge: input(1) },
+      { _tag: "in", added: input(100) },
+      ...["wrong_code", "expired", "exhausted", "send", "storage"].map((reason) => ({ _tag: "failed", reason })),
+    ];
+
+    for (const state of states) {
+      const saved = Schema.decodeUnknownSync(machine.model)(state);
+      const encoded = Schema.encodeSync(machine.model)(saved);
+      const back = Schema.decodeUnknownSync(machine.model)(JSON.parse(JSON.stringify(encoded)));
+      const [restored] = machine.init(back, { cloud: true, binding: binding() });
+      expect(restored).toEqual(saved);
+      const message = { type: "tick" as const, now: EPOCH + flow.time };
+      expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
+    }
+  },
+);
 
 // Plants after build: enter in on checked alone; on issued alone; or on a timer.
 it("P36.10 no generated Msg makes RecoveryEmail in without an appended added", () => {
   const machine = email().recoveryEmail;
   fc.assert(
     fc.property(
-      arbMsgSequence(msg, {
-        prefix: [
-          { type: "recover" },
-          { type: "issued", challenge: { id: input(1), until: EPOCH + 600000 } },
-          { type: "code", secret: "secret-holder-ref" },
-          { type: "old", old: "lost" },
-          { type: "checked", check: "touch" },
-        ],
-      }),
+      arbGuidedSequence(
+        machine,
+        { cloud: true, binding: binding() },
+        {
+          outside: { recover: messages.recover, code: messages.code, tick: messages.tick },
+          answers: {
+            issue: { draw: messages.issued, make: (_command, answer) => answer },
+            old: { draw: messages.old, make: (_command, answer) => answer },
+            check: { draw: messages.checked, make: (_command, answer) => answer },
+            redeem: { draw: messages.redeemed, make: (_command, answer) => answer },
+          },
+        },
+      ),
       (sequence) => {
         const ctx = { cloud: true, binding: binding() };
         let [model] = machine.init(null, ctx);
         expect(model._tag).not.toBe("in");
         const appended = new Set<string>();
+
         for (const message of sequence) {
           // Tea drops a message with no cell. This uses tea's table, not a copy of its rules.
-          if (!acceptedTypes(machine, model).includes(message.type)) continue;
-          if (message.type === "redeemed") appended.add(message.added);
+          if (!acceptedTypes(machine, model).includes(message.type)) {
+            continue;
+          }
+
+          if (message.type === "redeemed") {
+            appended.add(message.added);
+          }
+
           [model] = applyCell(machine, model, message);
           expect(model._tag === "in" ? appended.has(model.added) : true).toBe(true);
         }
@@ -69,21 +109,15 @@ it("P36.10 no generated Msg makes RecoveryEmail in without an appended added", (
   );
 });
 
-pureLaw(
-  "P36.10 local setup keeps the sheet path and offers no email action",
-  RecoveryFlow,
-  email,
-  (flow, plant) => {
-    const machine = email().recoveryEmail;
-    const ctx = { cloud: plant === "offer email locally", binding: binding() };
-    const [start] = machine.init(null, ctx);
-    const [next, commands] = applyCell(machine, start, { type: "recover" });
-    expect(next._tag).toBe("off");
-    expect(commands).toEqual([]);
-    void flow;
-  },
-  ["offer email locally"],
-);
+pureLaw("P36.10 local setup keeps the sheet path and offers no email action", RecoveryFlow, email, (flow) => {
+  const machine = email().recoveryEmail;
+  const ctx = { cloud: false, binding: binding() };
+  const [start] = machine.init(null, ctx);
+  const [next, commands] = applyCell(machine, start, { type: "recover" });
+  expect(next._tag).toBe("off");
+  expect(commands).toEqual([]);
+  void flow;
+});
 
 // The success control stops a child that refuses all messages from passing the negative law.
 it.effect.prop(
@@ -98,12 +132,17 @@ it.effect.prop(
         type: "email",
         msg: { type: "code", secret: "secret-holder-ref" },
       });
-      for (const command of commands) yield* parent.recoveryHandlers(services)(command);
+
+      for (const command of commands) {
+        yield* parent.recoveryHandlers(services)(command);
+      }
+
       expect(calls).toEqual(["old", "check"]);
       expect(next.email).toBeDefined();
       const machine = email().recoveryEmail;
       const ctx = { cloud: true, binding: binding() };
       let [child] = machine.init(null, ctx);
+
       for (const message of [
         { type: "recover" },
         { type: "issued", challenge: { id: input(1), until: EPOCH + 600000 } },
@@ -114,6 +153,7 @@ it.effect.prop(
         [child] = applyCell(machine, child, message);
         expect(child._tag).not.toBe("in");
       }
+
       [child] = applyCell(machine, child, { type: "redeemed", added: input(100) });
       expect(child).toMatchObject({ _tag: "in", added: input(100) });
     }),

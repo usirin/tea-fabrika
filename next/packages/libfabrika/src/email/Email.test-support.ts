@@ -9,16 +9,21 @@ import type { Written } from "../access/ClientManager.ts";
 
 export const EPOCH = 1_800_000_000_000;
 export const TEN_MINUTES = 600_000;
+
 export const PURE = {
   arbitrary: { seed: 119120, runs: 100, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 },
 };
+
 export const EFFECT = { arbitrary: { ...PURE.arbitrary, runs: 30 } };
-export const STAGE = { arbitrary: { ...PURE.arbitrary, runs: 10 } };
+export const INTEGRATION = { arbitrary: { ...PURE.arbitrary, runs: 10 } };
 export const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
+
 export const text = (minimum: number, maximum: number) =>
   Schema.String.check(Schema.isMinLength(minimum), Schema.isMaxLength(maximum));
+
 const list = <S extends Schema.Top>(item: S, minimum: number, maximum: number) =>
   Schema.Array(item).check(Schema.isMinLength(minimum), Schema.isMaxLength(maximum));
+
 export const Seed = list(integer(0, 255), 32, 32);
 export const Boundary = Schema.Literals([-1, 0, 1]);
 export const Role = Schema.Literals(["person", "window", "agent", "recovery", "email"]);
@@ -28,6 +33,7 @@ export const Operation = Schema.Literals(["issue", "wrong", "right", "replace", 
 
 // Depth is constructed, not filtered. Every array/object has 0..8 items; text is 0..512.
 const Json0 = Schema.Union([Schema.Null, Schema.Boolean, integer(-100, 100), text(0, 512)]);
+
 const jsonLevel = <S extends Schema.Top>(child: S) =>
   Schema.Union([
     Json0,
@@ -43,7 +49,9 @@ const jsonLevel = <S extends Schema.Top>(child: S) =>
       h: Schema.optionalKey(child),
     }),
   ]);
+
 export const OutsideJson = jsonLevel(jsonLevel(jsonLevel(Json0)));
+
 export const Flow = Schema.Struct({
   seed: Seed,
   code: Schema.Union([Schema.Literals([0, 1, 99999, 100000, 999999]), integer(0, 999999)]),
@@ -108,11 +116,13 @@ export const input = (n: number) => `in-process_01m6v5270hf3c8x2q7w9z4k5mn-${n}`
 export const address = (flow: Flow) => `${flow.local}@example.test`;
 export const code = (flow: Flow) => flow.code.toString().padStart(6, "0");
 export const wrong = (value: string) => `${value[0] === "9" ? "8" : "9"}${value.slice(1)}`;
+
 export const signed = (signer: string): typeof Signed.Type => ({
   signer,
   text: "checked by test door",
   armored: "test-only",
 });
+
 export const added = (flow: Flow, n = 0): typeof Add.Type => ({
   id: input(100 + n),
   for: PERSON,
@@ -136,6 +146,7 @@ export const added = (flow: Flow, n = 0): typeof Add.Type => ({
   },
   sentAt: new Date(EPOCH + flow.skew).toISOString(),
 });
+
 export const founded = (flow: Flow): MemberEvent => ({
   _tag: "founded",
   id: PERSON,
@@ -143,6 +154,7 @@ export const founded = (flow: Flow): MemberEvent => ({
   keys: Array.from({ length: flow.live }, (_, n) => `person-${n}`),
   window: "window-0",
 });
+
 export const initial = (flow: Flow): ReadonlyArray<MemberEvent> => [
   founded(flow),
   ...Array.from({ length: flow.live }, (_, n) => ({
@@ -168,30 +180,36 @@ export const initial = (flow: Flow): ReadonlyArray<MemberEvent> => [
 ];
 
 export class Fault extends Schema.TaggedError<Fault>()("EmailTestFault", {
-  why: Schema.String,
+  reason: Schema.String,
   message: Schema.String,
 }) {}
-export type IO<A> = Effect.Effect<A, Fault | { readonly why: string }>;
+
+export type IO<A> = Effect.Effect<A, Fault | { readonly reason: string }>;
 export const Challenge = Schema.Struct({ id: Schema.String, until: Schema.Number });
 export type Challenge = typeof Challenge.Type;
+
 export type Binding = {
   readonly for: string;
   readonly to: string;
   readonly person: string;
   readonly window: string;
 };
+
 export const binding = (n = 0): Binding => ({
   for: PERSON,
   to: LEDGER,
   person: `new-person-${n}`,
   window: `new-window-${n}`,
 });
+
 export type Redeemed = { readonly id: string; readonly add: typeof Add.Type };
+
 export type Row = {
   readonly fact: unknown;
   readonly arrivedAt: number | null;
   readonly parent: string | null;
 };
+
 export type Mail = {
   readonly to: Redacted.Redacted<string>;
   readonly code: Redacted.Redacted<string>;
@@ -199,17 +217,21 @@ export type Mail = {
   readonly device: string;
   readonly at: number;
 };
+
 export interface EmailSender {
   readonly send: (mail: Mail) => IO<void>;
 }
+
 export interface PrivateStorage {
   readonly read: (id: string) => IO<unknown>;
   readonly write: (id: string, value: unknown) => IO<void>;
-  readonly transaction: <A>(body: Effect.Effect<A, Fault | { readonly why: string }>) => IO<A>;
+  readonly transaction: <A>(body: Effect.Effect<A, Fault | { readonly reason: string }>) => IO<A>;
 }
+
 export interface Store {
   readonly snapshot: IO<ReadonlyArray<unknown>>;
 }
+
 export interface Recovery {
   readonly issueSetup: (device: Binding, to: Redacted.Redacted<string>) => IO<Challenge>;
   readonly verifySetup: (challenge: string, code: Redacted.Redacted<string>, fact: unknown) => IO<Written>;
@@ -221,6 +243,7 @@ export interface Recovery {
     proof: typeof Signed.Type,
   ) => IO<Redeemed>;
 }
+
 export interface Dependencies {
   readonly hash: (code: Redacted.Redacted<string>) => IO<string>;
   readonly store: Store;
@@ -244,24 +267,11 @@ export interface Domain {
   readonly EmailFact: Schema.Top;
   readonly verifiedText: (fact: unknown) => string;
 }
-export interface Door {
-  readonly handleEmail: (
-    request: {
-      readonly purpose: "setup" | "recovery";
-      readonly binding: Binding;
-      readonly body: unknown;
-    },
-    recovery: Recovery,
-  ) => IO<unknown>;
-}
+
 export const loadDomain = () => import("./Email.ts").then((value: Domain) => value);
-export const loadDoor = () => import("../gateway/GatewayEmail.ts").then((value: Door) => value);
 export const loadStore = () => import("./EmailSecrets.ts");
 export const loadService = () => import("./EmailRecovery.ts");
-export interface WorkerEmail {
-  readonly emailSender: (binding: { readonly send: (message: unknown) => Effect.Effect<void, unknown> }) => EmailSender;
-}
-export const loadWorker: () => Promise<WorkerEmail> = () => import("../cloudflare/EmailSender.ts");
+
 export const parentAnswers = (flow: Flow) => {
   const calls: string[] = [];
   return {
@@ -279,6 +289,7 @@ export const parentAnswers = (flow: Flow) => {
     },
   };
 };
+
 export interface RecoveryParent {
   readonly Recovery: {
     readonly init: (input: {
@@ -291,6 +302,7 @@ export interface RecoveryParent {
   };
   readonly recoveryHandlers: (services: ReturnType<typeof parentAnswers>["services"]) => (command: unknown) => IO<void>;
 }
+
 // P28's parent path is reconciled when its own exam moves to main's modules.
 export const loadParent: () => Promise<RecoveryParent> = () => import("./Recovery.ts");
 
@@ -305,69 +317,38 @@ export function pureModule<A>(load: () => Promise<A>): () => A {
     }
   });
   return () => {
-    if (loaded === undefined) throw failure ?? new Error("missing P36 export");
+    if (loaded === undefined) {
+      throw failure ?? new Error("missing P36 export");
+    }
+
     return loaded;
   };
 }
 
-// Register the control first. Plants run on a real module/typed dependency, outside the missing
-// import guard. Missing code therefore fails the plant too, never masquerades as a killed bug.
-export function pureLaw<A>(
-  name: string,
-  arb: Arbitrary.Arbitrary<A>,
-  ready: () => void,
-  check: (a: A, plant: string | null) => void,
-  plants: ReadonlyArray<string>,
-  plantInput: (flow: A) => A = (flow) => flow,
-) {
+// Plants are applied to product code once after build, never registered as tests.
+export function pureLaw<A>(name: string, arb: Arbitrary.Arbitrary<A>, ready: () => void, check: (a: A) => void) {
   it.prop(
     name,
     { flow: arb },
     ({ flow }) => {
       ready();
-      check(flow, null);
+      check(flow);
     },
     PURE,
   );
-  for (const plant of plants)
-    it.prop(
-      `plant: ${name}: ${plant}`,
-      { flow: arb },
-      ({ flow }) => {
-        ready();
-        expect(() => check(plantInput(flow), plant), "plant must reach an assertion").toThrow();
-      },
-      PURE,
-    );
 }
-export function effectLaw(
-  name: string,
-  check: (h: Harness, plant: string | null) => IO<void>,
-  plants: ReadonlyArray<string>,
-  arb = flows,
-) {
+
+export function effectLaw(name: string, check: (h: Harness) => IO<void>, arb = flows) {
   it.effect.prop(
     name,
     { flow: arb },
     ({ flow }) =>
       Effect.gen(function* () {
         const h = yield* harness(flow);
-        yield* check(h, null);
+        yield* check(h);
       }),
     EFFECT,
   );
-  for (const plant of plants)
-    it.effect.prop(
-      `plant: ${name}: ${plant}`,
-      { flow: arb },
-      ({ flow }) =>
-        Effect.gen(function* () {
-          const h = yield* harness({ ...flow, live: 4, code: flow.code % 100000, old: "lost" });
-          const outcome = yield* Effect.exit(check(h, plant));
-          expect(Exit.isFailure(outcome), "plant must break its law").toBe(true);
-        }),
-      EFFECT,
-    );
 }
 
 export const OUTPUTS = [
@@ -385,8 +366,10 @@ export const OUTPUTS = [
   "health",
   "reopened",
 ] as const;
+
 export type Output = (typeof OUTPUTS)[number];
 export type Captures = Record<Output, unknown[]>;
+
 export const captures = (): Captures => ({
   ledger: [],
   snapshots: [],
@@ -402,6 +385,7 @@ export const captures = (): Captures => ({
   health: [],
   reopened: [],
 });
+
 export const encodings = (secret: string): ReadonlyArray<string> => [
   ...new Set([
     secret,
@@ -411,30 +395,44 @@ export const encodings = (secret: string): ReadonlyArray<string> => [
     Buffer.from(secret).toString("base64url"),
   ]),
 ];
+
 export function assertSecret(out: Captures, secret: string, outputs: ReadonlyArray<Output> = OUTPUTS) {
   for (const name of outputs) {
     const raw = JSON.stringify(out[name]);
+
     for (const form of encodings(secret)) {
       // A numeric timestamp/count equal to a code is public. A string containing it is not.
       const strings: string[] = [];
       const visit = (value: unknown): void => {
-        if (typeof value === "string") strings.push(value);
-        else if (Array.isArray(value)) for (const item of value) visit(item);
-        else if (value !== null && typeof value === "object") for (const item of Object.values(value)) visit(item);
+        if (typeof value === "string") {
+          strings.push(value);
+        } else if (Array.isArray(value)) {
+          for (const item of value) {
+            visit(item);
+          }
+        } else if (value !== null && typeof value === "object") {
+          for (const item of Object.values(value)) {
+            visit(item);
+          }
+        }
       };
       visit(out[name]);
       expect(
         strings.some((value) => value.includes(form)),
         `secret in ${name}`,
       ).toBe(false);
+
       // JSON escaped text may only become visible in the serialized form.
-      if (!/^\d{6}$/.test(form)) expect(raw.includes(form), `encoded secret in ${name}`).toBe(false);
+      if (!/^\d{6}$/.test(form)) {
+        expect(raw.includes(form), `encoded secret in ${name}`).toBe(false);
+      }
     }
   }
 }
 
 export function assertPrivate(out: Captures, bytes: ReadonlyArray<number> | Uint8Array) {
   const sequence = [...bytes];
+
   for (const output of OUTPUTS) {
     const visit = (value: unknown): void => {
       if (value instanceof Uint8Array) {
@@ -443,9 +441,14 @@ export function assertPrivate(out: Captures, bytes: ReadonlyArray<number> | Uint
         for (let n = 0; n + sequence.length <= value.length; n++) {
           expect(value.slice(n, n + sequence.length), `private byte array in ${output}`).not.toEqual(sequence);
         }
-        for (const item of value) visit(item);
+
+        for (const item of value) {
+          visit(item);
+        }
       } else if (value !== null && typeof value === "object") {
-        for (const item of Object.values(value)) visit(item);
+        for (const item of Object.values(value)) {
+          visit(item);
+        }
       }
     };
     visit(out[output]);
@@ -459,7 +462,7 @@ export const privateFixture = () => {
     Effect.suspend(() => {
       const message = failures.get(edge);
       failures.delete(edge);
-      return message === undefined ? Effect.void : Effect.fail(new Fault({ why: edge, message }));
+      return message === undefined ? Effect.void : Effect.fail(new Fault({ reason: edge, message }));
     });
   const storage: PrivateStorage = {
     read: (id) => hit("store.read").pipe(Effect.map(() => structuredClone(data.get(id)))),
@@ -479,7 +482,10 @@ export const privateFixture = () => {
           Effect.tapError(() =>
             Effect.sync(() => {
               data.clear();
-              for (const [id, value] of before) data.set(id, value);
+
+              for (const [id, value] of before) {
+                data.set(id, value);
+              }
             }),
           ),
         );
@@ -509,7 +515,13 @@ export const memorySender = (mails: Mail[], hit: (edge: Edge) => IO<void>): Emai
 
 export const testKey = (seed: ReadonlyArray<number>) =>
   Effect.gen(function* () {
-    const { field, join } = yield* Effect.promise(() => import("../transport/internal/binary.ts"));
+    const field = (data: string | Uint8Array) => {
+      const body = typeof data === "string" ? new TextEncoder().encode(data) : data;
+      const size = new Uint8Array(4);
+      new DataView(size.buffer).setUint32(0, body.length);
+      return new Uint8Array([...size, ...body]);
+    };
+    const join = (...parts: Uint8Array[]) => new Uint8Array(parts.flatMap((part) => [...part]));
     const { KeyLine, writeSshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
     const raw = Uint8Array.from(seed);
     const pkcs8 = join(Uint8Array.from([48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32]), raw);
@@ -567,6 +579,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
     const logger = Logger.make((options) => {
       out.logs.push(Logger.formatJson.log(options));
     });
+    let store = storeModule.makeEmailStore(storage);
     const dependencies: Dependencies = {
       hash: (value) =>
         fixture.hit("hash").pipe(
@@ -574,9 +587,11 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
             Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(Redacted.value(value)))),
           ),
           Effect.map((bytes) => Buffer.from(bytes).toString("hex")),
-          Effect.mapError(() => ({ why: "crypto" })),
+          Effect.mapError(() => ({ reason: "crypto" })),
         ),
-      store: storeModule.makeEmailStore(storage),
+      get store() {
+        return store;
+      },
       sender: memorySender(mails, fixture.hit),
       // Rejection sampling gets 0xffffffff first, then the target. This catches modulo bias.
       entropy: {
@@ -595,10 +610,12 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
           Effect.gen(function* () {
             yield* fixture.hit("sign");
             out.signed.push(text);
+
             if (pauseSign) {
               yield* Deferred.succeed(signEntered, undefined);
               yield* Deferred.await(signRelease);
             }
+
             return yield* key.sign(text);
           }),
       },
@@ -626,12 +643,14 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
     const make = () => serviceModule.makeEmailRecovery(dependencies) as IO<Recovery>;
     let recovery: Recovery = yield* make();
     const reopen = Effect.gen(function* () {
+      store = storeModule.makeEmailStore(storage);
       recovery = yield* make();
       out.reopened.push(yield* dependencies.store.snapshot);
       return recovery;
     });
     const observe = Effect.gen(function* () {
       const { noticeView } = yield* Effect.promise(() => import("./RecoveryEmail.ts"));
+
       for (const row of rows) {
         if (typeof row.fact === "object" && row.fact !== null && "_tag" in row.fact && row.fact._tag === "added") {
           const { MemberEvent } = yield* Effect.promise(() => import("../access/Access.ts"));
@@ -646,6 +665,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
           );
         }
       }
+
       out.snapshots.push(yield* dependencies.store.snapshot);
       out.spans.push(
         ...spans.map((span) => ({
@@ -685,6 +705,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void) =>
       },
     };
   });
+
 export type Harness = Effect.Success<ReturnType<typeof harness>>;
 
 export const verified = (h: Harness, signer = "person-0") => ({
@@ -699,6 +720,7 @@ export const verified = (h: Harness, signer = "person-0") => ({
   },
   signed: signed(signer),
 });
+
 export const setup = (h: Harness) =>
   Effect.gen(function* () {
     const challenge = yield* h.recovery.issueSetup(binding(), Redacted.make(address(h.flow)));
@@ -711,6 +733,7 @@ export const setup = (h: Harness) =>
     expect(answer._tag).toBe("applied");
     return fact;
   });
+
 export const recover = (h: Harness, n = 0) =>
   Effect.gen(function* () {
     const challenge = yield* h.recovery.issueRecovery(binding(n % h.flow.devices));
@@ -724,10 +747,12 @@ export const recover = (h: Harness, n = 0) =>
     h.out.replies.push(challenge, receipt);
     return { challenge, value, receipt };
   });
+
 export const tags = (h: Harness, tag: string) =>
   h.rows.filter(
     (row) => typeof row.fact === "object" && row.fact !== null && "_tag" in row.fact && row.fact._tag === tag,
   );
+
 export const expectRefused = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.gen(function* () {
     const result = yield* Effect.exit(effect);
@@ -739,8 +764,10 @@ export const expectRefused = <A, E>(effect: Effect.Effect<A, E>) =>
 export const fullFlow = (h: Harness) =>
   Effect.gen(function* () {
     yield* setup(h);
+
     for (let n = 0; n < h.flow.requests; n++) {
       const { challenge, value } = yield* recover(h, n);
+
       for (const operation of h.flow.ops) {
         const action: IO<unknown> =
           operation === "reopen"
@@ -757,9 +784,13 @@ export const fullFlow = (h: Harness) =>
                 );
         const result = yield* Effect.exit(action);
         h.out.replies.push(Exit.isSuccess(result) ? result.value : "refused");
-        if (Exit.isFailure(result)) h.out.errors.push(result.cause);
+
+        if (Exit.isFailure(result)) {
+          h.out.errors.push(result.cause);
+        }
       }
     }
+
     const failures: ReadonlyArray<readonly [Edge, boolean]> = [
       ["store.read", h.flow.failures.read],
       ["store.write", h.flow.failures.write],
@@ -769,19 +800,31 @@ export const fullFlow = (h: Harness) =>
       ["sign", h.flow.failures.sign],
       ["append", h.flow.failures.append],
     ];
-    for (const [edge, active] of failures)
-      if (active) h.fixture.fail(edge, `${h.flow.failureText}${address(h.flow)}${code(h.flow)}`.slice(0, 160));
+
+    for (const [edge, active] of failures) {
+      if (active) {
+        h.fixture.fail(edge, `${h.flow.failureText}${address(h.flow)}${code(h.flow)}`.slice(0, 160));
+      }
+    }
+
     const capture = <A, E>(effect: Effect.Effect<A, E>) =>
       Effect.gen(function* () {
         const result = yield* Effect.exit(effect);
-        if (Exit.isSuccess(result)) h.out.replies.push(result.value);
-        else h.out.errors.push(result.cause);
+
+        if (Exit.isSuccess(result)) {
+          h.out.replies.push(result.value);
+        } else {
+          h.out.errors.push(result.cause);
+        }
+
         return result;
       });
+
     // Each named edge can fail once. Keep attempting real operations until every injected
     // send, storage, hash, signing and append failure has had a chance to reach an output.
     for (const _edge of failures) {
       const issued = yield* capture(h.recovery.issueRecovery(binding()));
+
       if (Exit.isSuccess(issued)) {
         yield* capture(
           h.recovery.redeem(
@@ -792,9 +835,14 @@ export const fullFlow = (h: Harness) =>
           ),
         );
       }
+
       yield* capture(h.reopen);
     }
-    for (let n = 0; n <= h.flow.reopens; n++) yield* capture(h.reopen);
+
+    for (let n = 0; n <= h.flow.reopens; n++) {
+      yield* capture(h.reopen);
+    }
+
     yield* TestClock.setTime(EPOCH + h.flow.time);
     yield* h.observe;
   });

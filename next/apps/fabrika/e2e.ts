@@ -29,33 +29,41 @@ const run = Effect.gen(function* () {
 
   yield* Console.log(`e2e: ${files.length} file(s): ${files.join(", ")}`);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
-  const exitCode = yield* spawner.exitCode(
-    ChildProcess.make(
-      "pnpm",
-      [
-        "exec",
-        "vitest",
-        "run",
-        "--maxWorkers=1",
-        "--root",
-        folder,
-        "--fileParallelism=false",
-        `--testTimeout=${LIMIT}`,
-        `--hookTimeout=${LIMIT}`,
-      ],
-      {
-        cwd: import.meta.dirname,
-        env: { FABRIKA_HOME: home },
-        stdin: "ignore",
-        stdout: "inherit",
-        stderr: "inherit",
-      },
-    ),
-  );
 
-  if (exitCode !== 0) {
-    return yield* new E2eFailed({ exitCode });
+  for (const file of files) {
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
+        const exitCode = yield* spawner.exitCode(
+          ChildProcess.make(
+            "pnpm",
+            [
+              "exec",
+              "vitest",
+              "run",
+              file,
+              "--maxWorkers=1",
+              "--root",
+              folder,
+              "--fileParallelism=false",
+              `--testTimeout=${LIMIT}`,
+              `--hookTimeout=${LIMIT}`,
+            ],
+            {
+              cwd: import.meta.dirname,
+              env: { FABRIKA_HOME: home },
+              stdin: "ignore",
+              stdout: "inherit",
+              stderr: "inherit",
+            },
+          ),
+        );
+
+        if (exitCode !== 0) {
+          return yield* new E2eFailed({ exitCode });
+        }
+      }),
+    );
   }
 });
 

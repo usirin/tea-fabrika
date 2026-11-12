@@ -1,29 +1,39 @@
 // P36, next/: EmailSender receives a binding as data. It cannot choose live mail from env.
 import { expect, it } from "@effect/vitest";
 import { Effect, Redacted } from "effect";
-import { EFFECT, flows, address, code, EPOCH, pureLaw, pureModule, loadWorker } from "../email/Email.test-support.ts";
+import {
+  EFFECT,
+  flows,
+  address,
+  code,
+  EPOCH,
+  pureLaw,
+  pureModule,
+  type EmailSender,
+} from "../email/Email.test-support.ts";
+
+interface WorkerEmail {
+  readonly emailSender: (binding: { readonly send: (message: unknown) => Effect.Effect<void, unknown> }) => EmailSender;
+}
+
+const loadWorker: () => Promise<WorkerEmail> = () => import("./EmailSender.ts");
 
 const worker = pureModule(loadWorker);
-pureLaw(
-  "P36.22 Worker sender uses only its injected binding and returns fixed send errors",
-  flows,
-  worker,
-  (flow, plant) => {
-    // The synchronous constructor must not read an environment credential or send anything.
-    const sent: unknown[] = [];
-    const sender = worker().emailSender({
-      send: (message: unknown) =>
-        Effect.sync(() => {
-          sent.push(message);
-        }),
-    });
-    expect(sent).toEqual([]);
-    expect(sender.send).toBeTypeOf("function");
-    if (plant === "send during construction") sent.push({ to: address(flow), code: code(flow) });
-    expect(sent).toEqual([]);
-  },
-  ["send during construction"],
-);
+
+pureLaw("P36.22 Worker sender uses only its injected binding and returns fixed send errors", flows, worker, (_flow) => {
+  // The synchronous constructor must not read an environment credential or send anything.
+  const sent: unknown[] = [];
+  const sender = worker().emailSender({
+    send: (message: unknown) =>
+      Effect.sync(() => {
+        sent.push(message);
+      }),
+  });
+  expect(sent).toEqual([]);
+  expect(sender.send).toBeTypeOf("function");
+
+  expect(sent).toEqual([]);
+});
 
 it.effect.prop(
   "P36.22 Worker binding accepts typed mail and refuses a failed send safely",

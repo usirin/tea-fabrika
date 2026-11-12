@@ -13,6 +13,7 @@ const codeType = (input: typeof CodeInput.Type) => {
   expectTypeOf(input).toExtend<Redacted.Redacted<string>>();
   expectTypeOf<string>().not.toExtend<typeof input>();
 };
+
 const addressType = (input: typeof AddressInput.Type) => {
   expectTypeOf(input).toExtend<Redacted.Redacted<string>>();
   expectTypeOf<string>().not.toExtend<typeof input>();
@@ -25,10 +26,12 @@ const client = (email: typeof EmailRecovery.Service) => [
   email.issueRecovery,
   email.redeem,
 ];
+
 const saved = (view: typeof EmailView.Type) => {
   expectTypeOf(view).not.toHaveProperty("code");
   expectTypeOf(view).not.toHaveProperty("address");
 };
+
 void codeType;
 void addressType;
 void client;
@@ -41,9 +44,11 @@ const noWaitingFact = () => {
   expectTypeOf<Extract<MemberEvent, { _tag: "requested" | "canceled" }>>().toBeNever();
   expectTypeOf<Extract<MemberEvent, { _tag: "verified" }>>().not.toBeNever();
 };
+
 const noNoticeAction = () => {
   expectTypeOf<NoticeMsg>().toBeNever();
 };
+
 void noWaitingFact;
 void noNoticeAction;
 
@@ -53,6 +58,7 @@ it.effect.prop(
   ({ flow }) =>
     Effect.gen(function* () {
       const email = yield* Effect.promise(() => import("@kampus/libfabrika/email"));
+
       for (const [schema, input] of [
         [email.CodeInput, code(flow)],
         [email.AddressInput, address(flow)],
@@ -72,7 +78,7 @@ it.effect.prop(
   ({ flow }) =>
     Effect.gen(function* () {
       const email = yield* Effect.promise(() => import("@kampus/libfabrika/email"));
-      expect(email.EmailRecovery.layer).toBeTypeOf("function");
+      expect(email.makeEmailRecovery).toBeTypeOf("function");
       const value = yield* Schema.decodeUnknownEffect(email.CodeInput)(code(flow));
       expect(Redacted.value(value)).toBe(code(flow));
     }),

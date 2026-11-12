@@ -836,14 +836,6 @@
       }
     },
     {
-      // P36 private edges store hashes and references; only the sender unwraps mail.
-      "files": [
-        "next/packages/libfabrika/src/email/EmailSecrets.ts",
-        "next/packages/libfabrika/src/cloudflare/EmailSender.ts"
-      ],
-      "rules": { "fabrika/no-redacted-value": "off" }
-    },
-    {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
       // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
@@ -968,6 +960,7 @@
               "jobs",
               "packs",
               "access",
+              "email",
               "runtime",
               "gateway"
             ],

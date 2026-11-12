@@ -10,7 +10,8 @@ import { Miniflare } from "miniflare";
 import { _electron, type ElectronApplication, type Page } from "playwright";
 
 export const EPOCH = 1_800_000_000_000;
-export const StageFlow = Schema.Struct({
+
+export const IntegrationFlow = Schema.Struct({
   live: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })),
   requests: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })),
   reopen: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
@@ -18,11 +19,14 @@ export const StageFlow = Schema.Struct({
   old: Schema.Literals(["lost", "kept"]),
   label: Schema.String.check(Schema.isMaxLength(64)),
 });
-export const STAGE = {
+
+export const INTEGRATION = {
   arbitrary: { seed: 119120, runs: 30, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 },
 };
-export type StageFlow = typeof StageFlow.Type;
+
+export type IntegrationFlow = typeof IntegrationFlow.Type;
 export type Mail = { readonly to: string; readonly raw: string };
+
 export type Snapshot = {
   readonly founding: unknown;
   readonly person: string;
@@ -38,8 +42,10 @@ export type Snapshot = {
   }>;
   readonly outputs: Record<string, ReadonlyArray<unknown>>;
 };
+
 export type Session = { readonly id: string; readonly key: string; readonly token: string };
-export interface Stage {
+
+export interface Instance {
   readonly home: string;
   readonly mails: Mail[];
   readonly url: string;
@@ -73,10 +79,11 @@ export default {fetch(request, env) {return env.PROJECT.getByName("p36-test").fe
 // These two observation hooks must be installed on the real object by the test wrapper, not
 // added to production: tests read its real ledger/storage and found test devices through P10.
 // Missing upstream hooks stay red until the lead reconciles the actual public test access.
-export async function openStage(): Promise<Stage> {
+export async function openInstance(): Promise<Instance> {
   const home = await mkdtemp("/tmp/fh.");
   const mails: Mail[] = [];
   let mf: Miniflare | undefined;
+
   try {
     const project = resolve(import.meta.dirname, "../../../packages/libfabrika/src/cloudflare/objects.ts");
     const compiled = await build({
@@ -126,7 +133,11 @@ export async function openStage(): Promise<Stage> {
                 body: JSON.stringify(body),
               },
         );
-        if (!response.ok) throw new Error(`P36 stage refused ${path}: ${response.status}`);
+
+        if (!response.ok) {
+          throw new Error(`P36 instance refused ${path}: ${response.status}`);
+        }
+
         return (await response.json()) as A;
       },
       close: async () => {
@@ -141,47 +152,61 @@ export async function openStage(): Promise<Stage> {
   }
 }
 
-export const mailCode = (stage: Stage) => {
-  const mail = stage.mails.at(-1);
-  if (mail === undefined) throw new Error("Stand-in sender received no mail");
+export const mailCode = (instance: Instance) => {
+  const mail = instance.mails.at(-1);
+
+  if (mail === undefined) {
+    throw new Error("Stand-in sender received no mail");
+  }
+
   const match = /(?:^|\D)(\d{6})(?:\D|$)/.exec(mail.raw);
-  if (match === null) throw new Error("Stand-in sender received no six-digit code");
+
+  if (match === null) {
+    throw new Error("Stand-in sender received no six-digit code");
+  }
+
   return match[1]!;
 };
-export const device = (stage: Stage, label: string): Promise<Session> => stage.call("/__test/device", { label });
-export const snapshot = (stage: Stage): Promise<Snapshot> => stage.call("/__test/snapshot");
-export const clock = (stage: Stage, at: number) => stage.call("/__test/clock", { at });
-export const checkedAddress = async (stage: Stage, session: Session) => {
-  const challenge = await stage.call<{ id: string }>("/email/setup", {
+
+export const device = (instance: Instance, label: string): Promise<Session> =>
+  instance.call("/__test/device", { label });
+
+export const snapshot = (instance: Instance): Promise<Snapshot> => instance.call("/__test/snapshot");
+export const clock = (instance: Instance, at: number) => instance.call("/__test/clock", { at });
+
+export const checkedAddress = async (instance: Instance, session: Session) => {
+  const challenge = await instance.call<{ id: string }>("/email/setup", {
     device: session,
     address: "p36@example.test",
   });
-  return stage.call("/email/verify", {
+  return instance.call("/email/verify", {
     device: session,
     challenge: challenge.id,
-    code: mailCode(stage),
+    code: mailCode(instance),
   });
 };
-export const redeem = async (stage: Stage, session: Session, old: "lost" | "kept") => {
-  const challenge = await stage.call<{ id: string }>("/email/recovery", { device: session });
-  return stage.call<{ id: string; added: string }>("/email/redeem", {
+
+export const redeem = async (instance: Instance, session: Session, old: "lost" | "kept") => {
+  const challenge = await instance.call<{ id: string }>("/email/recovery", { device: session });
+  return instance.call<{ id: string; added: string }>("/email/redeem", {
     device: session,
     challenge: challenge.id,
-    code: mailCode(stage),
+    code: mailCode(instance),
     old,
     check: "touch",
   });
 };
 
-export const launch = async (stage: Stage, label: string) => {
+export const launch = async (instance: Instance, label: string) => {
   const home = await mkdtemp("/tmp/fh.");
+
   try {
     const env: Record<string, string | undefined> = {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       TMPDIR: process.env.TMPDIR,
       FABRIKA_HOME: home,
-      FABRIKA_TEST_STAGE: stage.url,
+      FABRIKA_TEST_INSTANCE: instance.url,
       FABRIKA_TEST_PERSON_CHECK: "touch",
       FABRIKA_TEST_DEVICE_LABEL: label,
     };
@@ -209,29 +234,36 @@ export const launch = async (stage: Stage, label: string) => {
     throw error;
   }
 };
+
 export type Window = {
   readonly app: ElectronApplication;
   readonly page: Page;
   readonly home: string;
   readonly close: () => Promise<void>;
 };
+
 export const visible = async (page: Page, text: string) => {
   await page.getByText(text, { exact: false }).waitFor({ state: "visible" });
 };
+
 export const shots = async (window: Window, state: string) => {
   const folder = join(window.home, "email-shots");
   await mkdir(folder, { recursive: true });
+
   for (const layout of ["full", "side-by-side", "stacked", "grid", "small"]) {
     await window.page.setViewportSize(layout === "small" ? { width: 1024, height: 700 } : { width: 1440, height: 900 });
+
     // P28 uses the real desk. These key chords split its tiles, never draw a mock recovery view.
     if (layout === "side-by-side" || layout === "grid") {
       await window.page.keyboard.press("Control+b");
       await window.page.keyboard.press("|");
     }
+
     if (layout === "stacked" || layout === "grid") {
       await window.page.keyboard.press("Control+b");
       await window.page.keyboard.press("-");
     }
+
     await window.page.screenshot({ path: join(folder, `${state}-${layout}.png`) });
   }
 };
