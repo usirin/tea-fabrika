@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-t844-lead-host",
+  "ticket": "usirin/tea-fabrika#844",
+  "pr": "usirin/tea-fabrika#1027",
+  "started": "2026-11-12T01:45:55-08:00",
+  "ended": "2026-11-12T01:50:47-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ version. The lead's host checks and records for ticket 844 at head 190924cdf521291677987e9238cd09831c5891c3, after the review answered done. Each file ran alone on Node 26.13.0 with one worker: telemetry/internal/sums.test.ts 1 of 1, telemetry/Trace.types.test.ts 1 of 1 (its type law is checked by CI's typecheck, not by this run), cloudflare/connection.test.ts 2 of 2, transport/Connection.test.ts 4 of 4, apps/fabrika/src/instance-wire.test.ts 11 of 11, apps/fabrika/src/exam/layers.test.ts 19 of 19, apps/fabrika/src/door.test.ts 133 of 133. No failure and no rerun. loosening.sh from the merge base 417fdfc2 to the head gave 7 hits: 6 unrecognized changes, read by hand as no loosening, and 1 removed law, the old p67 spoof law that asserted a stored refused row, which decisions 0140 and 0143 remove. pnpm format changed nothing in code, and pnpm lint passed. No typecheck ran here; CI's job runs it. This run also wrote the plan rows and the two glossary rows. The started time is when the worktree was made; no token or dollar figure was reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.9,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}
