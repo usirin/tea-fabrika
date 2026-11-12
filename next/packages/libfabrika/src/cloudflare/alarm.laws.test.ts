@@ -135,13 +135,13 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                     : true,
             );
             const missing = possible.filter((move) => !covered.has(move));
-            const choices =
+            const choices: Move[] =
               covered.has("clear") && !covered.has("clear-again") && requested === null
                 ? ["clear-again" as const]
                 : missing.length > 0
                   ? missing
                   : possible;
-            const move = draw(fc.constantFrom, ...choices);
+            const move: Move = draw(fc.constantFrom, ...choices);
             const before = requests.length;
 
             if (move === "advance") {
@@ -152,7 +152,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               }
             } else {
               const gap = draw(fc.integer, { min: 1, max: now - 1 });
-              const at =
+              const at: number | null =
                 move === "clear" || move === "clear-again"
                   ? null
                   : move === "repeat"
