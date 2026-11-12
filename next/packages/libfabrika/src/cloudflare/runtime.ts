@@ -881,9 +881,10 @@ export const projectLayer = (
   env: Env,
   options: ProjectOptions,
   local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project"),
-) =>
-  Layer.unwrap(
-    (options.input ?? checkedSettings(env)).pipe(
+) => {
+  const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
+  return Layer.unwrap(
+    input.pipe(
       Effect.map(({ input }) => {
         const starts = Layer.effect(
           Starts.Starts,
@@ -902,6 +903,7 @@ export const projectLayer = (
       }),
     ),
   );
+};
 
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
   const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
