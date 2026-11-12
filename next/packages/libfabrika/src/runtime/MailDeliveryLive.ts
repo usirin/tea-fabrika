@@ -16,6 +16,7 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
       send: Effect.fn("mail_delivery.send")(
         function* (sent: Mail) {
           const receipt = yield* mail.deliver(sent);
+          yield* Effect.annotateCurrentSpan({ "fab.mail.receipt": receipt.id, "fab.mail.to": receipt.to.name });
           yield* wakeups.wake(receipt.to.name);
           return Queued.make({ id: receipt.id });
         },
