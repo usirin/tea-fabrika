@@ -94,6 +94,7 @@ catalog:
   electron: 45.2.1
   esbuild: 0.28.2
   fast-check: 4.10.2
+  pure-rand: 8.4.2
   # The fabrika app's terminal (apps/fabrika). MIT, no dependencies. Held exact: it is young.
   ghostty-web: 0.4.0
   # The markdown program's reader (programs/markdown): micromark, the CommonMark parser remark
