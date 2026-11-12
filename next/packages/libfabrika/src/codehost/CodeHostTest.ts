@@ -353,7 +353,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
       const collision = { move: 0, pick: 1, state: "open", head: "1".padStart(64, "f"), conflict: null } as const;
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
-        fc.property(fc.commands([commandArb], { maxCommands: 70 }), (commands) => {
+        fc.property(fc.commands([commandArb], { maxCommands: 70, size: "max" }), (commands) => {
           sync(
             Effect.scoped(
               Effect.gen(function* () {
