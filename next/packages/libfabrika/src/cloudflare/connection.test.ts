@@ -91,7 +91,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       head: () => Promise.resolve(null),
     },
   });
-  const config = fake<BrainOptions>({ name: "test-project", port: 8787 });
+  const config = fake<BrainOptions>({
+    name: "test-project",
+    port: 8787,
+    rateLimit: { limit: 100_000, window: 60_000 },
+  });
   return {
     socket,
     frames,
@@ -116,6 +120,58 @@ const tableCounts = (db: DatabaseSync) =>
         db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
       ]),
   );
+
+it.effect.prop(
+  "T843 RPC: ordinary and parked rate refusals keep delay and bounded frame/RPC sums (50 runs)",
+  {
+    count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60_000 })),
+    parked: Schema.Boolean,
+  },
+  ({ count, retryAfter, parked }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      yield* TestClock.setTime(H + 1000);
+      w.answer({ ...Answer.cases.refused.make({ reason: "rate_limited" }), retryAfter });
+      yield* Effect.gen(function* () {
+        const service = yield* ConnectionService;
+        let first: ReturnType<typeof tableCounts> | undefined;
+
+        for (let id = 0; id < count; id++) {
+          yield* service.message(
+            w.socket,
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id,
+              method: parked ? "ledger.wait" : "process.send",
+              params: parked ? { stream: "empty", after: 0 } : {},
+            }),
+          );
+          expect(JSON.parse(w.frames.at(-1)!)).toMatchObject({
+            id,
+            error: { data: { reason: "rate_limited", retryAfter } },
+          });
+          const counts = tableCounts(db);
+          first ??= counts;
+          expect(counts).toEqual(first);
+          expect(w.saved).toEqual([]);
+          expect(w.closes).toEqual([]);
+        }
+
+        expect(
+          db
+            .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
+            .all()
+            .map((r) => ({ ...r })),
+        ).toEqual([
+          { piece: "connection.frame", hour: H, refused: "rate_limited", count },
+          { piece: "runtime.rpc", hour: H, refused: "rate_limited", count },
+        ]);
+      }).pipe(Effect.provide(w.layer));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
+);
 
 it.effect.prop(
   "0140 bound A2: failed archives add no rows per reserved completion, and sums count every refusal",

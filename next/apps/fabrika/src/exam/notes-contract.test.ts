@@ -25,6 +25,7 @@ import {
 } from "@kampus/libfabrika";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
@@ -40,6 +41,7 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Result, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 
 const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -273,6 +275,9 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         Archive.memory,
         Id.Generator.layer,
         ProcessIdGenerator.layer,
+        RateLimiter.layer.pipe(
+          Layer.provide(RateLimiterSql.layer(sql, { build, policy: { limit: 100_000, window: 60_000 } })),
+        ),
       );
       let deliveries = 0;
       const layer = Gateway.layer({
@@ -285,6 +290,7 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         location: "exam",
         build,
         waiting: { most: 20, ttl: 600000 },
+        rateLimit: { limit: 100_000, window: 60_000 },
         ping: { min: 10000, max: 60000 },
         inputCap: 4096,
         spentCap: 4096,

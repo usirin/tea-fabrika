@@ -154,6 +154,56 @@ const answers = (log: ReadonlyArray<Event>, from: number) =>
   log.slice(from).flatMap((e) => (e._tag === "send" ? [e.frame] : []));
 
 it.effect.prop(
+  "T843 frame: ordinary and parked-read replies retain the delay, tag their ended frame, and keep the socket online (50 runs)",
+  {
+    retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+    picks: Schema.Array(Schema.Boolean).check(Schema.isMinLength(2), Schema.isMaxLength(15)),
+  },
+  ({ retryAfter, picks }) =>
+    Effect.gen(function* () {
+      const spans: Array<Tracer.NativeSpan> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
+      const h = harness(online());
+
+      for (const [id, pick] of picks.entries()) {
+        const now = h.saved();
+        expect(now._tag).toBe("online");
+        const method = now._tag === "online" && !now.busy && pick ? "ledger.wait" : "process.send";
+        yield* h
+          .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
+          .pipe(Effect.withTracer(tracer));
+
+        if (method === "ledger.wait") {
+          expect(h.waits.at(-1)).toBeDefined();
+          yield* Deferred.fail(h.waits.at(-1)!.reply, { reason: "rate_limited", retryAfter });
+        } else {
+          expect(h.calls.at(-1)).toBeDefined();
+          yield* Deferred.succeed(h.calls.at(-1)!.reply, {
+            ...Answer.cases.refused.make({ reason: "rate_limited" }),
+            retryAfter,
+          });
+        }
+
+        yield* settle;
+        const reply = answers(h.log, 0).at(-1)!;
+        expect(reply.error).toMatchObject({ message: "rate_limited", data: { reason: "rate_limited", retryAfter } });
+        expect(h.saved()._tag).toBe("online");
+        expect(h.log.filter((e) => e._tag === "close")).toEqual([]);
+        const frame = spans.filter((span) => span.name === "connection.frame").at(-1)!;
+        expect(frame.status._tag).toBe("Ended");
+        expect(frame.attributes.get("fab.gateway.refused")).toBe("rate_limited");
+      }
+    }),
+  { arbitrary: { seed: SEED, runs: 50 } },
+);
+
+it.effect.prop(
   "0140 frame: only a reserved answer tags the enclosing frame for counting instead of saving",
   {
     kind: Schema.Literals(["reserved", "bad_input", "ok"]),
