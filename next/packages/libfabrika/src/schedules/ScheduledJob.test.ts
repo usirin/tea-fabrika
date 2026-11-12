@@ -1,4 +1,4 @@
-import { applyCell, type CmdValue } from "@demlik/tea";
+import { applyCell, type CmdOf } from "@demlik/tea";
 import { Cmd } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { Result, Schema } from "effect";
@@ -83,7 +83,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
             }
 
             if (prev._tag === "idle") {
-              const [due, jobs] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdValue<typeof write>>(
+              const [due, jobs] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
                 machine,
                 prev,
                 { type: "timer", at: prev.next },
@@ -110,7 +110,7 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
   fc.assert(
     fc.property(walks, ({ ms, messages }) => {
       const { machine } = Result.getOrThrow(make(ms));
-      const [initial] = machine.init(undefined, ctx);
+      const [initial] = machine.init(null, ctx);
       expect(initial).toEqual({ _tag: "idle", next: 0, period: ms });
       expect(ScheduledJob.wake(initial)).toBe(0);
       propertyTrace(
@@ -148,11 +148,11 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
             const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
-            const [unchanged, sent] = applyCell<
-              ScheduledJob.Model,
-              { type: "timer"; at: number },
-              CmdValue<typeof write>
-            >(machine, prev, { type: "timer", at });
+            const [unchanged, sent] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
+              machine,
+              prev,
+              { type: "timer", at },
+            );
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
             const ignored = msg.type === "timer" && (prev._tag === "running" || msg.at < prev.next);
