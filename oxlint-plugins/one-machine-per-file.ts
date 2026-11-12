@@ -95,6 +95,9 @@ export const oneMachinePerFile: CreateRule = {
       return def?.type === "ImportBinding" &&
         def.parent?.type === "ImportDeclaration" &&
         def.parent.importKind !== "type" &&
+        (def.node.type === "ImportSpecifier" ||
+          def.node.type === "ImportDefaultSpecifier" ||
+          def.node.type === "ImportNamespaceSpecifier") &&
         !(def.node.type === "ImportSpecifier" && def.node.importKind === "type")
         ? { from: def.parent.source.value, name: importedName(def.node) }
         : null;
