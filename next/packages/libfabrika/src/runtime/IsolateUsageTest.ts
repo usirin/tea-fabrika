@@ -196,9 +196,9 @@ export const suite = (rig: Rig) =>
       }),
     );
 
-    it.effect("U3 batches commit once, survive reopen and hold every row after a failed write", () =>
+    it.effect("U3 fresh and warm sinks commit batches once, recover failed writes and survive reopen", () =>
       Effect.gen(function* () {
-        const once = (tape: ReadonlyArray<Cell>) =>
+        const once = (tape: ReadonlyArray<Cell>, warm: boolean) =>
           Effect.scoped(
             Effect.gen(function* () {
               const store = yield* rig.open;
@@ -233,14 +233,19 @@ export const suite = (rig: Rig) =>
               };
               yield* Effect.gen(function* () {
                 const service = yield* SpanSink;
-                // Warm the existing sink tables. The law counts batch transactions after setup.
-                yield* IsolateUsage.record([sample(pid(1), 0)]);
-                let committed = 1;
+
+                if (warm) {
+                  yield* IsolateUsage.record([sample(pid(1), 0)]);
+                }
+
+                let committed = warm ? 1 : 0;
                 let held = 0;
                 let owed = false;
 
                 for (const cell of tape) {
-                  const moves = held > 0 || owed ? ["flush", "recover"] : ["batch", "cut", "reopen"];
+                  // A fresh sink first loses its table creation in the failed transaction.
+                  const moves =
+                    held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
                   const move = moves[cell.pick % moves.length];
 
                   if (move === "reopen") {
@@ -285,8 +290,10 @@ export const suite = (rig: Rig) =>
               }).pipe(Effect.provide(sink(sql, "checklist:1")));
             }),
           );
+        const replay = (tape: ReadonlyArray<Cell>) =>
+          Effect.forEach([true, false], (warm) => once(tape, warm), { concurrency: 1 });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(replay(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
       }),
