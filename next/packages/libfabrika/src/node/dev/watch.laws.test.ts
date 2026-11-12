@@ -166,7 +166,7 @@ const drain = (queue: Queue.Queue<Install>, ms: number) =>
   });
 
 describe("P15 slice 1: the watcher", () => {
-  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures", async () => {
+  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings", async () => {
     const seen = new Set<string>();
     await fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
@@ -181,9 +181,14 @@ describe("P15 slice 1: the watcher", () => {
               const file = path.join(home, "programs", short, "program.ts");
               const original = yield* fs.readFileString(file);
               const sentinel = `P15SECRET${g(() => fc.stringMatching(/^[A-Z]{12}$/))}`;
+              const warnings = yield* Effect.acquireRelease(
+                Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
+                (spy) => Effect.sync(() => spy.mockRestore()),
+              );
               const moves = ["fit", "syntax", "compiler"];
               const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
-              let text = `${original}\nglobalThis.__p15Secret = ${JSON.stringify(sentinel)};\n`;
+              // A duplicate key makes Rolldown warn with a source excerpt while the program still builds.
+              let text = `${original}\nglobalThis.__p15Secret = {${JSON.stringify(sentinel)}: 1, ${JSON.stringify(sentinel)}: 2};\n`;
 
               if (move === "syntax") {
                 text += `export const broken = ${JSON.stringify(sentinel)} +;\n`;
@@ -244,9 +249,16 @@ describe("P15 slice 1: the watcher", () => {
                 JSON.stringify([...span.attributes]),
                 JSON.stringify(answers),
                 JSON.stringify(failures),
+                JSON.stringify(warnings.mock.calls),
               ]) {
                 for (const forbidden of [sentinel, home]) {
-                  expect(output.includes(forbidden)).toBe(false);
+                  for (const form of [
+                    forbidden,
+                    JSON.stringify(forbidden).slice(1, -1),
+                    encodeURIComponent(forbidden),
+                  ]) {
+                    expect(output.includes(form), "a rebuild output copied private input").toBe(false);
+                  }
                 }
               }
 

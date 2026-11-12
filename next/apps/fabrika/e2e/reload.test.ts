@@ -395,7 +395,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               let text = edited(
                 source,
                 next,
-                (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(message)};\nglobalThis.__p15Edit = ${n};\n`,
+                // Rolldown's duplicate-key warning quotes this line, including its private inputs.
+                (t) =>
+                  `${t}\nglobalThis.__p15 = {${JSON.stringify(message)}: 1, ${JSON.stringify(message)}: 2};\nglobalThis.__p15Edit = ${n};\n`,
               );
 
               if (move === "shape") {
