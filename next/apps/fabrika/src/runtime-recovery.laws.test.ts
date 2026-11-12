@@ -48,6 +48,10 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
   return {
     runtime,
+    settingsStart: (...args: Parameters<typeof runtime.settingsStart>) =>
+      Effect.runPromise(runtime.settingsStart(...args)),
+    settingsRead: (...args: Parameters<typeof runtime.settingsRead>) =>
+      Effect.runPromise(runtime.settingsRead(...args)),
     info: () => run((p) => p.info),
     clientConnect: () => run((p) => p.connect()),
     challenge: (client: Parameters<ProjectCalls["challenge"]>[0]) => run((p) => p.challenge(client)),
@@ -493,7 +497,8 @@ const world = (
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
     const work = () => Reflect.apply(Reflect.get(project, method), project, args);
 
-    if (OLD_PROJECT_CALLS.has(method)) {
+    // Settings setup is outside the recovery RPC failure cuts.
+    if (OLD_PROJECT_CALLS.has(method) || method === "settingsStart" || method === "settingsRead") {
       return work();
     }
 
