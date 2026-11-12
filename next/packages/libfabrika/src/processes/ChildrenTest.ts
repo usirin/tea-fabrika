@@ -1268,15 +1268,12 @@ const capture = Effect.fnUntraced(function* (sql: Sql) {
 });
 
 const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
-  Effect.fnUntraced(function* (secret: string, kind: number) {
+  Effect.fnUntraced(function* (secret: string, tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
     const { sql, arm, disarm } = cutting(store.sql);
     const pids = ids(...PIDS);
-    const mode = kind % 3;
-    const next =
-      mode === 2
-        ? Effect.suspend(() => (pids.calls() >= 1 ? Effect.die(new Error(`defect ${secret}`)) : pids.next))
-        : pids.next;
+    let defect = false;
+    const next = Effect.suspend(() => (defect ? Effect.die(new Error(`defect ${secret}`)) : pids.next));
     const boot = yield* ProcessManager.use((p) =>
       p.start(
         Start.cases.first.make({ id: "boot:queue:1", name: "queue:1", code: { program: QUEUE, hash: HASH } }),
@@ -1284,49 +1281,149 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       ),
     ).pipe(Effect.provide(layer(sql, next)), Effect.orDie);
     const seenBy = yield* capture(store.sql);
-    const child: Child = {
-      id: `${boot.process}/1/0`,
-      name: "merger:1",
-      code: { program: MERGER, hash: HASH },
-      requester: Recipient.cases.process.make({ process: boot.process }),
-      input: { type: "land", token: secret, nested: [`Bearer ${secret}`] },
-    };
+    const saved = new Map<string, { child: Child; answer: Started }>();
+    const pending = new Map<string, Child>();
+    const ended = new Set<string>();
+    const done = new Set<string>();
+    let n = 0;
+    const inspect = (exit: Exit.Exit<Started, ChildrenError>) => {
+      const outputs = [...seenBy.exported(), ...seenBy.lines];
 
-    if (mode === 1) {
-      arm("insert", `SQLITE_FULL at ${secret}`);
-    }
-
-    const exit = yield* Children.use((c) => c.start(child, from())).pipe(
-      Effect.provide(layer(sql, next)),
-      Effect.withTracer(seenBy.tracer),
-      Effect.provide(Logger.layer([seenBy.logger])),
-      Effect.exit,
-    );
-    disarm();
-    const outputs: Array<string> = [...seenBy.exported(), ...seenBy.lines];
-
-    if (Exit.isSuccess(exit)) {
-      outputs.push(JSON.stringify(exit.value));
-      seen.add("answer");
-    } else {
-      const failure = Cause.findErrorOption(exit.cause);
-
-      if (Option.isSome(failure) && failure.value instanceof ChildrenError) {
-        const error = failure.value;
-        // The cause is a value kept for the library caller; the error's own message and fields are output.
-        outputs.push(error.message, String(error.reason), JSON.stringify({ ...error, cause: undefined }));
-        seen.add(error.reason);
+      if (Exit.isSuccess(exit)) {
+        outputs.push(JSON.stringify(exit.value));
+        seen.add("answer");
       } else {
-        outputs.push(Cause.pretty(exit.cause));
-        seen.add("defect");
-      }
-    }
+        const failure = Cause.findErrorOption(exit.cause);
 
-    for (const output of outputs) {
-      for (const form of forms(secret)) {
-        expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+        if (Option.isSome(failure) && failure.value instanceof ChildrenError) {
+          const error = failure.value;
+          // The caller keeps the cause value. Only the error's other fields are rendered outputs.
+          outputs.push(error.message, String(error.reason), JSON.stringify({ ...error, cause: undefined }));
+          seen.add(error.reason);
+        } else {
+          outputs.push(Cause.pretty(exit.cause));
+          seen.add("defect");
+        }
       }
-    }
+
+      for (const output of outputs) {
+        for (const form of forms(secret)) {
+          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+        }
+      }
+    };
+    const step = Effect.fnUntraced(function* (cell: Cell) {
+      const available = [
+        "start",
+        "storage",
+        "defect",
+        "reopen",
+        ...(saved.size === 0 ? [] : ["retry"]),
+        ...(pending.size === 0 ? [] : ["recover"]),
+        ...([...saved.keys()].some((id) => !ended.has(id)) ? ["exit"] : []),
+      ];
+      const missing = available.filter((move) => !done.has(move));
+      const move = choose(missing.length === 0 ? available : missing, cell.move);
+
+      if (move === "reopen") {
+        yield* store.reopen;
+
+        // A reopened store must still answer one of the starts the model actually saved.
+        if (saved.size === 0) {
+          done.add(move);
+          seen.add(move);
+          return;
+        }
+      }
+
+      if (move === "exit") {
+        const [id, held] = choose(
+          [...saved].filter(([id]) => !ended.has(id)),
+          cell.pick,
+        );
+        yield* ProcessManager.use((p) => p.exit(held.answer.process, NORMAL, from())).pipe(
+          Effect.provide(layer(sql, next)),
+          Effect.orDie,
+        );
+        ended.add(id);
+      }
+
+      const held =
+        move === "retry" || move === "exit" || (move === "reopen" && saved.size > 0)
+          ? choose([...saved.values()], cell.pick)
+          : undefined;
+      const child: Child =
+        held?.child ??
+        (move === "recover"
+          ? choose([...pending.values()], cell.pick)
+          : {
+              id: `${boot.process}/${++n}/0`,
+              name: `merger:${n}`,
+              code: { program: MERGER, hash: HASH },
+              requester: Recipient.cases.process.make({ process: boot.process }),
+              input: { type: "land", token: secret, nested: [`Bearer ${secret}`, cell.m] },
+            });
+
+      if (move === "storage") {
+        arm("insert", `SQLITE_FULL at ${secret}`);
+      }
+
+      defect = move === "defect";
+      const exit = yield* Children.use((c) => c.start(child, from())).pipe(
+        Effect.provide(layer(sql, next)),
+        Effect.withTracer(seenBy.tracer),
+        Effect.provide(Logger.layer([seenBy.logger])),
+        Effect.exit,
+      );
+      const hit = disarm();
+      defect = false;
+      // Inspect before the behavior checks, so a leaking successful answer has its own failure.
+      inspect(exit);
+
+      if (move === "storage" || move === "defect") {
+        expect(Exit.isFailure(exit), `L11: ${move} reached the failing start`).toBe(true);
+
+        if (move === "storage") {
+          expect(hit, "L11: the storage cut was reached").toBe(true);
+
+          if (Exit.isFailure(exit)) {
+            const error = Cause.findErrorOption(exit.cause);
+            expect(
+              Option.isSome(error) && error.value instanceof ChildrenError && error.value.cause !== undefined,
+              "L11: the library caller retains the storage cause value",
+            ).toBe(true);
+          }
+        }
+
+        pending.set(child.id, child);
+      } else {
+        expect(Exit.isSuccess(exit), `L11: ${move} answers after recovery`).toBe(true);
+
+        if (Exit.isSuccess(exit)) {
+          if (held !== undefined) {
+            expect(exit.value).toEqual(held.answer);
+          } else {
+            expect(exit.value._tag).toBe("started");
+            saved.set(child.id, { child, answer: exit.value });
+          }
+        }
+
+        pending.delete(child.id);
+      }
+
+      const rows = yield* entries([...saved.values()].map((s) => s.child.name)).pipe(Effect.provide(layer(sql, next)));
+
+      for (const { child } of saved.values()) {
+        const letters = rows.filter((row) => row.id === letterId(child.id));
+        expect(letters, "L11: retry and recovery keep one first letter").toHaveLength(1);
+      }
+
+      done.add(move);
+      seen.add(move);
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: { saved, pending, ended }, real: { step } }), tape));
+    expect(done.size, "L11: the operation walk was not empty").toBeGreaterThan(0);
   });
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
@@ -1421,11 +1518,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const seen: Tally = new Set();
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-          const property = fc.asyncProperty(Secret, fc.nat(), (x, k) => Effect.runPromise(Effect.scoped(law(x, k))));
+          const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
           const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
-          expect([...seen].sort()).toEqual(expect.arrayContaining(["answer", "storage", "defect"].sort()));
+          expect([...seen].sort()).toEqual(
+            expect.arrayContaining(["answer", "storage", "defect", "retry", "recover", "reopen", "exit"].sort()),
+          );
         }),
       600_000,
     );

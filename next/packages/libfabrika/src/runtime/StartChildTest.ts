@@ -1203,7 +1203,7 @@ const Secret = fc
 const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
 
 const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string>) =>
-  Effect.fnUntraced(function* (secret: string, kind: number) {
+  Effect.fnUntraced(function* (secret: string, tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
@@ -1214,9 +1214,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       fault: { exited: false, message: `SQLITE_FULL at ${secret}` },
       n: 0,
     };
-    const scope = yield* Scope.make();
+    let scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-    const life = yield* host(store, world, next.next, scope);
+    let life = yield* host(store, world, next.next, scope);
 
     for (const [name, program] of BOOT) {
       const started = yield* ProcessManager.use((p) =>
@@ -1226,78 +1226,205 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     }
 
     const seenBy = yield* capture(store.sql("spans"));
-    const runner = yield* life.runner("starter:1");
-    const mode = kind % 4;
-    const input =
-      mode === 0 || mode === 3
-        ? { type: "start", ask: { program: "merger", name: "merger:1", input: { type: "ping", token: secret } } }
-        : mode === 1
-          ? // A refused Cmd whose operands carry the secret: its err answer must not echo them.
-            { type: "start", ask: { program: `nope-${secret}`, name: "merger:1" } }
-          : { type: "end", before: [], after: [], twice: false };
+    type Asked = {
+      name: string;
+      incoming: Incoming;
+      kind: "answer" | "refusal" | "storage" | "checkpoint";
+      before: number;
+    };
+    const pending = new Map<string, Asked>();
+    const saved: Array<Asked> = [];
+    const done = new Set<string>();
+    const answers = (name: string) =>
+      savedModel(store, name, world.names.get(name)?.pid as string).pipe(
+        Effect.provide(life.context as Context.Context<never>),
+        Effect.map((model) => model?.answers ?? []),
+      );
+    const inspect = Effect.fnUntraced(function* (outcome: Exit.Exit<unknown, unknown>) {
+      const outputs = [...seenBy.exported(), ...seenBy.lines];
 
-    if (mode === 2) {
-      world.fault.exited = true;
-    }
+      for (const name of world.names.keys()) {
+        if (!RUNS.has(world.names.get(name)?.program ?? "")) {
+          continue;
+        }
 
-    if (mode === 3) {
-      world.fault.inputCheckpoint = secret;
-    }
-
-    const outcome = yield* runner
-      .msg({
-        id: "letter-1",
-        envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input },
-        sentAt: "2026-11-11T01:00:00Z",
-        seen: 0,
-        span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
-      })
-      .pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
-    const cut = mode === 2 && !world.fault.exited;
-    world.fault.exited = false;
-    const pid = world.names.get("starter:1")?.pid as string;
-    const answers =
-      (yield* savedModel(store, "starter:1", pid).pipe(Effect.provide(life.context as Context.Context<never>)))
-        ?.answers ?? [];
-    const letters = (yield* store.entries(["starter:1"]).pipe(Effect.provide(life.context as Context.Context<never>)))
-      .filter((e) => e.stream === "starter:1/inbox" && e.id.endsWith("/answer"))
-      // Whole, its `cmd` echo included: an answer row is an output, and a refused Cmd's echo is in it.
-      .map((e) => JSON.stringify(body(e)));
-
-    // A start's case reached the answer row it inspects, its ok or its err.
-    if (mode < 2) {
-      expect(letters.length, "L11: the start's answer row was written and inspected").toBeGreaterThan(0);
-    }
-
-    const outputs = [
-      ...seenBy.exported(),
-      ...seenBy.lines,
-      JSON.stringify(answers),
-      ...letters,
-      ...(Exit.isFailure(outcome) ? [Cause.pretty(outcome.cause)] : []),
-    ];
-    // Each case reached the path it is about: a started answer, a refusal, a storage cut at the exit.
-    const told = answers.at(-1) as { type?: string; outcome?: unknown } | undefined;
-
-    if (mode === 0) {
-      expect(told?.type, "L11: the secret rode a start that answered").toBe("start_child_ok");
-      expect(tagged(told?.outcome), "L11: the secret rode a start that answered").toBe("started");
-    } else if (mode === 1) {
-      expect(told, "L11: the secret rode a refused start").toEqual({ type: "start_child_err", outcome: "no_program" });
-    } else if (mode === 2) {
-      expect(cut, "L11: the exit's write met the planted storage failure").toBe(true);
-    } else {
-      expect(world.fault.checkpointHit, "L11: a checkpoint carrying the secret met the storage failure").toBe(true);
-      expect(Exit.isFailure(outcome), "L11: the failed checkpoint reaches the error output").toBe(true);
-    }
-
-    seen.add(["answer", "refusal", "storage", "checkpoint"][mode] as string);
-
-    for (const output of outputs) {
-      for (const form of forms(secret)) {
-        expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+        outputs.push(JSON.stringify(yield* answers(name)));
       }
-    }
+
+      const rows = yield* store
+        .entries(world.names.keys())
+        .pipe(Effect.provide(life.context as Context.Context<never>));
+      // Keep the whole answer, including its Cmd echo, and the sink's stored failure content.
+      outputs.push(...rows.filter((e) => e.id.endsWith("/answer")).map((e) => JSON.stringify(body(e))));
+
+      if (Exit.isFailure(outcome)) {
+        outputs.push(Cause.pretty(outcome.cause));
+      }
+
+      for (const output of outputs) {
+        for (const form of forms(secret)) {
+          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+        }
+      }
+    });
+    const checkAnswer = Effect.fnUntraced(function* (ask: Asked) {
+      if (ask.kind === "storage") {
+        const rows = yield* store
+          .entries(world.names.keys())
+          .pipe(Effect.provide(life.context as Context.Context<never>));
+        expect(
+          rows.filter((e) => e._tag === "exited" && body(e)["process"] === world.names.get(ask.name)?.pid),
+          "L11: the failed exit recovers exactly once",
+        ).toHaveLength(1);
+        const held = world.names.get(ask.name) as Name;
+        held.live = false;
+        return;
+      }
+
+      const told = yield* answers(ask.name);
+      expect(told.length, `L11: ${ask.kind} for ${ask.name} was folded exactly once`).toBe(ask.before + 1);
+      const rows = yield* store.entries([ask.name]).pipe(Effect.provide(life.context as Context.Context<never>));
+      expect(
+        rows.filter((e) => e.stream === `${ask.name}/inbox` && e.id.endsWith("/answer")).length,
+        "L11: the start's whole answer row was written and inspected",
+      ).toBeGreaterThan(0);
+
+      if (ask.kind === "refusal") {
+        expect(told.at(-1), "L11: the secret rode a refused start").toEqual({
+          type: "start_child_err",
+          outcome: "no_program",
+        });
+      } else {
+        expect(told.at(-1), "L11: the secret rode a start that answered").toMatchObject({ type: "start_child_ok" });
+        expect(tagged((told.at(-1) as { outcome: unknown }).outcome)).toBe("started");
+      }
+    });
+    const step = Effect.fnUntraced(function* (cell: Cell) {
+      const live = [...world.names]
+        .filter(([name, held]) => held.live && held.program === "starter" && !pending.has(name))
+        .map(([name]) => name);
+      const retries = saved.filter((ask) => world.names.get(ask.name)?.live && !pending.has(ask.name));
+      const available = [
+        ...(live.length === 0
+          ? []
+          : saved.length === 0 && pending.size === 0
+            ? ["answer"]
+            : ["answer", "refusal", "storage", "checkpoint"]),
+        ...(pending.size === 0 ? [] : ["recover"]),
+        ...(retries.length === 0 ? [] : ["retry"]),
+      ];
+
+      if (available.length === 0) {
+        return;
+      }
+
+      const missing = available.filter((move) => !done.has(move));
+      const move = choose(missing.length === 0 ? available : missing, cell.move);
+      let ask: Asked;
+      let outcome: Exit.Exit<unknown, unknown>;
+
+      if (move === "recover") {
+        ask = choose([...pending.values()], cell.pick);
+        yield* Scope.close(scope, Exit.void);
+        yield* store.reopen;
+        scope = yield* Scope.make();
+        life = yield* host(store, world, next.next, scope);
+        const runner = yield* life.runner(ask.name);
+        outcome = yield* (
+          ask.kind === "checkpoint"
+            ? runner.msg({
+                ...ask.incoming,
+                id: `letter-${++world.n}`,
+                envelope: { ...ask.incoming.envelope, id: inputId(world.n), input: { type: "ping" } },
+              })
+            : runner.due((yield* Clock.currentTimeMillis) + 60_000)
+        ).pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
+        yield* inspect(outcome);
+        expect(Exit.isSuccess(outcome), "L11: a fresh runner recovers the failed operation").toBe(true);
+        yield* checkAnswer(ask);
+        pending.delete(ask.name);
+
+        if (ask.kind !== "storage") {
+          saved.push(ask);
+        }
+      } else if (move === "retry") {
+        ask = choose(retries, cell.pick);
+        const before = yield* answers(ask.name);
+        const runner = yield* life.runner(ask.name);
+        outcome = yield* runner
+          .msg(ask.incoming)
+          .pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
+        yield* inspect(outcome);
+        expect(Exit.isSuccess(outcome), "L11: a saved letter may be retried").toBe(true);
+        expect(yield* answers(ask.name), "L11: retry adds no answer").toEqual(before);
+      } else {
+        const name = choose(live, cell.pick);
+        const n = ++world.n;
+        const input =
+          move === "storage"
+            ? { type: "end", before: [], after: [], twice: false }
+            : {
+                type: "start",
+                ask: {
+                  program: move === "refusal" ? `nope-${secret}` : "merger",
+                  name: `merger:${n}`,
+                  ...(move === "refusal" ? {} : { input: { type: "ping", token: secret, nested: cell.m } }),
+                },
+              };
+        ask = {
+          name,
+          kind: move as Asked["kind"],
+          before: (yield* answers(name)).length,
+          incoming: {
+            id: `letter-${n}`,
+            envelope: { id: inputId(n), by: person, arrivedAt: 1794099600000 + n, input },
+            sentAt: "2026-11-11T01:00:00Z",
+            seen: 0,
+            span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
+          },
+        };
+
+        if (move === "storage") {
+          world.fault.exited = true;
+        }
+
+        if (move === "checkpoint") {
+          world.fault.checkpointHit = false;
+          world.fault.inputCheckpoint = secret;
+        }
+
+        const runner = yield* life.runner(name);
+        outcome = yield* runner
+          .msg(ask.incoming)
+          .pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
+        yield* inspect(outcome);
+
+        if (move === "storage" || move === "checkpoint") {
+          if (move === "storage") {
+            expect(world.fault.exited, "L11: the exit's write met the storage failure").toBe(false);
+          } else {
+            expect(world.fault.checkpointHit, "L11: a checkpoint carrying the secret met the storage failure").toBe(
+              true,
+            );
+            expect(Exit.isFailure(outcome), "L11: the failed checkpoint reaches the error output").toBe(true);
+          }
+
+          world.fault.exited = false;
+          world.fault.inputCheckpoint = undefined;
+          pending.set(name, ask);
+        } else {
+          expect(Exit.isSuccess(outcome)).toBe(true);
+          yield* checkAnswer(ask);
+          saved.push(ask);
+        }
+      }
+
+      done.add(move);
+      seen.add(move);
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: { world, saved, pending }, real: { step } }), tape));
+    expect(done.size, "L11: the operation walk was not empty").toBeGreaterThan(0);
   });
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
@@ -1372,11 +1499,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const seen = new Set<string>();
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-          const property = fc.asyncProperty(Secret, fc.nat(), (x, k) => Effect.runPromise(Effect.scoped(law(x, k))));
+          const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
           const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
-          expect([...seen].sort()).toEqual(["answer", "checkpoint", "refusal", "storage"]);
+          expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);
         }),
       600_000,
     );
