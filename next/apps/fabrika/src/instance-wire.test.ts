@@ -466,6 +466,7 @@ it.live.each(["flags", "env", "file"] as const)(
       placing(accepted);
       expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
       yield* Effect.sleep(retryAfter(settled.refused) + 5);
+      let previous = settled.refused;
       const rounds: Array<string> = [];
       const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
       const round = yield* Effect.gen(function* () {
@@ -474,14 +475,27 @@ it.live.each(["flags", "env", "file"] as const)(
           const delay = retryAfter(refused);
           const second = yield* client(s, "budget-two");
           const again = yield* timed(second, pid, letter);
-          rounds.push(JSON.stringify({ allowed: allowed.map(times), refused: times(refused), again: times(again) }));
+          rounds.push(
+            JSON.stringify({
+              previous: times(previous),
+              allowed: allowed.map(times),
+              refused: times(refused),
+              again: times(again),
+            }),
+          );
           expect(allowed.length).toBeGreaterThan(0);
 
           // These bounds use the refusal's window, including the time spent waiting for each reply.
-          if (allowed[0]!.sent >= refused.replied + delay - ratePolicy.window && again.replied < refused.sent + delay) {
+          // The last earlier call must precede its start: a discarded round's second socket can spend the next budget.
+          if (
+            previous.replied < refused.sent + delay - ratePolicy.window &&
+            allowed[0]!.sent >= refused.replied + delay - ratePolicy.window &&
+            again.replied < refused.sent + delay
+          ) {
             return { allowed, refused, second, again };
           }
 
+          previous = again;
           const last = again.reply.error?.data?.reason === "rate_limited" ? again : refused;
           const until = last.replied + retryAfter(last);
           yield* Effect.sleep(Math.max(0, until - (yield* Clock.currentTimeMillis)) + 5);
