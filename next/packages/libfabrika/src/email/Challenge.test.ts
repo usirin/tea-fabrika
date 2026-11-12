@@ -115,6 +115,8 @@ it.effect.prop(
                 expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
               }
             }
+
+            return true;
           }),
         { seed: 119120 },
       );
