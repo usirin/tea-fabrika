@@ -154,8 +154,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
-  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
-  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  is in `agents-ledger.json`, which only shrinks ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  No new shell or Python script enters the repo, and the ones here today are being ported to
+  TypeScript and Effect now, behind services with a test layer (ticket 766,
+  [0113](./.decisions/0113-no-shell-or-python-scripts.md)).
   Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
