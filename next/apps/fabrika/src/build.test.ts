@@ -325,3 +325,90 @@ describe("P12 Rolldown build", () => {
     expect(snapshot(out)).toEqual(before);
   });
 });
+
+// P14 slice 2, next/ (ticket 828): law L18 of the approved plan, on the app's real entry. The shape it
+// holds `build.ts` to: the app's build passes libfabrika's `tab` option, `src/entry/browser.tsx` with
+// three stylesheets in order (the design package's tokens, Manti's styles, Tuval's own), so the built
+// tables carry `/index.html` as text/html and `/window.js` as text/javascript, each with the SHA-256 of
+// its body, and the tab's script names no Node module. A failed build keeps the last good output.
+//
+// The walk: each attempt is chosen from the current output. With nothing published yet it builds; after
+// a good build it builds again or plants one disk failure (discovery, or the publication's write), and
+// the law reads the result against the last good bytes.
+describe("P14 slice 2, L18: the app's build carries the tab", () => {
+  const sha = async (text: string) => {
+    const { createHash } = await import("node:crypto");
+    return createHash("sha256").update(text).digest("hex");
+  };
+  const failing = (method: "glob" | "writeFile") =>
+    Layer.effect(
+      FileSystem.FileSystem,
+      Effect.map(FileSystem.FileSystem, (fs) => ({
+        ...fs,
+        [method]: () =>
+          Effect.fail(
+            PlatformError.systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method,
+              description: `planted ${method} failure`,
+            }),
+          ),
+      })),
+    );
+
+  it(
+    "generated build attempts: the page and the script ride in the tables with their hashes and types, and a failure keeps the last good output",
+    { timeout: 900_000 },
+    async () => {
+      const { build } = await import("./build.ts");
+      // A custom property the design package's own token sheet declares.
+      const token = /(--[a-z][a-z0-9-]*)\s*:/.exec(
+        readFileSync(resolve(import.meta.dirname, "../../../../packages/fabrika-design/src/tokens.css"), "utf8"),
+      )![1]!;
+      const seen = { built: 0, failed: 0 };
+      await fc.assert(
+        fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 3 }), async (picks) => {
+          const out = join(home(), "dist");
+          let good: ReturnType<typeof snapshot> | null = null;
+
+          for (const pick of picks) {
+            const moves = good === null ? (["build"] as const) : (["build", "glob", "writeFile"] as const);
+            const move = moves[pick % moves.length]!;
+
+            if (move !== "build") {
+              const result = await runNode(
+                Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(failing(move))),
+              );
+              seen.failed++;
+              expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
+              expect(snapshot(out), `a ${move} failure changed the published output`).toEqual(good);
+              continue;
+            }
+
+            const built = await runNode(build({ out, ledger: [] }));
+            seen.built++;
+            const page = built.assets["/index.html"];
+            const script = built.assets["/window.js"];
+            expect(page, "/ serves the page").toBeDefined();
+            expect(script, "/window.js serves the script").toBeDefined();
+            expect(page!.type).toBe("text/html; charset=utf-8");
+            expect(script!.type).toBe("text/javascript; charset=utf-8");
+            expect(page!.hash).toBe(await sha(page!.body));
+            expect(script!.hash).toBe(await sha(script!.body));
+            expect(page!.body, "the page loads the script").toContain("/window.js");
+            expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
+            // The three stylesheets are applied in order, one style each: the design package's tokens first.
+            const styles = [...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+            expect(styles, "the tab's three stylesheets").toHaveLength(3);
+            expect(styles[0], "the design package's tokens come first").toContain(token);
+            good = snapshot(out);
+          }
+        }),
+        { seed: 119120, numRuns: 30 },
+      );
+      expect(seen.built).toBeGreaterThan(0);
+      expect(seen.failed).toBeGreaterThan(0);
+    },
+  );
+});

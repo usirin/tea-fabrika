@@ -727,8 +727,23 @@ describe("P12 real dev.ts wire", () => {
       await pause();
     }
 
-    // Only POST /grant and GET /grant/client/KEY reach the grant routes; the rest get the page.
-    expect(await (await fetch(s.url)).text()).toBe("fabrika");
+    // Only POST /grant and GET /grant/client/KEY reach the grant routes. P14 slice 2 (ticket 828): the
+    // app's build carries its tab, so `/` is the built page and `/window.js` the script it loads, each
+    // with its type and its ETag over the real wire; a write elsewhere still gets the plain answer.
+    const root = await fetch(s.url);
+    expect(root.status).toBe(200);
+    expect(root.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    const page = await root.text();
+    expect(page, "/ is the tab's page").toContain('<script type="module" src="/window.js"></script>');
+    expect(root.headers.get("etag")).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
+    const script = await fetch(`${s.url}/window.js`);
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    const scriptBody = await script.text();
+    expect(script.headers.get("etag")).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
+    expect(page, "the page names the script it loads by its build").toContain(
+      `<meta name="fabrika-build" content="${createHash("sha256").update(scriptBody).digest("hex")}">`,
+    );
     const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
     expect(await posted.text()).toBe("fabrika");
     const home = mkdtempSync(join(tmpdir(), "p12-w-"));

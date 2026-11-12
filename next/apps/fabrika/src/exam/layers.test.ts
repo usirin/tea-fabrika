@@ -204,6 +204,18 @@ const manifest = (name: string, extra: object = {}): object => ({
 
 const LIBRARY = "@kampus/libfabrika";
 const TUVAL = "@kampus/tuval";
+// P14, p65's one outside package (docs/direction/fabrika-design-package.md): the window takes the design
+// package's public names, its root and its stylesheet, and nothing deeper.
+const DESIGN = "@kampus/fabrika-design";
+
+// The transport front files a client reaches, one subpath each (the exports map's `./transport/*`), P14
+// slice 2's three contracts and the Link machine among them: the same reach, file by file.
+const TRANSPORT = [
+  `${LIBRARY}/transport`,
+  ...["Answer", "ClientKey", "ClientRows", "ClientSocket", "Hello", "Link", "Sshsig", "Webauthn", "Wire"].map(
+    (front) => `${LIBRARY}/transport/${front}`,
+  ),
+];
 
 /** What each part may import beyond itself: the detail's table, as it stands. */
 const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -219,10 +231,10 @@ const allowed: Readonly<Record<string, ReadonlyArray<string>>> = {
   door: ["app", "coordination", "data", "transport", "id"], // P17a: the library's door composes all four
   mcp: ["app", "transport", "id"], // the named exception: the bridge is a client, as a window is
   desktop: [LIBRARY], // the app layer's names, nothing lower
-  window: ["desktop", LIBRARY, `${LIBRARY}/transport`], // a window is a client (the note's T3)
+  window: ["desktop", LIBRARY, ...TRANSPORT, DESIGN, `${DESIGN}/tokens.css`], // a window is a client (the note's T3); P14: and it takes the design's public names
   dom: ["desktop"],
-  browser: ["dom", "desktop", `${LIBRARY}/transport`], // its key signs transport's helloText
-  electron: ["dom", "desktop", `${LIBRARY}/transport`, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
+  browser: ["dom", "desktop", LIBRARY, ...TRANSPORT], // its key signs transport's helloText; P14: its layers meet transport's contracts
+  electron: ["dom", "desktop", ...TRANSPORT, `${LIBRARY}/coordination`], // the menu bar signs what the door takes
   headless: ["desktop"],
   program: [LIBRARY], // `.`, what the box loads: no tuval and no React
   "program-window": [LIBRARY, TUVAL], // `./window`: public names only
@@ -522,6 +534,18 @@ describe("planted breaks", () => {
       'import {layout} from "../desktop/layout.ts";',
       'import {wire} from "@kampus/libfabrika/transport";',
     ),
+    // P14 slice 2 (L19): the window takes the link and the design package, never a browser layer; the
+    // browser layers take transport's contracts, never the design package.
+    "packages/tuval/src/window/machine.ts": lines(
+      'import {Link} from "@kampus/libfabrika/transport/Link";',
+      'import {Client} from "@kampus/libfabrika";',
+      'import {themes} from "@kampus/fabrika-design";',
+      'import {key} from "../browser/key.ts";',
+    ),
+    "packages/tuval/src/browser/rows.ts": lines(
+      'import {ClientRows} from "@kampus/libfabrika/transport/ClientRows";',
+      'import {themes} from "@kampus/fabrika-design";',
+    ),
     "packages/tuval/src/dom/root.ts": lines('import {layout} from "../desktop/layout.ts";'),
     "packages/tuval/src/browser/key.ts": lines(
       'import {root} from "../dom/root.ts";',
@@ -565,6 +589,8 @@ describe("planted breaks", () => {
         'packages/libfabrika/src/sync/Merge.ts: the folder "sync" has no row in the exam\'s table',
         'packages/tuval/src/desktop/fold.ts imports "@kampus/libfabrika/data": desktop may not import it',
         'packages/tuval/src/headless/run.ts imports "../window/main.ts": headless may not import window',
+        'packages/tuval/src/window/machine.ts imports "../browser/key.ts": window may not import browser',
+        'packages/tuval/src/browser/rows.ts imports "@kampus/fabrika-design": browser may not import it',
         'programs/notes/src/root.ts imports "@kampus/tuval": program may not import it',
         'programs/notes/src/tile.ts imports "@kampus/libfabrika/transport": program-window may not import it',
       ].sort(),

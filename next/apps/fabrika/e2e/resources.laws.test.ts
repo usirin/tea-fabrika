@@ -1,4 +1,5 @@
-// P14 slice 1, next/ (ticket 698): S1.6, seen from outside. The browser suite runs as a child
+// P14 slice 1, next/ (ticket 698): S1.6, seen from outside. Slice 2 (ticket 828) extends it as L16 to
+// the first-window suite, whose fixture (`p14.test-support.ts`) keeps the same trace and faults. The browser suite runs as a child
 // process, and this supervising process checks what only an outside process can: the child exits
 // on its own after success, a setup failure, a test failure or an interruption, and leaves no owned
 // browser process, server listener or temp home behind (0061). Later browser suites reuse it.
@@ -49,7 +50,12 @@ const traceFolder = Effect.acquireRelease(
 
 /** The child suite. The scope's release is only the supervisor's own guard: the law observes the
  *  child's natural exit before it ever runs. */
-const suite = (trace: string, fault: Fault | undefined) =>
+/** A child suite: its file, the test it runs, and what a plain run of it must acquire. */
+type Target = { readonly file: string; readonly test: string; readonly label: string };
+const ONE_FILE: Target = { file: "one-file.test.ts", test: "S1.5", label: "P14 slice 1" };
+const FIRST_WINDOW: Target = { file: "first-window.test.ts", test: "L11", label: "P14 slice 2" };
+
+const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const started = Date.now();
@@ -63,9 +69,9 @@ const suite = (trace: string, fault: Fault | undefined) =>
           "--maxWorkers=1",
           "--testTimeout=180000",
           "--hookTimeout=180000",
-          "one-file.test.ts",
+          target.file,
           "-t",
-          "S1.5",
+          target.test,
         ],
         {
           cwd: APP,
@@ -154,12 +160,12 @@ const interrupt = (child: ChildProcess, trace: string, signal: NodeJS.Signals) =
   });
 
 /** One child run and every check the law makes of it. Returns what it acquired, in order. */
-const run = (fault: Fault | undefined, signal: NodeJS.Signals) =>
+const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = ONE_FILE) =>
   Effect.scoped(
     Effect.gen(function* () {
       const dir = yield* traceFolder;
       const trace = join(dir, "trace.jsonl");
-      const { child, ended } = yield* suite(trace, fault);
+      const { child, ended } = yield* suite(trace, fault, target);
 
       if (fault?.kind === "hold") {
         yield* interrupt(child, trace, signal).pipe(Effect.timeout("240 seconds"));
@@ -196,42 +202,54 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals) =>
     }),
   );
 
+/** The fault walk over one child suite: a plain run first, then faults only at what it reached. */
+const walk = async (target: Target) => {
+  const reached = await Effect.runPromise(run(undefined, "SIGTERM", target));
+  expect(reached, "the plain run acquires its home, server, browser, context and page").toEqual(
+    expect.arrayContaining(["home", "server", "browser", "context", "page"]),
+  );
+  const kinds = new Set<string>();
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(
+        fc.record({
+          pick: fc.nat(),
+          kind: fc.nat(),
+          signal: fc.constantFrom("SIGTERM", "SIGINT"),
+        }),
+        { minLength: 1, maxLength: 2 },
+      ),
+      async (steps) => {
+        for (const { pick, kind: pickKind, signal } of steps) {
+          // A kind the walks have not reached yet comes first, so a short walk still meets all three.
+          const pending = KINDS.filter((k) => !kinds.has(k));
+          const kind = pending.length > 0 ? pending[pickKind % pending.length]! : KINDS[pickKind % KINDS.length]!;
+          // Only an acquisition the real run reached is a fault point; a test failure comes after all.
+          const at = kind === "test" ? reached[reached.length - 1]! : reached[pick % reached.length]!;
+          kinds.add(kind);
+          await Effect.runPromise(run({ at, kind }, signal as NodeJS.Signals, target));
+        }
+      },
+    ),
+    { seed: 119120, numRuns: target === FIRST_WINDOW ? 10 : 3 },
+  );
+  expect([...kinds].sort(), "the walks reached every kind of fault").toEqual(["hold", "setup", "test"]);
+};
+
 describe("P14 slice 1: S1.6 browser and server resources close and the child suite exits", () => {
   it(
     "generated fault walks: success, setup failure, test failure and interruption after each reached acquisition",
     // A child run builds, starts a brain and a browser: about a minute each, so 3 walks of up to 2 faults.
     { timeout: 20 * 60_000 },
-    async () => {
-      const reached = await Effect.runPromise(run(undefined, "SIGTERM"));
-      expect(reached, "the plain run acquires its home, server, browser, context and page").toEqual(
-        expect.arrayContaining(["home", "server", "browser", "context", "page"]),
-      );
-      const kinds = new Set<string>();
-      await fc.assert(
-        fc.asyncProperty(
-          fc.array(
-            fc.record({
-              pick: fc.nat(),
-              kind: fc.nat(),
-              signal: fc.constantFrom("SIGTERM", "SIGINT"),
-            }),
-            { minLength: 1, maxLength: 2 },
-          ),
-          async (steps) => {
-            for (const { pick, kind: pickKind, signal } of steps) {
-              // A kind the walks have not reached yet comes first, so a short walk still meets all three.
-              const pending = KINDS.filter((k) => !kinds.has(k));
-              const kind = pending.length > 0 ? pending[pickKind % pending.length]! : KINDS[pickKind % KINDS.length]!;
-              // Only an acquisition the real run reached is a fault point; a test failure comes after all.
-              const at = kind === "test" ? reached[reached.length - 1]! : reached[pick % reached.length]!;
-              kinds.add(kind);
-              await Effect.runPromise(run({ at, kind }, signal as NodeJS.Signals));
-            }
-          },
-        ),
-        { seed: 119120, numRuns: 3 },
-      );
-      expect([...kinds].sort(), "the walks reached every kind of fault").toEqual(["hold", "setup", "test"]);
-    },
+    () => walk(ONE_FILE),
+  );
+});
+
+describe("P14 slice 2, L16: the first-window suite's resources close and its child exits", () => {
+  it(
+    "generated fault walks over the first-window suite: success, setup failure, test failure and interruption after each reached acquisition",
+    // A child run starts dev.ts and a browser: about a minute each, 10 walks of up to 2 faults.
+    { timeout: 60 * 60_000 },
+    () => walk(FIRST_WINDOW),
   );
 });

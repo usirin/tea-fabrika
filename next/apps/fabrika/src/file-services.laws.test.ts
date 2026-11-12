@@ -347,8 +347,18 @@ for (const failed of [false, true]) {
           const result = await Effect.runPromiseExit(
             build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)),
           );
-          expect(w.calls[0]).toEqual(["read", source]);
-          expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
+          // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
+          // read through the same FileSystem too, and every read still comes before the first write.
+          const reads = w.calls.flatMap(([call, file]) => (call === "read" ? [String(file)] : []));
+          expect(reads.filter((file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
+            source,
+            join(root, "compiler-ledger.json"),
+          ]);
+          const styles = reads.filter((file) => file.endsWith(".css"));
+          expect(styles, "the tab's stylesheets are read through FileSystem").toHaveLength(3);
+          const lastRead = w.calls.findLastIndex(([call]) => call === "read");
+          const firstWrite = w.calls.findIndex(([call]) => call === "write");
+          expect(firstWrite === -1 || lastRead < firstWrite, "a read came after a write").toBe(true);
           const renames = w.calls.filter(([call]) => call === "rename");
           expect(renames).toEqual([
             ["rename", w.out, w.backup],
