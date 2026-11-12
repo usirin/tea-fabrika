@@ -1,12 +1,14 @@
 // P17b slice 2, next/. Real runner storage. Each session opens new scoped connections.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
+import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Schema, type Scope, Stream, Tracer } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { Row } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -25,11 +27,14 @@ import { Nemesis } from "../runtime/Nemesis.ts";
 import * as NemesisLedger from "../runtime/NemesisLedger.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import { StepFault } from "../runtime/StepFault.ts";
+import * as StepFaultNone from "../runtime/StepFaultNone.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import * as StepFaultTest from "./stepFault.test-support.ts";
 
 const brain = "SHA256:test-brain";
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
@@ -39,7 +44,7 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 export const person = Writer.cases.person.make({ key: "SHA256:test-person", for: "test-person" });
 export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "test-agent" });
 
-export const letter = (n: number, input: unknown, by = person) => ({
+export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
     id: Schema.decodeUnknownSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
@@ -80,12 +85,40 @@ const managerLayer = (sql: Sql) =>
     Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer), Effect.orDie),
   ).pipe(Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))));
 
+const errors = { TypeError, RangeError, URIError };
+
+const faultControl = Effect.fnUntraced(function* () {
+  const state = yield* Ref.make(StepFaultTest.controller.init(null, {})[0]);
+  const send = (msg: typeof StepFaultTest.Msg.Type) =>
+    Ref.modify(state, (previous) => {
+      const [next] = applyCell(StepFaultTest.controller, previous, msg);
+      return [[previous, next] as const, next];
+    });
+  return {
+    arm: (name: string, letter: string, classes: ReadonlyArray<typeof StepFaultTest.ErrorClass.Type>) =>
+      send({ type: "arm", name, letter, errors: classes }).pipe(Effect.asVoid),
+    before: Effect.fnUntraced(function* (input: typeof StepFaultTest.Before.Type) {
+      const [previous, next] = yield* send({ type: "before", ...input });
+
+      if (previous._tag === "armed" && next._tag === "armed" && next.attempts.length > previous.attempts.length) {
+        const attempt = next.attempts.at(-1);
+
+        if (attempt !== undefined) {
+          return yield* Effect.die(new errors[attempt.error]("controlled private step failure"));
+        }
+      }
+    }),
+    saved: Ref.get(state),
+  };
+});
+
 /** A fresh folder of real databases. Closing a session closes all its connections before reopen. */
 export const open = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-runner-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
+  const fault = yield* faultControl();
 
   const session = Effect.fnUntraced(function* (
     name: string,
@@ -93,6 +126,7 @@ export const open = Effect.gen(function* () {
     program: unknown,
     handlers: Readonly<Record<string, Handler<never>>>,
     observe: (update: Update) => Effect.Effect<void> = () => Effect.void,
+    before?: (input: typeof StepFaultTest.Before.Type) => Effect.Effect<void>,
   ) {
     const ledger = yield* files("ledger");
     const store = yield* files(`store-${name}`);
@@ -153,6 +187,7 @@ export const open = Effect.gen(function* () {
       }),
       Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
       Layer.succeed(Recording, { flush }),
+      before === undefined ? StepFaultNone.layer : Layer.succeed(StepFault, { before }),
     ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(ledgerLayer(ledger)))));
     const context = yield* Layer.build(
       ProgramRunner.layer(
@@ -227,5 +262,23 @@ export const open = Effect.gen(function* () {
     );
   }, Effect.scoped);
 
-  return { session, snapshot, letters, check, person, agent, letter };
+  const history = (name: string) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const sql = yield* files("manager");
+        return sql
+          .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
+          .map((row) => Schema.decodeUnknownSync(Row)(row));
+      }),
+    );
+  const dead = Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* files("manager");
+      return sql
+        .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
+        .map((row) => Schema.decodeUnknownSync(Row)(row));
+    }),
+  );
+
+  return { session, snapshot, letters, check, person, agent, letter, fault, history, dead };
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
