@@ -33,7 +33,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Hello } from "@kampus/libfabrika/transport/Wire";
-import { Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -389,6 +389,24 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
   const clients = ClientManagerLedger.layer(founder).pipe(Layer.provideMerge(ledger));
   // P37's records.test.ts uses 64 KiB, above SQLite's empty table/index overhead.
   const records = RecordManager.sql(part, options.recordCap ?? 64 * 1024);
+  const usedInputs: Array<string> = [];
+  const observedIds = Layer.effect(
+    Id.Generator,
+    Id.Generator.pipe(
+      Effect.map((real) => ({
+        next: <P extends string>(schema: Id.IdSchema<P>) =>
+          real.next(schema).pipe(
+            Effect.tap((id) =>
+              Effect.sync(() => {
+                if (schema === Id.Input) {
+                  usedInputs.push(id);
+                }
+              }),
+            ),
+          ),
+      })),
+    ),
+  ).pipe(Layer.provide(Id.Generator.layer));
   const env = Layer.mergeAll(
     clients,
     LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet)),
@@ -397,7 +415,7 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     records,
     Archive.memory,
     ProcessIdGenerator.layer,
-    Id.Generator.layer,
+    observedIds,
   );
   const layer = Gateway.layer(settings).pipe(Layer.provideMerge(env));
   const reopen = (storage: ReturnType<typeof nodeSql>) => {
@@ -437,6 +455,8 @@ const world = Effect.fnUntraced(function* (options: { recordCap?: number; inputC
     layer,
     provide: Effect.provide(layer),
     reopen,
+    usedInputs,
+    databases: () => new Map([["object", db], ...partFiles]),
     partCount: () => partFiles.size,
     bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
   };
@@ -473,6 +493,49 @@ const request = (letter: string, m: unknown = comment()) => ({
   sentAt: SENT,
   seen: 0,
 });
+
+const HOUR = 3_600_000;
+const REFUSED_HOUR = 1_790_002_800_000;
+
+const SpoofedWrite = Schema.Struct({
+  method: Schema.Union([Schema.Literal("process.send"), Schema.String]),
+  key: Schema.Literals(["id", "by", "for", "arrivedAt"]),
+  inner: Schema.Boolean,
+  value: Schema.Union([Schema.Json, Schema.Undefined]),
+  marker: Schema.String,
+});
+
+const GoodWrite = Schema.Struct({ letter: Schema.NonEmptyString, id: Schema.String, text: Schema.String });
+
+const WriteMix = Schema.Array(
+  Schema.Struct({
+    spoof: Schema.Boolean,
+    hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+    write: SpoofedWrite,
+    text: Schema.String,
+  }),
+).check(Schema.isMinLength(1), Schema.isMaxLength(30));
+
+const spoofedParams = (write: typeof SpoofedWrite.Type, letter: string) => {
+  const marker = `t844-forged:${write.marker}`;
+  const m = {
+    ...comment(marker),
+    ...(write.inner && write.method === "process.send" ? { [write.key]: write.value } : {}),
+  };
+  return {
+    ...request(letter, m),
+    marker,
+    ...(!write.inner || write.method !== "process.send" ? { [write.key]: write.value } : {}),
+  };
+};
+
+const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, unknown>>> =>
+  Object.fromEntries(
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all()
+      .map(({ name }) => [String(name), db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`).all()]),
+  );
 
 const online = Effect.fnUntraced(function* (
   d: typeof Gateway.Service,
@@ -2307,43 +2370,151 @@ describe("P10 inputs, retries and signer", () => {
     }),
   );
 
-  for (const field of ["id", "by", "for", "arrivedAt"] as const) {
-    for (const location of ["outer", "wrapper"] as const) {
-      it.effect.prop(
-        `p67 spoof: ${location} ${field} is refused before decoding, with the real sender recorded`,
-        { generated: Schema.String },
-        ({ generated }) =>
-          Effect.forEach(
-            ["forged-writer-marker", generated],
-            (value) =>
-              Effect.gen(function* () {
-                const marker = value === "forged-writer-marker" ? value : `forged-writer-marker:${value}`;
-                const w = yield* world();
-                yield* Effect.gen(function* () {
-                  const d = yield* Gateway;
-                  const { client } = yield* online(d, w);
-                  const params =
-                    location === "outer"
-                      ? { ...request("spoof"), [field]: marker }
-                      : request("spoof", { ...comment(), [field]: marker });
-                  expect(yield* d.route(client, "process.send", params)).toMatchObject({
-                    _tag: "refused",
-                    reason: location === "outer" ? "reserved" : "bad_input",
-                  });
-                  expect(w.deliveries).toEqual([]);
-                  const row = (yield* stamped()).at(-1)!;
-                  expect(row._tag).toBe("refused");
-                  expect(row.by).toBe(w.window.fingerprint);
-                  expect(JSON.stringify(row)).not.toContain(marker);
-                  expect(JSON.stringify(row)).not.toContain(JSON.stringify(marker).slice(1, -1));
-                }).pipe(w.provide);
-              }),
-            { concurrency: 1, discard: true },
-          ),
-        { arbitrary: { seed: 119120, runs: 12 } },
-      );
-    }
-  }
+  // 0140 replaces the old assertion of a stored `refused` input event.
+  it.effect.prop(
+    "p67 spoof: stamped writes are refused whole before any input id or stored body",
+    { write: SpoofedWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const before = w.usedInputs.length;
+          const params = spoofedParams(write, "spoof");
+          expect(yield* d.route(client, write.method, params)).toEqual({ _tag: "refused", reason: "reserved" });
+          expect(w.deliveries).toEqual([]);
+          expect(w.usedInputs.length).toBe(before);
+          expect(yield* stamped()).toEqual([]);
+          const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
+          expect(saved).not.toContain(`t844-forged:${write.marker}`);
+          expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+
+  it.effect.prop(
+    "0140 bound: N stamped writes occupy exactly the rows of one and count N",
+    {
+      writes: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 500 }))).pipe(
+        Arbitrary.flatMap((n) => Arbitrary.array(Arbitrary.schema(SpoofedWrite), { minLength: n, maxLength: n })),
+      ),
+    },
+    ({ writes }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 1000);
+          let first: Record<string, number> | undefined;
+
+          for (const [i, write] of writes.entries()) {
+            expect((yield* d.route(client, write.method, spoofedParams(write, `bound-${i}`)))._tag).toBe("refused");
+            const counts = Object.fromEntries(
+              [...w.databases()].flatMap(([name, db]) =>
+                Object.entries(allObjectRows(db)).map(([table, rows]) => [`${name}/${table}`, rows.length]),
+              ),
+            );
+            first ??= counts;
+            expect(counts).toEqual(first);
+          }
+
+          expect(w.deliveries).toEqual([]);
+          expect(w.usedInputs).toEqual([]);
+          yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+          const sink = yield* SpanSink;
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+            { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved", count: writes.length },
+          ]);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "0140 hours: only spoofed writes count, in their closed referee hour",
+    { mix: WriteMix },
+    ({ mix }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const counts = new Map<number, number>();
+
+          for (const [i, write] of mix.entries()) {
+            const hour = REFUSED_HOUR + write.hour * HOUR;
+            yield* TestClock.setTime(hour + 1000);
+            const answer = yield* d.route(
+              client,
+              write.spoof ? write.write.method : "process.send",
+              write.spoof ? spoofedParams(write.write, `mix-${i}`) : request(`mix-${i}`, comment(write.text)),
+            );
+            expect(answer._tag).toBe(write.spoof ? "refused" : "ok");
+
+            if (write.spoof) {
+              counts.set(hour, (counts.get(hour) ?? 0) + 1);
+            }
+          }
+
+          const sink = yield* SpanSink;
+          expect(sink.sums).toBeTypeOf("function");
+          const openHour = REFUSED_HOUR + 3 * HOUR;
+          yield* TestClock.setTime(openHour + 2000);
+          const expected = [...counts]
+            .sort(([a], [b]) => a - b)
+            .map(([hour, count]) => ({
+              _tag: "sum",
+              piece: "gateway.route",
+              hour,
+              refused: "reserved",
+              count,
+            }));
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(
+            expected.filter((point) => point.hour < openHour),
+          );
+          yield* TestClock.setTime(openHour + HOUR);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(expected);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR + HOUR, REFUSED_HOUR + 2 * HOUR)).toEqual(
+            expected.filter((point) => point.hour === REFUSED_HOUR + HOUR),
+          );
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
+
+  it.effect.prop(
+    "0140 good: nested ids are delivered once with stamps, received entry and saved spans",
+    { write: GoodWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        const w = yield* world();
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          yield* TestClock.setTime(REFUSED_HOUR + 1000);
+          const m = Input.cases.comment.make({ ticket: { id: write.id }, text: write.text });
+          expect((yield* d.route(client, "process.send", request(write.letter, m)))._tag).toBe("ok");
+          expect(w.deliveries).toHaveLength(1);
+          const envelope = w.deliveries[0]!.envelope;
+          expect(Object.keys(envelope).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
+          expect(envelope.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
+          expect(envelope.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
+          expect(envelope.arrivedAt).toBe(REFUSED_HOUR + 1000);
+          expect(envelope.input).toEqual(m);
+          const received = yield* stamped();
+          expect(received).toHaveLength(1);
+          expect(received[0]).toMatchObject({ _tag: "received", id: envelope.id });
+          expect(w.db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='gateway.route'").get()?.n).toBe(1);
+          const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          expect(rows.filter((row) => row.name === "gateway.route")).toHaveLength(1);
+          expect(rows.filter((row) => row.name === "gateway.input")).toHaveLength(1);
+        }).pipe(w.provide);
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
 
   it.effect("p67: logical retries retain parent/trace and have one real mailbox placing", () =>
     Effect.gen(function* () {
