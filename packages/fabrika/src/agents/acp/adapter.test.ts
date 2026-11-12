@@ -160,7 +160,7 @@ describe("a permission request through the adapter (ticket 837)", () => {
       }).pipe(Effect.scoped, Effect.provide(nodeServices)),
     );
 
-  it("L7: a request whose only no is `cancel` fails the turn cannot_refuse, naming the request", async () => {
+  it("scenario: L7 a request whose only no is `cancel` fails the turn cannot_refuse, naming the request", async () => {
     // scenario: only a real fake process over stdio and our client send a Codex-shaped file
     // change ask (`yes`, `cancel`); the prompt word `cancelonly` asks it.
     const { seen, end } = await run("cancelonly");
@@ -175,7 +175,7 @@ describe("a permission request through the adapter (ticket 837)", () => {
     expect(seen.some((r) => r._tag === "ended")).toBe(false);
   }, 20_000);
 
-  it("L8: a request offering `cancel` before `decline` gets `decline`, and the turn ends end_turn", async () => {
+  it("scenario: L8 a request offering `cancel` before `decline` gets `decline`, and the turn ends end_turn", async () => {
     // scenario: the fake process offers `yes`, `cancel`, `decline` in that order, as a Codex
     // command may (prompt word `declinelast`); its `cancel` would end the turn `cancelled`.
     const { seen, end } = await run("declinelast");

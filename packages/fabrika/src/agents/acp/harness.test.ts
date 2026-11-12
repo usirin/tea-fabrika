@@ -1960,7 +1960,7 @@ describe("the Claude row's options", () => {
 
 describe("the ids that end a maker's turn (ticket 837)", () => {
   // L6. A contained run never refuses with one of these (refusal.ts).
-  it("L6: Codex's rows cancel exactly `cancel`, and Claude's nothing", () => {
+  it("pinned: L6 Codex's rows cancel exactly `cancel`, and Claude's nothing", () => {
     const home = fakeHome();
     const folder = join(tmpdir(), "a-scratch-folder");
 
