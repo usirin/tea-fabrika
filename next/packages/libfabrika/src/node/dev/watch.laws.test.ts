@@ -1,0 +1,309 @@
+// P15 slice 1, next/. The watcher: laws L10 and L18 of the approved plan, through the real Rolldown
+// watcher and the real program build on fixture programs in a temp folder. Only the brain is a
+// double here: `install` and `failed` record what the watcher sent and answer as the brain would.
+//
+// Test contract (the plan's shapes): `node/dev/watch.ts`, exported as `@kampus/libfabrika/node/watch`,
+// has `watchPrograms({root, entry, programs, install, failed})`, a scoped Stream of install answers.
+// One Rolldown watcher per selected program, on its entry; on each `END` it runs `buildPrograms` for
+// that program and installs `{id, program, hash, source, from}`, `from: "boot"` first, then
+// `"watch"`. A bundle error is `failed {hash: null, reason: "bundle", path, line}`. Every watcher and
+// every `BUNDLE_END` and `ERROR` result is closed with the scope (0061).
+//
+// L18 counts closes on the real Rolldown objects: `rolldown`'s `watch` is wrapped, never replaced.
+//
+// These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
+// box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
+import { NodeServices } from "@effect/platform-node";
+import { Deferred, Effect, Fiber, FileSystem, Path, Queue, Stream } from "effect";
+import * as fc from "fast-check";
+import { describe, expect, it, vi } from "vitest";
+import { expectTypeOf } from "vitest";
+import type * as Dev from "./dev.ts";
+import { watchPrograms } from "./watch.ts";
+
+const SEED = 119120;
+const ROOT = new URL("../../../../../../", import.meta.url).pathname;
+
+/** Every real Rolldown watcher and result the laws saw, and which were closed. */
+const opened = vi.hoisted(() => ({
+  watchers: [] as Array<{ closed: boolean }>,
+  results: [] as Array<{ code: string; closed: boolean }>,
+}));
+
+vi.mock("rolldown", async (original) => {
+  const actual = await original<typeof import("rolldown")>();
+  return {
+    ...actual,
+    watch: (...args: Parameters<typeof actual.watch>) => {
+      const watcher = actual.watch(...args);
+      const seen = { closed: false };
+      opened.watchers.push(seen);
+      const close = watcher.close.bind(watcher);
+      watcher.close = () => {
+        seen.closed = true;
+        return close();
+      };
+      const on = watcher.on.bind(watcher);
+      watcher.on = ((name: "event", listener: (event: import("rolldown").RolldownWatcherEvent) => void) =>
+        on(name, (event) => {
+          if ((event.code === "BUNDLE_END" || event.code === "ERROR") && event.result !== undefined) {
+            const result = { code: event.code, closed: false };
+            opened.results.push(result);
+            const done = event.result.close.bind(event.result);
+            event.result.close = () => {
+              result.closed = true;
+              return done();
+            };
+          }
+
+          return listener(event);
+        })) as typeof watcher.on;
+      return watcher;
+    },
+  };
+});
+
+type Options = Parameters<typeof watchPrograms>[0];
+type Install = Parameters<Options["install"]>[0];
+type Failed = Parameters<Options["failed"]>[0];
+
+// 0135: the install restated here is the watcher's own parameter.
+type InstallShape = {
+  readonly id: string;
+  readonly program: string;
+  readonly hash: string;
+  readonly source: string;
+  readonly from: "watch" | "deploy" | "boot" | "restart";
+};
+
+expectTypeOf<Install>().toEqualTypeOf<InstallShape>();
+// L20 (type): the install answer is a closed union a caller must match whole.
+expectTypeOf<(typeof Dev.Installed.Type)["_tag"]>().toEqualTypeOf<"same" | "failed" | "loaded">();
+// The handle `startDev` answers installs over its control socket in the watcher's own shape.
+expectTypeOf<Effect.Success<ReturnType<typeof Dev.startDev>>["install"]>().toEqualTypeOf<Options["install"]>();
+
+/** Two fixture programs and a module both import, in a fresh folder given back with its scope. */
+const fixture = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "p15w." });
+  yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
+  yield* fs.makeDirectory(path.join(home, "node_modules/@p15"), { recursive: true });
+
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+    yield* fs.symlink(path.join(ROOT, "next/apps/fabrika/node_modules", name), path.join(home, "node_modules", name));
+  }
+
+  yield* fs.makeDirectory(path.join(home, "shared"), { recursive: true });
+  yield* fs.writeFileString(path.join(home, "shared/shared.ts"), "export const shared = 0;\n");
+  // A module nothing imports: a save there reaches no program.
+  yield* fs.writeFileString(path.join(home, "shared/unused.ts"), "export const unused = 0;\n");
+  yield* fs.writeFileString(path.join(home, "brain.ts"), "export {};\n");
+
+  for (const short of ["one", "two"]) {
+    const pkg = path.join(home, "programs", short);
+    yield* fs.makeDirectory(pkg, { recursive: true });
+    yield* fs.symlink(pkg, path.join(home, "node_modules/@p15", short));
+    yield* fs.writeFileString(
+      path.join(pkg, "package.json"),
+      JSON.stringify({ name: `@p15/${short}`, type: "module", exports: { ".": "./program.ts" } }),
+    );
+    yield* fs.writeFileString(path.join(pkg, "own.ts"), "export const own = 0;\n");
+    yield* fs.writeFileString(
+      path.join(pkg, "program.ts"),
+      `import {counter} from "@kampus/counter"; import {shared} from "../../shared/shared.ts"; import {own} from "./own.ts";\n` +
+        `globalThis.__p15 = [shared, own]; export const program = {...counter, name: "p15/${short}"};\n`,
+    );
+  }
+
+  /** Which files each program's bundle reaches, by the fixture's own import lines. */
+  const reaches: Readonly<Record<string, ReadonlyArray<string>>> = {
+    "programs/one/own.ts": ["p15/one"],
+    "programs/two/own.ts": ["p15/two"],
+    "shared/shared.ts": ["p15/one", "p15/two"],
+    "shared/unused.ts": [],
+  };
+  return {
+    home,
+    reaches,
+    programs: ["one", "two"].map((short) => ({ name: `p15/${short}`, package: `@p15/${short}`, export: "program" })),
+  };
+});
+
+/** The brain as the watcher sees it: it answers `same` for a hash a program already runs. */
+const brain = Effect.gen(function* () {
+  const installs = yield* Queue.unbounded<Install>();
+  const failures = yield* Queue.unbounded<Failed>();
+  const running = new Map<string, string>();
+  return {
+    installs,
+    failures,
+    install: (code: Install) =>
+      Effect.gen(function* () {
+        yield* Queue.offer(installs, code);
+        const same = running.get(code.program) === code.hash;
+        running.set(code.program, code.hash);
+        return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
+      }),
+    failed: (fact: Failed) => Queue.offer(failures, fact).pipe(Effect.asVoid),
+  };
+});
+
+/** Every install that arrives within `ms` of the last one. */
+const drain = (queue: Queue.Queue<Install>, ms: number) =>
+  Effect.gen(function* () {
+    const got: Array<Install> = [];
+
+    while (true) {
+      const next = yield* Queue.take(queue).pipe(Effect.timeoutOption(ms));
+
+      if (next._tag === "None") {
+        return got;
+      }
+
+      got.push(next.value);
+    }
+  });
+
+describe("P15 slice 1: the watcher", () => {
+  // L10, p77. Plant: hash the entry file only; push the swap to every process.
+  it("L10: a save changes the hash of exactly the programs whose bundle reaches the file, and only they install", async () => {
+    const seen = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.gen(), (g) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem;
+              const path = yield* Path.Path;
+              const { home, reaches, programs } = yield* fixture;
+              const b = yield* brain;
+              const stream = watchPrograms({
+                root: home,
+                entry: path.join(home, "brain.ts"),
+                programs,
+                install: b.install,
+                failed: b.failed,
+              });
+              yield* Effect.forkScoped(Stream.runDrain(stream));
+              // The start: every program installs once, from the boot.
+              const first = yield* drain(b.installs, 3000);
+              expect(first.map((i) => [i.program, i.from]).toSorted()).toEqual(
+                programs.map((p) => [p.name, "boot"]).toSorted(),
+              );
+              const hashes = new Map(first.map((i) => [i.program, i.hash]));
+              const values = new Map<string, number>();
+              const edits = g(fc.integer, { min: 1, max: 4 });
+
+              for (let n = 0; n < edits; n++) {
+                // A file from the current set, and an edit: a new value, so the bytes change.
+                const files = Object.keys(reaches);
+                const file = files[g(fc.nat, { max: files.length - 1 })]!;
+                const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
+                values.set(file, value);
+                const name = file.endsWith("shared.ts") ? "shared" : file.endsWith("unused.ts") ? "unused" : "own";
+                yield* fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`);
+                const got = yield* drain(b.installs, 3000);
+                const changed = got.filter((i) => i.hash !== hashes.get(i.program)).map((i) => i.program);
+                expect(new Set(changed), `a save to ${file}`).toEqual(new Set(reaches[file]));
+                expect(got.every((i) => i.from === "watch")).toBe(true);
+                expect(new Set(got.map((i) => i.program)), "only the programs that reach it install").toEqual(
+                  new Set(reaches[file]),
+                );
+
+                for (const i of got) {
+                  hashes.set(i.program, i.hash);
+                }
+
+                seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
+              }
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        ),
+      ),
+      { seed: SEED, numRuns: 20, endOnFailure: true },
+    );
+
+    for (const kind of ["shared", "own", "outside"]) {
+      expect(seen.has(kind), `the walk reaches a save to a ${kind} file`).toBe(true);
+    }
+  }, 600_000);
+
+  // L18. Plant: never close a BUNDLE_END result; close the watcher outside the scope.
+  it("L18: every Rolldown watcher and every BUNDLE_END and ERROR result is closed when the scope closes, after success, a failure or an interruption at any point the run reached", async () => {
+    const seen = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.gen(), (g) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            opened.watchers.length = 0;
+            opened.results.length = 0;
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            // The point the run is cut at: after this many installs or failures, picked from what it reached.
+            const cut = g(fc.integer, { min: 0, max: 4 });
+            const broken = g(fc.boolean);
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const { home, programs } = yield* fixture;
+                const b = yield* brain;
+                const reached = yield* Deferred.make<void>();
+                let events = 0;
+                const count = <A, E>(work: Effect.Effect<A, E>) =>
+                  Effect.tap(work, () => (++events >= cut ? Deferred.succeed(reached, undefined) : Effect.void));
+                const run = yield* Effect.forkScoped(
+                  Stream.runDrain(
+                    watchPrograms({
+                      root: home,
+                      entry: path.join(home, "brain.ts"),
+                      programs,
+                      install: (code) => count(b.install(code)),
+                      failed: (fact) => count(b.failed(fact)),
+                    }),
+                  ),
+                );
+
+                if (cut === 0) {
+                  // Cut as it acquires its watchers.
+                  yield* Effect.yieldNow;
+                  seen.add("acquire");
+                } else {
+                  yield* drain(b.installs, 3000);
+
+                  if (broken) {
+                    // A save that does not parse: Rolldown answers ERROR, with a result to close.
+                    yield* fs.writeFileString(path.join(home, "shared/shared.ts"), "export const shared = ;\n");
+                    yield* Queue.take(b.failures).pipe(Effect.timeoutOption(3000));
+                    seen.add("error");
+                  } else {
+                    yield* fs.writeFileString(path.join(home, "shared/shared.ts"), `export const shared = ${cut};\n`);
+                  }
+
+                  yield* Deferred.await(reached).pipe(Effect.timeoutOption(3000));
+                  seen.add("reached");
+                }
+
+                yield* Fiber.interrupt(run);
+              }),
+            );
+            // The scope is closed: everything Rolldown opened for the run is closed.
+            expect(opened.watchers.length, "the run opened a watcher per program").toBeGreaterThan(0);
+            expect(
+              opened.watchers.filter((w) => !w.closed),
+              "watchers left open",
+            ).toEqual([]);
+            expect(
+              opened.results.filter((r) => !r.closed),
+              "results left open",
+            ).toEqual([]);
+          }).pipe(Effect.provide(NodeServices.layer)),
+        ),
+      ),
+      { seed: SEED, numRuns: 20, endOnFailure: true },
+    );
+
+    for (const point of ["acquire", "reached", "error"]) {
+      expect(seen.has(point), `the walk reaches ${point}`).toBe(true);
+    }
+  }, 600_000);
+});

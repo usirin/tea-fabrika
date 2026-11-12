@@ -47,6 +47,7 @@
     "./node/build": "./src/node/build/bundle.ts",
     "./node/local-dev": "./src/node/dev/local-dev.ts",
     "./node/dev": "./src/node/dev/dev.ts",
+    "./node/watch": "./src/node/dev/watch.ts",
     "./node/dev-recording": "./src/node/dev/dev-recording.ts",
     "./brain-life": "./src/runtime/BrainLife.ts",
     "./brain-event": "./src/runtime/BrainEvent.ts",
