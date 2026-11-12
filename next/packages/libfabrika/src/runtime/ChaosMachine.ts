@@ -10,7 +10,8 @@ import * as ChaosSchedule from "./ChaosSchedule.ts";
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
 const Positive = Count.check(Schema.isGreaterThanOrEqualTo(1));
 const Errors = ["NemesisError", "handler_failed", "bad_cmd"] as const;
-const Error = Schema.Union(Errors.map((tag) => Schema.TaggedStruct(tag, {})));
+const SettledErrors = [...Errors, "malformed_result"] as const;
+const Error = Schema.Union(SettledErrors.map((tag) => Schema.TaggedStruct(tag, {})));
 const Request = Schema.Struct({ id: Chaos.ExperimentId });
 const Inspect = Schema.Struct({ ...Request.fields, target: Chaos.Target });
 
@@ -44,7 +45,7 @@ const Asked = Schema.Struct({ ordinal: Positive, fault: Chaos.Fault, deadline: C
 const Did = Schema.Struct({
   ordinal: Positive,
   at: Count,
-  result: Schema.TaggedUnion({ answered: { value: Chaos.Fired }, failed: { reason: Schema.Literals(Errors) } }),
+  result: Schema.TaggedUnion({ answered: { value: Chaos.Fired }, failed: { reason: Schema.Literals(SettledErrors) } }),
 });
 
 const Experiment = Schema.Struct({
