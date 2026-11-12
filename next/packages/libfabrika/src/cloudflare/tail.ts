@@ -4,13 +4,10 @@
  * @stability unstable
  */
 import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { errorClass } from "../telemetry/Trace.ts";
+import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
 import type { Env } from "./runtime.ts";
 
 /**
@@ -34,42 +31,22 @@ export const bind = (ctx: DurableObjectState, props: typeof Props.Type): Fetcher
 };
 
 /**
- * Sends one batch to its name's object. A failed delivery records only the error class and is dropped.
+ * Sends one batch to its name's object. A failed delivery logs only the error class and is dropped.
  *
  * @stability unstable
  * @category combinators
  */
-export const tail = Effect.fnUntraced(function* (env: Env, props: typeof Props.Type, items: ReadonlyArray<TraceItem>) {
+export const tail = Effect.fnUntraced(function* (
+  env: Env,
+  props: typeof Props.Type,
+  items: Parameters<typeof isolateUsage>[1],
+) {
   const work = Effect.gen(function* () {
-    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(
-      items.map((item) => {
-        const event = item.event;
-        const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;
-        const outcome = item.outcome;
-        return {
-          process: props.process,
-          method: Schema.is(IsolateUsage.Method)(method) ? method : "other",
-          cpuMs: item.cpuTime,
-          wallMs: item.wallTime,
-          outcome: Schema.is(IsolateUsage.Outcome)(outcome) ? outcome : "other",
-        };
-      }),
-    );
+    const rows = yield* isolateUsage(props.process, items);
     const stub = env.PROCESS.getByName(JSON.stringify([props.project, props.name]));
-    // oxlint-disable-next-line fabrika/no-promises -- edge: the platform's tail delivers its batch over Durable Object RPC
-    yield* Effect.tryPromise({ try: () => stub.usage(rows), catch: (cause) => cause });
+    yield* ProcessClient.make(stub).usage(rows);
   });
-  yield* work.pipe(
-    Effect.catchCause((cause) =>
-      Effect.gen(function* () {
-        const kind = errorClass(Cause.squash(cause));
-        const span = yield* Effect.makeSpan("isolate.tail", {
-          attributes: { "fab.process": props.process, "error.type": kind },
-        });
-        span.end(yield* Clock.currentTimeNanos, Exit.fail(kind));
-      }),
-    ),
-  );
+  yield* work.pipe(Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))));
 });
 
 /**

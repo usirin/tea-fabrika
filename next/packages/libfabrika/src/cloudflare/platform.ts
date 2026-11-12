@@ -1,7 +1,31 @@
-import { Context, Effect } from "effect";
+import { Context, Effect, Predicate, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
 import type { RecordShape } from "./objects.ts";
+
+/**
+ * Reads only call metadata, including workerd's prototype getters.
+ *
+ * @stability unstable
+ * @category combinators
+ */
+export const isolateUsage = Effect.fnUntraced(function* (process: string, items: ReadonlyArray<TraceItem>) {
+  return yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(
+    items.map((item) => {
+      const event = item.event;
+      const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;
+      const outcome = item.outcome;
+      return {
+        process,
+        method: Schema.is(IsolateUsage.Method)(method) ? method : "other",
+        cpuMs: item.cpuTime,
+        wallMs: item.wallTime,
+        outcome: Schema.is(IsolateUsage.Outcome)(outcome) ? outcome : "other",
+      };
+    }),
+  );
+});
 
 type Client<S> = {
   readonly [K in keyof S]: S[K] extends (...args: infer A) => infer B
@@ -151,6 +175,9 @@ export class ProcessClient extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     return {
+      usage: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Process usage RPC enters Effect
+        Effect.tryPromise({ try: () => stub.usage(...args), catch: unreachable }),
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),

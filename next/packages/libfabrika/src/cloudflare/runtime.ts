@@ -855,11 +855,10 @@ const processLogic = Effect.fnUntraced(function* (
   const attributed = <A, E>(work: Effect.Effect<A, E>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
-    usage: (rows: unknown) =>
-      Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows).pipe(
-        Effect.flatMap(IsolateUsage.record),
-        Effect.provideContext(services),
-      ),
+    usage: Effect.fn("process.usage")(function* (rows: unknown) {
+      const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
+      yield* IsolateUsage.record(usage);
+    }, Effect.provideContext(services)),
     msg: (input: unknown) => {
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.

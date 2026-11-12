@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { ProcessId } from "../ProcessId.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 
 const Millis = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0), Schema.isFinite());
@@ -44,7 +45,7 @@ export const Outcome = Schema.Literals(["ok", "exception", "exceededCpu", "excee
  * @category schemas
  */
 export const Usage = Schema.Struct({
-  process: Schema.String,
+  process: ProcessId,
   method: Method,
   cpuMs: Millis,
   wallMs: Millis,
