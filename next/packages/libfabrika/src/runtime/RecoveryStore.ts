@@ -43,17 +43,17 @@ const bytes = (text: string) => new TextEncoder().encode(text).length;
 /** One name's saved journal in `sql`, checked whole against its caller's schema on every load and save. */
 export const recoveryStore = <S extends Kept>(
   sql: Sql,
-  who: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },
+  options: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },
 ): Store<S> => {
   // The journal row keeps its receipts apart, so it is checked whole only once they are merged back.
-  const Row = Schema.fromJsonString(Schema.Struct(who.schema.fields));
+  const Row = Schema.fromJsonString(Schema.Struct(options.schema.fields));
   const decodeRow = Schema.decodeUnknownSync(Row);
   const decode = (text: unknown) => {
     const row = decodeRow(text);
     return { ...row, ...kept(row) };
   };
   const encode = Schema.encodeUnknownSync(Row);
-  const check = Schema.decodeUnknownSync(who.schema);
+  const check = Schema.decodeUnknownSync(options.schema);
   const stored = <A>(f: () => A) =>
     Effect.try({
       try: () => {
@@ -69,7 +69,7 @@ export const recoveryStore = <S extends Kept>(
           : new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
     });
   const snapshot = () => {
-    const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name);
+    const [row] = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name);
 
     if (row === undefined) {
       return null;
@@ -77,7 +77,7 @@ export const recoveryStore = <S extends Kept>(
 
     const saved = decode(row.value);
 
-    if (saved.name !== who.name) {
+    if (saved.name !== options.name) {
       throw new LedgerError({ reason: "bad_row" });
     }
 
@@ -92,7 +92,10 @@ export const recoveryStore = <S extends Kept>(
 
     const receipts = new Map(saved.receipts.map((r) => [r.letter, r]));
 
-    for (const row of sql.exec("SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid", who.name)) {
+    for (const row of sql.exec(
+      "SELECT letter, value FROM process_receipts WHERE name=? ORDER BY rowid",
+      options.name,
+    )) {
       const receipt = receiptFor(row.value, row.letter);
       receipts.set(receipt.letter, receipt);
     }
@@ -101,7 +104,7 @@ export const recoveryStore = <S extends Kept>(
   });
   const receipt = Effect.fn("recovery.receipt")(function* (letter: string) {
     return yield* stored(() => {
-      const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", who.name, letter);
+      const [row] = sql.exec("SELECT value FROM process_receipts WHERE name=? AND letter=?", options.name, letter);
 
       // Read old single-row snapshots until their next atomic save splits the receipts.
       if (row === undefined) {
@@ -115,13 +118,13 @@ export const recoveryStore = <S extends Kept>(
     stored(() => {
       const saved = check(value);
 
-      if (saved.name !== who.name) {
+      if (saved.name !== options.name) {
         throw new LedgerError({ reason: "bad_row" });
       }
 
       const text = encode({ ...saved, receipts: [] });
       sql.transaction(() => {
-        const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", who.name)[0];
+        const old = sql.exec("SELECT value FROM process_recovery WHERE name=?", options.name)[0];
         let growth = bytes(text) - (typeof old?.value === "string" ? bytes(old.value) : 0);
         const changed: Array<{ letter: string; text: string }> = [];
         // Omitted receipts are retained, including during migration from the old snapshot.
@@ -135,7 +138,7 @@ export const recoveryStore = <S extends Kept>(
           const next = encodeReceipt(receipt);
           const [prior] = sql.exec(
             "SELECT value FROM process_receipts WHERE name=? AND letter=?",
-            who.name,
+            options.name,
             receipt.letter,
           );
 
@@ -146,20 +149,20 @@ export const recoveryStore = <S extends Kept>(
           growth += bytes(next) - (typeof prior?.value === "string" ? bytes(prior.value) : 0);
 
           if (prior === undefined) {
-            growth += bytes(who.name) + bytes(receipt.letter);
+            growth += bytes(options.name) + bytes(receipt.letter);
           }
 
           changed.push({ letter: receipt.letter, text: next });
         }
 
-        if (sql.size() + growth > who.capacity) {
+        if (sql.size() + growth > options.capacity) {
           throw new LedgerError({ reason: "storage" });
         }
 
         for (const receipt of changed) {
           sql.exec(
             "INSERT INTO process_receipts (name,letter,value) VALUES (?,?,?) ON CONFLICT(name,letter) DO UPDATE SET value=excluded.value",
-            who.name,
+            options.name,
             receipt.letter,
             receipt.text,
           );
@@ -168,7 +171,7 @@ export const recoveryStore = <S extends Kept>(
         if (old?.value !== text) {
           sql.exec(
             "INSERT INTO process_recovery (name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
-            who.name,
+            options.name,
             text,
           );
         }
@@ -189,6 +192,6 @@ export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()
 ) {
   static readonly layer = <S extends Kept>(
     sql: Sql,
-    who: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },
-  ): Layer.Layer<RecoveryStore> => Layer.succeed(RecoveryStore, recoveryStore(sql, who));
+    options: { readonly name: string; readonly capacity: number; readonly schema: Journal<S> },
+  ): Layer.Layer<RecoveryStore> => Layer.succeed(RecoveryStore, recoveryStore(sql, options));
 }

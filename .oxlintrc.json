@@ -631,7 +631,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
         "fabrika/no-stage-word": "error",
@@ -696,7 +699,10 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
         "fabrika/no-stage-word": "error",
@@ -752,11 +758,17 @@
       // and those stay review work. A conversation room, which 0091 keeps, takes a local
       // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`).
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
+      // override replaces a rule's whole list, so this one repeats the five question words (0081).
       "files": ["next/**/*"],
       "rules": {
         "eslint/id-denylist": [
           "error",
+          "where",
+          "why",
+          "what",
+          "who",
+          "how",
           "room",
           "rooms",
           "Room",
@@ -793,7 +805,7 @@
     },
     {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-      // `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
+      // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {

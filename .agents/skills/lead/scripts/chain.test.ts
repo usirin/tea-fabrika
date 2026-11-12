@@ -188,8 +188,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
       review: "open",
     };
     fc.assert(
-      fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, why) => {
-        const m = moveOf(s, line(o, "h", why), 0, 3);
+      fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, reason) => {
+        const m = moveOf(s, line(o, "h", reason), 0, 3);
         expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 
         if (m._tag === "step") {
@@ -203,21 +203,21 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("property: a send goes to the lane step it names with the sender's word; a send to plan or mutation parks", () => {
     fc.assert(
-      fc.property(step, laneStep, word, (from, to, why) => {
+      fc.property(step, laneStep, word, (from, to, reason) => {
         fc.pre(from !== to);
-        const m = moveOf(from, line(`send:${to}:step_said`, "h", why), 0, 3);
+        const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
 
         if (m._tag === "step") {
-          expect(m.note).toContain(why);
+          expect(m.note).toContain(reason);
         }
 
-        expect(moveOf(from, line("send:plan:plancheck", "h", why), 0, 3)._tag).toBe("park");
-        const toMutation = moveOf(from, line("send:mutation:step_said", "h", why), 0, 3);
+        expect(moveOf(from, line("send:plan:plancheck", "h", reason), 0, 3)._tag).toBe("park");
+        const toMutation = moveOf(from, line("send:mutation:step_said", "h", reason), 0, 3);
         expect(toMutation._tag).toBe("park");
 
         if (toMutation._tag === "park") {
-          expect(toMutation.reason).toContain(why);
+          expect(toMutation.reason).toContain(reason);
         }
       }),
       options,
@@ -228,8 +228,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   // `to === step` check in moveOf, and every case here runs the same step again.
   it("property: a send to the step that sent it is never another round of that step: it goes to judgment", () => {
     fc.assert(
-      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, why) => {
-        const m = moveOf(s, line(`send:${s}:step_said`, "h", why), stucks, 3);
+      fc.property(laneStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
+        const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
         expect(m).toEqual({ _tag: "judge" });
       }),
       options,
@@ -238,10 +238,10 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("a question goes to judgment, a lockfile ask parks with drive's own words", () => {
     fc.assert(
-      fc.property(step, word, (s, why) => {
-        expect(moveOf(s, line("ask:lead:question", "h", why), 0, 3)._tag).toBe("judge");
-        const m = moveOf(s, line("ask:lead:lockfile", "h", why), 0, 3);
-        expect(m).toEqual({ _tag: "park", reason: why });
+      fc.property(step, word, (s, reason) => {
+        expect(moveOf(s, line("ask:lead:question", "h", reason), 0, 3)._tag).toBe("judge");
+        const m = moveOf(s, line("ask:lead:lockfile", "h", reason), 0, 3);
+        expect(m).toEqual({ _tag: "park", reason });
       }),
       options,
     );
@@ -264,15 +264,15 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("the slot schedule is spaced by the wait, and running out is a typed RetriesExhausted", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, why) => {
+      fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, reason) => {
         expect(slotSchedule(minutes)).toBeDefined();
         const e = new RetriesExhausted({
           schedule: `slotSchedule(${minutes} minutes)`,
           times: 7,
-          reason: why,
+          reason,
         });
         expect(e._tag).toBe("RetriesExhausted");
-        expect(e.reason).toBe(why);
+        expect(e.reason).toBe(reason);
       }),
       options,
     );
@@ -280,8 +280,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
 
   it("a stuck goes to judgment until MaxStucks in a row on one step, then parks", () => {
     fc.assert(
-      fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, why) => {
-        const m = moveOf(s, line(`stuck:${why.replaceAll(" ", "_")}`, "h", why), stucks, max);
+      fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, reason) => {
+        const m = moveOf(s, line(`stuck:${reason.replaceAll(" ", "_")}`, "h", reason), stucks, max);
         expect(m._tag).toBe(stucks >= max ? "park" : "judge");
       }),
       options,
@@ -617,10 +617,10 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a send back reruns the named step with the sender's word in its note", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, why) => {
+      fc.property(laneStep, word, (to, reason) => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("done", "a".repeat(40)));
-        [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), why));
+        [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), reason));
 
         // The build is the sender here: a send to itself goes to judgment, never another round.
         if (to === "build") {
@@ -634,7 +634,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
         expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: to === "review" ? 4 : 3 });
 
         if (cmds[0]?.type === "step_run") {
-          expect(cmds[0].note).toContain(why);
+          expect(cmds[0].note).toContain(reason);
         }
       }),
       options,
@@ -643,25 +643,25 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a stuck asks for judgment; the judgment's send reruns that step, its park ends as ask (exit 20)", () => {
     fc.assert(
-      fc.property(laneStep, word, (to, why) => {
+      fc.property(laneStep, word, (to, reason) => {
         let [m, cmds] = start();
-        [m, cmds] = ran(m, line("stuck:timeout", "", why));
+        [m, cmds] = ran(m, line("stuck:timeout", "", reason));
         expect(m.phase).toBe("judging");
         expect(cmds[0]).toMatchObject({ type: "judge", step: "tests" });
         const [sent, after] = hostSkipped(
           machine,
           machine.update.judge_ok(m, {
             type: "judge_ok",
-            value: { text: `answer: send ${to} ${why}` },
+            value: { text: `answer: send ${to} ${reason}` },
           } as never),
         );
         expect(sent).toMatchObject({ phase: "stepping", step: to });
         expect(after[0]).toMatchObject({ type: "step_run", step: to });
         const [parked] = machine.update.judge_ok(m, {
           type: "judge_ok",
-          value: { text: `answer: park ${why}` },
+          value: { text: `answer: park ${reason}` },
         } as never);
-        expect(parked).toMatchObject({ phase: "over", end: { kind: "ask", reason: why } });
+        expect(parked).toMatchObject({ phase: "over", end: { kind: "ask", reason } });
 
         if (parked.phase === "over") {
           expect(exitOf(parked.end)).toBe(20);
@@ -673,7 +673,7 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
 
   it("a RetriesExhausted on the step's err channel ends the lane as stuck (exit 30), naming the schedule", () => {
     fc.assert(
-      fc.property(word, fc.integer({ min: 1, max: 9 }), (why, times) => {
+      fc.property(word, fc.integer({ min: 1, max: 9 }), (reason, times) => {
         const [m] = start();
         const [over] = machine.update.step_run_err(m, {
           type: "step_run_err",
@@ -681,14 +681,14 @@ describe("T341 the lane machine, stepped by hand, today's tooling", () => {
             _tag: "RetriesExhausted",
             schedule: "slotSchedule(5 minutes)",
             times,
-            reason: why,
+            reason,
           },
         } as never);
         expect(over).toMatchObject({ phase: "over", end: { kind: "stuck" } });
 
         if (over.phase === "over") {
           expect(over.end.reason).toContain("slotSchedule(5 minutes)");
-          expect(over.end.reason).toContain(why);
+          expect(over.end.reason).toContain(reason);
           expect(exitOf(over.end)).toBe(30);
           // Nothing moved: the lane's head is where it was.
           expect(over.lane.head).toBe("");
@@ -880,14 +880,14 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
 
   it("property: green goes on to loosening.sh; no answer goes on too, and the lane keeps why", () => {
     fc.assert(
-      fc.property(sha, pr, word, (head, n, why) => {
+      fc.property(sha, pr, word, (head, n, reason) => {
         const [m] = reviewed(head, 0, machine, n);
         const loosens = [expect.objectContaining({ type: "loosen", pr: n, head })];
         const [green, next] = answered(m, { _tag: "green" });
         expect(green).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: null } });
         expect(next).toEqual(loosens);
-        const [skipped, also] = answered(m, { _tag: "skipped", reason: why });
-        expect(skipped).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: why } });
+        const [skipped, also] = answered(m, { _tag: "skipped", reason });
+        expect(skipped).toMatchObject({ phase: "loosening", pr: n, lane: { unchecked: reason } });
         expect(also).toEqual(loosens);
         const [threw, again] = machine.update.typecheck_read_err(m, {
           type: "typecheck_read_err",
@@ -1111,11 +1111,11 @@ describe("T341 the pull request's steps table, today's tooling", () => {
 describe("T341 the chain record is a Schema value, today's tooling", () => {
   it("a step's record round-trips through encode and decode, before and after the step", () => {
     fc.assert(
-      fc.property(step, fc.nat({ max: 20 }), outcome, sha, word, (s, round, o, head, why) => {
+      fc.property(step, fc.nat({ max: 20 }), outcome, sha, word, (s, round, o, head, reason) => {
         const started = {
           round,
           step: s,
-          note: why,
+          note: reason,
           startedAt: "t",
           endedAt: null,
           line: null,
@@ -1129,8 +1129,8 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
             {
               ...started,
               endedAt: "u",
-              line: line(o, head, why),
-              judged: { box: "b", answer: why },
+              line: line(o, head, reason),
+              judged: { box: "b", answer: reason },
             },
           ],
         };

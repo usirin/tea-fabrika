@@ -275,7 +275,7 @@ const after: Record<StepName, LaneStep | null> = {
  * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
 export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
-  const [verb, to = "", why = ""] = line.outcome.split(":");
+  const [verb, to = "", reason = ""] = line.outcome.split(":");
 
   switch (verb) {
     case "done":
@@ -294,7 +294,7 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
       // plan is the lead's to approve; mutation is no lane step since 0066, so neither runs here.
       return toPark(`${step} sent the lane to ${to}, which is not a lane step: ${line.reason}`);
     case "ask":
-      if (why === "lockfile") {
+      if (reason === "lockfile") {
         return toPark(line.reason);
       }
 
@@ -1590,10 +1590,10 @@ const handlers = (s: Setup) => {
           errFile,
         });
         // catchup.sh says why it stopped on stderr; its last stdout line is only its last push.
-        const why = existsSync(errFile)
+        const reason = existsSync(errFile)
           ? (readFileSync(errFile).subarray(size).toString("utf8").trim().split("\n").at(-1) ?? "")
           : "";
-        const last = (ran.code === 0 ? "" : why) || (ran.out.trim().split("\n").at(-1) ?? "");
+        const last = (ran.code === 0 ? "" : reason) || (ran.out.trim().split("\n").at(-1) ?? "");
         note(`catchup.sh exited ${ran.code}: ${last}`);
         writeRecord({ ...readRecord(), landed: ran.code === 0 ? new Date().toISOString() : null });
         return { ok: ran.code === 0, detail: last || `exit ${ran.code}; see ${errFile}` };

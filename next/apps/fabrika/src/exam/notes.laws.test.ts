@@ -30,7 +30,7 @@ const Save = Arbitrary.all({
   clock: Arbitrary.schema(int(0, 281474976710655)),
   arrivedAt: Arbitrary.schema(int(0, 281474976710655)),
   rev: Arbitrary.schema(int(0, 4096)),
-  how: Arbitrary.schema(Schema.Literals(["pause", "leave", "done", "kept", "agent"])),
+  reason: Arbitrary.schema(Schema.Literals(["pause", "leave", "done", "kept", "agent"])),
   from: Arbitrary.schema(Schema.UndefinedOr(Schema.Struct({ note: Note, version: int(0, 64) }))),
 });
 type Save = typeof Save extends Arbitrary.Arbitrary<infer S> ? S : never;
@@ -53,7 +53,7 @@ const history = (saves: Sequence) =>
     note: `note_0000000000e00800000000000${s.note + 1}`,
     version: s.base + 1,
     body: s.body,
-    ...(s.how === "agent" ? {} : { how: s.how }),
+    ...(s.reason === "agent" ? {} : { reason: s.reason }),
     ...(s.from === undefined ? {} : { from: s.from }),
     by: `SHA256:exam-writer-${s.writer}`,
     arrivedAt: s.arrivedAt,
@@ -258,7 +258,7 @@ it.prop(
       note: "note_0000000000e008000000000001",
       version: 1,
       body: "",
-      how: "kept",
+      reason: "kept",
       from: { note: "note_0000000000e008000000000002", version: 0 },
       by: "SHA256:exam-writer-0",
       arrivedAt: 0,
@@ -266,7 +266,7 @@ it.prop(
       rev: 1,
     };
 
-    for (const field of ["how", "from", "by", "arrivedAt", "sentAt"] as const) {
+    for (const field of ["reason", "from", "by", "arrivedAt", "sentAt"] as const) {
       const missing: Record<string, unknown> = { ...row };
       delete missing[field];
       expect(() => exact([...expected, missing], [...expected, row])).toThrow();

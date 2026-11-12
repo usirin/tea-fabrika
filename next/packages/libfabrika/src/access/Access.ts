@@ -13,8 +13,8 @@ import { Result, Schema } from "effect";
 export const Saw = Schema.Struct({
   code: Schema.String,
   label: Schema.String,
-  where: Schema.String,
-  how: Schema.Literals(["compare", "link", "command"]),
+  location: Schema.String,
+  method: Schema.Literals(["compare", "link", "command"]),
   check: Schema.Literals(["touch", "click", "none"]),
   has: Schema.Array(Schema.String),
 });
@@ -36,8 +36,8 @@ export const Grant = Schema.Struct({
 /** What the person saw when they removed a key. In the signed text, as a grant's `saw` is. */
 export const Took = Schema.Struct({
   label: Schema.String,
-  where: Schema.String,
-  how: Schema.Literals(["panel", "command"]),
+  location: Schema.String,
+  method: Schema.Literals(["panel", "command"]),
   check: Schema.Literals(["touch", "click", "none"]),
 });
 
@@ -69,9 +69,9 @@ export const Revoke = Schema.Struct({
 
 /** What the person saw when a key was added. In the signed text. */
 export const AddSaw = Schema.Struct({
-  how: Schema.Literals(["sheet", "recovery", "device", "email", "command"]),
+  method: Schema.Literals(["sheet", "recovery", "device", "email", "command"]),
   check: Schema.Literals(["touch", "click", "none"]),
-  where: Schema.String,
+  location: Schema.String,
   has: Schema.Array(Schema.String),
   /** On a sheet: the person typed two words back. */
   typed: Schema.Boolean,

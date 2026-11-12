@@ -241,17 +241,17 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const ours = new Set(packages.map((pkg) => pkg.manifest.name));
   return packages.flatMap((pkg) => {
-    const where = shown(next, `${pkg.dir}${sep}package.json`);
+    const location = shown(next, `${pkg.dir}${sep}package.json`);
     const m = pkg.manifest;
     return [
-      ...(m.private === true ? [] : [`${where}: not private`]),
-      ...(m.version === "0.0.0" ? [] : [`${where}: version is not 0.0.0`]),
-      ...(m.sideEffects === false ? [] : [`${where}: sideEffects is not false`]),
-      ...(m.scripts?.["typecheck"] === undefined ? [`${where}: no typecheck script`] : []),
+      ...(m.private === true ? [] : [`${location}: not private`]),
+      ...(m.version === "0.0.0" ? [] : [`${location}: version is not 0.0.0`]),
+      ...(m.sideEffects === false ? [] : [`${location}: sideEffects is not false`]),
+      ...(m.scripts?.["typecheck"] === undefined ? [`${location}: no typecheck script`] : []),
       ...[...listed(m)].flatMap(([name, range]) => [
-        ...(name.endsWith("-old") ? [`${where}: depends on ${name}, today's version`] : []),
+        ...(name.endsWith("-old") ? [`${location}: depends on ${name}, today's version`] : []),
         ...(range.startsWith("workspace:") && !ours.has(name)
-          ? [`${where}: depends on ${name}, a workspace package outside next/`]
+          ? [`${location}: depends on ${name}, a workspace package outside next/`]
           : []),
       ]),
     ];
@@ -266,11 +266,11 @@ const importFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const byName = new Map(packages.map((pkg) => [pkg.manifest.name, pkg]));
   return codeFiles(next).flatMap((file) => {
-    const where = shown(next, file);
+    const location = shown(next, file);
     const pkg = ownerAt(packages, file);
 
     if (pkg === undefined) {
-      return EXAM.test(where) ? [] : [`${where}: sits in no package`];
+      return EXAM.test(location) ? [] : [`${location}: sits in no package`];
     }
 
     const names = listed(pkg.manifest);
@@ -279,7 +279,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
 
       if (isRelative(spec)) {
         if (!pointsAt(file, spec).startsWith(`${pkg.dir}${sep}`)) {
-          found.push(`${where} imports "${spec}": a relative path out of its package`);
+          found.push(`${location} imports "${spec}": a relative path out of its package`);
         }
 
         return found;
@@ -292,28 +292,28 @@ const importFaults = (next: string): ReadonlyArray<string> => {
       const { name, subpath } = packageAt(spec);
 
       if (name !== pkg.manifest.name && !names.has(name)) {
-        found.push(`${where} imports "${spec}": ${name} is not in its package.json`);
+        found.push(`${location} imports "${spec}": ${name} is not in its package.json`);
       }
 
       const target = byName.get(name);
       const reached = target === undefined ? undefined : exportAt(exportMap(target), subpath);
 
       if (reached?.kind === "missing") {
-        found.push(`${where} imports "${spec}": ${subpath} is not in ${name}'s exports`);
+        found.push(`${location} imports "${spec}": ${subpath} is not in ${name}'s exports`);
       }
 
       if (reached?.kind === "refused") {
-        found.push(`${where} imports "${spec}": ${subpath} is refused by ${name}'s exports`);
+        found.push(`${location} imports "${spec}": ${subpath} is refused by ${name}'s exports`);
       }
 
       if (reached?.kind === "file" && !existsSync(reached.file)) {
-        found.push(`${where} imports "${spec}": ${subpath} names no file in ${name}`);
+        found.push(`${location} imports "${spec}": ${subpath} names no file in ${name}`);
       }
 
       const inApp = pkg.group === "apps" && shown(pkg.dir, file) !== "src/entry/electron-main.ts";
 
       if (name === "electron" && inApp) {
-        found.push(`${where} imports "${spec}": in an app, only src/entry/electron-main.ts may`);
+        found.push(`${location} imports "${spec}": in an app, only src/entry/electron-main.ts may`);
       }
 
       return found;
