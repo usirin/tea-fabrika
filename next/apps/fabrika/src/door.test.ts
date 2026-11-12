@@ -120,7 +120,7 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
   );
 
 const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+  Effect.tryPromise({ try: call, catch: (): Error => new Error("test WebCrypto failed") });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -645,8 +645,15 @@ describe("T843 sender budget, next/", () => {
 
           for (const pick of choices) {
             // A retry exists only after its first delivery. Every other move is legal while online.
-            const moves = ["read", "bad", "reserved", "unknown", "send", ...(delivered ? ["retry"] : [])];
-            const move = moves[pick % moves.length]!;
+            const moves: ReadonlyArray<string> = [
+              "read",
+              "bad",
+              "reserved",
+              "unknown",
+              "send",
+              ...(delivered ? ["retry"] : []),
+            ];
+            const move: string = moves[pick % moves.length]!;
             const method = move === "read" ? "ledger.read" : move === "unknown" ? "missing.method" : "process.send";
             const params =
               move === "read"
@@ -1114,7 +1121,7 @@ describe("T843 sender budget, next/", () => {
             })),
           ),
         ).pipe(Layer.provide(w.env));
-        const markerValue = `t843-private-${marker}-end`.toWellFormed();
+        const markerValue = new TextDecoder().decode(utf8(`t843-private-${marker}-end`));
         yield* Effect.gen(function* () {
           const d = yield* Gateway;
           const { client } = yield* online(d, w);
