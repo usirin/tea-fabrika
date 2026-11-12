@@ -44,7 +44,7 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 export const person = Writer.cases.person.make({ key: "SHA256:test-person", for: "test-person" });
 export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "test-agent" });
 
-export const letter = (n: number, input: unknown, by = person) => ({
+export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
     id: Schema.decodeUnknownSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
