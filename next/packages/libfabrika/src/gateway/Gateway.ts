@@ -1222,10 +1222,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
         const audit = options.audit;
+        // Audit decodes the same trusted parent that the runner stamps before checking the message.
+        const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
         const selected =
           audit === undefined
             ? Effect.succeed<Schema.Json>({ type: name })
-            : Effect.suspend(() => audit(binding.process, message)).pipe(
+            : Effect.suspend(() => audit(binding.process, stamped)).pipe(
                 Effect.provideContext(context),
                 Effect.catchCause((cause) => {
                   const error = Cause.findError(cause);
