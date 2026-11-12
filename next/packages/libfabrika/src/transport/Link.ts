@@ -11,7 +11,7 @@
 // to reach it, timed by the handler that dialed, or the wait the link's own timer ran for a stall it
 // fired. The machine reads no clock and does not read `ms`; a window copies it into its records.
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Effect, Random, Schema } from "effect";
+import { Schema } from "effect";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;
@@ -101,21 +101,6 @@ export const knock = Cmd.make("knock", {
 
 /** The wait before retry number `tries`: doubling from half a second, never past the cap. */
 export const backoff = (tries: number): number => Math.min(CAP, 500 * 2 ** Math.max(-1, Math.min(tries - 1, 16)));
-
-/** Extra delay for a retry socket. The parent's retry timer already waited the backoff. */
-export const dialWait = Effect.fn("Link.dialWait")(function* (link: Link) {
-  if (link._tag !== "dialing" || !link.tries) {
-    return;
-  }
-
-  const base = backoff(link.tries);
-  const bound = Math.min(1000, base / 2, CAP - base);
-
-  if (bound > 0) {
-    const ms = yield* Random.nextIntBetween(0, bound);
-    yield* Effect.sleep(ms);
-  }
-});
 
 /** The timer the state waits on, or null when only a person can move it. A stall it fires carries
  *  the wait it ran as its `ms`: the timer starts when the state is entered, so that is how long the

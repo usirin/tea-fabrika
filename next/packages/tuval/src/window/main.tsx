@@ -6,10 +6,10 @@ import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { ClientSocket } from "@kampus/libfabrika/transport/ClientSocket";
 import { helloText } from "@kampus/libfabrika/transport/Hello";
-import { dialWait, Link } from "@kampus/libfabrika/transport/Link";
+import { backoff, CAP } from "@kampus/libfabrika/transport/Link";
 import { writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Clock, DateTime, Deferred, Effect, Option, Queue, Schema, Stream } from "effect";
+import { Clock, DateTime, Deferred, Effect, Option, Queue, Random, Schema, Stream } from "effect";
 import { type ReactNode, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { type WindowModel, type WindowMsg, type windowMachineFor, type write } from "./machine.ts";
@@ -238,6 +238,21 @@ type WindowOptions = {
   readonly origin: string;
 };
 
+/** The retry timer already waited the backoff. Only the socket adds jitter. */
+const dialWait = Effect.fn("Window.dialWait")(function* (tries: number) {
+  if (tries === 0) {
+    return;
+  }
+
+  const base = backoff(tries);
+  const bound = Math.min(1000, base / 2, CAP - base);
+
+  if (bound > 0) {
+    const ms = yield* Random.nextIntBetween(0, bound);
+    yield* Effect.sleep(ms);
+  }
+});
+
 /** Runs every Cmd to hand-off; socket answers arrive separately as Msgs. */
 export const startWindow = Effect.fn("Window.start")(function* (options: WindowOptions) {
   const keys = yield* ClientKey;
@@ -267,7 +282,7 @@ export const startWindow = Effect.fn("Window.start")(function* (options: WindowO
           Queue.offerUnsafe(queue, m);
         };
         const key = yield* Deferred.await(identityFor(rejected));
-        yield* dialWait(Link.cases.dialing.make({ dial, tries }));
+        yield* dialWait(tries);
         const since = yield* Clock.currentTimeMillis;
         const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(tab)}`;
         const ws = yield* sockets.dial(url).pipe(
