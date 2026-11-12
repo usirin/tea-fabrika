@@ -52,6 +52,7 @@ const run = Effect.gen(function* () {
             {
               cwd: import.meta.dirname,
               env: { FABRIKA_HOME: home },
+              extendEnv: true,
               stdin: "ignore",
               stdout: "inherit",
               stderr: "inherit",
