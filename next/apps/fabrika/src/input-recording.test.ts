@@ -204,7 +204,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         os: "linux",
         sentAt: SENT,
       },
-      { url: instance.url, tab, name: "recording" },
+      { url: instance.url, tab, name: fingerprint },
     ]);
     expect(answer).toMatchObject({ _tag: "online" });
     return client;

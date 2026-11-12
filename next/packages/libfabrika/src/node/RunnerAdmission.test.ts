@@ -54,7 +54,7 @@ const register: RunnerAdmissionTest.Register = (name, tape, check, options, reac
         ),
         options,
       );
-      expect([...reached]).toEqual(expect.arrayContaining(required));
+      expect([...reached]).toEqual(expect.arrayContaining([...required]));
     },
     600_000,
   );

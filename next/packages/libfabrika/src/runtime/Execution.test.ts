@@ -6,7 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { executionFailure, nodeExecution, workerExecution } from "./Execution.ts";
-import { stepper, Step } from "./Program.ts";
+import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "./Program.ts";
 import { Saved } from "./State.ts";
 
 const SEED = 119120;
@@ -107,7 +107,8 @@ describe("P13 split execution", () => {
 
               const remote = workerExecution(calls);
               const selected = mode === "retry" ? history[n % history.length]! : model;
-              const result = yield* Effect.result(remote[phase](selected, { type: "inc" }));
+              const call: Effect.Effect<Admission | Prepared, ProgramDown> = remote[phase](selected, { type: "inc" });
+              const result = yield* Effect.result(call);
               expect(composed, "new calls cannot fall back to composed step").toBe(0);
 
               if (mode === "rpc" || mode === "decode" || mode === "missing") {

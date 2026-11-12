@@ -1028,7 +1028,7 @@ describe("P13 A11 saved admission work", () => {
       let letters = 0;
       const messages: Array<typeof supervisor.msg.Type> = [];
       const send = (msg: Msg) => {
-        const checked = Schema.decodeUnknownSync(supervisor.msg)(msg);
+        const checked = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(msg);
         messages.push(checked);
         model = applyCell(supervisor, model, checked)[0];
       };

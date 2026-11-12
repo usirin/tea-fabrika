@@ -235,7 +235,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       message = { type: move, seq: j.attempt.seq };
     }
 
-    const msg = Schema.decodeUnknownSync(supervisor.msg)(message);
+    const msg = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(message);
     const before = model;
     const next = applyCell(supervisor, model, msg)[0];
 
@@ -306,8 +306,6 @@ const walk = Effect.fnUntraced(function* (
   let alarm: number | null = null;
   const acquire = Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
   let scope = yield* acquire;
-  let raw: Sql;
-  let journal: ReturnType<typeof recoveryStore<typeof Supervision.Type>>;
 
   const wrapped = (sql: Sql): Sql => ({
     exec: (query, ...params) => {
@@ -386,10 +384,10 @@ const walk = Effect.fnUntraced(function* (
     wake: () => null,
   };
   const connect = Effect.fnUntraced(function* () {
-    raw = yield* open("inbox").pipe(Scope.provide(scope));
+    const raw = yield* open("inbox").pipe(Scope.provide(scope));
     const manager = yield* open("manager").pipe(Scope.provide(scope));
     const sql = wrapped(raw);
-    journal = recoveryStore(raw, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
+    const journal = recoveryStore(raw, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
     const services = yield* Layer.build(harness.services(raw, manager)).pipe(Scope.provide(scope));
     const processes = Context.get(services, ProcessManager);
     const mailbox = Context.get(services, Mailbox);
@@ -416,9 +414,10 @@ const walk = Effect.fnUntraced(function* (
                 fresh: (s: unknown, m: unknown) =>
                   Effect.gen(function* () {
                     if (enabled.includes("admission_save")) {
-                      expect((yield* journal.load)?.journal._tag, "fresh checking has a saved, body-free attempt").toBe(
-                        "checking",
-                      );
+                      expect(
+                        (yield* journal.load.pipe(Effect.orDie))?.journal._tag,
+                        "fresh checking has a saved, body-free attempt",
+                      ).toBe("checking");
                     }
 
                     return yield* control.mode === "rpc" || control.mode === "cleanup"
@@ -431,10 +430,10 @@ const walk = Effect.fnUntraced(function* (
 
                     if (control.expected !== null) {
                       expect(
-                        yield* journal.input(control.expected.id),
+                        yield* journal.input(control.expected.id).pipe(Effect.orDie),
                         "the complete admitted delivery committed before update",
                       ).toEqual(control.expected);
-                      const pending = (yield* journal.load)?.journal;
+                      const pending = (yield* journal.load.pipe(Effect.orDie))?.journal;
                       expect(pending?._tag).toBe("stepping");
 
                       if (pending?._tag === "stepping") {
@@ -500,7 +499,7 @@ const walk = Effect.fnUntraced(function* (
       const opened = yield* Effect.exit(runner.open("fixture"));
 
       if (Exit.isSuccess(opened)) {
-        return { runner, mailbox };
+        return { runner, mailbox, raw, journal };
       }
 
       if (alarm === null) {
@@ -548,19 +547,19 @@ const walk = Effect.fnUntraced(function* (
     }
   };
   const check = Effect.fnUntraced(function* () {
-    const saved = yield* journal.load;
+    const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
       versions: Object.fromEntries(versions),
     });
 
     for (const prior of failures) {
-      expect(yield* journal.input(prior.id), "earlier failure evidence stays exact").toEqual(prior);
+      expect(yield* live.journal.input(prior.id), "earlier failure evidence stays exact").toEqual(prior);
     }
 
     expect(saved?.receipts.filter((r) => r.tries > 0).every((r) => r.errors.length === r.tries)).toBe(true);
-    const records = raw
+    const records = live.raw
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .flatMap(({ name }) => raw.exec(`SELECT * FROM "${name}"`));
+      .flatMap(({ name }) => live.raw.exec(`SELECT * FROM "${name}"`));
     const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
       (output) => texts(output, decoded),
     );
@@ -600,7 +599,7 @@ const walk = Effect.fnUntraced(function* (
 
     const beforeChecks = control.checks;
     const beforeUpdates = control.updates;
-    const before = yield* journal.load;
+    const before = yield* live.journal.load;
 
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
@@ -618,24 +617,24 @@ const walk = Effect.fnUntraced(function* (
             : { reason: "changed_elsewhere", now: versions.get(message.note) ?? 0 },
         ),
       );
-      expect(yield* journal.input(original.id)).toBeNull();
-      expect((yield* journal.load)?.crashes).toBe(before?.crashes ?? 0);
+      expect(yield* live.journal.input(original.id)).toBeNull();
+      expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
       expect(control.updates).toBe(beforeUpdates);
       expect(control.checks).toBe(beforeChecks + (move === "invalid" ? 0 : 1));
       const hasReplies =
-        raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='process_replies'").length > 0;
+        live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='process_replies'").length > 0;
       expect(
-        hasReplies ? raw.exec("SELECT id FROM process_replies WHERE name=? AND id=?", NAME, original.id) : [],
+        hasReplies ? live.raw.exec("SELECT id FROM process_replies WHERE name=? AND id=?", NAME, original.id) : [],
       ).toEqual([]);
       yield* reopen();
-      expect((yield* journal.load)?.crashes).toBe(before?.crashes ?? 0);
+      expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
       yield* check();
       continue;
     }
 
     if (move === "refuse_failed") {
       const prior = nth(unansweredFailures, cell.pick);
-      const old = yield* journal.receipt(prior.id);
+      const old = yield* live.journal.receipt(prior.id);
       const message = Schema.decodeUnknownSync(Save)(prior.envelope.input);
       const advance = yield* input({ ...cell, pick: Number(message.note.slice(1)) }, false);
       control.expected = advance;
@@ -646,10 +645,10 @@ const walk = Effect.fnUntraced(function* (
       control.expected = null;
       const refused = yield* live.runner.msg(prior);
       expect(refused).toEqual(
-        Sent.cases.refused.make({ reason: "changed_elsewhere", now: versions.get(message.note) }),
+        Sent.cases.refused.make({ reason: "changed_elsewhere", now: versions.get(message.note) ?? 0 }),
       );
       expect(
-        yield* journal.receipt(prior.id),
+        yield* live.journal.receipt(prior.id),
         "later refusal cannot replace the earlier failed-delivery evidence",
       ).toEqual(old);
       answers.push({ input: prior, first: refused });
@@ -718,8 +717,8 @@ const walk = Effect.fnUntraced(function* (
 
     if (refusing) {
       expect(control.updates).toBe(beforeUpdates);
-      expect(yield* journal.input(fresh.id), "a normal refusal stores no fresh draft").toBeNull();
-      expect((yield* journal.load)?.crashes).toBe(before?.crashes ?? 0);
+      expect(yield* live.journal.input(fresh.id), "a normal refusal stores no fresh draft").toBeNull();
+      expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
     }
 
     if (
@@ -744,12 +743,12 @@ const walk = Effect.fnUntraced(function* (
       }
 
       if (move === "rpc" || move === "cleanup" || move === "update_rpc" || move === "update_cleanup") {
-        expect((yield* journal.load)?.crashes).toBe(before?.crashes ?? 0);
+        expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
       }
 
       if (move === "check_throw" || move === "update_throw") {
         failures.push(fresh);
-        const saved = yield* journal.load;
+        const saved = yield* live.journal.load;
         expect(saved?.receipts.find((r) => r.letter === fresh.id)).toMatchObject({
           input: fresh,
           tries: 1,
@@ -768,7 +767,7 @@ const walk = Effect.fnUntraced(function* (
         }
 
         control.cut = "";
-        expect((yield* journal.load)?.receipts.some((r) => r.letter === fresh.id && r.tries > 0)).toBe(false);
+        expect((yield* live.journal.load)?.receipts.some((r) => r.letter === fresh.id && r.tries > 0)).toBe(false);
       }
 
       control.mode = "";
@@ -783,7 +782,7 @@ const walk = Effect.fnUntraced(function* (
       }
 
       if (move === "lost_observation") {
-        const saved = yield* journal.load;
+        const saved = yield* live.journal.load;
         expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
         expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(1);
       }
@@ -796,7 +795,7 @@ const walk = Effect.fnUntraced(function* (
         move === "update_rpc" ||
         move === "update_cleanup"
       ) {
-        expect((yield* journal.load)?.crashes).toBe(before?.crashes ?? 0);
+        expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
         reached.add("resume_without_charge");
       }
 

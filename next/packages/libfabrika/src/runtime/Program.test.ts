@@ -68,6 +68,7 @@ describe("P13 A7 split checking and update", () => {
           ...authoring(),
           machine: Machine.make({
             ...machine,
+            cmds: [save],
             update: {
               ...machine.update,
               add: (s, m) => {

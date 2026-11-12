@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeEach, describe, expect, it, vi } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -26,6 +26,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { ProcessError } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessId } from "../ProcessId.ts";
+import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import { Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -219,7 +220,12 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
           notices.push({ client, news });
         }),
       inputs: { schema: input, personOnly: [], raw: [] },
-      audit: (_process, message) => Schema.encodeUnknownEffect(Schema.toCodecJson(input))(message),
+      audit: (_process, message) =>
+        Schema.encodeUnknownEffect(Schema.toCodecJson(input))(message).pipe(
+          Effect.mapError(
+            (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+          ),
+        ),
       events: { personOnly: [] },
     }).pipe(Layer.provideMerge(env));
     return { layer, env };
