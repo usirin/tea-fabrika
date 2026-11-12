@@ -64,7 +64,7 @@ const world = () => {
     sql = nodeSql(db);
   let attached: unknown = Attached.cases.online.make({
     client: "client",
-    who: { key: "public", person: "person", as: "agent" },
+    identity: { key: "public", person: "person", as: "agent" },
     version: 1,
     waits: [],
     watching: false,

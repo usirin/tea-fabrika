@@ -389,8 +389,9 @@ describe("each rule refuses what it is there to refuse", () => {
       "modules",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
-      // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
-      "no-why-key",
+      // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
+      // lint config, beside oxlint's own id-denylist.
+      "no-question-word-key",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
     ];

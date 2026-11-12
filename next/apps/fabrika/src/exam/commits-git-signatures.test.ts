@@ -210,13 +210,13 @@ describe("person git signatures (p83b)", () => {
   it.each([
     ["a key with no person line", "stranger"],
     ["a step key's git signature", "tests"],
-  ] as const)("G18: refuses %s", (_, who) => {
+  ] as const)("G18: refuses %s", (_, signer) => {
     fc.assert(
       fc.property(fc.string(), (initial) => {
         const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
         r.write("next/packages/x/src/a.ts", "a\n");
-        const c = r.gitSigned(who);
-        const ownLine = `fixture namespaces="git" ${pub(who)}\n`;
+        const c = r.gitSigned(signer);
+        const ownLine = `fixture namespaces="git" ${pub(signer)}\n`;
         expect(verifyCommit(r, c, ownLine)).toBe(0);
         const out = r.check();
         expect(out.answers).toEqual([stuck("unsigned_commit", c)]);

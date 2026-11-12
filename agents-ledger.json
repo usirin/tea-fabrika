@@ -507,62 +507,62 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "exam.push({ glob: \"src/a.ts\", why: \"this fixture's signed tests change\" });"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "why: \"recorded fixture result\","
 		},
 		{
 			"file": ".agents/skills/lead/scripts/box.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "why: \"drive.ts mutation fixture row\","
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.test.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "expect(s.outcome).toEqual({ kind: \"skip\", why: \"step_said\" });"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
-			"code": "outcome: { kind: \"stuck\", why },"
+			"rule": "eslint(id-denylist)",
+			"code": "outcome: { kind: \"stuck\", why: reason },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"send\", to: \"tests\", why: \"exam_paths\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"send\", to: \"plan\", why: \"plancheck\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "return { outcome: { kind: \"send\", to, why: \"step_said\" }, reason: said.reason };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "return { outcome: { kind: \"skip\", why: \"step_said\" }, reason: said.reason };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "const outcome: Outcome = { kind: \"stuck\", why: \"record_failed\" };"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "outcome: { kind: \"stuck\", why: \"record_failed\" },"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-why-key)",
+			"rule": "eslint(id-denylist)",
 			"code": "why: ok ? e.reason : `${e.reason} (${notes.join(\"; \")})`,"
 		}
 	]

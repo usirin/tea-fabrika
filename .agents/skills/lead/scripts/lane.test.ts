@@ -156,7 +156,7 @@ describe("lane rules, today's tooling", () => {
       }),
       fc.record({
         _tag: fc.constant("ask"),
-        who: fc.constant("owner"),
+        to: fc.constant("owner"),
         for: fc.constant("exam_read"),
       }),
     );

@@ -436,7 +436,7 @@ export const recordInLane = Effect.fn("host.recordInLane")(function* (
     from: a.head,
     head: hosted.head,
     outcome: outcomeName(hosted.outcome),
-    // oxlint-disable-next-line fabrika/no-why-key -- drive.ts writes this file with today's key, and its readers read one shape
+    // oxlint-disable-next-line eslint/id-denylist -- drive.ts writes this file with today's key, and its readers read one shape
     why: hosted.outcome.reason,
     exit: hosted.outcome._tag === "stuck" ? 30 : 0,
     report: hosted.log,
@@ -453,7 +453,7 @@ const HostEntry = Schema.Struct({
   step: Schema.Literal("host"),
   outcome: Schema.String,
   head: Schema.String,
-  // oxlint-disable-next-line fabrika/no-why-key -- drive.ts writes this file with today's key, and its readers read one shape
+  // oxlint-disable-next-line eslint/id-denylist -- drive.ts writes this file with today's key, and its readers read one shape
   why: Schema.String,
 });
 

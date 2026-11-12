@@ -1619,7 +1619,7 @@ describe("P34 runner supervision", () => {
                 RecoveryStore: Context.Service<Store, Store> & {
                   layer: (
                     sql: Sql,
-                    who: { name: string; capacity: number; schema: typeof Supervision },
+                    options: { name: string; capacity: number; schema: typeof Supervision },
                   ) => LayerType.Layer<Store>;
                 };
               } = yield* Effect.promise(() => import(path));

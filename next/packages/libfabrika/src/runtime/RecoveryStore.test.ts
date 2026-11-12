@@ -22,7 +22,7 @@ type Subject = {
   readonly RecoveryStore: Context.Service<Store, Store> & {
     readonly layer: (
       sql: Sql,
-      who: { name: string; capacity: number; schema: typeof Supervision },
+      options: { name: string; capacity: number; schema: typeof Supervision },
     ) => Layer.Layer<Store>;
   };
 };

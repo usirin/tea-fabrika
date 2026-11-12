@@ -88,16 +88,16 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             ws.serializeAttachment(
               Attached.cases.online.make({
                 client,
-                who: result.who,
+                identity: result.identity,
                 version: result.version,
                 waits: [],
                 watching: false,
                 busy: false,
               }),
             );
-            yield* rpc(p.join({ client, key: result.who.key, gateway, session, at: Date.now() }));
+            yield* rpc(p.join({ client, key: result.identity.key, gateway, session, at: Date.now() }));
             return Answer.cases.ok.make({
-              result: { who: result.who, version: result.version, ping: result.ping },
+              result: { identity: result.identity, version: result.version, ping: result.ping },
             });
           }
 

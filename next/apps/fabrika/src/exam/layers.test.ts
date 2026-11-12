@@ -379,14 +379,14 @@ const faults = (
       return [];
     }
 
-    const where = shown(next, file);
+    const location = shown(next, file);
     const found: Array<string> = [];
 
     // Across the whole library, tests included: nothing imports tuval, a program or the app.
     if (pkg.manifest.name === LIBRARY) {
       for (const spec of importsInFile(file).filter((s) => !isRelative(s))) {
         if (above.has(packageAt(spec).name)) {
-          found.push(`${where} imports "${spec}": the library imports nothing above it`);
+          found.push(`${location} imports "${spec}": the library imports nothing above it`);
         }
       }
     }
@@ -399,7 +399,7 @@ const faults = (
     const folder = folderAt(pkg, file);
 
     if (folders !== undefined && folder !== null && !folders.includes(folder)) {
-      return [...found, `${where}: the folder "${folder}" has no row in the exam's table`];
+      return [...found, `${location}: the folder "${folder}" has no row in the exam's table`];
     }
 
     const part = partAt(rows, next, pkg, pkg.group === "programs" ? boxFor(pkg) : new Set(), file, parts);
@@ -407,11 +407,11 @@ const faults = (
     // A library file under `src/` needs exactly one row, and that row must be a part of the table.
     if (part === null && pkg.manifest.name === LIBRARY && file.startsWith(`${join(pkg.dir, "src")}${sep}`)) {
       const claimed = rowsAt(rows, ruled(next, file));
-      const what =
+      const message =
         folder !== null && claimed.length === 0
           ? `the folder "${folder}" has no row in the exam's table`
           : `the rule file's rows that claim it are [${claimed.join(", ")}], and a library file needs exactly one that is a part`;
-      return [...found, `${where}: ${what}`];
+      return [...found, `${location}: ${message}`];
     }
 
     if (part === null) {
@@ -435,10 +435,10 @@ const faults = (
         const there = partAt(rows, next, pkg, new Set(), target, parts) ?? "an entry file";
 
         if (there !== part && !may.includes(there)) {
-          found.push(`${where} imports "${spec}": ${part} may not import ${there}`);
+          found.push(`${location} imports "${spec}": ${part} may not import ${there}`);
         }
       } else if (packageAt(spec).name.startsWith("@kampus/") && !may.includes(spec)) {
-        found.push(`${where} imports "${spec}": ${part} may not import it`);
+        found.push(`${location} imports "${spec}": ${part} may not import it`);
       }
     }
 

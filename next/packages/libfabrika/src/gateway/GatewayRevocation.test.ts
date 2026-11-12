@@ -265,7 +265,7 @@ const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: str
     for: person,
     to: "p17",
     sentAt,
-    saw: { label: "Old client", where: "test", how: "panel", check: "touch" },
+    saw: { label: "Old client", location: "test", method: "panel", check: "touch" },
   });
   expect((yield* door.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
 });
@@ -285,8 +285,8 @@ const setup = Effect.fnUntraced(function* (w: World) {
     saw: {
       code: "1234",
       label: "Other client",
-      where: "test",
-      how: "compare",
+      location: "test",
+      method: "compare",
       check: "touch",
       has: [],
     },
@@ -1074,8 +1074,8 @@ describe("P17a, revoke stops writes at the final door", () => {
                 saw: {
                   code: "1234",
                   label: "Old client",
-                  where: "test",
-                  how: "compare",
+                  location: "test",
+                  method: "compare",
                   check: "touch",
                   has: [],
                 },
