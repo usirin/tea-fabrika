@@ -727,7 +727,11 @@ describe("L8: the window parent's connection", () => {
             ReadonlyArray<Cmd>,
           ];
           seen.stepped++;
-          expect(next.tiles.find((t) => t.id === m.id)!.own, "the tile's Model is its own machine's").toEqual(own);
+          const blockedPress = before.reach._tag !== "open" && out.some((c) => c.type === "press");
+          expect(
+            next.tiles.find((t) => t.id === m.id)!.own,
+            "a blocked submit keeps the draft until it can send",
+          ).toEqual(blockedPress ? before.own : own);
           expect(
             next.tiles.filter((t) => t.id !== m.id).map((t) => t.own),
             "another tile's Model moved",

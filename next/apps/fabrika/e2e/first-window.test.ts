@@ -15,6 +15,8 @@ import { join } from "node:path";
 import { applyCell } from "@demlik/tea";
 import { checklist, checklistMachine } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
+import { resolveName } from "@kampus/libfabrika/runtime/Client";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -24,6 +26,7 @@ import {
   fault,
   grant,
   home,
+  homeWithCredential,
   type Home,
   profile,
   reader,
@@ -100,6 +103,7 @@ const useChecklist = (
   tabs: ReadonlyArray<Effect.Success<ReturnType<typeof tab>>>,
   moves: ReadonlyArray<Control>,
   pool: ReadonlyArray<string>,
+  observe: Effect.Effect<unknown> = Effect.void,
 ) =>
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
@@ -140,6 +144,7 @@ const useChecklist = (
         ([r, said]) => JSON.stringify(r) === JSON.stringify(want) && said === words[at],
         `tab ${at} after ${msg.type}`,
       );
+      yield* observe;
     }
 
     for (const [at, t] of tabs.entries()) {
@@ -171,6 +176,9 @@ describe("L11: boot", () => {
           yield* Effect.sleep("2 seconds");
           // The entry mounts under Strict Mode, which mounts twice: one runtime still dials once.
           expect(sockets, "one runtime dials once").toHaveLength(1);
+          // L16's plain child also reaches the reader's socket.
+          yield* online(h, page);
+          yield* reader(h, dev);
           const closed = Effect.promise(() =>
             sockets[0]!.isClosed() ? Promise.resolve(true) : sockets[0]!.waitForEvent("close").then(() => true),
           );
@@ -299,8 +307,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
           async ({ token, secret, item, failFirst, moves }) => {
             await suite(
               Effect.gen(function* () {
-                const h = yield* home;
-                const stranger = yield* home;
+                const h = yield* homeWithCredential(`person_${secret}`);
+                const stranger = yield* homeWithCredential(`stranger_${secret}`);
                 const dev = yield* devServer(h, {
                   FABRIKA_SENTINEL_TOKEN: `tok_${token}`,
                   FABRIKA_SENTINEL_SECRET: `sec_${secret}`,
@@ -309,7 +317,13 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const context = yield* profile(b);
                 const t = yield* tab(context, dev.url);
                 const second = yield* tab(context, dev.url);
+                const snapshots: Array<readonly [string, string]> = [];
+                const observe = Effect.gen(function* () {
+                  snapshots.push(...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen)));
+                });
                 const w = yield* waiting(t.page);
+                const tt = yield* target(w);
+                yield* observe;
                 const grantErrors: Array<string> = [];
 
                 if (failFirst) {
@@ -320,6 +334,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   if (!refused.ok) {
                     grantErrors.push(refused.error);
                   }
+
+                  yield* observe;
                 }
 
                 yield* grant(h, w);
@@ -328,31 +344,88 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const field = tile(t.page, NAME).field;
                 yield* Effect.promise(() => field.waitFor({ timeout: 30_000 }));
                 yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
-                yield* useChecklist([t, second], moves, [`itm_${item}`, "milk", "bread"]);
+                yield* observe;
+                yield* useChecklist([t, second], moves, ["milk", "bread", "eggs"], observe);
 
                 for (let n = 0; n < 2; n++) {
                   yield* Effect.promise(() => field.fill(`itm_${item}`));
                   yield* Effect.promise(() => field.press("Enter"));
-                  yield* Effect.sleep("2 seconds");
+
+                  if (n === 0) {
+                    yield* settle(
+                      tile(t.page, NAME).shown,
+                      (shown) => shown.some((row) => row.name === `itm_${item}`),
+                      "the sentinel item lands",
+                    );
+                  } else {
+                    yield* settle(
+                      tile(t.page, NAME).refusal,
+                      (words) => words === checklistWindow.refused!({ type: "add", name: `itm_${item}` }, "taken"),
+                      "the duplicate sentinel is refused",
+                    );
+                  }
+
+                  yield* observe;
                 }
 
-                const tt = yield* target(w).pipe(Effect.orElseSucceed(() => null));
-                const revoked = tt === null ? null : yield* remove(h, dev, tt);
-                const personKey = yield* Effect.sync(() => readFileSync(h.key, "utf8"));
+                yield* Effect.promise(() => t.page.reload());
+                yield* Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 }));
+                yield* observe;
+                const r = yield* reader(h, dev);
+                const revoked = yield* remove(h, dev, tt);
+                expect(revoked.ok).toBe(true);
+                yield* Effect.promise(() => t.page.getByText("This window was removed").waitFor());
+                yield* observe;
+                yield* Effect.promise(() => t.page.getByRole("button", { name: "Ask again" }).click());
+                yield* waiting(t.page);
+                yield* observe;
+                const pid = resolveName(
+                  yield* r.read(`processes/${NAME}`),
+                  NAME,
+                  (by) => by === "brain" || by.startsWith("brain:"),
+                );
+                expect(pid, "the checklist's live process has a span chain").not.toBeNull();
+                const spans = [...(yield* r.spans()), ...(yield* r.spans(Chain.cases.job.make({ process: pid! })))];
+                expect(
+                  h.grants.flatMap((g) => g.signatures).length,
+                  "the real grant signature was observed",
+                ).toBeGreaterThan(0);
                 const secrets = [
                   `tok_${token}`,
                   `sec_${secret}`,
-                  ...personKey.split("\n").filter((l) => l.length > 20 && !l.startsWith("-----")),
-                  ...(revoked === null
-                    ? []
-                    : revoked.armored.split("\n").filter((l) => l.length > 20 && !l.startsWith("-----"))),
+                  h.credential,
+                  stranger.credential,
+                  ...[...h.grants, ...stranger.grants]
+                    .flatMap((g) => g.signatures)
+                    .flatMap((signature) => [
+                      signature,
+                      ...signature.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
+                    ]),
+                  ...revoked.armored.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
                 ];
-                const outputs = [
+                const outputs: ReadonlyArray<readonly [string, string]> = [
+                  ...snapshots,
                   ...(yield* look(t.page, t.seen)),
                   ...(yield* look(second.page, second.seen)),
                   ...grantErrors.map((error): readonly [string, string] => ["grant error", error]),
+                  ...[...h.grants, ...stranger.grants].flatMap((g): ReadonlyArray<readonly [string, string]> => [
+                    ["grant output", g.output],
+                    ["grant urls", g.urls.join("\n")],
+                  ]),
+                  ["server console", dev.output()],
+                  ["spans", JSON.stringify(spans)],
                   ...stored(h.dir),
                 ];
+
+                for (const [output, text] of outputs) {
+                  const decoded = text.replace(/%([0-9a-f]{2})/gi, (_, hex) =>
+                    String.fromCharCode(Number.parseInt(hex, 16)),
+                  );
+                  expect(
+                    /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(decoded),
+                    `${output} contains private key material`,
+                  ).toBe(false);
+                }
 
                 for (const form of [`itm_${item}`, encodeURIComponent(`itm_${item}`)]) {
                   for (const [output, text] of outputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
@@ -388,9 +461,14 @@ const stored = (dir: string): ReadonlyArray<readonly [string, string]> =>
 const look = (page: import("playwright").Page, seen: Seen) =>
   Effect.gen(function* () {
     const html = yield* Effect.promise(() => page.content());
+    const values = yield* Effect.promise(() =>
+      page
+        .locator("input")
+        .evaluateAll((inputs) => inputs.map((input) => (input instanceof HTMLInputElement ? input.value : ""))),
+    );
     const stored = yield* rows(page);
     return [
-      ["page", html],
+      ["page", html + JSON.stringify(values)],
       ["rows", JSON.stringify(stored)],
       ["console", seen.console.join("\n")],
       ["errors", seen.errors.join("\n")],

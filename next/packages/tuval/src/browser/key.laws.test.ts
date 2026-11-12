@@ -21,7 +21,7 @@ import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
 
 const SEED = 119120;
-const ORIGIN = "http://fabrika.test";
+const ORIGIN = "http://127.0.0.1";
 const ENTRY = "\0key-laws-entry";
 const HERE = new URL(".", import.meta.url).pathname;
 

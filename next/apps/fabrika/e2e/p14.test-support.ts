@@ -14,15 +14,17 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
-import { Effect, FileSystem, Schema } from "effect";
+import { Entry } from "@kampus/libfabrika/ledger/Log";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { type Browser, type BrowserContext, chromium, type Page, type WebSocket } from "playwright";
+import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
 import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 export const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
-export const RESOURCES = ["home", "server", "browser", "context", "page", "socket"] as const;
+export const RESOURCES = ["home", "port", "server", "browser", "context", "page", "socket"] as const;
 type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
@@ -101,38 +103,52 @@ const childEnv = (home: string, extra: Readonly<Record<string, string>>) => {
 };
 
 /** A temp home with its own person key, made by ssh-keygen as a person makes one. */
-export const home = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const dir = yield* owned(
-    "home",
-    fs.makeTempDirectory({ directory: "/tmp", prefix: "fw." }),
-    (dir) => fs.remove(dir, { recursive: true, force: true }),
-    (dir) => ({ home: dir }),
-  );
-  const key = join(dir, "person");
-  const child = yield* spawner.spawn(
-    ChildProcess.make("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key], {
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-    }),
-  );
-  const exitCode = yield* child.exitCode;
+export const homeWithCredential = (credential: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const dir = yield* owned(
+      "home",
+      fs.makeTempDirectory({ directory: "/tmp", prefix: "fw." }),
+      (dir) => fs.remove(dir, { recursive: true, force: true }),
+      (dir) => ({ home: dir }),
+    );
+    const key = join(dir, "person");
+    const child = yield* spawner.spawn(
+      ChildProcess.make("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", credential, "-f", key], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }),
+    );
+    const exitCode = yield* child.exitCode;
 
-  if (exitCode !== 0) {
-    return yield* new KeygenFailed({ exitCode });
-  }
+    if (exitCode !== 0) {
+      return yield* new KeygenFailed({ exitCode });
+    }
 
-  return { dir, key, publicKey: (yield* fs.readFileString(`${key}.pub`)).trim() };
-}).pipe(Effect.provide(NodeServices.layer));
+    return {
+      dir,
+      key,
+      credential,
+      publicKey: (yield* fs.readFileString(`${key}.pub`)).trim().split(/\s+/).slice(0, 2).join(" "),
+      grants: [] as Array<GrantSeen>,
+    };
+  }).pipe(Effect.provide(NodeServices.layer));
+
+export const home = homeWithCredential("p14-test");
 
 export type Home = Effect.Success<typeof home>;
 
 /** The real `dev.ts` on a held port in `h`, ready when `/` answers. `env` adds to its environment. */
 export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
-    const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+    const { port } = yield* owned(
+      "port",
+      heldPort(),
+      (held) => held.release,
+      (held) => ({ port: held.port - 1 }),
+    );
     const url = `http://127.0.0.1:${port}`;
     const out: Array<string> = [];
     const child = yield* owned(
@@ -228,7 +244,7 @@ export type Seen = {
   readonly errors: Array<string>;
   readonly urls: Array<string>;
   readonly sockets: Array<string>;
-  readonly opened: Array<WebSocket>;
+  readonly opened: Array<PageSocket>;
 };
 
 /** One tab of a profile, open at `url`, with what it says recorded from its first instant. */
@@ -288,24 +304,71 @@ export const waiting = (page: Page) =>
     }),
   );
 
-/** Runs the waiting screen's line with `key` in place of its placeholder: the person's grant. */
+type GrantSeen = {
+  readonly urls: ReadonlyArray<string>;
+  readonly signatures: ReadonlyArray<string>;
+  readonly output: string;
+};
+
+// Observe the CLI's HTTP edge through a separate pipe, never its signing key. The wire signature
+// is a forbidden output value; the signed request itself is its intended recipient.
+const GRANT_OBSERVER = `import { writeSync } from "node:fs";
+const real = globalThis.fetch;
+globalThis.fetch = (url, options) => {
+  const signature = options?.body ? JSON.parse(options.body).armored : undefined;
+  writeSync(3, JSON.stringify({url: String(url), signature}) + "\\n");
+  return real(url, options);
+};`;
+
+const GrantWire = Schema.Struct({ url: Schema.String, signature: Schema.optionalKey(Schema.String) });
+
+/** Runs the waiting screen's CLI with its own scoped process, recording output even on a refusal. */
 export const grant = (h: Home, w: Waiting, key = h.key) =>
-  Effect.sync(() => {
-    try {
-      execFileSync(
+  Effect.scoped(
+    Effect.gen(function* () {
+      const child = yield* ChildProcess.make(
         process.execPath,
-        [join(APP, "grant.ts"), "client", w.url, w.fingerprint, "--code", w.code, "--key", key],
+        [
+          "--import",
+          `data:text/javascript,${encodeURIComponent(GRANT_OBSERVER)}`,
+          join(APP, "grant.ts"),
+          "client",
+          w.url,
+          w.fingerprint,
+          "--code",
+          w.code,
+          "--key",
+          key,
+        ],
         {
           cwd: APP,
           env: childEnv(h.dir, {}),
-          stdio: ["ignore", "pipe", "pipe"],
+          stdin: "ignore",
+          additionalFds: { fd3: { type: "output" } },
         },
       );
-      return { ok: true as const };
-    } catch (error) {
-      return { ok: false as const, error: String(error) };
-    }
-  });
+      const [code, out, err, wire] = yield* Effect.all(
+        [
+          child.exitCode,
+          Stream.mkString(Stream.decodeText(child.stdout)),
+          Stream.mkString(Stream.decodeText(child.stderr)),
+          Stream.mkString(Stream.decodeText(child.getOutputFd(3))),
+        ],
+        { concurrency: 4 },
+      );
+      const sent = wire
+        .split("\n")
+        .filter((line) => line !== "")
+        .map(Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire)));
+      const seen: GrantSeen = {
+        urls: sent.map((row) => row.url),
+        signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
+        output: out + err,
+      };
+      h.grants.push(seen);
+      return code === 0 ? { ok: true as const } : { ok: false as const, error: seen.output };
+    }),
+  ).pipe(Effect.provide(NodeServices.layer));
 
 /** The door's own record of what is waiting for `w`: the client's raw key, its person and project. */
 const Target = Schema.Struct({ key: Schema.String, for: Schema.String, to: Schema.String });
@@ -461,7 +524,7 @@ const Frame = Schema.Struct({
 type Frame = typeof Frame.Type;
 
 const Entries = Schema.Struct({
-  entries: Schema.Array(Schema.Struct({ id: Schema.String, rev: Schema.Number })),
+  entries: Schema.Array(Entry),
 });
 
 /** A client of the instance with a key of its own, granted by the person as the tab is, through the
@@ -494,7 +557,15 @@ export const reader = (h: Home, dev: Dev) =>
         });
         return socket;
       }),
-      (socket) => Effect.sync(() => socket.close()),
+      (socket) =>
+        Effect.callback<void>((resume) => {
+          if (socket.readyState === WebSocket.CLOSED) {
+            return resume(Effect.void);
+          }
+
+          socket.addEventListener("close", () => resume(Effect.void), { once: true });
+          socket.close();
+        }),
     );
     const next = (test: (f: Frame) => boolean) =>
       Effect.gen(function* () {
@@ -556,6 +627,25 @@ export const reader = (h: Home, dev: Dev) =>
     }
 
     return {
+      spans: (chain: Chain = Chain.cases.spans.make({})) =>
+        Effect.gen(function* () {
+          const all: Array<unknown> = [];
+          let after = 0;
+
+          for (;;) {
+            const page = yield* call("spans.read", { chain, after });
+            const value = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({ spans: Schema.Array(Schema.Unknown), next: Schema.Int }),
+            )(page.result).pipe(Effect.orDie);
+            all.push(...value.spans);
+
+            if (value.spans.length === 0 || value.next <= after) {
+              return all;
+            }
+
+            after = value.next;
+          }
+        }),
       read: (stream: string) =>
         Effect.gen(function* () {
           const all: Array<(typeof Entries.Type.entries)[number]> = [];

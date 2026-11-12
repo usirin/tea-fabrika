@@ -81,6 +81,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
             ...(fault === undefined ? {} : { P14_E2E_FAULT: JSON.stringify(fault) }),
           },
           stdio: ["ignore", "ignore", "ignore"],
+          detached: true,
         },
       );
       const ended = Effect.callback<Ended>((resume) => {
@@ -90,8 +91,19 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
     }),
     ({ child }) =>
       Effect.sync(() => {
-        if (child.exitCode === null && child.signalCode === null) {
-          child.kill("SIGKILL");
+        // Natural exit is checked first. This guard runs only after the observation.
+        for (const pid of [...rows(trace).flatMap((row) => (row.pid === undefined ? [] : [row.pid])), child.pid]) {
+          if (pid !== undefined && alive(pid)) {
+            process.kill(pid, "SIGKILL");
+          }
+        }
+
+        if (child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, "SIGKILL");
+          } catch {
+            /* the process group already ended */
+          }
         }
       }),
   );
@@ -106,14 +118,18 @@ const alive = (pid: number) => {
 };
 
 const listening = (port: number) =>
-  Effect.callback<boolean>((resume) => {
-    const socket = connect({ host: "127.0.0.1", port });
-    socket.once("connect", () => {
-      socket.destroy();
-      resume(Effect.succeed(true));
-    });
-    socket.once("error", () => resume(Effect.succeed(false)));
-  });
+  Effect.scoped(
+    Effect.gen(function* () {
+      const socket = yield* Effect.acquireRelease(
+        Effect.sync(() => connect({ host: "127.0.0.1", port })),
+        (socket) => Effect.sync(() => socket.destroy()),
+      );
+      return yield* Effect.callback<boolean>((resume) => {
+        socket.once("connect", () => resume(Effect.succeed(true)));
+        socket.once("error", () => resume(Effect.succeed(false)));
+      });
+    }),
+  );
 
 /** Wait up to 10 s for what the child owned to be gone: its processes, listeners and homes. */
 const leftBehind = (trace: ReadonlyArray<Row>) =>
@@ -206,7 +222,14 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
 const walk = async (target: Target) => {
   const reached = await Effect.runPromise(run(undefined, "SIGTERM", target));
   expect(reached, "the plain run acquires its home, server, browser, context and page").toEqual(
-    expect.arrayContaining(["home", "server", "browser", "context", "page"]),
+    expect.arrayContaining([
+      "home",
+      "server",
+      "browser",
+      "context",
+      "page",
+      ...(target === FIRST_WINDOW ? ["port", "socket"] : []),
+    ]),
   );
   const kinds = new Set<string>();
   await fc.assert(
