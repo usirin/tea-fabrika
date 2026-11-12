@@ -31,6 +31,7 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | A watcher ends | Its monitors go ([proc]) | Each of its watches gets `demonitored {why: "watcher_exited"}` (`processes/ProcessManager.ts:199-211`) | same |
 | demonitor | Keeps a queued `DOWN` unless `[flush]` ([erl]) | Always drops it (`processes/Process.ts:417-419`) | differs, because a canceled watch's `DOWN` serves nobody (C5) |
 | Signals | Separate from messages ([proc]) | A `DOWN` is a letter under a signal id only the brain writes (`processes/Process.ts:49-56`, `:393-420`) | differs, because a browser has no pid and reads one durable stream (C5) |
+| Mail outside the program's API | `handle_info` receives messages outside `handle_call` and `handle_cast` ([server]) | The brain appends a letter under `noticeId(key)` with `letterLine`. Fresh notices take `step` without an input port; accepted notices fold on replay. Client entry points refuse notice ids (`processes/Process.ts:196`, `runtime/Runner.ts:978`, `access/SessionManager.ts:132`) | same role; differs because ids are brain-only and refused or throwing notices are skipped with a span count (P45 slice 1) |
 | Who supervises | A supervisor process, linked to its children ([sup]) | A tea machine (`runtime/internal/supervisor.ts:59`) stepped inside the program's own object (`runtime/Runner.ts:310-431`) | differs, because its receipts sit beside the step in the object's SQLite (C5) |
 | Strategies | `one_for_one`, `one_for_all`, `rest_for_one`, `simple_one_for_one` ([sup]) | `one_for_one` with one child; the rest not built, Tier 4 | differs, because Tier 1 has one child |
 | Restart types | `permanent`, `transient`, `temporary` ([sup]) | In effect `transient`: only a throw restarts (`runtime/internal/supervisor.ts:84-131`); no choice yet, Tier 4 | differs, because a program has no normal exit in Tier 1 |
@@ -43,7 +44,7 @@ against main at `5b1171ed`. OTP's side is its documentation as read that day:
 | A busy process | The scheduler preempts each process after a count of reductions, so one busy loop cannot stall the others ([proc]) | Each process runs in its own Worker Loader isolate (`cloudflare/index.ts:25`), but `limits.cpuMs` is unset and a local workerd runs them on one thread: a 300 ms spin stalls every process ([experiment 173](../../../experiments/173-worker-loader.md)) | differs, because nothing caps a step yet; [0020](../../../.decisions/0020-programs-get-hard-walls.md) sets `cpuMs` from a measured step and a local step watchdog, built by P34c |
 | A state's timeout | `gen_statem`'s state timeout: a named state sets a timer, and when it fires a message arrives in that state; leaving the state cancels it ([statem]) | The merger's `waiting` step holds the time, `wake(model)` gives it to the runner, and the runner saves it as the object's one alarm and sends `timer` when it is due; a `timer` from a wait the merger has left changes nothing (`next/programs/pipeline/src/Merger.ts:347`, `runtime/Runner.ts:186`) | differs, because the alarm is saved, so the wait is still there after a restart ([0105](../../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md)); OTP's timer is in memory and goes with the process |
 
-Count: 30 rows, 10 same, 20 differ. Of the 20, 4 are not built yet (links, trap exit, three of the
+Count: 31 rows, 10 same, 21 differ. Of the 21, 4 are not built yet (links, trap exit, three of the
 four strategies, restart types), each waiting for Tier 4. One has no written reason yet: exit
 reasons (ticket 406). One is an open call: past the limit (ticket 404). One is decided and not built: a busy process (0020).
 
@@ -63,3 +64,4 @@ message, and isolation gets hard walls: quotas per program and a CPU limit per i
 [erl]: https://www.erlang.org/doc/apps/erts/erlang.html
 [app]: https://www.erlang.org/doc/apps/kernel/application.html
 [statem]: https://www.erlang.org/doc/system/statem.html#state-time-outs
+[server]: https://www.erlang.org/doc/apps/stdlib/gen_server.html#c:handle_info/2

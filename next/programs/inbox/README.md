@@ -22,8 +22,10 @@ rows. The machine returns no Cmds and asks for no wake time.
 ## Who may send
 
 `inputs: {}` declares no port. A person, an agent and a recovered device cannot send `added`
-through `process.send`. The brain supplies saved letters through the ledger's inbox, and the
-runner folds them into the model. The program writes no facts and has no outputs.
+through `process.send`. The brain appends letters under `noticeId(factId)` directly in a ledger
+transaction, using `letterLine`. The runner gives a fresh notice to `step` without a port check;
+accepted notices fold on replay. `Mailbox.send` and the signer refuse notice ids. A refused or
+throwing notice is skipped and counted on the span. The program writes no facts and has no outputs.
 
 Slice 1 does not connect email recovery to these letters. The gateway's delivery and the boot
 entry belong to slice 3. The window and dismissal saved on each device belong to slice 2.

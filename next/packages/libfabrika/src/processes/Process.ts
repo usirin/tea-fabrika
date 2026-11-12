@@ -44,7 +44,7 @@ const eventStream = (name: string): string => `${PROCESSES}/${name}`;
 
 /**
  * The one rule for who may write what: only the brain's ProcessManager writes `processes` or any
- * stream under `processes/`, any ProcessEvent case, or any id in the signal id space. The gateway and
+ * stream under `processes/`, any ProcessEvent case, or any signal, runner or notice id. The gateway and
  * the mailbox refuse every such write.
  */
 export const brainOnly = (write: { readonly stream: string; readonly id: string; readonly tag: string }): boolean =>
@@ -54,6 +54,7 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
   write.tag === "dead" ||
   Object.hasOwn(ProcessEvent.cases, write.tag) ||
   inSignalSpace(write.id) ||
+  inNoticeSpace(write.id) ||
   inRunnerSpace(write.id);
 
 /** Answer and alarm letters belong to the brain. Cmd write ids remain available to the signer. */
@@ -181,13 +182,19 @@ const isText = Schema.is(Text);
 /** A client's own inbox, `client:<id>/inbox`, where its DOWNs land; never a process's inbox. */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
 
-const SIGNAL_LEAD = JSON.stringify(["DOWN"]).slice(0, -1);
-
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 
+const led = (word: string) => {
+  const lead = JSON.stringify([word]).slice(0, -1);
+  return (id: string): boolean => id.startsWith(lead) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
+};
+
 /** True for any id in the signal id space, a JSON array led by `"DOWN"`: only the brain writes one. */
-export const inSignalSpace = (id: string): boolean =>
-  id.startsWith(SIGNAL_LEAD) || Option.exists(decodeIdParts(id), (parts) => parts[0] === "DOWN");
+export const inSignalSpace = led("DOWN");
+
+/** Ids for what the brain tells a program. Only the brain writes one. */
+export const inNoticeSpace = led("notice");
+export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
 
 /**
  * A disposable fold of the ledger. No process authority survives outside its events, and an event
