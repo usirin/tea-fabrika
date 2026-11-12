@@ -5,6 +5,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
+import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
 import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
 import { revokeText } from "@kampus/libfabrika/access/Text";
@@ -231,7 +232,13 @@ const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
     },
     delete: async (key: string) => values.delete(key),
     sync: async () => {},
-    setAlarm: async (at: number) => alarms?.set(at),
+    setAlarm: async (at: number) => {
+      if (at <= 0) {
+        throw new TypeError("setAlarm() cannot be called with an alarm time <= 0");
+      }
+
+      alarms?.set(at);
+    },
     deleteAlarm: async () => alarms?.clear(),
   };
 };
@@ -300,6 +307,7 @@ const world = (
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
+  table.programs["fabrika/checklist"] = { hash: "checklist-a", source: "checklist" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   const key = identity(),
@@ -520,6 +528,11 @@ const world = (
               check: (kind: string, event: unknown) => box.check(kind, event),
               admit: (msg: unknown) => box.admit(msg),
             };
+          }
+
+          if (id.startsWith("checklist-")) {
+            const Box = programBox(checklist, "checklist-a");
+            return Reflect.construct(Box, []);
           }
 
           const approval = id.startsWith("approvals-"),
