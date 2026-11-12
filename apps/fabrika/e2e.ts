@@ -1343,7 +1343,8 @@ if (process.platform !== "darwin") {
   throw new Error("this run checks macOS's window rules: run it on a Mac");
 }
 
-const launch = async (on: string) => {
+/** `shows` is what says the fixture project is up, as `openFixtureProject` takes it. */
+const launch = async (on: string, shows?: (page: Page) => Locator) => {
   const win = await TestWindow.launch({ home: on, env: parentEnv });
   const { app } = win;
   await noBrowser(app).catch(async (e: unknown) => {
@@ -1360,7 +1361,7 @@ const launch = async (on: string) => {
   if (await recent.count()) {
     await recent.click();
   } else {
-    await openFixtureProject(app, welcome, selected.project.root);
+    await openFixtureProject(app, welcome, selected.project.root, shows);
   }
 
   return win;
@@ -1508,7 +1509,8 @@ const mismatch = async () => {
   const old = await oldHost(other);
 
   try {
-    const win = await launch(other);
+    // A window that does not attach shows the alert in place of the desk and its top bar.
+    const win = await launch(other, (p) => p.getByRole("alert").filter({ hasText: "Not attached" }));
     const { app } = win;
 
     try {
@@ -2925,9 +2927,14 @@ const grid = async (page: Page, visit: (layout: Layout, ids: readonly string[]) 
 const STATES = ["plain", "asks-dot", "close-asked", "info", "palette", "strips", "closing", "pipe"] as const;
 type State = (typeof STATES)[number];
 
-/** The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. */
-const seedAsks = (own: string) =>
-  Effect.runPromise(
+/**
+ * The existing, made-up ticket #7 has a plan waiting on the person. No agent is started. Since
+ * ticket 276 the host reads the fixture project's own home, so the ledger is seeded there.
+ */
+const seedAsks = async (own: string) => {
+  const projectHome = (await testProject(own)).home;
+  await mkdir(projectHome, { recursive: true, mode: 0o700 });
+  return Effect.runPromise(
     Effect.gen(function* () {
       const ledger = yield* Ledger;
 
@@ -2941,8 +2948,9 @@ const seedAsks = (own: string) =>
           data: entry.fact,
         });
       }
-    }).pipe(Effect.provide(layerSqliteSync({ path: join(own, "ledger.sqlite") }))),
+    }).pipe(Effect.provide(layerSqliteSync({ path: join(projectHome, "ledger.sqlite") }))),
   );
+};
 
 const FOCUS = {
   "tile-focused": "apps/fabrika/docs/focus",

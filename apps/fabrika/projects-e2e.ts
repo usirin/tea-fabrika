@@ -7,7 +7,7 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
 import type { BaseWindow, MessageBoxOptions, OpenDialogOptions } from "electron";
 import * as fc from "fast-check";
-import type { ElectronApplication, Page } from "playwright";
+import type { ElectronApplication, Locator, Page } from "playwright";
 import { deskMachine, savedOf } from "./src/desk/desk.ts";
 import * as TestWindow from "./test-window.ts";
 
@@ -208,7 +208,17 @@ const boxState = async (page: Page, optionBox?: string) => {
   }`;
 };
 
-export const openFixtureProject = async (app: ElectronApplication, from: Page, root: string | null) => {
+/**
+ * Pick `root` from `from` through the folder sheet, and return the window that shows it. `shows` is
+ * what says the picked project is up: the project button by default. A window that cannot attach
+ * to its host (another link version) has no top bar, so it shows its alert instead.
+ */
+export const openFixtureProject = async (
+  app: ElectronApplication,
+  from: Page,
+  root: string | null,
+  shows: (page: Page) => Locator = button,
+) => {
   // A fresh window has not drawn yet: wait for the welcome's option or the project button.
   await until(
     async () => (await from.getByRole("option", { name: /Open Folder…/ }).count()) + (await button(from).count()),
@@ -332,12 +342,12 @@ export const openFixtureProject = async (app: ElectronApplication, from: Page, r
       }
 
       for (const page of app.windows()) {
-        if (!before.has(page) && (await button(page).count())) {
+        if (!before.has(page) && (await shows(page).count())) {
           return page;
         }
       }
 
-      if (wasWelcome && !from.isClosed() && (await button(from).count())) {
+      if (wasWelcome && !from.isClosed() && (await shows(from).count())) {
         return from;
       }
 
@@ -1063,7 +1073,7 @@ export const builtLaws = async () => {
           fc.constantFrom("welcome row", "welcome folder"),
           fc.shuffledSubarray(
             (Object.keys(PRESS_RECORDS) as ProjectPress[]).filter((press) => !press.startsWith("welcome")),
-            { minLength: 1 },
+            { minLength: Object.keys(PRESS_RECORDS).filter((press) => !press.startsWith("welcome")).length },
           ),
         )
         .map(([welcome, rest]): ProjectPress[] => [welcome, ...rest]),

@@ -20,6 +20,7 @@ import {
   policyFor,
   type Sealed,
 } from "../../../fixtures/ask-desk/cases.ts";
+import { testProject } from "../projects-e2e.ts";
 
 // Today's app. The amendment excludes a new inbox, glance, Open all and content-tile placement.
 // Run only on purpose through e2e.ts --ask-desk; never through Vitest. No agent or key is needed.
@@ -128,10 +129,14 @@ const sizeTo = async (
 
 const seal: (draft: unknown, policy: { seed: number }) => Effect.Effect<Sealed, unknown> = sealAsk;
 
-const on = <A, E>(home: string, program: Effect.Effect<A, E, Ledger>) =>
-  Effect.runPromise(
-    program.pipe(Effect.provide(layerSqliteSync({ path: join(home, "ledger.sqlite") })), Effect.scoped),
+/** Runs `program` on the fixture project's own ledger: since ticket 276 the host reads it there. */
+const on = async <A, E>(home: string, program: Effect.Effect<A, E, Ledger>) => {
+  const projectHome = (await testProject(home)).home;
+  await mkdir(projectHome, { recursive: true, mode: 0o700 });
+  return Effect.runPromise(
+    program.pipe(Effect.provide(layerSqliteSync({ path: join(projectHome, "ledger.sqlite") })), Effect.scoped),
   );
+};
 
 const seedAsk = (
   home: string,
@@ -874,7 +879,7 @@ export const askDesk = async (tools: Tools) => {
         await draft.fill("The plan misses the empty input");
         // Hold a real competing write lock. The host must expose pending, then failure.
         // This changes no app code, response, clock or product export.
-        const locked = new DatabaseSync(join(home, "ledger.sqlite"));
+        const locked = new DatabaseSync(join((await testProject(home)).home, "ledger.sqlite"));
         locked.exec("BEGIN IMMEDIATE");
 
         try {

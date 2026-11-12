@@ -207,8 +207,8 @@ it("P16: a saved summon under the same root, by any spelling, comes up with its 
             const manager = yield* SummonManager;
             let list = yield* manager.list;
 
-            for (let i = 0; i < 150 && list.some((s) => s.state === "opening"); i++) {
-              yield* Effect.sleep("20 millis");
+            while (list.some((s) => s.state === "opening")) {
+              yield* Effect.yieldNow;
               list = yield* manager.list;
             }
 
