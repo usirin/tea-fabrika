@@ -77,6 +77,10 @@ const experiments = Arbitrary.all({
   late: bounded(0, 10000),
 });
 
+const uncertainExperiments = Arbitrary.flatMap(experiments, (input) =>
+  Arbitrary.map(bounded(1, input.most + 1), (ordinal) => ({ ...input, most: input.most + 1, ordinal })),
+);
+
 const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
@@ -361,7 +365,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
     it.effect.prop(
       "failed, refused, interrupted and missing fire results remain visible after reopen and later faults continue",
-      [experiments, Arbitrary.schema(Schema.Literals(["refused", "off", "failed", "interrupted", "missing"]))],
+      [uncertainExperiments, Arbitrary.schema(Schema.Literals(["refused", "off", "failed", "interrupted", "missing"]))],
       ([input, mode]) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -375,7 +379,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 calls.push(request.ordinal);
                 expect(calls.filter((ordinal) => ordinal === request.ordinal)).toHaveLength(1);
 
-                if (request.ordinal !== 1) {
+                if (request.ordinal !== input.ordinal) {
                   return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
                 }
 
@@ -395,64 +399,88 @@ export const suite = (open: Open, checklist: unknown) =>
                 }
               });
             const handlers = { now, fire, inspect: read(world, binding) };
-            const most = input.most + 1;
-            yield* Effect.scoped(
-              Effect.gen(function* () {
-                const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
-                yield* runner.open("watch");
-                yield* runner.msg(
-                  world.letter(1, {
-                    type: "start",
-                    id: experimentId,
-                    seed: input.seed,
-                    most,
-                    gap: input.gap,
-                    target: binding,
-                  }),
-                );
-                const deadline = yield* nextDeadline(world);
+            const uncertain = mode === "missing" || mode === "interrupted";
+            // The random cut can be before, on or after the uncertain fault, including the final one.
+            const cuts = [...new Set([input.cut % (input.most + 1), input.ordinal, input.most])].sort((a, b) => a - b);
 
-                if (deadline === null) {
-                  return yield* Effect.die(new Error("experiment lost its first deadline"));
-                }
-
-                if (mode === "missing" || mode === "interrupted") {
-                  const child = yield* runner.due(deadline).pipe(Effect.forkScoped);
-                  yield* Deferred.await(entered);
-                  yield* Fiber.interrupt(child);
-                } else {
-                  yield* runner.due(deadline);
-                }
-              }),
-            );
-
-            const first = phase((yield* world.snapshot(NAME)).model);
-            expect(JSON.stringify(first)).toContain('"ordinal":1');
-
-            for (let ordinal = 2; ordinal <= most; ordinal++) {
+            for (const [index, cut] of cuts.entries()) {
               yield* Effect.scoped(
                 Effect.gen(function* () {
+                  const before = index === 0 ? null : yield* world.snapshot(NAME);
                   const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                   yield* runner.open("reopen");
-                  expect(calls.filter((n) => n === 1)).toHaveLength(1);
-                  const deadline = yield* nextDeadline(world);
 
-                  if (deadline === null) {
-                    return yield* Effect.die(new Error("an unanswered fault blocked the remaining schedule"));
+                  if (before === null) {
+                    yield* runner.msg(
+                      world.letter(1, {
+                        type: "start",
+                        id: experimentId,
+                        seed: input.seed,
+                        most: input.most,
+                        gap: input.gap,
+                        target: binding,
+                      }),
+                    );
+                  } else {
+                    expect(yield* world.snapshot(NAME), "reopen preserves the saved requests and answers").toEqual(
+                      before,
+                    );
                   }
 
-                  yield* runner.due(deadline + input.late);
+                  while (calls.length < cut) {
+                    const model = phase((yield* world.snapshot(NAME)).model);
+                    expect(model.phase._tag).toBe("active");
+
+                    if (model.phase._tag !== "active") {
+                      return yield* Effect.die(new Error("an unanswered fault blocked the remaining schedule"));
+                    }
+
+                    const { ordinal, deadline } = model.phase.experiment;
+                    const at = deadline + input.late;
+
+                    if (uncertain && ordinal === input.ordinal) {
+                      const child = yield* runner.due(at).pipe(Effect.forkScoped);
+                      yield* Deferred.await(entered);
+                      yield* Fiber.interrupt(child);
+                    } else {
+                      yield* runner.due(at);
+                    }
+
+                    expect(calls).toEqual(Array.from({ length: ordinal }, (_, n) => n + 1));
+
+                    for (let n = 0; n < input.duplicates; n++) {
+                      yield* runner.due(at);
+                    }
+
+                    expect(calls).toHaveLength(ordinal);
+                  }
                 }),
               );
             }
 
-            expect(calls).toEqual(Array.from({ length: most }, (_, n) => n + 1));
+            expect(calls).toEqual(Array.from({ length: input.most }, (_, n) => n + 1));
             const final = phase((yield* world.snapshot(NAME)).model);
-            expect(final.phase._tag).toBe(mode === "refused" ? "done" : "incomplete");
+            // Interrupting the last fire also leaves its following check undispatched. That saved
+            // checking phase is honest uncertainty; reopening must not guess or retry either Cmd.
+            expect(final.phase._tag).toBe(
+              uncertain && input.ordinal === input.most ? "checking" : mode === "refused" ? "done" : "incomplete",
+            );
+            expect(chaos.wake(final)).toBeNull();
+
+            if (final.phase._tag === "idle" || final.phase._tag === "starting" || final.phase._tag === "stopped") {
+              return yield* Effect.die(new Error("the experiment lost its history"));
+            }
+
+            expect(final.phase.experiment.asked.map((a) => a.ordinal)).toEqual(calls);
+            expect(final.phase.experiment.answers.map((a) => a.ordinal).sort((a, b) => a - b)).toEqual(
+              calls.filter((ordinal) => !uncertain || ordinal !== input.ordinal),
+            );
             const letters = yield* world.letters(NAME);
             const result = letters
               .map((l) => l.m)
-              .filter((m) => Schema.is(Schema.Struct({ cmd: Schema.Struct({ ordinal: Schema.Literal(1) }) }))(m));
+              .filter((m) =>
+                Schema.is(Schema.Struct({ cmd: Schema.Struct({ ordinal: Schema.Literal(input.ordinal) }) }))(m),
+              );
 
             if (mode === "missing" || mode === "interrupted") {
               expect(result).toHaveLength(0);
@@ -473,9 +501,226 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
                 yield* runner.open("final-reopen");
+                yield* runner.due(100_000_000);
+                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
+                expect(calls).toHaveLength(input.most);
+              }),
+            );
+          }),
+        ),
+      { arbitrary, timeout: 120_000 },
+    );
+
+    it.effect.prop(
+      "delayed fire callbacks after reopen fill only their experiment and never refire saved faults",
+      [
+        uncertainExperiments,
+        Arbitrary.schema(Schema.Literals(["current", "replaced"])),
+        Arbitrary.schema(Schema.Literals(["fired", "refused", "off", "failed"])),
+      ],
+      ([input, delivery, outcome]) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const world = yield* open;
+            const binding = yield* startTarget(world, checklist);
+            const entered = yield* Deferred.make<void>();
+            const release = yield* Deferred.make<void>();
+            const nextEntered = yield* Deferred.make<void>();
+            const nextRelease = yield* Deferred.make<void>();
+            const nextId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
+            const calls: Array<Chaos.Fire> = [];
+            const fire: Handler<never> = (raw) =>
+              Effect.gen(function* () {
+                const request = Schema.decodeUnknownSync(fireRequest)(raw);
+                calls.push(request);
+                expect(calls.filter((c) => c.id === request.id && c.ordinal === request.ordinal)).toHaveLength(1);
+
+                if (request.id === experimentId && request.ordinal === input.ordinal) {
+                  yield* Deferred.succeed(entered, undefined);
+                  yield* Deferred.await(release);
+
+                  if (outcome === "off") {
+                    return Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) }));
+                  }
+
+                  if (outcome === "failed") {
+                    return yield* Effect.die(new TypeError("delayed outside failure"));
+                  }
+
+                  if (outcome === "refused") {
+                    return Outcome.ok(Chaos.Fired.cases.refused.make({ reason: "stale" }));
+                  }
+                }
+
+                if (request.id === nextId && request.ordinal === input.ordinal) {
+                  yield* Deferred.succeed(nextEntered, undefined);
+                  yield* Deferred.await(nextRelease);
+                }
+
+                return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
+              });
+            const handlers = {
+              now: (raw: unknown) => {
+                const request = Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId }))(raw);
+                return Effect.succeed(
+                  Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
+                );
+              },
+              fire,
+              inspect: read(world, binding),
+            };
+            const start = (id: typeof Chaos.ExperimentId.Type) => ({
+              type: "start",
+              id,
+              seed: input.seed,
+              most: input.most,
+              gap: input.gap,
+              target: binding,
+            });
+            const advance = Effect.fnUntraced(function* (runner: Runner, through: number) {
+              while (true) {
+                const model = phase((yield* world.snapshot(NAME)).model);
+
+                if (model.phase._tag !== "active" || model.phase.experiment.ordinal > through) {
+                  return;
+                }
+
+                const { ordinal, deadline } = model.phase.experiment;
+                const at = deadline + input.late;
+                const before = calls.length;
+                yield* runner.due(at);
+                expect(calls).toHaveLength(before + 1);
+                expect(calls.at(-1)?.ordinal).toBe(ordinal);
+
+                for (let n = 0; n < input.duplicates; n++) {
+                  yield* runner.due(at);
+                }
+
+                expect(calls).toHaveLength(before + 1);
+              }
+            });
+
+            // The pending callback keeps its scoped connections until it returns. Each reopened
+            // runner below has fresh connections, and sees only the saved state and ledger.
+            const original = yield* world.session(NAME, chaos.name, chaos, handlers);
+            yield* original.runner.msg(world.letter(1, start(experimentId)));
+            yield* advance(original.runner, input.ordinal - 1);
+            const deadline = yield* nextDeadline(world);
+
+            if (deadline === null) {
+              return yield* Effect.die(new Error("the selected fault has no deadline"));
+            }
+
+            const pending = yield* original.runner.due(deadline + input.late).pipe(Effect.forkScoped);
+            yield* Deferred.await(entered);
+            const cut = input.ordinal + (input.cut % (input.most - input.ordinal + 1));
+            const saved = yield* world.snapshot(NAME);
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
+                yield* runner.open("reopen-with-pending-callback");
+                expect(yield* world.snapshot(NAME)).toEqual(saved);
+                yield* advance(runner, cut);
+              }),
+            );
+            const before = phase((yield* world.snapshot(NAME)).model);
+            expect(calls.map((c) => c.ordinal)).toEqual(Array.from({ length: cut }, (_, n) => n + 1));
+
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
+                yield* runner.open("before-callback");
+                expect(phase((yield* world.snapshot(NAME)).model)).toEqual(before);
+
+                const newer =
+                  delivery === "replaced"
+                    ? yield* Effect.gen(function* () {
+                        expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
+                        expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
+                        yield* advance(runner, input.ordinal - 1);
+                        const deadline = yield* nextDeadline(world);
+
+                        if (deadline === null) {
+                          return yield* Effect.die(new Error("the new experiment lost its matching fault"));
+                        }
+
+                        const pending = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
+                        yield* Deferred.await(nextEntered);
+                        return pending;
+                      })
+                    : null;
+
+                const current = phase((yield* world.snapshot(NAME)).model);
+                const count = calls.length;
+                yield* Deferred.succeed(release, undefined);
+                yield* Fiber.join(pending);
+                expect(calls).toHaveLength(count);
+                const after = phase((yield* world.snapshot(NAME)).model);
+
+                if (delivery === "replaced") {
+                  expect(after, "an old fire and its old check cannot settle the current experiment").toEqual(current);
+                } else {
+                  if (
+                    current.phase._tag === "idle" ||
+                    current.phase._tag === "starting" ||
+                    current.phase._tag === "stopped" ||
+                    after.phase._tag === "idle" ||
+                    after.phase._tag === "starting" ||
+                    after.phase._tag === "stopped"
+                  ) {
+                    return yield* Effect.die(new Error("the delayed answer lost the experiment"));
+                  }
+
+                  expect(after.phase.experiment.asked).toEqual(current.phase.experiment.asked);
+                  expect(after.phase.experiment.schedule).toEqual(current.phase.experiment.schedule);
+                  expect(after.phase.experiment.answers).toHaveLength(current.phase.experiment.answers.length + 1);
+                  const answer = after.phase.experiment.answers.find((a) => a.ordinal === input.ordinal);
+                  expect(answer?.result._tag).toBe(outcome === "off" || outcome === "failed" ? "failed" : "answered");
+                }
+
+                if (newer !== null) {
+                  yield* Deferred.succeed(nextRelease, undefined);
+                  yield* Fiber.join(newer);
+                }
+
+                yield* advance(runner, input.most);
+              }),
+            );
+
+            const final = phase((yield* world.snapshot(NAME)).model);
+            expect(final.phase._tag).toBe(
+              delivery === "replaced" ||
+                (outcome !== "off" && outcome !== "failed" && (cut < input.most || input.ordinal === input.most))
+                ? "done"
+                : "incomplete",
+            );
+            expect(chaos.wake(final)).toBeNull();
+            expect(calls.filter((c) => c.id === experimentId).map((c) => c.ordinal)).toEqual(
+              Array.from({ length: delivery === "replaced" ? cut : input.most }, (_, n) => n + 1),
+            );
+            expect(calls.filter((c) => c.id === nextId).map((c) => c.ordinal)).toEqual(
+              Array.from({ length: delivery === "replaced" ? input.most : 0 }, (_, n) => n + 1),
+            );
+            const late = (yield* world.letters(NAME)).filter((letter) =>
+              Schema.is(
+                Schema.Struct({
+                  cmd: Schema.Struct({ id: Schema.Literal(experimentId), ordinal: Schema.Literal(input.ordinal) }),
+                }),
+              )(letter.m),
+            );
+            expect(late).toHaveLength(1);
+            expect(late[0]?.m).toMatchObject({
+              type: outcome === "off" || outcome === "failed" ? "fire_err" : "fire_ok",
+            });
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
+                yield* runner.open("after-callback-reopen");
+                yield* runner.due(100_000_000);
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(final);
               }),
             );
+            expect(new Set(calls.map((c) => `${c.id}/${c.ordinal}`)).size).toBe(calls.length);
           }),
         ),
       { arbitrary, timeout: 120_000 },
