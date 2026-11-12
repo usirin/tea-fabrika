@@ -10,8 +10,9 @@ import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.sha
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // 109 rows: four split estimates, four build rows from CI run 42922102030 (A9 and A10),
-  // and 101 measured medians, including zero-second files.
+  // T871 adds medians from runs 43239450301, 43235822398 and 43234969237, attempt 1.
+  // The store wrapper retains the original aggregate until the split's first ready CI run;
+  // the runtime wrapper has no measurement yet and stays absent.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
     "next/apps/fabrika/src/build.test.ts": 39.9,
@@ -50,6 +51,7 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/apps/fabrika/src/settings.test.ts": 0.0,
     "next/apps/fabrika/src/instance-records.test.ts": 32.8,
     "next/apps/fabrika/src/instance-wire.test.ts": 68.6,
+    "next/apps/fabrika/src/worker-mail.test.ts": 19.6,
     "next/packages/libfabrika/src/Id.test.ts": 3.8,
     "next/packages/libfabrika/src/Id.types.test.ts": 0.0,
     "next/packages/libfabrika/src/Testing.test.ts": 0.0,
@@ -76,6 +78,8 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/packages/libfabrika/src/ledger/TraceId.test.ts": 0.8,
     "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
     "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
+    "next/packages/libfabrika/src/node/ProgramMail.test.ts": 245.6,
+    "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
     "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": 2.1,
     "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": 0.1,
     "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": 4.2,

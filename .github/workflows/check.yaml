@@ -342,11 +342,9 @@ jobs:
           (needs.changes.result != 'success' ||
            needs.changes.outputs.next != 'false') }}
     runs-on: ubuntu-latest
-    # Each of the six machines gets this limit. The slowest shard took 132 s (93 to 132 s, run
-    # 42736438938 on pull request 653, ticket 376). next/ grew about half again since that run
-    # (one machine: 457 s then, 674 s when ticket 496 set its limit), so about 200 s now, and the
-    # limit is about three times that.
-    timeout-minutes: 10
+    # Largest of 30 completed next jobs: 486 s, run 43239450301 attempt 1, job 131255816934.
+    # Twice that whole-job time, rounded up to a minute: ceil(972 / 60) = 17.
+    timeout-minutes: 17
     strategy:
       fail-fast: false
       matrix:
@@ -368,9 +366,12 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run next/ --shard "$SHARD"
+      - run: pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"
         env:
           SHARD: ${{ matrix.shard }}/6
+      - name: shard times
+        if: ${{ !cancelled() }}
+        run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, the same way as the test job's apt step.
       - name: chromium

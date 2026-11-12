@@ -20,6 +20,7 @@ import {
   Arbitrary,
   Cause,
   Clock,
+  Console,
   Context,
   Deferred,
   Effect,
@@ -77,6 +78,19 @@ export type Store = {
 };
 
 const SEED = 119120;
+const joinLimit = "20 seconds";
+
+const completion = <A, E>(fiber: Fiber.Fiber<A, E>, label: string) =>
+  Fiber.join(fiber).pipe(
+    Effect.timeoutOrElse({
+      duration: joinLimit,
+      orElse: () =>
+        Console.error(`${label}: exceeded ${joinLimit}`).pipe(
+          Effect.andThen(Effect.sync(() => expect.fail(`${label}: exceeded ${joinLimit}`))),
+        ),
+    }),
+  );
+
 const BUILD = "p41-build-a";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -512,6 +526,7 @@ const savedModel = Effect.fnUntraced(function* (store: Store, name: string) {
  * and every saved alarm has fired, each request has the end its kind gives it.
  */
 const walk = (
+  law: string,
   open: Effect.Effect<Store, never, Scope.Scope>,
   pairs: ReadonlyArray<Pair>,
   moves: ReadonlyArray<Move>,
@@ -824,10 +839,10 @@ const walk = (
             yield* Deferred.succeed(hold.release, undefined);
 
             if (drain !== null) {
-              yield* Fiber.join(drain);
+              yield* completion(drain, `${law}: drain completion for ${name}`);
             }
 
-            yield* Fiber.join(sending);
+            yield* completion(sending, `${law}: sending completion for ${requesterName(k)}`);
             world.wakes.delete(name);
             const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
             expect(alarm, "M1, M4: the wake behind the drain saves the next alarm").toBeDefined();
@@ -1038,8 +1053,8 @@ const walk = (
 
     world.stalled.clear();
 
-    for (const fiber of world.background) {
-      yield* Fiber.join(fiber).pipe(Effect.timeoutOption("20 seconds"), Effect.ignore);
+    for (const [index, fiber] of world.background.entries()) {
+      yield* completion(fiber, `${law}: background Send completion for fiber ${index}`);
     }
 
     for (let round = 0; round < 4; round++) {
@@ -1125,7 +1140,7 @@ const prop = (
     () =>
       Effect.gen(function* () {
         const done = new Set<Move>();
-        const law = walk(open, pairs, moves, done);
+        const law = walk(name, open, pairs, moves, done);
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const probe = yield* Effect.scoped(law(tape));
           // L12: once the scope is gone, nothing it opened is still open or still running.
@@ -1146,7 +1161,8 @@ const prop = (
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),
-    600_000,
+    // CI max S1/S2 19.7 s, runs 43239450301, 43235822398, 43234969237: ceil(2 * 19.7) s.
+    40_000,
   );
 
 const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
@@ -1348,7 +1364,8 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
           ),
         );
       }),
-    600_000,
+    // CI max M3 11.1 s across the same three runs: ceil(2 * 11.1) s.
+    23_000,
   );
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
@@ -1364,6 +1381,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 2 });
               const observed = records(secrets, trace);
               const run = walk(
+                trace ? "T1a" : "T1a [secrets]",
                 open,
                 [1, 2],
                 [
@@ -1402,7 +1420,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               ]),
             );
           }),
-        600_000,
+        // CI max T1a [secrets] 58.5 s across the same three runs: 2 * 58.5 s.
+        117_000,
       );
     }
 
