@@ -55,6 +55,13 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
+P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
+[0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses
+a write that stamps its own `id`, `by`, `for` or `arrivedAt` before it makes an input id, and keeps
+only a count per piece and hour: no ledger entry, no span row and no measurement row. It finishes
+no Tier 1 row, so the count stays 20.
+
 *2026-11-12:* P17b, the rest of Tier 1's chaos row, is cut in three slices on tracker ticket 287.
 Slice 1 in `next/`, the history checker and the off contract, is
 [PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
@@ -67,6 +74,15 @@ Ticket 731's first slice in `next/` separates ClientManager's contract from its 
 ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
+
+*2026-11-12:* P38's slice 3 is cut in three on tracker ticket 753. Slice 3a in `next/` is
+[PR 1039](https://github.com/usirin/tea-fabrika/pull/1039): a settings file and the saved snapshot
+take their encodings from the one declaration, and a snapshot is read back strictly, with its hash
+checked ([the pattern](../../.patterns/settings.md)). It adds no setting and starts no Worker read.
+It finishes no Tier 1 row, so the count stays 20. Slice 3b comes next: the Worker handoff, the start
+record and the first byte setting, `limits.record`. Slice 3c adds the remaining declarations. P38
+stays open until its whole settings stack lands
+([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
 
 **Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,

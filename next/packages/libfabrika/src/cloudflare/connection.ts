@@ -2,7 +2,7 @@ import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } 
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
-import { errorClass } from "../telemetry/Trace.ts";
+import { errorClass, REFUSED } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
@@ -119,7 +119,17 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             return result;
           }
 
-          return yield* rpc(p.route(client, method, params));
+          return yield* rpc(
+            p
+              .route(client, method, params)
+              .pipe(
+                Effect.tap((answer) =>
+                  answer._tag === "refused" && answer.reason === "reserved"
+                    ? Effect.annotateCurrentSpan(REFUSED, "reserved")
+                    : Effect.void,
+                ),
+              ),
+          );
         },
         // A failed or defective call still answers its request without exposing error details. It is
         // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and
@@ -229,7 +239,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       }
 
       const work = (yield* connected(ws)).frame(text);
-      return yield* state._tag === "online" ? recorded(work) : work;
+      yield* state._tag === "online" ? recorded(work) : work;
     }),
     close: Effect.fnUntraced(function* (ws: WebSocket) {
       return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);

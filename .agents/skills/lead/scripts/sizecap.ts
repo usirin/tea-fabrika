@@ -17,7 +17,8 @@
 // detection, in a file under `next/`, `apps/`, `programs/` or `packages/` (AGENTS.md: product code
 // is `next/` and today's app) that is none of these, which are counted apart from product lines:
 //   test       a `.test.` or `.test-support.` file, anything under `fixtures/` or an `e2e/` folder,
-//              and an `e2e.ts` runner (0087 leans to tests not counting)
+//              an `e2e.ts` runner, and under `next/` a shared suite named `XTest.ts`, which a test
+//              file runs as `SinkTest.suite(nodeSql)` (0029, 0062) (0087 leans to tests not counting)
 //   docs       Markdown, and anything under `docs/`
 //   lock       `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `*.lock`
 //   generated  a file `.gitattributes` marks `linguist-generated` at the head, as GitHub's diff
@@ -45,7 +46,22 @@
 //     dependency, three packages to add. The plan's tables are read as the plan skill's owner check reads them, so
 //     both checks see the same cells: fenced blocks skipped, rows split on unescaped pipes.
 //
+// A shared suite is told by its name, as `exam-paths.json`'s row `next/**/*Test.ts` tells it. That
+// file is not read here: it lists the exam, which also holds product and settings files (a compiler
+// check, `package.json`, the token files), so its rows cannot say what a test is.
+//
 // Edge cases, each with a law in sizecap.test.ts:
+//   - `CiTest.ts`, `fooTest.ts` and `XTest.tsx` under `next/` are suites: any character, then `Test`
+//     with a capital T, then `.ts` or `.tsx`. The exam row names `.ts` only; `.tsx` follows its
+//     `.test.tsx` row.
+//   - `Latest.ts` and `Contest.ts` are product: the t is lower-case.
+//   - `Test.ts` alone is product: a suite is read through its subject, as `SinkTest`, and this name
+//     has none. The exam row's glob does match it; no such file exists.
+//   - `src/Test/thing.ts` is product: only the file's own name is read, never a folder's.
+//   - `XTest.css` and `XTest.json` are product: a suite is TypeScript.
+//   - `packages/x/XTest.ts` is product, and `.agents/x/XTest.ts` stays other: the exam row and the
+//     two decisions cover `next/` only.
+//   - `x.test-support.ts` is a test wherever it stands, as before.
 //   - A renamed file counts only its changed lines, and is sorted by its new path.
 //   - A binary file has no lines; it is counted in files, never as zero lines of product.
 //   - A path with a space or a non-ASCII name is read whole (`-z`).
@@ -74,6 +90,13 @@ export type Kind = typeof Kind.Type;
 const PRODUCT = ["next/", "apps/", "programs/", "packages/"];
 const LOCKS = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]);
 
+/** A file name that ends in `Test.ts` or `Test.tsx`, with a capital T and at least one character before it. */
+const SUITE = /.Test\.tsx?$/;
+
+/** Whether `path` is one of `next/`'s shared suites, read as `SinkTest.suite(nodeSql)` (0029, 0062). */
+export const isSharedSuite = (path: string): boolean =>
+  path.startsWith("next/") && SUITE.test(path.split("/").at(-1) ?? "");
+
 /** The kind of one changed file, from its path and whether the head marks it generated. */
 export const classify = (path: string, generated: boolean): Kind => {
   const parts = path.split("/");
@@ -90,6 +113,7 @@ export const classify = (path: string, generated: boolean): Kind => {
   if (
     /\.test(-support)?\./.test(name) ||
     name === "e2e.ts" ||
+    isSharedSuite(path) ||
     parts.slice(0, -1).includes("e2e") ||
     parts.slice(0, -1).includes("fixtures")
   ) {

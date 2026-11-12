@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-t844-lead-host-2",
+  "ticket": "usirin/tea-fabrika#844",
+  "pr": "usirin/tea-fabrika#1027",
+  "started": "2026-11-12T02:44:00-08:00",
+  "ended": "2026-11-12T02:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ version. The lead's second host checks for ticket 844, at head a2bcb5d8505189a0b7d284980af52e0f25ed9eb0 merged with main (clean merge, not committed), after the tests step strengthened the p67 spoof law and the review answered done again. By hand, not this repo's machine and not today's fabrika. Each file ran alone on Node 26.13.0 with one worker: apps/fabrika/src/door.test.ts 133 of 133, apps/fabrika/src/instance-wire.test.ts 11 of 11, cloudflare/connection.test.ts 2 of 2, telemetry/Trace.types.test.ts 1 of 1, telemetry/internal/sums.test.ts 1 of 1, transport/Connection.test.ts 4 of 4, apps/fabrika/src/exam/layers.test.ts 19 of 19. No failure and no rerun. pnpm lint passed and changed no file. pnpm typecheck passed. Hand check of loosening.sh's 7 hits: the .oxlintrc.json change only adds SpanTag to the fabrika/modules files and values lists, and no rule is off; layer-rules.json gains the shared name and the one exception row the plan names; the other unrecognized changes are imports and new laws. The removed law is the old p67 spoof law. Its two assertions on a stored refused row (the row's tag and the real sender) are gone, as decisions 0140 and 0143 decide: a refused write is counted by the hour and is never a row. Its replacement runs 100 times with generated key, place, method and value, and asserts the reserved answer, no delivery, no input id, an empty gateway/inputs and no trace of the value in any table or archive. One gap is left and filed as a ticket: no law sends a stamped key together with params that fail to decode. The times are estimates. No token or dollar figure was reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}
