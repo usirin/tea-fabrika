@@ -1,6 +1,6 @@
 // P41 slice 2, next/. Exercise the public delivery layer at its RPC handles.
 import { it, expect } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Logger, Result, Schema, Tracer } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Logger, References, Result, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { State } from "../processes/Process.ts";
 import { type Delivery, ProgramMailError, type Receipt } from "../processes/ProgramMail.ts";
@@ -132,9 +132,11 @@ for (const trace of [false, true]) {
         const outputs: Array<string> = [];
         const logger = Logger.layer([
           Logger.make((options) => {
+            // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
+            const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
             outputs.push(
-              JSON.stringify(options.message),
-              JSON.stringify([...options.annotations]),
+              JSON.stringify(options.message, plain),
+              JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
               Cause.pretty(options.cause),
             );
           }),

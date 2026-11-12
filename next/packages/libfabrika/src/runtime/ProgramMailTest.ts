@@ -28,6 +28,7 @@ import {
   Layer,
   Logger,
   Option,
+  References,
   Result,
   Schema,
   Scope,
@@ -207,7 +208,13 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
   });
   const logger = Logger.layer([
     Logger.make((options) => {
-      logs.push(JSON.stringify(options.message), JSON.stringify([...options.annotations]), Cause.pretty(options.cause));
+      // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
+      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      logs.push(
+        JSON.stringify(options.message, plain),
+        JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
+        Cause.pretty(options.cause),
+      );
     }),
   ]);
   const check = () => {
