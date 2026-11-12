@@ -4,15 +4,13 @@ import { Machine } from "@demlik/tea/effect";
 import { Effect, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
-import type { Envelope } from "../access/SessionManager.ts";
-import { Gateway } from "../gateway/Gateway.ts";
 import { from } from "../processes/Process.test-support.ts";
 import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
 import type { Sql } from "../Sql.ts";
 import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
 import { programBox } from "./box.ts";
-import { ProjectService, projectLayer, type ProjectDoorOptions } from "./runtime.ts";
+import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
@@ -27,9 +25,10 @@ const ProjectInput = Schema.Struct({
   body: Schema.optionalKey(Schema.String),
 });
 
-/** Storage and Promise-based platform handles belong to the module running this suite. */
+/** Storage, Gateway wiring and platform handles belong to the module running this suite. */
 export interface Harness {
   readonly open: Effect.Effect<Sql, never, Scope.Scope>;
+  readonly door: (url: string, input: typeof ProjectInput) => ProjectOptions["door"];
   readonly environment: (
     box: InstanceType<ReturnType<typeof programBox>>,
     accept: () => number,
@@ -82,7 +81,7 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   const Box = programBox(program, BUILD);
   const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
   let accepted = 0;
-  // Only platform handles are supplied. Project routing, audit, Gateway and box calls are real.
+  // The driver wires Gateway; project routing, audit and box calls stay real.
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
   });
@@ -136,37 +135,7 @@ const projectWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
         },
         programs: { counter: { hash: BUILD, source: "" } },
         bootstrap: { name: NAME, id: "project-start", program: "counter" },
-        door: (options: ProjectDoorOptions) =>
-          Gateway.pipe(
-            Effect.provide(
-              Gateway.layer({
-                ...options,
-                name: "p13-project",
-                url,
-                origins: ["https://fabrika.test"],
-                versions: [1],
-                location: "test",
-                build: BUILD,
-                waiting: { most: 20, ttl: 600_000 },
-                ping: { min: 10_000, max: 60_000 },
-                inputCap: 1000,
-                spentCap: 1000,
-                deliver: (
-                  pid: Parameters<ProjectDoorOptions["deliver"]>[0],
-                  _envelope: Envelope<typeof ProjectInput.Type>,
-                  _span: { readonly traceId: string; readonly spanId: string },
-                  incoming: Parameters<ProjectDoorOptions["deliver"]>[1],
-                ) => options.deliver(pid, incoming),
-                inputs: {
-                  schema: ProjectInput,
-                  raw: [],
-                  personOnly: [],
-                  name: (m: typeof ProjectInput.Type) => m.type,
-                },
-                events: { personOnly: [] },
-              }),
-            ),
-          ),
+        door: harness.door(url, ProjectInput),
       }),
     ),
   );

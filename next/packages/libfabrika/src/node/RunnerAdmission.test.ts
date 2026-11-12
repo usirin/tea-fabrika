@@ -6,7 +6,10 @@ import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
+import type { Envelope } from "../access/SessionManager.ts";
 import * as ProjectAuditTest from "../cloudflare/ProjectAuditTest.ts";
+import type { ProjectDoorOptions } from "../cloudflare/runtime.ts";
+import { Gateway } from "../gateway/Gateway.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -122,7 +125,44 @@ const environment: ProjectAuditTest.Harness["environment"] = (
   };
 };
 
+const door: ProjectAuditTest.Harness["door"] =
+  (url: string, input: Parameters<ProjectAuditTest.Harness["door"]>[1]) => (options: ProjectDoorOptions) =>
+    Gateway.pipe(
+      Effect.provide(
+        Gateway.layer({
+          ...options,
+          name: "p13-project",
+          url,
+          origins: ["https://fabrika.test"],
+          versions: [1],
+          location: "test",
+          build: "build-a",
+          waiting: { most: 20, ttl: 600_000 },
+          ping: { min: 10_000, max: 60_000 },
+          inputCap: 1000,
+          spentCap: 1000,
+          deliver: (
+            pid: Parameters<ProjectDoorOptions["deliver"]>[0],
+            _envelope: Envelope<typeof input.Type>,
+            _span: { readonly traceId: string; readonly spanId: string },
+            incoming: Parameters<ProjectDoorOptions["deliver"]>[1],
+          ) => options.deliver(pid, incoming),
+          inputs: {
+            schema: input,
+            raw: [],
+            personOnly: [],
+            name: (m: typeof input.Type) => m.type,
+          },
+          events: { personOnly: [] },
+        }),
+      ),
+    );
+
 ProjectAuditTest.suite(
-  { open: files.pipe(Effect.flatMap((open: Effect.Success<typeof files>) => open("project-audit"))), environment },
+  {
+    open: files.pipe(Effect.flatMap((open: Effect.Success<typeof files>) => open("project-audit"))),
+    environment,
+    door,
+  },
   register,
 );
