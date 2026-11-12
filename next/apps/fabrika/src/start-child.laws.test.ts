@@ -5,6 +5,7 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
@@ -457,6 +458,8 @@ const StoragePath = [
   "resolve",
   "receive",
   "object",
+  "read",
+  "append",
 ] as const;
 type StoragePath = (typeof StoragePath)[number];
 type StorageCut = { path: StoragePath; operation: number; statement: string };
@@ -488,6 +491,7 @@ const storageCall = Effect.fnUntraced(function* (
   };
   const start = ProjectService.use((p) => p.processChild(child, fixture.from));
   let pid = "";
+  let rev = 0;
   let prepared = true;
 
   if (path === "recovery") {
@@ -509,11 +513,12 @@ const storageCall = Effect.fnUntraced(function* (
     const started = yield* Effect.promise(() => runtime.runPromise(start));
     prepared = started._tag === "ok" && started.value._tag === "started";
 
-    if (started._tag !== "ok") {
+    if (started._tag !== "ok" || started.value._tag !== "started") {
       return yield* Effect.die("child was not started");
     }
 
     pid = started.value.process;
+    rev = started.value.rev;
 
     if (path === "migration") {
       fixture.legacyDescriptors();
@@ -549,6 +554,18 @@ const storageCall = Effect.fnUntraced(function* (
         return p.processReceive(pid, 0);
       case "object":
         return p.processObject(pid);
+      case "read":
+        return p.read(`${child.name}/inbox`, 0, pid);
+      case "append":
+        return p.append(
+          "counter:1/inbox",
+          `${child.id}/answer`,
+          letterLine(fixture.from, {
+            type: "start_child_ok",
+            cmd: { type: "start_child", id: child.id, input: { program: child.code.program, name: child.name } },
+            value: { _tag: "started", process: pid, name: child.name, rev },
+          }),
+        );
       case "exit":
         return p.processExit(pid, { _tag: "normal" }, fixture.from);
       default:
