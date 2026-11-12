@@ -785,4 +785,110 @@ describe("P12 Connection recording", () => {
       }
     });
   }
+
+  // Ticket 646: a call whose project route rejects answers its sender at once, and the cause is kept
+  // on a failed span, never on the wire.
+  class WireFault extends Error {
+    override name = "WireFault";
+  }
+
+  const rejected = fc.constantFrom(
+    { name: "Error", make: (message: string): Error => new Error(message) },
+    { name: "TypeError", make: (message: string): Error => new TypeError(message) },
+    { name: "WireFault", make: (message: string): Error => new WireFault(message) },
+  );
+  const FRAME = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    error: { code: -32000, message: "unreachable", data: { reason: "unreachable" } },
+  });
+
+  const refusedCall = async (fault: Error) => {
+    const w = await world(),
+      db = new DatabaseSync(":memory:"),
+      sent: string[] = [];
+    let attached: typeof Attached.Type = Attached.cases.online.make({
+      client: "client-test",
+      identity: { key: w.key.fingerprint, person: PERSON, as: "window" },
+      version: 1,
+      waits: [],
+      watching: false,
+      busy: false,
+    });
+    const ws = {
+      deserializeAttachment: () => attached,
+      serializeAttachment: (a: typeof Attached.Type) => {
+        attached = a;
+      },
+      send: (text: string) => {
+        sent.push(text);
+      },
+      close: () => {},
+    };
+    // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+    const ctx = {
+      id: { name: "gateway-test" },
+      storage: storage(db),
+      getWebSockets: () => [ws],
+      getTags: () => ["session-test", "tab-a", w.key.fingerprint],
+      getWebSocketAutoResponseTimestamp: () => new Date(42),
+    } as unknown as DurableObjectState;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+    const project = {
+      getByName: () => ({
+        route: async () => {
+          throw fault;
+        },
+      }),
+    } as unknown as Env["PROJECT"];
+    // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+    const socket = ws as unknown as WebSocket;
+    const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
+
+    try {
+      const gateway = await runtime.runPromise(ConnectionService),
+        before = w.recorded.length;
+      const frame = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ledger.read", params: { stream: "x", after: 0 } });
+      await runtime.runPromise(gateway.message(socket, frame));
+      return { sent, spans: w.recorded.slice(before) };
+    } finally {
+      await runtime.dispose();
+      db.close();
+
+      for (const close of closers.splice(0).reverse()) {
+        await close();
+      }
+    }
+  };
+
+  it("a call whose project route fails answers exactly refused unreachable, and none of the failure's text reaches the client", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        rejected,
+        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
+        async (kind, text) => {
+          const { sent } = await refusedCall(kind.make(text));
+          expect(sent).toEqual([FRAME]);
+          expect(sent.join("")).not.toContain(text);
+        },
+      ),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
+
+  it("that call records one failed gateway.refused span whose error.type is the rejected error's name, and no text of it in a tag", async () => {
+    await fc.assert(
+      fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), async (kind, text) => {
+        const { spans } = await refusedCall(kind.make(text));
+        const refused = spans.filter((row) => row.name === "gateway.refused");
+        expect(refused).toHaveLength(1);
+        expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
+        // Failure text is deletable content (P37), never a span tag.
+        expect(
+          Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+        ).toEqual([]);
+      }),
+      { seed: 119120, numRuns: 20 },
+    );
+  });
 });
