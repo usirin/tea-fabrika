@@ -2,10 +2,10 @@ import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Program } from "@kampus/libfabrika";
 import { Checks } from "@kampus/libfabrika/ci/Ci";
-import { Change, ChangeId, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
+import { Change as HostChange, ChangeId, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { send, SendInput, Queued } from "@kampus/libfabrika/runtime/Send";
 import { Array as Arr, Schema } from "effect";
-import { Check, checksFor, Kind, kindOf, verdictOf } from "./Change.ts";
+import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
 
@@ -20,7 +20,7 @@ export const Inputs = {
   merge: Schema.Struct({ attempt: Attempt, change: ChangeId, head: Commit }),
 };
 
-const change = Cmd.make("change", { input: Schema.toType(Inputs.change), ok: Schema.toType(Change), err: Faults });
+const change = Cmd.make("change", { input: Schema.toType(Inputs.change), ok: Schema.toType(HostChange), err: Faults });
 const update = Cmd.make("update", { input: Schema.toType(Inputs.update), ok: Schema.toType(Updated), err: Faults });
 const checks = Cmd.make("checks", { input: Schema.toType(Inputs.checks), ok: Schema.toType(Checks), err: Faults });
 const merge = Cmd.make("merge", { input: Schema.toType(Inputs.merge), ok: Schema.toType(Merged), err: Faults });
@@ -42,7 +42,7 @@ const Job = Schema.Struct({ ref: Land.fields.ref, change: ChangeId, head: Commit
 
 const counts = { attempt: Count, late: Count };
 const working = { ...counts, job: Job, step: Step };
-const prepared = { ...working, kind: Kind, checks: Schema.NonEmptyArray(Check) };
+const prepared = { ...working, kind: Change.Kind, checks: Schema.NonEmptyArray(Change.Check) };
 
 const Model = Schema.TaggedUnion({
   idle: counts,
@@ -80,7 +80,7 @@ const Msg = Schema.Union([
   Land,
   Abandon,
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
-  answers(change.cmdType, Inputs.change, Change, Faults),
+  answers(change.cmdType, Inputs.change, HostChange, Faults),
   answers(update.cmdType, Inputs.update, Updated, Faults),
   answers(checks.cmdType, Inputs.checks, Checks, Faults),
   answers(merge.cmdType, Inputs.merge, Merged, Faults),
@@ -191,8 +191,8 @@ export const merger = (settings: Values) => {
         return finish(s, Reply.cases.moved.make({ ...identity(s), head: v.head }));
       }
 
-      const kind = kindOf(settings.kinds, v.paths);
-      const wanted = checksFor(settings.checks, kind);
+      const kind = Change.kind(settings.kinds, v.paths);
+      const wanted = Change.checksFor(settings.checks, kind);
 
       if (!Arr.isReadonlyArrayNonEmpty(wanted)) {
         return finish(s, Reply.cases.unset.make({ ...identity(s), kind }));
@@ -238,7 +238,7 @@ export const merger = (settings: Values) => {
     }
 
     if (s._tag === "checking" && m.type === "checks_ok") {
-      const verdict = verdictOf(s.checks, m.value);
+      const verdict = Change.verdict(s.checks, m.value);
 
       if (verdict._tag === "red") {
         return finish(s, Reply.cases.red.make({ ...identity(s), head: s.head, runs: verdict.runs }));

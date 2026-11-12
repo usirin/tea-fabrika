@@ -20,25 +20,24 @@ export const Glob = Schema.NonEmptyString.check(
 
 export const Kinds = Schema.Struct({ rows: Schema.Array(Glob), docs: Schema.Array(Glob) });
 
-// oxlint-disable-next-line fabrika/no-of -- ticket 765 approved plan names this public function kindOf
-export const kindOf = (kinds: typeof Kinds.Type, paths: ReadonlyArray<typeof Path.Type> | null): typeof Kind.Type => {
+export const kind = (kinds: typeof Kinds.Type, paths: ReadonlyArray<typeof Path.Type> | null): typeof Kind.Type => {
   if (paths === null || paths.length === 0) {
     return "code";
   }
 
   const rows = kinds.rows.map((g) => picomatch(g));
   const docs = kinds.docs.map((g) => picomatch(g));
-  let kind: typeof Kind.Type = "rows";
+  let heaviest: typeof Kind.Type = "rows";
 
   for (const path of paths) {
     if (docs.some((matches) => matches(path))) {
-      kind = "docs";
+      heaviest = "docs";
     } else if (!rows.some((matches) => matches(path))) {
       return "code";
     }
   }
 
-  return kind;
+  return heaviest;
 };
 
 export const Check = Schema.Struct({ name: Schema.NonEmptyString, source: Schema.optionalKey(Schema.NonEmptyString) });
@@ -54,8 +53,7 @@ export const Verdict = Schema.TaggedUnion({
   lost: { runs: Schema.NonEmptyArray(CheckRun) },
 });
 
-// oxlint-disable-next-line fabrika/no-of -- ticket 765 approved plan names this public function verdictOf
-export const verdictOf = (
+export const verdict = (
   checks: Arr.NonEmptyReadonlyArray<typeof Check.Type>,
   current: typeof Checks.Type,
 ): typeof Verdict.Type => {

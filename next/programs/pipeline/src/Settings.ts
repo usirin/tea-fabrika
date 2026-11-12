@@ -44,5 +44,4 @@ export const all = Setting.group({
 
 export type Values = typeof all extends Setting.Group<infer A> ? A : never;
 
-// oxlint-disable-next-line fabrika/no-of -- ticket 765 approved plan names this public function keyOf
-export const keyOf = (kind: typeof Kind.Type) => `queue.checks.${kind}`;
+export const key = (kind: typeof Kind.Type) => `queue.checks.${kind}`;
