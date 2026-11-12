@@ -3,7 +3,22 @@
 import { Outcome } from "@demlik/tea";
 import { Machine, Cmd } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Appended, LedgerError, Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -377,6 +392,7 @@ type Name = {
 type Session = {
   readonly scope: Scope.Closeable;
   readonly runner: ProgramRunner["Service"];
+  readonly alarms: Array<number | null>;
   readonly run: <A, E>(
     work: Effect.Effect<A, E, ProgramRunner | Mailbox | StoreNeeds | ProcessStore>,
   ) => Effect.Effect<A, E>;
@@ -445,6 +461,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
   };
   w.names.set(name, entry);
   const scope = yield* Scope.fork(w.scope);
+  const alarms: Array<number | null> = [];
   const sessionWork = Effect.gen(function* () {
     const storeSql = entry.store.sql;
     const manager = w.rig.coordination(w.ledger.sql, w.manager.sql, nextProcess);
@@ -531,7 +548,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
             entry.updates.set(client, [...(entry.updates.get(client) ?? []), structuredClone(update)]);
           }),
       }),
-      Layer.succeed(Alarm, { set: () => Effect.void }),
+      Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(managerContext)));
     const layer = ProgramRunner.withLoader(
@@ -556,6 +573,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
     const session: Session = {
       scope,
       runner,
+      alarms,
       run: (work) => Effect.provide(work, context),
       sql: storeSql,
     };
@@ -1353,7 +1371,7 @@ export const suite = (rig: Rig): void => {
 
   describe("P15 slice 1: pending Cmds survive swap recovery", () => {
     it.live(
-      "L4/L15: a recovered swap retries pending writes and sends with their original IDs and folds each answer once on the new code",
+      "L4/L15: normal and recovered swaps keep pending Cmds and their retry deadline; each answer folds once on the new code",
       () =>
         Effect.gen(function* () {
           const seen = new Set<string>();
@@ -1455,6 +1473,75 @@ export const suite = (rig: Rig): void => {
           ]) {
             expect(seen.has(move), `the walk reaches ${move}`).toBe(true);
           }
+
+          // A successful swap must keep a failed Send's alarm without another client call.
+          // Plant: omit sendRetry from finishSwap's alarm candidates.
+          yield* law((g) => {
+            const start: Spec = { ...BASE, durable: "send", k: g(fc.integer, { min: 1, max: 5 }) };
+            return inWorld(rig, [start], (w) =>
+              Effect.gen(function* () {
+                const old = yield* hashFor(start);
+                const s = yield* open(w, NAME, old);
+                const a = account(old);
+                const steps = g(fc.integer, { min: 1, max: 4 });
+
+                for (let n = 0; n < steps; n++) {
+                  expect((yield* history(w, NAME)).checkpoint?.cmds ?? []).toEqual([]);
+                  w.durable.blocked = true;
+                  const { input } = press(w, "inc");
+                  yield* Effect.exit(s.runner.msg(input));
+                  const before = yield* history(w, NAME);
+                  const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
+                  expect(pending).toHaveLength(1);
+                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
+                    pending[0],
+                  );
+                  expect(job.build).toBe(a.build);
+                  expect(w.durable.attempts).toContain(job.id);
+                  expect(w.durable.completed.has(job.id)).toBe(false);
+                  const deadline = Option.getOrThrow(Option.fromNullishOr(s.alarms.at(-1)));
+                  const now = yield* Clock.currentTimeMillis;
+                  expect(deadline).toBeGreaterThan(now);
+                  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                    type: "inc",
+                  });
+                  a.accepted.push(input.id);
+                  yield* TestClock.setTime(g(fc.integer, { min: now + 1, max: deadline - 1 }));
+                  const spec = g(() =>
+                    fcFitting(a.model, a.v)
+                      .map((variant) => ({ ...variant, durable: "send" as const }))
+                      .filter((variant) => JSON.stringify(variant) !== JSON.stringify(w.code.variants.get(a.build))),
+                  );
+                  const hash = yield* learn(w.code, spec);
+                  expect(hash).not.toBe(a.build);
+                  const load = `normal_pending_${n}`;
+                  expect(yield* swap(s, load, hash)).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
+                  expect(s.alarms.at(-1), "a normal swap preserves the original Send retry deadline").toBe(deadline);
+                  expect((yield* history(w, NAME)).checkpoint?.cmds).toEqual(pending);
+                  const attempts = w.durable.attempts.filter((id) => id === job.id).length;
+                  w.durable.blocked = false;
+                  yield* TestClock.setTime(deadline);
+                  // The host fires only the alarm. No msg, open or mailed call nudges the runner.
+                  yield* s.runner.due(deadline);
+                  expect(w.durable.attempts.filter((id) => id === job.id)).toHaveLength(attempts + 1);
+                  expect(w.durable.completed.has(job.id)).toBe(true);
+                  a.model = updateFor(spec, climb(spec, a.model, a.v), { type: "send_ok" });
+                  a.v = spec.v;
+                  a.build = hash;
+                  const after = yield* history(w, NAME);
+                  expect(after.checkpoint?.cmds).toEqual([]);
+                  expect(after.checkpoint?.saved.model).toEqual(a.model);
+                  expect(after.checkpoint?.saved.build).toBe(hash);
+                  const answers = after.facts.filter((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`);
+                  expect(answers).toHaveLength(1);
+                  expect(answers[0]?.body.build).toBe(hash);
+                  expect(after.facts.filter((f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
+                  expect([...w.durable.completed]).toHaveLength(n + 1);
+                  expect(s.alarms.at(-1), "the answered Send no longer needs an alarm").toBeNull();
+                }
+              }).pipe(Effect.provide(TestClock.layer())),
+            );
+          }, 50);
         }),
       TIMEOUT,
     );
