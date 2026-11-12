@@ -72,9 +72,10 @@ export const watchPrograms = (options: {
       const results = new Set<Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]>();
       const close = (result: Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown result cleanup returns a Promise
-        Effect.tryPromise({ try: () => result.close(), catch: () => new ControlError({ reason: "watch_close" }) })
-          .pipe(Effect.orDie)
-          .pipe(Effect.tap(() => Effect.sync(() => results.delete(result))));
+        Effect.tryPromise({ try: () => result.close(), catch: () => new ControlError({ reason: "watch_close" }) }).pipe(
+          Effect.orDie,
+          Effect.tap(() => Effect.sync(() => results.delete(result))),
+        );
       const received = Effect.fnUntraced(function* (event: RolldownWatcherEvent) {
         if ((event.code === "BUNDLE_END" || event.code === "ERROR") && event.result !== undefined) {
           yield* Effect.acquireUseRelease(

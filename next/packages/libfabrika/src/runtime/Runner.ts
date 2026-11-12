@@ -1431,7 +1431,7 @@ export class ProgramRunner extends Context.Service<
 
         return {
           swap: (request: { readonly load: string; readonly program: string; readonly hash: string }) =>
-            call("runner.swap")(
+            call("runner.swap")<Swapped>(
               Effect.gen(function* () {
                 const saved = live === null ? yield* store.load : null;
                 const was = saved?.saved.build ?? process.build;

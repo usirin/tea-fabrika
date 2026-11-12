@@ -412,11 +412,12 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       recorded(
         call("project", config.name, "", "codeInstall", [code]).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
-          Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
         ),
-      ),
+      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
     failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
-      recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)),
+      recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
+        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+      ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>
       proxy((method, args) => call("project", project, "", method === "connect" ? "clientConnect" : method, args), {

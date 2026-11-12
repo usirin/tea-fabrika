@@ -79,5 +79,9 @@ export const code = Machine.make({
       { ...m, [msg.program]: { hash: msg.hash, load: msg.id } },
       [swap({ load: msg.id, program: msg.program, hash: msg.hash })],
     ],
+    append_ok: (m) => [m, []],
+    append_err: (m) => [m, []],
+    swap_ok: (m) => [m, []],
+    swap_err: (m) => [m, []],
   },
 });

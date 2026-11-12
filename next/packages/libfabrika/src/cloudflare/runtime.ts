@@ -766,7 +766,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return answers;
   });
   const checked = Effect.fn("code.checked")(function* (input: typeof Install.Type) {
-    const [, cmds] = applyCell(codeMachine, selected, { type: "checked", ...input });
+    const [, cmds] = applyCell<
+      typeof selected,
+      Parameters<typeof codeMachine.update.checked>[1],
+      ReturnType<typeof codeMachine.update.checked>[1][number]
+    >(codeMachine, selected, { type: "checked", ...input });
     const swaps: Array<{ load: string; program: string; hash: string }> = [];
 
     for (const cmd of cmds) {
@@ -789,7 +793,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         const fact = yield* Schema.decodeUnknownEffect(CodeEvent.cases["code.loaded"])(valueFor(entry.value)).pipe(
           Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         );
-        const [next, commands] = applyCell(codeMachine, selected, {
+        const [next, commands] = applyCell<
+          typeof selected,
+          Parameters<typeof codeMachine.update.loaded>[1],
+          ReturnType<typeof codeMachine.update.loaded>[1][number]
+        >(codeMachine, selected, {
           type: "loaded",
           id: cmd.id,
           program: fact.program,
