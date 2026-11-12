@@ -168,7 +168,17 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 /** The ledger's Sql with one cut: the next INSERT of an `exited` line throws once. */
-const faulting = (sql: Sql, fault: { exited: boolean; message: string; checkpoint?: boolean; landed?: boolean }) => {
+const faulting = (
+  sql: Sql,
+  fault: {
+    exited: boolean;
+    message: string;
+    checkpoint?: boolean;
+    landed?: boolean;
+    inputCheckpoint?: string;
+    checkpointHit?: boolean;
+  },
+) => {
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (
@@ -183,6 +193,19 @@ const faulting = (sql: Sql, fault: { exited: boolean; message: string; checkpoin
       if (fault.checkpoint && fault.landed && /INSERT INTO process_state/.test(query)) {
         fault.checkpoint = false;
         throw new Error(fault.message);
+      }
+
+      if (
+        fault.inputCheckpoint !== undefined &&
+        /INSERT INTO process_(state|checkpoint_parts)/.test(query) &&
+        params.some(
+          (value) => typeof value === "string" && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
+        )
+      ) {
+        fault.inputCheckpoint = undefined;
+        fault.checkpointHit = true;
+        // Driver failures can echo bound values. The runner must keep this out of every output.
+        throw new Error(`SQLITE_FULL checkpoint ${JSON.stringify(params)}`);
       }
 
       const rows = sql.exec(query, ...params);
@@ -232,7 +255,14 @@ type World = {
   readonly parents: Map<string, string>;
   /** Live watches: who watches whom, under which ref. */
   readonly watches: Array<{ readonly watcher: string; readonly target: string; readonly ref: string }>;
-  readonly fault: { exited: boolean; message: string; checkpoint?: boolean; landed?: boolean };
+  readonly fault: {
+    exited: boolean;
+    message: string;
+    checkpoint?: boolean;
+    landed?: boolean;
+    inputCheckpoint?: string;
+    checkpointHit?: boolean;
+  };
   worker?: boolean;
   hold?: { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> };
   n: number;
@@ -1101,7 +1131,10 @@ const capture = Effect.fnUntraced(function* (sql: Sql) {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
   // Inspect the real sink's saved span and failure content, including nested storage causes.
-  const exported = () => sql.exec("SELECT row, content FROM unsent").map((row) => JSON.stringify(row));
+  const exported = () =>
+    sql
+      .exec("SELECT row, content FROM unsent")
+      .flatMap((row) => [JSON.stringify(row), String(row.row), String(row.content)]);
   return { tracer, logger, lines, exported };
 });
 
@@ -1138,9 +1171,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
     const seenBy = yield* capture(store.sql("spans"));
     const runner = yield* life.runner("starter:1");
-    const mode = kind % 3;
+    const mode = kind % 4;
     const input =
-      mode === 0
+      mode === 0 || mode === 3
         ? { type: "start", ask: { program: "merger", name: "merger:1", input: { type: "ping", token: secret } } }
         : mode === 1
           ? // A refused Cmd whose operands carry the secret: its err answer must not echo them.
@@ -1149,6 +1182,10 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
     if (mode === 2) {
       world.fault.exited = true;
+    }
+
+    if (mode === 3) {
+      world.fault.inputCheckpoint = secret;
     }
 
     const outcome = yield* runner
@@ -1172,7 +1209,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       .map((e) => JSON.stringify(body(e)));
 
     // A start's case reached the answer row it inspects, its ok or its err.
-    if (mode !== 2) {
+    if (mode < 2) {
       expect(letters.length, "L11: the start's answer row was written and inspected").toBeGreaterThan(0);
     }
 
@@ -1191,11 +1228,14 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       expect(tagged(told?.outcome), "L11: the secret rode a start that answered").toBe("started");
     } else if (mode === 1) {
       expect(told, "L11: the secret rode a refused start").toEqual({ type: "start_child_err", outcome: "no_program" });
-    } else {
+    } else if (mode === 2) {
       expect(cut, "L11: the exit's write met the planted storage failure").toBe(true);
+    } else {
+      expect(world.fault.checkpointHit, "L11: a checkpoint carrying the secret met the storage failure").toBe(true);
+      expect(Exit.isFailure(outcome), "L11: the failed checkpoint reaches the error output").toBe(true);
     }
 
-    seen.add(["answer", "refusal", "storage"][mode] as string);
+    seen.add(["answer", "refusal", "storage", "checkpoint"][mode] as string);
 
     for (const output of outputs) {
       for (const form of forms(secret)) {
@@ -1271,7 +1311,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
-          expect([...seen].sort()).toEqual(["answer", "refusal", "storage"]);
+          expect([...seen].sort()).toEqual(["answer", "checkpoint", "refusal", "storage"]);
         }),
       600_000,
     );

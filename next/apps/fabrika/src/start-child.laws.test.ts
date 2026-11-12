@@ -3,10 +3,16 @@
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { configureProcess, savedAlarm } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Schema, Scope } from "effect";
-import { describe, expect, it } from "vitest";
-import { childInstance, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
+import { Recipient } from "@kampus/libfabrika/processes/Process";
+import { configureProcess, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
+import { Effect, Exit, Schema, Scope } from "effect";
+import { describe, expect, it, vi } from "vitest";
+import { childProject, childInstance, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
+
+vi.mock("virtual:fabrika-built", () => ({
+  programs: { counter: { hash: "counter-test", source: "counter" }, child: { hash: "child-test", source: "child" } },
+  assets: {},
+}));
 
 const STARTS = [{ source: "starter", to: "child" }];
 /** Bounded waits tied to observable facts. */
@@ -172,6 +178,68 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
 };
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
+  // scenario: L10. One committed-start cut, before the descriptor can be saved. Real-instance
+  // execution is checked below; here the public Project service must repair the interrupted start.
+  it("scenario: L10: a committed child without its descriptor recovers and configures once", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fixture = yield* childProject();
+          const scope = yield* Scope.make();
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const first = yield* Scope.provide(scope)(fixture.acquire());
+          const project = yield* Effect.promise(() => first.runPromise(ProjectService));
+          const boot = project.boot.process;
+          const child = {
+            id: `${boot}/1/0`,
+            name: "child:cut",
+            code: { program: "child", hash: "child-test" },
+            requester: Recipient.cases.process.make({ process: boot }),
+            input: { type: "inc" },
+          };
+          fixture.cut();
+          const cut = yield* Effect.promise(() =>
+            first.runPromise(Effect.exit(project.processChild(child, fixture.from))),
+          );
+          expect(fixture.hit(), "L10: the cut reached the descriptor write").toBe(true);
+          expect(cut._tag).toBe("Failure");
+          const starts = yield* Effect.promise(() => first.runPromise(project.read("processes/child:cut", 0, "audit")));
+          const committed = starts.filter((row) => row._tag === "started");
+          expect(committed, "L10: the child start committed before the descriptor failed").toHaveLength(1);
+          const input = yield* Effect.promise(() => first.runPromise(project.read("child:cut/inbox", 0, "audit")));
+          expect(input, "L10: the first letter committed with the start").toHaveLength(1);
+          expect(fixture.configured.filter((call) => call.descriptor.name === child.name)).toEqual([]);
+          yield* Scope.close(scope, Exit.void);
+          const reopened = yield* fixture.acquire();
+          const recovered = yield* Effect.promise(() => reopened.runPromise(ProjectService));
+          const reply = yield* Effect.promise(() => reopened.runPromise(recovered.processChild(child, fixture.from)));
+          expect(reply, "L10: retry finds the saved start with its original revision").toMatchObject({
+            _tag: "ok",
+            value: { _tag: "started", name: child.name, rev: committed[0]?.rev },
+          });
+          expect(
+            fixture.configured.filter((call) => call.descriptor.name === child.name),
+            "L10: recovery rebuilds the descriptor and wakes the first letter once",
+          ).toEqual([
+            {
+              descriptor: {
+                id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
+                name: child.name,
+                program: "child",
+                build: "child-test",
+                owner: fixture.configured[0]?.descriptor.owner,
+              },
+              wake: true,
+            },
+          ]);
+          expect(
+            yield* Effect.promise(() => reopened.runPromise(recovered.read("child:cut/inbox", 0, "audit"))),
+          ).toEqual(input);
+        }),
+      ),
+    );
+  });
+
   // scenario: L10, A7. One storage cut between saving the first wake and setting its alarm.
   // The real-instance check below proves execution; this checks the public configure handoff's retry.
   it("scenario: L10: a retry after the first alarm write fails arms the saved wake", async () => {

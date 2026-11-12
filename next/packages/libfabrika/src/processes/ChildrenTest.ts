@@ -1260,7 +1260,10 @@ const capture = Effect.fnUntraced(function* (sql: Sql) {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
   // Inspect the real sink's saved span and failure content, including nested storage causes.
-  const exported = () => sql.exec("SELECT row, content FROM unsent").map((row) => JSON.stringify(row));
+  const exported = () =>
+    sql
+      .exec("SELECT row, content FROM unsent")
+      .flatMap((row) => [JSON.stringify(row), String(row.row), String(row.content)]);
   return { tracer, logger, lines, exported };
 });
 

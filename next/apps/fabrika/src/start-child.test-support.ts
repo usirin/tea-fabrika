@@ -4,13 +4,18 @@
 // instance takes its start grants from its caller (`starts`), as the app's own wiring hands in its
 // empty list. Real workerd, sockets, object storage and alarms; no raw platform object stands in.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// Edge: Effect has no node:sqlite driver.
+import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
+import type { Descriptor } from "@kampus/libfabrika";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, FileSystem, Path } from "effect";
+import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
+import { projectRuntime, type Env } from "./runtime.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 export const SENT = "2026-11-11T04:00:00.000Z";
@@ -149,3 +154,117 @@ export const childInstance = Effect.fnUntraced(
 
 /** A letter for the door's `process.send`. */
 export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+
+// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform RPC doubles return Promises to the public client adapters
+const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);
+const Written = Schema.TaggedStruct("written", {});
+
+/** The real Project service on scoped SQLite, with only the platform handles supplied by the test. */
+export const childProject = Effect.fnUntraced(function* () {
+  const db = yield* Effect.acquireRelease(
+    Effect.sync(() => new DatabaseSync(":memory:")),
+    (held) => Effect.sync(() => held.close()),
+  );
+  const sql = nodeSql(db);
+  const key = identity();
+  const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
+  const descriptors = new Map<string, Descriptor>();
+  let armed = false;
+  let hit = false;
+  const storage = {
+    sql: {
+      exec: (query: string, ...params: Array<string | number | null>) => {
+        if (armed && /INSERT.*dev_descriptors/.test(query)) {
+          armed = false;
+          hit = true;
+          throw new Error("SQLITE_FULL while saving the child descriptor");
+        }
+
+        return sql.exec(query, ...params);
+      },
+      get databaseSize() {
+        return sql.size();
+      },
+    },
+    transactionSync: sql.transaction,
+  };
+  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
+  const ctx = { id: { name: PROJECT }, storage } as unknown as DurableObjectState;
+  // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
+  const env = {
+    INSTANCE: JSON.stringify({
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: 18787,
+      build: "p42-project",
+      starts: [{ source: "counter", to: "child" }],
+    }),
+    PROCESS: {
+      getByName: (name: string) => {
+        const [, registered] = JSON.parse(name) as [string, string];
+        return {
+          configure: (descriptor: Descriptor, wake = false) =>
+            remote(
+              Effect.sync(() => {
+                descriptors.set(registered, descriptor);
+                configured.push({ descriptor, wake });
+              }),
+            ),
+          descriptor: () => remote(Effect.sync(() => descriptors.get(registered))),
+        };
+      },
+    },
+    CONNECTION: {
+      getByName: () => ({
+        ring: () => remote(Effect.void),
+        notify: () => remote(Effect.void),
+        probe: () => remote(Effect.succeed(42)),
+      }),
+    },
+    RECORD: { getByName: () => ({ write: () => remote(Effect.succeed(Written.make({}))) }) },
+    MEASUREMENTS: {},
+    LOADER: {
+      get: (id: string) => ({
+        getEntrypoint: () => ({
+          describe: () =>
+            remote(
+              Effect.sync(() => ({
+                name: id.startsWith("child-") ? "child" : "counter",
+                v: 1,
+                writes: {},
+                inputs: { inc: { write: true, personOnly: false } },
+                cmds: [],
+              })),
+            ),
+        }),
+      }),
+    },
+  } as unknown as Env;
+  // Each restart loses service memory but keeps the database and the remote objects' storage.
+  const acquire = () =>
+    Effect.acquireRelease(
+      Effect.sync(() => projectRuntime(ctx, env)),
+      // oxlint-disable-next-line fabrika/no-promises -- edge: ManagedRuntime disposal returns a Promise
+      (runtime) => Effect.promise(() => runtime.dispose()),
+    );
+  const from: From = {
+    by: key.fingerprint,
+    for: PERSON,
+    sentAt: SENT,
+    seen: 0,
+    parent: null,
+    traceId: TRACE,
+    build: "p42-project",
+  };
+  return {
+    acquire,
+    from,
+    configured,
+    cut: () => {
+      armed = true;
+    },
+    hit: () => hit,
+  };
+});
