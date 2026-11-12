@@ -3,6 +3,7 @@ import type * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import type * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as fc from "fast-check";
+import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
 import type { queue } from "./Queue.ts";
 
@@ -35,6 +36,7 @@ export type World = {
   readonly ci: CiTest.Control["Service"];
   readonly moveMain: Effect.Effect<void>;
   readonly moveBeforeMerge: Effect.Effect<void>;
+  readonly allowStart: (allowed: boolean) => Effect.Effect<void>;
 };
 
 export type Driver = {
@@ -128,6 +130,46 @@ const tapes = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, m
 
 export const suite = (driver: Driver) =>
   describe("the queue on real runners, next/", () => {
+    it.effect.prop(
+      "Q5: a real refused start stops, keeps the entry and resumes under a fresh name",
+      {
+        change: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 6 })),
+        ref: Schema.NonEmptyString.check(Schema.isMaxLength(24)),
+      },
+      ({ change, ref }) =>
+        Effect.gen(function* () {
+          const h = yield* driver.open();
+          yield* h.allowStart(false);
+          yield* h.enqueue(change, ref);
+          const refused = yield* h.snapshot;
+          expect(refused.letters).toContainEqual(
+            expect.objectContaining({
+              name: "queue:1",
+              m: expect.objectContaining({ type: "start_child_err", reason: "forbidden" }),
+            }),
+          );
+          expect(refused.model?._tag).toBe("stopped");
+          expect(refused.model).toHaveProperty("reason._tag", "start_refused");
+          expect(refused.model).toMatchObject({
+            attempt: 1,
+            reason: { change, name: `merger:${change}.1`, refusal: "forbidden" },
+            line: [{ change }],
+          });
+          expect(started(refused)).toEqual([]);
+          expect(replies(refused, change)).toEqual([]);
+          yield* h.allowStart(true);
+          yield* h.resume;
+          expect(started(yield* h.snapshot).map((p) => p.name)).toEqual([`merger:${change}.2`]);
+          yield* finish(h);
+          const landed = yield* h.snapshot;
+          expect(landed.model?._tag).toBe("idle");
+          expect(replies(landed, change)).toHaveLength(1);
+          expect(replies(landed, change)[0]).toHaveProperty("_tag", "merged");
+          expect(replies(landed, change)[0]).toHaveProperty("ref", ref);
+          allNormal(landed);
+        }).pipe(Effect.scoped),
+      { arbitrary: { seed: 119120, runs: 200 } },
+    );
     it.effect("scenario: QR1 three real children land in arrival order and end normally", () =>
       Effect.gen(function* () {
         // Only real runners save a child start, its first letter and mail between processes.
@@ -195,10 +237,22 @@ export const suite = (driver: Driver) =>
         // Both original heads pass alone. The second must also pass with the first on main.
         yield* h.green(1);
         yield* h.green(2);
-        yield* h.step;
-        yield* h.step;
+
+        for (let turn = 0; turn < 32; turn++) {
+          const current = yield* h.host.read(2);
+
+          if (current !== undefined && h.ci.starts().includes(current.head)) {
+            break;
+          }
+
+          yield* h.step;
+        }
+
         const before = yield* h.host.read(2);
         expect(before).toBeDefined();
+        expect(h.ci.starts()).toContain(before?.head);
+        expect(replies(yield* h.snapshot, 1)).toHaveLength(1);
+        expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
         yield* h.green(2);
         yield* h.moveMain;
         yield* h.step;
@@ -257,6 +311,19 @@ export const suite = (driver: Driver) =>
           Effect.gen(function* () {
             const capture = driver.capture();
             const logs: Array<string> = [];
+            yield* Effect.forEach(
+              ["log", "info", "warn", "error", "debug"] as const,
+              (method) =>
+                Effect.acquireRelease(
+                  Effect.sync(() =>
+                    vi.spyOn(console, method).mockImplementation((...args: ReadonlyArray<unknown>) => {
+                      logs.push(args.map((arg) => `${String(arg)} ${JSON.stringify(arg)}`).join(" "));
+                    }),
+                  ),
+                  (spy) => Effect.sync(() => spy.mockRestore()),
+                ),
+              { discard: true, concurrency: 1 },
+            );
             const logger = Logger.map(Logger.formatSimple, (line) => {
               logs.push(line);
             });

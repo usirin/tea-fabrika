@@ -9,6 +9,7 @@ import { InputId, Writer } from "@kampus/libfabrika/coordination";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
+import type { StartGrant } from "@kampus/libfabrika/processes/Children";
 import * as ChildrenLedger from "@kampus/libfabrika/processes/ChildrenLedger";
 import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
@@ -170,6 +171,7 @@ const life = Effect.fnUntraced(function* (
   services: Context.Context<Services>,
   ids: Effect.Effect<string>,
   scope: Scope.Scope,
+  grants: ReadonlyArray<typeof StartGrant.Type>,
 ) {
   const data = Layer.merge(
     LedgerSql.layer(store.sql("ledger"), { reader: "queue-laws" }),
@@ -186,7 +188,7 @@ const life = Effect.fnUntraced(function* (
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        ChildrenLedger.layer({ grants: [{ source: "pipeline/queue", to: "pipeline/merger" }] }),
+        ChildrenLedger.layer({ grants }),
         ProgramMailLedger.layer({ grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) } }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
@@ -316,7 +318,8 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
   const ids = Effect.sync(() => `process_0000000000e008${(++serial).toString(16).padStart(12, "0")}`);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-  let current = yield* life(store, wrapped, ids, scope);
+  const grants: Array<typeof StartGrant.Type> = [{ source: "pipeline/queue", to: "pipeline/merger" }];
+  let current = yield* life(store, wrapped, ids, scope, grants);
   let letter = 0;
   const deliver = Effect.fnUntraced(function* (input: unknown) {
     const runner = yield* current.runner(NAME);
@@ -476,11 +479,19 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
     moveBeforeMerge: Effect.sync(() => {
       gap = true;
     }),
+    allowStart: (allowed) =>
+      Effect.sync(() => {
+        grants.splice(0);
+
+        if (allowed) {
+          grants.push({ source: "pipeline/queue", to: "pipeline/merger" });
+        }
+      }),
     reopen: Effect.gen(function* () {
       yield* Scope.close(scope, Exit.void);
       yield* store.reopen;
       scope = yield* Scope.make();
-      current = yield* life(store, wrapped, ids, scope);
+      current = yield* life(store, wrapped, ids, scope, grants);
     }),
   } satisfies QueueRunnerTest.World;
 });
