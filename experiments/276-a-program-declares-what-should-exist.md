@@ -1,8 +1,9 @@
 # 276. Can a program declare what should exist as resources, and can Alchemy's own engine apply them inside the brain when the program is loaded?
 
 **Draft, started 2026-11-11. Nothing has run yet.** This page is written on its branch from its
-first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)). It follows experiment
-264, which wrote two custom Alchemy resources in Effect. `next/` only.
+first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)). It follows
+[experiment 264](264-hands-as-an-alchemy-resource.md), which wrote two custom Alchemy resources in
+Effect. `next/` only.
 
 ## The idea
 
