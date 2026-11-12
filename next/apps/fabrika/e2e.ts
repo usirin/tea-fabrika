@@ -29,6 +29,7 @@ const run = Effect.gen(function* () {
 
   yield* Console.log(`e2e: ${files.length} file(s): ${files.join(", ")}`);
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
   const exitCode = yield* spawner.exitCode(
     ChildProcess.make(
       "pnpm",
@@ -43,7 +44,13 @@ const run = Effect.gen(function* () {
         `--testTimeout=${LIMIT}`,
         `--hookTimeout=${LIMIT}`,
       ],
-      { cwd: import.meta.dirname, stdin: "ignore", stdout: "inherit", stderr: "inherit" },
+      {
+        cwd: import.meta.dirname,
+        env: { FABRIKA_HOME: home },
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+      },
     ),
   );
 
@@ -52,4 +59,4 @@ const run = Effect.gen(function* () {
   }
 });
 
-NodeRuntime.runMain(run.pipe(Effect.provide(NodeServices.layer)));
+NodeRuntime.runMain(run.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));

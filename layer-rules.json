@@ -62,6 +62,26 @@
       ]
     },
     {
+      "name": "next-email-tests",
+      "layer": 10,
+      "paths": [
+        "next/packages/libfabrika/src/access/AccessEmail.test.ts",
+        "next/packages/libfabrika/src/gateway/GatewayEmail.test.ts",
+        "next/packages/libfabrika/src/email/*.test.ts",
+        "next/packages/libfabrika/src/cloudflare/EmailSender.test.ts"
+      ]
+    },
+    {
+      "name": "next-email-test-support",
+      "layer": 10,
+      "paths": ["next/packages/libfabrika/src/email/Email.test-support.ts"]
+    },
+    {
+      "name": "next-email",
+      "layer": 5,
+      "paths": ["next/packages/libfabrika/src/email"]
+    },
+    {
       "name": "next-access",
       "layer": 4,
       "paths": ["next/packages/libfabrika/src/access"]

@@ -11,7 +11,7 @@
     "grant": "node grant.ts",
     "settings": "node cli.ts settings",
     "settings:generate": "node settings-generate.ts",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit --target esnext --module nodenext --moduleResolution nodenext --allowImportingTsExtensions --strict --skipLibCheck e2e.ts e2e/email.test.ts"
   },
   "dependencies": {
     "@kampus/libfabrika": "workspace:*",
@@ -25,6 +25,9 @@
     "@demlik/tea": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "electron": "catalog:",
+    "miniflare": "catalog:",
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",

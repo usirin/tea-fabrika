@@ -821,6 +821,29 @@
       "rules": { "vitest/no-hooks": ["error", { "allow": ["beforeAll", "beforeEach"] }] }
     },
     {
+      // P36 fixtures capture made-up secrets and drive test-only Promise APIs.
+      "files": [
+        "next/packages/libfabrika/src/email/Email.test-support.ts",
+        "next/apps/fabrika/e2e/email.test-support.ts"
+      ],
+      "rules": {
+        "fabrika/no-redacted-value": "off",
+        "fabrika/no-promises": "off",
+        "fabrika/no-effect-run-outside-edge": "off",
+        "fabrika/effect-functions": "off",
+        "fabrika/no-hand-tag": "off",
+        "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      // P36 private edges store hashes and references; only the sender unwraps mail.
+      "files": [
+        "next/packages/libfabrika/src/email/EmailSecrets.ts",
+        "next/packages/libfabrika/src/cloudflare/EmailSender.ts"
+      ],
+      "rules": { "fabrika/no-redacted-value": "off" }
+    },
+    {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
       // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.

@@ -652,9 +652,18 @@ importers:
       alchemy:
         specifier: 'catalog:'
         version: 2.0.0-beta.85(@effect/platform-node@4.1.2(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/react@19.3.0)(effect@4.1.2(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))(ws@8.22.1)
+      electron:
+        specifier: 'catalog:'
+        version: 45.2.1(supports-color@10.2.2)
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
       fast-check:
         specifier: 'catalog:'
         version: 4.10.2
+      miniflare:
+        specifier: 'catalog:'
+        version: 4.20260730.0
       playwright:
         specifier: 'catalog:'
         version: 1.64.1
