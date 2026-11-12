@@ -96,7 +96,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         update: (change, head) =>
           failure({ method: "update", change, head }).pipe(
             Effect.andThen(
-              Effect.suspend(() => {
+              Effect.suspend((): Effect.Effect<typeof Updated.Type, CodeHostError> => {
                 const found = changes.get(change);
 
                 if (found === undefined) {
@@ -139,7 +139,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         merge: (change, head) =>
           failure({ method: "merge", change, head }).pipe(
             Effect.andThen(
-              Effect.suspend(() => {
+              Effect.suspend((): Effect.Effect<typeof Merged.Type, CodeHostError> => {
                 const previous = merges.get(JSON.stringify([change, head]));
 
                 if (previous !== undefined) {
@@ -275,7 +275,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
                 : cell.pick % 3 === 0
                   ? commit(hex(7))
                   : found.head;
-            const answer = sync(merging ? r.host.merge(id, head) : r.host.update(id, head));
+            const answer = merging ? sync(r.host.merge(id, head)) : sync(r.host.update(id, head));
             expect(Schema.is(merging ? Merged : Updated)(answer)).toBe(true);
 
             for (const key of ["head", "tree", "main", "commit"] as const) {
