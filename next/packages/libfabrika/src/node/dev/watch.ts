@@ -163,24 +163,33 @@ export const watchPrograms = (options: {
             event: Extract<RolldownWatcherEvent, { code: "ERROR" }> | { readonly code: "END" },
           ): Effect.fn.Return<readonly [number, ReadonlyArray<Reloaded>], never, FileSystem.FileSystem | Path.Path> {
             const started = yield* Clock.currentTimeMillis;
+            const finish = Effect.fnUntraced(function* (result: readonly [number, ReadonlyArray<Reloaded>], bytes = 0) {
+              yield* Effect.annotateCurrentSpan({
+                program: selected.name,
+                bytes,
+                ms: (yield* Clock.currentTimeMillis) - started,
+                outcome: result[1][0]?._tag ?? "failed",
+              });
+              return result;
+            });
 
             if (event.code === "ERROR") {
-              return [index, [yield* failure("bundle", event.error)]] as const;
+              return yield* finish([index, [yield* failure("bundle", event.error)]]);
             }
 
             const built = yield* Effect.result(buildPrograms({ root, entry: options.entry, programs: [selected] }));
 
             if (built._tag === "Failure") {
-              return [
+              return yield* finish([
                 index,
                 [yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause)],
-              ] as const;
+              ]);
             }
 
             const code = built.success[selected.name];
 
             if (code === undefined) {
-              return [index, [yield* failure("bundle", null)]] as const;
+              return yield* finish([index, [yield* failure("bundle", null)]]);
             }
 
             const answer = yield* options
@@ -191,13 +200,10 @@ export const watchPrograms = (options: {
                 from: index === 0 ? "boot" : "watch",
               })
               .pipe(Effect.catch(() => Effect.succeed(Installed.cases.failed.make({ reason: "load" }))));
-            yield* Effect.annotateCurrentSpan({
-              program: selected.name,
-              bytes: new TextEncoder().encode(code.source).byteLength,
-              ms: (yield* Clock.currentTimeMillis) - started,
-              outcome: answer._tag,
-            });
-            return [index + 1, [{ ...answer, program: selected.name, hash: code.hash }]] as const;
+            return yield* finish(
+              [index + 1, [{ ...answer, program: selected.name, hash: code.hash }]],
+              new TextEncoder().encode(code.source).byteLength,
+            );
           }),
         ),
       );

@@ -133,7 +133,9 @@ const command = Command.make("dev", flags, (options) => {
         const handle = yield* localInstance(built, { ...state, port: loaded.values.port, home });
         yield* Effect.forkScoped(
           Stream.runForEach(
-            watchPrograms({ ...built.watch, install: handle.install, failed: handle.failed }),
+            watchPrograms({ ...built.watch, install: handle.install, failed: handle.failed }).pipe(
+              Stream.provideContext(handle.recording),
+            ),
             (answer) =>
               Effect.sync(() => {
                 if (answer._tag === "same") {

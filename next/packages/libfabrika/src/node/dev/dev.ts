@@ -407,6 +407,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
   return {
+    recording,
     install: (code: Install): Effect.Effect<Installed, ControlError> =>
       recorded(
         call("project", config.name, "", "codeInstall", [code]).pipe(

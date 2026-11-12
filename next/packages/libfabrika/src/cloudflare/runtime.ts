@@ -3,6 +3,7 @@ import { applyCell } from "@demlik/tea";
 import {
   Context,
   Effect,
+  Equal,
   Exit,
   Layer,
   ManagedRuntime,
@@ -24,7 +25,7 @@ import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import type { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Appended, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
+import { type Appended, fromHere, Line, lineFor, valueFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
@@ -40,7 +41,7 @@ import { code as codeMachine, CodeEvent } from "../runtime/Code.ts";
 import { CodeStore } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
-import { Checkpoint, ProcessStore } from "../runtime/ProcessStore.ts";
+import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
@@ -549,29 +550,76 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const from = Effect.fn(function* (parent: string | null = null) {
     return yield* fromHere({ by, for: config.person, seen: 0, parent, build: config.build }).pipe(Effect.orDie);
   });
-  const start = Effect.fnUntraced(function* (request: Start, origin: From) {
+  sql.exec("CREATE TABLE IF NOT EXISTS dev_starts (id TEXT PRIMARY KEY, request TEXT NOT NULL, hash TEXT NOT NULL)");
+  const start = Effect.fnUntraced(function* (raw: Start, origin: From) {
+    const request = yield* Schema.decodeUnknownEffect(Start)(raw).pipe(
+      Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
+    );
+
     if (!Object.hasOwn(programs, request.code.program)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    if (request._tag === "first") {
-      const chosen = selected[request.code.program];
-
-      if (chosen !== undefined) {
-        request = Start.cases.first.make({ ...request, code: { ...request.code, hash: chosen.hash } });
-      }
-    }
-
-    const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`, request.code.hash);
     const result = yield* write(
       Effect.gen(function* () {
-        const result = yield* processes.start(request, origin);
-        remember(request.name, program.declaration);
+        let chosen = request;
+        const row =
+          request._tag === "first"
+            ? sql.exec("SELECT request, hash FROM dev_starts WHERE id=?", request.id)[0]
+            : undefined;
+
+        if (request._tag === "first") {
+          if (row !== undefined) {
+            const prior = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Start))(row.request).pipe(
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+            );
+
+            if (!Equal.equals(prior, request)) {
+              return yield* new ProcessError({ reason: "id_reused" });
+            }
+          }
+
+          chosen = Start.cases.first.make({
+            ...request,
+            code: {
+              ...request.code,
+              hash: row === undefined ? (selected[request.code.program]?.hash ?? request.code.hash) : String(row.hash),
+            },
+          });
+        }
+
+        const program = yield* loader.load(chosen.code.program, `project:${name}/${chosen.name}`, chosen.code.hash);
+
+        // Keep the choice before the start can commit and lose its answer.
+        if (request._tag === "first" && row === undefined) {
+          sql.exec(
+            "INSERT OR IGNORE INTO dev_starts (id,request,hash) VALUES (?,?,?)",
+            request.id,
+            JSON.stringify(request),
+            chosen.code.hash,
+          );
+        }
+
+        const result = yield* processes.start(chosen, origin).pipe(
+          Effect.tapError((error) =>
+            Effect.sync(() => {
+              if (request._tag === "first" && row === undefined && error instanceof ProcessError) {
+                sql.exec("DELETE FROM dev_starts WHERE id=?", request.id);
+              }
+            }),
+          ),
+        );
+
+        // A retry must not put its original policy back over a process that has since swapped.
+        if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", result.process).length === 0) {
+          remember(request.name, program.declaration);
+        }
+
         const descriptor = {
           id: result.process,
           name: request.name,
           program: request.code.program,
-          build: request.code.hash,
+          build: chosen.code.hash,
           owner: Writer.cases.person.make({ key: founder.by, for: config.person }),
         };
         // Only a first start configures its name's object. A successor shares that object, which
@@ -591,6 +639,49 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     return result;
+  });
+  const running = Effect.fnUntraced(function* (pid: string, program: string, hash: string) {
+    const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
+
+    if (row === undefined || !(yield* processes.isLive(pid))) {
+      return;
+    }
+
+    const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
+
+    if (descriptor.program !== program) {
+      return yield* new LedgerError({ reason: "refused" });
+    }
+
+    const current = yield* loader.load(program, "check", hash);
+    remember(descriptor.name, current.declaration);
+    sql.exec("UPDATE dev_descriptors SET value=? WHERE process=?", JSON.stringify({ ...descriptor, build: hash }), pid);
+  });
+  // A swap publishes its running build before releasing the Process permit. Its durable fact
+  // also repairs a lost reply; re-reading the newest fact cannot undo a later swap on a retry.
+  const append = Effect.fnUntraced(function* (stream: string, id: string, input: unknown) {
+    const answer = yield* referee.append(stream, id, input);
+    const line = Schema.decodeUnknownOption(Line)(input);
+
+    if (answer._tag === "refused" || Option.isNone(line) || line.value._tag !== "code.swapped") {
+      return answer;
+    }
+
+    const latest = yield* ledger.read(stream, answer.rev - 1).pipe(
+      Stream.filter((entry) => entry._tag === "code.swapped"),
+      Stream.runLast,
+    );
+
+    if (Option.isSome(latest)) {
+      const fact = yield* Schema.decodeUnknownEffect(RuntimeRecord.cases["code.swapped"])(valueFor(latest.value)).pipe(
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+      );
+      yield* running(stream, fact.program, fact.hash);
+    }
+
+    return answer;
   });
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
@@ -642,25 +733,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       );
 
       if (outcome._tag === "swapped" || outcome._tag === "same") {
-        const current = yield* loader.load(program, "check", hash);
         yield* write(
           Effect.gen(function* () {
-            if (selected[program]?.hash !== hash) {
-              return;
-            }
-
-            remember(process.name, current.declaration);
-            const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
-
-            if (row !== undefined) {
-              const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
-                row.value,
-              ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
-              sql.exec(
-                "UPDATE dev_descriptors SET value=? WHERE process=?",
-                JSON.stringify({ ...descriptor, build: hash }),
-                process.process,
-              );
+            if (selected[program]?.hash === hash) {
+              yield* running(process.process, program, hash);
             }
           }),
         );
@@ -905,7 +981,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
     read: referee.read,
     wait: referee.wait,
-    append: referee.append,
+    append: (stream: string, id: string, input: unknown) => wrapped(write(append(stream, id, input))),
     sign: (pid: string, id: string, parent: string, kind: string) => wrapped(door.sign(pid, id, parent, kind)),
     commit: (pid: string, input: Omit<Parameters<typeof door.append>[0], "process">) =>
       wrapped(door.append({ ...input, process: pid })),
