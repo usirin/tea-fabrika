@@ -1,5 +1,5 @@
-// P14 slice 2, next/ (ticket 828): the page's run, laws L10 (real runtime progress) and L12 (wire
-// formats) of the approved plan. Written before `window/main.tsx`.
+// P14 slice 2, next/ (ticket 828): the page's run, laws L2 (retry timing), L10 (real runtime progress)
+// and L12 (wire formats) of the approved plan. Written before `window/main.tsx`.
 //
 // The shape these laws hold `main.tsx` to, from the plan (the build may add more):
 // - `startWindow({ tiles, window, build, origin })`: boots the window machine (`window`, from
@@ -24,10 +24,12 @@ import { ClientRow, Id } from "@kampus/libfabrika";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { ClientSocket } from "@kampus/libfabrika/transport/ClientSocket";
+import { backoff, CAP, linkTimer } from "@kampus/libfabrika/transport/Link";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Exit, Fiber, Layer, Option, Queue, Schema, Scope, Stream } from "effect";
+import { Effect, Exit, Fiber, Layer, Option, Queue, Random, Schema, Scope, Stream } from "effect";
 import * as Clock from "effect/Clock";
 import { TestClock } from "effect/testing";
+import * as fc from "fast-check";
 import { windowMachineFor } from "./machine.ts";
 import { startWindow } from "./main.tsx";
 
@@ -204,6 +206,113 @@ const services = (socket: Layer.Layer<ClientSocket>, rows: Array<unknown>) =>
 const tick = (ms: number) => TestClock.adjust(ms).pipe(Effect.andThen(Effect.yieldNow));
 
 const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0" }, via: "button" } as const;
+
+const choice = fc.record({
+  move: fc.nat(),
+  pick: fc.nat(),
+  code: fc.nat(),
+  ping: fc.integer({ min: 0, max: 60_000 }),
+  ms: fc.integer({ min: 0, max: 20_000 }),
+  word: fc.stringMatching(/^[A-Z0-9]{4}$/),
+});
+
+type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
+
+// Measure the real socket acquisition, including the Link timer and the private dial jitter.
+// The same choice generator and shortened prefixes rebuild each failure from the current link.
+const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number, Set<number>>) =>
+  Effect.gen(function* () {
+    const key = yield* identity;
+    const clock = yield* Clock.Clock;
+    const opened: Array<number> = [];
+    let events: Queue.Queue<SocketEvent> | undefined;
+    const socket = Layer.succeed(ClientSocket, {
+      dial: () =>
+        Effect.acquireRelease(
+          Effect.gen(function* () {
+            opened.push(clock.currentTimeMillisUnsafe());
+            const queue = yield* Queue.unbounded<SocketEvent>();
+            events = queue;
+            return {
+              events: Stream.fromQueue(queue),
+              send: () => true,
+              close: (code: number) => void Queue.offerUnsafe(queue, { event: "close", code }),
+            };
+          }),
+          (socket) => Effect.sync(() => socket.close(1000)),
+        ),
+    });
+    const layers = Layer.mergeAll(
+      socket,
+      Layer.succeed(ClientKey, {
+        current: () => Effect.succeed(key),
+        claimPersist: Effect.succeed(false),
+        persist: Effect.succeed(true),
+      }),
+      Layer.succeed(ClientRows, { put: () => Effect.void }),
+      Id.Generator.layer,
+    );
+    const started = clock.currentTimeMillisUnsafe();
+    const booting = yield* startWindow({ tiles, window, build: BUILD, origin: ORIGIN }).pipe(Effect.provide(layers));
+    const run = yield* booting.ready;
+    yield* run.idle();
+    yield* tick(0);
+    expect(opened, "the first dial opens at once").toEqual([started]);
+    let dialingAt = started;
+
+    for (const c of list) {
+      const link = run.getState().link;
+      expect(link._tag).toBe("dialing");
+
+      if (link._tag !== "dialing") {
+        return;
+      }
+
+      if (c.move % 2 === 0) {
+        Queue.offerUnsafe(events!, { event: "close", code: 1006 });
+        yield* tick(0);
+      } else {
+        yield* tick(dialingAt + linkTimer(link)!.after - clock.currentTimeMillisUnsafe());
+      }
+
+      const retrying = run.getState().link;
+      expect(retrying._tag).toBe("retrying");
+
+      if (retrying._tag !== "retrying") {
+        return;
+      }
+
+      const failedAt = clock.currentTimeMillisUnsafe();
+      const before = backoff(retrying.tries);
+      const count = opened.length;
+      const bound = Math.min(1000, before / 2, CAP - before);
+      expect(linkTimer(retrying)?.after, "the machine's timer stays backoff(tries)").toBe(before);
+      yield* tick(before - 1);
+      expect(opened.length, "the retry cannot open before its backoff").toBe(count);
+      yield* tick(1 + bound);
+      expect(opened.length, "one socket opens within the jitter bound").toBe(count + 1);
+      const total = opened[count]! - failedAt;
+      const wait = total - before;
+      expect(wait).toBeGreaterThanOrEqual(0);
+      expect(wait, `tries ${retrying.tries}`).toBeLessThanOrEqual(bound);
+      expect(total).toBeLessThanOrEqual(CAP);
+      seen.set(retrying.tries, (seen.get(retrying.tries) ?? new Set()).add(wait));
+      dialingAt = failedAt + before;
+    }
+  }).pipe(Effect.scoped, Random.withSeed(seed), Effect.provide(TestClock.layer()));
+
+describe("L2: retry jitter in the dial", () => {
+  it("a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
+    const seen = new Map<number, Set<number>>();
+    await fc.assert(
+      fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
+        await Effect.runPromise(retryTiming(list, seed, seen));
+      }),
+      { seed: SEED, numRuns: 100 },
+    );
+    expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
+  });
+});
 
 describe("L10: real runtime progress", () => {
   it.effect.prop(

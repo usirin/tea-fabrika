@@ -1,4 +1,4 @@
-// P14 slice 2, next/ (ticket 828): the link to the brain, laws L1 and L2 of the approved plan. Written
+// P14 slice 2, next/ (ticket 828): the link to the brain, law L1 of the approved plan. Written
 // before `transport/Link.ts`.
 //
 // The shape these laws hold `Link.ts` to, from the plan (the build may add more):
@@ -12,21 +12,15 @@
 // - `linkTimer(link)`: the timer the state waits on, `{after, msg}` in ms, or null for removed and
 //   blocked. Firing it is applying `msg`.
 // - `backoff(tries)`: the retry timer's wait, doubling from 500 ms and never past `CAP` (30 s).
-// - `dialWait(link)`: the wait the socket Sub runs before it opens the socket for a `dialing` state, an
-//   Effect that sleeps on Effect's Clock a wait drawn from Effect's `Random`: nothing for a first dial,
-//   and for a retry dial (`tries` >= 1) a wait in `[0, min(1000, backoff(tries) / 2, CAP -
-//   backoff(tries))]` ms. The machine itself reads no clock and no random.
 //
 // L1 walks the real machine from its real init. Each generated step reads the folded state and turns
 // its choice numbers into a move that state allows: an answer on the current dial, its own timer, a
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Effect, Fiber, Random, Ref, Schema } from "effect";
-import * as Clock from "effect/Clock";
-import { TestClock } from "effect/testing";
+import { Schema } from "effect";
 import * as fc from "fast-check";
-import { backoff, CAP, dialWait, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
+import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
 const SEED = 119120;
 const BEAT_BOUND = 10_000; // L1: an unanswered beat leaves online within 10 s
@@ -305,67 +299,5 @@ describe("L1: the link machine", () => {
       opts,
     );
     expect([...reached].sort()).toEqual(["blocked", "dialing", "online", "removed", "retrying", "waiting_grant"]);
-  });
-});
-
-/** How long `dialWait` sleeps for `s` under TestClock with Random seeded by `seed`. */
-const waited = (s: Link, seed: number) =>
-  Effect.gen(function* () {
-    const done = yield* Ref.make<number | null>(null);
-    const t0 = yield* Clock.currentTimeMillis;
-    const fiber = yield* dialWait(s).pipe(
-      Effect.andThen(Clock.currentTimeMillis),
-      Effect.flatMap((t1) => Ref.set(done, t1 - t0)),
-      Random.withSeed(seed),
-      Effect.forkChild,
-    );
-    yield* TestClock.adjust(CAP);
-    yield* Fiber.join(fiber);
-    return yield* Ref.get(done);
-  });
-
-describe("L2: retry jitter in the dial", () => {
-  it("a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
-    const seen = new Map<number, Set<number>>();
-    await fc.assert(
-      fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
-        // Walk failed dials from the current `tries`: each step fails the current dial, by a close or
-        // its stall timer, then fires the retry timer, and the dial it makes is measured.
-        let s: Link = linkMachine.init(null, {})[0];
-        const first = await Effect.runPromise(waited(s, seed).pipe(Effect.provide(TestClock.layer())));
-        expect(first, "the first dial opens at once").toBe(0);
-
-        for (const c of list) {
-          if (s._tag !== "dialing") {
-            break;
-          }
-
-          const failure: LinkMsg =
-            c.move % 2 === 0
-              ? { type: "closed", dial: s.dial, code: 1006, fingerprint: "SHA256:x", ms: c.ms }
-              : linkTimer(s)!.msg;
-          const retrying = step(s, failure)[0];
-          expect(retrying._tag).toBe("retrying");
-
-          if (retrying._tag !== "retrying") {
-            break;
-          }
-
-          const before = backoff(retrying.tries);
-          expect(linkTimer(retrying)?.after, "the machine's timer stays backoff(tries)").toBe(before);
-          s = step(retrying, linkTimer(retrying)!.msg)[0];
-          const wait = await Effect.runPromise(waited(s, seed + c.pick).pipe(Effect.provide(TestClock.layer())));
-          const bound = Math.min(1000, before / 2, CAP - before);
-          expect(wait).not.toBeNull();
-          expect(wait!).toBeGreaterThanOrEqual(0);
-          expect(wait!, `tries ${retrying.tries}`).toBeLessThanOrEqual(bound);
-          expect(before + wait!).toBeLessThanOrEqual(CAP);
-          seen.set(retrying.tries, (seen.get(retrying.tries) ?? new Set()).add(wait!));
-        }
-      }),
-      { seed: SEED, numRuns: 100 },
-    );
-    // The jitter is drawn, not fixed: an early retry, whose bound is above zero, waits more than one way.
-    expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
   });
 });
