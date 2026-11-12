@@ -1115,6 +1115,8 @@ export class ProgramRunner extends Context.Service<
             }
 
             const owed = !accepted || letter.id === options.mine;
+            // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
+            const recovering = Option.exists(prepared, (turn) => turn.id === letter.id);
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
               cmd,
@@ -1122,7 +1124,9 @@ export class ProgramRunner extends Context.Service<
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
-              ...(owed && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type)) ? { mail: true as const } : {}),
+              ...((owed || recovering) && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type))
+                ? { mail: true as const }
+                : {}),
               ...Option.getOrElse(oversized(cmd), () => ({})),
             }));
             cmds = [...cmds, ...dispatched];
@@ -1130,8 +1134,8 @@ export class ProgramRunner extends Context.Service<
             if (letter.id === options.mine) {
               mine = Option.some(letter);
               fresh.push(...dispatched);
-            } else if (!accepted) {
-              drain.push(...dispatched);
+            } else {
+              drain.push(...dispatched.filter((job) => !accepted || job.mail === true));
             }
           }
 
