@@ -91,7 +91,7 @@ const called = yield* call(seq, { to: 3 }, { told: {}, stopOn: ctrlC });
 
 *(updated 2026-11-08 to Program.make.)* This sketch and `defineProgram` below are today's
 version. In `next/`, a program is one typed `Program.make({name, machine, ...})`, its machine a
-`Machine.make` value of its own, and there is no `defineX` ([Program.make](./program-make.md),
+`Machine.make` value of its own, and there is no `defineX` ([Program.make](../../.decisions/0256-a-program-is-one-program-make.md),
 decided 2026-11-07).
 
 **The rule: outputs are events.** Heard once, by whoever listens at that
@@ -180,7 +180,7 @@ Three layers, each with one job.
     program's dead-letter stream, so the desk shows it to raise or drop.
   - Same shape as the mailbox's `capacity`: a program fact, enforced by the host,
     answered with a typed reason. This replaces fabrika's own supervisor as the
-    one that says no ([helpers](./helpers-and-the-supervisor.md)).
+    one that says no ([0417](../../.decisions/0417-fabrika-has-no-supervisor-of-its-own.md)).
   - Open: soft limits (warn before the end), as cgroups have.
 - **Only the starter closes an input, like stdin's end.** The close goes into
   the mailbox after the values told before it, so `serve` handles those first

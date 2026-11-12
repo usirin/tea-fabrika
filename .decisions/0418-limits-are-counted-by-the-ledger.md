@@ -12,7 +12,7 @@ tags: [limits, ledger, host, spend]
 
 ## Context
 
-From [helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md#what-was-decided),
+From the note "helpers, and one supervisor", since removed,
 changed 2026-10-21 by experiment 102. Built in today's host (`setLimits` in `packages/fabrika/src/host/`).
 
 ## Decision

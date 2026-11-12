@@ -184,7 +184,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
   holds, since focus is per workspace (W4).
 - [The GUI is an Electron app first](./the-gui-is-electron-first.md): the
   Electron window is one backend of three, and it dials the brain itself (T3).
-- [tsh, a shell for tea programs](./tsh-a-shell-for-tea-programs.md): tsh is
+- [tsh, a shell for tea programs](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md): tsh is
   a regular program in the brain (W2).
 
 ## What it costs

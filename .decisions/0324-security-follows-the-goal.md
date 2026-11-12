@@ -13,7 +13,8 @@ tags: [security, hardening, order-of-work, code-host]
 ## Context
 
 Designing around a code host's permissions tied the design to that host and went round in circles.
-From [North Star first; harden later](../docs/direction/north-star-first-harden-later.md).
+From the note "North Star first; harden later", since removed. Its 2026-10-18 order of work is
+replaced by [the tiers](../docs/plan/tiers.md).
 
 ## Decision
 

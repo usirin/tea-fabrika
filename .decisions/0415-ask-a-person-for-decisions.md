@@ -20,7 +20,7 @@ if (left.owed === "a_ruling") return waitFor(owner, "rule on the open call in th
 
 ## Context
 
-From [ask for decisions, not facts](../docs/direction/ask-for-decisions-not-facts.md#what-was-decided),
+From the note "ask for decisions, not facts", since removed,
 decided 2026-10-11. A real backlog is hundreds of open tickets; nobody holds what is left on each in
 their head.
 

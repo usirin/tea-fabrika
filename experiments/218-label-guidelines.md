@@ -85,14 +85,14 @@ Hospital     color wristbands meant different things in two hospitals; the fix: 
 |---|---|
 | Labels never gate a build; the approved plan is the only go. Decided 2026-10-21. | [sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md), "Who approves building" |
 | No ticket-kind label (bug, feature, chore, ...) enters the ledger, from experiment 88, on routing. | same note, "What it means for the work" |
-| The tracker is like Linear and grows toward its model; a label never gates. Decided 2026-10-27. | [the tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md) |
+| The tracker is like Linear and grows toward its model; a label never gates. Decided 2026-10-27. | [0346](../.decisions/0346-the-tracker-is-built-like-linear.md) |
 | Status, done included, is a fold of facts; `moved` cannot spell done. Decided 2026-11-06. | [tracker views are programs](../docs/direction/tracker-views-are-programs.md) |
 | Priority, labels and project are a person's only, refused at the door; no stage reads them. | same note, section 4 |
 | A person is the assignee, their agent the delegate; whose turn is a fold of asks and answers. Decided 2026-11-06. | [a ticket runs from the app](../docs/direction/a-ticket-runs-from-the-app.md) |
 | An area is a person's data on the ledger, made, renamed, merged; never read from folders (call 5). Decided 2026-11-04. | [areas](../docs/direction/areas.md), A1 |
 | A ticket's area is a guess until a person picks, and the guess says so. Decided 2026-11-04. | same note, A2 |
 | Ids are stable: a counter or a name, never a place in a list. | [the smallest ledger](../docs/direction/smallest-ledger-proof-to-grow.md) |
-| Before adding a field or label, ask: is it something we already have? | [reuse before special rules](../docs/direction/reuse-before-special-rules.md) |
+| Before adding a field or label, ask: is it something we already have? | [reuse before special rules](../.decisions/0421-reuse-before-special-rules.md) |
 
 **Leaned, not decided.** `labeled {add, drop}` with string labels, a person's, is a sketch in
 tracker views (section 7). Areas' own "where this differs" says "an area is not a label in a
@@ -217,7 +217,7 @@ in living on their own stream with their own facts, which is what this study tes
 
 Two things tip it toward the group. Labels are coming anyway (tracker views sketches `labeled`),
 so a separate area makes two make-rename-merge flows, two pickers and two filter doors for the
-same act, which [reuse before special rules](../docs/direction/reuse-before-special-rules.md)
+same act, which [reuse before special rules](../.decisions/0421-reuse-before-special-rules.md)
 asks us not to do. And area's best parts, numbers, merge and the guess, are what phoenix's labels
 lacked. The one thing against it is behavior: Jira's component has an owner and routes work, and
 our glossary already calls an area "the long-lived grouping with an owner" (the `project` row).

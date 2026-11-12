@@ -181,7 +181,7 @@ spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pi
 ## The leak check
 
 Today the leak check is a by-hand grep, before the merge yes, when the branch is already public. A gate
-before the push ([nothing is pushed before review](../direction/push-after-review.md)) is not built. A
+before the push ([nothing is pushed before review](../../.decisions/0392-push-is-a-step-after-review.md)) is not built. A
 person or an agent reads the pull request's added lines and greps them for keys, machine paths, personal
 names and account names. Do not give the merge yes until that is clean.
 
