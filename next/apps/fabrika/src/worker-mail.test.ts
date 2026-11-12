@@ -87,7 +87,7 @@ const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
   send_err: (s,m) => s.phase === "waiting" ? [{...s, phase: "failed", reason: m.error._tag}, []] : [s, []],
   crash: () => { throw new TypeError("fixture crash"); }
  }});
-export const program = Program.make({name: "${role}-${pair}", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+export const program = Program.make({name: "p41/${role}-${pair}", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
  inputs: ${role === "requester" ? '{start: "Ask", answer: "Answer"}' : '{request: "Request", crash: "Crash"}'},
  outputs: {}, writes: {}, wake: () => null});
 `;
@@ -136,7 +136,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
           const name = `${role}-${pair}`;
           const path = join(home, `${name}.ts`);
           writeFileSync(path, source(role, pair));
-          selections[name] = path;
+          selections[`p41/${name}`] = path;
         }
       }
 
@@ -192,7 +192,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = name.replace(":", "-");
+              const program = `p41/${name.replace(":", "-")}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
               const started = await Reflect.get(instance.project(PROJECT), "start")(
