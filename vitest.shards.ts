@@ -16,6 +16,8 @@ const LANE = "packages/pipeline/src/stages/pipeline/lane";
  * run 42874119130, attempts 5 to 14 (a median of 10).
  * stepcommit, redact and gc use CI runs 42631962689, 42631256491 and 42630840277.
  * next/ medians use main runs 42717511599, 42716453289 and 42715921306, rounded to one decimal.
+ * T871 medians use completed main runs 43239450301 (755d6f4ad), 43235822398 (2d60c9835)
+ * and 43234969237 (27011b244), all attempt 1, with jobs and samples beside each row.
  * The four catchup files are one time each from PR 770's CI run 42883743294, rounded to one decimal.
  * The four build files (build.test.ts, build-assets.test.ts, build-one-file.test.ts, exam/bytes.test.ts) are one time each from CI run 42922102030, rounded to one decimal.
  * A file not measured counts 1 s.
@@ -148,6 +150,8 @@ export const measured: Record<string, number> = {
   "next/apps/fabrika/src/settings.test.ts": 0.0,
   "next/apps/fabrika/src/instance-records.test.ts": 32.8,
   "next/apps/fabrika/src/instance-wire.test.ts": 68.6,
+  // Shard 4 jobs 131255816865, 131243028487, 131240031939: 19.6, 15.7, 23.9 s; median 19.6.
+  "next/apps/fabrika/src/worker-mail.test.ts": 19.6,
   "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts": 0.1,
   "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts": 4.2,
   "next/packages/libfabrika/src/runtime/Entry.test.ts": 0.0,
@@ -164,6 +168,12 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": 0.1,
   "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
   "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
+  // Shard 5 jobs 131255817055, 131243028586, 131240031887: 225.4, 245.6, 261.4 s; median 245.6.
+  // Store wrapper keeps the aggregate until the split's first ready CI run measures both wrappers.
+  // ProgramMailRuntime.test.ts has no measured weight yet and stays absent.
+  "next/packages/libfabrika/src/node/ProgramMail.test.ts": 245.6,
+  // Shard 4 jobs 131255816865, 131243028487, 131240031939: 79.2, 71.1, 84.4 s; median 79.2.
+  "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
   "next/packages/libfabrika/src/access/Authorization.test.ts": 16.4,
   "next/packages/libfabrika/src/access/ClientManager.test.ts": 13.0,
   "next/packages/libfabrika/src/presence/Connections.test.ts": 2.5,
