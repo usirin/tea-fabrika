@@ -206,6 +206,7 @@ type Ask = {
   readonly program: unknown;
   readonly name: unknown;
   readonly input?: unknown;
+  readonly inputBytes?: number;
   readonly extra?: Record<string, unknown>;
   readonly drop?: ReadonlyArray<string>;
 };
@@ -378,7 +379,8 @@ type Move =
   | "queued_exit"
   | "interleaved_exit"
   | "worker_before_exit"
-  | "worker_after_exit";
+  | "worker_after_exit"
+  | "checkpoint_starts";
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
 const forged = (field: string, world: World): unknown => {
@@ -543,6 +545,7 @@ const walk = (
         worker_before_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         worker_after_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         cut_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
+        checkpoint_starts: starters().length > 0 && next.calls() < PIDS.length - 6,
       };
       const options = moves.filter((move) => can[move]);
 
@@ -744,7 +747,17 @@ const walk = (
             const endingCall = yield* Effect.forkChild(runner.msg(letter(ending)).pipe(Effect.result));
             yield* Deferred.await(entered).pipe(Effect.timeout("10 seconds"));
             // A different letter arrives while the Cmd before exit is still in flight.
-            const laterCall = yield* Effect.forkChild(runner.msg(letter(late)).pipe(Effect.result));
+            const alarm = cell.alt % 2 === 0;
+
+            if (alarm) {
+              yield* inContext(Mailbox.use((m) => m.send(name, `late-${++world.n}`, late, brainFrom())));
+            }
+
+            const laterCall = yield* Effect.forkChild(
+              (alarm ? runner.due((yield* Clock.currentTimeMillis) + 1_000) : runner.msg(letter(late))).pipe(
+                Effect.result,
+              ),
+            );
 
             // Let the competing call run up to a wait, without requiring it to finish before release.
             for (let turn = 0; turn < 20; turn++) {
@@ -754,6 +767,7 @@ const walk = (
             yield* Deferred.succeed(release, undefined);
             yield* Fiber.join(endingCall);
             yield* Fiber.join(laterCall);
+            seen.add(alarm ? "interleaved_alarm" : "interleaved_letter");
           } else {
             world.fault.landed = false;
             world.fault.exited = move === "worker_before_exit";
@@ -810,6 +824,36 @@ const walk = (
           ).toEqual([]);
           held.live = false;
           seen.add(move);
+          break;
+        }
+        case "checkpoint_starts": {
+          const name = choose(starters(), cell.pick);
+          const held = world.names.get(name) as Name;
+          const before = (yield* answers(name)).length;
+          const asks = Array.from({ length: 2 + (cell.shape % 2) }, () => ({
+            program: "merger",
+            name: fresh(),
+            inputBytes: 1_100_000 + (cell.alt % 10_000),
+          }));
+          // The door letter holds sizes only. Its step emits individually valid Cmds whose sum
+          // crosses the platform's row limit before any of them can be performed.
+          yield* door(name, { type: "end", before: asks, after: [], twice: false });
+          const rows = yield* all(asks.map((ask) => ask.name));
+          expect((yield* answers(name)).length, "L6: every valid start answers across a large checkpoint").toBe(
+            before + asks.length,
+          );
+
+          for (const ask of asks) {
+            const starts = rows.filter((row) => row._tag === "started" && body(row)["name"] === ask.name);
+            const letters = rows.filter((row) => row.stream === `${ask.name}/inbox`);
+            expect(starts, "L6: checkpoint size loses no valid start").toHaveLength(1);
+            expect(letters, "L6: each input was written once").toHaveLength(1);
+            expect(body(letters[0])["m"]).toBe("x".repeat(ask.inputBytes));
+          }
+
+          expect(yield* exitedRows(held.pid), "L7: exit still follows every valid start").toHaveLength(1);
+          held.live = false;
+          seen.add("checkpoint_starts");
           break;
         }
         case "exit":
@@ -1188,8 +1232,24 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     );
 
     for (const move of ["queued_exit", "interleaved_exit", "worker_before_exit", "worker_after_exit"] as const) {
-      prop(`L7 ${move}: exit keeps its command order and survives a fresh runner`, open, [move], [move], [move], 100);
+      prop(
+        `L7 ${move}: exit keeps its command order and survives a fresh runner`,
+        open,
+        [move],
+        [move],
+        move === "interleaved_exit" ? [move, "interleaved_alarm", "interleaved_letter"] : [move],
+        100,
+      );
     }
+
+    prop(
+      "L6: individually valid starts survive a checkpoint larger than one platform row",
+      open,
+      ["checkpoint_starts"],
+      ["checkpoint_starts"],
+      ["checkpoint_starts"],
+      200,
+    );
 
     prop(
       "L8: start_child and exit run only when declared, and both refuse extra fields as bad_cmd",

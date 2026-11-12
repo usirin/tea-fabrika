@@ -1,6 +1,9 @@
 // P42 slice 1 (ticket 770), next/: L9 and L10 on a real local instance. Outside only: real workerd,
 // sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
+import type { Descriptor } from "@kampus/libfabrika";
+import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { configureProcess, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Schema, Scope } from "effect";
 import { describe, expect, it } from "vitest";
 import { childInstance, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
@@ -169,6 +172,46 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
 };
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
+  // scenario: L10, A7. One storage cut between saving the first wake and setting its alarm.
+  // The real-instance check below proves execution; this checks the public configure handoff's retry.
+  it("scenario: L10: a retry after the first alarm write fails arms the saved wake", async () => {
+    const values = new Map<string, unknown>();
+    let armed: number | undefined;
+    let fail = true;
+    const ctx = {
+      storage: {
+        get: async (key: string) => values.get(key),
+        put: async (key: string, value: unknown) => {
+          values.set(key, value);
+        },
+        setAlarm: async (at: number) => {
+          if (fail) {
+            fail = false;
+            throw new Error("first alarm write failed");
+          }
+
+          armed = at;
+        },
+      },
+    } as Parameters<typeof configureProcess>[0];
+    const descriptor: Descriptor = {
+      id: "process_0000000000e008000000000001",
+      name: "child:alarm",
+      program: "child",
+      build: "p42-alarm",
+      owner: Writer.cases.person.make({ key: "SHA256:test", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" }),
+    };
+    const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, true)));
+    expect(first._tag).toBe("Failure");
+    const wake = await Effect.runPromise(savedAlarm(ctx));
+    expect(wake).toBeTypeOf("number");
+    expect(armed).toBeUndefined();
+    await Effect.runPromise(configureProcess(ctx, descriptor, true));
+    expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
+    expect(values.get("descriptor")).toEqual(descriptor);
+    expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
+  });
+
   // scenario: L9. Only the real project holds the client list a notify would reach, so one real
   // instance with one connected client is the check; generated Node laws cannot see that list.
   it("scenario: L9: a code start sends nothing to any client: no view, no notify, no focus", async () => {

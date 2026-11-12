@@ -8,6 +8,7 @@ import { Effect, FileSystem, Layer, Path, Stream } from "effect";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { ROW_BYTES } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -55,6 +56,7 @@ const databases = Effect.gen(function* () {
   };
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
+  const bytes = new TextEncoder();
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -63,7 +65,22 @@ const databases = Effect.gen(function* () {
     }
 
     const made: Sql = {
-      exec: (query, ...params) => handle(part).sql.exec(query, ...params),
+      exec: (query, ...params) => {
+        // Cloudflare limits each stored row. Node SQLite needs the same failure at this edge.
+        if (/^\s*(INSERT|UPDATE)\b/i.test(query)) {
+          const size = params.reduce<number>(
+            (total, value) => total + (typeof value === "string" ? bytes.encode(value).byteLength : 8),
+            0,
+          );
+
+          if (size > ROW_BYTES) {
+            // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- edge: synchronous Sql.exec reproduces the platform driver's row-limit exception
+            throw new Error("SQLITE_TOOBIG: row exceeds the platform limit");
+          }
+        }
+
+        return handle(part).sql.exec(query, ...params);
+      },
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
