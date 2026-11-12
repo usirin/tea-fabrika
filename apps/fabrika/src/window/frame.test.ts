@@ -628,7 +628,14 @@ describe("the bottom line and the asks list", () => {
 describe("keys while something lies over the desk", () => {
   const quiet = { armed: false, asking: false };
   const asks: Frame["over"] = { kind: "asks" };
-  const palette: Frame["over"] = { kind: "palette", title: "commands", query: "", at: 0 };
+  const palette: Frame["over"] = {
+    kind: "palette",
+    source: { _tag: "commands" },
+    query: "",
+    at: 0,
+    selected: "",
+    rows: [],
+  };
 
   it("sends every key to the desk when nothing is open", () => {
     for (const key of ["<arrowdown>", "a", "<c-b>"]) {
@@ -867,7 +874,14 @@ describe("the frame's own state", () => {
     expect(frameUpdate(open, { type: "show", what: "asks" }).over).toEqual({ kind: "none" });
     const palette = frameUpdate(FRAME, { type: "palette" });
     const typed = frameUpdate(palette, { type: "query", query: "zo" });
-    expect(typed.over).toEqual({ kind: "palette", title: "commands", query: "zo", at: 0 });
+    expect(typed.over).toEqual({
+      kind: "palette",
+      source: { _tag: "commands" },
+      query: "zo",
+      at: 0,
+      selected: "",
+      rows: [],
+    });
     expect(frameUpdate(typed, { type: "move", by: -1, of: 3 }).over).toMatchObject({ at: 2 });
   });
 
@@ -878,7 +892,9 @@ describe("the frame's own state", () => {
       kind: "item",
       what: "host",
     });
-    expect(frameUpdate(asks, { type: "show", what: "keys" }).over).toMatchObject({ title: "keys" });
+    expect(frameUpdate(asks, { type: "show", what: "keys" }).over).toMatchObject({
+      source: { _tag: "keys" },
+    });
     const palette = frameUpdate(FRAME, { type: "palette" });
     expect(frameUpdate(palette, { type: "show", what: "asks" }).over).toEqual({ kind: "asks" });
     expect(frameUpdate(asks, { type: "close" }).over).toEqual({ kind: "none" });
@@ -1227,7 +1243,7 @@ describe("info mode", () => {
   // explanation with the mode off, or "left" while it is on, cannot be built.
   it("keeps its state in one value, so the impossible mixes cannot be built", () => {
     expect(FRAME.info).toEqual({ kind: "never" });
-    expect(Object.keys(FRAME).sort()).toEqual(["bare", "info", "note", "over"]);
+    expect(Object.keys(FRAME).sort()).toEqual(["bare", "info", "note", "opening", "over", "returnTo"]);
     const modes: readonly InfoMode[] = [
       { kind: "never" },
       { kind: "on", explained: null },

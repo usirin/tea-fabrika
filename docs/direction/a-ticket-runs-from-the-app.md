@@ -87,7 +87,7 @@ const lane = (ticket: TicketNumber) =>
   [every finding is rated](./every-finding-is-rated.md),
   [new combos](./new-combos.md),
   [property tests](./property-tests-not-our-own-search.md),
-  [push after review](./push-after-review.md),
+  [push after review](../../.decisions/0392-push-is-a-step-after-review.md),
   [ship stage rules](./ship-stage-rules.md),
   [the ticket is the lane view](./the-ticket-is-the-lane-view.md),
   [what a ticket shows](./what-a-ticket-shows.md),
@@ -120,7 +120,7 @@ const lane = (ticket: TicketNumber) =>
 | Push | nowhere | No program. Today's `stages/ship` takes an open PR; nothing pushes after review. |
 | The PR watcher | nowhere | No program writes `pr` facts. |
 | The box | experiments 128, 137 and 148 | No `Sandbox` service in the packages. The builder has only its harness holds. |
-| Two parents | `stages/operate/`, `stages/lane/` with `hosted/` | `operate` pushes every round before review, against [push after review](./push-after-review.md). `lane` matches the decisions but runs as hosted children on tea-host, a shape the 10-22 note says the rebuild drops. |
+| Two parents | `stages/operate/`, `stages/lane/` with `hosted/` | `operate` pushes every round before review, against [push after review](../../.decisions/0392-push-is-a-step-after-review.md). `lane` matches the decisions but runs as hosted children on tea-host, a shape the 10-22 note says the rebuild drops. |
 | `Agents` | `packages/fabrika/src/agents/agent/` | Built in experiment 156. No stage uses it. Its Claude adapter always sends Claude Code's preset ([PR 127](https://github.com/usirin/tea-fabrika/pull/127)); a `Turn` cannot ask for another prompt. |
 
 ## 1. The whole trip of one ticket
@@ -785,7 +785,7 @@ evaluation ([Canarying Releases](https://sre.google/workbook/canarying-releases/
 
 - **What:** the earlier draft had ship push, open the PR and merge. Today's
   ship code only does the last part: it takes an open PR, waits on CI and
-  comments, and merges. [Push after review](./push-after-review.md) left
+  comments, and merges. [Push after review](../../.decisions/0392-push-is-a-step-after-review.md) left
   "who pushes" open, and the draft filled that gap without asking.
 - So push becomes its own small program. It runs the leak check, pushes the
   commit review read, and opens the PR. Like every program it runs in a box.
@@ -829,7 +829,7 @@ run(push, {
   the work happens every day, and its tickets are the best known. A miss here
   is cheap to see and fix.
 - It clashes with earlier notes, which name demlik as the first real repo
-  ([demlik is the first real repo](./demlik-is-the-first-real-repo.md)).
+  ([demlik is the first real repo](../../.decisions/0224-real-repos-keep-their-merge-rules.md)).
   demlik moves to right after v1.
 - **There is one catch.** This repo's main has no review rule, so "merge by
   the repo's own rules" would mean merging with nobody's approval. The fix is one

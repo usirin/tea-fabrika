@@ -23,7 +23,7 @@ flowchart LR
 The owner decided on 2026-10-18 that building is approved on the plan, the first point where what
 would be built is clear, and on 2026-10-21 that labels never gate a build
 ([sort answers yes or no, who approves building](../docs/direction/sort-answers-yes-or-no.md#who-approves-building)).
-[The tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md) (2026-10-27) keeps
+[0346](0346-the-tracker-is-built-like-linear.md), the tracker built like Linear (2026-10-27), keeps
 it as the tracker grows priorities and labels.
 
 ## Decision

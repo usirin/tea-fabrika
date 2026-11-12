@@ -39,9 +39,14 @@ export type RestartNote = typeof RestartNote.Type;
 
 const decodeNote = Schema.decodeUnknownEffect(Schema.fromJsonString(RestartNote));
 
+/**
+ * The note's file: beside the host's log, in its durable folder (`<home>/host/`), never in the
+ * short runtime folder a project's sockets use (project.ts), which a reboot may empty.
+ */
 const fileIn = (paths: HostPaths) =>
   Effect.gen(function* () {
-    return (yield* Path.Path).join(paths.dir, "restart.json");
+    const path = yield* Path.Path;
+    return path.join(path.dirname(paths.log), "restart.json");
   });
 
 /** Leave `note` for the next host: written beside, then moved over, so it is never read half written. */

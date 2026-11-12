@@ -14,6 +14,7 @@ import { type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf 
 //   tezgah."split --to down" = "<prefix>-"                  a word with spaces, quoted after the dot
 //   tezgah.fold              = []                           unbound: still in the palette and tsh
 //   palette.open             = "cmd+k"
+//   projects.open            = "cmd+o"                      the projects box, the page's own (ticket 276)
 //   ignore                   = ["cmd+w"]                    eaten: the system never hears it
 //
 //   decodeKeys('prefix = "ctrl+a"', true)            the defaults, armed by <c-a>
@@ -81,6 +82,7 @@ export const Does = Schema.Literals([
   "tezgah.sync",
   "tezgah.host",
   "palette.open",
+  "projects.open",
 ]);
 export type Does = typeof Does.Type;
 
@@ -139,21 +141,34 @@ export const commandFor = (does: Action): Does | undefined =>
 /** The palette opens on Cmd-K, as in Linear and VS Code. */
 const PALETTE_KEY = "<m-k>";
 
-/** The table with no file: today's keys, Cmd-K for the palette, Cmd-W eaten. */
+/**
+ * The projects box opens on Cmd-O, as File > Open Project… does in the menu (ticket 276): the
+ * page's own, like the palette's, so it works on the welcome page with no host or terminal.
+ */
+const PROJECTS_KEY = "<m-o>";
+
+/** The commands the page runs itself, with the key each has pressed alone by default. */
+const PAGE_KEYS: Partial<Record<Does, string>> = {
+  "palette.open": PALETTE_KEY,
+  "projects.open": PROJECTS_KEY,
+};
+
+/** The table with no file: today's keys, Cmd-K for the palette, Cmd-O for projects, Cmd-W eaten. */
 export const defaults: Keys = {
   prefix: "<c-b>",
-  rows: Does.literals.map((does) =>
-    Row.make({
+  rows: Does.literals.map((does) => {
+    const page = PAGE_KEYS[does];
+    return Row.make({
       does,
       keys:
-        does === "palette.open"
-          ? [alone(PALETTE_KEY)]
+        page !== undefined
+          ? [alone(page)]
           : BINDINGS.filter((b) => b.command === does).map((b) =>
               b.does.kind === "cycle" ? alone(b.key) : after(b.key),
             ),
       source: "default",
-    }),
-  ),
+    });
+  }),
   programs: ProgramDoes.literals.map((does) =>
     ProgramRow.make({
       does,

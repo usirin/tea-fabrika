@@ -83,7 +83,7 @@ const DEFAULTS = {
     steps or duplicate listed field rows. Missing or unclear state sends it back to those facts.
     A driver is not the lead session: every plan and amendment returns unsigned after the draft
     check, then waits for the lead session's own read and signature. See
-    [hand-run review and cleanup](./hand-run-review-and-cleanup.md).
+    [the lead skill](../../.agents/skills/lead/SKILL.md).
   - The driver merges its own pull request only after plan, tests, build, mutation and one review
     all ran, each by its own agent, with the review saying `merge-ready`, CI green and a clean leak
     grep. No step is skipped. A new design call or an exam read goes back to the lead.

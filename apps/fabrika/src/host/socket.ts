@@ -30,7 +30,7 @@ export interface HostPaths {
 }
 
 /** The longest socket path macOS takes, in bytes (`sun_path`, less its closing zero). */
-const MAX_SOCKET_PATH = 103;
+export const MAX_SOCKET_PATH = 103;
 
 const fits = (sock: string) => new TextEncoder().encode(sock).length <= MAX_SOCKET_PATH;
 

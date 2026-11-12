@@ -6,7 +6,8 @@ import { ChildProcess } from "effect/process";
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner";
 import { describe, expect, it } from "vitest";
 import { attach } from "../attach.ts";
-import { pathsOf, type Reached, reach } from "./socket.ts";
+import { projectHome } from "../project.test-support.ts";
+import { type Reached, reach } from "./socket.ts";
 
 // One host per home, however many start at once. Each host here is a real process, started as
 // the app starts one (host/main.ts, run as plain Node), on a fresh home of the test's own:
@@ -41,11 +42,16 @@ const N = 6;
  */
 const SETTLE_MS = 12_000;
 
-/** A fresh home, with the host's paths in it. Short, as a socket path is 103 bytes at most. */
+/**
+ * A fresh project home, with the host's paths and its project: a host starts only on a home whose
+ * `project.json` names a real working tree (P1), so the round makes one. Short, as a socket path is
+ * 103 bytes at most.
+ */
 const freshHome = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const home = yield* fs.makeTempDirectoryScoped({ prefix: "oh-" });
-  return { home, paths: yield* pathsOf(home) };
+  const app = yield* fs.makeTempDirectoryScoped({ prefix: "oh-" });
+  const { home, paths, project } = yield* projectHome(app, "work");
+  return { home, paths, project };
 });
 
 /**
@@ -160,7 +166,7 @@ const hostsAtOnce = (stale: boolean) =>
 
 /** One round: `N` apps attach at once on a fresh home, each able to start a host process. */
 const appsAtOnce = Effect.gen(function* () {
-  const { home, paths } = yield* freshHome;
+  const { home, paths, project } = yield* freshHome;
   const started: ChildProcessHandle[] = [];
   const start = Effect.gen(function* () {
     const host = yield* hostProcess(home);
@@ -168,7 +174,9 @@ const appsAtOnce = Effect.gen(function* () {
     return host.exitCode;
   });
   const tries = yield* Effect.all(
-    Array.from({ length: N }, () => attach({ home, deliver: () => {}, start }).pipe(Effect.exit)),
+    Array.from({ length: N }, () =>
+      attach({ home, deliver: () => {}, start, project: { key: project.key, paths } }).pipe(Effect.exit),
+    ),
     { concurrency: "unbounded" },
   );
   const up = tries.filter((t) => Exit.isSuccess(t) && t.value.wire.state().at === "up").length;
@@ -205,7 +213,7 @@ describe("one host per home", () => {
   it("more hosts started while one serves leave its socket, its app and its pid alone", async () => {
     const seen = await go(
       Effect.gen(function* () {
-        const { home, paths } = yield* freshHome;
+        const { home, paths, project } = yield* freshHome;
         const first = yield* hostProcess(home);
 
         if (!(yield* answersWithin(paths.sock, 10_000))) {
@@ -219,7 +227,12 @@ describe("one host per home", () => {
           starts.push(host);
           return host.exitCode;
         });
-        const app = yield* attach({ home, deliver: () => {}, start });
+        const app = yield* attach({
+          home,
+          deliver: () => {},
+          start,
+          project: { key: project.key, paths },
+        });
         const after = [];
 
         for (let i = 0; i < 4; i += 1) {
@@ -241,7 +254,12 @@ describe("one host per home", () => {
               ),
             { concurrency: "unbounded" },
           );
-          const next = yield* attach({ home, deliver: () => {}, start }).pipe(Effect.exit);
+          const next = yield* attach({
+            home,
+            deliver: () => {},
+            start,
+            project: { key: project.key, paths },
+          }).pipe(Effect.exit);
           after.push({
             exited: exited.every((e) => e),
             firstRuns: yield* running(first),
@@ -272,10 +290,11 @@ describe("one host per home", () => {
   it("a socket left by a host that was killed is taken over by the next host started", async () => {
     const seen = await go(
       Effect.gen(function* () {
-        const { home, paths } = yield* freshHome;
+        const { home, paths, project } = yield* freshHome;
         const before = yield* staleSocket(home, paths.sock);
         const started: ChildProcessHandle[] = [];
         const { wire } = yield* attach({
+          project: { key: project.key, paths },
           home,
           deliver: () => {},
           start: Effect.gen(function* () {

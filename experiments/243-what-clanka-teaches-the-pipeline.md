@@ -303,9 +303,9 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 | Signing | none; the agent runs git and `gh` itself | code signs each step (proposed, above) |
 | Ledger | none; history in memory, ACP saves a record in a key-value store | facts in the ledger ([the ledger behind a service](../docs/direction/ledger-behind-a-service.md), [a job record holds its trace](../docs/direction/a-job-record-holds-its-trace.md)) |
 | Transcripts | `HistoryAppended` and `HistoryReplaced` events | content beside the spans, deletable ([an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md), proposed) |
-| Asks to a person | none; `permissionMode: "dontAsk"`, and `steer` is the only way in | one ask with the hash of what was shown ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md), [ask for decisions](../docs/direction/ask-for-decisions-not-facts.md)) |
+| Asks to a person | none; `permissionMode: "dontAsk"`, and `steer` is the only way in | one ask with the hash of what was shown ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md), [ask for decisions](../.decisions/0415-ask-a-person-for-decisions.md)) |
 | Money | tokens, no dollars | one meter, list dollars on every run (same note) |
-| Helpers | the agent starts sub-agents itself; tasks belong to their starter | an agent asks through one tool; tea-host's `DynamicSupervisor` starts it with limits ([helpers](../docs/direction/helpers-and-the-supervisor.md)) |
+| Helpers | the agent starts sub-agents itself; tasks belong to their starter | an agent asks through one tool; tea-host's `DynamicSupervisor` starts it with limits ([0417](../.decisions/0417-fabrika-has-no-supervisor-of-its-own.md)) |
 | Providers | a model layer per provider, picked by a flag | one `Agents` service, providers swapped by config ([agents behind one service](../docs/direction/agents-behind-one-service.md)) |
 
 ## What to borrow
@@ -414,7 +414,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
   that steps on Msgs ([tea is the engine](../docs/direction/tea-is-the-engine.md): "nothing replaces
   a tea machine"). clanka's fiber is a fine inside for one Cmd, never the loop.
 - **History in memory, saved by the caller.** Ours is facts in the ledger. A host can die mid-spend
-  ([helpers](../docs/direction/helpers-and-the-supervisor.md), experiment 102), so the ledger keeps
+  ([0418](../.decisions/0418-limits-are-counted-by-the-ledger.md), experiment 102), so the ledger keeps
   the count and the record.
 - **The agent says it is done, in free text.** Our step's answer is checked by its schema, and a
   misfit ends the step `stuck`, with no "fix your answer" turn (Tier 5 law). clanka's "please try

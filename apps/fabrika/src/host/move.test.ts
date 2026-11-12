@@ -20,17 +20,28 @@ import {
 } from "@kampus/fabrika-old";
 import { openDb } from "@kampus/fabrika-old/sqlite";
 import { Effect, type FileSystem, Layer, Option, type Path, type Scope } from "effect";
+import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
+import { go, projectHome } from "../project.test-support.ts";
+import { Project } from "../project.ts";
 import { CONNECTION_FILE } from "./connection.ts";
 import { copyInto, dryRun, LinkDropped, MoveStopped, MoveTarget, move, readLaptop } from "./move.ts";
-import { pathsOf } from "./socket.ts";
+import { MAX_SOCKET_PATH, pathsOf } from "./socket.ts";
 
 // The laptop's side of the move, against the server's own window (`importChunk`, `sealMove`) on
 // node:sqlite in this process: the same code the Durable Object runs, with no network. The move
 // over the twin, and two people after it, is shared.test.ts.
 
 const root = mkdtempSync(join(tmpdir(), "move-"));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+/** Short app homes P31 makes under /tmp, so a socket path fits; they go with the rest. */
+const homes: string[] = [];
+
+afterAll(() => {
+  for (const folder of [root, ...homes]) {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 let n = 0;
 
 const fresh = (name: string) => {
@@ -126,6 +137,16 @@ const target = (db: Db, o: { drop?: number } = {}) => {
 
 const rowsOf = (db: Db) =>
   read(db, 0, 10_000, "tracker").map((r) => [r.stream, r.rev, r.writer, r.kind, r.at, r.data, r.id]);
+
+/** The home's two ledger files, byte for byte, or `null` for one that is not there. */
+const ledgerBytes = (home: string) =>
+  ["ledger.sqlite", CONNECTION_FILE].map((name) => {
+    try {
+      return readFileSync(join(home, name)).toString("base64");
+    } catch {
+      return null;
+    }
+  });
 
 const fileHash = (dir: string) =>
   createHash("sha256")
@@ -236,6 +257,68 @@ describe("fabrika move, on the laptop's side", () => {
     writeFileSync(paths.lock, `${process.pid}\n`);
     const byLock = await run(move(o).pipe(Effect.flip));
     expect(String((byLock as MoveStopped).why)).toContain(`a host is starting, pid ${process.pid}`);
+  });
+
+  // P31 (T276 amendment 4): the refusal above, for a project's own host. A project home, as
+  // Project.select gives it, keeps its host's socket and start lock under the app home's runtime
+  // folder (Project.hostPaths), not in `<home>/host/`. Short app homes are the ones whose
+  // `<home>/host/sock` would still fit 103 bytes, so reading that path finds no host; long ones
+  // are the default Application Support kind, where it does not fit at all.
+  it("P31: refuses while the project's own host runs, for any app-home length, and changes no ledger file", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc
+          .record({
+            length: fc.constantFrom("short", "long"),
+            layout: fc.constantFrom("project", "legacy"),
+            running: fc.constantFrom("lock", "socket"),
+            pad: fc.integer({ min: 40, max: 70 }),
+          })
+          .filter((c) => c.layout === "project" || c.length === "short"),
+        async ({ length, layout, running, pad }) => {
+          const short = mkdtempSync("/tmp/m");
+          homes.push(short);
+          const app = length === "short" ? short : join(short, "a".repeat(pad));
+          mkdirSync(app, { recursive: true });
+          const home = layout === "project" ? (await go(projectHome(app, "repo"))).home : app;
+
+          if (length === "short") {
+            expect(Buffer.byteLength(join(home, "host", "sock"))).toBeLessThanOrEqual(MAX_SOCKET_PATH);
+          }
+
+          const file = laptopFile(home);
+          writeFileSync(join(home, CONNECTION_FILE), '{"fixture":"kept connection"}\n');
+          const before = ledgerBytes(home);
+          const paths = await go(Project.hostPaths(home));
+          const o = { home, from: file, to: "http://127.0.0.1:9/acme", login: "alice", key: join(home, "no-key") };
+          const said =
+            running === "socket" ? `a host answers on ${paths.sock}` : `a host is starting, pid ${process.pid}`;
+          const [stopped, dry] = await go(
+            Effect.gen(function* () {
+              yield* Effect.sync(() => mkdirSync(paths.dir, { recursive: true, mode: 0o700 }));
+
+              if (running === "socket") {
+                yield* NodeSocketServer.make({ path: paths.sock });
+              } else {
+                yield* Effect.sync(() => writeFileSync(paths.lock, `${process.pid}\n`));
+              }
+
+              const stopped = yield* move(o).pipe(
+                Effect.flip,
+                Effect.orElseSucceed(() => null),
+              );
+              const dry = yield* dryRun({ home, from: file, founder: FOUNDER }).pipe(Effect.orElseSucceed(() => null));
+              return [stopped, dry] as const;
+            }).pipe(Effect.provide(platform)),
+          );
+          expect(stopped).toMatchObject({ _tag: "MoveStopped" });
+          expect(String((stopped as MoveStopped | null)?.why)).toContain(said);
+          expect(dry !== null && Option.isSome(dry.running)).toBe(true);
+          expect(ledgerBytes(home)).toEqual(before);
+        },
+      ),
+      { seed: 119120, numRuns: 12 },
+    );
   });
 
   it("stops on a file whose -wal still holds writes: its rows are not all in the file", async () => {

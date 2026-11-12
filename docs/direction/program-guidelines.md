@@ -346,7 +346,7 @@ its machine               a process id, a trace, saved state, hot reload, a job 
   75%. R2 the desk's pieces are not the program's: lean 85%. R3 the kit holds view helpers, not parts
   that keep state: list and detail, the row, the action bar, lean 75%. R4 what two programs both need
   moves below both: a view piece into the kit, and a fold into the domain package (C9, decided
-  2026-11-02), lean 80% ([reuse before special rules](./reuse-before-special-rules.md)).
+  2026-11-02), lean 80% ([reuse before special rules](../../.decisions/0421-reuse-before-special-rules.md)).
 - **R5, things to find (decided 2026-11-06).** A program hands the desk the rows it can be found by,
   as a pure function of its model, the way `view` is one. The desk keeps one index, matches and ranks
   once for every program, and keeps the last rows of a program that is not running. Picking a row is

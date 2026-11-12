@@ -7,6 +7,7 @@ import {
   Duration,
   Effect,
   Exit,
+  FileSystem,
   Layer,
   Option,
   PubSub,
@@ -17,6 +18,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { isAgentName } from "../../host/door.ts";
 import { type Ended, type RunningOf, start } from "../../program/program.ts";
 import type { Storage } from "../../program/storage.ts";
@@ -205,6 +207,49 @@ export class SummonedNow extends Context.Service<
   }
 >()("@kampus/fabrika-old/SummonedNow") {}
 
+/** One summon or ended turn, as a record keeps it. What the harness did not say is `null`. */
+export interface SummonRecord {
+  readonly name: string;
+  readonly agent: string;
+  readonly folder: string;
+  readonly run: string;
+  readonly model: string | null;
+  readonly effort: string | null;
+  readonly by: string;
+  readonly input: number | null;
+  readonly output: number | null;
+  readonly cost: number | null;
+  readonly at: number;
+}
+
+/**
+ * The git working tree a folder is in, by its real top folder, or `null` when it is in none or
+ * cannot be read. Links resolve and a subfolder gives its tree's top, so two spellings of one
+ * project give one root; another clone or worktree gives its own. git is asked, never guessed.
+ */
+const rootOf = (folder: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const real = yield* fs.realPath(folder);
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(
+      ChildProcess.make("git", ["-C", real, "rev-parse", "--show-toplevel"], {
+        // Only what git needs: an inherited GIT_DIR or GIT_WORK_TREE would answer for another tree.
+        env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: process.env.HOME ?? "/" },
+        extendEnv: false,
+      }),
+    );
+    const [out, code] = yield* Effect.all([handle.stdout.pipe(Stream.decodeText(), Stream.mkString), handle.exitCode], {
+      concurrency: "unbounded",
+    });
+    const top = out.trim();
+    return Number(code) === 0 && top !== "" ? yield* fs.realPath(top) : null;
+  }).pipe(
+    Effect.scoped,
+    Effect.orElseSucceed(() => null),
+    Effect.provide(nodeServices),
+  );
+
 /**
  * The host's summoned agents, kept in `storage`, working in the repository `folder`: the
  * `SummonManager`, and `SummonedNow` beside it.
@@ -212,10 +257,16 @@ export class SummonedNow extends Context.Service<
 export const summonManager = (options: {
   readonly storage: Storage;
   readonly folder: string;
+  /**
+   * Keep a record of each summon and each ended turn, as the host's records keep them (the app's
+   * host/records.ts): what a name meant at that time, and what the turn cost as the harness said.
+   */
+  readonly record?: ((kind: "summon" | "turn", row: SummonRecord) => Effect.Effect<void>) | undefined;
 }): Layer.Layer<SummonManager | SummonedNow> =>
   Layer.effectContext(
     Effect.gen(function* () {
       const { storage, folder } = options;
+      const record = options.record ?? (() => Effect.void);
       const scope = yield* Effect.scope;
       const kept = yield* openNames(storage);
       const live = new Map<string, Live>();
@@ -250,9 +301,10 @@ export const summonManager = (options: {
       /**
        * Start a name's acp run, and hear it. Answers at once; `opened` is done once its session is
        * open. A run keeps the flags it was first started with, so no setting is a flag: each is set
-       * after the session opens (`settle`), at every start.
+       * after the session opens (`settle`), at every start. It runs in `at`, the name's own folder,
+       * or its project's root when that folder spells the root another way (a link, a subfolder).
        */
-      const open = (name: Name) =>
+      const open = (name: Name, at: string = name.folder) =>
         Effect.gen(function* () {
           const { acpInRepo } = yield* acpCode;
           const own = yield* Scope.fork(scope);
@@ -291,7 +343,7 @@ export const summonManager = (options: {
             acpInRepo,
             {
               agent: name.agent as (typeof AGENTS)[number],
-              folder: name.folder,
+              folder: at,
               model: undefined,
               effort: undefined,
               // Codex has no asks of its own to wait on: it runs read-only in a person's repo.
@@ -454,11 +506,9 @@ export const summonManager = (options: {
           Deferred.doneUnsafe(l.ready, done);
         });
 
-      // A host started again: each kept name opens again, in the background, with its settings.
-      for (const name of kept.now().names) {
-        const l = yield* open(name).pipe(Effect.result);
-
-        if (l._tag === "Failure") {
+      /** A kept name that does not open: listed down with why, its saved folder as it was. */
+      const downOf = (name: Name, failure: SummonRefused) =>
+        Effect.gen(function* () {
           const down: Live = {
             name,
             scope: yield* Scope.fork(scope),
@@ -471,11 +521,39 @@ export const summonManager = (options: {
             state: "down",
             turn: null,
             cost: null,
-            why: l.failure.why,
+            why: failure.why,
           };
-          Deferred.doneUnsafe(down.opened, Exit.fail(l.failure));
-          Deferred.doneUnsafe(down.ready, Exit.fail(l.failure));
+          Deferred.doneUnsafe(down.opened, Exit.fail(failure));
+          Deferred.doneUnsafe(down.ready, Exit.fail(failure));
           put(name.name, down);
+        });
+
+      // A host started again: each kept name opens again, in the background, with its settings.
+      // One summoned in another project stays down: it is never reopened here, and its folder is
+      // never rewritten, so the project it was for still finds it. A project is its git root, so a
+      // folder spelled another way (a link, a subfolder, a trailing slash) is still this one.
+      const own = yield* Effect.cached(rootOf(folder));
+
+      for (const name of kept.now().names) {
+        const root = name.folder === folder ? folder : yield* rootOf(name.folder);
+
+        if (root === null || (root !== folder && root !== (yield* own))) {
+          yield* downOf(
+            name,
+            new SummonRefused({
+              why:
+                root === null
+                  ? `${name.name} was summoned in a folder that is no longer a git repository: open its project again to use it`
+                  : `${name.name} was summoned in another project: open that project to use it`,
+            }),
+          );
+          continue;
+        }
+
+        const l = yield* open(name, root).pipe(Effect.result);
+
+        if (l._tag === "Failure") {
+          yield* downOf(name, l.failure);
           continue;
         }
 
@@ -563,6 +641,19 @@ export const summonManager = (options: {
                 effort: set.effort ?? "",
                 folder,
                 run: l.name.run,
+              });
+              yield* record("summon", {
+                name,
+                agent,
+                folder,
+                run: l.name.run,
+                model: set.model ?? null,
+                effort: set.effort ?? null,
+                by,
+                input: null,
+                output: null,
+                cost: null,
+                at: since,
               });
               return summonedOf(l);
             }).pipe(Effect.ensuring(Effect.sync(() => pending.delete(name))));
@@ -718,6 +809,22 @@ export const summonManager = (options: {
                             output: ended?.output ?? null,
                             cost: n.cost,
                           }),
+                        ).pipe(
+                          Effect.andThen(
+                            record("turn", {
+                              name,
+                              agent: l.name.agent,
+                              folder: l.name.folder,
+                              run: l.name.run,
+                              model: l.name.model.resolved,
+                              effort: l.name.effort.set,
+                              by: l.name.by,
+                              input: ended?.input ?? null,
+                              output: ended?.output ?? null,
+                              cost: n.cost ?? null,
+                              at: began,
+                            }),
+                          ),
                         )
                       : Effect.void,
                 ),

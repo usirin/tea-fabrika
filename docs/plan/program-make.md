@@ -4,7 +4,7 @@ Tracker ticket **280**. Approved with the amendments below (lead, 2026-11-08). *
 
 ## Lead amendments
 
-The draft walked back two lines of [program-make.md](../direction/program-make.md): "nothing is written twice" (it passed `state.schema`, `msg` and a schema per write port again) and "the runner reads the model and Msg schemas off the machine" (it said no tea patch was needed). It also left out two owner calls from 2026-11-08. Fixed here.
+The draft walked back two lines of [the Program.make note, now 0256](../../.decisions/0256-a-program-is-one-program-make.md): "nothing is written twice" (it passed `state.schema`, `msg` and a schema per write port again) and "the runner reads the model and Msg schemas off the machine" (it said no tea patch was needed). It also left out two owner calls from 2026-11-08. Fixed here.
 
 ### A1. The tea patch, in the shape of demlik#897
 

@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-09-projectwin-push-stopped-on-test-home-paths",
+  "date": "2026-11-09",
+  "lanes": [
+    "projectwin"
+  ],
+  "stage": "lead",
+  "kind": "failure",
+  "what": "Build 4 was signed and green but stopped at botpush with stuck:push_failed. The leak check flagged 19 machine_path hits, all short test homes under /tmp named fh.<random> in exam files, plus one README path with a <uid> placeholder. None named a person or a machine.",
+  "cause": "leakgrep.sh's machine_path rule flagged every path under /tmp, while AGENTS.md asks test homes to use short paths there because of the 103-byte socket limit.",
+  "person": true,
+  "primitive": "Check",
+  "fix": "Decision 0011 (PR 622) and PR 625: a plain path under /tmp passes; one whose first part ends in a dash and a number is still flagged, as are home and per-user temp folders.",
+  "test": "leakgrep.test.ts: a vector for a short test home and pinned laws for the four kept shapes; dropping the dash-number branch fails three laws.",
+  "links": [
+    "https://github.com/usirin/tea-fabrika/pull/622",
+    "https://github.com/usirin/tea-fabrika/pull/625"
+  ]
+}

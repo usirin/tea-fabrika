@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{check: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, test: true, next: true, e2e: true, field: true };
+const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true };
 const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
@@ -68,8 +68,12 @@ export const classify = (paths, event) => {
 
   /** @param {string} path */
   const quiet = (path) => safe(path) || prose(path);
+  // The typecheck is its own job so it answers at once, beside lint and build; it reads the same
+  // paths as check, so it runs where check runs.
+  const check = !paths.every(quiet);
   return {
-    check: !paths.every(quiet),
+    check,
+    typecheck: check,
     test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits)),
     next: !paths.every((path) => quiet(path) || script(path) || old(path)),
     e2e: !paths.every((path) => quiet(path) || script(path) || path.startsWith("next/")),

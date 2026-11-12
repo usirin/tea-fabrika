@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Ledger, memoryStorage, openJobs, streams, Traces } from "@kampus/fabrika-old";
@@ -20,8 +21,19 @@ import { readUp, type Down, type Up } from "./link.ts";
 // Today's version, review 5 finding 5; plan: "Record each newly sent notice."
 // Real main, host message handlers and SQLite. Electron and the socket are test doubles.
 // Unrelated programs/terminals do not start. No OS notification, socket or focus is used.
+// main starts on welcome and links a window to a host only once a project opens (ticket 276),
+// so each run opens a git working tree first, as a person does: File > Open Folder….
+type MenuTemplate = readonly {
+  readonly label?: string;
+  readonly submenu?: MenuTemplate;
+  readonly click?: () => void;
+}[];
+
 const bridge = vi.hoisted(() => ({
   home: "",
+  /** The folder the folder sheet answers: a git working tree. */
+  folder: "",
+  menu: null as MenuTemplate | null,
   toApp: null as ((msg: Down) => void) | null,
   toHost: null as ((msg: Up) => void) | null,
   focused: false,
@@ -40,17 +52,33 @@ vi.mock("electron", async () => {
     quit: vi.fn(),
     exit: vi.fn(),
   });
+  let ids = 0;
   class Window extends EventEmitter {
+    static getFocusedWindow() {
+      return null;
+    }
+
+    readonly id = ++ids;
+    private closed = false;
+    readonly webContents = { getURL: () => "", postMessage() {} };
+
     isFocused() {
       return bridge.focused;
     }
 
     isDestroyed() {
-      return false;
+      return this.closed;
     }
 
     loadURL() {
       return Promise.resolve();
+    }
+
+    close() {
+      if (!this.closed) {
+        this.closed = true;
+        this.emit("closed");
+      }
     }
   }
   class Notification extends EventEmitter {
@@ -69,6 +97,16 @@ vi.mock("electron", async () => {
   return {
     app,
     BrowserWindow: Window,
+    Menu: {
+      buildFromTemplate: (template: MenuTemplate) => {
+        bridge.menu = template;
+        return template;
+      },
+      setApplicationMenu() {},
+    },
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: [bridge.folder] }),
+    },
     Notification,
     ipcMain: new EventEmitter(),
     nativeTheme: { shouldUseDarkColors: true },
@@ -144,6 +182,18 @@ vi.mock("./asks.ts", async (original) => ({
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+/** File > Open Folder…, from main's own menu: the folder sheet answers `bridge.folder`. */
+const openFolder = () => {
+  const file = bridge.menu?.find((item) => item.label === "File")?.submenu;
+  const item = file?.find((entry) => entry.label === "Open Folder…");
+
+  if (item?.click === undefined) {
+    throw new Error("main built no File > Open Folder… item");
+  }
+
+  item.click();
+};
+
 const snapshot = (asks: readonly Ask[]): Down => ({
   type: "to",
   port: "desk",
@@ -163,8 +213,11 @@ it("every newly sent notice has one lasting record tied to its ask and ticket", 
       async (firstTicket, total) => {
         vi.resetModules();
         bridge.home = mkdtempSync("/tmp/fn-");
+        bridge.folder = join(bridge.home, "repo");
+        execFileSync("git", ["init", "-q", bridge.folder]);
         vi.stubEnv("FABRIKA_HOME", bridge.home);
         vi.stubEnv("TYPESAFE_API_KEY", undefined);
+        bridge.menu = null;
         bridge.toApp = null;
         bridge.toHost = null;
         bridge.shown = [];
@@ -213,6 +266,8 @@ it("every newly sent notice has one lasting record tied to its ask and ticket", 
           await vi.waitFor(() => expect(bridge.toHost).not.toBeNull());
           ({ app } = await import("electron"));
           await import("./main.ts");
+          await vi.waitFor(() => expect(bridge.menu).not.toBeNull());
+          openFolder();
           await vi.waitFor(() => expect(bridge.toApp).not.toBeNull());
           // Let main keep the attachment before its first count.
           await settle();

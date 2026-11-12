@@ -13,8 +13,8 @@ tags: [direction, projects, triage, planning, agents]
 ## Context
 
 Decided 2026-10-11. Pulling each agent apart into its steps left the project machinery as the core:
-tickets, their order and state, the plans, the decisions, the approvals. See
-[built for projects](../docs/direction/built-for-projects.md).
+tickets, their order and state, the plans, the decisions, the approvals. From the note
+"built for projects", since removed: this file holds its rules.
 
 ## Decision
 

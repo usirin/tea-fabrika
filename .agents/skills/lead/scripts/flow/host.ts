@@ -159,7 +159,7 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
 /** One command's end: its exit code, and stdout and stderr as one text. */
 export type Ran = { readonly code: number; readonly output: string };
 
-/** One command in `dir` with safe git, run to its end; ./typecheck.ts runs it too. */
+/** One command in `dir` with safe git, run to its end; ../ci/typecheck.ts runs it too. */
 export const exec = Effect.fn("host.exec")(
   function* (
     dir: string,

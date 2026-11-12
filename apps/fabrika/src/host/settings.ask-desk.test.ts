@@ -7,7 +7,9 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { type Setting, settingsFile } from "./settings.ts";
+// Ticket 276 made `settingsSaves` the one settings reader, in place of `settingsFile`, with the
+// same poll and settle; these laws read it.
+import { type Setting, settingsSaves } from "./settings.ts";
 
 /** main's settle in apps/fabrika/src/host/settings.ts (`SETTLE_MS`, not exported): the text must stay still this long. */
 const SETTLE_MS = 50;
@@ -50,7 +52,7 @@ const watching = Effect.gen(function* () {
         ),
       ),
   });
-  yield* settingsFile(dir, "keybindings.toml", Result.succeed).pipe(
+  yield* settingsSaves(dir, "keybindings.toml", Result.succeed).pipe(
     Stream.runForEach((answer) =>
       Effect.gen(function* () {
         answers.push(answer);
@@ -70,7 +72,7 @@ const watching = Effect.gen(function* () {
 }).pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(NodePath.layer));
 
 describe("ask desk round 24: settings with a silent folder watch", () => {
-  // Plant: remove the poll from `Stream.merge(saves, again, ...)`.
+  // Plant: remove the poll from `Stream.merge(heard, polled)`.
   it.effect.prop(
     "hears a missed save by the next poll period",
     { value: Schema.NonEmptyString.check(Schema.isPattern(/^[^\uD800-\uDFFF]*$/u)) },
@@ -100,7 +102,7 @@ describe("ask desk round 24: settings with a silent folder watch", () => {
     runs,
   );
 
-  // Plant: remove `Stream.changesWith((a, b) => a === b)`.
+  // Plant: remove both `Stream.filterEffect(fresh)`, the poll's and the saves'.
   it.effect.prop(
     "an unchanged reread says nothing",
     { periods: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })) },

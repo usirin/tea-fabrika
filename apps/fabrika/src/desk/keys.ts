@@ -37,8 +37,7 @@ export const REPEAT_MS = 500;
  * bar's agents, sync or host. The desk only says so; the page draws it, as tmux's server runs
  * `list-keys` and the client that pressed shows it.
  */
-export const SHOWS = ["asks", "jobs", "keys", "info", "bars", "agents", "sync", "host", "palette"] as const;
-
+export const SHOWS = ["asks", "jobs", "keys", "info", "bars", "agents", "sync", "host", "palette", "projects"] as const;
 export type Show = (typeof SHOWS)[number];
 
 /** What a key after the prefix does, or a tsh word does in the tile it was typed in. */

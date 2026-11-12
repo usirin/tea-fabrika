@@ -14,7 +14,7 @@ assignee, and milestones are for people, never for the pipeline's decisions.
 ## Context
 
 The owner decided this on 2026-10-27
-([the tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md)). It replaces the
+(in the note "the tracker is like Linear", since removed: this file holds its rules). It replaces the
 2026-10-24 line "It is not a whole Linear" in
 [tickets start in our tracker](../docs/direction/tickets-start-in-our-tracker.md), and, for the
 tracker, the "left out until proven" list of

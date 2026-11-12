@@ -46,7 +46,7 @@ Its decided rules are in: [0220](../../.decisions/0220-plan-is-the-one-shape.md)
     types are fine. Internals go in the pointers, which bind nobody;
   - open questions block until the owner answers. "Build on the lean and ask
     without blocking" was turned down: it clashes with
-    [ask for decisions, not facts](./ask-for-decisions-not-facts.md).
+    [ask for decisions, not facts](../../.decisions/0415-ask-a-person-for-decisions.md).
 - **A project is a parent plan.** A success line plus child plans. It closes
   itself when its children are done and its success check passes.
 - **GitHub milestones leave the loop.** Nothing in the pipeline reads or writes
