@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, FileSystem, Schema, Scope } from "effect";
+import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -159,39 +159,35 @@ export class Control extends Brain.Control {
   );
 };
 
-const mailDiagnostics = (path: string) => {
+const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
-  const observations: Array<unknown> = [];
-  let frozen: ReadonlyArray<(typeof frames)[number]> | undefined;
   const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
-  const save = () =>
-    writeFileSync(path, JSON.stringify({ version: "next", frames, frozen, events, observations }, null, 2));
   const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
   note("start");
-  console.log(`T880 diagnostics: ${path}`);
   const read = async (label: string, call: () => Promise<unknown>) => {
     const start = stamp();
     let value: unknown = null;
 
     try {
       value = await call();
-      observations.push({ label, start, end: stamp(), value });
+      console.error("T880 observation", JSON.stringify({ label, start, end: stamp(), value }, null, 2));
     } catch (error) {
-      observations.push({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" });
+      console.error(
+        "T880 observation",
+        JSON.stringify({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" }),
+      );
     }
 
-    save();
     return value;
   };
   return {
     note,
-    save,
     frame: (raw: string) => frames.push({ ...stamp(), raw }),
     capture: async (instance: Instance, requester: string, responder: string) => {
-      frozen = frames.slice();
+      const frozen = frames.slice();
       note("failure", { requester, responder });
-      save();
+      console.error("T880 diagnostics", JSON.stringify({ version: "next", frozen, events }, null, 2));
 
       for (const name of ["requester:1", "responder:1"]) {
         for (const stream of [`${name}/inbox`, `${name}/outbox`, `processes/${name}`]) {
@@ -292,9 +288,7 @@ const world = async (
       let diagnostics: ReturnType<typeof mailDiagnostics> | undefined;
 
       if (diagnose) {
-        const fs = yield* FileSystem.FileSystem;
-        yield* fs.makeDirectory("runs/t880/diagnostics", { recursive: true });
-        diagnostics = mailDiagnostics(`runs/t880/diagnostics/${Date.now()}-${crypto.randomUUID()}.json`);
+        diagnostics = mailDiagnostics();
         yield* Effect.promise(() => instrumentMailBrain(built.brain, home));
       }
 
@@ -593,7 +587,6 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
           result: { view: { phase: "answered", ref: "eviction", value: 8 } },
         });
         fixture.diagnostics?.note("complete");
-        fixture.diagnostics?.save();
       } catch (error) {
         if (fixture.diagnostics !== undefined) {
           await fixture.diagnostics.capture(instance, requester, responder).catch(() => {
@@ -606,7 +599,7 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
     },
     true,
     false,
-    process.env.T880_DIAGNOSTICS === "1",
+    true,
   );
 }, 180_000);
 
