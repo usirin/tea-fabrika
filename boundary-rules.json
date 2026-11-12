@@ -17,6 +17,7 @@
     "packages/pipeline": "app",
     "next/apps/fabrika": "next-app",
     "next/packages/libfabrika": "next-library",
+    "next/programs/checklist": "next-program",
     "next/programs/counter": "next-program"
   },
   "libraryRoots": ["next"],
