@@ -601,8 +601,21 @@ it.effect("U8 Process and rebuilt Project runtimes bind every load to its own pr
             door: (options) =>
               Effect.sync(() => {
                 policy = options.policy;
-                // The loader law uses only the door's policy callback and retirement call.
-                return { retire: () => Effect.void } as Effect.Success<ReturnType<ProjectOptions["door"]>>;
+                const unused = () => Effect.die("Unexpected door call in loader law");
+                return {
+                  connect: unused,
+                  challenge: unused,
+                  initialize: unused,
+                  target: unused,
+                  route: unused,
+                  knock: unused,
+                  grant: unused,
+                  disconnect: unused,
+                  sign: unused,
+                  append: unused,
+                  retire: () => Effect.void,
+                  checkDelivery: unused,
+                };
               }),
           };
           const projectServices = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
