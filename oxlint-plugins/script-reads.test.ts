@@ -1,7 +1,9 @@
 import { posix } from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Path, type Scope } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { reached, scriptReads } from "./script-reads.mjs";
+import { load, reached, scriptReads } from "./script-reads.mjs";
 
 // Today's tooling. No schemas describe source text. Graphs hold cycles, unreferenced scripts and
 // every naming form; the oracle walks the generated edges, never the source text. The edge cases
@@ -30,6 +32,10 @@ const forms = (from: string, path: string, form: number) => {
 };
 
 const none = () => false;
+
+// Edge: Vitest awaits the Promise a test hands back. The scope gives the temp folder back.
+const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
+  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 
 /** A generated tree, and for each test the set of files its edges reach. */
 const build = ({ skills, tests, form }: Model) => {
@@ -83,6 +89,80 @@ describe("reached", () => {
             expect(from < 0 ? via === test : edges[from]!.includes(to)).toBe(true);
           }
         }
+      }),
+      options,
+    );
+  });
+
+  it("never reaches a test file and never reads one for names, however a script or a test names it by path", () => {
+    fc.assert(
+      fc.property(model, (input) => {
+        const { files, tree, expected } = build(input);
+        const tests = [...expected.keys()];
+        // A basename never names a test, so each test is named by a relative path and from the top.
+        const named = (from: string) => tests.flatMap((test) => [forms(from, test, 3), forms(from, test, 4)]);
+        const loud = new Map(tree);
+
+        for (const { path } of files) {
+          loud.set(path, [tree.get(path), ...named(path)].join("\n"));
+        }
+
+        // Every test names every test, itself too: a test read for names would reach what it names.
+        for (const test of tests) {
+          loud.set(test, [tree.get(test), ...named(test).map((name) => `// ${name}`)].join("\n"));
+        }
+
+        for (const [test, want] of expected) {
+          expect(new Set(reached(loud, none, test).keys())).toEqual(want);
+        }
+      }),
+      options,
+    );
+  });
+
+  it("reaches a path outside the scripts tree exactly when it stays inside the repo, wherever its dots sit", () => {
+    const script = ".agents/skills/a/scripts/check.ts";
+    const test = ".agents/skills/a/scripts/check.test.ts";
+    // `..` in the middle, at the end, and as the start or the end of a longer name.
+    const segment = fc.constantFrom("x", "y", "..", ".", "..x", "x..", "...");
+    const token = fc.record({
+      top: fc.boolean(),
+      ups: fc.nat({ max: 7 }),
+      middle: fc.array(segment, { maxLength: 4 }),
+      name: fc.option(fc.constantFrom("f.txt", "..f.json", "f..ts")),
+    });
+    // The oracle walks the segments by hand: it never calls the path library the derivation uses.
+    const walk = (base: ReadonlyArray<string>, segments: ReadonlyArray<string>) => {
+      const stack = [...base];
+
+      for (const part of segments) {
+        if (part === ".." && stack.length > 0 && stack.at(-1) !== "..") {
+          stack.pop();
+        } else if (part !== ".") {
+          stack.push(part);
+        }
+      }
+
+      return stack;
+    };
+    fc.assert(
+      fc.property(fc.array(token, { minLength: 1, maxLength: 4 }), (tokens) => {
+        const named = tokens.map(({ top, ups, middle, name }) => {
+          const segments = [...Array.from({ length: ups }, () => ".."), ...middle, ...(name === null ? [] : [name])];
+          // From the top a path starts with a name; a relative one starts with `./` or `../`.
+          const text = top ? ["x", ...segments].join("/") : `${ups === 0 ? "./" : ""}${segments.join("/")}`;
+          const stack = top ? walk([], ["x", ...segments]) : walk(posix.dirname(script).split("/"), segments);
+          return { text, path: stack.join("/"), file: name !== null, above: stack[0] === ".." };
+        });
+        const tree = new Map([
+          [script, named.map(({ text }) => `read("${text}");`).join("\n")],
+          [test, "// Starts the check script."],
+        ]);
+        // Every named file exists, above the repo too, so only the guard keeps those out. A folder never does.
+        const files = new Set(named.filter(({ file }) => file).map(({ path }) => path));
+        const got = reached(new Map(tree).set(test, `"${posix.basename(script)}"`), (path) => files.has(path), test);
+        const want = named.filter(({ file, above }) => file && !above).map(({ path }) => path);
+        expect(new Set(got.keys())).toEqual(new Set([script, ...want]));
       }),
       options,
     );
@@ -257,4 +337,49 @@ describe("scriptReads", () => {
       skill === ".agents/skills/a/SKILL.md" ? "| `flow/run.ts <flow-file>` | run one flow |" : "";
     expect(scriptReads(tree, none, prose).unreached).toEqual([".agents/skills/a/scripts/run.ts"]);
   });
+});
+
+describe("load", () => {
+  it("scenario: a folder on disk, since nothing else checks what load reads and the lint and the Vitest plugin both trust it", () =>
+    ran(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "script-reads-" });
+        const scripts = ".agents/skills/a/scripts";
+        const written = {
+          [`${scripts}/run.test.ts`]: 'spawnSync("sh", [join(import.meta.dirname, "run.sh")]);',
+          [`${scripts}/run.sh`]:
+            'sh "$(dirname "$0")/flow/deep.sh"\ncat "../../../../data/rows.json" "../../../../data"',
+          [`${scripts}/flow/deep.sh`]: "echo deep",
+          [`${scripts}/tool.sh`]: "echo tool",
+          [`${scripts}/lost.sh`]: "echo lost",
+          ".agents/skills/a/SKILL.md": "| `tool.sh` | a tool a person runs |",
+          ".agents/skills/a/notes/scripts.txt": "not under scripts/",
+          "data/rows.json": "[]",
+        };
+
+        for (const [file, text] of Object.entries(written)) {
+          yield* fs.makeDirectory(path.join(root, path.dirname(file)), { recursive: true });
+          yield* fs.writeFileString(path.join(root, file), text);
+        }
+
+        const { tree, exists, prose } = load(root);
+        // Only files under a scripts/ folder, at any depth, each with its text.
+        expect(Object.fromEntries(tree)).toEqual(
+          Object.fromEntries(Object.entries(written).filter(([file]) => file.startsWith(`${scripts}/`))),
+        );
+        // A file exists; a folder and a missing path do not.
+        expect(["data/rows.json", "data", "data/none.json", scripts].map(exists)).toEqual([true, false, false, false]);
+        expect(prose(".agents/skills/a/SKILL.md")).toBe(written[".agents/skills/a/SKILL.md"]);
+        expect(prose(".agents/skills/b/SKILL.md")).toBe("");
+        // And the three answers together are what the walk and the lint need.
+        expect(Object.fromEntries(reached(tree, exists, `${scripts}/run.test.ts`))).toEqual({
+          [`${scripts}/run.sh`]: `${scripts}/run.test.ts`,
+          [`${scripts}/flow/deep.sh`]: `${scripts}/run.sh`,
+          "data/rows.json": `${scripts}/run.sh`,
+        });
+        expect(scriptReads(tree, exists, prose)).toEqual({ raw: [], unreached: [`${scripts}/lost.sh`] });
+      }),
+    ));
 });

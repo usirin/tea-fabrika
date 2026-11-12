@@ -7,6 +7,7 @@ export const Settings = Schema.Struct({
   window: Schema.NullOr(Schema.String),
   port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
   build: Schema.NonEmptyString,
+  mail: Schema.optionalKey(Schema.Struct({ grants: Schema.Record(Schema.String, Schema.Array(Schema.String)) })),
   limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
 });
 export type Settings = typeof Settings.Type;
