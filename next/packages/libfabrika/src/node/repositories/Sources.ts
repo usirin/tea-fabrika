@@ -158,11 +158,13 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     from: string,
     file: "repo" | "person",
   ): Effect.fn.Return<Source, RepositoriesError> {
-    const located = yield* target(
-      file === "repo" ? path.join(options.root, ".fabrika") : options.person,
-      from,
-      file === "repo",
-    );
+    const base =
+      file === "repo"
+        ? path.join(options.root, ".fabrika")
+        : yield* fs
+            .realPath(options.person)
+            .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+    const located = yield* target(base, from, file === "repo");
 
     if (located.committed) {
       const relative = path.relative(options.root, located.location).split(path.sep).join("/");
@@ -182,7 +184,9 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
       };
     }
 
-    const stat = yield* fs.stat(located.location).pipe(Effect.mapError(failed));
+    const stat = yield* fs
+      .stat(located.location)
+      .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
 
     if (stat.type !== "Directory") {
       return yield* failed("source is not a folder");
