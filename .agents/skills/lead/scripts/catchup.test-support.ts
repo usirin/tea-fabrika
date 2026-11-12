@@ -34,6 +34,8 @@ const { parse } = createRequire(new URL("../../../../.github/ci/package.json", i
 // Today's tooling. GitHub, signing and pushes are stubbed. Cleanup uses disposable local Git.
 const script = join(import.meta.dirname, "catchup.sh");
 export const tip = "0123456789abcdef0123456789abcdef01234567";
+// What the stubbed git answers for origin/main.
+export const mainTip = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 const workflow = parse(readFileSync(join(import.meta.dirname, "../../../../.github/workflows/check.yaml"), "utf8"));
 
@@ -116,8 +118,13 @@ export type Setup = {
   landed?: "MERGED" | "OPEN";
   offMain?: boolean;
   tickets?: Record<number, "open" | "closed">;
-  // The last look at main refuses: main moved after the checks and the merged tree is red (552).
-  stale?: boolean;
+  // How many looks at main find the head lacking it, the first look included (0146): each one is a
+  // round of merging main in. 1 when `merge` is set and 0 when not, unless given.
+  moves?: number;
+  // sizecap.ts's size count fails.
+  sizeFails?: boolean;
+  // The fetch of main for the last look, after the checks, fails.
+  fetchFails?: boolean;
   // The pull request's state, one answer per read of it (the start read, then each look inside a
   // wait), the last one repeating. OPEN by default. UNKNOWN is gh's answer for no such PR.
   views?: View[];
@@ -127,10 +134,6 @@ export type Setup = {
   links?: boolean;
   // Another run holds the catch-up lock the whole time, and `date` answers these seconds in turn.
   lockHeld?: number[];
-  // The first check read that answers (0097: catch-up's own look at a head that lacks main) finds
-  // `check` red or still running, or `e2e` missing because CI never ran it; later reads are as the
-  // rest of the setup says.
-  before?: "red" | "running" | "missing";
 };
 
 export type View = "OPEN" | "DRAFT" | "MERGED" | "CLOSED" | "UNKNOWN";
@@ -200,13 +203,11 @@ if (cmd === "gh") {
     die("This pull request is part of a stack and must be merged using the asynchronous merge REST API");
   if (key === "checks") {
     const pending = n - setup.failures[index] < setup.pending;
-    const before = n === setup.failures[index] ? setup.before : undefined;
     if (setup.checks) {
       for (const check of setup.checks) console.log(check.name + "\t" + check.status + "\t" + check.conclusion + "\t" + (check.url ?? ""));
     } else for (const name of ["check", "e2e", "commits", ...${JSON.stringify(nextNames)}, "next"]) {
-      if (before === "missing" && name === "e2e") continue;
-      const red = (setup.answer === "red" || before === "red") && name === "check";
-      const running = pending || (before === "running" && name === "check");
+      const red = setup.answer === "red" && name === "check";
+      const running = pending;
       // Existing non-waiter laws also provide a skipped bare job while the waiter changes.
       // T376's isolated laws below never add this compatibility check to a matrix answer.
       const url = setup.links ? "https://github.com/fixture/repo/runs/" + encodeURIComponent(name) : "";
@@ -233,7 +234,15 @@ if (cmd === "git") {
     process.stdout.write(ran.stdout || ""); process.stderr.write(ran.stderr || "");
     process.exit(ran.status ?? 1);
   }
-  if (args.includes("merge-base")) process.exit(setup.merge ? 1 : 0);
+  if (args.includes("merge-base")) {
+    // One answer per look at main: the head lacks it for the first \`moves\` looks, then holds it.
+    const looked = state.mains || 0;
+    state.mains = looked + 1;
+    fs.writeFileSync(stateFile, JSON.stringify(state));
+    process.exit(looked < (setup.moves ?? (setup.merge ? 1 : 0)) ? 1 : 0);
+  }
+  if (setup.fetchFails && args[0] === "fetch" && args.includes("main") && (state.checks || 0) > 0) die("planted main fetch failure");
+  if (args[0] === "rev-parse" && args.includes("origin/main") && !setup.cleanup) { console.log(process.env.CATCHUP_MAIN); process.exit(0); }
   const op = args[0] === "-C" ? args.slice(2) : args;
   const local = ["update-ref", "worktree", "rev-parse", "for-each-ref", "status", "cat-file", "show-ref", "symbolic-ref", "rev-list", "config", "ls-files", "log"];
   if (setup.cleanup && args.some(a => local.includes(a)) && !["fetch", "checkout", "push"].includes(op[0]) && !args.includes("merge")) {
@@ -264,17 +273,12 @@ if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] ==
 if (cmd === "node" && args[0].endsWith("/sizecap.ts")) {
   // sizecap.ts's size line (0099), with its own laws in sizecap.test.ts: here it is advice, and a failure of it
   // must stop nothing.
-  if (setup.stale) die("sizecap: planted");
+  if (setup.sizeFails) die("sizecap: planted");
   console.log("size: 7 product lines; not counted: 0 test, 0 docs, 0 lock, 0 generated, 0 other lines, 0 binary files");
   process.exit(0);
 }
 if (cmd === "node" && args[0].endsWith("/gcloop.ts")) {
   // The box cleanup kick after a merge (0101), with its own laws in gcloop.test.ts: here it only starts.
-  process.exit(0);
-}
-if (cmd === "node" && args[0].endsWith("/freshmain.ts")) {
-  // The last look at main, with its own laws in freshmain.test.ts: here it only passes or refuses.
-  if (setup.stale) die("pr 900: merge refused at the lint check: planted");
   process.exit(0);
 }
 if (cmd === "node" && args[0].endsWith("/box.ts")) {
@@ -688,6 +692,7 @@ export const run = (setup: Setup, args: string[] = []) => {
         CATCHUP_FIXTURE: dir,
         CATCHUP_TIP: checkedTip,
         CATCHUP_MERGED: merged,
+        CATCHUP_MAIN: mainTip,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
         TYPESAFE_API_KEY: undefined,
