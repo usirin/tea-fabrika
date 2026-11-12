@@ -35,7 +35,7 @@ export const recipe = fc.record({
   origin: fc.constantFrom("default", "flag", "env", "file"),
 });
 
-export type Recipe = fc.ArbitraryValue<typeof recipe>;
+export type Recipe = typeof recipe extends fc.Arbitrary<infer A> ? A : never;
 
 export const originKinds = ["flag", "env", "file"] as const;
 

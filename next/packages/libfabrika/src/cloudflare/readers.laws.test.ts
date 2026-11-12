@@ -224,7 +224,11 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                   return yield* part.read(Chain.cases.spans.make({}), 0, 0);
                 }).pipe(
                   Effect.provideService(WorkerEnvironment, env),
-                  Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
+                  Effect.provideService(
+                    ObjectState,
+                    // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
+                    fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
+                  ),
                 ),
               );
             } else if (path === "Connection") {
@@ -1026,7 +1030,11 @@ SettingsTest.suite((recipe, secret) =>
         // Construct only the stable holder here. The operation must perform the fallible gate.
         const build = yield* constructor.pipe(
           Effect.provideService(WorkerEnvironment, env),
-          Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
+          Effect.provideService(
+            ObjectState,
+            // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
+            fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
+          ),
           Effect.provideService(Scope.Scope, scope),
         );
         enter = Effect.fnUntraced(function* (choice) {

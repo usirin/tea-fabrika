@@ -85,8 +85,10 @@ for (const kind of StartsTest.originKinds) {
         let poisoned = false;
 
         for (const choice of choices) {
-          const moves = poisoned ? ["read", "repeat", "restore"] : ["read", "repeat", "poison"];
-          const move = moves[choice % moves.length];
+          const moves: ReadonlyArray<"read" | "repeat" | "restore" | "poison"> = poisoned
+            ? ["read", "repeat", "restore"]
+            : ["read", "repeat", "poison"];
+          const move: (typeof moves)[number] | undefined = moves[choice % moves.length];
 
           if (move === "poison" || move === "restore") {
             poisoned = move === "poison";
@@ -132,8 +134,10 @@ for (const kind of StartsTest.originKinds) {
         const starts = Context.get(context, Starts);
 
         for (const choice of choices) {
-          const moves = poisoned ? ["read", "record", "restore"] : ["read", "record", "poison"];
-          const move = moves[choice % moves.length];
+          const moves: ReadonlyArray<"read" | "record" | "restore" | "poison"> = poisoned
+            ? ["read", "record", "restore"]
+            : ["read", "record", "poison"];
+          const move: (typeof moves)[number] | undefined = moves[choice % moves.length];
 
           if (move === "poison" || move === "restore") {
             poisoned = move === "poison";
