@@ -630,13 +630,15 @@ export class ProgramRunner extends Context.Service<
             supervision = yield* recovery.load;
 
             if (supervision === null) {
-              supervision = supervisor.init(null, {
+              const started = supervisor.init(null, {
                 policy,
                 process: status.state.process,
                 name: initial.name,
                 build: status.state.code.hash,
                 at: status.at,
               })[0];
+              yield* recovery.save(started);
+              supervision = started;
             }
           }
 
