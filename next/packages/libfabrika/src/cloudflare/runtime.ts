@@ -408,11 +408,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   };
 
   for (const process of yield* processes.info) {
-    const program = yield* loader.load(
-      process.program,
-      process.process,
-      bindTail(ctx, { project: name, name: process.name, process: process.process }),
+    const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
+      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
+    const program = yield* loader.load(process.program, process.process, tail);
     remember(process.name, program.declaration);
 
     if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
@@ -436,12 +435,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return known;
     }
 
+    const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
     const program = yield* loader
-      .load(
-        life.state.code.program,
-        life.state.process,
-        bindTail(ctx, { project: name, name: life.name, process: life.state.process }),
-      )
+      .load(life.state.code.program, life.state.process, tail)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });

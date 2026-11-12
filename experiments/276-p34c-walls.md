@@ -64,12 +64,10 @@ Its spin assertion must keep failing if local CPU is zero. Save that reading, ra
 weakening the law.
 
 Keep the measurement script on a separate branch, proposed name `p34c-walls-measurement`.
-That branch and script have **not yet been created**. They must not enter main. The host run
-needs the following work, using the built program and the existing local-instance test setup:
-
-The approved build paths include only this write-up and its index, with no measurement script
-path. Creating `experiments/276-p34c-walls.ts` on that separate branch needs the lead to add it to
-the plan. The script is still owed; this checklist is not an executable measurement.
+That branch and script have **not yet been created**. Amendment A4 assigns them to the lead
+after this lane; the review does not wait for the script. It must not enter main. The host run
+needs the following work, using the built program and the existing local-instance test setup.
+The script is still owed; this checklist is not an executable measurement.
 
 1. Build the checklist and two fixtures. One throws on a chosen message for restart timing;
    one spins a fixed loop and also accepts an idle message. Acquire the instance, homes,
