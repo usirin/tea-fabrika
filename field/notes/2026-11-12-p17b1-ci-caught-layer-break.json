@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-12-p17b1-ci-caught-layer-break",
+  "date": "2026-11-12",
+  "lanes": [
+    "usirin/tea-fabrika#287"
+  ],
+  "stage": "review",
+  "kind": "friction",
+  "what": "next/ version. On PR 1037 (P17b slice 1) the shared suite next/packages/libfabrika/src/runtime/NemesisTest.ts imported four telemetry files (Archive, Records, Sink, Trace). The review answered done and the lead's host checks passed at d9e70aeba, then CI's next job went red at 85a4cf31c on next/apps/fabrika/src/exam/layers.test.ts. The lane went back to the tests step, which moved the telemetry wiring into the driver that node/Nemesis.laws.test.ts passes in. The suite now imports nothing from telemetry/, no layer-rules.json row was added, and CI is green at e231e39f4. One extra round, no person needed.",
+  "cause": "The layers law skips only files named *.test.ts. A shared suite such as NemesisTest.ts counts as a product file, so the wall 'the runtime may not import data' applies to it, and telemetry is a data module. The runtime's own *.test.ts files import telemetry and pass, which makes the import look allowed. The lead's host run covered only the two changed law files and pnpm lint, and neither runs layers.test.ts.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "The lead's host checks for a next/ pull request run next/apps/fabrika/src/exam/layers.test.ts beside the changed test files, before the records commit. The second host run on this pull request did.",
+  "test": "Replay: check out d9e70aeba and run layers.test.ts alone on the host. It must fail on runtime/NemesisTest.ts, in about 3 seconds.",
+  "links": [
+    "https://github.com/usirin/tea-fabrika/pull/1037",
+    "https://github.com/usirin/tea-fabrika/actions/runs/43195325853"
+  ]
+}
