@@ -7,12 +7,15 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
     lookup: (_key: void) =>
       Effect.gen(function* () {
         const memoMap = yield* Layer.makeMemoMap;
-        const scope = yield* Effect.scope;
+        const scope = yield* Scope.fork(yield* Effect.scope);
         return yield* Layer.buildWithMemoMap(ready, memoMap, scope).pipe(
-          Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void)),
+          Effect.onExit((exit: Exit.Exit<Context.Context<ROut>, E>) =>
+            Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void,
+          ),
         );
       }),
-    timeToLive: (exit, _key) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+    timeToLive: (exit: Exit.Exit<Context.Context<ROut>, E>, _key: void) =>
+      Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,
   });
 
 /** The outer runtime owns only the holder; each entry acquires the retryable context. */

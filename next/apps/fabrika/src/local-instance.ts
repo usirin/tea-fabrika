@@ -38,13 +38,13 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
   const { startDev } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: defer Alchemy loading until telemetry is disabled
     try: () => import("./instance.ts"),
-    catch: (cause) => new BrainError({ reason: "storage", cause }),
+    catch: (cause: unknown) => new BrainError({ reason: "storage", cause }),
   });
   // oxlint-disable-next-line fabrika/no-promises -- edge: the platform module is loaded at the local command boundary
   const { ProcessIdGenerator } = yield* Effect.tryPromise({
     // oxlint-disable-next-line fabrika/no-promises -- edge: load the platform dependency at the command boundary
     try: () => import("@kampus/libfabrika/processes/ProcessIdGenerator"),
-    catch: (cause) => new BrainError({ reason: "storage", cause }),
+    catch: (cause: unknown) => new BrainError({ reason: "storage", cause }),
   });
   // Alchemy listens with a strict port, so a taken one fails here and no other port is tried.
   const started = startDev(built, options).pipe(Effect.provide(ProcessIdGenerator.layer));
