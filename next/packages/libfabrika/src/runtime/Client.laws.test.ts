@@ -26,7 +26,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
-import type { Client } from "./Client.ts";
+import type { Client, ClientMsg, Pending } from "./Client.ts";
 import { clientMachineFor, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
@@ -50,6 +50,9 @@ type Ready = Omit<Dating, "_tag"> & {
   readonly traceId?: string;
 };
 
+expectTypeOf<Dating>().toEqualTypeOf<Extract<Pending, { readonly _tag: "dating" }>>();
+expectTypeOf<Ready>().toEqualTypeOf<Extract<Pending, { readonly _tag: "ready" }>>();
+
 type Model = {
   readonly written: number;
   readonly seen: number;
@@ -59,18 +62,8 @@ type Model = {
 
 expectTypeOf<Model>().toEqualTypeOf<typeof Client.Type>();
 
-type Answer =
-  | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
-  | { readonly _tag: "refused"; readonly reason: string }
-  | { readonly _tag: "unreachable" }
-  | { readonly _tag: "unknown" };
-
-type Msg =
-  | { readonly type: "press"; readonly pid: string; readonly m: unknown }
-  | { readonly type: "dated"; readonly n: number; readonly letter: string; readonly sentAt: string }
-  | { readonly type: "reply"; readonly letter: string; readonly answer: Answer }
-  | { readonly type: "read"; readonly rev: number }
-  | { readonly type: "notice"; readonly pid: string; readonly note: unknown };
+type Msg = ClientMsg;
+type Answer = Extract<Msg, { readonly type: "reply" }>["answer"];
 
 type Out = ReadonlyArray<{ readonly type: string; readonly pid?: string }>;
 

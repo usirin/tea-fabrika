@@ -846,6 +846,29 @@ describe("L8: the window parent's connection", () => {
 });
 
 describe("L9: the records the window emits", () => {
+  it("a failed record attempts one failure row and keeps the window working without retrying a failed failure row", () => {
+    let failed = 0;
+    fc.assert(
+      fc.property(walks, (list) => {
+        fold(list, ({ prev, m, next, cmds }) => {
+          if (m.type !== "record_err") {
+            return;
+          }
+
+          failed++;
+          expect(next, "a store failure changed the window").toEqual(prev);
+          expect(cmds).toEqual(
+            m.cmd.record._tag === "failure"
+              ? []
+              : [{ type: "record", record: { _tag: "failure", op: "record", error: "other" } }],
+          );
+        });
+      }),
+      opts,
+    );
+    expect(failed, "the walks failed record writes").toBeGreaterThan(0);
+  });
+
   it("each record Cmd carries one checked ClientRecord and nothing else", () => {
     fc.assert(
       fc.property(walks, (list) => {

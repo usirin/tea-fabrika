@@ -26,6 +26,7 @@ type Tile = { readonly draft: string };
 expectTypeOf<Tile>().toEqualTypeOf<typeof tile.model.Type>();
 
 type Msg = { readonly type: "typed"; readonly text: string } | { readonly type: "submit" };
+expectTypeOf<Msg>().toEqualTypeOf<typeof tile.msg.Type>();
 type Cmd = { readonly type: string; readonly m?: unknown };
 /** The program's own add, so a press the tile hands up is a Msg the checklist takes. */
 type Add = Extract<typeof checklistMachine.msg.Type, { readonly type: "add" }>;

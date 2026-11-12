@@ -36,7 +36,8 @@ const wrongTile = Machine.make({
 });
 
 describe("L20: the checklist window's contract", () => {
-  it("type: the View's props are the program's data and Msgs and the tile's own Model and Msgs", () => {
+  // pinned: L20's compile-time contract must reject calls from another program or tile.
+  it("pinned: the View's props are the program's data and Msgs and the tile's own Model and Msgs", () => {
     expectTypeOf<Props["data"]>().toEqualTypeOf<Readonly<typeof checklistView.Type>>();
     expectTypeOf<Props["press"]>().parameter(0).toEqualTypeOf<Msg>();
     expectTypeOf<Props>().toMatchTypeOf<WindowProps<typeof checklist>>();
@@ -58,7 +59,8 @@ describe("L20: the checklist window's contract", () => {
     expect(use).toBeTypeOf("function");
   });
 
-  it("type: the registration refuses another view, a tile that presses another program's Msg and a refusal for other Msgs", () => {
+  // pinned: L20's invalid registrations must fail CI's typecheck.
+  it("pinned: the registration refuses another view, a tile that presses another program's Msg and a refusal for other Msgs", () => {
     expect(defineWindow(checklist, checklistWindow)).toBe(checklistWindow);
     // @ts-expect-error the counter's view schema is not the checklist's
     defineWindow(checklist, { ...checklistWindow, data: Schema.Struct({ count: Schema.Int }) });
@@ -75,7 +77,8 @@ describe("L20: the checklist window's contract", () => {
     defineWindow(checklist, { ...checklistWindow, keys: { "checklist.toggle": ["t"] } });
   });
 
-  it("the registration hands back its own parts: the view schema, the tile machine and no key rows yet", () => {
+  // pinned: the registration is Tier 1 wiring, chosen once in this slice.
+  it("pinned: the registration hands back its own parts: the view schema, the tile machine and no key rows yet", () => {
     expect(checklistWindow.data).toBe(checklistView);
     expect(checklistWindow.tile).toBe(tile);
     expect(checklistWindow.keys).toEqual({});

@@ -21,7 +21,7 @@
 // its choice numbers into a move that state allows: an answer on the current dial, its own timer, a
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Fiber, Random, Ref, Schema } from "effect";
 import * as Clock from "effect/Clock";
 import { TestClock } from "effect/testing";
@@ -31,6 +31,9 @@ import { backoff, CAP, dialWait, Link, linkMachine, type LinkMsg, linkTimer } fr
 const SEED = 119120;
 const BEAT_BOUND = 10_000; // L1: an unanswered beat leaves online within 10 s
 const REMOVED = 4003;
+
+// L20: every Link Msg about a dial must carry it; blocked is the one profile-wide failure.
+expectTypeOf<Exclude<LinkMsg, { readonly type: "blocked" }>>().toMatchTypeOf<{ readonly dial: number }>();
 
 type Step = readonly [Link, ReadonlyArray<{ readonly type: string; readonly dial?: number }>];
 const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
@@ -126,15 +129,11 @@ const fold = (list: ReadonlyArray<Choice>, each: (prev: Walk, m: LinkMsg, next: 
 const opts = { seed: SEED, numRuns: 300 };
 
 describe("L1: the link machine", () => {
-  it("init is dialing on dial 1 with no Cmd", () => {
-    fc.assert(
-      fc.property(fc.constant(null), (loaded) => {
-        const [s, cmds] = linkMachine.init(loaded, {});
-        expect(s).toEqual(Link.cases.dialing.make({ dial: 1 }));
-        expect(cmds).toEqual([]);
-      }),
-      { seed: SEED, numRuns: 1 },
-    );
+  // pinned: L1's fresh init has one fixed state and no outside input to generate.
+  it("pinned: init is dialing on dial 1 with no Cmd", () => {
+    const [s, cmds] = linkMachine.init(null, {});
+    expect(s).toEqual(Link.cases.dialing.make({ dial: 1 }));
+    expect(cmds).toEqual([]);
   });
 
   it("a Msg for an older dial changes nothing and sends nothing", () => {

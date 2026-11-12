@@ -199,6 +199,28 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
     );
   });
 
+  it("an array index past its end is refused without changing the view or operations", async () => {
+    const { apply } = await import("./Patch.ts");
+    const { Result } = await import("effect");
+    fc.assert(
+      fc.property(
+        fc.array(fc.jsonValue(), { maxLength: 20 }),
+        fc.integer({ min: 1, max: 100 }),
+        fc.constantFrom("add", "replace", "remove"),
+        fc.jsonValue(),
+        (items, gap, op, value) => {
+          const before = { items };
+          const path = `/items/${items.length + gap}`;
+          const ops = [op === "remove" ? { op, path } : { op, path, value }];
+          const copy = structuredClone({ before, ops });
+          expect(Result.isFailure(apply(before, ops))).toBe(true);
+          expect({ before, ops }).toEqual(copy);
+        },
+      ),
+      { seed: 119120, numRuns: 500 },
+    );
+  });
+
   it("a path through __proto__, constructor or prototype is refused, at any depth, and nothing is polluted", async () => {
     const { apply } = await import("./Patch.ts");
     const { Result } = await import("effect");

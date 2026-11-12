@@ -44,21 +44,25 @@ globalThis.__key = {
 `;
 
 /** The page script, built once from the real layer with the tab's own bundler. */
-const bundled = Effect.promise(async () => {
-  const bundle = await rolldown({
-    input: ENTRY,
-    cwd: HERE,
-    platform: "browser",
-    plugins: [
-      {
-        name: "key-laws-entry",
-        resolveId: (id) => (id === ENTRY ? ENTRY : null),
-        load: (id) => (id === ENTRY ? PAGE_ENTRY : null),
-      },
-    ],
-  });
-  const { output } = await bundle.generate({ format: "esm" });
-  await bundle.close();
+const bundled = Effect.gen(function* () {
+  const bundle = yield* Effect.acquireRelease(
+    Effect.promise(() =>
+      rolldown({
+        input: ENTRY,
+        cwd: HERE,
+        platform: "browser",
+        plugins: [
+          {
+            name: "key-laws-entry",
+            resolveId: (id) => (id === ENTRY ? ENTRY : null),
+            load: (id) => (id === ENTRY ? PAGE_ENTRY : null),
+          },
+        ],
+      }),
+    ),
+    (bundle) => Effect.promise(() => bundle.close()),
+  );
+  const { output } = yield* Effect.promise(() => bundle.generate({ format: "esm" }));
   return output[0].code;
 });
 
@@ -70,30 +74,34 @@ const browser = Effect.acquireRelease(
 /** One profile: a fresh context whose origin serves an empty page with the layer's script. */
 const profile = (b: Browser, script: string) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
-      const context = await b.newContext();
-      await context.route(`${ORIGIN}/**`, (route) =>
-        route.request().url().endsWith("/key.js")
-          ? route.fulfill({ contentType: "text/javascript", body: script })
-          : route.fulfill({
-              contentType: "text/html",
-              body: `<!doctype html><script type="module" src="/key.js"></script>`,
-            }),
-      );
-      return context;
-    }),
+    Effect.promise(() => b.newContext()),
     (context) => Effect.promise(() => context.close()),
+  ).pipe(
+    Effect.tap((context) =>
+      Effect.promise(() =>
+        context.route(`${ORIGIN}/**`, (route) =>
+          route.request().url().endsWith("/key.js")
+            ? route.fulfill({ contentType: "text/javascript", body: script })
+            : route.fulfill({
+                contentType: "text/html",
+                body: `<!doctype html><script type="module" src="/key.js"></script>`,
+              }),
+        ),
+      ),
+    ),
   );
 
 const tab = (context: Awaited<ReturnType<Browser["newContext"]>>) =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
-      const page = await context.newPage();
-      await page.goto(`${ORIGIN}/`);
-      await page.waitForFunction(() => "__key" in globalThis);
-      return page;
-    }),
+    Effect.promise(() => context.newPage()),
     (page) => Effect.promise(() => page.close()),
+  ).pipe(
+    Effect.tap((page) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => page.goto(`${ORIGIN}/`));
+        yield* Effect.promise(() => page.waitForFunction(() => "__key" in globalThis));
+      }),
+    ),
   );
 
 type Answer<A> = {

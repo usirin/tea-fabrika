@@ -285,6 +285,18 @@ describe("L10: real runtime progress", () => {
           expect(door.knocks(), "a renewal went unanswered").toBeGreaterThan(1);
         }
 
+        // A long grant wait may have ended only on the walk's last move. Establish an actual pong
+        // on this online dial before measuring silence, rather than dating it from the page's boot.
+        const previousPong = lastPong;
+
+        for (let n = 0; n < 20 && lastPong === previousPong; n++) {
+          yield* tick(500);
+          yield* idleNow;
+        }
+
+        expect(lastPong, "the current online dial received a pong").toBeGreaterThan(previousPong);
+        expect(run.getState().link).toMatchObject({ _tag: "online", pings: 0 });
+
         // Stop answering pings on the current dial. A later successful dial is allowed.
         script.pong = false;
         const link = run.getState().link;
@@ -320,6 +332,13 @@ describe("L12: wire formats are refused as typed values", () => {
     "format: a malformed open_ok.value, a view notice without pid, a refused answer without a string reason, an answer to an unknown id and a broken frame install nothing and stop nothing",
     () =>
       Effect.gen(function* () {
+        // The parent also validates this public protocol value before its reducer sees it.
+        const openAnswer = { type: "open_ok", id: 1, dial: 1, ms: 0 };
+
+        for (const value of [{}, { rev: "one", view: list(1) }, { rev: 1 }]) {
+          expect(Schema.is(window.msg)({ ...openAnswer, value }), "an invalid open_ok.value passed").toBe(false);
+        }
+
         const script: Script = {
           pong: true,
           open: false,
