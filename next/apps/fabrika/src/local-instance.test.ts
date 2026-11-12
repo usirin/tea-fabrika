@@ -110,7 +110,7 @@ it("a later dev command links its first start to the last runtime in that home",
       for (const build of builds) {
         await Effect.runPromise(
           Effect.scoped(
-            startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.settingsFixture(config)),
+            startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
           ).pipe(
             Effect.provide(ProcessIdGenerator.layer),
             Effect.provide(SecureRandom.layerWebCrypto),
@@ -157,7 +157,7 @@ it("instance readiness waits for the started event to reach the ledger", async (
             const starting = yield* Effect.forkChild(
               startDev(
                 { build, brain: "unused.mjs", programs: {} },
-                RecordWireTest.settingsFixture({
+                RecordWireTest.startupFixture({
                   home: folder,
                   name: "life-contract",
                   person: "person-test",

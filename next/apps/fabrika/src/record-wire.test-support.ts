@@ -21,6 +21,12 @@ export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
   };
 };
 
+// Startup allocates its own identity; direct Worker fixtures still need a complete envelope.
+export const startupFixture = <A extends StartsTest.Fixture & { readonly home: string }>(config: A) => {
+  const { start: _start, ...input } = settingsFixture(config);
+  return { ...input, ...(config.start === undefined ? {} : { start: config.start }) };
+};
+
 export const recordCall = Effect.fnUntraced(function* (invoke: () => Promise<unknown>) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance record proxy exposes Promise-returning stub calls
   return yield* Effect.tryPromise({
@@ -68,7 +74,7 @@ export const recordWire = Effect.fnUntraced(
     );
     return yield* localInstance(
       built,
-      settingsFixture({
+      startupFixture({
         home,
         name: "record-law",
         person: "person_01m6v5270hf3c8x2q7w9z4k5mn",

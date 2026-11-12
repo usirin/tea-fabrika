@@ -299,7 +299,7 @@ const world = async (
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
         const instance = yield* localInstance(
           built,
-          RecordWireTest.settingsFixture({
+          RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -721,7 +721,7 @@ const checklistWorld = async (
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
       const instance = yield* localInstance(
         built,
-        RecordWireTest.settingsFixture({
+        RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,

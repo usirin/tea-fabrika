@@ -185,7 +185,7 @@ const world = async (
       Effect.gen(function* () {
         const instance = yield* localInstance(
           built,
-          RecordWireTest.settingsFixture({
+          RecordWireTest.startupFixture({
             home,
             name: "p12-records",
             person: PERSON,

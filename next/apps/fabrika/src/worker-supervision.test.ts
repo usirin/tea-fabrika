@@ -115,7 +115,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
         const instance = yield* localInstance(
           built,
-          RecordWireTest.settingsFixture({
+          RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -334,7 +334,7 @@ const worldScoped = Effect.gen(function* () {
   );
   const instance: Instance = yield* localInstance(
     built,
-    RecordWireTest.settingsFixture({
+    RecordWireTest.startupFixture({
       home,
       name: PROJECT,
       person: PERSON,

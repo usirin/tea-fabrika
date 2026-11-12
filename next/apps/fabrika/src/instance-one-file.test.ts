@@ -656,7 +656,7 @@ describe("P16 copied-file real instance, serial", () => {
                     Effect.gen(function* () {
                       const instance = yield* localInstance(
                         { ...built, brain: join(alone, "brain.mjs") },
-                        RecordWireTest.settingsFixture({
+                        RecordWireTest.startupFixture({
                           home: h,
                           name: "p16-isolation",
                           person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -761,7 +761,7 @@ describe("P16 copied-file real instance, serial", () => {
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localInstance(copied, RecordWireTest.settingsFixture(options(port)));
+                    const runtime = yield* localInstance(copied, RecordWireTest.startupFixture(options(port)));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),

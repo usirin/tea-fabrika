@@ -137,7 +137,7 @@ describe("P16 real browser from a copied one-file build", () => {
             const instance = await Effect.runPromise(
               localInstance(
                 { ...built, brain: join(alone, "brain.mjs") },
-                RecordWireTest.settingsFixture({
+                RecordWireTest.startupFixture({
                   home,
                   name: "p16-browser",
                   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -362,7 +362,7 @@ const servedCounter = Effect.gen(function* () {
     "server",
     localInstance(
       built,
-      RecordWireTest.settingsFixture({
+      RecordWireTest.startupFixture({
         home,
         name: "p14-browser",
         person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
