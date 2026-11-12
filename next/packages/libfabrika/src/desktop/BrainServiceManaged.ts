@@ -186,6 +186,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           Effect.exit,
         );
         yield* flush.pipe(
+          Effect.timeoutOrElse({
+            duration: Math.max(0, deadline - (yield* Clock.currentTimeMillis)),
+            orElse: () => Effect.fail(operation("cleanup", "record delivery deadline")),
+          }),
           Effect.catch((error) =>
             Effect.gen(function* () {
               const at = yield* Clock.currentTimeMillis;
