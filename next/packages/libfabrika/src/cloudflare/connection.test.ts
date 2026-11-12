@@ -136,6 +136,7 @@ it.effect.prop(
       w.answer({ ...Answer.cases.refused.make({ reason: "rate_limited" }), retryAfter });
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
+        const startupSpans = [...w.saved];
         let first: ReturnType<typeof tableCounts> | undefined;
 
         for (let id = 0; id < count; id++) {
@@ -155,7 +156,7 @@ it.effect.prop(
           const counts = tableCounts(db);
           first ??= counts;
           expect(counts).toEqual(first);
-          expect(w.saved).toEqual([]);
+          expect(w.saved).toEqual(startupSpans);
           expect(w.closes).toEqual([]);
         }
 

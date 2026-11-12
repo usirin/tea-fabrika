@@ -109,9 +109,14 @@ it.prop(
   { window: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1000 })) },
   ({ window }) => {
     const state = Rate.machine.init(null, {})[0];
-    expect(() =>
-      applyCell(Rate.machine, state, { type: "take", at: Number.MAX_SAFE_INTEGER, policy: { limit: 1, window } }),
-    ).toThrow();
+    const [next, cmds] = applyCell(Rate.machine, state, {
+      type: "take",
+      at: Number.MAX_SAFE_INTEGER,
+      policy: { limit: 1, window },
+    });
+    expect(next).toEqual(state);
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]!.decision).toMatchObject({ _tag: "invalid", cause: expect.anything() });
   },
   { arbitrary: { seed: 119120, runs: 50 } },
 );

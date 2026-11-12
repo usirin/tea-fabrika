@@ -111,7 +111,7 @@ describe("P10 JSON-RPC", () => {
         );
         expect(JSON.parse(reply.send!)).toEqual({
           jsonrpc: "2.0",
-          id,
+          id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
           error: { code: -32000, message: "rate_limited", data: { reason: "rate_limited", retryAfter } },
         });
         expect(reply.attached).toEqual(attached);
