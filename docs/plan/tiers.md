@@ -309,7 +309,9 @@ or this moves up. That is the cost of placing it here.
 car, truck. Each one takes a person somewhere. Two wheels and an axle don't, however
 well they're built. So every tier has to do a real job for someone, and the job gets
 bigger. Tier 1 passes: nobody needs a counter, but notes that agents write and a person
-reads drawn do a real job. The counter stays as the test.
+reads drawn do a real job. The counter was the test until 2026-11-11; the checklist takes that job
+over, slice by slice, and the counter is removed
+([0125](../../.decisions/0125-the-example-program-is-a-checklist.md)).
 
 - **A tier fills every layer and every core idea.**
   - If a layer or a core idea gets nothing new, the tier says so and says why. It never just skips
