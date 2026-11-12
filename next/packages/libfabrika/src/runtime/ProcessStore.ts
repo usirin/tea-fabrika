@@ -121,7 +121,6 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             catch: (error) =>
               new LedgerError({
                 reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                message: String(error),
               }),
           });
         });

@@ -22,7 +22,7 @@ import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import type { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
@@ -448,11 +448,27 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     remember(process.name, program.declaration);
 
     if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
-      const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
+      const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
+        processes.table(turn).life(process.process),
+      );
+      const requester =
+        Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
+      // A child's start may have committed before its descriptor. Its object has never been
+      // configured, so rebuild from the saved life and its requester's recorded owner.
+      const descriptor = yield* requester?._tag === "process"
+        ? Effect.gen(function* () {
+            const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
+            const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
+              saved?.value,
+            ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+            return { id: process.process, name: process.name, program: process.program, build: process.build, owner };
+          })
+        : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
       sql.exec(
-        "INSERT INTO dev_descriptors (process,value) VALUES (?,?)",
+        "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
         process.process,
         JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+        requester?._tag === "process" ? 2 : 0,
       );
     }
 
