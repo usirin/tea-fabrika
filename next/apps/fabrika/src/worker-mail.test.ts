@@ -151,6 +151,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
           founder: key.line,
           window: key.raw,
           port: at.port,
+          rateLimit: { limit: 100_000, window: 60_000 },
           mail: {
             grants: granted
               ? {

@@ -190,6 +190,7 @@ const world = async (
           founder: key.line,
           window: key.raw,
           port: at.port,
+          rateLimit: { limit: 100_000, window: 60_000 },
           limits: { recordBytes: 64 * 1024 },
         });
         const from: From = {

@@ -342,6 +342,7 @@ describe("P16 stack and sealed loader", () => {
             founder: (multibyte ? "雪" : "a").repeat(length),
             window: null,
             build: built.build,
+            rateLimit: { limit: 100_000, window: 60_000 },
           };
           const result = await Effect.runPromise(Effect.result(stack(built, settings)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
@@ -657,6 +658,7 @@ describe("P16 copied-file real instance, serial", () => {
                           founder: key.line,
                           window: key.raw,
                           port: brainPort,
+                          rateLimit: { limit: 100_000, window: 60_000 },
                         },
                       );
                       yield* Effect.tryPromise({
@@ -744,6 +746,7 @@ describe("P16 copied-file real instance, serial", () => {
             founder: key.line,
             window: key.raw,
             port,
+            rateLimit: { limit: 100_000, window: 60_000 },
           });
           const copied = { ...built, brain: join(alone, "brain.mjs") };
           let pid = "",
