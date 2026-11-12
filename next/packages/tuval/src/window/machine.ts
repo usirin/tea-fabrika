@@ -130,8 +130,8 @@ type Out = ReadonlyArray<
 type Step = readonly [WindowModel, Out];
 type ClientStep = (client: C.Client, msg: C.ClientMsg) => readonly [C.Client, ReadonlyArray<string>];
 
-export type WindowChecks = C.ClientChecks & { readonly tile?: (name: string) => AnyTile | undefined };
-export type WindowCtx = { readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }> };
+type WindowChecks = C.ClientChecks & { readonly tile?: (name: string) => AnyTile | undefined };
+type WindowCtx = { readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }> };
 type SocketSub = Sub<"socket", { readonly dial: number; readonly rejected: string | null; readonly tries: number }>;
 
 const wrote = (s: WindowModel, dial: number, calls: ReadonlyArray<Call>): Step => {
@@ -235,6 +235,7 @@ const noticed = (
 
 const opened = (s: WindowModel, pid: string): WindowModel => ({
   ...s,
+  trouble: null,
   tiles: s.tiles.map((t) =>
     "pid" in t.reach && t.reach.pid === pid ? { ...t, last: pid, reach: Reach.cases.open.make({ pid }) } : t,
   ),
@@ -459,6 +460,11 @@ export const windowMachineFor = (checks: WindowChecks) => {
           return [s, []];
         }
 
+        // Keep the draft until the parent can take the child's press as a letter.
+        if (t.reach._tag !== "open" && cmds.some((cmd) => cmd.type === "press")) {
+          return [s, []];
+        }
+
         let next = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
         const out: Array<Out[number]> = [];
 
@@ -578,7 +584,16 @@ export const windowMachineFor = (checks: WindowChecks) => {
         }
 
         const pid = found.call.pid;
-        const [next, rows] = noticed({ ...s, flight: found.rest }, step, pid, { type: "whole", ...m.value });
+        const [next, rows, asks] = noticed({ ...s, flight: found.rest }, step, pid, { type: "whole", ...m.value });
+
+        if (asks.length > 0 && s.link._tag === "online") {
+          const calls = asks
+            .filter((p) => !next.flight.some((f) => f.call._tag === "open" && f.call.pid === p))
+            .map((p) => Call.cases.open.make({ pid: p }));
+          const [written, writes] = wrote({ ...next, trouble: "Bad view" }, s.link.dial, calls);
+          return [written, [...rows, ...writes]];
+        }
+
         return [
           next.client.views[pid] !== s.client.views[pid] ? opened(next, pid) : { ...next, trouble: "Bad view" },
           rows,

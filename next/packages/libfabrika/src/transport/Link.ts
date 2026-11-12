@@ -23,7 +23,7 @@ const BEAT = 5_000;
 /** How often a grant wait knocks again, which keeps its code or renews an expired one. */
 const RENEW = CAP;
 /** The close code the door sends when the key's grant was removed. */
-export const REMOVED = 4003;
+const REMOVED = 4003;
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -93,7 +93,7 @@ export const ping = Cmd.make("ping", {
 });
 
 /** Knock again on the dial's socket (`gateway.knock`), keeping or renewing the waiting code. */
-export const knock = Cmd.make("knock", {
+const knock = Cmd.make("knock", {
   input: Schema.Struct(OnDial),
   ok: Schema.Null,
   err: ["closed"],
