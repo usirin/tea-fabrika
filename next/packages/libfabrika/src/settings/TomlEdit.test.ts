@@ -138,7 +138,8 @@ const literal = (value: unknown): string => {
       .join(", ")} }`;
   }
 
-  return JSON.stringify(value);
+  // JSON erases negative zero; keep the generated value in the TOML fixture.
+  return Object.is(value, -0) ? "-0.0" : JSON.stringify(value);
 };
 
 const fixture = (l: Layout, n: number) => {
@@ -445,6 +446,14 @@ describe("T877 public TOML edits, next/", () => {
           );
           const edited = yield* toml.remove(text, path);
           model = drop(model, path);
+
+          // A dotted parent has no header left to declare it after its last key goes.
+          const box = get(model, ["box"]);
+
+          if (l.style === "dotted" && record(box) && Object.keys(box).length === 0) {
+            model = drop(model, ["box"]);
+          }
+
           yield* document(toml, edited, model);
           removed.push(path);
           expect(yield* toml.remove(edited, pick(removed, hint.key))).toBe(edited);

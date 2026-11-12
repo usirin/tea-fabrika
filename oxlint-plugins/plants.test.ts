@@ -417,7 +417,7 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
   const banned = [
     "next/programs/sample/src/machine.ts",
     "next/packages/libfabrika/src/settings/TomlEdit.test.ts",
-    "next/packages/libfabrika/src/settings/internal/Edit.ts",
+    "next/packages/libfabrika/src/settings/internal/edit.ts",
     "next/packages/libfabrika/src/node/settings/Load.ts",
     "next/packages/libfabrika/src/runtime/Runner.ts",
     "next/packages/libfabrika/src/access/Access.ts",
