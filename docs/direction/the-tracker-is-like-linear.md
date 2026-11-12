@@ -5,6 +5,9 @@ where people and agents work together, so it is built like Linear: a full issue
 tracker, not the smallest form that runs one lane. The pipeline, milestones and
 later packs are all built on it.
 
+Its decided rules are in: [0346](../../.decisions/0346-the-tracker-is-built-like-linear.md),
+[0376](../../.decisions/0376-only-an-approved-plan-starts-a-build.md).
+
 ```ts
 // A sketch. Linear's issue, as facts on the ledger. Which of these come first is the study below.
 {type: "filed", title: "…", body: "…", to: "github:7"} // to: the assignee, from the start

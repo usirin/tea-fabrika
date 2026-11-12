@@ -7,6 +7,13 @@ model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
 where they clash, and adds what a ticket shows at a glance. Tracker ticket 64.
 
+Its decided rules are in: [0350](../../.decisions/0350-each-tracker-view-is-a-program.md),
+[0351](../../.decisions/0351-linked-nested-and-moved-facts.md),
+[0352](../../.decisions/0352-status-is-a-fold-of-facts.md),
+[0353](../../.decisions/0353-the-status-line-says-whose-turn.md),
+[0354](../../.decisions/0354-writes-apart-from-reads.md),
+[0355](../../.decisions/0355-one-input-per-command.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): the glance's `of` became `total`, and
 `due`'s `on` became `date`.
 
