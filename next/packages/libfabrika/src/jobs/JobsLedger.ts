@@ -3,11 +3,13 @@
 // when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
 // Tier 1, P39 slice 1.
 import { applyCell } from "@demlik/tea";
-import { Effect, Layer, Result as R, Schema } from "effect";
+import { Effect, Layer, Result as R, Schema, Stream } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
+import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor, valueFor } from "../ledger/Log.ts";
+import type { ProcessId } from "../ProcessId.ts";
 import { job, Msg } from "./internal/job.ts";
 import { Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
 import { Jobs, JobsError } from "./Jobs.ts";
@@ -75,6 +77,23 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const ledger = yield* LedgerTransaction;
     const ids = yield* Id.Generator;
+    const streams = yield* LedgerStreams;
+
+    const read = Effect.fn("jobs.read")(function* (id: string) {
+      const found = yield* ledger
+        .transact((turn) => {
+          const entries = [...turn.read(stream(id), 0)];
+          const events = entries.map((entry) => decodeEvent({ ...entry, event: entry._tag }));
+          return { state: fold(entries).state, events };
+        })
+        .pipe(Effect.mapError(translated));
+
+      if (found.state._tag === "absent") {
+        return yield* new JobsError({ reason: "not_found" });
+      }
+
+      return found satisfies Job;
+    });
 
     /** One call in one transaction. It answers the receipt of the call's event and the job after it. */
     const call = Effect.fnUntraced(function* (id: string, input: Msg, said: Recorded) {
@@ -133,21 +152,13 @@ export const layer = Layer.effect(
       finish: Effect.fn("jobs.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
         return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
       }),
-      read: Effect.fn("jobs.read")(function* (id: string) {
-        const found = yield* ledger
-          .transact((turn) => {
-            const entries = [...turn.read(stream(id), 0)];
-            const events = entries.map((entry) => decodeEvent({ ...entry, event: entry._tag }));
-            return { state: fold(entries).state, events };
-          })
-          .pipe(Effect.mapError(translated));
-
-        if (found.state._tag === "absent") {
-          return yield* new JobsError({ reason: "not_found" });
-        }
-
-        return found satisfies Job;
-      }),
+      read,
+      forProcess: (process: typeof ProcessId.Type) =>
+        streams.list("job:").pipe(
+          Stream.mapError((cause) => new JobsError({ reason: "storage", cause })),
+          Stream.mapEffect((name) => read(name.slice("job:".length))),
+          Stream.filter((job) => job.state._tag !== "absent" && job.state.request.process === process),
+        ),
     };
   }),
 );

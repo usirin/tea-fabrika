@@ -73,6 +73,7 @@ const decodeRing = Schema.decodeUnknownSync(Ring);
 const decodeHead = Schema.decodeUnknownSync(Head);
 const decodeLast = Schema.decodeUnknownSync(Last);
 const decodeLag = Schema.decodeUnknownSync(Lag);
+const decodeStream = Schema.decodeUnknownSync(Schema.Struct({ stream: Schema.String }));
 
 const encoder = new TextEncoder();
 
@@ -156,6 +157,7 @@ export const ledgerStore = (
   doorbell: (typeof Doorbell)["Service"],
 ): (typeof Referee)["Service"] & {
   readonly transact: <A>(step: (turn: LedgerTurn) => A) => Effect.Effect<A, LedgerError>;
+  readonly streams: (prefix: string, after: string | null) => Effect.Effect<ReadonlyArray<string>, LedgerError>;
 } => {
   let ready = false;
   const one = (query: string, ...params: ReadonlyArray<SqlValue>): Option.Option<unknown> =>
@@ -445,5 +447,22 @@ export const ledgerStore = (
     return committed.value;
   });
 
-  return { append, read, wait, transact };
+  const streams = Effect.fn("ledger.streams")(function* (prefix: string, after: string | null) {
+    return yield* atomic(() =>
+      sql
+        .exec(
+          `SELECT DISTINCT stream FROM entries
+         WHERE substr(stream, 1, length(?)) = ? AND (? IS NULL OR stream > ?)
+         ORDER BY stream LIMIT ?`,
+          prefix,
+          prefix,
+          after,
+          after,
+          PAGE,
+        )
+        .map((row) => decodeStream(row).stream),
+    );
+  });
+
+  return { append, read, wait, transact, streams };
 };

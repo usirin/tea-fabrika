@@ -93,6 +93,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
                 waits: [],
                 watching: false,
                 busy: false,
+                has: result.hello.has,
+                ...(result.hello.build === undefined ? {} : { build: result.hello.build }),
               }),
             );
             const at = yield* Clock.currentTimeMillis;
@@ -103,9 +105,12 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
           }
 
           if (method === "gateway.knock") {
-            const input = yield* Schema.decodeUnknownEffect(Schema.Struct({ label: Schema.String }))(params).pipe(
-              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-            );
+            const input = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({
+                label: Schema.String,
+                as: Schema.optionalKey(Schema.Literals(["window", "agent", "hands"])),
+              }),
+            )(params).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
             const result = yield* rpc(p.knock(client, input));
 
             if (result._tag === "ok") {

@@ -17,6 +17,7 @@ import {
 import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
+import { Jobs } from "../jobs/Jobs.ts";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
@@ -39,6 +40,7 @@ import { Admission, Answer, Attached, Hello } from "../transport/Wire.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
+import * as JobRoutes from "./Jobs.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
@@ -272,6 +274,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
+  const jobs = yield* Jobs;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
@@ -318,7 +321,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const members = yield* clients.members;
     const identity = admitted(members, raw);
 
-    if ("reason" in identity) {
+    if ("reason" in identity || identity.as === "hands") {
       return yield* new NotGranted({});
     }
 
@@ -369,7 +372,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return store.get(`client/${client}`, Attached);
     });
   });
-  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+  const authenticated = Effect.fnUntraced(function* (client: ConnectionId) {
     const attached = yield* attachment(client);
 
     if (attached?._tag !== "online") {
@@ -382,8 +385,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new NotGranted({});
     }
 
-    const by = yield* membership(raw);
-    return { attached, raw, by };
+    const identity = admitted(yield* clients.members, raw);
+
+    if ("reason" in identity) {
+      return yield* new NotGranted({});
+    }
+
+    return { attached: { ...attached, identity: { ...identity, key: yield* fingerprint(raw, false) } }, raw };
+  });
+  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+    const checked = yield* authenticated(client);
+    return { ...checked, by: yield* membership(checked.raw) };
   });
   const connect = Effect.fnUntraced(function* () {
     return yield* Effect.sync(() => ConnectionId.make(random()));
@@ -543,6 +555,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         version: result.version,
         location: options.location,
         build: options.build,
+        ...(result.hello.build === undefined ? {} : { clientBuild: result.hello.build }),
       });
       const placed = yield* appendChecked(result.hello.key, {
         stream: "gateway/hellos",
@@ -567,6 +580,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             waits: [],
             watching: false,
             busy: false,
+            has: result.hello.has,
+            ...(result.hello.build === undefined ? {} : { build: result.hello.build }),
           }),
         );
       });
@@ -591,7 +606,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
-    params: { readonly label: string; readonly pass?: string | null },
+    params: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) {
     const attached = yield* attachment(client);
 
@@ -608,7 +623,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         label: params.label,
         location: options.location,
         has: attached.hello.has,
-        as: "window",
+        as: params.as ?? "window",
         code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
           .slice(-6)
           .padStart(6, "0"),
@@ -1010,17 +1025,37 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     params: unknown,
     reader = String(client),
   ) {
-    const checked = yield* silent(Effect.result(online(client)));
+    const checked = yield* silent(Effect.result(authenticated(client)));
 
     if (Result.isFailure(checked)) {
       return no("not_granted");
     }
 
-    const { by, raw } = checked.success;
+    const { raw } = checked.success;
 
     if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
       return yield* refuse("reserved");
     }
+
+    if (method.startsWith("jobs.")) {
+      const answer = yield* Effect.gen(function* () {
+        const fresh = yield* silent(Effect.result(authenticated(client)));
+
+        if (Result.isFailure(fresh)) {
+          return no("not_granted");
+        }
+
+        return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
+      }).pipe(write);
+      yield* flush;
+      return answer;
+    }
+
+    if (checked.success.attached.identity.as === "hands") {
+      return no("not_allowed");
+    }
+
+    const by = yield* membership(raw);
 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
@@ -1653,6 +1688,7 @@ const HelloEvent = Schema.TaggedStruct("initialized", {
   version: Schema.Int,
   location: Schema.String,
   build: Schema.String,
+  clientBuild: Schema.optionalKey(Schema.NonEmptyString),
 });
 
 const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
