@@ -40,7 +40,11 @@ the rest.
      `fabrika/law-shape` in `pnpm lint` flags a `next/` or `.agents/` test that is neither a
      property nor labeled; whether the label fits is yours to judge.
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
-     law, record the plant and its result, then undo the plant. Commit no plant test. A plant that
+     law, record the plant and its result, then undo the plant. Commit no plant test. A plant
+     may break any product file its law covers, whoever owns that file in the plan: it is never
+     committed, so it needs no row in the plan's Files table and no question to the lead. Save a
+     copy, break one thing, run the one law, restore by copy, and see `git status --short` show no
+     product file before you commit. A plant that
      was not run or not recorded counts as not run, and its law is not done. An old plant test may
      go, since it is not a law; removing or narrowing a law still waits on the owner
      ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). A lint rule's own

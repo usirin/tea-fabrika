@@ -104,6 +104,7 @@ it("a later dev command links its first start to the last runtime in that home",
         founder: "public-test-key",
         window: null,
         port: 18787,
+        rateLimit: { limit: 100_000, window: 60_000 },
       };
 
       for (const build of builds) {
@@ -161,6 +162,7 @@ it("instance readiness waits for the started event to reach the ledger", async (
                   founder: "public-test",
                   window: null,
                   port: 18787,
+                  rateLimit: { limit: 100_000, window: 60_000 },
                 },
               ),
             );

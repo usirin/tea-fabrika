@@ -18,7 +18,7 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -78,6 +78,37 @@ const grouped = (ds: Declared) =>
   );
 
 describe("L1, the generated schemas and reference stay fresh and deterministic", () => {
+  it.prop(
+    "T843 generated settings: person scope carries both rate declarations and repo scope rejects them (50 runs)",
+    {
+      limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+      window: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+    },
+    ({ limit, window }) => {
+      expect(
+        Result.isSuccess(
+          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
+            gateway: { limit, window },
+          }),
+        ),
+      ).toBe(true);
+
+      for (const gateway of [{ limit }, { window }, { limit, window }]) {
+        expect(
+          Result.isFailure(
+            Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
+              gateway,
+            }),
+          ),
+        ).toBe(true);
+      }
+
+      const generated = outputs(Declarations.all);
+      expect(generated.reference).toContain("gateway.limit");
+      expect(generated.reference).toContain("gateway.window");
+    },
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
   it("format: the committed person.json, repo.json and reference are what generation writes", async () => {
     // format: editors read the two schemas and people read the reference exactly as committed, so
     // the committed bytes must be the generator's output for the shipped declarations.
