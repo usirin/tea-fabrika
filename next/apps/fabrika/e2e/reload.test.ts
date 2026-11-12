@@ -12,6 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, type Layer, Schedule, type Scope } from "effect";
+import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
@@ -186,8 +187,12 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
   });
 
 /** Runs one law's world: every resource it acquired is given back when it ends. */
-const scoped = <A, E>(work: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof NodeServices.layer>>) =>
-  Effect.runPromise(Effect.scoped(work).pipe(Effect.provide(NodeServices.layer)));
+const scoped = <A, E>(
+  work: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof NodeServices.layer> | SecureRandom.SecureRandom>,
+) =>
+  Effect.runPromise(
+    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
+  );
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */
 const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
