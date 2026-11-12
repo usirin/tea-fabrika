@@ -97,7 +97,7 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
 export type MetricPoint = typeof MetricPoint.Type;
 
 /** A refusal counted instead of keeping the span or its measurement. */
-export const REFUSED = "fab.gateway.refused";
+export { REFUSED } from "../SpanTag.ts";
 
 export const Refused = Schema.Literals(["reserved", "other"]);
 export type Refused = typeof Refused.Type;

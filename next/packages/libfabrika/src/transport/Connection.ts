@@ -1,6 +1,6 @@
 import { applyCell } from "@demlik/tea";
 import { Effect, Predicate, Result, Schema, Semaphore } from "effect";
-import { REFUSED } from "../telemetry/Trace.ts";
+import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, Wait } from "./Wire.ts";
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
