@@ -1,6 +1,6 @@
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Context, Effect, Option, Result, Schema } from "effect";
-import { Deliveries } from "./internal/recovery.ts";
+import { Deliveries, Policy } from "./internal/recovery.ts";
 import { type Input, ProgramDown, stepper, Step, type Stepper } from "./Program.ts";
 import { Saved } from "./State.ts";
 
@@ -64,6 +64,7 @@ export const Declaration = Schema.Struct({
   name: Schema.String,
   v: Schema.Int,
   maxDeliveries: Schema.optionalKey(Deliveries),
+  policy: Schema.optionalKey(Policy),
   writes: Schema.Record(Schema.String, Schema.Struct({ personOnly: Schema.Boolean })),
   /** Each input port: whether it takes writes, and whether only a person may send it. */
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),

@@ -277,10 +277,24 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
     return turned;
   }).pipe(Effect.provide(nodeServices));
 
-/** One turn through the agents service, on `prompt` and `seconds`, with what its last message said. */
+/** A message that is one JSON object and nothing else: the typed answer, sent alone. */
+const ALONE = /^\{[\s\S]*\}$/;
+
+/**
+ * The turn's report, from what the agent said after its last tool call: the last message. When that
+ * message is the answer alone, the messages before it come first. Codex sometimes sends the report
+ * and the answer as two messages a second apart, and the report was lost (tickets 869 and 871,
+ * 2026-11-12).
+ */
+export const closingWords = (closing: readonly string[]): string => {
+  const last = closing.at(-1) ?? "";
+  return ALONE.test(last.trim()) ? closing.join("\n\n") : last;
+};
+
+/** One turn through the agents service, on `prompt` and `seconds`, with its report (`closingWords`). */
 const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: number) =>
   Effect.gen(function* () {
-    const state = { said: "", spent: NO_SPENT, ended: null as Agent.Ended<A> | null };
+    const state = { closing: [] as string[], spent: NO_SPENT, ended: null as Agent.Ended<A> | null };
     const append = (line: object) => appendTo(ask.events, line);
     const turn: Agent.Turn<A> = {
       provider: ask.provider,
@@ -299,8 +313,13 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
         Effect.gen(function* () {
           yield* append(heard);
 
-          if (heard._tag === "said") {
-            state.said = heard.text;
+          if (heard._tag === "tool") {
+            state.closing = [];
+          }
+
+          // An adapter may say its last message twice: once as it arrives, once as the turn's last word.
+          if (heard._tag === "said" && heard.text !== state.closing.at(-1)) {
+            state.closing.push(heard.text);
           }
 
           if (heard._tag === "ended") {
@@ -314,7 +333,8 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
       Effect.result,
     );
     const failed = (reason: string, message: string) => Failed.make({ reason, message, spent: state.spent });
-    const done = (turned: Turned<A>) => ({ turned, said: state.said });
+    const said = () => closingWords(state.closing);
+    const done = (turned: Turned<A>) => ({ turned, said: said() });
 
     if (Result.isFailure(ran)) {
       const e = ran.failure;
@@ -329,7 +349,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
     }
 
     return done({
-      ...Ended.make({ stop: ended.stop, spent: state.spent, said: state.said }),
+      ...Ended.make({ stop: ended.stop, spent: state.spent, said: said() }),
       answer: ended.answer,
     });
   });
