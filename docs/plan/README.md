@@ -55,6 +55,12 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12:* P19 slice 1, tracker ticket 881, is in build in `next/`: the brain-service
+contracts, lifecycle machine and launchd adapter. The box checks only controlled services;
+the real launchd and Electron restart and cleanup check remains with the host lead.
+P19 stays open. Slice 2 adds sealed identities and founding storage, then slice 3 builds
+the Electron client and recovery with both windows.
+
 *2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
 P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
 [0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses

@@ -33,4 +33,45 @@ export const version = Setting.make("fabrika-version", {
   since: "0.0.0",
 });
 
-export const all = Setting.group({ port, version });
+const Positive = Schema.Int.check(Schema.isGreaterThan(0)).annotate({
+  title: "a positive whole number",
+  description: "The value must be a positive whole number.",
+});
+
+export const brainThrottle = Setting.make("desktop.brain-throttle", {
+  schema: Positive,
+  default: 2,
+  doc: "The delay in whole seconds between crash restarts of the local brain.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const brainPoll = Setting.make("desktop.brain-poll", {
+  schema: Positive,
+  default: 100,
+  doc: "The interval in milliseconds between brain readiness and shutdown checks.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const brainStartTimeout = Setting.make("desktop.brain-start-timeout", {
+  schema: Positive,
+  default: 60000,
+  doc: "The maximum time in milliseconds to start or reuse a ready local brain.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
+  schema: Positive,
+  default: 5000,
+  doc: "The maximum time in milliseconds to confirm the local brain and its children have stopped.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const all = Setting.group({ port, version, brainThrottle, brainPoll, brainStartTimeout, brainStopTimeout });
