@@ -5,10 +5,12 @@ import type { inbox } from "@kampus/inbox";
 import * as RunnerTest from "@kampus/inbox/RunnerTest";
 import { Alarm, CheckedWriter, Id, ProgramLoader, ProgramRunner, Recording, WatcherManager } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { noticeId } from "@kampus/libfabrika/coordination";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
+import { LedgerTransaction } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
-import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
+import { letterLine, Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
@@ -76,7 +78,9 @@ const session = Effect.fnUntraced(function* (
   const mail = Mailbox.layer.pipe(
     Layer.provideMerge(LedgerSql.layer(ledger, { reader: "inbox-law" }).pipe(Layer.provide(quiet))),
   );
-  yield* Mailbox.use((m) => m.send(NAME, "brain-notice", initial, brainFrom)).pipe(Effect.provide(mail), Effect.orDie);
+  yield* LedgerTransaction.use((l) =>
+    l.transact((turn) => turn.append(`${NAME}/inbox`, noticeId(initial.id), letterLine(brainFrom, initial))),
+  ).pipe(Effect.provide(LedgerTransactionSql.layer(ledger).pipe(Layer.provide(quiet))), Effect.orDie);
   const checked = Layer.effect(
     CheckedWriter,
     Effect.gen(function* () {

@@ -500,9 +500,13 @@
     },
     {
       // Test files only: an `expect` that sits only inside an `if` may never run.
-      // `!` is allowed here: a test that hits a missing value fails on its own. The record-part
-      // suite (0062) holds the laws its runner registers, so it is a test file here too.
-      "files": ["**/*.test.ts", "next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      // `!` is allowed here: a test that hits a missing value fails on its own. Shared law suites
+      // (0062) hold the laws their runner registers, so they are test files here too.
+      "files": [
+        "**/*.test.ts",
+        "next/packages/libfabrika/src/telemetry/RecordPartTest.ts",
+        "next/programs/inbox/src/RunnerTest.ts"
+      ],
       "rules": {
         "fabrika/no-expect-in-if": "error",
         "typescript/no-non-null-assertion": "off",
@@ -850,10 +854,10 @@
       }
     },
     {
-      // The record-part suite (0062) is the laws its runner registers. It is a test, as above, except
+      // Shared law suites (0062) hold the laws their runner registers. They are tests, as above, except
       // that it keeps the edge rules on and marks its Promise edges: only `next/`'s `.test.ts` files
       // may turn one off (`edge-comment.test.ts`).
-      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts", "next/programs/inbox/src/RunnerTest.ts"],
       "rules": {
         "fabrika/prefer-schema-arbitrary": "warn",
         "fabrika/effect-functions": "off",

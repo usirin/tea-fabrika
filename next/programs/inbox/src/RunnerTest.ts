@@ -37,19 +37,23 @@ export const suite = (open: Open) =>
             const { type: _type, ...fields } = initial;
             const before = (yield* runner.open("before")).view;
             const letters = yield* session.letters;
-            const answer = yield* runner.msg({
-              id: "inbox-client-attempt",
-              envelope: {
-                id: "input_0000000000e008000000000001",
-                by: session[sender],
-                arrivedAt: 1,
-                input: { ...initial, id: `attempt:${initial.id}` },
-              },
-              sentAt: "2026-11-12T00:00:00Z",
-              seen: 0,
-              span: TRACE,
-            });
-            expect(answer._tag).toBe("refused");
+
+            for (const id of ["inbox-client-attempt", JSON.stringify(["notice", "inbox-client-attempt"])]) {
+              const answer = yield* runner.msg({
+                id,
+                envelope: {
+                  id: "input_0000000000e008000000000001",
+                  by: session[sender],
+                  arrivedAt: 1,
+                  input: { ...initial, id: `attempt:${initial.id}` },
+                },
+                sentAt: "2026-11-12T00:00:00Z",
+                seen: 0,
+                span: TRACE,
+              });
+              expect(answer).toEqual({ _tag: "refused", reason: "bad_msg" });
+            }
+
             expect((yield* runner.open("after")).view).toEqual(before);
             expect(yield* session.letters, "a refused input saves no letter").toEqual(letters);
             expect(before, "the brain's saved letter reaches the real program").toEqual({
