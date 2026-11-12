@@ -1,0 +1,31 @@
+{
+  "name": "@kampus/pipeline-pack",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/libfabrika": "workspace:*",
+    "effect": "catalog:",
+    "picomatch": "4.0.7"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@types/picomatch": "4.0.3"
+  },
+  "volta": {
+    "extends": "../../../package.json"
+  }
+}
