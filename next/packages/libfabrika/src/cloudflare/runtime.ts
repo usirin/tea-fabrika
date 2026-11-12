@@ -1,5 +1,6 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
+  Cause,
   Context,
   Effect,
   Exit,
@@ -44,7 +45,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
-import { Answer } from "../transport/Wire.ts";
+import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   CommitReply,
   MailReplies,
@@ -269,6 +270,10 @@ export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, 
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
+      if (Exit.isFailure(exit) && Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+        return exit;
+      }
+
       // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
       if (
         Exit.isSuccess(exit) &&

@@ -31,12 +31,12 @@ import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
-import { type SinkError, SpanSink } from "../telemetry/Sink.ts";
+import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
 import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
-import { Admission, Answer, Attached, Hello, RateRefusal } from "../transport/Wire.ts";
+import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
@@ -1046,7 +1046,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
 
       const answer = yield* refuseRate(Duration.toMillis(budget.failure.reason.retryAfter));
-      yield* sink.check;
+      yield* sink.check.pipe(
+        Effect.mapError(
+          (cause) =>
+            new SinkError({
+              reason: cause.reason,
+              held: cause.held,
+              message: RateCountFailure.fields.message.literal,
+              cause,
+            }),
+        ),
+      );
       return answer;
     }
 

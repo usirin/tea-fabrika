@@ -46,6 +46,16 @@ export const RateRefusal = Schema.TaggedStruct("refused", {
   retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
 });
 
+/**
+ * Identifies a failed rate count by the static Error message preserved across RPC.
+ *
+ * @stability unstable
+ * @category models
+ */
+export const RateCountFailure = Schema.Struct({
+  message: Schema.Literal("Gateway rate refusal count could not be saved"),
+});
+
 export const Wait = Schema.Struct({
   id: Schema.Union([Schema.String, Schema.Number]),
   stream: Schema.String,

@@ -130,6 +130,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),
   /** Spans in memory that met a full disk; 0 otherwise. */
   held: Schema.Int,
+  message: Schema.optionalKey(Schema.String),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 

@@ -2,9 +2,9 @@ import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } 
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
-import { errorClass, REFUSED } from "../telemetry/Trace.ts";
+import { errorClass, REFUSED, SinkError } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
-import { Answer, Attached, Hello } from "../transport/Wire.ts";
+import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { ProjectClient, rejected } from "./platform.ts";
@@ -20,6 +20,24 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
   );
   const recorded = <A, E>(work: Effect.Effect<A, E>) => complete(work).pipe(Effect.provideContext(recording));
+  const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
+    return yield* work.pipe(
+      Effect.catch((error) => {
+        const failure = rejected(error);
+        return Schema.is(RateCountFailure)(failure)
+          ? Effect.fail(new SinkError({ reason: "storage", held: 0, message: failure.message, cause: error }))
+          : Effect.fail(error);
+      }),
+      Effect.tap((answer) =>
+        answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
+          ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
+          : Effect.void,
+      ),
+      Effect.tapError((error) =>
+        Schema.is(RateCountFailure)(error) ? Effect.annotateCurrentSpan(REFUSED, "rate_limited") : Effect.void,
+      ),
+    );
+  });
   yield* recorded(Effect.void);
   const connections = new Map<WebSocket, ReturnType<typeof connection>>();
   const attached = Effect.fnUntraced(function* (ws: WebSocket) {
@@ -42,15 +60,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       wait: Effect.fnUntraced(function* (stream, after, reader) {
         const state = yield* attached(ws);
         const answer = yield* rpc(
-          p
-            .route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader)
-            .pipe(
-              Effect.tap((answer) =>
-                answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
-                  ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
-                  : Effect.void,
-              ),
-            ),
+          routed(p.route(state.client as ConnectionId, "ledger.wait", { stream, after }, reader)),
         );
 
         if (answer._tag === "parked") {
@@ -129,17 +139,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             return result;
           }
 
-          return yield* rpc(
-            p
-              .route(client, method, params)
-              .pipe(
-                Effect.tap((answer) =>
-                  answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)
-                    ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
-                    : Effect.void,
-                ),
-              ),
-          );
+          return yield* rpc(routed(p.route(client, method, params)));
         },
         // A failed or defective call still answers its request without exposing error details. It is
         // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and
@@ -147,6 +147,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         // thrown text, which may hold a bearer or a raw frame.
         Effect.catchCause((cause) => {
           const failure = Cause.squash(cause);
+
+          if (Schema.is(RateCountFailure)(failure)) {
+            return Effect.failCause(cause);
+          }
+
           return Effect.exit(
             Effect.fail(failure).pipe(
               Effect.withSpan("gateway.refused", { attributes: { "error.type": errorClass(rejected(failure)) } }),

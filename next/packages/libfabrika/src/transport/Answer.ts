@@ -1,7 +1,7 @@
-import { Effect, Exit, Result, Schema } from "effect";
+import { Cause, Effect, Exit, Result, Schema } from "effect";
 import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
-import { Answer, Attached } from "./Wire.ts";
+import { Answer, Attached, RateCountFailure } from "./Wire.ts";
 
 const Request = Schema.fromJsonString(
   Schema.Struct({
@@ -59,6 +59,10 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
   );
 
   if (Exit.isFailure(exit)) {
+    if (Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+      yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
+    }
+
     return { send: null, attached };
   }
 
