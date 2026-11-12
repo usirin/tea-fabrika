@@ -199,6 +199,12 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         if (model._tag !== "closed") {
           old.push({ type: "checked", selection, snapshot });
           old.push({ type: "history", selection, events: [] });
+          old.push({
+            type: "answer",
+            selection,
+            request,
+            decision: TrustDecision.cases.accepted.make({}),
+          });
           old.push({ type: "saved", selection, request, receipt: draw.receipts[pick % draw.receipts.length]! });
           old.push({ type: "failed", selection, request, reason: draw.failures[pick % draw.failures.length]! });
         }
@@ -277,6 +283,11 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
             phase,
           );
           expect(model).toEqual(before);
+          send(
+            { type: "failed", selection, request: other, reason: draw.failures[cell.pick % draw.failures.length]! },
+            phase,
+          );
+          expect(model).toEqual(before);
         } else if (move === "duplicate-answer") {
           const before = model;
           send(
@@ -314,6 +325,19 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       }
 
       expect(model._tag).toBe("refused");
+      // Require a stale yes to arrive while its replacement is actually awaiting an answer.
+      const stale: Msg = {
+        type: "answer",
+        selection,
+        request,
+        decision: TrustDecision.cases.accepted.make({}),
+      };
+      select(draw.cells[0]!.pick);
+      advance(0, true);
+      advance(0, true);
+      const pending = model;
+      send(stale, "awaiting_trust");
+      expect(model).toEqual(pending);
       // tea's own runner checks the same list from the actual init as well.
       propertyInvariant(
         Open.machine,

@@ -4,13 +4,26 @@ import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions ar
 import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable diagnostic fields
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, FileSystem, Layer, Logger, Path, Redacted, Schema, Tracer } from "effect";
+import {
+  Arbitrary,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Logger,
+  Path,
+  Redacted,
+  Schema,
+  Sink,
+  Stream,
+  Tracer,
+} from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
-import { Doorbell, Ledger } from "../../ledger/Ledger.ts";
+import { Doorbell, Ledger, LedgerError } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import type { Line } from "../../ledger/Log.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
@@ -331,10 +344,9 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
     fc.asyncProperty(
       fc.stringMatching(/^[a-zA-Z][a-zA-Z0-9]{11,23}$/),
       tape,
-      ids,
-      ids,
+      fc.uniqueArray(ids, { minLength: 32, maxLength: 32 }),
       people,
-      async (word, cells, selection, request, actor) => {
+      async (word, cells, requests, actor) => {
         const secret = `sentinel-${word}/+ &"`;
         const folder = `/private/fixture-${word}`;
         const url = `https://fixture:${encodeURIComponent(secret)}@example.invalid/repo.git`;
@@ -379,9 +391,23 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   return real.append(stream, id, line);
                 },
               };
+              const path = yield* Path.Path;
+              const digest = yield* Digest.Digest;
+              // Require pending, acknowledged consent, document refusal, storage and prompt failures in every flow.
+              const flow = [
+                ...cells,
+                { pick: 1, move: 0 },
+                { pick: 1, move: 2 },
+                { pick: 0, move: 0 },
+                { pick: 2, move: 2 },
+                { pick: 7, move: 2 },
+                { pick: 8, move: 2 },
+              ];
 
-              for (const c of cells) {
-                const source = c.pick % 7;
+              for (const [index, c] of flow.entries()) {
+                const selection = requests[index * 2]!;
+                const request = requests[index * 2 + 1]!;
+                const source = c.pick % 9;
                 const body =
                   source === 0
                     ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
@@ -392,29 +418,81 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                         : source === 5
                           ? `fabrika-version = ${JSON.stringify(secret)} [\n`
                           : 'fabrika-version = "0.0.0"\n';
-                const gitError = new RepositoriesError({
-                  reason: new ReadFailed({ cause: Redacted.make(new Error(`${url} ${folder} ${secret}`)) }),
+                const fs = FileSystem.layerNoop({
+                  realPath: (location) => Effect.succeed(location),
+                  makeTempDirectoryScoped: () => Effect.succeed(`${folder}/temporary`),
+                  makeDirectory: () => Effect.void,
+                  writeFileString: () => Effect.void,
+                  readFileString: () =>
+                    Effect.succeed(source === 6 ? `[instance]\nport = ${JSON.stringify(secret)}\n` : ""),
                 });
-                const selected =
-                  source === 2 ? Layer.succeed(Repositories, { open: () => Effect.fail(gitError) }) : reader(body, []);
+                const spawner = ChildProcessSpawner.make((command) => {
+                  if (command._tag !== "StandardCommand") {
+                    return Effect.die("unexpected pipeline");
+                  }
+
+                  const args = command.args;
+                  const commit = "b".repeat(40);
+                  const blob = "d".repeat(40);
+                  let output = "";
+
+                  if (args.includes("--show-toplevel")) {
+                    output = folder;
+                  } else if (args.includes("--git-common-dir")) {
+                    output = `${folder}/.git`;
+                  } else if (args.includes("--show-object-format")) {
+                    output = "sha1";
+                  } else if (args.includes("config") || args.includes("--get-url")) {
+                    output = `${url}/${index}`;
+                  } else if (args.includes("--symref")) {
+                    output = `ref: refs/heads/release\tHEAD\n${commit}\tHEAD\n`;
+                  } else if (args.includes("--verify")) {
+                    output = commit;
+                  } else if (args.includes("ls-tree") && args.at(-1) === document) {
+                    output = `100644 blob ${blob}\t${document}\0`;
+                  } else if (args.includes("cat-file")) {
+                    output = body;
+                  }
+
+                  const failed = source === 2 && args.includes(["fetch", "ls-tree", "cat-file"][c.move % 3]!);
+                  const bytes = new TextEncoder().encode(output);
+                  const errors = new TextEncoder().encode(`${url} ${folder} ${secret}`);
+                  return Effect.succeed(
+                    ChildProcessSpawner.makeHandle({
+                      pid: ChildProcessSpawner.ProcessId(1),
+                      exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(failed ? 1 : 0)),
+                      isRunning: Effect.succeed(false),
+                      kill: () => Effect.void,
+                      stdin: Sink.drain,
+                      stdout: Stream.make(bytes),
+                      stderr: Stream.make(errors),
+                      all: Stream.make(bytes, errors),
+                      getInputFd: () => Sink.drain,
+                      getOutputFd: () => Stream.empty,
+                      unref: Effect.succeed(Effect.void),
+                    }),
+                  );
+                });
+                const selected = RepositoriesGit.layer({ person: folder }).pipe(
+                  Layer.provide(
+                    Layer.mergeAll(
+                      fs,
+                      Layer.succeed(Path.Path, path),
+                      Layer.succeed(Digest.Digest, digest),
+                      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+                    ),
+                  ),
+                );
                 const checked = yield* OpenRepository.prepare(folder, {
                   person: { path: `${folder}/person.toml`, name: personName },
                   flags: {},
                   env: { UNRELATED_TOKEN: secret },
                   version: "0.0.0",
-                }).pipe(
-                  Effect.provide([
-                    selected,
-                    FileSystem.layerNoop({
-                      readFileString: () =>
-                        Effect.succeed(source === 6 ? `[instance]\nport = ${JSON.stringify(secret)}\n` : ""),
-                    }),
-                  ]),
-                  Effect.exit,
-                );
+                }).pipe(Effect.provide([selected, fs]), Effect.exit);
+                expect(Exit.isSuccess(checked)).toBe(source === 1 || source === 7 || source === 8);
 
                 if (Exit.isFailure(checked)) {
-                  outputs.error.push(String(checked.cause));
+                  outputs.error.push(String(checked.cause), checked.cause);
                   outputs.errorJson.push(JSON.stringify(checked.cause));
                 } else {
                   outputs.settings.push(checked.value.settings);
@@ -425,19 +503,41 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     by: "brain",
                     build: "fixture",
                     interactive: c.move % 3 !== 0,
-                    confirm: () => Effect.succeed(c.move % 2 === 0),
+                    confirm: (snapshot) => {
+                      outputs.pending.push(snapshot);
+                      return source === 8
+                        ? Effect.fail(new Error(`${url} ${folder} ${secret}`))
+                        : Effect.succeed(c.move % 2 === 0);
+                    },
                   }).pipe(
                     Effect.provide(RepositoryTrustLedger.layer),
-                    Effect.provideService(Ledger, captured),
+                    Effect.provideService(
+                      Ledger,
+                      source === 7
+                        ? {
+                            ...captured,
+                            append: () => Effect.fail(new LedgerError({ reason: `${url} ${folder} ${secret}` })),
+                          }
+                        : captured,
+                    ),
                     Effect.exit,
                   );
 
+                  expect(Exit.isSuccess(opened)).toBe(source !== 7 && (source !== 8 || c.move % 3 === 0));
+
                   if (Exit.isSuccess(opened)) {
+                    expect(opened.value._tag).toBe(
+                      c.move % 3 === 0 ? "awaiting_trust" : c.move % 2 === 0 ? "ready" : "refused",
+                    );
                     outputs.state.push(opened.value);
-                    outputs.pending.push(opened.value);
+
+                    if (opened.value._tag === "awaiting_trust") {
+                      outputs.pending.push(opened.value);
+                    }
+
                     outputs.report.push(JSON.stringify(opened.value));
                   } else {
-                    outputs.error.push(String(opened.cause));
+                    outputs.error.push(String(opened.cause), opened.cause);
                     outputs.errorJson.push(JSON.stringify(opened.cause));
                   }
                 }
@@ -455,6 +555,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         );
 
         for (const [name, values] of Object.entries(outputs)) {
+          expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
               typeof value === "bigint" ? value.toString() : value,

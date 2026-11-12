@@ -121,6 +121,73 @@ describe("T878 pinned repository reads", () => {
     );
   });
 
+  it("L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
+        fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
+        async (credential, tape) =>
+          Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const f = yield* fixture("sha1", "release");
+                const otherRoot = f.path.join(f.root, "other");
+                yield* f.fs.makeDirectory(otherRoot);
+                const clone = f.path.join(otherRoot, "selected");
+                yield* git(otherRoot, ["clone", f.origin, clone]);
+                const alias = f.path.join(f.root, "alias");
+                yield* git(f.repo, ["worktree", "add", "--detach", alias, f.commit]);
+                const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+                const key = (location: string, destination: string) => {
+                  const spawner = ChildProcessSpawner.make((command) => {
+                    if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
+                      return real.spawn(command);
+                    }
+
+                    // Model a host URL rewrite while keeping every transport on the local bare origin.
+                    const bytes = new TextEncoder().encode(destination);
+                    return Effect.succeed(
+                      ChildProcessSpawner.makeHandle({
+                        pid: ChildProcessSpawner.ProcessId(1),
+                        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+                        isRunning: Effect.succeed(false),
+                        kill: () => Effect.void,
+                        stdin: Sink.drain,
+                        stdout: Stream.make(bytes),
+                        stderr: Stream.empty,
+                        all: Stream.make(bytes),
+                        getInputFd: () => Sink.drain,
+                        getOutputFd: () => Stream.empty,
+                        unref: Effect.succeed(Effect.void),
+                      }),
+                    );
+                  });
+                  return withReader(
+                    f.person,
+                    Repositories.use((service) => service.open(location)),
+                  ).pipe(
+                    Effect.map((handle) => handle.snapshot.key),
+                    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+                  );
+                };
+                const destination = "https://example.invalid/repo.git";
+                const initial = yield* key(f.repo, destination);
+
+                for (const cell of tape) {
+                  const authorized = `https://fixture:${credential}${cell}@example.invalid/repo.git`;
+                  expect(yield* key(f.repo, authorized)).toBe(initial);
+                  expect(yield* key(alias, authorized)).toBe(initial);
+                  expect(yield* key(clone, authorized)).not.toBe(initial);
+                  expect(yield* key(f.repo, `${destination}-${cell}`)).not.toBe(initial);
+                }
+              }),
+            ).pipe(Effect.provide(services)),
+          ),
+      ),
+      { seed: 119120, numRuns: 300 },
+    );
+  });
+
   it("L2: only an absent tree entry is an empty document; every requested Git failure refuses", async () => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
@@ -142,21 +209,69 @@ describe("T878 pinned repository reads", () => {
               yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
               yield* git(f.repo, ["push", "origin", f.branch]);
               const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-              const operations = ["fetch", "ls-tree", "cat-file", "ls-remote", "rev-parse"];
+              const object = "a".repeat(40);
+              const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
+              const faults = [
+                { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
+                { operation: "ls-tree", flag: ".fabrika/fabrika.toml", output: "", code: 1 },
+                { operation: "cat-file", flag: "blob", output: "", code: 1 },
+                { operation: "ls-remote", flag: "--symref", output: "", code: 1 },
+                { operation: "rev-parse", flag: "--verify", output: "", code: 1 },
+                { operation: "rev-parse", flag: "--verify", output: "not-an-object", code: 0 },
+                { operation: "rev-parse", flag: "--show-object-format", output: "sha999", code: 0 },
+                { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
+                { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
+                { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
+                { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
+                {
+                  operation: "ls-tree",
+                  flag: ".fabrika/fabrika.toml",
+                  output: `040000 tree ${object}\t.fabrika/fabrika.toml\0`,
+                  code: 0,
+                },
+                {
+                  operation: "ls-tree",
+                  flag: ".fabrika/fabrika.toml",
+                  output: `160000 commit ${object}\t.fabrika/fabrika.toml\0`,
+                  code: 0,
+                },
+                {
+                  operation: "ls-tree",
+                  flag: ".fabrika/fabrika.toml",
+                  output: `120000 blob ${object}\t.fabrika/fabrika.toml\0`,
+                  code: 0,
+                },
+                {
+                  operation: "ls-tree",
+                  flag: ".fabrika/fabrika.toml",
+                  output: `100644 blob ${object}\twrong-path\0`,
+                  code: 0,
+                },
+                {
+                  operation: "ls-tree",
+                  flag: ".fabrika/fabrika.toml",
+                  output: `100644 blob ${object}\t.fabrika/fabrika.toml`,
+                  code: 0,
+                },
+                { operation: "cat-file", flag: "blob", output: new Uint8Array([0xc3, 0x28]), code: 0 },
+              ];
 
               for (const cell of tape) {
-                const operation = operations[cell % operations.length]!;
+                const fault = faults[cell % faults.length]!;
                 let hits = 0;
                 const injected = ChildProcessSpawner.make((command) => {
-                  if (command._tag === "StandardCommand" && command.args.includes(operation)) {
+                  if (
+                    command._tag === "StandardCommand" &&
+                    command.args.includes(fault.operation) &&
+                    command.args.includes(fault.flag)
+                  ) {
                     hits++;
-                    const bytes = new TextEncoder().encode(cell % 2 === 0 ? "invalid Git output\n" : "");
+                    const bytes =
+                      typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
                     return Effect.succeed(
                       ChildProcessSpawner.makeHandle({
                         pid: ChildProcessSpawner.ProcessId(1),
-                        exitCode: Effect.succeed(
-                          ChildProcessSpawner.ExitCode(operation === "fetch" || cell % 2 !== 0 ? 1 : 0),
-                        ),
+                        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(fault.code)),
                         isRunning: Effect.succeed(false),
                         kill: () => Effect.void,
                         stdin: Sink.drain,
@@ -280,7 +395,16 @@ describe("T878 pinned repository reads", () => {
 
                 for (const cell of tape) {
                   let held = 0;
+                  const children: Array<ChildProcessSpawner.ChildProcessHandle> = [];
+                  const directories: Array<string> = [];
                   const entered = yield* Deferred.make<void>();
+                  const trackedFs: FileSystem.FileSystem = {
+                    ...f.fs,
+                    makeTempDirectoryScoped: (options) =>
+                      f.fs
+                        .makeTempDirectoryScoped(options)
+                        .pipe(Effect.tap((directory) => Effect.sync(() => directories.push(directory)))),
+                  };
                   const tracked = ChildProcessSpawner.make((command) =>
                     Effect.gen(function* () {
                       yield* Effect.acquireRelease(
@@ -292,13 +416,14 @@ describe("T878 pinned repository reads", () => {
                             held--;
                           }),
                       );
+                      const child = yield* real.spawn(
+                        cell % 3 === 2
+                          ? ChildProcess.make(process.execPath, ["-e", "setInterval(() => {}, 1000)"])
+                          : command,
+                      );
+                      children.push(child);
                       yield* Deferred.succeed(entered, undefined);
-
-                      if (cell % 3 === 2) {
-                        return yield* Effect.never;
-                      }
-
-                      return yield* real.spawn(command);
+                      return child;
                     }),
                   );
 
@@ -313,7 +438,11 @@ describe("T878 pinned repository reads", () => {
                         return yield* (yield* Repositories).open(f.repo);
                       }),
                     ),
-                  ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, tracked), Effect.exit);
+                  ).pipe(
+                    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, tracked),
+                    Effect.provideService(FileSystem.FileSystem, trackedFs),
+                    Effect.exit,
+                  );
                   const fiber = yield* operation.pipe(Effect.forkScoped);
                   yield* Deferred.await(entered);
 
@@ -324,6 +453,16 @@ describe("T878 pinned repository reads", () => {
                   }
 
                   expect(held).toBe(0);
+                  expect(children.length).toBeGreaterThan(0);
+
+                  for (const child of children) {
+                    expect(yield* child.isRunning).toBe(false);
+                  }
+
+                  for (const directory of directories) {
+                    expect(yield* f.fs.exists(directory)).toBe(false);
+                  }
+
                   yield* git(f.repo, ["remote", "set-url", "origin", f.origin]);
                 }
               }),

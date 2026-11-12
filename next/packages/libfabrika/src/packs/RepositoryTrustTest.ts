@@ -12,6 +12,7 @@ import * as Declarations from "../settings/Declarations.ts";
 import * as LoadSnapshot from "../settings/Snapshot.ts";
 import * as Sources from "../settings/Sources.ts";
 import type { Sql } from "../Sql.ts";
+import * as Open from "./Open.ts";
 import { Event, RepositoryTrust, TrustDecision } from "./RepositoryTrust.ts";
 import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
 
@@ -122,13 +123,58 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${key.slice(1)}`;
                     const distinct =
                       otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
-                    expect(yield* trust.history(distinct, operator)).toEqual([]);
+                    const otherLocation = yield* trust.history(distinct, operator);
+                    expect(otherLocation).toEqual([]);
                     const otherPerson = Schema.decodeUnknownSync(Id.make("person"))(
                       `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
                     );
-                    expect(yield* trust.history(key, otherPerson)).toEqual([]);
+                    const otherIdentity = yield* trust.history(key, otherPerson);
+                    expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
+                    const reopened = Schema.decodeUnknownSync(Id.InputId)(
+                      `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
+                    );
+
+                    for (const candidate of [
+                      { key, person: operator, events: same, known: true },
+                      { key: distinct, person: operator, events: otherLocation, known: false },
+                      { key, person: otherPerson, events: otherIdentity, known: false },
+                    ]) {
+                      const session = yield* Open.session();
+                      yield* session.send({ type: "select", selection: reopened });
+                      yield* session.send({
+                        type: "checked",
+                        selection: reopened,
+                        snapshot: {
+                          repository: repoId,
+                          label: selected.label,
+                          branch: selected.branch,
+                          hash: selected.hash,
+                          present: selected.present,
+                          settings: snapshot,
+                          key: candidate.key,
+                          person: candidate.person,
+                          commit: (cell.pick % 2 === 0 ? "c" : "d").repeat(40),
+                        },
+                      });
+                      const state = yield* session.send({
+                        type: "history",
+                        selection: reopened,
+                        events: candidate.events,
+                      });
+                      expect(state._tag).toBe(candidate.known ? "saving" : "awaiting_trust");
+
+                      if (state._tag === "saving") {
+                        const ready = yield* session.send({
+                          type: "saved",
+                          selection: reopened,
+                          request: reopened,
+                          receipt: first,
+                        });
+                        expect(ready._tag).toBe("ready");
+                      }
+                    }
                   }
                 }),
               ).pipe(Effect.provide(Digest.layerWebCrypto)),
