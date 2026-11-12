@@ -27,7 +27,7 @@ import { ProcessId } from "../ProcessId.ts";
 import { Incoming } from "../runtime/Entry.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
-import { type RunnerError, type Sent } from "../runtime/Runner.ts";
+import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { type SinkError, SpanSink } from "../telemetry/Sink.ts";
@@ -310,14 +310,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   });
   const membership = Effect.fnUntraced(function* (raw: string) {
     const members = yield* clients.members;
-    const who = admitted(members, raw);
+    const identity = admitted(members, raw);
 
-    if ("reason" in who) {
+    if ("reason" in identity) {
       return yield* new NotGranted({});
     }
 
     const key = yield* fingerprint(raw, false);
-    return Writer.cases[who.as === "agent" ? "agent" : "person"].make({ key, for: who.person });
+    return Writer.cases[identity.as === "agent" ? "agent" : "person"].make({ key, for: identity.person });
   });
   const sessions = yield* Effect.service(SessionManager).pipe(
     Effect.provide(
@@ -479,10 +479,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           const members = existing ?? (yield* clients.members);
-          const who = admitted(members, raw);
-          return "reason" in who
+          const identity = admitted(members, raw);
+          return "reason" in identity
             ? Admission.cases.refused.make({ reason: "not_granted" })
-            : Admission.cases.admitted.make({ who: { ...who, key: trusted.name } });
+            : Admission.cases.admitted.make({ identity: { ...identity, key: trusted.name } });
         }),
       }),
     );
@@ -525,8 +525,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const recordHello = Effect.fn("gateway.initialize")(function* () {
       const from = yield* fromHere({
-        by: result.who.key,
-        for: result.who.person,
+        by: result.identity.key,
+        for: result.identity.person,
         seen: 0,
         parent: null,
         build: options.build,
@@ -556,7 +556,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           Attached,
           Attached.cases.online.make({
             client,
-            who: result.who,
+            identity: result.identity,
             version: result.version,
             waits: [],
             watching: false,
@@ -1087,10 +1087,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const recordInput = Effect.fn("gateway.input")(function* () {
       const span = yield* Effect.currentSpan;
       const destination = letter !== null && Option.isSome(processes) ? yield* processes.value.resolve(target) : null;
-      const accepted =
+      // The letter's inbox row, if an earlier delivery landed it: its placing is the letter's answer.
+      const held =
         destination === null || request === null || Result.isFailure(request)
-          ? false
-          : (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).some(
+          ? undefined
+          : (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).find(
               (entry) => entry.id === request.success.letter,
             );
       const allocation = yield* store.atomic(() => {
@@ -1112,7 +1113,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
           if (
             old.state._tag === "settled" ||
-            accepted ||
+            held !== undefined ||
             destination?.state._tag !== "live" ||
             destination.state.process === old.process
           ) {
@@ -1229,17 +1230,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           yield* store.atomic(() => saveBinding(recorded));
         }
 
-        return recorded;
+        return { binding: recorded, held };
       }
 
-      return binding;
+      return { binding, held };
     });
-    const binding = yield* recordInput();
+    const input = yield* recordInput();
     yield* flush;
 
-    if (binding === null) {
+    if (input === null) {
       return no("id_reused");
     }
+
+    const { binding, held } = input;
 
     const routeInput = Effect.fn("gateway.route", {
       links: [{ span: Tracer.externalSpan(binding.span), attributes: {} }],
@@ -1262,6 +1265,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
           if (binding.state._tag === "settled") {
             return deliveryAnswer(binding.state.result);
+          }
+
+          if (held !== undefined) {
+            // The letter landed, and a crash cut its answer: its answer is its first placing (p10, p13).
+            // It is never delivered again, so it needs no session, and the binding keeps its pid (p69).
+            const answer = Sent.cases.accepted.make({ rev: held.rev, pos: held.pos });
+            yield* store.atomic(() =>
+              saveBinding({ ...binding, state: EnvelopeState.cases.settled.make({ result: answer }) }),
+            );
+            return deliveryAnswer(answer);
           }
 
           const sessions = yield* sessionsFor(binding.process);

@@ -43,7 +43,7 @@ review.model = "claude-sonnet-5-5"
 ```
 
 ```ts
-// A sketch, next/. `Setting` is from the proposed settings note (PR 831), not on main.
+// A sketch, next/. `Setting` is from the settings note, docs/direction/settings.md (PR 852).
 // In the pack: one group for all its programs.
 export const settings = Setting.group({ region, review: Setting.group({ model }) });
 // In any program of that pack: fabrika hands it a ConfigProvider scoped to its own pack.

@@ -19,6 +19,15 @@
   (call 2). A guess may come from a small classifier, a project setting that is off by default
   (call 6).
 
+Its decided rules are in: [0356](../../.decisions/0356-an-area-is-a-persons-data.md),
+[0357](../../.decisions/0357-an-area-is-a-guess-until-picked.md),
+[0358](../../.decisions/0358-one-area-filter-many-doors.md),
+[0359](../../.decisions/0359-areas-say-it-once-in-a-menu.md),
+[0360](../../.decisions/0360-an-area-can-be-deleted.md),
+[0361](../../.decisions/0361-a-tab-only-for-pinned-areas.md),
+[0362](../../.decisions/0362-a-jobs-line-follows-the-filter.md),
+[0363](../../.decisions/0363-a-judge-area-guess-is-off.md).
+
 Built from [experiment 205](../../experiments/205-organizing-work.md), which read about 40 makers
 and tools and built four designs and three rounds in today's tracker, and a Design canvas, "Area
 guidelines", which is not published yet. Neither is a measurement. A tag such as `[l10]` points at

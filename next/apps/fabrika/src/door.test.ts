@@ -41,9 +41,9 @@ const runs = (numRuns: number) => ({ seed: SEED, endOnFailure: true, numRuns });
 const SpanPage = Schema.Struct({ spans: Schema.Array(SpanRow), next: Schema.Int });
 
 const ADD_SAW = {
-  how: "device",
+  method: "device",
   check: "touch",
-  where: "test",
+  location: "test",
   has: ["verify"],
   typed: false,
   kept: null,
@@ -59,8 +59,8 @@ const PROCESS = processId();
 const SAW = {
   code: "1234",
   label: "Browser",
-  where: "test",
-  how: "compare",
+  location: "test",
+  method: "compare",
   check: "touch",
   has: ["verify", "seal"],
 } as const;
@@ -69,7 +69,7 @@ const SENT = "2026-11-08T04:00:00.000Z";
 /** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
 const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
 const START = processId();
-const TOOK = { label: "Browser", where: "test", how: "panel", check: "touch" } as const;
+const TOOK = { label: "Browser", location: "test", method: "panel", check: "touch" } as const;
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPACE = "fabrika-client";
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -567,7 +567,7 @@ const sheet = Effect.fnUntraced(function* (d: typeof Gateway.Service, w: World) 
     to: "project-a",
     adds: Adds.cases.recovery.make({ key: w.sheet.line, v: 1 }),
     drops: [],
-    saw: { ...ADD_SAW, how: "sheet", typed: true, kept: "print" },
+    saw: { ...ADD_SAW, method: "sheet", typed: true, kept: "print" },
     sentAt: SENT,
   });
   expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
@@ -602,7 +602,7 @@ const enrolled = Effect.fnUntraced(function* (
       },
     }),
     drops: [],
-    saw: { ...ADD_SAW, how: signer === w.sheet ? "recovery" : "device" },
+    saw: { ...ADD_SAW, method: signer === w.sheet ? "recovery" : "device" },
     sentAt: SENT,
   } satisfies typeof Add.Type;
   const text = addText(add),
@@ -649,7 +649,7 @@ describe("P10 review regressions", () => {
       fc.asyncProperty(
         fc.array(
           fc.record({
-            who: fc.nat(3),
+            keyIndex: fc.nat(3),
             tab: fc.nat(1),
             pass: fc.oneof(fc.constant(undefined), fc.constant(null), fc.string()),
           }),
@@ -665,14 +665,14 @@ describe("P10 review regressions", () => {
                 const keys = [w.otherWindow, w.agent, w.otherRoot, w.sheet] as const;
                 const clients = new Map<string, Effect.Success<ReturnType<typeof d.connect>>>();
 
-                for (const { who, tab, pass } of knocks) {
-                  const k = keys[who]!;
-                  const name = `${who}-${tab}`;
+                for (const { keyIndex, tab, pass } of knocks) {
+                  const k = keys[keyIndex]!;
+                  const name = `${keyIndex}-${tab}`;
                   const client = clients.get(name) ?? (yield* pendingHello(d, k, `tab-${name}`)).client;
                   clients.set(name, client);
                   // The door keeps the newest `most` pending connections.
                   const kept = [...clients.keys()].slice(-w.settings.waiting.most);
-                  const label = `browser ${who}`;
+                  const label = `browser ${keyIndex}`;
                   const reply = yield* d.knock(client, pass === undefined ? { label } : { label, pass });
 
                   if (!kept.includes(name)) {
@@ -1546,11 +1546,11 @@ const DoorMove = fc.record({
 
 type DoorMove = typeof DoorMove extends fc.Arbitrary<infer A> ? A : never;
 
-// The saved value's row, field by field in its stored order: the legacy `where` and `tabs`.
-const legacyRow = (r: WatchRow) => ({
+// The saved value's row, field by field in its stored order: its `location` and `tabs`.
+const savedRow = (r: WatchRow) => ({
   key: r.key,
   label: r.label,
-  where: r.where,
+  location: r.location,
   code: r.code,
   until: r.until,
   tabs: r.tabs,
@@ -1585,7 +1585,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         assert(owner);
         const reply = yield* d.watch(owner);
         expect(reply._tag).toBe("watching");
-        const flat = reply.rows.map(legacyRow);
+        const flat = reply.rows.map(savedRow);
         // format: watch replies and the saved value keep the stored row bytes, and the saved
         // value keeps its flat rows-and-settings shape under the same gateway_state key.
         expect(JSON.stringify(reply.rows)).toBe(JSON.stringify(flat));
@@ -1750,7 +1750,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             {
               key: connection.key,
               label,
-              where: "test-instance",
+              location: "test-instance",
               code: row.code,
               until: now + ttl,
               tabs: 1,
@@ -1773,7 +1773,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
     // An old row: the value as a door before ticket 707 wrote it, by hand, then a fresh door.
     w.db
       .prepare("UPDATE gateway_state SET value=? WHERE name='waiting'")
-      .run(JSON.stringify({ rows: rows.map(legacyRow), most, ttl }));
+      .run(JSON.stringify({ rows: rows.map(savedRow), most, ttl }));
     layer = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
   }
 });
@@ -1819,7 +1819,7 @@ describe("P10 signed membership changes", () => {
               to: "project-a",
               adds: Adds.cases.person.make({ key: winnerKey.line, window: winnerWindow.raw }),
               drops: [],
-              saw: { ...ADD_SAW, how: "recovery" },
+              saw: { ...ADD_SAW, method: "recovery" },
               sentAt: SENT,
             } satisfies typeof Add.Type;
             const text = addText(winner),
@@ -2308,9 +2308,9 @@ describe("P10 inputs, retries and signer", () => {
   );
 
   for (const field of ["id", "by", "for", "arrivedAt"] as const) {
-    for (const where of ["outer", "wrapper"] as const) {
+    for (const location of ["outer", "wrapper"] as const) {
       it.effect.prop(
-        `p67 spoof: ${where} ${field} is refused before decoding, with the real sender recorded`,
+        `p67 spoof: ${location} ${field} is refused before decoding, with the real sender recorded`,
         { generated: Schema.String },
         ({ generated }) =>
           Effect.forEach(
@@ -2323,12 +2323,12 @@ describe("P10 inputs, retries and signer", () => {
                   const d = yield* Gateway;
                   const { client } = yield* online(d, w);
                   const params =
-                    where === "outer"
+                    location === "outer"
                       ? { ...request("spoof"), [field]: marker }
                       : request("spoof", { ...comment(), [field]: marker });
                   expect(yield* d.route(client, "process.send", params)).toMatchObject({
                     _tag: "refused",
-                    reason: where === "outer" ? "reserved" : "bad_input",
+                    reason: location === "outer" ? "reserved" : "bad_input",
                   });
                   expect(w.deliveries).toEqual([]);
                   const row = (yield* stamped()).at(-1)!;

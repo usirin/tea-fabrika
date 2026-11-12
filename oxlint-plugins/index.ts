@@ -23,13 +23,13 @@ import { noNumericDuration } from "./no-numeric-duration.ts";
 import { noOf } from "./no-of.ts";
 import { noProjectSettings } from "./no-project-settings.ts";
 import { noPromises } from "./no-promises.ts";
+import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
-import { noWhyKey } from "./no-why-key.ts";
 import { oneIdModule } from "./one-id-module.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
@@ -64,13 +64,13 @@ const plugin: Plugin = {
     "no-of": noOf,
     "no-project-settings": noProjectSettings,
     "no-promises": noPromises,
+    "no-question-word-key": noQuestionWordKey,
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
     "no-stage-word": noStageWord,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
-    "no-why-key": noWhyKey,
     "one-store-hook": oneStoreHook,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,

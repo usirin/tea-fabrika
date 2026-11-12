@@ -36,6 +36,8 @@ import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
 import "./redact.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -101,10 +103,12 @@ import {
   phasesIn,
   reportOf,
   rowOf,
+  runNames,
   startedOf,
   STEPS,
   tailFor,
 } from "./drive.ts";
+import { boxTree } from "./lane.ts";
 import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
@@ -202,8 +206,8 @@ describe("drive keeps a box that holds work, today's tooling", () => {
         expect(state.kept).toBe(cmd.keep);
 
         // The outcome line's reason says what was kept.
-        for (const what of held) {
-          expect(cmd.reason).toContain(what);
+        for (const message of held) {
+          expect(cmd.reason).toContain(message);
         }
 
         if (held.length === 0) {
@@ -239,7 +243,7 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 });
 
 describe("drive takes a skip answer, today's tooling", () => {
-  const why = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
+  const reason = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
   const steps = fc.constantFrom("tests", "build", "mutation", "review") as fc.Arbitrary<
     "tests" | "build" | "mutation" | "review"
   >;
@@ -265,7 +269,7 @@ describe("drive takes a skip answer, today's tooling", () => {
   // 2026-11-09: "answer: skip no product file changed" was recorded as stuck:no_answer).
   it("a skip answer is a skip outcome with exit 40 and the step's why, and the box goes", () => {
     fc.assert(
-      fc.property(steps, why, fc.constantFrom("", "`", "**"), (step, text, wrap) => {
+      fc.property(steps, reason, fc.constantFrom("", "`", "**"), (step, text, wrap) => {
         const [s, cmds] = read(step, `report body\n\n${wrap}answer: skip ${text}${wrap}`);
         expect(s.phase).toBe("recording");
 
@@ -335,7 +339,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   // never closes, and a review whose verdict line is not merge-ready.
   type Step = "mutation" | "review";
   const steps = fc.constantFrom<Step>("mutation", "review");
-  const why = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);
+  const reason = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);
   const wrap = fc.constantFrom("", "`", "**");
   const spell = fc.constantFrom(
     (l: string) => l,
@@ -352,7 +356,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   );
   const line = fc.oneof(
     {
-      arbitrary: fc.tuple(readable, why).map(([[verb, name], text]) => ({ text: `answer: ${verb} ${text}`, name })),
+      arbitrary: fc.tuple(readable, reason).map(([[verb, name], text]) => ({ text: `answer: ${verb} ${text}`, name })),
       weight: 4,
     },
     {
@@ -740,6 +744,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
           return;
         }
 
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (0081)
         expect(s.outcome).toEqual({ kind: "ask", who: "lead", for: "lockfile" });
 
         for (const p of paths) {
@@ -759,6 +764,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         const s = read(report, []);
         expect(["pushing", "recording"]).toContain(s.phase);
         const outcome = s.phase === "pushing" || s.phase === "recording" ? s.outcome : null;
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (0081)
         expect(outcome).not.toEqual({ kind: "ask", who: "lead", for: "lockfile" });
       }),
       options,
@@ -866,7 +872,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
       "git",
       [
         `--git-dir=${join(root, "b-gitdata")}`,
-        `--work-tree=${join(root, "b")}`,
+        `--work-tree=${boxTree(root, "b")}`,
         "-c",
         "user.email=t@example.com",
         "-c",
@@ -883,7 +889,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   // Plants: drop --untracked-files=all; read through the box's own `.git` file; call a box whose
   // data is gone a box with no changes.
   it("scenario: every edited, deleted and new file is named, a new folder file by file, whatever the box's `.git` file says", () => {
-    const box = join(root, "b");
+    const box = boxTree(root, "b");
     spawnSync("git", ["init", "-q", "--separate-git-dir", join(root, "b-gitdata"), box]);
     writeFileSync(join(box, "a.ts"), "1\n");
     writeFileSync(join(box, "gone.ts"), "1\n");
@@ -921,7 +927,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   // Plants: read only git status; take a file whose folder differs; name the old path as edited.
   it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
     const top = mkdtempSync(join(tmpdir(), "drive-case-"));
-    const box = join(top, "c");
+    const box = boxTree(top, "c");
     const cgit = (...args: string[]) =>
       spawnSync(
         "git",
@@ -1002,7 +1008,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
   >;
   const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
   const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
-  const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", who: "codex" | "claude", box: string) =>
+  const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", agent: "codex" | "claude", box: string) =>
     Effect.gen(function* () {
       const rows = {
         codex: Agent.fakeAdapter(() => Agent.saying("done")),
@@ -1018,7 +1024,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         deps: {
           ...ask,
           step,
-          agent: who,
+          agent,
           box,
           prompt,
           events: join(dir, "events.jsonl"),
@@ -1038,14 +1044,14 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
   // Plants: run every step in BOXES; run a plan in a box; run a review on the row that writes.
   it("a plan reads the main checkout and every other step works in its own box, never in a folder above it", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, who, name, n) =>
-        drafted(step, who, `${name}-${step}${n}`).pipe(
+      fc.asyncProperty(steps, agent, lane, fc.integer({ min: 1, max: 99 }), (step, agent, name, n) =>
+        drafted(step, agent, `${name}-${step}${n}`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
               const started = Object.values(rows).flatMap((row) => row.seen.started);
               expect(started.length).toBe(1);
               const folder = started[0]?.folder ?? "";
-              expect(folder).toBe(step === "plan" ? env.MAIN : join(env.BOXES, `${name}-${step}${n}`));
+              expect(folder).toBe(step === "plan" ? env.MAIN : boxTree(env.BOXES, `${name}-${step}${n}`));
               expect(env.BOXES.startsWith(folder)).toBe(false);
               expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
             }),
@@ -1059,8 +1065,8 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
 
   it("on Codex a plan and a review start on the row that only reads, and a Claude step never starts on a Codex row", () =>
     fc.assert(
-      fc.asyncProperty(steps, agent, lane, (step, who, name) =>
-        drafted(step, who, `${name}-${step}1`).pipe(
+      fc.asyncProperty(steps, agent, lane, (step, agent, name) =>
+        drafted(step, agent, `${name}-${step}1`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
               const count = (row: keyof typeof rows) => rows[row].seen.started.length;
@@ -1069,8 +1075,8 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
                 expect(count("codex")).toBe(0);
               }
 
-              expect(count("claude")).toBe(who === "claude" ? 1 : 0);
-              expect(count("codex") + count("codex-read")).toBe(who === "codex" ? 1 : 0);
+              expect(count("claude")).toBe(agent === "claude" ? 1 : 0);
+              expect(count("codex") + count("codex-read")).toBe(agent === "codex" ? 1 : 0);
             }),
           ),
           Effect.asVoid,
@@ -1097,6 +1103,18 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
       }),
       options,
     );
+  });
+
+  // Plants: read only the boxes folder, so a tree under BOXES/box is missed and its id taken again.
+  it("scenario: a box's tree under BOXES/box holds its run id, beside the files in the boxes folder", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-names-"));
+    const empty = RunId.next("p12", "build", runNames(boxes, "p12"));
+    mkdirSync(boxTree(boxes, "p12-build2"), { recursive: true });
+    writeFileSync(join(boxes, "p12-build1.md"), "old\n");
+    const next = RunId.next("p12", "build", runNames(boxes, "p12"));
+    rmSync(boxes, { recursive: true, force: true });
+    expect(empty).toBe("p12-build1");
+    expect(next).toBe("p12-build3");
   });
 
   // Plants: return the path whenever the file exists; compare to the ms without the whole second.
@@ -1463,11 +1481,11 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         text,
         fc.constantFrom("line", "exit", "silent"),
         fc.constantFrom(0, 1, 30, 137),
-        (name, reason, detail, how, exit) => {
+        (name, reason, detail, method, exit) => {
           const said =
-            how === "line"
+            method === "line"
               ? { code: exit, out: `noise\n${line("stuck", reason, detail)}\n` }
-              : how === "exit"
+              : method === "exit"
                 ? { code: 30, out: `${line("done", "", "")}\n` }
                 : { code: exit, out: "not a line" };
           return drafted(
@@ -1496,7 +1514,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                 expect(ran.turned.answer?.reason).toContain("mutbox");
                 expect(ran.report).toContain(ran.turned.answer?.reason ?? "no reason");
 
-                if (how === "line") {
+                if (method === "line") {
                   expect(ran.turned.answer?.reason).toContain(reason);
                   expect(ran.turned.answer?.reason).toContain(detail);
                 }
@@ -1590,7 +1608,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                   ],
                 ]);
                 expect(ran.started.length).toBe(1);
-                expect(ran.started[0]?.folder).toBe(join(env.BOXES, name));
+                expect(ran.started[0]?.folder).toBe(boxTree(env.BOXES, name));
                 const prompt = ran.started[0]?.prompt ?? "";
                 expect(prompt).toContain(brief);
                 expect(prompt).toContain(report);

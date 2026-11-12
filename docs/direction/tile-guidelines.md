@@ -5,6 +5,13 @@ as a lesson. It holds the written rules for every part of a tile, each tested ag
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
 
+Its decided rules are in: [0499](../../.decisions/0499-a-tile-adds-a-word-not-color.md),
+[0500](../../.decisions/0500-a-tiles-edge-is-one-outline.md),
+[0501](../../.decisions/0501-a-tiles-title-bar-is-mono.md),
+[0502](../../.decisions/0502-a-tiles-state-is-a-word.md),
+[0503](../../.decisions/0503-each-tile-is-one-region.md),
+[0504](../../.decisions/0504-two-live-regions-from-boot.md).
+
 **Changed 2026-11-08:** design foundations PR 1 builds slate a9 focus in both looks for today's
 version, shared by the plain tile's edge and strip ring through `--focus`. Dark pipes stay at a8;
 light pipes keep their a9 to a11 steps. The slate focus ratios below use the new value.

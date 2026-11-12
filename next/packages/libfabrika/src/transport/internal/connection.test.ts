@@ -30,7 +30,7 @@ type Msg =
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
-/** The named state an attachment stands for: busy lives only in the tag, `who` is `identity`. */
+/** The named state an attachment stands for: busy lives only in the tag. */
 const expected = (saved: Saved | null): unknown => {
   if (saved === null) {
     return { _tag: "unloaded" };
@@ -40,8 +40,8 @@ const expected = (saved: Saved | null): unknown => {
     return { _tag: saved._tag, attached: saved };
   }
 
-  const { client, who, version, watching, waits, busy } = saved;
-  return { _tag: busy ? "busy" : "idle", client, identity: who, version, watching, waits };
+  const { client, identity, version, watching, waits, busy } = saved;
+  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits };
 };
 
 /** The attachment a loaded state saves, read from the Model alone. */
@@ -52,7 +52,7 @@ const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved 
 
   return Attached.cases.online.make({
     client: model.client,
-    who: model.identity,
+    identity: model.identity,
     version: model.version,
     waits: model.waits,
     watching: model.watching,
@@ -113,7 +113,7 @@ const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
 const stream = fc.constantFrom(...streams);
 const after = fc.nat({ max: 12 });
-const who = fc.record({ key: text, person: text, as: fc.constantFrom("window" as const, "agent" as const) });
+const identity = fc.record({ key: text, person: text, as: fc.constantFrom("window" as const, "agent" as const) });
 const wait = fc.record({ id, stream, after }).map((w) => Wait.make(w));
 
 const hello = fc.record({
@@ -135,7 +135,7 @@ const observation = fc.oneof(
   fc
     .record({
       client: text,
-      who,
+      identity,
       version: fc.integer({ min: 0, max: 9 }),
       waits: fc.uniqueArray(wait, { maxLength: 6, selector: (w) => w.id }),
       watching: fc.boolean(),

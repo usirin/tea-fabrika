@@ -427,7 +427,7 @@ pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and C
 pnpm test
 ```
 
-All three must pass before a change is offered. None needs a key or the
+All three must pass before a change is offered. A push does not wait on a local `pnpm typecheck`: CI's `check` job runs it on every push, and a pull request merges only when it is green ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
 patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The four advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
@@ -623,6 +623,9 @@ Write-ups are read by busy people, some of them not native English speakers.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same
   checkout.
+- Push every commit when you make it, and give its branch a draft pull request at the first commit.
+  No code stays only on a branch
+  ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)).
 
 ## Changing the product
 

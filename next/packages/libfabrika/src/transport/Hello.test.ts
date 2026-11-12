@@ -93,7 +93,7 @@ const setup = Effect.fnUntraced(function* () {
     sentAt: SENT,
     signed,
   };
-  const who = {
+  const identity = {
     key: k.fingerprint,
     person: PERSON,
     as: "window",
@@ -107,7 +107,7 @@ const setup = Effect.fnUntraced(function* () {
     used = true;
     return true;
   });
-  const admit = vi.fn(() => Effect.succeed(Admission.cases.admitted.make({ who })));
+  const admit = vi.fn(() => Effect.succeed(Admission.cases.admitted.make({ identity })));
   const trusted = {
     url,
     tab,
@@ -118,7 +118,7 @@ const setup = Effect.fnUntraced(function* () {
     consume,
     admit,
   };
-  return { hello, trusted, who, consume, admit };
+  return { hello, trusted, identity, consume, admit };
 });
 
 describe("P10 hello", () => {
@@ -216,7 +216,7 @@ describe("P10 hello", () => {
       const result = yield* checked;
       expect(result).toMatchObject({
         _tag: "online",
-        who: x.who,
+        identity: x.identity,
         version: 2,
         ping: 30_000,
         hello: { nonce },
@@ -310,7 +310,7 @@ describe("P10 hello", () => {
         hello: { ...x.hello, future: { rank: "person" }, ping: "1ms" },
       });
       const result = yield* checked;
-      expect(result).toMatchObject({ _tag: "online", who: x.who, version: 2, ping: 10_000 });
+      expect(result).toMatchObject({ _tag: "online", identity: x.identity, version: 2, ping: 10_000 });
       assert(result._tag === "online");
       expect(result.hello).toMatchObject({ os: "ios", has: ["verify", "seal"] });
     }),

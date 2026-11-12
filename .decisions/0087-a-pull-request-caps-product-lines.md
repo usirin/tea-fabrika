@@ -46,7 +46,7 @@ One branch that grows until it lands becomes a stack of slices, each its own pul
 every step, landing bottom up with [0004](0004-squash-merges-and-native-stacks.md)'s `gh stack`.
 
 ```ts
-// A sketch, next/. `Setting.make` is from the settings note in open PR 852 (0086), not on main.
+// A sketch, next/. `Setting.make` is from the settings note, docs/direction/settings.md (PR 852, 0086).
 // The key name, its table and how lines are counted are for the build's plan.
 export const lines = Setting.make("review.lines", {
   schema: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),

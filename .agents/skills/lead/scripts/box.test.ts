@@ -43,6 +43,8 @@ import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
 import "./redact.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -81,6 +83,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { boxTree, oldBoxTree } from "./lane.ts";
 
 // Today's tooling. Real Git and the installed signer, local paths only. The only keys are
 // throwaway keys made here; scripts open them, this test never reads their files.
@@ -252,7 +255,7 @@ class Box {
   readonly home = join(this.dir, "home");
   readonly bin = join(this.dir, "bin");
   readonly plan = join(this.dir, "plan.md");
-  readonly work = join(this.boxes, "one");
+  readonly work = boxTree(this.boxes, "one");
   readonly data = join(this.boxes, "one-gitdata");
   readonly branch = "fabrikalfa/one";
   readonly env: NodeJS.ProcessEnv;
@@ -449,15 +452,15 @@ const fixture = (f: (b: Box) => void, files?: Array<[string, string]>) => {
   }
 };
 
-const refused = (r: { code: number | null; text: string }, why: RegExp) => {
+const refused = (r: { code: number | null; text: string }, pattern: RegExp) => {
   expect(r.code, r.text).not.toBe(0);
-  expect(r.text).toMatch(why);
+  expect(r.text).toMatch(pattern);
   expect(r.text).not.toMatch(/usage:|Traceback|command not found|cannot open/);
 };
 
 /** A start check's no: exit 3 and one `refused <check>: <why>` line, which drive reads (ticket 428). */
-const checkRefused = (r: { code: number | null; text: string }, check: string, why = /.*/) => {
-  refused(r, why);
+const checkRefused = (r: { code: number | null; text: string }, check: string, pattern = /.*/) => {
+  refused(r, pattern);
   expect(r.code, r.text).toBe(3);
   expect(r.text).toMatch(new RegExp(`^refused ${check}: .*$`, "m"));
   expect(r.text).not.toMatch(/^stuck /m);
@@ -673,7 +676,7 @@ describe("T321 K1 fetch, today's tooling", () => {
         const b = new Box();
 
         try {
-          const two = join(b.boxes, "two"),
+          const two = boxTree(b.boxes, "two"),
             data = join(b.boxes, "two-gitdata");
           b.git(b.dir, "clone", "-q", `--separate-git-dir=${data}`, b.main, two);
           b.git(two, "config", "user.name", "fixture");
@@ -958,7 +961,7 @@ describe("T321 K1 fetch, today's tooling", () => {
             [2, "", false],
             [2, '{"_tag":"done"}\n', false],
             [0, "not json\n", false],
-            [0, '{"_tag":"ask","who":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
+            [0, '{"_tag":"ask","to":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
           ] as const,
           ([status, output, pass]) =>
             fixture((b) => {
@@ -997,6 +1000,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "this",
       "open-pr",
       "running-box",
+      "running-old-box",
       "history",
       "merged",
       "gh-down",
@@ -1005,7 +1009,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "field-rows",
       "field-files",
     ] as const;
-    const blocks = new Set(["open-pr", "running-box", "gh-down"]);
+    const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
     fc.assert(
       fc.property(word, (text) => {
         each(places, (place) =>
@@ -1044,9 +1048,12 @@ describe("T321 K2 box start, today's tooling", () => {
               ...(place === "gh-down" ? { gh: "down" as const } : {}),
             });
 
-            if (place === "running-box") {
+            if (place === "running-box" || place === "running-old-box") {
               write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
-              mkdirSync(join(b.boxes, "two"));
+              // A tree in BOXES/box, or one made before that layout, in BOXES.
+              mkdirSync(place === "running-box" ? boxTree(b.boxes, "two") : oldBoxTree(b.boxes, "two"), {
+                recursive: true,
+              });
             }
 
             if (place === "history") {
@@ -1376,7 +1383,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     each(["lead", "tests"] as const, (step) =>
       fixture((b) => {
         const stale = JSON.stringify({ _tag: "stuck", reason: "stale_link", sha: "head", step });
-        const ask = JSON.stringify({ _tag: "ask", who: "owner", for: "exam_read", paths: [] });
+        const ask = JSON.stringify({ _tag: "ask", to: "owner", for: "exam_read", paths: [] });
         b.setup({
           operations: [{ path: "src/a.ts", text: "run\n" }],
           check: { status: 1, text: `${stale}\n${ask}\n` },
@@ -1559,6 +1566,31 @@ describe("T321 review round 1 fixes, today's tooling", () => {
       expect(started.code, started.text).toBe(0);
       const state = readFileSync(join(b.boxes, "state/two.box"), "utf8");
       expect(state).toContain(`base: ${head}`);
+      // The tree is in BOXES/box, beside no file the boxes keep (ticket 659).
+      expect(existsSync(join(boxTree(b.boxes, "two"), ".git"))).toBe(true);
+      expect(existsSync(oldBoxTree(b.boxes, "two"))).toBe(false);
+    });
+  });
+
+  // scenario: a box made before the BOXES/box layout still holds its name, so a new one by that name
+  // would make two trees for one set of facts. Plant: drop the check; look only in BOXES/box.
+  it("K2 scenario: a new box refuses a name an older box's tree in BOXES still holds", () => {
+    fixture((b) => {
+      mkdirSync(oldBoxTree(b.boxes, "two"));
+      const started = b.call("sh", [
+        program,
+        "new",
+        "two",
+        "origin/main",
+        "fabrikalfa/two",
+        "--ticket",
+        "321",
+        "--plan",
+        b.plan,
+      ]);
+      expect(started.code).toBe(1);
+      expect(started.text).toContain("stuck box name taken by an older box");
+      expect(existsSync(boxTree(b.boxes, "two"))).toBe(false);
     });
   });
 

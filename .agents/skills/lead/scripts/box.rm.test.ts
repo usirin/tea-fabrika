@@ -26,6 +26,8 @@ import "./box/Remove.ts?raw";
 import "./box/Runs.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./box/RunsProcess.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./catchup.sh?raw";

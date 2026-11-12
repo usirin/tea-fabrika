@@ -137,9 +137,9 @@ const letters = (actual: ReadonlyArray<string>) => {
 const visible = (
   a: { readonly saved: string; readonly shown: string; readonly by: string; readonly for: string },
   body: string,
-  who: { readonly key: string; readonly for: string },
+  agent: { readonly key: string; readonly for: string },
 ) => {
-  expect(a).toEqual({ saved: body, shown: body, by: who.key, for: who.for });
+  expect(a).toEqual({ saved: body, shown: body, by: agent.key, for: agent.for });
 };
 
 const waitingTools = ["ps", "notes_list", "notes_read", "notes_save"] as const;
@@ -179,7 +179,7 @@ type Bridge = {
   readonly save: (call: Call) => Effect.Effect<{
     readonly letters: ReadonlyArray<string>;
     readonly result: Parameters<typeof visible>[0];
-    readonly who: { readonly key: string; readonly for: string };
+    readonly agent: { readonly key: string; readonly for: string };
   }>;
   readonly malformed: (
     call: Call,
@@ -292,7 +292,7 @@ it.effect.prop(
         a = yield* b.save(c);
       expect(a.letters.length).toBeGreaterThan(0);
       letters(a.letters);
-      visible(a.result, c.body, a.who);
+      visible(a.result, c.body, a.agent);
     }).pipe(Effect.provide(platform)),
   options,
 );
@@ -342,14 +342,14 @@ it.prop(
     unknownTool({ words: "unknown tool notes_person_input", letters: [] }, "notes_person_input");
     const id = "letter_0000000000e008000000000001",
       parent = "input_0000000000e008000000000001";
-    const who = { key: `SHA256:agent-${c.name}`, for: "person_0000000000e008000000000001" };
+    const agent = { key: `SHA256:agent-${c.name}`, for: "person_0000000000e008000000000001" };
     letters([id, id]);
-    visible({ saved: c.body, shown: c.body, by: who.key, for: who.for }, c.body, who);
+    visible({ saved: c.body, shown: c.body, by: agent.key, for: agent.for }, c.body, agent);
     senderTest({
-      inputs: [{ parent, by: who }],
-      expected: [{ id, by: who }],
-      writes: [{ id, parent, by: who }],
-      owner: { key: "SHA256:owner", for: who.for },
+      inputs: [{ parent, by: agent }],
+      expected: [{ id, by: agent }],
+      writes: [{ id, parent, by: agent }],
+      owner: { key: "SHA256:owner", for: agent.for },
       seed: SEED,
     });
   },
@@ -367,15 +367,19 @@ it.prop(
     expect(() => tools(cleanTools().map((t) => ({ ...t, annotations: { readOnlyHint: false } })))).toThrow();
     expect(() => letters(["letter_0000000000e008000000000001", "letter_0000000000e008000000000002"])).toThrow();
     expect(() => letters(["p8-01"])).toThrow();
-    const who = { key: "SHA256:checked-agent", for: "person_0000000000e008000000000001" };
-    expect(() => visible({ saved: c.body, shown: `${c.body}!`, by: who.key, for: who.for }, c.body, who)).toThrow();
-    expect(() => visible({ saved: c.body, shown: c.body, by: "params.person", for: who.for }, c.body, who)).toThrow();
+    const agent = { key: "SHA256:checked-agent", for: "person_0000000000e008000000000001" };
+    expect(() =>
+      visible({ saved: c.body, shown: `${c.body}!`, by: agent.key, for: agent.for }, c.body, agent),
+    ).toThrow();
+    expect(() =>
+      visible({ saved: c.body, shown: c.body, by: "params.person", for: agent.for }, c.body, agent),
+    ).toThrow();
     expect(() =>
       senderTest({
-        inputs: [{ parent: "input", by: who }],
-        expected: [{ id: "letter", by: who }],
-        writes: [{ id: "letter", parent: "input", by: { key: "SHA256:owner", for: who.for } }],
-        owner: who,
+        inputs: [{ parent: "input", by: agent }],
+        expected: [{ id: "letter", by: agent }],
+        writes: [{ id: "letter", parent: "input", by: { key: "SHA256:owner", for: agent.for } }],
+        owner: agent,
         seed: SEED,
       }),
     ).toThrow();

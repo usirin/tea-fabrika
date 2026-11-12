@@ -2,6 +2,8 @@
 
 `next/`. Decided by the owner on 2026-11-02. From [experiment 174](../../experiments/174-effect-on-cloudflare.md).
 
+Its decided rules are in: [0254](../../.decisions/0254-tea-is-the-one-engine.md).
+
 ```ts
 // A sketch. An agent turn is a tea machine. It steps; Effect runs only inside its Cmds.
 import {Cmd} from "@demlik/tea/effect";

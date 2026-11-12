@@ -90,3 +90,8 @@ one (owner, 2026-11-10).**
   and people direct and check it. How human teams work is background only, used where one of those
   teams says it kept or dropped a practice. The draft's principles are not decided. The study is
   redone on these sources before any walk, and PR 797 stays a draft until then.
+- 2026-11-11 (ticket 616): steps 1 to 3 are answered. The study was redone on the teams where
+  agents do most of the work, the owner walked it on 2026-11-10, and on 2026-11-11 approved its
+  seven principles in [how we get work done](../docs/direction/how-we-get-work-done.md) as the
+  starting point, recorded as [0127](0127-how-we-get-work-done-seven-principles.md). Step 4, the
+  pipeline, may now build on them. No rule above changes.

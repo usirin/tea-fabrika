@@ -2,6 +2,9 @@
 
 Decided 2026-10-26 by the owner.
 
+Its decided rules are in: [0399](../../.decisions/0399-agents-read-rule-files-themselves.md),
+[0400](../../.decisions/0400-a-repos-agent-settings-stay-out.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): `at` became `ref`.
 
 ```ts

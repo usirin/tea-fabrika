@@ -3,6 +3,8 @@
 **Decided 2026-10-25 by the owner.** Tracker ticket 12. Sections 1, 2 and 3
 are built.
 
+Its decided rules are in: [0281](../../.decisions/0281-a-saved-job-is-decoded-not-trusted.md), [0282](../../.decisions/0282-an-old-host-is-named-then-restarted.md).
+
 ```ts
 // A sketch. What the app does when it finds a host already running on its home.
 //

@@ -6,11 +6,13 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
+import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -167,7 +169,12 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
-const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
+const until = async <A>(
+  message: string,
+  look: () => Promise<A>,
+  done: (value: A) => boolean,
+  ms = WAIT,
+): Promise<A> => {
   const end = Date.now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
@@ -186,7 +193,7 @@ const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) =
     await pause();
   }
 
-  throw new Error(`${what}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
+  throw new Error(`${message}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
 };
 
 /** A real WebSocket client at the door, initialized with a signed hello. */
@@ -231,23 +238,30 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
     return next((frame) => frame.id === id);
   };
-  const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
-  expect(
-    (
-      await call("initialize", {
-        versions: [1],
-        has: ["seal"],
-        ping: "30s",
-        key: key.raw,
-        tab,
-        nonce,
-        platform: "headless",
-        os: "linux",
-        sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
-      })
-    ).error,
-  ).toBeUndefined();
+  const hello = async () => {
+    const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
+    expect(
+      (
+        await call("initialize", {
+          versions: [1],
+          has: ["seal"],
+          ping: "30s",
+          key: key.raw,
+          tab,
+          nonce,
+          platform: "headless",
+          os: "linux",
+          sentAt: SENT,
+          signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        })
+      ).error,
+    ).toBeUndefined();
+  };
+  // A socket whose hello fails is closed here: no caller holds it to close.
+  await hello().catch((error: unknown) => {
+    socket.close();
+    throw error;
+  });
   return { call, close: () => socket.close() };
 };
 
@@ -270,6 +284,135 @@ const send = (pid: string, letter: string, type: "throw" | "inc") => ({
   sentAt: SENT,
   seen: 0,
 });
+
+const range = (n: number) => Array.from({ length: n }, (_, at) => at);
+
+/** The same instance `world` builds, with every resource acquired in the test's scope: a home,
+ *  FABRIKA_HOME, a held port, the platform layers and the local instance. They are given back in the
+ *  opposite order, so the instance closes before its port and its durable files go. */
+const worldScoped = Effect.gen(function* () {
+  const home = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p34w-"))),
+    (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
+  );
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const previous = process.env.FABRIKA_HOME;
+      process.env.FABRIKA_HOME = home;
+      process.env.DO_NOT_TRACK = "1";
+      return previous;
+    }),
+    (previous) =>
+      Effect.sync(() => {
+        if (previous === undefined) {
+          delete process.env.FABRIKA_HOME;
+        } else {
+          process.env.FABRIKA_HOME = previous;
+        }
+      }),
+  );
+  const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
+  const { build } = yield* Effect.promise(() => import("./build.ts"));
+  const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
+  const key = identity();
+  // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
+  const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+  symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+  const poison = join(home, "poison.ts");
+  writeFileSync(poison, poisonSource);
+  const built = yield* build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(
+    Effect.provide(NodeServices.layer),
+  );
+  const code = built.programs[PROGRAM];
+  expect(code, "the fixture program must be built").toBeDefined();
+  const context = yield* Layer.build(
+    localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+  );
+  const instance: Instance = yield* localInstance(built, {
+    home,
+    name: PROJECT,
+    person: PERSON,
+    founder: key.line,
+    window: key.raw,
+    port: at.port,
+  }).pipe(Effect.provideContext(context));
+  const from: From = {
+    by: key.fingerprint,
+    for: PERSON,
+    sentAt: SENT,
+    seen: 0,
+    parent: null,
+    traceId: TRACE,
+    build: built.build,
+  };
+  const fixture: Fixture = {
+    from,
+    hash: code!.hash,
+    start: async (name) => {
+      const started = await Reflect.get(instance.project(PROJECT), "start")(
+        { _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } },
+        from,
+      );
+      return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+    },
+  };
+  return { instance, key, fixture, home };
+});
+
+/** A real WebSocket client at the door, closed when the test's scope closes. */
+const wired = (instance: Instance, key: Key, tab: string) =>
+  Effect.acquireRelease(
+    Effect.promise(() => wire(instance, key, tab)),
+    (c) => Effect.sync(() => c.close()),
+  );
+
+/** The same, once workerd is back: a new socket until the hello is answered (the proxy refuses while it
+ *  restarts). A socket whose hello fails is closed by `wire`; no answer in WAIT fails the test. */
+const reconnected = (instance: Instance, key: Key, tab: string) =>
+  Effect.acquireRelease(
+    Effect.promise(() =>
+      until(
+        "a hello answered after the kill",
+        () => wire(instance, key, tab),
+        () => true,
+      ),
+    ),
+    (c) => Effect.sync(() => c.close()),
+  );
+
+/** The raw rows of a stream, as the audit reader gives them: id, tag and body. */
+const rows = async (instance: Instance, stream: string) =>
+  (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<{ id: string; _tag: string; body: any }>;
+
+/** Waits with `ledger.wait` after the last rev seen for `restarted {after}` on a process name. No such
+ *  fact in WAIT fails the test with the rows it saw, so a missing restart is a failure, never a hang. */
+const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after: string) =>
+  Effect.promise(async () => {
+    const end = Date.now() + WAIT,
+      seenRows: Array<unknown> = [];
+    let seen = 0;
+
+    while (Date.now() < end) {
+      const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
+      expect(read.error, `reading processes/${name}`).toBeUndefined();
+      const found = (read.result.entries as Array<any>).find(
+        (entry) => entry._tag === "restarted" && entry.body.after === after,
+      );
+
+      if (found !== undefined) {
+        return found as { _tag: string; rev: number; body: { process: string; after: string; name: string } };
+      }
+
+      if (read.result.entries.length > 0) {
+        seenRows.push(...read.result.entries.map((entry: any) => entry._tag));
+        seen = read.result.entries.at(-1).rev;
+      } else {
+        expect((await c.call("ledger.wait", { stream: `processes/${name}`, after: seen })).error).toBeUndefined();
+      }
+    }
+
+    throw new Error(`no restarted after ${after} on ${name} in ${WAIT} ms; saw ${JSON.stringify(seenRows)}`);
+  });
 
 /** Live means it also accepts a healthy input: an info row alone is not enough. */
 const healthy = async (
@@ -492,4 +635,78 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
       }
     });
   }, 180_000);
+
+  // scenario: workerd killed inside a step (ticket 646). The marker a mid-step kill leaves is written through
+  // Process.activity, as test 402's abort case does, and read back before a real SIGKILL, so the moment is
+  // certain every run. It refuses the one letter that first wakes the name, restarts once, and accepts its resend.
+  // It runs on the real clock (it.live): the runtime waits a moment before it starts the new workerd, and
+  // it.effect's test clock never moves, so under it the restart never comes.
+  it.live(
+    "scenario: ticket 646 plant (ignore the marker, refuse a live name, count one attempt twice): workerd killed inside a step refuses one letter, restarts once and accepts its one resend",
+    () =>
+      Effect.gen(function* () {
+        const { instance, key, fixture, home } = yield* worldScoped;
+        const name = "kill:1";
+        const first = yield* Effect.promise(() => fixture.start(name));
+        const before = yield* wired(instance, key, "before");
+        const letter = (n: number) => send(first, `k-${n}`, "inc");
+        const placed = new Map<number, { rev: number; pos: number }>();
+
+        for (const n of range(10)) {
+          const sent = yield* Effect.promise(() => before.call("process.send", letter(n)));
+          expect(sent, `k-${n} before the kill`).toMatchObject({ result: { _tag: "accepted" } });
+          placed.set(n, { rev: sent.result.rev, pos: sent.result.pos });
+        }
+
+        yield* Effect.promise(() =>
+          instance.process(first).activity({ _tag: "stepping", process: first, letter: "k-10", build: fixture.hash }),
+        );
+        // recover reads storage and wakes nothing, so the marker is on disk before the kill.
+        expect(yield* Effect.promise(() => instance.process(first).recover())).toMatchObject({
+          _tag: "interrupted",
+          letter: "k-10",
+        });
+        yield* killWorkerd(process.pid);
+        const after = yield* reconnected(instance, key, "after");
+        // Before the first send, the rows the wake reads say the kill cut k-10, the marker recover() read.
+        expect(yield* killedMoment(home, name, first)).toEqual({ _tag: "inside", letter: "k-10" });
+
+        // Settled letters are answered from the door's saved bindings and never wake the Process object.
+        for (const n of range(10)) {
+          expect(yield* Effect.promise(() => after.call("process.send", letter(n)))).toMatchObject({
+            result: { _tag: "accepted", ...placed.get(n) },
+          });
+        }
+
+        // k-10 is the first call into the object: it sees the marker and is the one refusal.
+        expect(yield* Effect.promise(() => after.call("process.send", letter(10)))).toMatchObject({
+          error: { data: { reason: "unreachable" } },
+        });
+        const restarted = yield* restartedAfter(after, name, first);
+        const second = restarted.body.process;
+        expect(restarted).toMatchObject({ _tag: "restarted", body: { after: first, name } });
+        expect(second).not.toBe(first);
+
+        for (const n of range(10).map((at) => at + 10)) {
+          expect(
+            yield* Effect.promise(() => after.call("process.send", letter(n))),
+            `k-${n} after the restart`,
+          ).toMatchObject({
+            result: { _tag: "accepted" },
+          });
+        }
+
+        const inbox = yield* Effect.promise(() => rows(instance, `${name}/inbox`));
+        expect(inbox).toHaveLength(20);
+        expect(new Set(inbox.map((row) => row.id)).size).toBe(20);
+        expect(yield* Effect.promise(() => restarts(instance, name))).toHaveLength(1);
+        expect(yield* Effect.promise(() => livePid(instance, name))).toBe(second);
+        expect(yield* Effect.promise(() => after.call("view.open", { pid: second }))).toMatchObject({
+          result: { view: { count: 20 } },
+        });
+        expect(yield* Effect.promise(() => facts(instance, `${first}/dead`))).toEqual([]);
+        expect(yield* Effect.promise(() => facts(instance, `${second}/dead`))).toEqual([]);
+      }),
+    180_000,
+  );
 });

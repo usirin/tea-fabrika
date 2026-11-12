@@ -3,6 +3,8 @@
 **Decided 2026-11-07.** `next/`. Every thing has one id. A thing people count also gets a number,
 and only the program that owns the thing prints that number.
 
+Its decided rules are in: [0211](../../.decisions/0211-one-typeid-per-thing.md).
+
 ```ts
 // A sketch, next/. Id.make gives a branded Schema for one type of thing.
 const TicketId = Id.make("ticket"); // decodes "ticket_01h455vb4pex5vsknk084sn02q", refuses the rest

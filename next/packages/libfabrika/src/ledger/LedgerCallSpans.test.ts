@@ -87,14 +87,14 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               sending("append", stream);
               return append;
             },
-            async read(stream, after, who) {
+            async read(stream, after, readerId) {
               sending("read", stream);
-              expect(who).toBe(reader);
+              expect(readerId).toBe(reader);
               return rows.filter((r) => r.rev > after).slice(0, PAGE);
             },
-            async wait(stream, _after, who) {
+            async wait(stream, _after, readerId) {
               sending("wait", stream);
-              expect(who).toBe(reader);
+              expect(readerId).toBe(reader);
               return wait;
             },
           };
