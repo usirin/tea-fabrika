@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-experiments-index-rows-251-258-six-cells",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "experiments/README.md",
+    "line": 296
+  },
+  "says": "Rows 251 and 258 of the experiments index have six cells, a trailing '$0', against the table's five-column header.",
+  "proof": "git show origin/main:experiments/README.md | awk -F'|' '/^\\| 2[0-9][0-9] /{print $2, NF-2}' prints 6 for 251 and 258 (lines 296 and 303) and 5 for every other row from 238 to 261; the header at line 52 has 5.",
+  "cost": "GitHub renders an extra cell past the Result column on those two rows, and a writer copying a neighbor copies the wrong shape (PR 797's row 250 had the same sixth cell).",
+  "head": "c031aba718157d5f82a698089c80ad8519363890",
+  "ticket": "usirin/tea-fabrika#616",
+  "pr": "usirin/tea-fabrika#797"
+}

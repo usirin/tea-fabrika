@@ -116,7 +116,7 @@ stage" there as the local instance. None of them ruled the word, so none is supe
 
 - One sweep is owed, mostly in tests. Until it lands, two words are alive at once: the code and the
   plan say stage, and this record and the glossary say instance.
-- The settings note, proposed in an open pull request, changes its examples from `[stage]` to
+- The [settings note](../docs/direction/settings.md), proposed in an open pull request when this was written, changes its examples from `[stage]` to
   `[instance]` before it is decided.
 - Instance is a common word, so it is harder to search for than stage was. Search with "fabrika
   instance", "local instance" or a path.

@@ -2,6 +2,8 @@
 
 Decided 2026-10-30, by the owner, from experiment 163 parts 4 and 5.
 
+Its decided rules are in: [0377](../../.decisions/0377-triage-asks-when-worth-is-unclear.md).
+
 ```ts
 // Triage in two (experiment 163 part 4): close on a fact, ask on worth.
 // The pick: when worth is unclear, triage asks. It does not keep and build.

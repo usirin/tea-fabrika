@@ -2,6 +2,10 @@
 
 Decided 2026-10-17. The MCP part was added 2026-10-18.
 
+Its decided rules are in: [0430](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md),
+[0431](../../.decisions/0431-agents-get-programs-as-mcp-tools.md),
+[0432](../../.decisions/0432-next-has-fabsh-rethought-from-tsh.md).
+
 *Changed 2026-11-01: `tsh` stays in today's version. The new version's shell is `fabsh`,
 in `next/`, in Tier 2 ([the tiers](../plan/tiers.md)). It is rethought, not copied.*
 
@@ -28,7 +32,7 @@ jobs                                  # a built-in, like ps
   - A value bound to one lane is fabrika's job: narrow the flag or input schema
     to that lane's value.
 - **MCP is the tools protocol** (2026-10-18). tsh will serve each listed
-  program to an agent as an MCP tool (experiment 78, not built yet).
+  program to an agent as an MCP tool (planned as experiment 78, which never ran; not built yet).
 
 ## Why
 
@@ -39,7 +43,7 @@ jobs                                  # a built-in, like ps
 ## Still open
 
 - Whether programs that write must ask a person first, and reading ones are
-  free. Planned with experiment 78, not decided.
+  free. Planned for experiment 78, which never ran; not decided.
 
 ## What would change it
 

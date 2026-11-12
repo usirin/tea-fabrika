@@ -102,6 +102,10 @@
 
     // Code never reaches a primitive (design language, call 3): it reads a token. Only the token
     // build imports Radix, so it is turned off for that folder alone below.
+    // A test window is launched only through apps/fabrika/test-window.ts, which keeps it out of a
+    // person's way (AGENTS.md, "Go easy on the machine"). On main before ticket 733, 3 of 3
+    // `_electron` imports were real bypasses. An override replaces a rule's options, so every
+    // override of this rule repeats the two `_electron` entries.
     "eslint/no-restricted-imports": [
       "error",
       {
@@ -109,6 +113,16 @@
           {
             "name": "@radix-ui/colors",
             "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+          },
+          {
+            "name": "playwright",
+            "importNames": ["_electron"],
+            "message": "Launch a test window through apps/fabrika/test-window.ts."
+          },
+          {
+            "name": "@playwright/test",
+            "importNames": ["_electron"],
+            "message": "Launch a test window through apps/fabrika/test-window.ts."
           }
         ],
         "patterns": [
@@ -433,6 +447,16 @@
               {
                 "name": "fs/promises",
                 "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ]
           }
@@ -445,6 +469,18 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
             "patterns": [
               {
                 "group": [
@@ -490,8 +526,27 @@
     },
     {
       // The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
+      // It keeps the top level's `_electron` ban (ticket 733): an override replaces a rule's options.
       "files": ["packages/fabrika-design/src/build/**"],
-      "rules": { "eslint/no-restricted-imports": "off" }
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       // `ownRules` is the one place that says where a Claude run's settings come from.
@@ -594,6 +649,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -652,6 +717,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -805,6 +880,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -880,6 +965,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -930,6 +1025,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -967,6 +1072,16 @@
               {
                 "name": "@radix-ui/colors",
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -1101,6 +1216,75 @@
                 "group": ["**", "!alchemy", "!alchemy/**", "!@alchemy.run", "!@alchemy.run/**"],
                 "allowTypeImports": true,
                 "message": "Object contracts import only Alchemy values and erased types."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // Ticket 733: an e2e script launches and sizes its window only through test-window.ts. The
+      // top-level paths, plus the Electron binary and a window moved by hand. On main before it,
+      // 3 of 3 `createRequire` calls in these scripts found that binary, and 2 of 2 `setBounds`
+      // moved a test window: 0 false alarms in 8.
+      "files": ["apps/fabrika/e2e.ts", "apps/fabrika/*-e2e.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "node:module",
+                "importNames": ["createRequire"],
+                "message": "The Electron binary comes from test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "error",
+          { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
+          { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
+        ]
+      }
+    },
+    {
+      // Ticket 733: the one file that launches a test window. The top-level paths without `_electron`.
+      "files": ["apps/fabrika/test-window.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
               }
             ]
           }

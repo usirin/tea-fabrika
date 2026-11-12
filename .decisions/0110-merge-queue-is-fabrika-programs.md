@@ -45,10 +45,10 @@ its stages come in.
 
 ## Context
 
-0107 (in [pull request 952](https://github.com/usirin/tea-fabrika/pull/952)) makes the merge queue a
+[0107](0107-fabrika-provides-the-merge-queue.md) makes the merge queue a
 fabrika primitive and leaves open where its worker runs and whether it
 lands changes one at a time or in batches. The owner settled both on 2026-11-11, after a walk of
-research on what a merge queue must do.
+[research on what a merge queue must do](../experiments/266-what-a-merge-queue-must-do.md).
 
 Cloudflare Workflows was the other candidate
 ([Workflows](https://developers.cloudflare.com/workflows/)). What the walk found:

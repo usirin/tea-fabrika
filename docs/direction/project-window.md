@@ -6,7 +6,7 @@ bar is C's button with a chevron, which opens C's box; and Cmd-O opens that box 
 with Open Folder… as its last row. File > Open Folder stays the system's folder sheet. Not taken:
 B (a projects tile) and D (a rail).
 
-Built from [experiment 237](../experiments/237-project-window-look.md), which read how Zed, VS Code
+Built from [experiment 237](../../experiments/237-project-window-look.md), which read how Zed, VS Code
 and Linear do it and shot four designs in today's app. Neither is a measurement. It shapes the look
 of [a window is one project](./brain-hands-window-agent.md) and changes one line there (below).
 

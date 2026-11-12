@@ -2,6 +2,9 @@
 
 Decided 2026-10-11.
 
+Its decided rules are in: [0223](../../.decisions/0223-built-for-projects.md),
+[0231](../../.decisions/0231-ledger-and-codehost-are-separate.md).
+
 ## What was decided
 
 fabrika was never only about building code. It is good at that, but it is

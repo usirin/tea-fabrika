@@ -1,5 +1,7 @@
 # Layers: what sits on top, who owns it, and who takes the keys
 
+Its decided rules are in: [0264](../../.decisions/0264-the-frame-owns-named-layers.md), [0265](../../.decisions/0265-one-modal-esc-peels-the-top.md), [0266](../../.decisions/0266-a-look-unfolds-in-place.md).
+
 **Decided 2026-11-03.** The owner approved the six principles, L1 to L6, and the smaller calls 1 to 4
 below, after a walk of each part. The leans' confidence numbers stay as written. In the walk the
 owner took these:

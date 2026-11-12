@@ -3,6 +3,14 @@
 **Decided 2026-11-07 (owner): the principle, five calls from P37's questions and after, and the
 four leans below, after a walk of each part. The leans' confidence numbers stay as written.** `next/`.
 
+Its decided rules are in: [0200](../../.decisions/0200-no-object-grows-forever.md),
+[0201](../../.decisions/0201-full-disk-fails-the-step.md),
+[0202](../../.decisions/0202-spans-and-measurements-kept-forever.md),
+[0203](../../.decisions/0203-archives-go-to-r2.md),
+[0204](../../.decisions/0204-process-record-rolls-in-parts.md),
+[0205](../../.decisions/0205-big-bodies-go-to-blobs.md),
+[0206](../../.decisions/0206-sealed-ledger-stretches-keep-one-order.md).
+
 ```ts
 // A sketch of the whole idea. Every object that grows names its cap and what it does there.
 // Names are the plans' to settle.

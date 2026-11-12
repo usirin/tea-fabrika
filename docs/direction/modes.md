@@ -9,6 +9,8 @@ refuses a mode with no way out (WCAG 2.1.2); and a command's field is called `mo
 as the program's `mode`. The shape, which the owner shaped and now approved: a program gets one
 new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
+Its decided rules are in: [0267](../../.decisions/0267-commands-and-one-mode-field.md), [0268](../../.decisions/0268-a-mode-is-the-last-tool.md), [0269](../../.decisions/0269-a-mode-is-shown-in-words.md), [0270](../../.decisions/0270-escape-always-leaves-a-mode.md), [0271](../../.decisions/0271-one-mode-per-program.md), [0272](../../.decisions/0272-a-press-finds-its-command.md), [0273](../../.decisions/0273-mode-keys-live-in-their-section.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): the info Msg's `on` became `active`, the
 word Zed's key binding docs use for a context that holds.
 
