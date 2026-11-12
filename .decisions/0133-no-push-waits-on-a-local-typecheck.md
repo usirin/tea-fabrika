@@ -44,5 +44,10 @@ request merges only when that job is green.**
 - The one-at-a-time wait on `tsgo` leaves the lead's landing path.
 - The cost: a type error is found a few minutes later, in CI, and costs one more push.
 - AGENTS.md's Checks section says so in the same pull request.
-- Not decided here: whether a lane's own typecheck phase, which sends a type error back to the build
-  before a review starts, also moves to reading CI's result.
+
+## Amendments
+
+- 2026-11-11, the same day: the lane's own typecheck goes too. The lane script ran one on the laptop
+  after the review and before it opened the pull request. Now the lane opens the pull request and
+  reads CI's `check` job: red sends the work back to tests or to the build with the error lines, as
+  the laptop run did. No step between build and review ran a typecheck before, and none does now.
