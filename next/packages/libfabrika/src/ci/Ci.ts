@@ -76,14 +76,33 @@ export const Checks = Schema.Array(CheckRun).check(
 );
 
 /**
+ * The CI host could not be reached.
+ *
+ * @stability experimental
+ * @category errors
+ */
+export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
+ * The CI host's request limit was reached.
+ *
+ * @stability experimental
+ * @category errors
+ */
+export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
  * Error for a CI fault that permits another attempt.
  *
  * @stability experimental
  * @category errors
  */
 export class CiError extends Schema.TaggedError<CiError>()("CiError", {
-  reason: Schema.Literals(["unavailable", "rate_limited"]),
-  cause: Schema.optionalKey(Schema.Defect()),
+  reason: Schema.Union([Unavailable, RateLimited]),
 }) {}
 
 /**

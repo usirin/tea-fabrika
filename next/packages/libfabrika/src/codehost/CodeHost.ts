@@ -92,14 +92,43 @@ export const Merged = Schema.TaggedUnion({
 });
 
 /**
+ * The code host could not be reached.
+ *
+ * @stability experimental
+ * @category errors
+ */
+export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
+ * The code host's request limit was reached.
+ *
+ * @stability experimental
+ * @category errors
+ */
+export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
+ * The code host refused the request.
+ *
+ * @stability experimental
+ * @category errors
+ */
+export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  cause: Schema.Defect(),
+}) {}
+
+/**
  * Error for a host fault outside the change that permits another attempt.
  *
  * @stability experimental
  * @category errors
  */
 export class CodeHostError extends Schema.TaggedError<CodeHostError>()("CodeHostError", {
-  reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
-  cause: Schema.optionalKey(Schema.Defect()),
+  reason: Schema.Union([Unavailable, RateLimited, Refused]),
 }) {}
 
 /**

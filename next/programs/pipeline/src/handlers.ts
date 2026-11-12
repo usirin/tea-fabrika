@@ -1,7 +1,7 @@
 import { Outcome } from "@demlik/tea";
 import type { Handler } from "@kampus/libfabrika";
-import { Ci, CiError } from "@kampus/libfabrika/ci/Ci";
-import { CodeHost, CodeHostError } from "@kampus/libfabrika/codehost/CodeHost";
+import { Ci, type CiError } from "@kampus/libfabrika/ci/Ci";
+import { CodeHost, type CodeHostError } from "@kampus/libfabrika/codehost/CodeHost";
 import { Cause, Effect, Schema } from "effect";
 import { Inputs } from "./Merger.ts";
 
@@ -11,27 +11,26 @@ export class HandlerDefect extends Schema.TaggedError<HandlerDefect>()("HandlerD
 
 const Fault = Schema.TaggedUnion({ unavailable: {}, rate_limited: {}, refused: {} });
 
+const faults = {
+  Unavailable: Fault.cases.unavailable,
+  RateLimited: Fault.cases.rate_limited,
+  Refused: Fault.cases.refused,
+};
+
 type Command = keyof typeof Inputs;
 
 // This boundary must not retain a service's failure text in runner letters or spans.
 const outcome =
   (cmd: Command) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  <A, R>(effect: Effect.Effect<A, CodeHostError | CiError | Schema.SchemaError, R>) =>
     effect.pipe(
       Effect.map(Outcome.ok),
+      Effect.catchTag(["CodeHostError", "CiError"], (error) =>
+        Effect.succeed(Outcome.err(faults[error.reason._tag].make({}))),
+      ),
       Effect.catchCause((cause) => {
         if (Cause.hasInterrupts(cause)) {
           return Effect.interrupt;
-        }
-
-        const reason = cause.reasons[0];
-
-        if (
-          cause.reasons.length === 1 &&
-          reason?._tag === "Fail" &&
-          (reason.error instanceof CodeHostError || reason.error instanceof CiError)
-        ) {
-          return Effect.succeed(Outcome.err(Fault.cases[reason.error.reason].make({})));
         }
 
         return Effect.fail(new HandlerDefect({ cmd }));
