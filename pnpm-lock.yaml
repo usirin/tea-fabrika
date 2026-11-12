@@ -649,6 +649,9 @@ importers:
       '@kampus/counter':
         specifier: workspace:*
         version: link:../../programs/counter
+      '@kampus/inbox':
+        specifier: workspace:*
+        version: link:../../programs/inbox
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
