@@ -799,6 +799,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     const values = new Map<string, unknown>();
     let armed: number | undefined;
     let fail = true;
+    // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
     const ctx = {
       exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       storage: {
@@ -815,7 +816,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           armed = at;
         },
       },
-    } as Parameters<typeof configureProcess>[0];
+    } as unknown as Parameters<typeof configureProcess>[0];
     const descriptor: Descriptor = {
       id: "process_0000000000e008000000000001",
       name: "child:alarm",
