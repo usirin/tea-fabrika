@@ -602,7 +602,7 @@ const wire = Effect.fnUntraced(function* (
     closes,
     send,
     read: () => attached,
-    recover: service.notify(client, { method: "test.recover" }).pipe(Effect.provideContext(context)),
+    recover: Effect.suspend(() => send("process.send", request("recovery-probe"))),
   };
 });
 
@@ -886,7 +886,6 @@ describe("T843 sender budget, next/", () => {
               yield* c.send("process.send", request("accepted"));
               yield* c.send("process.send", request("warm-count"));
               yield* projectSink.flush;
-              yield* c.recover;
               const rows = () =>
                 Object.fromEntries(
                   [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
@@ -952,7 +951,7 @@ describe("T843 sender budget, next/", () => {
               }
 
               broken = false;
-              // Recovery must send no hidden failed-attempt spans to either record chain.
+              // A refused recovery probe must land held counts without saving failed-attempt spans.
               yield* projectSink.check.pipe(Effect.ignore);
               expect(yield* projectSink.flush).toEqual({ sent: 0 });
               yield* c.recover.pipe(Effect.ignore);
@@ -961,7 +960,7 @@ describe("T843 sender budget, next/", () => {
               expect(c.saved).toHaveLength(recorded);
               yield* TestClock.setTime(REFUSED_HOUR + HOUR);
               expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-                { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
+                { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 },
               ]);
             }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
           }),
