@@ -38,7 +38,10 @@ const heldRuntime = (ctx: Parameters<typeof projectLayer>[0], env: Parameters<ty
             config,
             ...(config.mail === undefined ? {} : { mail: config.mail }),
             programs,
-            bootstrap: [{ name: "counter:1", id: "counter:1", program: "fabrika/counter" }],
+            bootstrap: [
+              { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
+              { name: "checklist:1", id: "checklist:1", program: "fabrika/checklist" },
+            ],
             door: (options) =>
               Gateway.pipe(
                 Effect.provide(

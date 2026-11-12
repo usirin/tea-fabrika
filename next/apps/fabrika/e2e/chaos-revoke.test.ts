@@ -558,9 +558,12 @@ it.live(
         // The checklist runner stamps its own timer letters with the program owner's key.
         for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
-            Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }) }),
+            Schema.Struct({
+              m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
+            }),
           )(row.body);
-          expect(row.id).toBe(`${pid}/due/${m.at}`);
+          // The timer follows the inbox position whose model asked for this wake.
+          expect(row.id).toBe(`${pid}/due/${m.at}/${row.pos - 1}`);
           expect(row).toMatchObject({ by: root.fingerprint, for: RevokeTest.PERSON, parent: null });
           expect(row.body).toEqual({ m });
         }

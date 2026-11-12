@@ -43,8 +43,13 @@ type Dating = {
   readonly viewRev: number;
 };
 
-type Ready = Omit<Dating, "_tag"> & {
+type Ready = {
   readonly _tag: "ready";
+  readonly n: number;
+  readonly pid: string;
+  readonly m: Schema.Json;
+  readonly seen: number;
+  readonly viewRev: number;
   readonly letter: string;
   readonly sentAt: string;
   readonly traceId?: string;
