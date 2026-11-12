@@ -211,6 +211,19 @@ describe("catchup, today's tooling", () => {
     expect(got.text).toContain("missing: check");
     expect(merges(got.calls)).toHaveLength(0);
   });
+  it("scenario: a docs-only change's skipped check job, reported by its raw name, counts as check only beside ci-required", () => {
+    // scenario: GitHub leaves a skipped job's name expression unevaluated, which parked two docs pull requests.
+    const raw = "github.event.pull_request.draft && 'lint' || 'check'";
+    const skipped = (name: string): Check => ({ name, status: "completed", conclusion: "skipped" });
+    const docs: Check[] = [success("commits"), skipped(raw), skipped("e2e"), skipped("next")];
+    const ready = run({ ...green, checks: [...docs, success("ci-required")], clock: [0, 1, 3601] });
+    expect(ready.code, ready.text).toBe(0);
+    expect(merges(ready.calls)).toHaveLength(1);
+    const draft = run({ ...green, checks: [...docs, success("ci-required (draft)")], clock: [0, 1, 3601] });
+    expect(draft.code, draft.text).toBe(1);
+    expect(draft.text).toContain("missing: check");
+    expect(merges(draft.calls)).toHaveLength(0);
+  });
   it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
     fc.assert(
       fc.property(

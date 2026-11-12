@@ -111,14 +111,14 @@ side by side need.
   40 for a title, 26 for a lead line, 20 for body, 16 for a label. Inside an app window, every text
   takes one of the six text styles and no size is set by hand.
 - [ ] One idea per slide. A longer why goes in a sticky beside the slide, not on it, and its full
-  text lives in the note.
+  text lives in the experiment.
 - [ ] Tables are real `<table>` elements, at most one per slide. Code sits only where a principle
   needs it, highlighted as below.
 
 The slides, in order:
 
-- [ ] **The question.** The title, "Proposed, not built" (or "Decided DATE, not built"), the scope
-  line from step 1, and the names of the note, the experiment and the pull request. No hero
+- [ ] **The question.** The title, "Proposed, not built" (or "Approved DATE, not built"), the scope
+  line from step 1, and the names of the page, the experiment and the pull request. No hero
   heading and no lede.
 - [ ] **What is settled.** Each decided point with its source, marked "Decided".
 - [ ] **How the makers do it.** The plain way they agree on, one line per tool, and the two or three
@@ -245,7 +245,7 @@ tables, without rendering. The owner presses each row in Play during the look.
 
 - [ ] State colors always come with a word or shape: "done ✓", "running ●", "stuck ✕",
   "your turn". A lean is "Lean · NN%" in a dashed outline. Decided is "Decided" in a solid outline. Once decided,
-  a lean's mark reads "Decided · NN%", with the number kept, as the note keeps its numbers. A
+  a lean's mark reads "Decided · NN%", with the number kept, as the experiment keeps its numbers. A
   breaks or follows verdict carries its word and a glyph. The word always carries the meaning.
 - [ ] Color is never the only cue (WCAG 1.4.1). Focus shows a ring. Colors come from the system's
   tokens, never a palette typed by hand.
