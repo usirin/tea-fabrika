@@ -26,6 +26,9 @@ const Ask = Schema.Struct({
   program: Schema.Json,
   name: Schema.Json,
   input: Schema.optionalKey(Schema.Json),
+  /** A first letter of this many bytes, built here in `update`: one too big for the ledger cannot
+   *  ride in the letter that asks for it, since the ledger would refuse that letter first. */
+  inputBytes: Schema.optionalKey(Schema.Int),
   /** Fields beside the operands, or operands left out: what the host must refuse as `bad_cmd`. */
   extra: Extra,
   drop: Schema.optionalKey(Schema.Array(Schema.String)),
@@ -60,6 +63,7 @@ const asked = (ask: typeof Ask.Type) => {
     program: ask.program,
     name: ask.name,
     ...(ask.input === undefined ? {} : { input: ask.input }),
+    ...(ask.inputBytes === undefined ? {} : { input: "x".repeat(ask.inputBytes) }),
     ...ask.extra,
   };
 

@@ -431,7 +431,8 @@ const walk = (
       );
     const exitedRows = (pid: string) =>
       Effect.map(all(), (rows) => rows.filter((e) => e._tag === "exited" && body(e)["process"] === pid));
-    const head = Effect.map(all(), (rows) => Math.max(0, ...rows.map((e) => e.rev)));
+    // Built on each read: `all()` lists the streams of the names known at the time it is called.
+    const head = Effect.suspend(() => Effect.map(all(), (rows) => Math.max(0, ...rows.map((e) => e.rev))));
     const fresh = (prefix = "merger") => `${prefix}:${1000 + ++world.n}`;
     const runnable = () =>
       [...world.names].filter(([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain").map(([n]) => n);
@@ -591,7 +592,7 @@ const walk = (
                               tag: "bad_name",
                             }
                           : {
-                              ask: { program: "merger", name: target, input: "x".repeat(ROW_LIMIT + 1) },
+                              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
                               reason: "bad_input",
                               tag: "bad_input",
                             };
