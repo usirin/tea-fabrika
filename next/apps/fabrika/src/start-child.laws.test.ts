@@ -800,6 +800,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     let armed: number | undefined;
     let fail = true;
     const ctx = {
+      exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       storage: {
         get: async (key: string) => values.get(key),
         put: async (key: string, value: unknown) => {

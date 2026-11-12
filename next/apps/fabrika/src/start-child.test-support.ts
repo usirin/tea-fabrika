@@ -273,7 +273,12 @@ export const childProject = Effect.fnUntraced(function* () {
     },
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
-  const ctx = { id: { name: PROJECT }, storage } as unknown as DurableObjectState;
+  const ctx = {
+    id: { name: PROJECT },
+    storage,
+    // oxlint-disable-next-line fabrika/no-promises -- edge: the ctx.exports fetch binding returns a Promise
+    exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
+  } as unknown as DurableObjectState;
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
     INSTANCE: JSON.stringify({
