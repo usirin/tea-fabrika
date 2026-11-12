@@ -35,6 +35,8 @@ import { Mailbox, type From } from "../processes/Mailbox.ts";
 import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
+import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
+import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
 import type { Selected } from "../runtime/Code.ts";
@@ -50,10 +52,13 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
+import { Answer } from "../transport/Wire.ts";
 import {
   CommitReply,
   Install,
   Installed,
+  MailReplies,
+  type MailReply,
   ProcessReplies,
   SigningReply,
   type ConnectionId,
@@ -66,6 +71,7 @@ import {
 } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
+import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 
@@ -116,6 +122,7 @@ export interface ProjectDoorOptions {
 }
 
 export interface ProjectOptions {
+  readonly mail?: { readonly grants: Grants };
   readonly config: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
   readonly bootstrap: { readonly name: string; readonly id: string; readonly program: string };
@@ -287,12 +294,17 @@ const flushed = SpanSink.use((sink) => sink.flush);
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
   return yield* work.pipe(
     Effect.exit,
-    Effect.flatMap((exit) =>
-      flushed.pipe(
+    Effect.flatMap((exit) => {
+      // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
+      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+        return exit;
+      }
+
+      return flushed.pipe(
         Effect.flatMap(() => exit),
         Effect.catch((error) => (Exit.isFailure(exit) ? exit : Effect.fail(error))),
-      ),
-    ),
+      );
+    }),
   );
 });
 
@@ -384,6 +396,13 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     ),
   ).pipe(Layer.provideMerge(base));
   const services = yield* Layer.build(managers);
+  const mail = yield* ProgramMail.pipe(
+    Effect.provide(
+      ProgramMailLedger.layer({ grants: options.mail?.grants ?? {} }).pipe(
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
@@ -953,6 +972,17 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     code,
     codeInstall: (raw: unknown) => wrapped(install(raw)),
     codeFailed: (raw: unknown) => wrapped(write(failed(raw))),
+    mail: (delivery: Delivery, trace?: { traceId: string; spanId: string }) => {
+      const work: Effect.Effect<MailReply, ProgramMailError> = write(mail.deliver(delivery)).pipe(
+        Effect.map((receipt): MailReply => MailReplies.cases.ok.make({ receipt })),
+        Effect.catchTag("ProgramMailError", (error) =>
+          error.reason === "storage"
+            ? Effect.fail(error)
+            : Effect.succeed(MailReplies.cases.refused.make({ reason: error.reason })),
+        ),
+      );
+      return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
+    },
     target: door.target,
     register: (client: string, gateway: string, session: string) =>
       Effect.sync(() => {
@@ -1145,6 +1175,7 @@ const processLogic = Effect.fnUntraced(function* (
     yield* rpc(p.publish(client, update));
   });
   const dependencies = Layer.mergeAll(
+    mailLayer(env, project),
     Layer.succeed(CheckedWriter, {
       sign: (id, parent, kind) =>
         Effect.suspend(() => rpc(p.sign(active, id, parent, kind))).pipe(
@@ -1190,7 +1221,7 @@ const processLogic = Effect.fnUntraced(function* (
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
   yield* sink.flush.pipe(Effect.provideContext(services));
-  const attributed = <A, E>(work: Effect.Effect<A, E>) =>
+  const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
     msg: (input: unknown) => {
@@ -1200,6 +1231,10 @@ const processLogic = Effect.fnUntraced(function* (
       return Option.isSome(sent) ? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span))) : work;
     },
     swap: (request: Parameters<typeof runner.swap>[0]) => attributed(runner.swap(request)),
+    mailed: (trace?: { traceId: string; spanId: string }) => {
+      const work = attributed(complete(runner.mailed));
+      return trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)));
+    },
     open: (client: string) => attributed(runner.open(client)),
     due: (at: number) => attributed(runner.due(at)),
     restart: (request: unknown) =>

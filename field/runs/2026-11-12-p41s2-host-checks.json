@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p41s2-host-checks",
+  "ticket": "usirin/tea-fabrika#764",
+  "pr": "usirin/tea-fabrika#1029",
+  "started": "2026-11-12T01:18:00-08:00",
+  "ended": "2026-11-12T01:32:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The new version (next/). Host checks the review left to the lead for ticket 764, P41 slice 2, at head fde0b495570d26dff312e443096e9440eb47afe6, on the laptop with real workerd, Node 26.13.0, one worker. worker-mail.test.ts: 4 passed. worker-supervision.test.ts: 4 passed. Then the five workerd plants the boxes could not run, each planted once in product code, run against worker-mail.test.ts, and undone with a clean tree before the next; all five were red (see plants). The W1, W2 and W6 plants also failed other scenarios in the file, since a lost alarm stops every exchange. loosening.sh from the merge base with main to the head printed 7 hits, all read by hand: 6 are added or changed test code with no law removed, and the 'fewer numRuns' hit in runtime/ProgramMailTest.ts is the count 40 moving into a default parameter that stays 40, with the new laws at 100. No real loosening. This was a hand run by a lead helper, not a pipeline step; no dollar figure or token count was reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:340 scenario: W1 and W6",
+      "plant": "next/packages/libfabrika/src/cloudflare/runtime.ts:877 Process mailed answers without calling the runner's mailed, so no alarm is set",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:361 scenario: W2",
+      "plant": "next/packages/libfabrika/src/cloudflare/runtime.ts:851 the Worker Alarm.set sets the platform alarm but does not save the wake key",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:394 scenario: W4",
+      "plant": "next/packages/libfabrika/src/cloudflare/runtime.ts:366 the Project builds its ledger mail with a grant for every name",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:408 scenario: W5",
+      "plant": "next/packages/libfabrika/src/runtime/Runner.ts:1333 mailed sends restart_requested for a name that is not live",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/worker-mail.test.ts:340 scenario: W1 and W6",
+      "plant": "next/packages/libfabrika/src/runtime/Runner.ts:1453 retryLater runs on every drain, not only a failed one",
+      "result": "red"
+    }
+  ]
+}

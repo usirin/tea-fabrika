@@ -43,6 +43,7 @@ import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };
+// T753 L8 and L9 reuse these complete command flows, with every output captured below.
 const VERSION = "0.0.0";
 const HOME = "/t730";
 
@@ -270,6 +271,25 @@ const inputs = fc.record({
   flagVersion: fc.option(version, { nil: undefined }),
   envPort: fc.option(value, { nil: undefined }),
   envVersion: fc.option(version, { nil: undefined }),
+});
+
+it("T753 L8 explicit values equal to defaults remain visible without all", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ viaEnv: fc.boolean(), all: fc.boolean() }), async (v) => {
+      const d = Declarations.port;
+      const ran = await run({
+        args: [...(v.all ? ["--all"] : []), ...(v.viaEnv ? [] : [`--${d.path}=${d.default}`])],
+        env: { HOME, ...(v.viaEnv ? { [d.env]: String(d.default) } : {}) },
+        person: { _tag: "text", text: `[instance]\nport = ${d.default}\n` },
+      });
+      expect(Exit.isSuccess(ran.exit)).toBe(true);
+      expect(ran.counts.reads).toBe(1);
+      expect(ran.stdout.join("\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
+      expect(ran.stdout.join("\n")).toContain(v.viaEnv ? d.env : `--${d.path}`);
+      expect(ran.counts.writes).toEqual([]);
+    }),
+    check,
+  );
 });
 
 type Generated = typeof inputs extends fc.Arbitrary<infer I> ? I : never;

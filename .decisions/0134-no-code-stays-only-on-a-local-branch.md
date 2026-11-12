@@ -78,3 +78,10 @@ commit.**
 - The branches found on 2026-11-11 are sorted once: a draft pull request for each that holds work
   not on main, and deletion for each whose work has merged.
 - Not decided: how long an unmerged draft may stay open before someone closes it.
+
+## Amendments
+
+- 2026-11-11 (owner): a draft pull request runs only the fast jobs, `changes`, `field`, `typecheck`
+  and `check`'s lint, under the names `lint` and `ci-required (draft)`; marking it ready starts the
+  full set (`check`, `test`, `next`, `e2e`, as changes.mjs picks them) on the same head, which is
+  the run catchup.sh and the ruleset wait for. Nothing merges as a draft, so nothing gets weaker.

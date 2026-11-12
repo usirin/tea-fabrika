@@ -1,59 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGitProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Remove.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Runs.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/RunsProcess.ts?raw";
-import "./keepruns.sh?raw";
-import "./leakgrep.sh?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxfiles.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gcloop.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Beat.ts?raw";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -100,6 +44,7 @@ import {
   holdsElectron,
   laneRunning,
   machine,
+  NO_ESCALATION,
   phasesIn,
   reportOf,
   rowOf,
@@ -833,6 +778,41 @@ describe("the box's changes are read from its status, today's tooling", () => {
     expect(sent.reason).toBe("a law");
     expect(nameOf(decide(ask, read).outcome)).toBe("stuck:step_said");
   });
+
+  // Ticket 850: a review asked for plant records that already ran, the tests step answered them with
+  // no file change, and the gate ended it stuck:no_commit until the budget stopped the lane
+  // (acpcancel and sjob1, 2026-11-11). Plants run once, all red: drop the plants check (no plants
+  // passes); drop the clean-tree check (changed files pass); keep the old stuck for every tests step.
+  it("property: a tests step with no commit is done only when it names plants and left its tree clean", () => {
+    const plant = fc.record({
+      law: fc.constantFrom("L1", "L2", "A4"),
+      plant: fc.string({ maxLength: 20 }),
+      result: fc.constantFrom("red" as const, "green" as const),
+    });
+    fc.assert(
+      fc.property(fc.array(plant, { maxLength: 4 }), fc.nat({ max: 3 }), (plants, changed) => {
+        const read = {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed,
+          report: "",
+          problem: null,
+        };
+        const said: Answer = { verb: "done", to: null, reason: "the records", laws: null, plants };
+        const j = decide({ ...ask, step: "tests" }, read, said);
+        const records = plants.length > 0 && changed === 0;
+        expect(nameOf(j.outcome)).toBe(records ? "done" : "stuck:no_commit");
+        expect(j.reason.includes("the records")).toBe(records);
+      }),
+      options,
+    );
+  });
 });
 
 describe("T341 a step commit's subject says what the step did, today's tooling", () => {
@@ -1260,6 +1240,20 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
     );
     expect(FINISH).toContain('"after build" or "lead runs it"');
     expect(FINISH).toContain("does not block `done`");
+    expect(FINISH).toContain("never for work still to do");
+  });
+
+  // 2026-11-11: every Codex ask in the boxes folder ended its turn `cancelled`. Plant: leave the
+  // rule out of any step's tail, the plan's included.
+  it("property: every step's prompt, the plan's included, says never to ask to run outside the box", () => {
+    fc.assert(
+      fc.property(steps, fc.boolean(), (step, electron) => {
+        expect(agentTail({ step, ticket: "1" }, electron).includes(NO_ESCALATION)).toBe(true);
+      }),
+      options,
+    );
+    expect(NO_ESCALATION).toContain("`require_escalated`");
+    expect(NO_ESCALATION).toContain("ends your turn");
   });
 });
 

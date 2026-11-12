@@ -18,6 +18,8 @@ import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
+import * as Print from "../../settings/Print.ts";
+import * as Reference from "../../settings/Reference.ts";
 import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
@@ -197,6 +199,74 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
       check,
     );
   });
+});
+
+it("T753 L8 one load reads each source once, checks the repo first and reports saved values", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({
+        value: port,
+        override: fc.boolean(),
+        all: fc.boolean(),
+        selected: fc.boolean(),
+        newer: fc.boolean(),
+        equal: fc.boolean(),
+        personPresent: fc.boolean(),
+      }),
+      async (v) => {
+        const touched: Array<string> = [];
+        const fileValue = v.equal ? Declarations.port.default : v.value;
+        const fs = FileSystem.layerNoop({
+          readFileString: (path) => {
+            touched.push(path);
+
+            if (path === REPO) {
+              return Effect.succeed(`fabrika-version = "${v.newer ? "1.0.0" : "0.0.0"}"\n`);
+            }
+
+            // A second read changes the value, proving the report uses the first snapshot.
+            return Effect.succeed(
+              v.personPresent
+                ? `[instance]\nport = ${touched.filter((p) => p === PERSON).length === 1 ? fileValue : (fileValue % 65535) + 1}\n`
+                : "",
+            );
+          },
+        });
+        const exit = await Effect.runPromise(
+          Load.load({
+            person: { path: PERSON, name: PERSON },
+            ...(v.selected ? { repo: { path: REPO, name: REPO } } : {}),
+            version: "0.0.0",
+            flags: v.override ? { "instance.port": String(fileValue) } : {},
+            env: {},
+          }).pipe(Effect.exit, Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto))),
+        );
+        expect(Exit.isSuccess(exit)).toBe(!(v.selected && v.newer));
+
+        if (v.selected && v.newer) {
+          expect(reason(exit)).toBe("version");
+          expect(touched).toEqual([REPO]);
+        } else {
+          expect(Exit.isSuccess(exit)).toBe(true);
+          expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+
+          if (Exit.isSuccess(exit)) {
+            const wanted = v.override || v.personPresent ? fileValue : Declarations.port.default;
+            expect(exit.value.values.port).toBe(wanted);
+            expect(exit.value.snapshot.values["instance.port"]).toBe(wanted);
+            const rows = Reference.rows(Declarations.all, exit.value.snapshot);
+            const row = rows.find((r) => r.path === Declarations.port.path)!;
+            expect(row.value).toBe(wanted);
+            expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
+            const report = Print.report(rows, { all: v.all });
+            expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
+            expect(touched).toEqual(v.selected ? [REPO, PERSON] : [PERSON]);
+          }
+        }
+      },
+    ),
+    check,
+  );
 });
 
 // T730 L6 and L7: the repo context a load returns, for the version warnings. A repo's minimum is

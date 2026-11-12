@@ -1,12 +1,13 @@
 import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
-import { Appended } from "../ledger/Log.ts";
+import { Appended, Line } from "../ledger/Log.ts";
 import { ProgramName } from "../packs/ProgramName.ts";
 import type { Connections } from "../presence/Connections.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
-import { ProcessError, type Activity, type Start } from "../processes/Process.ts";
+import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
+import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { BuiltProgram } from "../runtime/Built.ts";
 import { Hash } from "../runtime/Built.ts";
@@ -33,6 +34,27 @@ export const Installed = Schema.TaggedUnion({
   loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
 });
 export type Installed = typeof Installed.Type;
+
+export const MailReplies = Schema.TaggedUnion({
+  ok: {
+    receipt: Schema.Struct({
+      id: Schema.String,
+      command: Schema.String,
+      source: Schema.Struct({ name: Schema.String, process: Schema.String }),
+      to: Schema.Struct({ name: Schema.String, state: State }),
+      m: Schema.Json,
+      ref: Schema.NullOr(Schema.String),
+      grant: Schema.Struct({ source: Schema.String, to: Schema.String }),
+      from: Line.mapFields(({ _tag, body, ...fields }) => fields),
+      arrivedAt: Schema.Number,
+      rev: Schema.Number,
+      pos: Schema.Number,
+    }),
+  },
+  refused: { reason: MailRefusal },
+});
+
+export type MailReply = typeof MailReplies.Type;
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 
@@ -143,6 +165,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         input: Omit<Parameters<DoorService["append"]>[0], "process">,
       ) => Effect.Effect<typeof CommitReply.Type>
     >;
+    mail: RemoteCall<(delivery: Delivery, trace?: { traceId: string; spanId: string }) => Effect.Effect<MailReply>>;
     inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
     own: RemoteCall<
       (
@@ -171,6 +194,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
+    mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
     configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
     descriptor: RemoteCall<(process?: string) => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;

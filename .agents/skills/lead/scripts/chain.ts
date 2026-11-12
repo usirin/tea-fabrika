@@ -76,6 +76,14 @@
 // While the lane runs, the record also holds its heartbeat (./flow/Beat.ts, ticket 685): the phase
 // the chain is in, since when, and when an agent last wrote, written on each phase change and every
 // 30 seconds, so a status page tells a lane at work from one blocked in a hung call.
+// A lane keeps one version of its scripts from start to end (./pin.ts, ticket 835): started from a
+// checkout, chain.ts copies `.agents/` at the main checkout's commit into `BOXES/pins/<lane>.<pid>`,
+// runs itself again from there, and removes the copy when that process ends. The record's
+// `scripts` names the commit; a restart pins again and prints the commit its last process ran on.
+// The lane's pull request is a draft from its first commit (0134): drive's pushing phase pushes each
+// step's commit to the branch and opens the draft when the branch has none (./pr/Publish.ts). The
+// `opening` phase pushes the reviewed head, gives the pull request the brief's `## pr` words and
+// marks it ready (`Publish.ready`), through the typed PullRequests service.
 // The chain holds every right (the bot's push, the PR, catch-up, the commit and its signature); a
 // box or the judgment agent holds only its model login
 // (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
@@ -101,7 +109,7 @@ import {
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
-import { NodeServices } from "@effect/platform-node";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
@@ -126,7 +134,12 @@ import {
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
-import { stepOf, wipOf } from "./lane.ts";
+import { pinFolder, stepOf, wipOf } from "./lane.ts";
+import * as Pin from "./pin.ts";
+import * as Plants from "./plants.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -134,6 +147,8 @@ const HERE = import.meta.dirname;
 export const STEPS = ["tests", "build", "mutation", "review"] as const;
 export type StepName = (typeof STEPS)[number];
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
+/** A lane's name, as its state files and its pin folder carry it. */
+const LANE_NAME = /^[a-z0-9][a-z0-9-]*$/;
 /** A lane's steps, in order (0066). A move names only these, so no move reaches mutation. */
 export const LANE_STEPS = ["tests", "build", "review"] as const;
 export type LaneStep = (typeof LANE_STEPS)[number];
@@ -411,6 +426,8 @@ export type Facts = {
   readonly note: string;
   /** The last host step's outcome and head, for a review; `null` for any other step. */
   readonly host: string | null;
+  /** The lane's plant records (./plants.ts), for a review; `null` for any other step or with none. */
+  readonly plants: string | null;
 };
 
 /** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
@@ -465,6 +482,10 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     lines.push(
       `Host run, by chain.ts on the laptop outside any box (the brief's \`## host\` commands, e2e laws and shots): ${f.host}`,
     );
+  }
+
+  if (step === "review" && f.plants !== null) {
+    lines.push("", f.plants);
   }
 
   // Only a lane started at mutation, parked inside that step before 0066, gets here.
@@ -613,6 +634,8 @@ export const ChainRecord = Schema.Struct({
   stop: Schema.optionalKey(Stop),
   /** The heartbeat while the chain runs (./flow/Beat.ts); gone once the lane ends. */
   beat: Schema.optionalKey(Beat.Beat),
+  /** The commit and folder the lane's last process ran its scripts from (./pin.ts, ticket 835). */
+  scripts: Schema.optionalKey(Pin.Pinned),
 });
 export type ChainRecord = typeof ChainRecord.Type;
 
@@ -1165,6 +1188,8 @@ const handlers = (s: Setup) => {
     root?: string;
     steps: { step: string; outcome: string; head: string }[];
   } => (existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { steps: [] });
+  /** A step's report beside the lane, for its plant table; `null` once the file is gone. */
+  const readReport = (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : null);
   const { readRecord, writeRecord } = chainFile(chainState, s.lane);
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
@@ -1210,6 +1235,7 @@ const handlers = (s: Setup) => {
       Effect.gen(function* () {
         const lane = saved();
         const round = earlier + cmd.round;
+        const heads = headsOf();
         const facts: Facts = {
           ticket: s.ticket,
           branch: s.branch,
@@ -1217,10 +1243,12 @@ const handlers = (s: Setup) => {
           root: lane.root ?? "",
           head: lane.head ?? "",
           round,
-          heads: headsOf(),
+          heads,
           commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
           host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
+          plants:
+            cmd.step === "review" ? Plants.section(Plants.records(lane.steps, readReport), heads.build ?? null) : null,
         };
         const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
@@ -1422,33 +1450,6 @@ const handlers = (s: Setup) => {
           return { pr: null, detail: "the lane brief has no `## pr` section with a title line" };
         }
 
-        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and opening the PR`);
-        const push = yield* spawnEffect("node", [join(HERE, "botpush.mjs"), env.MAIN, s.branch, cmd.head], { errFile });
-
-        if (push.code !== 0) {
-          return { pr: null, detail: `botpush ${s.branch} failed; see ${errFile}` };
-        }
-
-        const listed = sh("gh", [
-          "pr",
-          "list",
-          "-R",
-          env.GH_REPO,
-          "--head",
-          s.branch,
-          "--json",
-          "number",
-          "-q",
-          ".[0].number",
-        ]);
-        const existing = Number(listed.out.trim());
-
-        if (listed.code === 0 && Number.isInteger(existing) && existing > 0) {
-          note(`PR ${existing} already open on ${s.branch}`);
-          writeRecord({ ...readRecord(), pr: existing });
-          return { pr: existing, detail: "existing" };
-        }
-
         const body = [
           (s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
           "",
@@ -1462,32 +1463,28 @@ const handlers = (s: Setup) => {
           "",
           ...stepsTable(join(env.BOXES, `${s.lane}-rows.jsonl`), saved().steps),
         ].join("\n");
-        const bodyFile = join(env.BOXES, `${s.lane}-pr-body.md`);
-        writeFileSync(bodyFile, `${body}\n`);
-        const made = sh("gh", [
-          "pr",
-          "create",
-          "-R",
-          env.GH_REPO,
-          "--head",
-          s.branch,
-          "--title",
-          title,
-          "--body-file",
-          bodyFile,
-        ]);
-        const pr = Number(/\/pull\/(\d+)/.exec(made.out)?.[1]);
+        // The draft opened at the lane's first commit (drive's pushing phase, 0134) takes the brief's
+        // words and is marked ready; a lane started before that gets its pull request here.
+        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
+        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        const readied = yield* Publish.ready({
+          dir: env.MAIN,
+          branch: s.branch,
+          head: cmd.head,
+          text: { title, body },
+        }).pipe(
+          Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
+          Effect.catch((e) => Effect.succeed({ pr: null, detail: `${s.branch} not marked ready: ${e.reason}` })),
+          Effect.provide(Layer.provide(services, NodeServices.layer)),
+        );
 
-        if (made.code !== 0 || !Number.isInteger(pr)) {
-          return {
-            pr: null,
-            detail: `gh pr create failed: ${made.out.trim().split("\n").at(-1) ?? ""}`,
-          };
+        if (readied.pr === null) {
+          return readied;
         }
 
-        note(`opened https://github.com/${env.GH_REPO}/pull/${pr}`);
-        writeRecord({ ...readRecord(), pr });
-        return { pr, detail: "opened" };
+        note(`ready: https://github.com/${env.GH_REPO}/pull/${readied.pr}`);
+        writeRecord({ ...readRecord(), pr: readied.pr });
+        return readied;
       }),
     // loosening.sh on the exam diff from where the lane leaves main to the reviewed head, run in
     // the main checkout, which holds every step's commits. Its output, hits or not, goes on the PR
@@ -1674,11 +1671,11 @@ const stepSet = (text: string | undefined): Set<StepName> =>
       .filter(isStep),
   );
 
-export const chainMain = (args: string[], env: Env) =>
+export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
   Effect.gen(function* () {
     const [lane = "", briefPath = ""] = args;
 
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(lane) || !existsSync(briefPath)) {
+    if (!LANE_NAME.test(lane) || !existsSync(briefPath)) {
       console.error(
         "usage: node chain.ts <lane> <lane-brief.md> [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <path>] [--claude tests,build] [--electron tests,build] [--codex-exec tests,build,review] [--model sonnet|opus] [--start tests|build|mutation|review]",
       );
@@ -1733,6 +1730,13 @@ export const chainMain = (args: string[], env: Env) =>
     }
 
     const record = chainFile(join(env.BOXES, "state", `${lane}-chain.json`), lane);
+
+    // A restart is a new choice of scripts: the record and the log say which commit, and the last.
+    if (pin !== null) {
+      console.error(`chain.ts: ${Pin.pinLine(record.readRecord().scripts, pin)}`);
+      record.writeRecord({ ...record.readRecord(), scripts: pin });
+    }
+
     const beats = beating(record);
     // A beat left by a process that died is not this one's: its phase must not lend its `since`.
     beats.clear();
@@ -1836,12 +1840,57 @@ const overridden =
     return process.env[name] !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
   };
 
+/** The last line of a lane that never started: its pin could not be made or read. */
+const unpinned = (reason: string, lane?: string) => {
+  console.log(JSON.stringify({ outcome: "stuck", ...(lane === undefined ? {} : { lane }), reason, exit: 30 }));
+  process.exitCode = 30;
+};
+
+/**
+ * A lane started from a checkout pins its scripts first and runs chain.ts again from the pin, with
+ * the same arguments (./pin.ts, ticket 835): that pinned process drives the lane. This one waits,
+ * answers its exit code, and removes the pin when it ends; a SIGINT or SIGTERM stops the pinned
+ * process first.
+ */
+const launch = (env: Env, lane: string, args: ReadonlyArray<string>) =>
+  NodeRuntime.runMain(
+    Effect.gen(function* () {
+      const folder = pinFolder(env.BOXES, lane, process.pid);
+      const pin = yield* Pin.acquire({ main: env.MAIN, folder, script: "chain.ts" });
+      const code = yield* Pin.runPinned(pin, env, "chain.ts", args);
+      yield* Effect.sync(() => {
+        process.exitCode = code;
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, lane))),
+      Effect.provide(NodeServices.layer),
+    ),
+    { disableErrorReporting: true },
+  );
+
 const main = () => {
   const env = loadEnv();
+  const args = process.argv.slice(2);
+  const state = Pin.pinState(process.env[Pin.PIN_ENV]);
+  const [lane = ""] = args;
+
+  if (state._tag === "malformed") {
+    unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
+    return;
+  }
+
+  // A usage error needs no pin: it is printed here, from the checkout.
+  if (state._tag === "unpinned" && LANE_NAME.test(lane)) {
+    launch(env, lane, args);
+    return;
+  }
+
+  const pin = state._tag === "pinned" ? state.pin : null;
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const end = yield* chainMain(process.argv.slice(2), env);
+        const end = yield* chainMain(args, env, pin);
         process.exitCode = exitOf(end);
       }),
     ).pipe(

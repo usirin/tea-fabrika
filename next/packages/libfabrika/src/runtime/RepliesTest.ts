@@ -103,8 +103,8 @@ export const capture = () => {
     spans.map((span) =>
       [
         span.name,
-        JSON.stringify([...span.attributes]),
-        JSON.stringify(span.events),
+        JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+        JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
         span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
       ].join("\n"),
     );

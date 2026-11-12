@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-12-size-counts-shared-test-suites",
+  "date": "2026-11-12",
+  "by": "review",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/sizecap.ts",
+    "line": 89
+  },
+  "says": "Today's lead size counter counts next/ shared test suites as product code.",
+  "proof": "exam-paths.json:11 identifies next/**/*Test.ts as shared test suites. sizecap.ts:88-101 excludes .test. and .test-support. files but lets *Test.ts fall through to product. This diff changes 694 lines in ProgramMailTest.ts and 4 in RepliesTest.ts, inflating 180 product lines to 878.",
+  "cost": "Recorded product sizes are inflated and size advice flags test-suite changes.",
+  "head": "fde0b495570d26dff312e443096e9440eb47afe6",
+  "ticket": "usirin/tea-fabrika#764",
+  "pr": "usirin/tea-fabrika#1029"
+}

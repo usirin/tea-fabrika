@@ -220,6 +220,8 @@ crash  nothing: launchd keeps the brain, and the next open finds it
 
 ## Notes
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes program leaves Tier 1 and is Tier 2's first real app. Tier 1's program is the checklist ([Tier 1's P44](./tier-1.md#the-pull-requests-one-at-a-time)). P13 keeps only its two platform slices, durable terminal replies and safe input recording. This text stays for Tier 2.*
+
 **The answer:** a list of notes, each with a raw Markdown body, drawn when read and a plain text box when edited. A save comes after a short pause, on leaving the box, or from an agent's tool. Full history is kept, and everything reads back after a restart. It is a sealed program in the same box as the counter, with no network and no binding. It lands as PR D, for the reason in biggest call 10.
 
 ```ts
@@ -380,6 +382,8 @@ const Box = Schema.TaggedUnion({
 
 ## Drawing a note
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): drawing a note leaves Tier 1 with notes, and P22 goes to Tier 2. In Tier 1, a checklist item's note is drawn as plain text. This text stays for Tier 2.*
+
 **The answer:** a note opens drawn. `e` or an Edit button shows the plain text box, and saving goes back to drawn. The fact keeps the raw `body`. Blocks are derived, never stored. The drawing comes from today's `programs/markdown`, copied by a named exception.
 
 ```ts
@@ -440,6 +444,8 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 ## Agents through MCP
 
+*Changed 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the agent's program in Tier 1 is the checklist, not notes. Its tools are `checklist_check` (with an optional `note`), `checklist_uncheck`, `checklist_left` and `checklist_items`; `add`, `rename` and `remove` are a person's and get no tool. The checklist's half is built in [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019); P25 builds the tools. The notes example below stays for Tier 2.*
+
 **The answer:** an agent adds one line, and it has tools made from each program's inputs.
 
 ```text
@@ -465,7 +471,7 @@ agent client  --MCP over stdio-->  the bridge  --the same WebSocket and door--> 
                                    a headless client, `as: "agent"`
 ```
 
-MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[notes]`, and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
+MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[checklist]` (*changed 2026-11-11, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md): it said `[notes]`*), and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
 
 **Let in once.** The first time a name is used, the bridge makes a key file in the app's home (`<home>/agents/<name>.key`, mode 0600) and knocks with `{label: "claude", as: "agent"}`. The menu bar shows the usual row: "Agent claude, this Mac, says code 482 109". **How often: once per agent name, one click on Approve with the same check as any row, never again.** The grant says `as: "agent"` and `for` the person, signed. Until then, every tool call answers in words:
 
@@ -557,6 +563,8 @@ export class Nemesis extends Context.Service<Nemesis, {
 	static readonly none: Layer.Layer<Nemesis>;
 }
 ```
+
+*Changed 2026-11-12, as P17b's slice 1 built it ([PR 1037](https://github.com/usirin/tea-fabrika/pull/1037)); the sketch above stays as it was written.* The schemas and the pure check are in `next/packages/libfabrika/src/runtime/Chaos.ts`, and the contract alone is in `runtime/Nemesis.ts` ([0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md)). There is no static `none`: the off layer is `NemesisNone.layer`, and it fails both calls with `NemesisError`, whose `reason` is `Off`. `fire` takes a `Fire` (`{id, ordinal, target, fault}`) and `check` takes a `Target`, which names only `fabrika/checklist` ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). Both fail with `NemesisError`, never `LedgerError`: its `reason` is `Off`, `BadTarget`, `NotGranted`, `Unreachable`, `BadRow` or `Storage`, each keeping its cause. `abort`'s targets are `connection`, `process` and `project`, since main has no separate gateway object. `runtime/` may not import `ledger/`, so `NemesisLedger.layer` reads history through `ProcessHistory` in `processes/`. `Report` holds `letters`, `doubled` and `gaps` with the two stream boundaries it read to and the restart facts it saw.
 
 - The box does not change: `globalOutbound: null`, no stub in its env. The isolate returns `cmds`. `ProgramRunner` in the process object reads them.
 - The wiring (`brain.ts`) holds one table: `{chaos: Nemesis}`. A `fire` from any other program is refused and logged as `bad_cmd`, and the letter stays.
@@ -2213,7 +2221,7 @@ All have `tool: "test"`. Runtime: **node** is vitest on Node, **instance** is th
 **p67, the door stamps every input (scenario of P10).** `new`, node. s4, s7. `transport/Answer.ts`, door. *Added 2026-11-05 (owner), from [inputs carry their sender](../direction/inputs-carry-their-sender.md).*
 - *Changed 2026-11-08 (owner, [question 20](./tier-1.md#open-questions)): `id` is a TypeID, `input_<26 chars>`, and the door's process and count are their own fields on the entry. Below is the law as first written; a build pull request moves p67 and p68 to the new shape.*
 - Every input past the door becomes one `Envelope` `{id, by, arrivedAt, input}`, made in memory there. `id` is an `InputId`, `in-<run>-<n>`: only the door makes one, the `<run>` part, which names the door's start ([question 20](./tier-1.md#open-questions)), is fresh at each start of the door's object, and no id is made twice across any number of starts. `by` is the checked key's writer, whatever the params say. `arrivedAt` is the referee's clock.
-- A frame that names its own `id` or `by` is refused in words, and the refusal is recorded. Nothing it asked for happens.
+- A frame that names its own `id` or `by` is refused in words, counted, and nothing of it is kept. Nothing it asked for happens. *Changed 2026-11-12 (owner, [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and [0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md); built by ticket 844, PR 1027): it said "and the refusal is recorded". The gateway refuses a write that carries `id`, `by`, `for` or `arrivedAt`, at the top of its params or of a `process.send`'s `m`, with the reason `reserved`, before it makes an input id. It writes no ledger entry, no span row and no measurement row. Each span around the call (`gateway.route`, `runtime.rpc`, `connection.frame`) is tagged `fab.gateway.refused` and adds one to its piece's hourly sum. After N refusals in one hour, every table holds the same rows as after 1, and the sum says N.*
 - Each envelope is logged in the brain's own log: who sent it and where it went. Never a raw key's text, and a `Redacted` value logs hidden.
 - Why: who sent each input exists only at the door, and the note decided to record it first. Plants: an `id` taken from the frame; `by` read from params; a client-sent `by` dropped silently instead of refused; a raw key in the log line; a start part reused after a restart.
 

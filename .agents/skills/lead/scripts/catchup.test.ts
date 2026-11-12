@@ -1,68 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./catchup.sh?raw";
-import "./leakgrep.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/BoxGitProcess.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Remove.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/Runs.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./box/RunsProcess.ts?raw";
-import "./keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./runid.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxfiles.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./freshmain.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gcloop.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./flow/Beat.ts?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -161,6 +96,55 @@ describe("catchup, today's tooling", () => {
       );
     },
   );
+  // 0134's amendment (2026-11-11): a draft's run names its jobs `lint` and `ci-required (draft)`.
+  // Plants: read them as any other check (a red or pending one blocks), or read `lint` for `check`.
+  it("property: a draft's own checks are never read, whatever they say, beside the ready run's", () => {
+    fc.assert(
+      fc.property(
+        fc.shuffledSubarray(matrixChecks, { minLength: matrixChecks.length, maxLength: matrixChecks.length }),
+        fc.array(
+          fc.record({
+            name: fc.constantFrom("lint", "ci-required (draft)"),
+            status: fc.constantFrom("completed", "in_progress", "queued"),
+            conclusion: fc.constantFrom("success", "failure", "cancelled", "skipped"),
+          }),
+          { minLength: 1, maxLength: 3 },
+        ),
+        (ready, draft) => {
+          const got = run({ ...green, checks: [...draft, ...ready], clock: [0, 1, 3601] });
+          expect(got.code, got.text).toBe(0);
+          expect(merges(got.calls)).toHaveLength(1);
+        },
+      ),
+      { seed: 119120, numRuns: 4 },
+    );
+  });
+  it("scenario: a draft run's green checks alone, before the ready run's check, never land", () => {
+    const draft: Check[] = [
+      success("lint"),
+      success("commits"),
+      success("ci-required (draft)"),
+      { name: "e2e", status: "completed", conclusion: "skipped" },
+      { name: "next", status: "completed", conclusion: "skipped" },
+    ];
+    const got = run({ ...green, checks: draft, clock: [0, 1, 3601] });
+    expect(got.code, got.text).toBe(1);
+    expect(got.text).toContain("missing: check");
+    expect(merges(got.calls)).toHaveLength(0);
+  });
+  it("scenario: a docs-only change's skipped check job, reported by its raw name, counts as check only beside ci-required", () => {
+    // scenario: GitHub leaves a skipped job's name expression unevaluated, which parked two docs pull requests.
+    const raw = "github.event.pull_request.draft && 'lint' || 'check'";
+    const skipped = (name: string): Check => ({ name, status: "completed", conclusion: "skipped" });
+    const docs: Check[] = [success("commits"), skipped(raw), skipped("e2e"), skipped("next")];
+    const ready = run({ ...green, checks: [...docs, success("ci-required")], clock: [0, 1, 3601] });
+    expect(ready.code, ready.text).toBe(0);
+    expect(merges(ready.calls)).toHaveLength(1);
+    const draft = run({ ...green, checks: [...docs, success("ci-required (draft)")], clock: [0, 1, 3601] });
+    expect(draft.code, draft.text).toBe(1);
+    expect(draft.text).toContain("missing: check");
+    expect(merges(draft.calls)).toHaveLength(0);
+  });
   it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
     fc.assert(
       fc.property(

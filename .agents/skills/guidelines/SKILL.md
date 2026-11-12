@@ -1,21 +1,23 @@
 ---
 name: guidelines
-description: Run this repo's guidelines study for one design area, from settled check to a decided note. Use on "guidelines for X", "we need X guidelines", "run the guidelines process", or "a guidelines study".
+description: Run this repo's guidelines study for one design area, from settled check to an approved guideline page. Use on "guidelines for X", "we need X guidelines", "run the guidelines process", or "a guidelines study".
 ---
 
 # A guidelines study
 
 One design area becomes a few principles the owner can press, read and decide on, and then a
-build in the app. A study ends with one experiment, one note, one Design canvas titled "<Area>
-guidelines", one docs-only pull request, a walk that ends in a yes or a no, and, on a yes, a build
-plan the same day. The canvas is the study's front door, presented the way a designer presents
-work: slides that walk the story, and at the end a clickable prototype of the pick that answers
+build in the app. A study ends with one experiment, one guideline page under `docs/guidelines/`,
+one Design canvas titled "<Area> guidelines", one docs-only pull request, a walk that ends in a yes
+or a no, and, on a yes, one approval decision and a build plan the same day
+([0136](../../../.decisions/0136-guidelines-live-in-their-own-pages.md)). The canvas is the
+study's front door, presented the way a designer presents work: slides that walk the story, and at the end a clickable prototype of the pick that answers
 every key and click the guidelines name. It is a Design canvas in Claude Design with the design
 system installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)).
 
 The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the note's shape and the order of the principle slides,
-and modes is the closest to it all: copy modes for those. Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model.
+Themes came first; the other three set the order of the principle slides, and modes is the
+closest to it all: copy modes for those. The page's shape is `references/guideline-page.md`.
+Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model.
 The prototype copies the mockup rounds instead (the tile, the pipe marker finalists, the chat
 window, the outline round): there the screen is the point, and the words sit beside it.
 
@@ -25,8 +27,9 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 ### 1. Check what is settled
 
-- Search `docs/direction/` (its README rows, then each note on the area), `experiments/README.md`
-  and `docs/plan/` (README, `tiers.md`, `tier-1.md`) for the area.
+- Search `docs/guidelines/` (any page on the area), `.decisions/`, what is
+  left of `docs/direction/`, `experiments/README.md` and `docs/plan/` (README, `tiers.md`,
+  `tier-1.md`) for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
   and is never asked again.
 - Name the open pull requests on the same area and what they already lean.
@@ -46,7 +49,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 - One real case from today's code, read on main, with `file:line` for each claim. Modes used
   info mode (`C-b i`). Pipeline used ticket 117's real run. Keybindings used today's key code.
-- It runs through the experiment, the note, the code block that opens the note, and the
+- It runs through the experiment, the page, the code block that opens the page, and the
   canvas. Every principle says whether today's case follows it or breaks it, and where.
 - Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`) or
   `next/`.
@@ -129,7 +132,7 @@ request opens, even when no study is running (owner, 2026-11-08).
 `experiments/NN-<area>.md`, the next free number. Shape, from 182, 183 and 184:
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
-  measurement."** unless something ran. It names the note and the Design canvas "<Area>
+  measurement."** unless something ran. It links the page and names the Design canvas "<Area>
   guidelines" by title.
 - When step 5 ran, say so: the branch, the app version, the designs and rounds shot, and how many
   states each prototype has, with how many of them have a real shot.
@@ -138,35 +141,47 @@ request opens, even when no study is running (owner, 2026-11-08).
 - `## What was read`, then one section per group of sources, at most one table each.
 - `## Today's <example>`: a what, today, where table, then the same case checked against each
   principle (passes, breaks, half).
-- `## What this tells us for fabrika`, `## What it cannot tell us`, `## Links` with the tags.
+- `## What this tells us for fabrika`: the long reasoning the page leaves out. Each principle with
+  its lean (**Lean, NN%.** with the doubt and what would settle it, or **No lean, the owner
+  picks.**), its Linear row, its Elm or OTP answer and its cost. Then the smaller calls, each with
+  options as small code blocks and a lean; what the ledger records, or "nothing new"; and a tryout
+  in today's version, with a size in lines and agent hours, when the area has one.
+- `## What it cannot tell us`, `## Links` with the tags.
 - Dollars spent, even when $0. A probe that ran says where, on what version, and if it was kept.
 
-### 7. Write the note
+### 7. Write the guideline page
 
-`docs/direction/<area>.md`. Shape, from modes and hot reload:
+`docs/guidelines/<area>.md`, or for a visual area a folder: `docs/guidelines/<area>/README.md`
+with its shots in `shots/`
+([0136](../../../.decisions/0136-guidelines-live-in-their-own-pages.md)). Copy the shape from
+`references/guideline-page.md`. No new note goes under `docs/direction/`.
 
-- **Status line first:** **Proposed DATE.**, then each point the owner already decided, named.
-- Built from experiment NN and the Design canvas, "Neither is a measurement."
-- **A code block first:** the running example in the new shape, marked as a sketch, then a short
-  `text` trace of one press or one save, step by step.
-- `## Which version`: `next/` and today's version, one bullet each.
-- `## The shape`, if the area adds fields or types: the types, and how they were checked.
-- `## The N principles`: as many as the findings give, never aimed at a count. Each is `### X1: <name>`, then **Lean, NN%.**, **No lean, the owner picks.** or
-  **Decided DATE.** on its own line, then bullets: what it means, why (a quoted source), the Linear row,
-  the Elm or OTP answer, what holds it (the type, test or refusal that enforces it), the doubt and what would settle it, the cost, and today's example
-  (follows or breaks, with `file:line`). When several share one reason and one check, they are
-  rules: group them under one principle, as hot reload's six held seventeen rules.
-- The smaller calls, each with options as small code blocks, a lean and how sure (or "No lean,
-  the owner picks", as for a clash with Linear).
-- What the ledger records, or "nothing new", and what fact is lost if it is not recorded now.
-- `## A tryout in today's version`: small fixes offered, not filed (when the area has one), with a size in lines and
-  agent hours.
-- `## Where this differs from settled notes`, `## What it costs`, `## What it cannot tell us`.
+The page holds the rules only. The long reasoning, the leans and how sure, the Linear rows, the
+smaller calls, the ledger, the tryout and the cost stay in the experiment (step 6), and the page
+links it.
+
+- **Line one is the status:** **Proposed DATE.** with a link to the experiment. On the owner's
+  yes it becomes **Approved DATE.** with a link to the approval decision (step 11).
+- **One `## X1: <name>` per principle,** as many as the findings give, never aimed at a count.
+  When several share one reason and one check, they are rules: group them under one principle, as
+  hot reload's six held seventeen rules.
+- **Each principle has six fields:** **Kind** (`law`, `lint` or `taste`), **Means**, **Why** (a
+  quoted source), **Example** (real code or a real shot), **Held by** (the type, test, lint rule
+  or refusal) and **Breaks today** (`file:line`, or where today's case follows it).
+- **Held by** links the decision file that enforces a `law` or `lint` principle and never restates
+  it. A `taste` principle names the shot a person judges it by.
+- **A visual principle** opens with a do and don't pair of shots, then the fields, plus **Tokens**
+  (from `@kampus/fabrika-design`) and **Checked by**. The shots are step 5's real ones from the
+  built app, in `shots/`, named `<state>.<layout>.<look>.png`. Step 5's other shots stay private.
+- The canvas and the walk page are named by title, never linked.
 
 ### 8. Add the index rows
 
-- One row in `docs/direction/README.md`: what the note says, then its status, `proposed`.
+- One row in `docs/guidelines/README.md`: the area, what the page covers, then its status,
+  `proposed`. If the folder or its README does not exist yet, create it with this first row.
 - One row in `experiments/README.md`: number, question, files, date, the answer, $.
+- If AGENTS.md's table has no row for `docs/guidelines/` yet, add it, as 0136 asks: read a page
+  there, write one per area.
 
 ### 9. Build and publish the deck and the prototype
 
@@ -233,21 +248,6 @@ beside the canvas for the walk. Keep the distinct designs from step 5 available 
 - **Make one HTML copy with everything inline.** Include styles, scripts, fonts, images and
   real parts, so the owner's side panel needs no other files or server. Open that copy and
   check its keys, clicks and states before sending it.
-
-The owner's plain walk page uses the same real parts, states, working keys and clicks. It sits
-beside the canvas for the walk. Keep the distinct designs from step 5 available to choose.
-
-- **One selected design per screen.** Show today's version on the left and the selected design
-  on the right. Label both. Switch the design between screens or walk steps. Never pack three
-  or four frames into one row to show all choices at once.
-- **Keep both at 1:1 real size.** Use their real dimensions. Allow scrolling when the pair needs
-  more space. Never shrink the screens to fit the page or redraw their layout at a smaller size.
-- **Lead looks before sending.** Capture the plain page at 1440x900 and look at that capture.
-  Check the left and right order, real sizes, scrolling and the chosen design. Fix clipping or
-  crowding before the owner sees it. Press the keys and clicks too.
-- **Make one HTML copy with everything inline.** Include styles, scripts, fonts, images and
-  real parts, so the owner's side panel needs no other files or server. Open that copy and
-  check its keys, clicks and states before sending it.
 - These checks apply only to the plain walk page and its single-file copy. Keep the canvas
   type's own rule against an agent checking its own canvas render. The owner's canvas look
   still checks each proof slide against its real shot.
@@ -256,10 +256,11 @@ beside the canvas for the walk. Keep the distinct designs from step 5 available 
 
 leakgrep.sh checks added text; private words stay outside the repo.
 
-- Title: `direction: <area>, proposed, with experiment NN`. The body, as PR 287: what is in it,
-  the principles with their leans (or "No lean, the owner picks"), the shape, today's example, what was decided, what other open
-  pull requests would change to match, open calls, what it cannot tell us. It names the canvas
-  "<Area> guidelines" by title, never by link.
+- Title: `guidelines: <area>, proposed, with experiment NN`. It holds the page (and its
+  `shots/`), the experiment and their rows. The body, as PR 287: what is in it, the principles
+  with their kinds and leans (or "No lean, the owner picks"), the shape, today's example, what was
+  decided, what other open pull requests would change to match, open calls, what it cannot tell
+  us. It names the canvas "<Area> guidelines" and the walk page by title, never by link.
 - Log the hand run in `field/` the same day. It lands by
   [the plan's rule](../../../docs/plan/README.md#how-a-change-lands), after the owner's yes.
 
@@ -273,24 +274,35 @@ leakgrep.sh checks added text; private words stay outside the repo.
 - A principle's step ends with its Try it line, so the owner can press it in the prototype.
 - The next to last step is the prototype: the owner presses it in Play, and any press that does
   the wrong thing goes back to step 9 before the walk goes on.
-- The owner's answer on a lean changes the canvas first, then the note, then the pull request.
+- The owner's answer on a lean changes the canvas first, then the experiment and the page, then the pull request.
 - The last step asks one yes or no: merge it?
-- **Before the merge,** mark the note decided. Its status line becomes "**Decided DATE.** The
-  owner approved the N principles, the shape and the smaller calls below with their leans, after
-  a walk of each part. The leans' confidence numbers stay as written." Its README row says
-  `decided DATE`, and the canvas's marks change to match.
+- **Before the merge, in the same pull request:**
+  - Line one of the page becomes **Approved DATE.**, with a link to the approval decision, and its
+    row in `docs/guidelines/README.md` says `approved DATE`. The experiment keeps its leans and
+    their confidence numbers as written. The canvas's marks change to match.
+  - Write the area's one approval decision with [`/adr`](../adr/SKILL.md),
+    `.decisions/NNNN-<area>-guidelines-approved.md`. Its title names the area and the approval. It
+    says the owner approved the page on DATE and links it, and holds no principle.
+  - Each `law` and `lint` principle that has no decision file yet gets one, with `/adr`, and its
+    **Held by** links it. A `taste` principle gets no file of its own.
 
 ### 12. Plan the build, the same day
 
-A decided note is not done until the app shows it. The owner decided on 2026-11-03 that every
+An approved page is not done until the app shows it. The owner decided on 2026-11-03 that every
 study ends here.
 
-- **The same day as the merge,** write the build plan for the version the note names, using the
+- **The same day as the merge,** write the build plan for the version the page names, using the
   plan skill.
-- **Today's version is in scope.** A note about today's app, or one whose tryout the owner took,
+- **Today's version is in scope.** A page about today's app, or one whose tryout the owner took,
   is the owner's pick by that yes; it needs no second ask before it is planned.
 - **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts
   as soon as a slot is free (AGENTS.md's caps), then the build, mutation and one review, as every
-  pull request does. File the build as a tracker ticket with `from` set to the note's pull request.
-- **A `next/`-only note** gets its plan written too, filed against the tier it lands in, so the
+  pull request does. File the build as a tracker ticket with `from` set to the page's pull request.
+- **A `next/`-only page** gets its plan written too, filed against the tier it lands in, so the
   build is waiting when that tier opens.
+
+## Changing an approved page
+
+A change to a guideline is an edit to its page, in a pull request the owner says yes to. It never
+writes a new decision file, and the approval decision is not edited. A change to a `law` or `lint`
+rule goes through its own decision file, with `/adr`.
