@@ -1,19 +1,20 @@
-import { Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { errorClass } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
-import { ProjectClient } from "./platform.ts";
+import { ProjectClient, rejected } from "./platform.ts";
 import { complete, projectStub, recordingLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
 
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env, config: BrainOptions) {
   const p = ProjectClient.make(projectStub(env, config.name)),
     ids = yield* ProcessIdGenerator;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   const recording = yield* Layer.build(
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
@@ -23,13 +24,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const connections = new Map<WebSocket, ReturnType<typeof connection>>();
   const attached = Effect.fnUntraced(function* (ws: WebSocket) {
     return yield* Schema.decodeUnknownEffect(Attached)(ws.deserializeAttachment()).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
   });
   const make = Effect.fnUntraced(function* (ws: WebSocket) {
     const [session, tab, key] = yield* Schema.decodeUnknownEffect(
       Schema.Tuple([Schema.String, Schema.String, Schema.String]),
-    )(ctx.getTags(ws)).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+    )(ctx.getTags(ws)).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     const c = connection({
       reader: gateway,
       session,
@@ -51,7 +52,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         }
 
         const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result).pipe(
-          Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         );
         return Waited.cases.ready.make(ready);
       }),
@@ -87,29 +88,30 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             ws.serializeAttachment(
               Attached.cases.online.make({
                 client,
-                who: result.who,
+                identity: result.identity,
                 version: result.version,
                 waits: [],
                 watching: false,
                 busy: false,
               }),
             );
-            yield* rpc(p.join({ client, key: result.who.key, gateway, session, at: Date.now() }));
+            const at = yield* Clock.currentTimeMillis;
+            yield* rpc(p.join({ client, key: result.identity.key, gateway, session, at }));
             return Answer.cases.ok.make({
-              result: { who: result.who, version: result.version, ping: result.ping },
+              result: { identity: result.identity, version: result.version, ping: result.ping },
             });
           }
 
           if (method === "gateway.knock") {
             const input = yield* Schema.decodeUnknownEffect(Schema.Struct({ label: Schema.String }))(params).pipe(
-              Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+              Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             );
             const result = yield* rpc(p.knock(client, input));
 
             if (result._tag === "ok") {
               const waiting = yield* Schema.decodeUnknownEffect(
                 Schema.Struct({ code: Schema.String, until: Schema.Number }),
-              )(result.result).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+              )(result.result).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               yield* rpc(p.publish(client, { method: "gateway.waiting", params: waiting }));
               return Answer.cases.ok.make({ result: waiting });
             }
@@ -119,8 +121,18 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
           return yield* rpc(p.route(client, method, params));
         },
-        // A failed or defective call still answers its request without exposing error details.
-        Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
+        // A failed or defective call still answers its request without exposing error details. It is
+        // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and
+        // the span fails with the typed error, so stored content keeps its tag and reason, never the
+        // thrown text, which may hold a bearer or a raw frame.
+        Effect.catchCause((cause) => {
+          const failure = Cause.squash(cause);
+          return Effect.exit(
+            Effect.fail(failure).pipe(
+              Effect.withSpan("gateway.refused", { attributes: { "error.type": errorClass(rejected(failure)) } }),
+            ),
+          ).pipe(Effect.as(Answer.cases.refused.make({ reason: "unreachable" })));
+        }),
       ),
     });
     connections.set(ws, c);
@@ -133,7 +145,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     const state = yield* attached(ws),
       [session] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String, Schema.String, Schema.String]))(
         ctx.getTags(ws),
-      ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     yield* rpc(p.leave(state.client, session));
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
@@ -170,7 +182,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               );
             }
           },
-          catch: () => new LedgerError({ reason: "unreachable" }),
+          catch: (cause) => new LedgerError({ reason: "unreachable", cause }),
         });
       }
     }
@@ -191,10 +203,10 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
       const segments = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String, Schema.String]))(
         path.slice(2, 4),
-      ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+      ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
       const [key, tab] = yield* Effect.try({
         try: () => [decodeURIComponent(segments[0]), decodeURIComponent(segments[1])] as const,
-        catch: () => new LedgerError({ reason: "bad_row" }),
+        catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
       });
       const client = yield* rpc(p.clientConnect()),
         nonce = yield* rpc(p.challenge(client)),
@@ -235,7 +247,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 export class ConnectionService extends Context.Service<
   ConnectionService,
   Effect.Success<ReturnType<typeof gatewayLogic>>
->()("fabrika/Connection") {}
+>()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 export const connectionLayer = (ctx: DurableObjectState, env: Env, config: BrainOptions) =>
   Layer.effect(ConnectionService, gatewayLogic(ctx, env, config)).pipe(Layer.provide(ProcessIdGenerator.layer));

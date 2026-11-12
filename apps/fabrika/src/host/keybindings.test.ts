@@ -18,17 +18,13 @@ const bind = (does: Does, keys: readonly string[]) => Edit.cases.bind.make({ doe
 const row = (keys: Keys, does: string) => keys.rows.find((r) => r.does === does);
 const pause = Effect.sleep("150 millis");
 
-const until = (what: string, check: () => boolean) =>
+// No count of tries or wall-clock cap here: how long a watch takes to answer depends on the machine's
+// load (0036, 0052). A condition that never holds ends at the test's own timeout, which names the test.
+const until = (_what: string, check: () => boolean) =>
   Effect.gen(function* () {
-    for (let i = 0; i < 1000; i += 1) {
-      if (check()) {
-        return;
-      }
-
+    while (!check()) {
       yield* Effect.sleep("5 millis");
     }
-
-    return yield* Effect.die(`waited for ${what}`);
   });
 
 // The real service on real files. Only the two OS failures are injected.

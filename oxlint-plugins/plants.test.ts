@@ -366,6 +366,8 @@ describe("each rule refuses what it is there to refuse", () => {
       // P17a's path-scoped rules have plants in their own oxlint-plugins/*.test.ts files.
       "door-is-library",
       "outside-input-constructor",
+      // T737's rule reads only libfabrika's src, so service-id.test.ts plants it there.
+      "service-id",
       // T518's retired module is planted in one-id-module.test.ts.
       "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
@@ -387,8 +389,11 @@ describe("each rule refuses what it is there to refuse", () => {
       "modules",
       // P16's rule reads the program package, so generated packages plant it in its own test file.
       "program-package-layout",
-      // Generated no-why-key.test.ts plants run at next/ paths with the real lint config.
-      "no-why-key",
+      // Generated no-question-word-key.test.ts plants run at next/ and .agents/ paths with the real
+      // lint config, beside oxlint's own id-denylist. Generated no-wall-clock.test.ts plants run at
+      // next/ paths with the real lint config.
+      "no-question-word-key",
+      "no-wall-clock",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
     ];

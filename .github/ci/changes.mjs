@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{check: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
+/** @typedef {{check: boolean, typecheck: boolean, test: boolean, next: boolean, e2e: boolean, field: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, test: true, next: true, e2e: true, field: true };
+const all = { check: true, typecheck: true, test: true, next: true, e2e: true, field: true };
 const today = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 const helper = "next/apps/fabrika/src/exam/plant.ts";
 const commits = "next/apps/fabrika/src/exam/commits.ts";
@@ -68,13 +68,40 @@ export const classify = (paths, event) => {
 
   /** @param {string} path */
   const quiet = (path) => safe(path) || prose(path);
+  // The typecheck is its own job so it answers at once, beside lint and build; it reads the same
+  // paths as check, so it runs where check runs.
+  const check = !paths.every(quiet);
   return {
-    check: !paths.every(quiet),
+    check,
+    typecheck: check,
     test: !paths.every((path) => quiet(path) || (path.startsWith("next/") && path !== helper && path !== commits)),
     next: !paths.every((path) => quiet(path) || script(path) || old(path)),
     e2e: !paths.every((path) => quiet(path) || script(path) || path.startsWith("next/")),
     field: paths.some(rows),
   };
+};
+
+/** @typedef {Flags & {build: boolean}} Jobs */
+
+/**
+ * What one event runs: classify's flags, plus `build`, the slow half of check (its promises gate
+ * and `pnpm build`). A draft pull request runs only the fast jobs: changes, field, typecheck and
+ * check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts a run with
+ * `draft` false, so the full set runs on that head before it can merge. Only a pull request can
+ * be a draft; on any other event the flag is ignored.
+ * @param {readonly string[] | null} paths
+ * @param {string} event
+ * @param {boolean} draft
+ * @returns {Jobs}
+ */
+export const jobs = (paths, event, draft) => {
+  const flags = classify(paths, event);
+
+  if (event === "pull_request" && draft) {
+    return { ...flags, test: false, next: false, e2e: false, build: false };
+  }
+
+  return { ...flags, build: flags.check };
 };
 
 /** @param {string} sha */
@@ -124,7 +151,9 @@ export const readPaths = (base, head, event, run = git) => {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const event = process.env["EVENT"] ?? "";
   const paths = readPaths(process.env["BASE"] ?? "", process.env["HEAD"] ?? "", event);
-  const flags = classify(paths, event);
+  // `github.event.pull_request.draft`: "true" on a draft, "false" or empty otherwise. Anything but
+  // "true" runs the full set, so a value we cannot read never skips a job.
+  const flags = jobs(paths, event, process.env["DRAFT"] === "true");
   const output = `${Object.entries(flags)
     .map(([job, enabled]) => `${job}=${enabled}`)
     .join("\n")}\n`;

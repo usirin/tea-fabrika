@@ -441,7 +441,8 @@ const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
 ) => {
-  table.programs.counter = { hash: "counter-a", source: "counter" };
+  // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
+  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   table.programs[requestProgram.name] = { hash: "requester-a", source: "requester" };
@@ -854,7 +855,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs.counter = { hash: "counter-b", source: "changed counter" };
+      table.programs["fabrika/counter"] = { hash: "counter-b", source: "changed counter" };
       project = projectObject(ctx, env);
       return project.info();
     },
@@ -906,7 +907,7 @@ const world = (
           key: key.raw,
           for: PERSON,
           to: "project-test",
-          saw: { label: "fixture", where: "local", how: "command", check: "none" },
+          saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
         expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
@@ -937,7 +938,9 @@ describe("P12 Project configure recovery", () => {
       const descriptor = w.attempts[0]!;
       const saved = w.db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(descriptor.id);
       expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
-      expect(await w.reopen()).toMatchObject([{ process: descriptor.id, name: "counter:1", program: "counter" }]);
+      expect(await w.reopen()).toMatchObject([
+        { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
+      ]);
       expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
 
       for (const attempt of w.attempts) {
@@ -1042,7 +1045,7 @@ const FLOW_WAIT = 15_000;
 /** The crash that trips P34's decided Worker policy, 5 restarts in 5,000 ms: it goes down, not restarted. */
 const BRAKE = 6;
 
-const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean) => {
+const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
   const end = Date.now() + FLOW_WAIT;
   let last: unknown = null;
 
@@ -1061,7 +1064,7 @@ const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) =
     await new Promise((done) => setTimeout(done, 20));
   }
 
-  throw new Error(`${what}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
+  throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
 };
 
 const NAME = "poison:1";

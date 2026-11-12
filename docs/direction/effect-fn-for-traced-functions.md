@@ -2,6 +2,8 @@
 
 **Decided 2026-11-07 by the owner.** This is about `next/`. Today's code is not changed.
 
+Its decided rules are in: [0252](../../.decisions/0252-effect-fn-for-exported-effects.md).
+
 ```ts
 import { Effect } from "effect";
 

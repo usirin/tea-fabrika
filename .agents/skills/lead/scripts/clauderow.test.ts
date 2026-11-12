@@ -1,4 +1,3 @@
-import "./clauderow.py?raw";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

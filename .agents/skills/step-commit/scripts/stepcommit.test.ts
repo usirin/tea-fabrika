@@ -1,46 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/mutbox.ts?raw";
-import "../../lead/scripts/mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./stepcommit.sh?raw";
-import "../../lead/scripts/leakgrep.sh?raw";
-import "./exam.py?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/sizecap.ts?raw";
-import "../../lead/scripts/box.sh?raw";
-import "../../lead/scripts/keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/boxnode.ts?raw";
-import "../../lead/scripts/fieldrow.py?raw";
-import "../../lead/scripts/runplan.sh?raw";
-import "../../lead/scripts/env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/gc.ts?raw";
-import "../../lead/scripts/redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/botpush.mjs?raw";
-import "../../lead/scripts/clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../lead/scripts/lane.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../../../exam-paths.json?raw";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -146,6 +103,15 @@ if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
 process.stdout.write(prs);
 `;
     writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, { mode: 0o755 });
+    // The publisher (0134) records its arguments, and fails when T134_PUBLISH says "fail".
+    const publish = String.raw`
+const fs=require("node:fs");
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["publish",...process.argv.slice(2)])+"\n");
+if(process.env.T134_PUBLISH==="fail"){console.log("publish: refused: push rejected");process.exit(1);}
+console.log("publish: pushed");
+`;
+    writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
+    this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
     put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
@@ -216,6 +182,16 @@ process.stdout.write(prs);
           .split("\n")
           .map((s) => JSON.parse(s))
           .filter((a: string[]) => a[0] === "commits")
+      : [];
+  }
+
+  published(): string[][] {
+    return existsSync(join(this.dir, "calls"))
+      ? readFileSync(join(this.dir, "calls"), "utf8")
+          .trim()
+          .split("\n")
+          .map((s) => JSON.parse(s))
+          .filter((a: string[]) => a[0] === "publish")
       : [];
   }
 
@@ -750,19 +726,19 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     // scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
     // time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
     type Case = {
-      where: "other" | "same" | "own-wip" | "none";
+      location: "other" | "same" | "own-wip" | "none";
       ticket: string;
       step: Owner;
       only: boolean;
     };
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
     const cases: Case[] = [
-      ...(["other", "same", "own-wip", "none"] as const).map((where) => ({ ...lead, where })),
-      { ...lead, where: "other", ticket: "999" },
-      { ...lead, where: "other", step: "build" },
-      { ...lead, where: "other", only: true },
+      ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
+      { ...lead, location: "other", ticket: "999" },
+      { ...lead, location: "other", step: "build" },
+      { ...lead, location: "other", only: true },
     ];
-    each(cases, ({ where, ticket, step, only }) =>
+    each(cases, ({ location, ticket, step, only }) =>
       withRepo([["src/owned.ts", step]], (r) => {
         const head = {
           other: "fabrikalfa/lane",
@@ -770,13 +746,13 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           "own-wip": "fabrikalfa/one-wip",
         };
 
-        if (where !== "none") {
-          r.openPr(head[where], ticket);
+        if (location !== "none") {
+          r.openPr(head[location], ticket);
         }
 
         r.changed("src/owned.ts");
         const got = r.commit(step, ["src/owned.ts"], only);
-        const refused = step === "lead" && !only && where === "other" && ticket === "321";
+        const refused = step === "lead" && !only && location === "other" && ticket === "321";
 
         if (refused) {
           expect(got.code, got.text).toBe(5);
@@ -815,5 +791,49 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           expect(r.signs()).toEqual([]);
         }),
     );
+  });
+});
+
+describe("T134 a signed commit leaves the laptop the moment it is made (0134), today's tooling", () => {
+  // Plants: publish before the sign; publish on --commit-only or in a box's sign worktree; pass when
+  // the publish fails.
+  it("scenario: a signed commit is published on its own branch, after the sign; --commit-only is not", () => {
+    // scenario: the two routes of one commit, signed and commit-only, on the same tree.
+    each([false, true], (only) =>
+      withRepo([["src/owned.ts", "tests"]], (r) => {
+        r.changed("src/owned.ts");
+        const got = r.commit("tests", ["src/owned.ts"], only);
+        expect(got.code, got.text).toBe(0);
+        expect(r.published()).toEqual(only ? [] : [["publish", "fabrikalfa/one"]]);
+        const calls = readFileSync(join(r.dir, "calls"), "utf8");
+        expect(only || calls.indexOf('["commits"') < calls.indexOf('["publish"')).toBe(true);
+      }),
+    );
+  });
+
+  it("scenario: a box's commit, in drive's sign worktree, is left for the host part to push", () => {
+    // scenario: STEPCOMMIT_BOX names the box; drive.ts's pushing phase pushes its commit next.
+    withRepo([["src/owned.ts", "tests"]], (r) => {
+      r.env.STEPCOMMIT_BOX = "one";
+      r.changed("src/owned.ts");
+      const got = r.commit("tests", ["src/owned.ts"]);
+      expect(got.code, got.text).toBe(0);
+      expect(r.signs()).toHaveLength(1);
+      expect(r.published()).toEqual([]);
+    });
+  });
+
+  it("scenario: a publish that fails exits 6 and says so, with the commit made and signed", () => {
+    // scenario: the bot's push is refused; the commit step must fail, never pass quietly.
+    withRepo([["src/owned.ts", "tests"]], (r) => {
+      r.env.T134_PUBLISH = "fail";
+      r.changed("src/owned.ts");
+      const got = r.commit("tests", ["src/owned.ts"]);
+      expect(got.code, got.text).toBe(6);
+      expect(got.text).toContain("committed and signed, but not pushed (0134)");
+      expect(got.text).toContain("publish.ts fabrikalfa/one");
+      expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+      expect(r.signs()).toHaveLength(1);
+    });
   });
 });

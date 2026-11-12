@@ -2,6 +2,9 @@
 
 Decided 2026-10-11. Both names are working names.
 
+Its decided rules are in: [0231](../../.decisions/0231-ledger-and-codehost-are-separate.md),
+[0232](../../.decisions/0232-a-claim-is-a-lease.md).
+
 *2026-10-19: `Ledger` now belongs to tea-host, which gives it to the programs
 it runs; `CodeHost` stays with fabrika. See tea-host.*
 

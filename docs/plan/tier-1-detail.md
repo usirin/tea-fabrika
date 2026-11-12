@@ -220,6 +220,8 @@ crash  nothing: launchd keeps the brain, and the next open finds it
 
 ## Notes
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes program leaves Tier 1 and is Tier 2's first real app. Tier 1's program is the checklist ([Tier 1's P44](./tier-1.md#the-pull-requests-one-at-a-time)). P13 keeps only its two platform slices, durable terminal replies and safe input recording. This text stays for Tier 2.*
+
 **The answer:** a list of notes, each with a raw Markdown body, drawn when read and a plain text box when edited. A save comes after a short pause, on leaving the box, or from an agent's tool. Full history is kept, and everything reads back after a restart. It is a sealed program in the same box as the counter, with no network and no binding. It lands as PR D, for the reason in biggest call 10.
 
 ```ts
@@ -380,6 +382,8 @@ const Box = Schema.TaggedUnion({
 
 ## Drawing a note
 
+*Moved 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): drawing a note leaves Tier 1 with notes, and P22 goes to Tier 2. In Tier 1, a checklist item's note is drawn as plain text. This text stays for Tier 2.*
+
 **The answer:** a note opens drawn. `e` or an Edit button shows the plain text box, and saving goes back to drawn. The fact keeps the raw `body`. Blocks are derived, never stored. The drawing comes from today's `programs/markdown`, copied by a named exception.
 
 ```ts
@@ -440,6 +444,8 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 ## Agents through MCP
 
+*Changed 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the agent's program in Tier 1 is the checklist, not notes. Its tools are `checklist_check` (with an optional `note`), `checklist_uncheck`, `checklist_left` and `checklist_items`; `add`, `rename` and `remove` are a person's and get no tool. The checklist's half is built in [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019); P25 builds the tools. The notes example below stays for Tier 2.*
+
 **The answer:** an agent adds one line, and it has tools made from each program's inputs.
 
 ```text
@@ -465,7 +471,7 @@ agent client  --MCP over stdio-->  the bridge  --the same WebSocket and door--> 
                                    a headless client, `as: "agent"`
 ```
 
-MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[notes]`, and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
+MCP runs only between the agent client and the bridge. On the wire, the bridge is a client like any other, so a browser could be this client too. The bridge lives on `@kampus/libfabrika/mcp` and names no program. `next/apps/fabrika/mcp.ts` starts it and hands it `[checklist]` (*changed 2026-11-11, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md): it said `[notes]`*), and `fabrika` is a one-line command that calls that. The instance comes from `instance.json`, so an agent writes where real notes live, and `--url` wins for one run.
 
 **Let in once.** The first time a name is used, the bridge makes a key file in the app's home (`<home>/agents/<name>.key`, mode 0600) and knocks with `{label: "claude", as: "agent"}`. The menu bar shows the usual row: "Agent claude, this Mac, says code 482 109". **How often: once per agent name, one click on Approve with the same check as any row, never again.** The grant says `as: "agent"` and `for` the person, signed. Until then, every tool call answers in words:
 
@@ -1661,7 +1667,7 @@ const sent = yield* runner.msg(delivery);            // P10's delivery, decoded 
 yield* runner.due(Date.parse("2026-11-08T10:05:00Z")); // the object's alarm fired: a timer letter, if the program asked
 ```
 
-**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../direction/program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
+**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../../.decisions/0256-a-program-is-one-program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
 
 ```ts
 // runtime/Program.ts
@@ -1846,6 +1852,7 @@ remoteProcessManager(manager); // processes/ProcessManager.ts, from a plain Proc
 - **These twelve handoffs are methods on the plain classes** in `next/apps/fabrika/src/brain.ts`, each one line into its service. They move to Effect objects with ticket 502's port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)).
 - **Records.** No new event or recovery state. The Worker now writes the existing `dead`, `exited`, `started`, `restarted` and `down` events, and the existing `runner.throw`, `runner.dead`, `runner.restart` and `runner.recover` spans, with the real process ID on each.
 - **Tested.** `next/apps/fabrika/src/worker-supervision.test.ts` runs three scenarios on the real local instance (workerd, the real brain, alarms): a poison letter reaches `dead` at its limit of 2 and its sender is refused with `reason: "dead"`, then the successor accepts healthy mail and its counts survive a reopen; a trusted restart starts the new init once per request ID; a saved stepping marker becomes one interrupted recovery after an abort. `runtime-recovery.laws.test.ts` generates `RecoveryFlow` cases (limits 1 to 32, resends, reopen points, lost Project calls) against the real services on SQLite.
+- **A workerd kill, with tracker ticket 646.** A kill between steps restarts nothing; a kill inside a step refuses the first letter that wakes the name, and its resend after the `restarted` fact is accepted; a resend of a letter the inbox already holds answers its first placing.
 - **Not covered.** Cloud alarms, cloud eviction and a deploy are P24's. The 1 GiB receipt cap is a wiring choice, not a measure, and nothing cleans receipts yet. Mutation cannot reach code that runs only inside workerd. The retry policy after the brake is P34c's (ticket 404).
 
 ### The span sink, as P37 built it

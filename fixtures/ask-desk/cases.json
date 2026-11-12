@@ -1,0 +1,316 @@
+{
+  "AGENT": {
+    "kind": "agent",
+    "id": "lane",
+    "for": "owner"
+  },
+  "CANONICAL_INPUT": {
+    "numbers": [
+      333333333.3333333,
+      1e+30,
+      4.5,
+      0.002,
+      1e-27
+    ],
+    "string": "€$\u000f\nA'B\"\\\"/",
+    "literals": [
+      null,
+      true,
+      false
+    ]
+  },
+  "CANONICAL_TEXT": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\"/\"}",
+  "DRAFT": {
+    "ask": "a-approve-8-sealed",
+    "for": "approve",
+    "step": "plan",
+    "repo": "fixture/project",
+    "why": null,
+    "what": "Do you approve plan version 2?",
+    "picks": [
+      {
+        "pick": "approve",
+        "does": "Take the lean on each open question and write the tests"
+      },
+      {
+        "pick": "no",
+        "does": "Keep the lane parked for a new plan"
+      }
+    ],
+    "rec": {
+      "_tag": "pick",
+      "pick": "approve",
+      "why": "The plan covers the ticket",
+      "cost": "One small change",
+      "sure": 95
+    },
+    "ticket": {
+      "title": "tracker | ticket | map: the map should take a ticket",
+      "body": "Select a ticket in tracker and pass it to the map."
+    },
+    "evidence": {
+      "_tag": "plan",
+      "version": 2,
+      "plan": {
+        "summary": "Pass the selected ticket through the pipe.",
+        "stories": [
+          {
+            "id": "reader",
+            "who": "a reader",
+            "want": "the selected ticket on the map",
+            "why": "keep context",
+            "from": "the ticket"
+          }
+        ],
+        "tasks": [],
+        "pointers": [],
+        "questions": [
+          {
+            "id": "q1",
+            "ask": "Keep one ticket input?",
+            "options": [
+              "Keep one input",
+              "Add inputs"
+            ],
+            "lean": "Keep one input",
+            "why": "One selection",
+            "cost": "One input",
+            "sure": 99
+          },
+          {
+            "id": "q2",
+            "ask": "Keep the map beside the ticket?",
+            "options": [
+              "Keep it beside",
+              "Replace it"
+            ],
+            "lean": "Keep it beside",
+            "why": "Keep context",
+            "cost": "One tile",
+            "sure": 95
+          },
+          {
+            "id": "q3",
+            "ask": "Clear a missing ticket?",
+            "options": [
+              "Clear it",
+              "Keep it"
+            ],
+            "lean": "Clear it",
+            "why": "Avoid stale context",
+            "cost": "An empty state",
+            "sure": 95
+          }
+        ]
+      }
+    },
+    "until": null
+  },
+  "FILED": {
+    "type": "filed",
+    "title": "tracker | ticket | map: the map should take a ticket",
+    "body": "Select a ticket in tracker and pass it to the map."
+  },
+  "HEAD": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "LEGACY_ANSWER": {
+    "type": "answered",
+    "ask": "a-approve-2",
+    "pick": "approve",
+    "note": "",
+    "text": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+  },
+  "LEGACY_ASK": {
+    "type": "asked",
+    "ask": "a-approve-8",
+    "what": "Do you approve plan version 2?",
+    "picks": [
+      "approve",
+      "no"
+    ],
+    "trace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+  },
+  "LEGACY_FACTS": [
+    {
+      "type": "filed",
+      "title": "tracker | ticket | map: the map should take a ticket",
+      "body": "Select a ticket in tracker and pass it to the map."
+    },
+    {
+      "type": "started",
+      "run": "r-plan-2",
+      "stage": "plan",
+      "task": null,
+      "log": null,
+      "trace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    },
+    {
+      "type": "planned",
+      "version": 1,
+      "tasks": []
+    },
+    {
+      "type": "ended",
+      "run": "r-plan-2",
+      "stage": "plan",
+      "outcome": {
+        "kind": "done",
+        "part": false
+      },
+      "usd": 0,
+      "input": 0,
+      "output": 0,
+      "turns": 1
+    },
+    {
+      "type": "asked",
+      "ask": "a-approve-2",
+      "what": "Do you approve plan version 1?",
+      "picks": [
+        "approve",
+        "no"
+      ]
+    },
+    {
+      "type": "answered",
+      "ask": "a-approve-2",
+      "pick": "approve",
+      "note": "",
+      "text": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+    },
+    {
+      "type": "restarted",
+      "from": "plan",
+      "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "onto": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "head": null,
+      "to": null,
+      "conflicts": []
+    },
+    {
+      "type": "started",
+      "run": "r-plan-8",
+      "stage": "plan",
+      "task": null,
+      "log": null,
+      "trace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    },
+    {
+      "type": "planned",
+      "version": 2,
+      "tasks": []
+    },
+    {
+      "type": "ended",
+      "run": "r-plan-8",
+      "stage": "plan",
+      "outcome": {
+        "kind": "done",
+        "part": false
+      },
+      "usd": 0,
+      "input": 0,
+      "output": 0,
+      "turns": 1
+    },
+    {
+      "type": "asked",
+      "ask": "a-approve-8",
+      "what": "Do you approve plan version 2?",
+      "picks": [
+        "approve",
+        "no"
+      ],
+      "trace": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+    }
+  ],
+  "NONE": {
+    "_tag": "none",
+    "why": "No recommendation was recorded"
+  },
+  "NOW": 1800000000000,
+  "OTHER_HEAD": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "OWNER": {
+    "kind": "user",
+    "id": "owner"
+  },
+  "PICKS": [
+    {
+      "pick": "approve",
+      "does": "Take the lean on each open question and write the tests"
+    },
+    {
+      "pick": "no",
+      "does": "Keep the lane parked for a new plan"
+    }
+  ],
+  "PLAN": {
+    "summary": "Pass the selected ticket through the pipe.",
+    "stories": [
+      {
+        "id": "reader",
+        "who": "a reader",
+        "want": "the selected ticket on the map",
+        "why": "keep context",
+        "from": "the ticket"
+      }
+    ],
+    "tasks": [],
+    "pointers": [],
+    "questions": [
+      {
+        "id": "q1",
+        "ask": "Keep one ticket input?",
+        "options": [
+          "Keep one input",
+          "Add inputs"
+        ],
+        "lean": "Keep one input",
+        "why": "One selection",
+        "cost": "One input",
+        "sure": 99
+      },
+      {
+        "id": "q2",
+        "ask": "Keep the map beside the ticket?",
+        "options": [
+          "Keep it beside",
+          "Replace it"
+        ],
+        "lean": "Keep it beside",
+        "why": "Keep context",
+        "cost": "One tile",
+        "sure": 95
+      },
+      {
+        "id": "q3",
+        "ask": "Clear a missing ticket?",
+        "options": [
+          "Clear it",
+          "Keep it"
+        ],
+        "lean": "Clear it",
+        "why": "Avoid stale context",
+        "cost": "An empty state",
+        "sure": 95
+      }
+    ]
+  },
+  "REC": {
+    "_tag": "pick",
+    "pick": "approve",
+    "why": "The plan covers the ticket",
+    "cost": "One small change",
+    "sure": 95
+  },
+  "TOOK": {
+    "key": "y",
+    "rec": "shown",
+    "ms": 1200,
+    "opened": [
+      "questions",
+      "plan"
+    ],
+    "said": 1800000000000
+  },
+  "TRACE": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+}

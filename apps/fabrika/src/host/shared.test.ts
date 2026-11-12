@@ -29,9 +29,9 @@ import { Context, Effect, Exit, FileSystem, Layer, Option, Path, Schema, Scope, 
 import { ChildProcess } from "effect/process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { attach } from "../attach.ts";
+import { projectHome } from "../project.test-support.ts";
 import { CONNECTION_FILE, connect, connectAndRestart, hostLedger, invite, loginWith, members } from "./connection.ts";
 import { move, readLaptop } from "./move.ts";
-import { pathsOf } from "./socket.ts";
 
 // Two people on one laptop, sharing one ledger server: its twin, in Miniflare, from the same
 // Worker and bindings a deploy uses (packages/ledger-server). Each person has their own app home
@@ -521,18 +521,20 @@ describe("connecting while the app runs", () => {
     });
 
   it("the running host is stopped, and the app's next try starts one on the new ledger", async () => {
-    const home = join(root, "alice", "live");
-    mkdirSync(home, { recursive: true });
+    const app = join(root, "alice", "live");
+    mkdirSync(app, { recursive: true });
     const seen = await Effect.runPromise(
       Effect.gen(function* () {
-        const paths = yield* pathsOf(home);
+        // A host starts only on a project's home (host/main.ts): a working tree and its record.
+        const { home, paths, project } = yield* projectHome(app, "work");
+        const as = { key: project.key, paths };
         const started: number[] = [];
         const start = Effect.gen(function* () {
           const host = yield* hostProcess(home);
           started.push(host.pid);
           return host.exitCode;
         });
-        const before = yield* attach({ home, deliver: () => {}, start });
+        const before = yield* attach({ home, deliver: () => {}, start, project: as });
         const old = yield* pidIn(paths.pid);
         const logins = () => calls.filter((p) => p === "/user/7").length;
         const connected = yield* connectAndRestart(home, {
@@ -543,7 +545,7 @@ describe("connecting while the app runs", () => {
         const atConnect = logins();
         const ended = yield* before.wire.ended.pipe(Effect.timeout("5 seconds"));
         // What the reconnect machine's next try does: attach, which starts a host when none answers.
-        const after = yield* attach({ home, deliver: () => {}, start });
+        const after = yield* attach({ home, deliver: () => {}, start, project: as });
         return {
           connected,
           ended: typeof ended,

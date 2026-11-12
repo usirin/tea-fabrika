@@ -1480,7 +1480,8 @@ main.program > [role="alert"] {
   gap: 12px;
 }
 
-button {
+/* A plain button. A Manti button (`data-scope`) is Manti's to draw, here and in every rule below. */
+button:where(:not([data-scope])) {
   font: inherit;
   color: var(--text-secondary);
   background: var(--line);
@@ -1494,7 +1495,12 @@ button:hover {
   border-color: var(--key);
 }
 
-button:focus-visible {
+/* Manti draws its own hover: the plain one above stops at it. */
+button[data-scope]:hover {
+  border-color: revert-layer;
+}
+
+button:where(:not([data-scope])):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -1523,14 +1529,14 @@ button:focus-visible {
   box-sizing: border-box;
 }
 
-.view button,
+.view button:where(:not([data-scope])),
 .view input,
 .view textarea {
   font: inherit;
   color: inherit;
 }
 
-.view button {
+.view button:where(:not([data-scope])) {
   background: none;
   border: 0;
   border-radius: 0;
@@ -1539,11 +1545,11 @@ button:focus-visible {
   text-align: start;
 }
 
-.view button:hover {
+.view button:where(:not([data-scope])):hover {
   border-color: transparent;
 }
 
-.view button:disabled {
+.view button:where(:not([data-scope])):disabled {
   cursor: default;
 }
 
@@ -1841,7 +1847,7 @@ button:focus-visible {
 }
 
 /* Buttons: quiet by default, one filled for the thing a form is for. */
-.tracker button {
+.tracker button:where(:not([data-scope])) {
   font: inherit;
   color: var(--soft);
   background: transparent;
@@ -1851,12 +1857,12 @@ button:focus-visible {
   cursor: default;
 }
 
-.tracker button:hover {
+.tracker button:where(:not([data-scope])):hover {
   background: var(--hover);
   border-color: var(--line);
 }
 
-.tracker button:focus-visible,
+.tracker button:where(:not([data-scope])):focus-visible,
 .tracker a:focus-visible,
 .tracker input:focus-visible,
 .tracker textarea:focus-visible {
@@ -1876,6 +1882,13 @@ button:focus-visible {
   background: transparent;
   color: var(--faint);
   border-color: var(--line);
+}
+
+/* A disabled Manti button is Manti's to draw, as an enabled one is. */
+.tracker button[data-scope]:disabled {
+  opacity: revert-layer;
+  background: revert-layer;
+  border-color: revert-layer;
 }
 
 /* The bar: what the list shows, and the search. */
@@ -2773,6 +2786,25 @@ main.program:has(> .view) {
   overflow-wrap: anywhere;
 }
 
+/* The turn card's icon, drawn bare: the card is the one box, so the icon gets none of its own. */
+.ticket-view .turn-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  color: var(--text-muted);
+}
+
+.ticket-view .turn-icon.w-done {
+  color: var(--done);
+}
+
+.ticket-view .turn-icon svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
 .ticket-view .turnc {
   display: flex;
   align-items: center;
@@ -2780,20 +2812,397 @@ main.program:has(> .view) {
   flex-wrap: wrap;
   padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
   border-radius: var(--r-lg);
-  background: var(--surface-raised);
-  box-shadow: inset 0 0 0 1px var(--border-faint);
+  background: var(--surface-card);
 }
 
 .ticket-view .turnc.you {
-  box-shadow:
-    inset 0 0 0 1px var(--border-faint),
-    inset 2px 0 0 var(--turn-fill);
+  box-shadow: none;
 }
 
 .ticket-view .turnc.stuck {
+  box-shadow: none;
+}
+
+/* Design E (owner, 2026-11-08): the ask is one quiet bar under the ticket's title, where the card
+   sat. No box and no fill: only a hairline under it. It scrolls with the ticket, and what opens
+   under it (every pick, the note, a failed save) stays in normal flow. */
+.ask-view {
+  display: grid;
+  gap: var(--s-2);
+  min-inline-size: 0;
+  position: relative;
+  padding: var(--s-2) 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--fs-body) / 1.5 var(--font);
+}
+
+/* The one hairline under the bar: square at both ends, so it never reads as a card's bottom. */
+.ask-view::after {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 1px;
+  background: var(--border-faint);
+  content: "";
+}
+
+/* Focused from the keyboard, the hairline becomes the app's focus ring line: its color and its 2px,
+   the whole width of the bar (WCAG 2.4.7). A 1px gray line was too faint to find. Still a line under
+   the bar, never a box around it; each control inside draws its own ring (`.view :focus-visible`). */
+.ask-view:focus-visible {
+  border-radius: var(--r-lg);
+  outline: none;
+}
+.ask-view:focus-visible::after {
+  block-size: 2px;
+  background: var(--focus);
+}
+
+.ask-view p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Line one: whose turn and the question. The actions sit on the line under it, at the content's
+   left edge, on every layout: never pushed to the far right of a wide tile, as a ticket column
+   reads top to bottom. */
+.ask-line {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-2);
+  min-inline-size: 0;
+}
+.ask-question {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--s-2);
+  min-inline-size: 0;
+  font-weight: 600;
+}
+/* The turn says so in words; its indigo only repeats them (WCAG 1.4.1). */
+.ask-turn {
+  color: var(--turn-text);
+}
+
+/* Line two: the rec line, then the optional mark, quiet, at its end. */
+/* Line two flows as one run of text. A long hint (a blind ask's "Your pick first: …") wraps like
+   words, and "Did this need you?" goes on after its last word where it fits, never on a line of its
+   own while the hint's line has room. The pair of marks moves as one piece. */
+.ask-rec {
+  min-inline-size: 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.ask-view .ask-recwords {
+  display: inline;
+  margin-inline-end: var(--s-2);
+  overflow-wrap: normal;
+}
+.ask-recwords strong {
+  font-weight: 600;
+}
+.ask-quiet {
+  color: var(--text-faint);
+}
+/* Line three: the rec's reason, then the evidence's one quiet button right after it. A reason that
+   wraps fills the line, so the button drops under it at the reason's left edge, never to the right
+   of a wrapped reason. */
+.ask-why {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  font-size: var(--fs-small);
+}
+.ask-why > p {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+.ask-toolbar,
+.ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+}
+/* The actions keep one line: no button ever sits alone on a line. Narrow, their key chips go first
+   (below), then a long label wraps inside its own button. */
+.ask-toolbar {
+  flex-wrap: nowrap;
+  max-inline-size: 100%;
+}
+@container main (max-width: 480px) {
+  .ask-toolbar [data-scope="kbd"] {
+    display: none;
+  }
+}
+/* "Did this need you?" and its two marks are one piece: they go on after the rec's words where
+   they fit, or take the next line together, at the words' left edge. Never split, never one mark
+   to a line. */
+/* Baseline, not middle: on the hint's line "Did this need you?" reads as the same line of text. */
+.ask-marks {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: var(--s-2);
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.ask-mark-pair {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--s-2);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+/* In a tile under about 320px the piece cannot hold one line: the question, then each mark, take
+   the next line at the words' left edge, so nothing scrolls sideways (review 3). */
+@container main (max-width: 320px) {
+  .ask-marks,
+  .ask-mark-pair {
+    flex-wrap: wrap;
+    max-inline-size: 100%;
+    white-space: normal;
+  }
+}
+.ask-view button {
+  white-space: normal;
+}
+
+/* The key on the one indigo button reads in the button's own text color, on no fill of its own. */
+.ask-view [data-variant="primary"] [data-scope="kbd"] {
+  border-color: currentcolor;
+  color: inherit;
+}
+
+/* The bar's quiet buttons (the marks, Evidence) read as words: no side padding, so a line that
+   starts with one starts at the same edge as the words above it. */
+.ask-why [data-variant="tertiary"],
+.ask-marks [data-variant="tertiary"] {
+  padding-inline: 0;
+}
+/* The marks are quiet: small words, and a pressed one takes the selected fill, its primary text and
+   an underline, so color is never the only cue (WCAG 1.4.1). */
+.ask-marks [data-scope="button"] {
+  /* A 24px target (WCAG 2.5.8) that takes a text line's height in the flow: the line under the
+	   marks starts where it would under words. */
+  min-block-size: 24px;
+  margin-block: -4px;
+  color: var(--text-faint);
+}
+/* A press never changes the piece's width, so the marks stay on the line they had and under the
+   pointer that pressed them: the cue is an underline, which takes no width, not a check beside the
+   words. The fill hugs the words: it reaches past them sideways only, and its box is the words' own
+   height, so it keeps the bar's row gap (`--s-1`) from the line above and the row below, also where
+   the piece wraps under a blind ask's hint. */
+.ask-marks [data-part="root"][aria-pressed="true"] {
+  /* Holds its 24px target below to the mark itself, not to the tile around it. */
+  position: relative;
+  min-block-size: 0;
+  margin-block: 0;
+  border-block-width: 0;
+  background: var(--surface-selected);
   box-shadow:
-    inset 0 0 0 1px var(--border-faint),
-    inset 2px 0 0 var(--stuck);
+    var(--s-1) 0 0 0 var(--surface-selected),
+    calc(-1 * var(--s-1)) 0 0 0 var(--surface-selected);
+  color: var(--text-primary);
+  line-height: 1;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+/* Manti's label inside the mark is `data-scope="button"` too, so the rule above gives it the 24px
+   target as well. Pressed, the label takes the words' own height and the mark's text, or it would
+   hold the fill at the target's height, up against the line above. */
+.ask-marks [aria-pressed="true"] > [data-part="label"] {
+  min-block-size: 0;
+  margin-block: 0;
+  color: inherit;
+}
+/* The pressed mark's target stays 24px tall (WCAG 2.5.8) around its smaller fill. */
+.ask-marks [data-part="root"][aria-pressed="true"]::before {
+  position: absolute;
+  inset-block: calc(50% - 12px);
+  inset-inline: 0;
+  content: "";
+}
+
+/* Every pick, a list under the bar: rows with no edge of their own, each number at the same edge. */
+.ask-picks {
+  display: grid;
+  gap: 2px;
+}
+.ask-picks [data-scope="button"] {
+  justify-content: flex-start;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 28px;
+  gap: var(--s-2);
+  text-align: start;
+}
+.ask-picks .ask-quiet {
+  font-weight: 400;
+}
+.ask-view form {
+  display: grid;
+  gap: var(--s-2);
+}
+
+/* Manti's field draws the note's one box and its focus: the textarea inside draws neither. */
+.ask-view textarea:focus-visible {
+  outline: none;
+}
+/* One ring, not two: focused, Manti's field turns its 1px border the ring's color and draws its
+   2px ring 2px outside it, two lines with a gap. Here the ring lies over the border instead, so a
+   person sees one 2px line. The field's side padding moves into the textarea, so the ring hugs the
+   box the words are typed in. Its width is the design's 12px step, the side padding of Manti's
+   default (md) field. */
+.ask-note [data-scope="field"][data-part="control"] {
+  padding-inline: 0;
+}
+.ask-note [data-scope="field"][data-part="input"] {
+  padding-inline: var(--s-3);
+  /* At rest one line (`rows={1}`), growing as the words wrap: the note is one line by its schema,
+     so the bar from "Your turn" to Send and Cancel fits a short tile. */
+  field-sizing: content;
+}
+.ask-note [data-scope="field"][data-part="control"]:has([data-part="input"]:focus-visible) {
+  outline-offset: -1px;
+}
+
+/* A failed save is a line under the bar, not a red box: its mark, its words, Try again. */
+.ask-fail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--stuck);
+}
+.ask-fail p {
+  flex: 1 1 200px;
+}
+
+/* What the ask stands on, as words: labels, short lists, the step's own words, then the diff. */
+.ask-evidence {
+  display: grid;
+  gap: var(--s-1);
+}
+/* Closed, the evidence stays in the markup and out of sight: `hidden` beats the grid above. */
+.ask-evidence[hidden] {
+  display: none;
+}
+.ask-evidence ul {
+  margin: 0;
+  padding-inline-start: var(--s-4);
+}
+/* A plan's paths and ids are long single words: they wrap rather than push the tile sideways. */
+.ask-evidence li {
+  overflow-wrap: anywhere;
+}
+/* One item's fields sit under the item's own bullet, not under a second one. */
+.ask-evidence .ask-fields {
+  padding-inline-start: 0;
+  list-style: none;
+}
+.ask-evidence-label {
+  color: var(--text-faint);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.ask-said {
+  white-space: pre-wrap;
+}
+.ask-evidence pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--fs-small) / 1.5 var(--mono);
+}
+
+/* The window's one status region: read out, not seen. */
+.ask-status {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The asks menu stays a menu: narrow, as a list of rows is. An open row's ask takes up to four
+   lines there: the actions, the rec's words, "Did this need you?" with its marks where they do not
+   fit after the words, then Evidence. */
+#pop-asks.panel {
+  width: min(400px, calc(100% - 2 * var(--s-2)));
+}
+/* At 400px an open row's five actions fit one row only as words: the key chips go, as the bar's do
+   in a narrow tile, the sides get tighter, and each label keeps its one line. The keys still work,
+   and each button still names its key (aria-keyshortcuts). Evidence drops its chip too, so it fits
+   after the rec's reason on one line. */
+#pop-asks .ask-view [data-scope="kbd"] {
+  display: none;
+}
+#pop-asks .ask-toolbar button {
+  --manti-button-padding-x: var(--s-1);
+  white-space: nowrap;
+}
+#pop-asks .ask-why {
+  column-gap: var(--s-2);
+}
+
+/* In the asks menu a row is a row: padded off the menu's edge, and its ask has no card of its own. */
+.asks-row {
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-sm);
+}
+.asks-row[aria-selected="true"] {
+  background: var(--surface-hover);
+}
+/* In the menu the row draws the edge: the view adds no hairline of its own. */
+.asks-row .ask-view::after {
+  content: none;
+}
+/* With no hairline to clear, the ask ends where its last line does: the row's own padding is the
+   space under it. */
+.asks-row .ask-view {
+  padding-block-end: 0;
+}
+.asks-row .asks-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+/* A row's question lines up with the words under it: a button by role, plain text by look. A
+   closed row is two tight lines, the question and its ticket's title right under it: the button
+   keeps no control height of its own. */
+/* The row's own lines carry no paragraph margins: the browser's 1em under the question was the
+   blank band between it and its title. */
+.asks-row [role="gridcell"] > p {
+  margin: 0;
+}
+.asks-row .asks-title {
+  display: flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-block-size: 0;
+  padding-block: 0;
+  padding-inline: 0;
+  line-height: 1.5;
+  justify-content: flex-start;
+  text-align: start;
+  font-weight: 500;
+}
+
+/* The menu's grid holds focus for its rows (aria-activedescendant): the active row shows where. */
+#pop-asks [role="grid"]:focus-visible {
+  outline: none;
 }
 
 .ticket-view .turnc .what {
@@ -3032,7 +3441,6 @@ main.program:has(> .view) {
 
 /* The properties, as Linear keeps them: a quiet column beside the work. */
 .ticket-view .tk-side {
-  border-inline-start: 1px solid var(--border-faint);
   padding: var(--s-5) var(--s-4) var(--s-8);
   display: grid;
   gap: var(--s-5);
@@ -3153,7 +3561,6 @@ main.program:has(> .view) {
     gap: var(--s-1);
     padding: var(--s-3) var(--s-3) var(--s-2);
     border-radius: var(--r-lg);
-    box-shadow: inset 0 0 0 1px var(--border-faint);
   }
 
   .ticket-view .props-inline .props {
@@ -4153,4 +4560,166 @@ main.program:has(> .view) {
   .trace-view .tv-cached {
     display: none;
   }
+}
+
+/*
+ * Projects (ticket 276): the project button that opens the top bar, the welcome page a window
+ * shows before a project, and the projects box in the palette's place. One raised box at a time,
+ * no new colors: the frame's own text steps, and the palette's own rows.
+ */
+.topbar .fb.project {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 32ch;
+  margin-right: 18px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.topbar .project-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The parent folders that tell two equal names apart: kept whole while the name is cut. */
+.topbar .project-twin {
+  flex: none;
+  color: var(--text-faint);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.topbar .chevron {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.welcome {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  /* Centered in what the top bar leaves; a list taller than that starts at the top. */
+  align-items: safe center;
+  padding: var(--s-3);
+  font: 400 var(--fs-body) / 1.4 var(--font);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.welcome-body {
+  width: min(640px, 100%);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.welcome h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+.welcome-sub {
+  margin: 6px 0 24px;
+  color: var(--text-faint);
+}
+
+/* A refusal is said in words with the way on beside it: color never the only cue (WCAG 1.4.1). */
+.welcome-refusal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: var(--stuck);
+}
+
+.welcome-refusal p {
+  flex: 1;
+  margin: 0;
+}
+
+.welcome-refusal button {
+  padding: 4px 10px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--r);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.welcome-rows {
+  display: grid;
+  gap: 2px;
+}
+
+.welcome-row {
+  /* The path has the row's whole width on its own line, so it is cut last. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name when"
+    "path path";
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  color: var(--text-primary);
+  cursor: default;
+}
+
+.welcome-row.on,
+.welcome-row:hover {
+  background: var(--surface-hover);
+}
+
+.welcome-row:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.welcome-row .name {
+  grid-area: name;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.faint,
+.welcome-row .when,
+.pop.projects .when {
+  color: var(--text-faint);
+}
+
+.welcome-row .when {
+  grid-area: when;
+}
+
+.welcome-row .path {
+  grid-area: path;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop.projects .when.open {
+  color: var(--text-primary);
+}
+
+.pop.projects .pop-count {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  border-top: 1px solid var(--border-faint);
+}
+
+.pop.projects .pop-count .pop-foot {
+  flex: 1;
+  border-top: none;
 }

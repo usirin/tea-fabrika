@@ -43,6 +43,8 @@ export class Unattached extends Schema.TaggedError<Unattached>()("Unattached", {
   why: Schema.Union([
     Schema.Struct({ kind: Schema.Literal("version"), theirs: Schema.Int, ours: Schema.Int }),
     Schema.Struct({ kind: Schema.Literal("ended"), what: Schema.String }),
+    /** The other side serves another project, or names none: the link never comes up. */
+    Schema.Struct({ kind: Schema.Literal("project"), theirs: Schema.NullOr(Schema.String) }),
   ]),
 }) {}
 
@@ -69,10 +71,16 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
     readonly deliver: (m: In) => void;
     /** The build our hello names, or `null`: it names none. */
     readonly build: string | null;
+    /**
+     * The project this side serves, by its key: our hello names it, and a hello that names
+     * another, or none, ends the link before it is up. `null`: this side checks no project, as a
+     * test's or a home's from before projects.
+     */
+    readonly project: string | null;
   },
 ) =>
   Effect.gen(function* () {
-    const { ctx, read, deliver, build } = options;
+    const { ctx, read, deliver, build, project } = options;
     const out = yield* Queue.make<Out | Up | Down, Cause.Done>();
     const up = yield* Deferred.make<string | null, Unattached>();
     const ended = yield* Deferred.make<string>();
@@ -84,10 +92,12 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
       for (const c of cmds) {
         switch (c.type) {
           case "greet":
-            Queue.offerUnsafe(
-              out,
-              build === null ? { type: "hello", version: c.version } : { type: "hello", version: c.version, build },
-            );
+            Queue.offerUnsafe(out, {
+              type: "hello",
+              version: c.version,
+              ...(build === null ? {} : { build }),
+              ...(project === null ? {} : { project }),
+            });
             break;
           case "deliver":
             if (line !== null) {
@@ -126,8 +136,20 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
     const heard = (raw: unknown) => {
       const got = read(raw);
 
-      if (got.kind === "read" && got.msg.type === "hello" && "build" in got.msg) {
-        theirs = got.msg.build ?? null;
+      if (got.kind === "read" && got.msg.type === "hello") {
+        if ("build" in got.msg) {
+          theirs = got.msg.build ?? null;
+        }
+
+        const named = got.msg.project ?? null;
+
+        // A hello for another project: refused before any line of it is handed on. Only a hello of
+        // our version is read for its project: another version's fields are its own (a host
+        // before version 3 names none), so the link machine refuses it by its version, and names both.
+        if (project !== null && got.msg.version === ctx.ours && named !== project && state.at === "hello") {
+          Deferred.doneUnsafe(up, Effect.fail(new Unattached({ why: { kind: "project", theirs: named } })));
+          return step({ type: "bad", why: "the other side serves another project" }, null);
+        }
       }
 
       step(linkMsgOf(got), got.kind === "read" ? got.msg : null);
@@ -170,13 +192,23 @@ export const hostWire = (
   deliver: (m: Up) => void,
   ours = PROTOCOL,
   build: string | null = BUILD,
-) => openWire<Up, Down>(socket, { ctx: { side: "host", ours }, read: readUp, deliver, build });
+  project: string | null = null,
+) => openWire<Up, Down>(socket, { ctx: { side: "host", ours }, read: readUp, deliver, build, project });
 
-/** The app's end of a link: it reads `Down`, sends `Up`, and says hello first, naming no build. */
-export const appWire = (socket: Socket.Socket, deliver: (m: Down) => void, ours = PROTOCOL) =>
+/**
+ * The app's end of a link: it reads `Down`, sends `Up`, and says hello first, naming no build. With
+ * a project's key, its hello names it and a host of another project is refused.
+ */
+export const appWire = (
+  socket: Socket.Socket,
+  deliver: (m: Down) => void,
+  ours = PROTOCOL,
+  project: string | null = null,
+) =>
   openWire<Down, Up>(socket, {
     ctx: { side: "app", ours },
     read: readDown,
     deliver,
     build: null,
+    project,
   });

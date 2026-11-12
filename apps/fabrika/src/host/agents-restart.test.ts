@@ -13,6 +13,7 @@ import { BUILD } from "../build-id.ts";
 import { gridOf } from "../editor/grid.ts";
 import type { Down } from "../link.ts";
 import { readToPage, type ToPage } from "../messages.ts";
+import { projectHome } from "../project.test-support.ts";
 import { appWire } from "../wire.ts";
 import { runHost } from "./run.ts";
 import { pathsOf, reach } from "./socket.ts";
@@ -648,8 +649,8 @@ describe("a real host process, restarted by an agent", () => {
     const seen = await go(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const home = yield* freshHome;
-        const paths = yield* pathsOf(home);
+        // A host starts only on a project's home (host/main.ts): a working tree and its record.
+        const { home, paths, project } = yield* projectHome(yield* freshHome, "work");
         // This test's own child: the only process it ever stops, by its scope.
         const host = yield* hostProcess(home);
         yield* reach(paths.mcp).pipe(
@@ -659,7 +660,7 @@ describe("a real host process, restarted by an agent", () => {
             orElse: () => Effect.die("the host process did not listen"),
           }),
         );
-        const app = yield* appWire(yield* NodeSocket.makeNet({ path: paths.sock }), () => {});
+        const app = yield* appWire(yield* NodeSocket.makeNet({ path: paths.sock }), () => {}, undefined, project.key);
         yield* app.up;
         const agent = yield* agentOn(home, "claude");
         const answer = yield* agent.call("restart", { why: WHY });

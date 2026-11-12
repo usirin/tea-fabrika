@@ -10,6 +10,11 @@ note. Two parts were ruled first:
 - **The bars stay as they are.** The top bar and the bottom line keep their
   monospace, tmux-like look. They are out of scope for this note.
 
+Its decided rules are in: [0509](../../.decisions/0509-a-popover-is-a-raised-box-of-rows.md),
+[0510](../../.decisions/0510-a-popover-behaves-like-its-role.md),
+[0511](../../.decisions/0511-keycaps-in-popovers-tmux-in-bars.md),
+[0460](../../.decisions/0460-mono-only-for-typed-words.md).
+
 The build settled the questions the note left open (section 9):
 
 - **`↵` on an ask that no tile shows** turns the tracker to that ticket, and

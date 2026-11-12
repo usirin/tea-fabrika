@@ -189,6 +189,7 @@ export const ledgerStore = (
         const failure = new LedgerError({
           reason,
           ...(error instanceof Error ? { message: error.message } : {}),
+          cause: error,
         });
         // The class and code are tags; the message rides only in the span's failure, its content.
         return Effect.annotateCurrentSpan({

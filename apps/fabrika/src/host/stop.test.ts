@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -8,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { attach, restart } from "../attach.ts";
 import type { Down } from "../link.ts";
 import { readToPage, type ToPage } from "../messages.ts";
+import { projectHome } from "../project.test-support.ts";
 import { runHost } from "./run.ts";
 import { pathsOf, reach } from "./socket.ts";
 import { NotStopped, stopHost } from "./stop.ts";
@@ -29,6 +31,17 @@ const freshHome = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "hs-" });
   return { home, paths: yield* pathsOf(home) };
+});
+
+/**
+ * A fresh project home for a host process: host/main.ts starts only on a home whose `project.json`
+ * names a real working tree (P1). Its paths are the project's runtime ones, not `<home>/host/`.
+ */
+const freshProject = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const app = yield* fs.makeTempDirectoryScoped({ prefix: "hs-" });
+  const { home, paths, project } = yield* projectHome(app, "work");
+  return { home, paths, project, as: { key: project.key, paths } };
 });
 
 /** A host process on `home`, as the app starts one. Killed with the scope, if it still runs. */
@@ -67,7 +80,7 @@ describe("stopping the old host", () => {
   it("stops the host by its pid, waits for it to exit, and the restart attaches to a new one", async () => {
     const seen = await go(
       Effect.gen(function* () {
-        const { home, paths } = yield* freshHome;
+        const { home, paths, as } = yield* freshProject;
         const started: number[] = [];
         const start = Effect.gen(function* () {
           const host = yield* hostProcess(home);
@@ -75,9 +88,9 @@ describe("stopping the old host", () => {
           return host.exitCode;
         });
         // The old host, and an app on it.
-        const before = yield* attach({ home, deliver: () => {}, start });
+        const before = yield* attach({ home, deliver: () => {}, start, project: as });
         const old = yield* pidIn(paths.pid);
-        const again = yield* restart({ home, deliver: () => {}, start });
+        const again = yield* restart({ home, deliver: () => {}, start, project: as });
         const now = yield* pidIn(paths.pid);
         const ended = yield* before.wire.ended.pipe(Effect.timeout("5 seconds"));
         return {
@@ -107,14 +120,14 @@ describe("stopping the old host", () => {
     const seen = await go(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const { home, paths } = yield* freshHome;
+        const { home, paths, as } = yield* freshProject;
         const start = Effect.gen(function* () {
           const host = yield* hostProcess(home);
           return host.exitCode;
         });
-        yield* attach({ home, deliver: () => {}, start });
+        yield* attach({ home, deliver: () => {}, start, project: as });
         const got: Down[] = [];
-        const again = yield* restart({ home, deliver: (m) => got.push(m), start });
+        const again = yield* restart({ home, deliver: (m) => got.push(m), start, project: as });
         again.wire.send({ type: "page" });
         /** The host as it last said of itself, for the top bar. */
         const hostNow = () =>
@@ -178,18 +191,19 @@ describe("stopping the old host", () => {
     const seen = await go(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const { home, paths } = yield* freshHome;
+        const { home, paths, as } = yield* freshProject;
         const started: number[] = [];
         const start = Effect.gen(function* () {
           const host = yield* hostProcess(home);
           started.push(host.pid);
           return host.exitCode;
         });
-        yield* attach({ home, deliver: () => {}, start });
+        yield* attach({ home, deliver: () => {}, start, project: as });
         // The note is written beside, then moved over: a folder where it is written beside.
-        yield* fs.makeDirectory(`${paths.dir}/restart.json.new`);
+        // The note is in the project's durable host folder, beside its log (host/restart.ts).
+        yield* fs.makeDirectory(`${dirname(paths.log)}/restart.json.new`, { recursive: true });
         const got: Down[] = [];
-        const again = yield* restart({ home, deliver: (m) => got.push(m), start });
+        const again = yield* restart({ home, deliver: (m) => got.push(m), start, project: as });
         again.wire.send({ type: "page" });
         let now: ToPage | undefined;
 

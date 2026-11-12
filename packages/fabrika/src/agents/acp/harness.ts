@@ -92,6 +92,8 @@ interface Started extends Spawnable {
   readonly script: string;
   /** What must be made before the command starts, when the harness needs anything. */
   readonly prepare?: Effect.Effect<void, string, FileSystem.FileSystem>;
+  /** The permission option ids that end the maker's turn: never picked to refuse (refusal.ts). */
+  readonly cancels: readonly string[];
 }
 
 /** A row, ready to start. Codex's keeps the access it was made with, so its config can be made again (`withSystem`). */
@@ -859,6 +861,8 @@ export function harnessOf(row: Row, folder: string, budget: number | null, paren
       env: codexEnv(parent, folder, row.access),
       script: CODEX,
       meta: undefined,
+      // codex-acp 2.5.0: `ApprovalOptionId.Cancel` and `McpApprovalOptionId.Cancel` interrupt the turn.
+      cancels: ["cancel"],
       prepare: Effect.andThen(
         fenceFits(parent, folder, row.access),
         codexHome(codexHomeOf(folder, parent), codexLogin(parent)),
@@ -874,8 +878,11 @@ export function harnessOf(row: Row, folder: string, budget: number | null, paren
         env: fencedEnv(agentEnv(parent)),
         script: CLAUDE,
         meta: { claudeCode: { options: claudeRepoOptions(folder, budget) } },
+        // claude-agent-acp 0.99.1: its one no, `reject`, denies without an interrupt.
+        cancels: [],
       };
     case "fake":
-      return { name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined };
+      // The fake's `cancel` ends its turn, as Codex's does (./fake-agent.ts).
+      return { name: row, ...node(FAKE), env: runEnv(parent), script: FAKE, meta: undefined, cancels: ["cancel"] };
   }
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/program.ts"
+    ".": "./src/program.ts",
+    "./window": "./src/window.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
@@ -13,11 +14,15 @@
   "dependencies": {
     "@demlik/tea": "catalog:",
     "@kampus/libfabrika": "workspace:*",
-    "effect": "catalog:"
+    "@manti-ui/react": "catalog:",
+    "effect": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "fast-check": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -3,6 +3,11 @@
 **Decided 2026-11-08.** Today's hand-run tooling, used for work in either version.
 K20's lint advice applies only to `next/` tests.
 
+Its decided rules are in: [0408](../../.decisions/0408-skills-keep-only-judgment.md),
+[0409](../../.decisions/0409-one-leak-check-for-push-and-plan.md),
+[0410](../../.decisions/0410-the-machine-caps-live-in-code.md),
+[0411](../../.decisions/0411-property-data-comes-from-schemas.md).
+
 ```text
 skill: read the plan -> judge the work -> report what happened
 code: check leaks -> cap workers -> share one typecheck lock -> choose a safe test home

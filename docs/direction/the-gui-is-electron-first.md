@@ -3,6 +3,14 @@
 Decided 2026-10-24. Replaces The GUI is a local web page first
 of 2026-10-22.
 
+Its decided rules are in: [0439](../../.decisions/0439-a-view-is-the-hosts-reaching-inputs-only.md),
+[0442](../../.decisions/0442-the-app-is-one-electron-app.md),
+[0443](../../.decisions/0443-the-window-is-tiled-like-tmux.md),
+[0444](../../.decisions/0444-the-host-runs-apart-from-the-app.md),
+[0445](../../.decisions/0445-the-host-decides-what-a-key-does.md),
+[0446](../../.decisions/0446-closing-a-tile-is-tmuxs.md),
+[0447](../../.decisions/0447-the-app-is-the-only-desk.md).
+
 *2026-11-01: this note is about today's version. For `next/`, see
 [the desktop layer](./the-desktop-layer.md).*
 

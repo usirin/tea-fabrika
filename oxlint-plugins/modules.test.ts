@@ -17,9 +17,19 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const SRC = "next/packages/libfabrika/src";
 
-const MODULES = ["telemetry", "ledger", "transport", "processes", "presence", "access", "runtime", "gateway"] as const;
+const MODULES = [
+  "telemetry",
+  "ledger",
+  "transport",
+  "processes",
+  "presence",
+  "jobs",
+  "access",
+  "runtime",
+  "gateway",
+] as const;
 
-/** Every module with every other module: 56 pairs, so no pair is left to a pattern nobody tried. */
+/** Every module with every other module: 72 pairs, so no pair is left to a pattern nobody tried. */
 const PAIRS = MODULES.flatMap((module) =>
   MODULES.filter((other) => other !== module).map((other) => [module, other] as const),
 );
@@ -69,7 +79,7 @@ describe("fabrika/modules: no module file re-exports another module's names", as
   const linted = await plant(files);
 
   // Plant (the plan's): `processes/Mailbox.ts` holds `export {Rev} from "../ledger/Log.ts"`.
-  it("fires on every form of re-export, for each of the 56 pairs of modules", () => {
+  it("fires on every form of re-export, for each of the 72 pairs of modules", () => {
     for (const [module, other] of PAIRS) {
       expect(linted(modules, pair(module, other)), `${module} from ${other}`).toEqual([2, 3, 4, 5, 7]);
     }
@@ -128,7 +138,7 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
     }
   });
 
-  it("takes the eight modules, the platform folders, the listed top files and their tests", () => {
+  it("takes the nine modules, the platform folders, the listed top files and their tests", () => {
     for (const path of taken) {
       expect(linted(modules, path), path).toEqual([]);
     }
@@ -330,10 +340,16 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
 
   // Plants (the plan's): `gateway/Gateway.ts` imports `../ledger/internal/ledgerStore.ts`, and
   // `cloudflare/runtime.ts` imports `../runtime/internal/supervisor.ts`.
-  it("fires on an import and on an export-from, in either spelling, for each of the 56 pairs", () => {
+  it("fires on an import and on an export-from, in either spelling, for each of the 72 pairs", () => {
     for (const [module, other] of PAIRS) {
-      expect(linted(restricted, front(module, other)), `${module} into ${other}`).toEqual([2, 3, 4, 5, 6, 7]);
-      expect(linted(restricted, inner(module, other)), `${module} into ${other}`).toEqual([2, 3, 4]);
+      // A front file of ledger/ is two layers down for three modules: the last describe's law.
+      const down = other === "ledger" && ["runtime", "access", "gateway"].includes(module);
+      expect(linted(restricted, front(module, other)), `${module} into ${other}`).toEqual(
+        down ? [2, 3, 4, 5, 6, 7, 9] : [2, 3, 4, 5, 6, 7],
+      );
+      expect(linted(restricted, inner(module, other)), `${module} into ${other}`).toEqual(
+        down ? [2, 3, 4, 7] : [2, 3, 4],
+      );
     }
   });
 
@@ -353,7 +369,7 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
 describe("unicorn/filename-case: a front file is PascalCase and an internal/ file is camelCase", async () => {
   // The modules with no file on main. `transport/` joins in PR 2 and `door/` in PR 5, when their
   // lowercase files have moved, so the rule fires on nothing on main.
-  const FRESH = ["telemetry", "ledger", "processes", "presence", "access", "runtime"] as const;
+  const FRESH = ["telemetry", "ledger", "processes", "presence", "jobs", "access", "runtime"] as const;
   const refused = [
     `${SRC}/ledger/log.ts`, // the plan's plant
     `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
@@ -397,6 +413,46 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
   it("takes the right case, with .test, .types.test, .laws.test and .test-support suffixes", () => {
     for (const path of taken) {
       expect(linted(fileCase, path), path).toEqual([]);
+    }
+  });
+});
+
+// scenario: every module and every depth, since the law is a list of paths in the config. 0043, rule
+// 11 and its amendments: the module above never sees what is two layers down, so `runtime/`,
+// `access/` and `gateway/` import no `ledger/`, types and tests included (0062). The override that
+// says so replaces the modules override's options, so its Radix and `internal/` entries must still hold.
+describe("runtime/, access/ and gateway/ never import ledger/", async () => {
+  const ABOVE = ["runtime", "access", "gateway"] as const;
+  const body = (up: string) =>
+    file(
+      `import {Ledger} from "${up}ledger/Ledger.ts";`, // 2
+      `import type {LedgerError} from "${up}ledger/Ledger.ts";`, // 3
+      `export {Line} from "${up}ledger/Log.ts";`, // 4
+      `import {Sink} from "${up}telemetry/Sink.ts";`, // 5: telemetry is open to every module
+      `import {Mailbox} from "${up}processes/Mailbox.ts";`, // 6
+      `import {store} from "${up}processes/internal/store.ts";`, // 7: another module's internal/
+      'import {cyan} from "@radix-ui/colors";', // 8
+      `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
+    );
+  const refused = ABOVE.flatMap((module) => [
+    [`${SRC}/${module}/Front.ts`, "../"],
+    [`${SRC}/${module}/Front.test.ts`, "../"],
+    [`${SRC}/${module}/internal/front.ts`, "../../"],
+  ]);
+  const taken = (["processes", "presence"] as const).map((module) => [`${SRC}/${module}/Front.ts`, "../"]);
+  const linted = await plant(
+    Object.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])),
+  );
+
+  it("refuses an import or re-export of ledger/, a type too, from each of the three, tests too", () => {
+    for (const [path = ""] of refused) {
+      expect(linted(restricted, path), path).toEqual([2, 3, 4, 7, 8]);
+    }
+  });
+
+  it("leaves the modules the law does not name to their own rows, with the modules override's bans", () => {
+    for (const [path = ""] of taken) {
+      expect(linted(restricted, path), path).toEqual([7, 8]);
     }
   });
 });

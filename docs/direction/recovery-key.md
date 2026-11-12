@@ -2,6 +2,21 @@
 
 **Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.
 The read call (call 13) and the key's derivation decided 2026-11-09, built by P28.**
+
+Its decided rules are in: [0328](../../.decisions/0328-a-device-comes-back-by-sheet-or-email.md),
+[0329](../../.decisions/0329-the-words-are-a-key.md),
+[0330](../../.decisions/0330-words-become-the-key-by-hkdf.md),
+[0331](../../.decisions/0331-a-sheet-works-at-once-and-once.md),
+[0332](../../.decisions/0332-recovery-asks-if-the-old-device-is-lost.md),
+[0333](../../.decisions/0333-every-device-is-an-equal-person-key.md),
+[0334](../../.decisions/0334-a-dropped-key-drops-all-below.md),
+[0335](../../.decisions/0335-the-sheet-is-printed-words.md),
+[0336](../../.decisions/0336-a-recovery-ends-by-counting.md),
+[0337](../../.decisions/0337-a-new-device-reads-before-recovery.md),
+[0338](../../.decisions/0338-email-recovery-waits-a-day.md),
+[0339](../../.decisions/0339-an-admin-can-re-invite-a-person.md),
+[0138](../../.decisions/0138-email-recovery-lets-in-at-once.md) (replaces 0338's wait and cancel).
+
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
@@ -12,8 +27,8 @@ The industry calls this account recovery. Two ways back in are offered, and the 
 
 - **The sheet:** a recovery key kept as 12 words on paper or in a PDF. No email needed, and the way
   back for a local setup restored from Time Machine. It works at once.
-- **Email:** for the Cloudflare setup. A 6-digit code to the person's checked address, then a
-  24-hour wait that any live device can cancel ([below](#email-recovery-decided-two-unknowns-open)).
+- **Email:** for the Cloudflare setup. A 6-digit code to the person's checked address lets the
+  device in at once, and every live device is told ([below](#email-recovery-decided-two-unknowns-open)).
   Decided too. Two unknowns stay open: whether the no-domain route works, and whether the code
   reaches the inbox.
 
@@ -58,8 +73,8 @@ decided both ways are offered. The file name stays, so links hold.*
 - **Recovery asks once: "Is your old device lost or stolen?"** The default is yes. Yes drops the old
   device and everything it let in, all the way down. The old device is told at once if online.
 - **No wait and no passphrase,** for the sheet, ever. A stolen sheet stays the known hole. This
-  matches products whose recovery secret is a strong key (experiment 216). Email is weak proof, so
-  it waits 24 hours.
+  matches products whose recovery secret is a strong key (experiment 216). Email does not wait
+  either ([0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)).
 - **The person meets the sheet twice in the life of a Mac:** once to make it, once to use it. "Check
   my sheet" is there any time, offline, and never nags.
 - **No GitHub.** The owner decided on 2026-11-05 that no GitHub trust is automatic, ever.
@@ -80,7 +95,7 @@ Cloudflare in the cloud.
 
 | Setup | Way back after a lost Mac | What the person is told at setup |
 |---|---|---|
-| Cloudflare | The sheet, at once; or email, after a 24-hour wait any live device can cancel | Both are offered |
+| Cloudflare | The sheet, at once; or email, at once, with every live device told | Both are offered |
 | Local, with Time Machine | Restore the Mac from it. If the keys did not come across, the sheet lets the new Mac's keys in | The sheet is offered |
 | Local, no copy | None. A ledger that is gone cannot come back | "Your notes live only on this Mac." A plain warning, once, at setup |
 
@@ -517,10 +532,11 @@ Each says what the attacker gets in Tier 1.
   sheet drops the stolen Mac and everything it let in, their devices included. If they have, you
   cannot recover with the sheet. This hole needs both the Mac and its password. Tier 1 accepts it,
   as Apple and Keybase do once a device's login is known. Email recovery does not help here: the
-  thief can cancel it from the stolen Mac.
-- **Someone in your mailbox.** They can ask for a code and start an email recovery. Every live
-  device is told at once and can cancel within 24 hours. If all your devices are off for a day,
-  they get in. That is the cost of offering email, and why it waits.
+  thief can remove the recovered device from the stolen Mac's list.
+- **Someone in your mailbox.** They can ask for a code and get in at once. Every live device shows
+  a notice, and you remove their device from the list of let-in devices. Until you do, they are in.
+  That is the cost of offering email, accepted by the owner: a person whose mailbox is taken has
+  lost far more than fabrika ([0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)).
 - **A Time Machine disk.** It is a sealed copy of the person key, opened by the login password
   (experiment 217). A stolen disk plus the password is the story above. Experiment 217 leans
   toward "encrypt your Time Machine backup" in the sheet's help rather than keeping the key out of
@@ -562,13 +578,15 @@ saw, and which devices would drop. It spends nothing and lets nothing in.
 **Decided by the owner, 2026-11-05 and 2026-11-06,** after walking experiment 217
 ([PR 406](https://github.com/usirin/tea-fabrika/pull/406)). Email recovery is offered for the
 Cloudflare setup. The sheet stays the way with no email, and the way for a local setup.
+**Changed by the owner, 2026-11-11** ([0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)):
+the 24-hour wait and its Cancel are gone. The right code lets the device in at once.
 
 ```text
 On a new device:  "Email me a code" -> a 6-digit code to the checked address -> typed on this device
                   -> "Is your old device lost or stolen?" -> Touch ID
-Every live device, at once:  "A new device asked to get in by email. It gets in at 14:02 tomorrow.
-                              [Cancel it]"
-24 hours later, if nobody canceled:  the new device is in, and the drops apply.
+                  -> the new device is in, and the drops apply, at once.
+Every live device:  "A device came back by email: mbp-2025, Lisbon, 14:02."  (nothing to press)
+Not you?  Remove it from the list of let-in devices, as any device.
 ```
 
 - **Sent free through Cloudflare.** Email Routing's `send_email` binding sends to the person's own
@@ -577,44 +595,49 @@ Every live device, at once:  "A new device asked to get in by email. It gets in 
   below).
 - **A 6-digit code, not a link,** typed on the device that asked. A link opened on another device,
   or by a mail scanner, would let in the wrong device.
-- **Every live device is told at once,** with a Cancel button.
-- **A 24-hour wait that any live device can cancel.** Email is weak proof: anyone who gets into the
-  mailbox gets the code. The products in experiments 216 and 217 whose proof is weak wait or ask
-  for a second secret (Apple's account recovery waits "several days or longer"; 1Password blocks
-  for 24 hours after a recent sign-in). Cancel needs no finger, as Deny needs none: saying no
-  should be easy.
-- **The sheet stays instant.** There is no third way, sheet plus email: the sheet alone is already
-  instant, so adding email to it buys nothing.
+- **No wait, and no step of its own to undo it.** Email is weak proof: anyone who gets into the
+  mailbox gets the code. The owner ruled that recovery gets no barriers, as for the admin's
+  re-invite ([0339](../../.decisions/0339-an-admin-can-re-invite-a-person.md)): a person whose
+  mailbox is taken has lost far more than fabrika, and a wait costs every honest person a day. The
+  industry does the same for an emailed password reset: it takes effect at once, and the account
+  is told afterward ([OWASP's forgot-password guidance](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)).
+  No recovery path gets a waiting period; a new limit on something a person should do easily
+  needs the owner's yes.
+- **Every live device shows a plain notice** that a device came back by email. The notice carries
+  no action: no Cancel and no "not me". It is a view of the `added` fact, so a device that was off
+  sees it when it reconnects.
+- **The recovered device is a device like any other.** It is in the list of let-in devices, and
+  the list's own Remove works on it, as on every device
+  ([call 7](#7-who-may-sign-what-decided)).
+- **The sheet stays instant too.** There is no third way, sheet plus email: each works alone.
 - **At setup, record which email and when it was checked.** A later recovery can only trust an
   address that was on the ledger before the Mac was lost. This fact exists only at that moment.
-- **The drops wait too.** The "lost or stolen?" answer is asked at once and applies only when the
-  wait ends, so a cancel also keeps the old Mac in.
-- **No GitHub.** The person's mail account is an outside party, but it never decides alone: the
-  wait and every live device stand between it and the ledger.
+- **The drops apply at once,** with the `added`. The "lost or stolen?" answer is asked as for the
+  sheet.
 
 ```ts
-// The facts, decided by the owner 2026-11-06. Their fields are a sketch.
+// The facts. Their fields are a sketch.
 // At setup: the person types their address, gets a code, types it back. A person key signs:
 {_tag: "verified", email: "<address>", signed: sshsig(personKey)}       // its arrivedAt is "when checked"
-// On a new device, after the code is right. The door writes it; nothing is let in yet:
-{_tag: "requested", id: "rq-1", email: "<address>", adds: {_tag: "person", key: "...p2", window: "...w2"},
-  drops: ["...p1", "...w1"], saw: {how: "email", check: "touch", old: "lost"}}
-// Any live device, within 24 hours. A person key signs; no finger needed:
-{_tag: "canceled", request: "rq-1", signed: sshsig(personKey)}
-// 24 hours after `requested`, with no `canceled`, on the project object's alarm:
-{_tag: "added", add: {..., saw: {how: "email", ...}}, signed: sshsig(emailKey)}   // cause: the request's input id
+// On a new device, the right code inside 10 minutes and 5 tries. The email key signs at once:
+{_tag: "added", add: {adds: {_tag: "person", key: "...p2", window: "...w2"}, drops: ["...p1", "...w1"],
+  saw: {how: "email", check: "touch", old: "lost"}}, signed: sshsig(emailKey)}
+// Every live device folds it and shows the notice. Nothing is written to send the notice.
 ```
 
-- **Who signs the last `added`:** a key the brain holds for this one job, its public half on the
-  ledger with the rank `email`. It signs only an `added` of a device, only after the wait, and
-  never leaves the brain (experiment 217's lesson from Matrix, which handed its top key to every
-  device). So the door keeps its one signature check. Decided by the owner, 2026-11-06.
+- **Who signs the `added`:** a key the brain holds for this one job, its public half on the
+  ledger with the rank `email`. It signs only the `added` of the device whose code was just right,
+  and never leaves the brain (experiment 217's lesson from Matrix, which handed its top key to
+  every device). So the door keeps its one signature check. Decided by the owner, 2026-11-06.
 - **The code:** good for 10 minutes and 5 tries, then a new one. Only its hash is kept, and never
   in the ledger. Decided by the owner, 2026-11-06.
-- **Cancel needs no finger,** as Deny needs none. Decided by the owner, 2026-11-06.
-- **Who it stops:** someone with the mailbox and no device waits 24 hours, and any of your devices
-  cancels them. A thief who holds a stolen Mac with its password can cancel your email recovery;
-  the sheet is instant and is the answer there.
+- **Who it stops:** a wrong code, an old code, a sixth try, or an address not `verified` before the
+  loss. Someone who holds the mailbox and no device gets in at once; the person learns from the
+  notice and removes the device. Accepted by the owner in 0138.
+
+*Changed 2026-11-11. Until then this section had a 24-hour wait any live device could cancel, with
+the facts `requested` and `canceled` and the brain's alarm signing the `added` when the wait ended
+([0338](../../.decisions/0338-email-recovery-waits-a-day.md)). 0138 replaced those parts.*
 
 **Open, and the first build tries both:**
 
@@ -657,19 +680,21 @@ builder and read by the owner, holds:
      screen, never to the founding screen, and makes no new keys.
   9. Home B lets in home D as a second device. Removing D from B's menu bar drops D and the tab D
      let in.
-- **Email, on a stand-in sender and a test clock:** a right code starts a `requested` and tells
-  every live device at once; nothing is let in before 24 hours; one `canceled` from any live device
-  stops it, and its drops never apply; with no cancel, the alarm writes one `added`. A wrong code,
-  an old code, a sixth try, and an address not `verified` before the request each let in nothing.
-  The code is never in the ledger. The brain's email key signs nothing but that `added`.
+- **Email, on a stand-in sender and a test clock:** a right code writes one email-signed `added`
+  at once, with no fact before it, and its drops apply with it. Every live device shows the notice,
+  and a device that was off shows it on reconnect. The notice sends nothing. The recovered device
+  is in the list of let-in devices, and another device's Remove drops it and all it let in. A wrong
+  code, an old code, a sixth try, and an address not `verified` before the loss each let in
+  nothing. The code is never in the ledger. The brain's email key signs nothing but that `added`.
 - **The two unknowns,** in the first build, on a real account: one code through `send_email` to
   a real inbox, and one through Access with no domain. Each logged in `field/`.
 - **Plants:** spent rule skipped; a window key or an agent's key accepted as a signer; a recovery
   key used twice; drops not applied; the tree not walked (a removed device's tabs stay); a
   device dropped with another device; the sheet dropped with a removed device; a check not
   recorded, or recorded with its words; a key that will not open sent to founding; words
-  sent in the request; the label ignored; the old Mac not told; the email wait skipped; a cancel
-  ignored.
+  sent in the request; the label ignored; the old Mac not told; the email `added` held back; the
+  notice shown only on the asking device; the email-added device hidden from the list or refused
+  by Remove.
 - **Only a person can pass:** a real print and a real recovery on a second home, with a real finger,
   logged in `field/`. A Time Machine restore on a real Mac, once, if the owner wants that path
   proven in Tier 1.
@@ -696,7 +721,7 @@ builder agent hours, 45% sure, since its two unknowns can change the sending par
   making flow behind Touch ID, and a row for a device asking to join. Remove drops the subtree.
 - **P28** (the backup): all of the above, on top of P26's cloud notes, with its own exam first.
   Email is its own row, P36, after P28 (the plan, 2026-11-06).
-- **P26** (Cloudflare): the `send_email` binding, or Access, and the alarm that ends the wait.
+- **P26** (Cloudflare): the `send_email` binding, or Access. Email recovery needs no alarm (0138).
 - **The plan's s13 and check 6** get their words from "How it would be tested" above.
 
 New files, a guess: `tuval/src/desktop/sheet.ts` (pure), `tuval/electron/sheet.*` (the screens,
@@ -728,10 +753,12 @@ The sheet, all of it. The calls the owner made on it:
 12. A Mac whose keys did not come across goes to the recovery screen, never to a new founding.
 13. Email recovery for the Cloudflare setup, sent free through Cloudflare (`send_email`, or
     Access's one-time PIN with no domain); a 6-digit code typed on the device that asked; every
-    live device told at once; a 24-hour wait any live device can cancel. Which email and when it
-    was checked are recorded at setup. The code is good for 10 minutes and 5 tries; Cancel needs
-    no finger; the brain holds one key that signs only the final `added` after the wait; the facts
-    are `verified`, `requested` and `canceled`.
+    live device told at once. Which email and when it was checked are recorded at setup. The code
+    is good for 10 minutes and 5 tries; the brain holds one key that signs only the `added`.
+    *Changed 2026-11-11 ([0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)):* the right
+    code lets the device in at once, with no wait and no Cancel. Every live device shows a plain
+    notice with nothing to act on, and the list's Remove works on the recovered device as on any.
+    The facts are `verified` and `added`; `requested` and `canceled` are gone.
 14. The person's devices are equal roots in the grant tree; only tabs and agents hang under a
     device. The sheet belongs to the person, and removing a device leaves it alone.
 15. Each "Check my sheet" is recorded: when, which device, matched or not. Never the words.
@@ -788,7 +815,7 @@ These are proposals, not settled words or numbers:
 - The field names `adds`, `drops`, `typed`, `kept`, `old`, `v`, `under`, `matched`, the `how` words
   `device` and `email`, the struct names `Add`, `Adds`, `AddSaw`, the `Rank` type, the rank word
   `email`, the fact name `checked`, and the function `mayAdd`.
-- The fields inside `verified`, `requested` and `canceled` (the three names are decided).
+- The fields inside `verified` (its name is decided).
 - The `why` words `used`, `replaced` and `not_allowed`.
 - The label's shape, `r1-7f3a`.
 - Every screen's words, the sheet's layout, and the file names.

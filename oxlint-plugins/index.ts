@@ -23,19 +23,21 @@ import { noNumericDuration } from "./no-numeric-duration.ts";
 import { noOf } from "./no-of.ts";
 import { noProjectSettings } from "./no-project-settings.ts";
 import { noPromises } from "./no-promises.ts";
+import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
-import { noWhyKey } from "./no-why-key.ts";
+import { noWallClock } from "./no-wall-clock.ts";
 import { oneIdModule } from "./one-id-module.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
+import { serviceId } from "./service-id.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
 
 const plugin: Plugin = {
@@ -63,19 +65,21 @@ const plugin: Plugin = {
     "no-of": noOf,
     "no-project-settings": noProjectSettings,
     "no-promises": noPromises,
+    "no-question-word-key": noQuestionWordKey,
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
     "no-stage-word": noStageWord,
     "no-throw-in-effect-gen": noThrowInEffectGen,
     "no-type-assertions": noTypeAssertions,
-    "no-why-key": noWhyKey,
+    "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-schema-arbitrary": preferSchemaArbitrary,
+    "service-id": serviceId,
     "use-import-extensions": useImportExtensions,
   },
 };

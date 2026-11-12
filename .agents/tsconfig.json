@@ -7,6 +7,9 @@
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",
+    "skills/lead/scripts/box.ts",
+    "skills/lead/scripts/box.rm.test.ts",
+    "skills/lead/scripts/box/*.ts",
     "skills/lead/scripts/chain.ts",
     "skills/lead/scripts/chain.test.ts",
     "skills/lead/scripts/drive.ts",

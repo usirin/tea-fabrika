@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Predicate, Schedule, Schema } from "effect";
-import { pathsOf, reach } from "./socket.ts";
+import { Project } from "../project.ts";
+import { type HostPaths, reach } from "./socket.ts";
 
 // Stop the host on a home, by the pid in `<home>/host/pid`, and wait for it to exit: what the
 // window's "Stop the old host and start this one" does first (main.ts), before it attaches and so
@@ -39,10 +40,11 @@ const send = (pid: number, signal: NodeJS.Signals | 0) =>
     Effect.catch((code) => (code === "ESRCH" ? Effect.succeed("gone" as const) : Effect.fail(code))),
   );
 
-export const stopHost = (home: string) =>
+/** Stop the host on `home`; a project's host is named by its own `paths` (project.ts). */
+export const stopHost = (home: string, at?: HostPaths) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const paths = yield* pathsOf(home);
+    const paths = at ?? (yield* Project.hostPaths(home));
 
     if ((yield* reach(paths.sock)) !== "live") {
       return "none" as const;

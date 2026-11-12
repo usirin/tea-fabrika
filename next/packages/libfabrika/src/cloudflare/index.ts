@@ -27,12 +27,12 @@ export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<str
       globalOutbound: null,
     }));
     const rpc = worker.getEntrypoint<Calls>();
-    const fail = () => new ProgramDown({ reason: "load" });
+    const fail = (cause: unknown) => new ProgramDown({ reason: "load", error: "ProgramDown", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
     const work = Effect.tryPromise({ try: () => rpc.describe(), catch: fail });
     const raw = yield* work;
     const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
-      Effect.mapError(() => new ProgramDown({ reason: "load" })),
+      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
     return {
       execution: workerExecution(rpc),

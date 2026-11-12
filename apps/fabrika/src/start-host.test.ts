@@ -19,11 +19,15 @@ const entry = (name: string, text: string) => {
   return file;
 };
 
+// The project the host serves: every start names one (HostStart.project is required). Its root is
+// a fixture folder; start-host.ts writes the record and never checks it, the host does (P1).
+const project = { root: join(root, "project"), key: "fixture-key" };
+
 const started = (home: string, file: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const paths = yield* pathsOf(home);
-      const exited = yield* startHost({ binary: process.execPath, entry: file, home, paths });
+      const exited = yield* startHost({ binary: process.execPath, entry: file, home, paths, project });
       return { code: yield* exited, paths };
     }).pipe(Effect.provide(NodePath.layer)),
   );
@@ -48,5 +52,6 @@ describe("starting the host", () => {
     const { code, paths } = await started(home, says);
     expect(code).toBe(0);
     expect(readFileSync(paths.log, "utf8")).toBe(`home ${home} node 1\n`.repeat(2));
+    expect(JSON.parse(readFileSync(join(home, "project.json"), "utf8"))).toEqual(project);
   });
 });
