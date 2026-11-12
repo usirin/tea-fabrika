@@ -94,7 +94,11 @@ const Tile = ({
   const offline = link._tag !== "online";
   const refusal = refusalFor(registration, tile.refusal);
   return (
-    <section className={offline ? "tile disconnected" : "tile"} aria-label={tile.name} inert={offline}>
+    <section
+      className={offline ? "tile disconnected" : "tile"}
+      aria-label={tile.name}
+      inert={offline || tile.reach._tag !== "open"}
+    >
       <header className="titlebar">
         <span>{tile.name.split(":")[0]}</span>
         <span>{tile.name}</span>

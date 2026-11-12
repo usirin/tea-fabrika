@@ -460,11 +460,6 @@ export const windowMachineFor = (checks: WindowChecks) => {
           return [s, []];
         }
 
-        // Keep the draft until the parent can take the child's press as a letter.
-        if (t.reach._tag !== "open" && cmds.some((cmd) => cmd.type === "press")) {
-          return [s, []];
-        }
-
         let next = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
         const out: Array<Out[number]> = [];
 
