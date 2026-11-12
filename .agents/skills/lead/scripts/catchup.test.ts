@@ -175,6 +175,42 @@ describe("catchup, today's tooling", () => {
       );
     },
   );
+  // 0134's amendment (2026-11-11): a draft's run names its jobs `lint` and `ci-required (draft)`.
+  // Plants: read them as any other check (a red or pending one blocks), or read `lint` for `check`.
+  it("property: a draft's own checks are never read, whatever they say, beside the ready run's", () => {
+    fc.assert(
+      fc.property(
+        fc.shuffledSubarray(matrixChecks, { minLength: matrixChecks.length, maxLength: matrixChecks.length }),
+        fc.array(
+          fc.record({
+            name: fc.constantFrom("lint", "ci-required (draft)"),
+            status: fc.constantFrom("completed", "in_progress", "queued"),
+            conclusion: fc.constantFrom("success", "failure", "cancelled", "skipped"),
+          }),
+          { minLength: 1, maxLength: 3 },
+        ),
+        (ready, draft) => {
+          const got = run({ ...green, checks: [...draft, ...ready], clock: [0, 1, 3601] });
+          expect(got.code, got.text).toBe(0);
+          expect(merges(got.calls)).toHaveLength(1);
+        },
+      ),
+      { seed: 119120, numRuns: 4 },
+    );
+  });
+  it("scenario: a draft run's green checks alone, before the ready run's check, never land", () => {
+    const draft: Check[] = [
+      success("lint"),
+      success("commits"),
+      success("ci-required (draft)"),
+      { name: "e2e", status: "completed", conclusion: "skipped" },
+      { name: "next", status: "completed", conclusion: "skipped" },
+    ];
+    const got = run({ ...green, checks: draft, clock: [0, 1, 3601] });
+    expect(got.code, got.text).toBe(1);
+    expect(got.text).toContain("missing: check");
+    expect(merges(got.calls)).toHaveLength(0);
+  });
   it("T376 bare success and unfinished bare skips cannot stand in for the matrix", () => {
     fc.assert(
       fc.property(
