@@ -144,9 +144,9 @@ describe("catchup, today's tooling", () => {
   });
 
   // Plant: clean before a successful merge, including after checks, trust, pushes or merge fail.
-  // `merge: true` is a head that lacks main. Green at its head, it lands without a catch-up (0097),
-  // so each failure is planted on both paths: on the fast path (its own checks or trust, the last
-  // look at main, the merge) and on the catch-up path a red first look sends it down (the push).
+  // `merge: true` is a head that lacks main, so it catches up first (0146). Each failure is planted
+  // on a head that holds main and on one that caught up: its checks or trust, the push, the fetch
+  // for the last look at main, a main that never holds still, and the merge.
   it("T318 cleanup starts only after a successful merge", () => {
     fc.assert(
       fc.property(
@@ -158,10 +158,11 @@ describe("catchup, today's tooling", () => {
           for (const patch of [
             { answer },
             { merge: true, answer },
-            { merge: true, before: "red" as const, refused: "notes" as const },
+            { merge: true, refused: "notes" as const },
             { mergeFails: true },
             { merge: true, mergeFails: true },
-            { merge: true, stale: true },
+            { merge: true, fetchFails: true },
+            { merge: true, moves: 6 },
           ]) {
             const got = run({
               ...green,
