@@ -49,8 +49,18 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       const calls: Array<Call> = [];
       let main = commit("0".repeat(40));
       let serial = 1;
+      const used = new Set<string>([main]);
       let crash = false;
-      const fresh = (size: number) => (serial++).toString(16).padStart(size, "f");
+      const fresh = (size: number) => {
+        let id: string;
+
+        do {
+          id = (serial++).toString(16).padStart(size, "f");
+        } while (used.has(id));
+
+        used.add(id);
+        return id;
+      };
       const failure = (call: Call) =>
         Effect.suspend(() => {
           calls.push(call);
@@ -174,10 +184,14 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           put: (data: ChangeData) =>
             Effect.sync(() => {
               changes.set(data.change, data);
+              used.add(data.head);
+              used.add(data.base);
+              used.add(data.tree);
             }),
           main: (head: typeof Commit.Type) =>
             Effect.sync(() => {
               main = head;
+              used.add(head);
             }),
           fail: (method: Method, fault: Fault) =>
             Effect.sync(() => {
@@ -194,7 +208,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
   );
 
 export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
-  describe("C1: the code host contract", () => {
+  describe.each([40, 64])("C1: the code host contract (%i-character ids)", (size) => {
     it("pins every call, repeats completed writes and forgets an update's pin after a later push", () => {
       type Model = {
         changes: Map<number, ChangeData>;
@@ -205,126 +219,141 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
         serial: number;
       };
       type Real = { host: CodeHost["Service"]; control: Control["Service"] };
-      const command = fc
+      type Cell = {
+        move: number;
+        pick: number;
+        state: "open" | "draft" | "closed";
+        head: string;
+        conflict: ReadonlyArray<string> | null;
+      };
+      const command = (cell: Cell): fc.Command<Model, Real> => ({
+        check: () => true,
+        run: (m, r) => {
+          const id = (cell.pick % 4) + 1;
+          const found = m.changes.get(id);
+          m.serial++;
+          const hex = (salt: number) => (m.serial * 16 + salt + 10).toString(16).padStart(m.size, "0");
+
+          if (found === undefined || cell.move % 7 === 0) {
+            const data: ChangeData = {
+              ...Change.cases.found.make({
+                change: id,
+                head: commit(found === undefined ? cell.head.slice(-m.size) : hex(1)),
+                state: cell.state,
+                paths: ["src/a.ts"],
+              }),
+              base: cell.pick % 2 === 0 ? m.main : commit(hex(2)),
+              tree: tree(hex(3)),
+              conflict: cell.conflict,
+            };
+            m.changes.set(id, data);
+            m.updates.delete(id);
+            m.merges.delete(id);
+            sync(r.control.put(data));
+          } else if (cell.move % 7 === 1) {
+            m.main = commit(hex(5));
+            sync(r.control.main(m.main));
+          } else if (cell.move % 7 === 2) {
+            const changed = { ...found, head: commit(hex(6)) };
+            m.changes.set(id, changed);
+            sync(r.control.put(changed));
+            const previous = m.updates.get(id);
+
+            if (changed.state === "open" && previous?.answer._tag === "updated") {
+              expect(sync(r.host.update(id, previous.asked))).toEqual(Updated.cases.moved.make({ head: changed.head }));
+            }
+          } else if (cell.move % 7 === 3) {
+            const answer = sync(r.host.change(id));
+            expect(Schema.is(Change)(answer)).toBe(true);
+            expect(answer).toMatchObject({ change: id, head: found.head, state: found.state, paths: found.paths });
+          } else {
+            const merging = cell.move % 7 === 4;
+            const previous = merging ? m.merges.get(id) : m.updates.get(id);
+            const head =
+              previous !== undefined && (cell.pick % 2 === 0 || (merging && found.state === "merged"))
+                ? previous.asked
+                : cell.pick % 3 === 0
+                  ? commit(hex(7))
+                  : found.head;
+            const answer = sync(merging ? r.host.merge(id, head) : r.host.update(id, head));
+            expect(Schema.is(merging ? Merged : Updated)(answer)).toBe(true);
+
+            for (const key of ["head", "tree", "main", "commit"] as const) {
+              if (key in answer) {
+                expect(String(Reflect.get(answer, key)).length).toBe(head.length);
+              }
+            }
+
+            if (merging && m.merges.get(id)?.asked === head) {
+              expect(answer).toEqual(m.merges.get(id)?.answer);
+            } else if (found.state !== "open") {
+              expect(answer).toEqual(Updated.cases.closed.make({ state: found.state }));
+            } else if (
+              !merging &&
+              previous?.asked === head &&
+              previous.answer._tag === "updated" &&
+              previous.answer.head === found.head
+            ) {
+              expect(answer).toEqual(previous.answer);
+            } else if (head !== found.head) {
+              expect(answer).toEqual(Updated.cases.moved.make({ head: found.head }));
+              expect(answer._tag === "moved" && answer.head).not.toBe(head);
+            } else if (found.conflict !== null) {
+              expect(answer).toEqual(Updated.cases.conflict.make({ main: m.main, paths: found.conflict }));
+            } else if (merging) {
+              expect(answer._tag).toBe("merged");
+
+              if (answer._tag === "merged") {
+                m.merges.set(id, { asked: head, answer });
+                m.changes.set(id, { ...found, state: "merged" });
+                m.main = answer.commit;
+                expect(sync(r.host.merge(id, head))).toEqual(answer);
+              }
+            } else if (found.base === m.main) {
+              expect(answer).toEqual(Updated.cases.current.make({ head, tree: found.tree, main: m.main }));
+            } else {
+              expect(answer._tag).toBe("updated");
+
+              if (answer._tag === "updated") {
+                expect(answer.head).not.toBe(head);
+                expect(answer.main).toBe(m.main);
+                m.updates.set(id, { asked: head, answer });
+                m.changes.set(id, { ...found, head: answer.head, tree: answer.tree, base: m.main });
+                expect(sync(r.host.update(id, head))).toEqual(answer);
+
+                if (cell.pick % 3 !== 0) {
+                  const pushed = { ...found, head: commit(hex(8)), tree: answer.tree, base: m.main };
+                  m.changes.set(id, pushed);
+                  sync(r.control.put(pushed));
+                  expect(sync(r.host.update(id, head))).toEqual(Updated.cases.moved.make({ head: pushed.head }));
+                }
+              }
+            }
+          }
+
+          expect(sync(r.host.change(999))).toEqual(Change.cases.missing.make({ change: 999 }));
+        },
+        toString: () => JSON.stringify(cell),
+      });
+      const commandArb = fc
         .record({
           move: fc.nat(),
           pick: fc.nat(),
           state: fc.constantFrom("open", "draft", "closed"),
+          head: fc.oneof(
+            fc
+              .array(fc.constantFrom(..."0123456789abcdef"), { minLength: 64, maxLength: 64 })
+              .map((digits) => digits.join("")),
+            fc.integer({ min: 1, max: 32 }).map((n) => n.toString(16).padStart(64, "f")),
+          ),
           conflict: fc.option(fc.array(fc.constantFrom("a b", "dir/[x]", ".dot")), { nil: null }),
         })
-        .map((cell): fc.Command<Model, Real> => ({
-          check: () => true,
-          run: (m, r) => {
-            const id = (cell.pick % 4) + 1;
-            const found = m.changes.get(id);
-            m.serial++;
-            const hex = (salt: number) => (m.serial * 16 + salt + 10).toString(16).padStart(m.size, "0");
-
-            if (found === undefined || cell.move % 7 === 0) {
-              const data: ChangeData = {
-                ...Change.cases.found.make({
-                  change: id,
-                  head: commit(hex(1)),
-                  state: cell.state,
-                  paths: ["src/a.ts"],
-                }),
-                base: cell.pick % 2 === 0 ? m.main : commit(hex(2)),
-                tree: tree(hex(3)),
-                conflict: cell.conflict,
-              };
-              m.changes.set(id, data);
-              m.updates.delete(id);
-              m.merges.delete(id);
-              sync(r.control.put(data));
-            } else if (cell.move % 7 === 1) {
-              m.main = commit(hex(5));
-              sync(r.control.main(m.main));
-            } else if (cell.move % 7 === 2) {
-              const changed = { ...found, head: commit(hex(6)) };
-              m.changes.set(id, changed);
-              sync(r.control.put(changed));
-              const previous = m.updates.get(id);
-
-              if (changed.state === "open" && previous?.answer._tag === "updated") {
-                expect(sync(r.host.update(id, previous.asked))).toEqual(
-                  Updated.cases.moved.make({ head: changed.head }),
-                );
-              }
-            } else if (cell.move % 7 === 3) {
-              const answer = sync(r.host.change(id));
-              expect(Schema.is(Change)(answer)).toBe(true);
-              expect(answer).toMatchObject({ change: id, head: found.head, state: found.state, paths: found.paths });
-            } else {
-              const merging = cell.move % 7 === 4;
-              const previous = merging ? m.merges.get(id) : m.updates.get(id);
-              const head =
-                previous !== undefined && (cell.pick % 2 === 0 || (merging && found.state === "merged"))
-                  ? previous.asked
-                  : cell.pick % 3 === 0
-                    ? commit(hex(7))
-                    : found.head;
-              const answer = sync(merging ? r.host.merge(id, head) : r.host.update(id, head));
-              expect(Schema.is(merging ? Merged : Updated)(answer)).toBe(true);
-
-              for (const key of ["head", "tree", "main", "commit"] as const) {
-                if (key in answer) {
-                  expect(String(Reflect.get(answer, key)).length).toBe(head.length);
-                }
-              }
-
-              if (merging && m.merges.get(id)?.asked === head) {
-                expect(answer).toEqual(m.merges.get(id)?.answer);
-              } else if (found.state !== "open") {
-                expect(answer).toEqual(Updated.cases.closed.make({ state: found.state }));
-              } else if (
-                !merging &&
-                previous?.asked === head &&
-                previous.answer._tag === "updated" &&
-                previous.answer.head === found.head
-              ) {
-                expect(answer).toEqual(previous.answer);
-              } else if (head !== found.head) {
-                expect(answer).toEqual(Updated.cases.moved.make({ head: found.head }));
-                expect(answer._tag === "moved" && answer.head).not.toBe(head);
-              } else if (found.conflict !== null) {
-                expect(answer).toEqual(Updated.cases.conflict.make({ main: m.main, paths: found.conflict }));
-              } else if (merging) {
-                expect(answer._tag).toBe("merged");
-
-                if (answer._tag === "merged") {
-                  m.merges.set(id, { asked: head, answer });
-                  m.changes.set(id, { ...found, state: "merged" });
-                  m.main = answer.commit;
-                  expect(sync(r.host.merge(id, head))).toEqual(answer);
-                }
-              } else if (found.base === m.main) {
-                expect(answer).toEqual(Updated.cases.current.make({ head, tree: found.tree, main: m.main }));
-              } else {
-                expect(answer._tag).toBe("updated");
-
-                if (answer._tag === "updated") {
-                  expect(answer.head).not.toBe(head);
-                  expect(answer.main).toBe(m.main);
-                  m.updates.set(id, { asked: head, answer });
-                  m.changes.set(id, { ...found, head: answer.head, tree: answer.tree, base: m.main });
-                  expect(sync(r.host.update(id, head))).toEqual(answer);
-
-                  if (cell.pick % 3 !== 0) {
-                    const pushed = { ...found, head: commit(hex(8)), tree: answer.tree, base: m.main };
-                    m.changes.set(id, pushed);
-                    sync(r.control.put(pushed));
-                    expect(sync(r.host.update(id, head))).toEqual(Updated.cases.moved.make({ head: pushed.head }));
-                  }
-                }
-              }
-            }
-
-            expect(sync(r.host.change(999))).toEqual(Change.cases.missing.make({ change: 999 }));
-          },
-          toString: () => JSON.stringify(cell),
-        }));
+        .map(command);
+      // pinned: the host's first generated head used to equal an f-padded input in either hash format.
+      const collision = { move: 0, pick: 1, state: "open", head: "1".padStart(64, "f"), conflict: null } as const;
+      const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
-        fc.property(fc.commands([command], { maxCommands: 70 }), fc.constantFrom(40, 64), (commands, size) => {
+        fc.property(fc.commands([commandArb], { maxCommands: 70 }), (commands) => {
           sync(
             Effect.scoped(
               Effect.gen(function* () {
@@ -344,7 +373,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
             ),
           );
         }),
-        { seed: 119120, numRuns: 100 },
+        { seed: 119120, numRuns: 100, examples: [[collisionWalk]] },
       );
     });
   });
