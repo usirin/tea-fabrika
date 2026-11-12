@@ -598,6 +598,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           : deliver(pid, descriptor).pipe(
               // The row stays pending, so the next load sends it again; the failure is still seen.
               Effect.catch((error) => Effect.logWarning(`start of ${pid} not delivered: ${error._tag}`)),
+              Effect.onInterrupt(() => Effect.logWarning(`start of ${pid} not delivered: interrupted`)),
             ),
       { concurrency: 1, discard: true },
     ),

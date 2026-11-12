@@ -799,6 +799,26 @@ export class ProgramRunner extends Context.Service<
           return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ reason }));
         });
 
+        /** A throw in the program's init is supervision's, as a step's is: observed, then the wait. */
+        const booted = (init: Effect.Effect<Step, ProgramDown>) =>
+          init.pipe(
+            Effect.catchIf(
+              (down) => supervision !== null && down.source === undefined,
+              Effect.fnUntraced(function* (down) {
+                const { at } = yield* (yield* coordinator).status(process.name);
+                const failure = Failure.cases.saved.make({
+                  process: process.id,
+                  letter: `${process.id}/init`,
+                  build: process.build,
+                  seq: (supervision?.seq ?? 0) + 1,
+                  error: down.errorClass,
+                });
+                yield* observed(failure, at, down.cause).pipe(Effect.mapError(() => down));
+                return yield* down;
+              }),
+            ),
+          );
+
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
         const load = Effect.fnUntraced(function* () {
           const loaded = yield* loader.load(process.program, process.build);
@@ -814,7 +834,7 @@ export class ProgramRunner extends Context.Service<
           const saved = yield* store.load;
 
           if (saved === null) {
-            const boot = yield* stepped(yield* loaded.execution.init(null), "load");
+            const boot = yield* stepped(yield* booted(loaded.execution.init(null)), "load");
             const fresh: Live = {
               loaded,
               model: boot.model,
@@ -836,7 +856,7 @@ export class ProgramRunner extends Context.Service<
 
           const cmds = decoded.success;
           const { saved: next, ran } = yield* loaded.execution.upgrade(saved.saved);
-          const boot = yield* stepped(yield* loaded.execution.init(next.model), "saved_state");
+          const boot = yield* stepped(yield* booted(loaded.execution.init(next.model)), "saved_state");
           const upgraded = saved.saved.v !== next.v || ran.length > 0;
 
           if (upgraded) {
@@ -1546,7 +1566,14 @@ export class ProgramRunner extends Context.Service<
             init(
               Effect.gen(function* () {
                 if (supervision === null || supervision.recovery._tag === "live") {
-                  yield* ready();
+                  // A program that throws in init is supervision's: once it holds the crash, the start answers.
+                  yield* ready().pipe(
+                    Effect.catchIf(
+                      (error) =>
+                        error._tag === "ProgramDown" && supervision !== null && supervision.recovery._tag !== "live",
+                      () => Effect.void,
+                    ),
+                  );
                 }
 
                 return { answer: undefined, jobs: [] };
