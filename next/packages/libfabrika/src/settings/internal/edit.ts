@@ -107,6 +107,7 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
     const at = path.slice(0, i);
     const entry =
       index.assignments.find((assignment) => same(assignment.path, at)) ??
+      index.sections.find((section) => same(section.path, at)) ??
       index.sections.find((section) => i > 0 && prefix(at, section.path));
 
     if (entry) {
@@ -216,12 +217,14 @@ export const set = (
 
   if (parent) {
     const at = parent.end - 1;
+    const last = parent.members.at(-1);
+    const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
     return Result.succeed(
       apply(text, [
         {
           start: at,
           end: at,
-          text: `${parent.members.length ? ", " : ""}${keys.slice(parent.path.length).join(".")} = ${rendered}`,
+          text: `${separator}${keys.slice(parent.path.length).join(".")} = ${rendered}`,
         },
       ]),
     );
