@@ -4,6 +4,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
+import { inboxMachine } from "./program.ts";
 
 const SEED = 119120;
 const RUNS = 100;
@@ -92,7 +93,11 @@ describe("ticket 884 the inbox program, slice 1", () => {
 
   it.effect.prop(
     "I4: the view decodes through inboxView and keeps every row field in order",
-    { model: Arbitrary.all({ rows: Arbitrary.array(Arbitrary.schema(Row), { maxLength: 40 }) }) },
+    {
+      model: Arbitrary.all({
+        rows: Arbitrary.array(Arbitrary.schema(inboxMachine.model.fields.rows.value), { maxLength: 40 }),
+      }),
+    },
     ({ model }) =>
       Effect.gen(function* () {
         const { inbox, inboxView } = yield* Effect.promise(load);

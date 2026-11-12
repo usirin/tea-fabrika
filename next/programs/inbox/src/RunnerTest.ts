@@ -1,8 +1,7 @@
 // Ticket 884, next/: the app supplies real runner wiring so this program imports only the library's front (0062).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
-import { Arbitrary, Effect, type Scope } from "effect";
-import * as fc from "fast-check";
+import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import { inbox, Row } from "./program.ts";
 
 type Runner = ProgramRunner["Service"];
@@ -29,7 +28,7 @@ export const suite = (open: Open) =>
   describe("ticket 884 the inbox program at the runner", () => {
     it.live.prop(
       "I2: a person, an agent and a recovered device cannot send added or change the brain's rows",
-      [fc.constantFrom("person", "agent", "recovered"), Arbitrary.schema(inbox.msg)],
+      [Schema.Literals(["person", "agent", "recovered"]), Arbitrary.schema(inbox.msg)],
       ([sender, initial]) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -37,9 +36,6 @@ export const suite = (open: Open) =>
             const runner = yield* session.start(inbox, initial);
             const { type: _type, ...fields } = initial;
             const before = (yield* runner.open("before")).view;
-            expect(before, "the brain's saved letter reaches the real program").toEqual({
-              rows: [Row.cases.added.make(fields)],
-            });
             const letters = yield* session.letters;
             const answer = yield* runner.msg({
               id: "inbox-client-attempt",
@@ -56,6 +52,9 @@ export const suite = (open: Open) =>
             expect(answer._tag).toBe("refused");
             expect((yield* runner.open("after")).view).toEqual(before);
             expect(yield* session.letters, "a refused input saves no letter").toEqual(letters);
+            expect(before, "the brain's saved letter reaches the real program").toEqual({
+              rows: [Row.cases.added.make(fields)],
+            });
           }),
         ),
       { arbitrary: { seed: 119120 } },
