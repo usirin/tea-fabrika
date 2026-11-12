@@ -308,6 +308,7 @@ const served = Effect.gen(function* () {
     founder: root.line,
     window: old.raw,
     port,
+    rateLimit: { limit: 100_000, window: 60_000 },
   }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
   const from = {
     by: root.fingerprint,

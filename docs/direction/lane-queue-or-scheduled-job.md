@@ -55,7 +55,8 @@ flowchart LR
   merge queue. Every piece of work in it judges this change and is needed by the next step.
 - **One merge queue.** fabrika provides it as its own primitive, in its official pipeline pack
   ([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)). What it runs before a merge
-  is 0107's and [0097](../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md)'s.
+  is 0107's and, until its first stage, [0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)'s:
+  every check on a head that holds main.
 - **Work on the merge event.** The merge queue raises it. Bringing the tool checkout up to date
   hangs here, and so does a cleanup run ([0101](../../.decisions/0101-box-cleanup-runs-on-a-timer.md)).
 - **Two scheduled jobs.** The laptop cleaner (0101) and a main watcher that files one ticket when
@@ -157,8 +158,8 @@ Lead tooling today. Where a home is a lean, it says so.
 - **The laptop.** Box cleanup, stale processes, Docker health: the laptop cleaner, a scheduled job
   (0101).
 - **Main.** The full suite still runs on every push to main. The main watcher, a scheduled job, reads its
-  result and files one ticket when main goes red, so the "fix it the same turn" that 0097 relies on
-  has an owner. Hourly mutation stays as 0066 and
+  result and files one ticket when main goes red, so "fix it the same turn" has an owner (0097 relied
+  on it; 0146 superseded 0097 and catches a clash before the merge). Hourly mutation stays as 0066 and
   [0067](../../.decisions/0067-hourly-mutation-runs-in-ci.md) have it.
 
 ## The guesses the owner corrected

@@ -2,6 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
+    "gateway": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The most routed attempts one signed-in key may make in one gateway window.",
+          "default": 600
+        },
+        "window": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The gateway window in milliseconds.",
+          "default": 60000
+        }
+      },
+      "additionalProperties": false
+    },
     "instance": {
       "type": "object",
       "properties": {
