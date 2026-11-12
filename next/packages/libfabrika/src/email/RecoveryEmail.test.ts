@@ -125,7 +125,7 @@ it.effect.prop(
   { flow: RecoveryFlow },
   ({ flow }) =>
     Effect.gen(function* () {
-      const parent = yield* Effect.promise(loadParent);
+      const parent = yield* loadParent;
       const { calls, services } = parentAnswers(flow);
       const [model] = parent.Recovery.init({ cloud: true });
       const [next, commands] = parent.Recovery.update(model, {

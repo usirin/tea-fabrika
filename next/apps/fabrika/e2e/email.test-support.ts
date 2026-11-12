@@ -1,13 +1,8 @@
-// P36, next/: local workerd and real Electron only. No network or Cloudflare account is used.
-// The Project constructor and app entry paths are provisional P24/P26/P28 contracts. The lead
-// reconciles them before build, as the approved plan requires. Never substitute a fake project.
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
-import { Schema } from "effect";
-import { build } from "esbuild";
-import { Miniflare } from "miniflare";
-import { _electron, type ElectronApplication, type Page } from "playwright";
+// P36, next/. Scoped Alchemy runtime and real Electron. No live sender or account.
+import { Effect, FileSystem, Path, Schema } from "effect";
+import type { Page } from "playwright";
+import { launch as launchWindow, type TestWindow } from "../test-window.ts";
+import { startWorker } from "./email-worker.test-support.ts";
 
 export const EPOCH = 1_800_000_000_000;
 
@@ -47,223 +42,120 @@ export type Session = { readonly id: string; readonly key: string; readonly toke
 
 export interface Instance {
   readonly home: string;
-  readonly mails: Mail[];
   readonly url: string;
-  readonly call: <A>(path: string, body?: unknown) => Promise<A>;
-  readonly close: () => Promise<void>;
+  readonly call: <A>(path: string, body?: unknown) => Effect.Effect<A, unknown>;
 }
 
-// P24/P26 test driver contract. Only these private test paths are handled by this wrapper. All
-// public email, grant, watch and admission requests run the real Project and P10 door.
-const wrapper = (projectPath: string) => `
-import {Project} from ${JSON.stringify(projectPath)};
-import {Effect, Redacted} from "effect";
-let now = ${EPOCH};
-export class EmailExam extends Project {
-  constructor(ctx, env) {
-    super(ctx, {...env, emailClock: Effect.sync(() => now),
-      emailSender: {send: (mail) => Effect.tryPromise(() => env.MAIL.fetch(new Request("https://mail.example.test/", {method:"POST", body: JSON.stringify({to: Redacted.value(mail.to), raw: Redacted.value(mail.code)})})))},
-      personCheck: Effect.succeed("touch")});
+// The response boundary is private to this exam; the law checks every observed result.
+const request = Effect.fn("emailExam.request")(function* <A>(url: string, path: string, body?: unknown) {
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the HTTP fetch boundary returns a Promise
+  const response = yield* Effect.tryPromise(() =>
+    fetch(
+      new URL(path, url),
+      body === undefined
+        ? undefined
+        : {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          },
+    ),
+  );
+
+  if (!response.ok) {
+    return yield* Effect.fail(new Error("P36 instance refused request"));
   }
-  async fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === "/__test/clock") {now = (await request.json()).at; return Response.json({ok:true});}
-    if (url.pathname === "/__test/snapshot") return Response.json(await this.emailTestSnapshot());
-    if (url.pathname === "/__test/device") return Response.json(await this.emailTestDevice(await request.json()));
-    return super.fetch(request);
-  }
-}
-export default {fetch(request, env) {return env.PROJECT.getByName("p36-test").fetch(request);}};
-`;
 
-// These two observation hooks must be installed on the real object by the test wrapper, not
-// added to production: tests read its real ledger/storage and found test devices through P10.
-// Missing upstream hooks stay red until the lead reconciles the actual public test access.
-export async function openInstance(): Promise<Instance> {
-  const home = await mkdtemp("/tmp/fh.");
-  const mails: Mail[] = [];
-  let mf: Miniflare | undefined;
+  // oxlint-disable-next-line fabrika/no-promises -- edge: a web Response decodes JSON through a Promise
+  const value: unknown = yield* Effect.tryPromise(() => response.json());
+  return value as A;
+});
 
-  try {
-    const project = resolve(import.meta.dirname, "../../../packages/libfabrika/src/cloudflare/objects.ts");
-    const compiled = await build({
-      stdin: {
-        contents: wrapper(project),
-        resolveDir: resolve(import.meta.dirname, ".."),
-        sourcefile: "email.test-worker.ts",
-        loader: "ts",
-      },
-      bundle: true,
-      write: false,
-      format: "esm",
-      platform: "browser",
-      external: ["cloudflare:workers"],
-      logLevel: "silent",
-    });
-    mf = new Miniflare({
-      modules: true,
-      script: compiled.outputFiles[0]!.text,
-      compatibilityDate: "2026-11-08",
-      durableObjects: { PROJECT: { className: "EmailExam", useSQLite: true } },
-      durableObjectsPersist: join(home, "objects"),
-      serviceBindings: {
-        MAIL: async (request) => {
-          const value: Mail = await request.json();
-          mails.push(value);
-          return new Response(null, { status: 202 });
-        },
-      },
-      // Every external call is refused. MAIL is the only stand-in send destination.
-      outboundService: () => new Response("No network in P36 tests", { status: 502 }),
-    });
-    const active = mf;
-    const url = String(await active.ready);
-    return {
-      home,
-      mails,
-      url,
-      call: async <A>(path: string, body?: unknown): Promise<A> => {
-        const response = await active.dispatchFetch(
-          `https://project.example.test${path}`,
-          body === undefined
-            ? undefined
-            : {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify(body),
-              },
-        );
+export const openInstance = Effect.fn("emailExam.openInstance")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
+  const url = yield* startWorker(home);
+  return { home, url, call: <A>(path: string, body?: unknown) => request<A>(url, path, body) } satisfies Instance;
+});
 
-        if (!response.ok) {
-          throw new Error(`P36 instance refused ${path}: ${response.status}`);
-        }
-
-        return (await response.json()) as A;
-      },
-      close: async () => {
-        await active.dispose();
-        await rm(home, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
-    await mf?.dispose();
-    await rm(home, { recursive: true, force: true });
-    throw error;
-  }
-}
-
-export const mailCode = (instance: Instance) => {
-  const mail = instance.mails.at(-1);
+export const mailCode = Effect.fn("emailExam.mailCode")(function* (instance: Instance) {
+  const mails = yield* instance.call<ReadonlyArray<Mail>>("/__test/mail");
+  const mail = mails.at(-1);
 
   if (mail === undefined) {
-    throw new Error("Stand-in sender received no mail");
+    return yield* Effect.fail(new Error("Stand-in sender received no mail"));
   }
 
   const match = /(?:^|\D)(\d{6})(?:\D|$)/.exec(mail.raw);
 
-  if (match === null) {
-    throw new Error("Stand-in sender received no six-digit code");
+  if (match === null || match[1] === undefined) {
+    return yield* Effect.fail(new Error("Stand-in sender received no six-digit code"));
   }
 
-  return match[1]!;
-};
+  return match[1];
+});
 
-export const device = (instance: Instance, label: string): Promise<Session> =>
-  instance.call("/__test/device", { label });
-
-export const snapshot = (instance: Instance): Promise<Snapshot> => instance.call("/__test/snapshot");
+export const device = (instance: Instance, label: string) => instance.call<Session>("/__test/device", { label });
+export const snapshot = (instance: Instance) => instance.call<Snapshot>("/__test/snapshot");
 export const clock = (instance: Instance, at: number) => instance.call("/__test/clock", { at });
 
-export const checkedAddress = async (instance: Instance, session: Session) => {
-  const challenge = await instance.call<{ id: string }>("/email/setup", {
+export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (instance: Instance, session: Session) {
+  const challenge = yield* instance.call<{ id: string }>("/email/setup", {
     device: session,
     address: "p36@example.test",
   });
-  return instance.call("/email/verify", {
+  return yield* instance.call("/email/verify", {
     device: session,
     challenge: challenge.id,
-    code: mailCode(instance),
+    code: yield* mailCode(instance),
   });
-};
+});
 
-export const redeem = async (instance: Instance, session: Session, old: "lost" | "kept") => {
-  const challenge = await instance.call<{ id: string }>("/email/recovery", { device: session });
-  return instance.call<{ id: string; added: string }>("/email/redeem", {
+export const redeem = Effect.fn("emailExam.redeem")(function* (
+  instance: Instance,
+  session: Session,
+  old: "lost" | "kept",
+) {
+  const challenge = yield* instance.call<{ id: string }>("/email/recovery", { device: session });
+  return yield* instance.call<{ id: string; added: string }>("/email/redeem", {
     device: session,
     challenge: challenge.id,
-    code: mailCode(instance),
+    code: yield* mailCode(instance),
     old,
     check: "touch",
   });
-};
+});
 
-export const launch = async (instance: Instance, label: string) => {
-  const home = await mkdtemp("/tmp/fh.");
+export const launch = (instance: Instance, label: string) => launchWindow({ instance: instance.url, label });
+export type Window = TestWindow;
 
-  try {
-    const env: Record<string, string | undefined> = {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      TMPDIR: process.env.TMPDIR,
-      FABRIKA_HOME: home,
-      FABRIKA_TEST_INSTANCE: instance.url,
-      FABRIKA_TEST_PERSON_CHECK: "touch",
-      FABRIKA_TEST_DEVICE_LABEL: label,
-    };
-    delete env.TYPESAFE_API_KEY;
-    delete env.FABRIKA_FOREGROUND;
-    const require = createRequire(import.meta.url);
-    const executablePath: string = require("electron");
-    const app = await _electron.launch({
-      executablePath,
-      args: [resolve(import.meta.dirname, "../electron/main.ts")],
-      env,
-    });
-    const page = await app.firstWindow();
-    return {
-      app,
-      page,
-      home,
-      close: async () => {
-        await app.close();
-        await rm(home, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
-    await rm(home, { recursive: true, force: true });
-    throw error;
-  }
-};
+// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright exposes renderer operations through Promise APIs
+export const play = <A>(action: () => PromiseLike<A>) => Effect.tryPromise(() => action());
 
-export type Window = {
-  readonly app: ElectronApplication;
-  readonly page: Page;
-  readonly home: string;
-  readonly close: () => Promise<void>;
-};
+export const visible = (page: Page, text: string) =>
+  play(() => page.getByText(text, { exact: false }).waitFor({ state: "visible" }));
 
-export const visible = async (page: Page, text: string) => {
-  await page.getByText(text, { exact: false }).waitFor({ state: "visible" });
-};
-
-export const shots = async (window: Window, state: string) => {
-  const folder = join(window.home, "email-shots");
-  await mkdir(folder, { recursive: true });
+export const shots = Effect.fn("emailExam.shots")(function* (window: Window, state: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const folder = path.join(window.home, "email-shots");
+  yield* fs.makeDirectory(folder, { recursive: true });
 
   for (const layout of ["full", "side-by-side", "stacked", "grid", "small"]) {
-    await window.page.setViewportSize(layout === "small" ? { width: 1024, height: 700 } : { width: 1440, height: 900 });
+    yield* play(() =>
+      window.page.setViewportSize(layout === "small" ? { width: 1024, height: 700 } : { width: 1440, height: 900 }),
+    );
 
-    // P28 uses the real desk. These key chords split its tiles, never draw a mock recovery view.
     if (layout === "side-by-side" || layout === "grid") {
-      await window.page.keyboard.press("Control+b");
-      await window.page.keyboard.press("|");
+      yield* play(() => window.page.keyboard.press("Control+b"));
+      yield* play(() => window.page.keyboard.press("|"));
     }
 
     if (layout === "stacked" || layout === "grid") {
-      await window.page.keyboard.press("Control+b");
-      await window.page.keyboard.press("-");
+      yield* play(() => window.page.keyboard.press("Control+b"));
+      yield* play(() => window.page.keyboard.press("-"));
     }
 
-    await window.page.screenshot({ path: join(folder, `${state}-${layout}.png`) });
+    yield* play(() => window.page.screenshot({ path: path.join(folder, `${state}-${layout}.png`) }));
   }
-};
+});
