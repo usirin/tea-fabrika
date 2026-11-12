@@ -116,6 +116,7 @@
       "paths": [
         "next/packages/libfabrika/src/Id.ts",
         "next/packages/libfabrika/src/ProcessId.ts",
+        "next/packages/libfabrika/src/SpanTag.ts",
         "next/packages/libfabrika/src/Sql.ts",
         "next/packages/libfabrika/src/Rev.ts"
       ]
