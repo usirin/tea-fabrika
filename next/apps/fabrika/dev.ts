@@ -1,9 +1,15 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Id } from "@kampus/libfabrika";
+import type { LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
+import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
+import * as OpenRepository from "@kampus/libfabrika/node/repositories/OpenRepository";
+import * as RepositoriesGit from "@kampus/libfabrika/node/repositories/RepositoriesGit";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
+import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Path, Schema } from "effect";
-import { Command, Flag } from "effect/cli";
+import { Config, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { build } from "./src/build.ts";
@@ -38,6 +44,7 @@ const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
   settings,
+  repo: Flag.String("repo").pipe(Flag.withDefault(undefined)),
   child: Flag.Boolean("child").pipe(Flag.withDefault(false)),
   parent: Flag.String("parent").pipe(Flag.withDefault(undefined)),
   name: Flag.String("name").pipe(Flag.withDefault(undefined)),
@@ -53,7 +60,8 @@ for (let n = 2; n < process.argv.length; n++) {
   const word = process.argv[n] ?? "",
     value = process.argv[n + 1];
   const flag =
-    (/^--(port|name|person|founder|window|parent)$/.test(word) || declarations.some((d) => word === `--${d.path}`)) &&
+    (/^--(repo|port|name|person|founder|window|parent)$/.test(word) ||
+      declarations.some((d) => word === `--${d.path}`)) &&
     value !== undefined;
   words.push(flag ? `${word}=${value}` : word);
 
@@ -88,18 +96,25 @@ const command = Command.make("dev", flags, (options) => {
           path: path.join(home, "fabrika.toml"),
           name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
         };
-        // Settings are read once, before anything starts. Only declared names are taken from the
-        // environment, so no other variable reaches the snapshot. A dev start selects no repo, so
-        // it reads no repo file.
-        const loaded = yield* Load.load({
+        const loadOptions = {
           person,
           flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
           env: present(declarations.map((d) => [d.env, process.env[d.env]])),
           version: VERSION,
-        }).pipe(
-          Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
-          Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
-        );
+        };
+        const prepared =
+          options.repo === undefined
+            ? undefined
+            : yield* OpenRepository.prepare(options.repo, loadOptions).pipe(
+                Effect.provide(RepositoriesGit.layer({ person: home })),
+                Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
+              );
+        const loaded =
+          prepared ??
+          (yield* Load.load(loadOptions).pipe(
+            Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
+            Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })),
+          ));
         const { file, state } = yield* Effect.gen(function* () {
           yield* fs.makeDirectory(home, { recursive: true });
           const file = path.join(home, "instance.json");
@@ -129,7 +144,41 @@ const command = Command.make("dev", flags, (options) => {
           .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => new InstanceError({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
-        yield* localInstance(built, { ...state, port: loaded.values.port, home });
+        const instance = yield* localInstance(built, { ...state, port: loaded.values.port, home });
+
+        if (prepared !== undefined) {
+          const ids = yield* Id.Generator;
+          const { append, read, wait } = instance.project(state.name);
+
+          if (append === undefined || read === undefined || wait === undefined) {
+            return yield* new InstanceError({ reason: "ledger_unavailable" });
+          }
+
+          const calls: LedgerCalls = { append, read, wait };
+          const selected = yield* OpenRepository.open(prepared, {
+            selection: yield* ids.next(Id.InputId),
+            request: yield* ids.next(Id.InputId),
+            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            by: "brain",
+            build: built.build,
+            interactive: process.stdin.isTTY === true,
+            confirm: (snapshot) =>
+              Prompt.Confirm({ message: `Trust ${snapshot.label} at ${snapshot.commit}?`, initial: false }),
+          }).pipe(
+            Effect.provide(
+              RepositoryTrustLedger.layer.pipe(
+                Layer.provide(LedgerRemote.layer(calls, { reader: "brain" })),
+                Layer.provide(Digest.layerWebCrypto),
+              ),
+            ),
+          );
+          process.stdout.write(`${JSON.stringify(selected)}\n`);
+
+          if (selected._tag === "refused") {
+            return yield* new InstanceError({ reason: "repository_refused" });
+          }
+        }
+
         process.stdout.write(
           `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
@@ -163,6 +212,6 @@ const command = Command.make("dev", flags, (options) => {
 
 NodeRuntime.runMain(
   Command.runWith(command, { version: "0.0.0" })(words).pipe(
-    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto]),
+    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto, Id.Generator.layer]),
   ),
 );

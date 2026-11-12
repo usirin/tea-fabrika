@@ -55,6 +55,14 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-12, P40 slice 2, ticket 878:* `next/` has an explicit `dev --repo` route that checks one
+default-branch commit through P38 before building the shipped programs. Repository selections,
+trust answers and opening results use the local instance's ledger. First use defaults to no;
+noninteractive first use reports awaiting trust. Repository code is never loaded by this slice.
+P38 slices 1, 2 and 3a supply its foundation. The next pack build/settings slice is shared with
+P38 slice 5 and still needs the later isolation work. P40 stays open through slice 4's cold-author
+check. Real Git and Alchemy checks remain the lead's host checks before landing this slice.
+
 *2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
 P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
 [0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses
