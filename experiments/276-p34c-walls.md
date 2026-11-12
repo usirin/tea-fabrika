@@ -40,16 +40,24 @@ step does not wait for delivery. The measurement must compare calls and rows to 
 or duplicate delivery.
 
 The receiving object's services enclose `process.usage` itself, so both a decoded batch and
-a rejected batch leave that call's span. The app's tail callback hands off to the library,
-which reads the invocation's props through Alchemy's runtime context adapter. It imports no
-deploy-time Worker declaration and needs no stack name or local instance hardcoded in the tail.
+a rejected batch leave that call's span. The app exports Alchemy's Worker bridge as `IsolateTail`.
+Worker init registers its tail listener through Alchemy's `listen`; the library reads each
+invocation's props from `WorkerExecutionContext` and bindings from `WorkerEnvironment`.
+The tail has no deploy-time Worker import and runs no Promise bridge of its own.
+`IsolateTail` and `RecordPart` share one entrypoint and metadata object. The stack name and
+instance come from Alchemy's `ALCHEMY_STACK_NAME` and `ALCHEMY_STAGE` bindings, checked as
+nonempty strings at module load. Neither is fixed to the laptop's values.
 Alchemy also creates the loopback tail binding and wraps
 the usage RPC. The trace adapter takes Alchemy's tail event type. The existing loader still
 accepts native code options; the bound Alchemy fetcher's `raw` is passed only at that old boundary.
 The Process caller supplies the sink's batch operation; the runtime value imports no telemetry.
 The host must validate this wiring, including a failed usage call's saved span. The earlier
 host U9 attempt stopped at an unreachable control call before any tail assertion. This build
-removed the tail's deploy-time Alchemy import, but that cause still needs the host rerun.
+uses the bridge form from the installed Alchemy source, but still needs the host rerun.
+That run must confirm the two metadata bindings reach the prebuilt Worker, a loader tail
+reaches `IsolateTail`, and the init listener handles it. Missing metadata fails decoding with
+the missing binding's name. With debug logging enabled, `isolate.tail listener registered`
+marks init and `isolate.tail received` gives the incoming event count, without trace content.
 
 ## Measurement still owed on the host
 

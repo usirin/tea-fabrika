@@ -130,7 +130,7 @@ export interface ProjectOptions {
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
 
 /** One Process object per registered name: every process ID of that name, first or successor. */
-export const processStub = (env: Env, project: string, name: string) =>
+export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
   env.PROCESS.getByName(JSON.stringify([project, name]));
 
 export const recordStub = (env: Env, project: string, name: string) =>

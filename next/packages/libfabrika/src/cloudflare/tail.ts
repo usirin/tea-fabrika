@@ -3,7 +3,11 @@
  *
  * @stability unstable
  */
-import { fromExecutionContext, getLoopbackEntrypoint } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import {
+  getLoopbackEntrypoint,
+  WorkerEnvironment,
+  WorkerExecutionContext,
+} from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -41,7 +45,7 @@ export const bind = Effect.fnUntraced(function* (
  * @category combinators
  */
 export const tail = Effect.fnUntraced(function* (
-  env: Env,
+  env: Pick<Env, "PROCESS">,
   props: typeof Props.Type,
   items: Parameters<typeof isolateUsage>[1],
 ) {
@@ -59,18 +63,21 @@ export const tail = Effect.fnUntraced(function* (
  * @stability unstable
  * @category combinators
  */
-export const receive = (env: Env, props: unknown, items: Parameters<typeof tail>[2]) =>
+export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parameters<typeof tail>[2]) =>
   Schema.decodeUnknownEffect(Props)(props).pipe(Effect.flatMap((checked) => tail(env, checked, items)));
 
 /**
- * Alchemy reads the callback's props without loading deploy-time Worker declarations.
+ * Reads each tail invocation's props and bindings from Alchemy's live services.
  *
  * @stability unstable
  * @category combinators
  */
 export const callback = Effect.fnUntraced(
-  function* (env: Env, ctx: Parameters<typeof fromExecutionContext>[0], items: Parameters<typeof tail>[2]) {
-    yield* receive(env, yield* fromExecutionContext(ctx).props, items);
+  function* (items: Parameters<typeof tail>[2]) {
+    yield* Effect.logDebug("isolate.tail received", { events: items.length });
+    const env = yield* WorkerEnvironment;
+    const ctx = yield* WorkerExecutionContext;
+    yield* receive({ PROCESS: env.PROCESS }, yield* ctx.props, items);
   },
   Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))),
 );
