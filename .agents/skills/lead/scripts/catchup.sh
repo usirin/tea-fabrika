@@ -383,6 +383,14 @@ checks_at() {
 	runs=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
 		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)\t\(.html_url // "")"') || exit 1
 	runs=$(printf '%s\n' "$runs" | awk -F'\t' '$1!="lint" && $1!="ci-required (draft)"')
+	# A skipped job keeps its name's expression unevaluated, so on a docs-only change GitHub reports
+	# check.yaml's `check` job by its raw text. It counts as `check` only beside the ready run's own
+	# `ci-required`, so a draft run's skip never stands in for it.
+	runs=$(printf '%s\n' "$runs" | awk -F'\t' -v OFS='\t' '
+		{ row[NR]=$0; if ($1=="ci-required") ready=1 }
+		END { for (i=1; i<=NR; i++) { $0=row[i]
+			if (ready && $3=="skipped" && $1 ~ /^github\.event\.pull_request\.draft && /) $1="check"
+			print } }')
 	# A red job prints with its link, so nobody has to look it up.
 	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {
 		print $1": "$3 ($4 == "" ? "" : ", " $4) }')

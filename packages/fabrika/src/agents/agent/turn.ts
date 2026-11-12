@@ -74,7 +74,7 @@ export const Update = Schema.Union([
     output: Schema.optionalKey(Schema.String),
   }),
   /** ACP's `session/request_permission`. Refused: a contained run asks nobody. */
-  Schema.TaggedStruct("asked", { id: Schema.String, title: Schema.String }),
+  Schema.TaggedStruct("asked", { id: Schema.String, title: Schema.String, option: Schema.optionalKey(Schema.String) }),
   /** The turn's tokens so far. */
   Schema.TaggedStruct("tokens", { tokens: Tokens }),
 ]);
@@ -100,6 +100,8 @@ export const AgentFailedWhy = Schema.Literals([
   "no_provider",
   /** The turn asks for a limit the adapter cannot hold. */
   "cannot_limit",
+  /** The agent asked for a permission, and every no it offered would end its turn. */
+  "cannot_refuse",
   /** The session is someone else's: opened on another provider. */
   "other_provider",
   /** The turn's system prompt does not read: a `replace` prompt with no text that got past its type. */
@@ -199,7 +201,7 @@ export type Raw =
       readonly status: ToolStatus;
       readonly output?: string;
     }
-  | { readonly _tag: "asked"; readonly id: string; readonly title: string }
+  | { readonly _tag: "asked"; readonly id: string; readonly title: string; readonly option?: string }
   /** One model request's tokens (`whole: false`), or the turn's total (`whole: true`). */
   | { readonly _tag: "tokens"; readonly tokens: Tokens; readonly whole: boolean }
   | {
