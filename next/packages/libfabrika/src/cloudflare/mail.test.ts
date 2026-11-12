@@ -98,13 +98,35 @@ const ReceiptFields = fc.record({
   pos: fc.nat(),
 });
 
-for (const trace of [false, true]) {
-  it.effect(trace ? "T1b: the wake carries the delivery trace" : "T1b [secrets]: RPC records hold no mail", () =>
+for (const flow of [
+  {
+    name: "T1b [secrets]: RPC records hold no mail",
+    choices: fc.oneof(Cases, fc.constant("ok")),
+    trace: false,
+  },
+  {
+    name: "T1b: the wake carries the delivery trace",
+    choices: fc.oneof(Cases, fc.constant("ok")),
+    trace: true,
+  },
+  {
+    name: "T1b [secrets]: Project mail rejections hold no mail",
+    choices: fc.constant("mail_rejected"),
+    trace: false,
+  },
+  {
+    name: "T1b [secrets]: Process mailed rejections hold no mail",
+    choices: fc.constant("mailed_rejected"),
+    trace: true,
+  },
+]) {
+  it.effect(flow.name, () =>
     Effect.gen(function* () {
       const check = Effect.fnUntraced(function* (
         fields: typeof ReceiptFields extends fc.Arbitrary<infer A> ? A : never,
         choice: string,
         seed: number,
+        rejected: "error" | "text" | "object",
       ) {
         const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 1 });
         const secret = secrets[0]!;
@@ -127,6 +149,12 @@ for (const trace of [false, true]) {
           rev: fields.rev,
           pos: fields.pos,
         };
+        const rejection =
+          rejected === "error"
+            ? new Error(secret)
+            : rejected === "text"
+              ? secret
+              : { message: secret, mail: receipt.m };
         const spans: Array<Tracer.Span> = [];
         const captured = RepliesTest.capture();
         const outputs: Array<string> = [];
@@ -156,6 +184,10 @@ for (const trace of [false, true]) {
               mail: async (_mail: unknown, ...args: ReadonlyArray<unknown>) => {
                 outputs.push(JSON.stringify(args));
 
+                if (choice === "mail_rejected") {
+                  return Promise.reject(rejection);
+                }
+
                 if (choice === "transport" || choice === "storage") {
                   return Promise.reject(new Error("connection lost"));
                 }
@@ -164,7 +196,9 @@ for (const trace of [false, true]) {
                   return { unexpected: receipt };
                 }
 
-                return choice === "ok" ? MailOk.make({ receipt }) : Refused.make({ reason: choice });
+                return choice === "ok" || choice === "mailed_rejected"
+                  ? MailOk.make({ receipt })
+                  : Refused.make({ reason: choice });
               },
             }),
           },
@@ -176,6 +210,10 @@ for (const trace of [false, true]) {
               ) => {
                 outputs.push(JSON.stringify([trace, ...args]));
                 wakes.push(trace);
+
+                if (choice === "mailed_rejected") {
+                  return Promise.reject(rejection);
+                }
               },
             }),
           },
@@ -197,7 +235,6 @@ for (const trace of [false, true]) {
           );
         }
 
-        RepliesTest.unleaked([...outputs, ...captured.text()], secrets);
         const sends = spans.filter((span) => span.name === "mail_delivery.send");
         expect(sends).toHaveLength(1);
         const sent = sends[0]!;
@@ -210,19 +247,32 @@ for (const trace of [false, true]) {
             expect(exit.value.id).toBe(receipt.id);
           }
 
-          if (trace) {
+          if (flow.trace) {
             expect(wakes).toEqual([{ traceId: sent.traceId, spanId: sent.spanId }]);
           }
         } else {
           expect(Exit.isFailure(exit)).toBe(true);
-          expect(wakes).toEqual([]);
+
+          if (choice === "mailed_rejected") {
+            expect(wakes).toEqual([{ traceId: sent.traceId, spanId: sent.spanId }]);
+          } else {
+            expect(wakes).toEqual([]);
+          }
+
+          if (Exit.isFailure(exit) && (choice === "mail_rejected" || choice === "mailed_rejected")) {
+            const failure = Cause.squash(exit.cause);
+            expect(failure).toMatchObject({ reason: choice === "mail_rejected" ? "storage" : "unavailable" });
+          }
         }
+
+        RepliesTest.unleaked([...outputs, ...captured.text()], secrets);
       });
       const property = fc.asyncProperty(
         ReceiptFields,
-        fc.oneof(Cases, fc.constant("ok")),
+        flow.choices,
         fc.nat(),
-        (fields, choice, seed) => Effect.runPromise(check(fields, choice, seed)),
+        fc.constantFrom("error" as const, "text" as const, "object" as const),
+        (fields, choice, seed, rejected) => Effect.runPromise(check(fields, choice, seed, rejected)),
       );
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
     }),
