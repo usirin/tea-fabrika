@@ -6,7 +6,7 @@
 // - edge is slate a4, a background step used as a line: a higher one was too loud on a full desk;
 // - focus is slate a9 in both looks, dark and light, a solid step used as a line: a8 reads 1.90 on
 //   the desk in light and 2.82 on a selected row in dark.
-// The fifteen colors come from tokens/color/<token>.toml, each step and bend with its reason
+// The sixteen colors come from tokens/color/<token>.toml, each step and bend with its reason
 // there: the token build writes them into theme-colors.ts and into tokens.css, so the stylesheet,
 // the terminal and the window's frame cannot drift. The terminal's palette is written here, and its
 // black (dark) and two whites (light) are fills, not text.
@@ -17,7 +17,7 @@ import { dark, light } from "./theme-colors.ts";
 
 type Hex = `#${string}`;
 
-/** The fifteen colors the note names. */
+/** The sixteen colors: the note's fifteen and the ask desk's card. */
 interface Colors {
   /** Behind the tiles. */
   readonly desk: Hex;
@@ -25,6 +25,8 @@ interface Colors {
   readonly ground: Hex;
   /** What opens over the desk. */
   readonly raised: Hex;
+  /** A card on a tile: one ask on the ask desk. */
+  readonly card: Hex;
   readonly hover: Hex;
   /** A tile's edge at rest: carries no fact, the bend color principles records. */
   readonly edge: Hex;

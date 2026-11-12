@@ -5,7 +5,20 @@ import "../agents.ts?raw";
 import "../codexexec.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../botpush.mjs?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box/BoxGit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box/BoxGitProcess.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box/Remove.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box/Runs.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../box/RunsProcess.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../boxnode.ts?raw";
 import "../catchup.sh?raw";
@@ -57,6 +70,8 @@ import "../../../mutation/scripts/scope.ts?raw";
 import "../../../plan/scripts/plancheck.sh?raw";
 import "../../../step-commit/scripts/exam.py?raw";
 import "../../../step-commit/scripts/stepcommit.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "../gcloop.ts?raw";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { errorsIn, type Found, LINES, summary, verdict, WIDTH } from "./typecheck.ts";

@@ -11,7 +11,8 @@ import { kindOf, nameOf } from "@kampus/pipeline/tickets/ticket";
 import { SEVEN, SEVEN_TITLE } from "@tea-fabrika/tracker/seven";
 import { Effect } from "effect";
 import { _electron, type ElectronApplication, type Locator, type Page } from "playwright";
-import { openFixtureProject, runProjectChecks, testProject } from "./projects-e2e.ts";
+import { askDesk } from "./e2e/ask-desk.ts";
+import { builtLaws, openFixtureProject, runProjectChecks, testProject } from "./projects-e2e.ts";
 import { PROTOCOL } from "./src/link.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
@@ -886,8 +887,20 @@ const systemKeys = async (app: ElectronApplication, page: Page) => {
   });
   const chords = accelerators.map(chordFor).filter((chord) => chord !== "Meta+w");
   check("the menu has Quit on Cmd-Q", chords.includes("Meta+q"), chords);
+  // Cmd-O is the page's own, as Cmd-K is (ticket 276's plan): File > Open Project… shows it, and the
+  // page takes it before any tile hears it, so it opens the projects box and types nothing.
+  check("the menu has Open Project… on Cmd-O", chords.includes("Meta+o"), chords);
+  // `onKey` swallows it before the spy hears it, as with Cmd-W: a key that ended "free" fails.
+  await page.evaluate(() => delete document.documentElement.dataset.keyEnd);
+  await page.keyboard.press("Meta+o");
+  await page.getByRole("dialog", { name: "Open a project…", exact: true }).waitFor();
+  const end = await page.evaluate(() => document.documentElement.dataset.keyEnd);
+  check("Cmd-O is the page's own: it never goes free to the menu", end !== "free", end);
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "Open a project…", exact: true }).waitFor({ state: "detached" });
+  check("Cmd-O goes by t1 and types nothing", lastRow(await screen(page, "t1")) === "tsh$");
 
-  for (const chord of [...chords, "Meta+,", "Meta+`", "Meta+t"]) {
+  for (const chord of [...chords.filter((chord) => chord !== "Meta+o"), "Meta+,", "Meta+`", "Meta+t"]) {
     await pressEnds(page, chord, "free");
     const row = lastRow(await screen(page, "t1"));
     check(`${chord} goes by t1 and types nothing`, row === "tsh$", row);
@@ -1440,7 +1453,9 @@ const stop = async (pid: number) => {
 
 /**
  * A host of another version: a Node server on the home's socket, in a 0700 folder as the host
- * keeps it, that says hello with version 0 to whoever connects.
+ * keeps it, that says hello with version 0 to whoever connects. The app's look at the socket
+ * (host/socket.ts, `reach`) connects and closes at once, so the hello's write can meet a closed
+ * peer: that EPIPE is heard and dropped, or the fake host dies and leaves a stale socket.
  */
 const oldHost = async (on: string) => {
   const { paths } = await testProject(on);
@@ -1451,7 +1466,7 @@ const oldHost = async (on: string) => {
     process.execPath,
     [
       "-e",
-      `require("node:net").createServer((c) => c.write('{"type":"hello","version":0}\\n')).listen(process.argv[1])`,
+      `require("node:net").createServer((c) => { c.on("error", () => {}); c.write('{"type":"hello","version":0}\\n'); }).listen(process.argv[1])`,
       sock,
     ],
     { stdio: "ignore" },
@@ -3436,6 +3451,21 @@ const all = async () => {
     await borderDrag();
     await keysLook();
     await trackerFocus();
+    await askDesk({
+      launch,
+      prompted,
+      run,
+      prefixed,
+      focusOn,
+      tilesAre,
+      lookIs,
+      hostPid,
+      stop,
+      shots,
+    });
+    // P17's and P29's built-app properties (ticket 276): each launches the built app on its own
+    // home, so they run here, after the build, and never in vitest's test job.
+    await builtLaws();
     // The 60 focus images need a 1440 by 900 window, taller than a CI runner's screen, so they
     // run only with --focus, the way the ARIA trees run only with --aria.
   } finally {
@@ -3458,6 +3488,8 @@ if (process.argv.some((arg) => ["--projects", "--projects-flow", "--projects-cap
         : undefined,
   );
   process.exit(0);
+} else if (process.argv.includes("--ask-desk")) {
+  await askDesk({ launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
 } else if (process.argv.includes("--keys")) {
   await keysLook();
 } else if (process.argv.includes("--drag")) {

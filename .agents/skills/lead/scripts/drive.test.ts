@@ -16,7 +16,20 @@ import "../../mutation/scripts/limit.ts?raw";
 import "../../mutation/scripts/sample.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "../../mutation/scripts/scope.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./box.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box/BoxGit.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box/BoxGitProcess.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box/Remove.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box/Runs.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./box/RunsProcess.ts?raw";
 import "./keepruns.sh?raw";
 import "./leakgrep.sh?raw";
 import "./fieldrow.py?raw";
@@ -35,6 +48,10 @@ import "../../plan/scripts/plancheck.sh?raw";
 import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gcloop.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Beat.ts?raw";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -55,6 +72,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
 import {
+  AGENT_CAP,
+  agentCapFull,
   agentsDraft,
   agentTail,
   ownedHead,
@@ -75,8 +94,6 @@ import {
   FINISH,
   firstEventAt,
   freeLane,
-  GC_EVERY,
-  gcDue,
   holdLane,
   holdsElectron,
   laneRunning,
@@ -86,7 +103,6 @@ import {
   rowOf,
   startedOf,
   STEPS,
-  Sweep,
   tailFor,
 } from "./drive.ts";
 import * as RunId from "./runid.ts";
@@ -570,6 +586,24 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
       expect(name).toBe(`refused:${c}`);
       expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
+  });
+});
+
+describe("the agent cap refuses a start once 12 agents run (0012), today's tooling", () => {
+  // Plants: compare with > instead of >=; keep the old cap of 8.
+  it("property: a start is refused exactly when the agents running reach AGENT_CAP", () => {
+    fc.assert(
+      fc.property(fc.nat({ max: 40 }), (agents) => {
+        expect(agentCapFull(agents)).toBe(agents >= AGENT_CAP);
+      }),
+      options,
+    );
+  });
+
+  it("pinned: the cap is 12, decision 0012's at most 12 code agents at once", () => {
+    expect(AGENT_CAP).toBe(12);
+    expect(agentCapFull(11)).toBe(false);
+    expect(agentCapFull(12)).toBe(true);
   });
 });
 
@@ -1609,37 +1643,8 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
   });
 });
 
-describe("T673 a step's start is timed and sweeps at most once in 30 minutes, today's tooling", () => {
-  const MIN = 60_000;
-  // Plant: sweep on every start, never sweep on a low or unreadable disk, or skip once the period
-  // passed. The low_disk refusal must always follow a fresh sweep.
-  it("T673 gcDue runs on a low or unreadable disk, with no sweep recorded, or once GC_EVERY passed", () => {
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: 10 ** 13 }),
-        fc.option(fc.integer({ min: -3 * GC_EVERY, max: 3 * GC_EVERY }), { nil: null }),
-        fc.option(fc.integer({ min: 0, max: 500 }), { nil: null }),
-        (now, ago, free) => {
-          const last = ago === null ? null : now - ago;
-          const due = gcDue(now, last, free);
-          const low = free === null || free < 20;
-          const fresh = ago !== null && ago >= 0 && ago < GC_EVERY;
-          expect(due._tag).toBe(low || !fresh ? "run" : "skip");
-        },
-      ),
-      options,
-    );
-  });
-
-  // vector: the boundary minute and the reason a skip prints.
-  it("T673 vector: a sweep 29 min ago is skipped with its age, one 30 min ago runs", () => {
-    expect(gcDue(100 * MIN, 71 * MIN, 50)).toEqual(
-      Sweep.cases.skip.make({ reason: "the last sweep started 29 min ago" }),
-    );
-    expect(gcDue(100 * MIN, 70 * MIN, 50)._tag).toBe("run");
-    expect(gcDue(100 * MIN, 99 * MIN, 19)).toEqual(Sweep.cases.run.make({ reason: "19 GB free" }));
-  });
-
+describe("T673 a step's start is timed, today's tooling", () => {
+  // The start's sweep left with 0101: no start runs box.sh gc, so gcDue and its two laws went.
   // Plant: drop a phase line, reorder them, or read a line that only starts like one.
   it("T673 phasesIn reads every phase line box.sh prints, in order, and nothing else", () => {
     const name = fc.stringMatching(/^[a-z_]{1,12}$/);

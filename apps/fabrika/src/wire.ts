@@ -143,8 +143,10 @@ const openWire = <In extends Up | Down, Out extends Up | Down>(
 
         const named = got.msg.project ?? null;
 
-        // A hello for another project: refused before any line of it is handed on.
-        if (project !== null && named !== project && state.at === "hello") {
+        // A hello for another project: refused before any line of it is handed on. Only a hello of
+        // our version is read for its project: another version's fields are its own (a host
+        // before version 3 names none), so the link machine refuses it by its version, and names both.
+        if (project !== null && got.msg.version === ctx.ours && named !== project && state.at === "hello") {
           Deferred.doneUnsafe(up, Effect.fail(new Unattached({ why: { kind: "project", theirs: named } })));
           return step({ type: "bad", why: "the other side serves another project" }, null);
         }

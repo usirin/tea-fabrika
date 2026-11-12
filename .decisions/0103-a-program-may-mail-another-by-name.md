@@ -1,7 +1,7 @@
 ---
 id: 0103
 title: A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it
-status: accepted
+status: amended-in-part by [0109](0109-a-pipe-is-saved-program-mail.md)
 date: 2026-11-11
 tags: [programs, mailbox, send, pipes, composition, g6, tier-1, p41]
 ---
@@ -75,5 +75,6 @@ program asking another in code.**
 - Not decided here: whether a pipe becomes shell syntax on top of this same mail path, so there is
   one transport. The owner wants that tried. Mail is saved before it is delivered, so a stream of
   many small outputs may cost too much on it; an experiment measures that before pipes are built
-  in `next/`.
+  in `next/`. [0109](0109-a-pipe-is-saved-program-mail.md) settles it: a pipe is shell syntax over
+  this mail path, in chunks. The rest of this file holds.
 - Real delivery between instances and the pack example a person can run are P41's later slices.

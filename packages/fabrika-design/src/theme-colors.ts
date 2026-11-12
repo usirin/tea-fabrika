@@ -2,6 +2,7 @@
 // edit a TOML file, then run `pnpm tokens`. The colors themes.ts gives the terminal and the frame.
 
 export const dark = {
+  card: "#212225",
   closed: "#f1f7feb5",
   desk: "#0c0d0e",
   done: "#71d083",
@@ -20,6 +21,7 @@ export const dark = {
 } as const;
 
 export const light = {
+  card: "#f0f0f3",
   closed: "#0007149f",
   desk: "#f9f9fb",
   done: "#203c25",

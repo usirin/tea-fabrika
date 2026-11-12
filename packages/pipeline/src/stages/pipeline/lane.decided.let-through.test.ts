@@ -1,5 +1,7 @@
 import { rmSync } from "node:fs";
+import { Schema } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Asked } from "../../tickets/ask.ts";
 import {
   YES,
   TIMED_OUT,
@@ -28,6 +30,7 @@ import {
   RUN_3,
   bye,
   FOLDS,
+  answersOf,
 } from "./lane-harness.ts";
 
 // What a person decided at the plan: `again` and its rounds, and a finding a person lets through. The
@@ -60,29 +63,51 @@ describe("a lane, on what the real agents answered", () => {
       };
 
       // P28: this replaces a test whose new test passed from the start, which only a fake could write.
-      it("`again` with a note runs the builder once more with it, and no new test writer: a real fix lands", async () => {
-        const NOTE = "Fold ß to ss in `lower`, as the new test says.";
-        const ran = await lane({
-          within: 50,
-          // The first step's question is round 1's surviving mutant, then the builder's no change.
-          steps: ["go_on", "again"],
-          picks: { ...YES, step: "go_on" },
-          notes: { step: NOTE },
-          fake: {
-            ...RUN_3,
-            // Each mutant is answered `cannot`, so a later mutation run writes no test twice.
-            cannot: REAL_MUTANT,
-            answers: { ...RUN_3.answers, build: [null, NO_CHANGE, null] },
-            writesAt: { build: { 2: [FOLDS] } },
-          },
-        });
-        const builds = runsOf(ran, "build");
-        expect(builds).toHaveLength(3);
-        expect(builds[2]?.prompt).toContain(NOTE);
-        expect(runsOf(ran, "tests")).toHaveLength(2);
-        expect(bye(ran)).toContain("ended: done");
-        expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
-      });
+      // scenario: the local builder process runs again and the real git change lands on a local main.
+      it.each([undefined, "Keep the empty input test."])(
+        "scenario: `again` with no recommendation carries only the person's note=%j to the builder, with no new test writer",
+        async (note) => {
+          const ran = await lane({
+            within: 50,
+            // Let round 1's mutant through. After two red builds, `again` on rounds_spent
+            // really reruns the builder; mutation's later question would only rerun mutation.
+            steps: ["go_on"],
+            picks: { ...YES, step: "go_on" },
+            queues: { rounds_spent: ["again"] },
+            ...(note === undefined ? {} : { notes: { "rounds_spent/again": note } }),
+            fake: {
+              ...RUN_3,
+              // Each mutant is answered `cannot`, so a later mutation run writes no test twice.
+              cannot: REAL_MUTANT,
+              answers: { ...RUN_3.answers, build: [null, NO_CHANGE, NO_CHANGE, null] },
+              writesAt: { build: { 3: [FOLDS] } },
+            },
+          });
+          const builds = runsOf(ran, "build");
+          expect(builds).toHaveLength(4);
+          const again = answersOf(ran).find(({ answer }) => answer?.pick === "again");
+          expect(again?.fact.ask).toMatch(/^a-rounds_spent-/);
+          expect(askedFor(ran, "rounds_spent")).toMatchObject([{ step: "build", shows: { rec: { _tag: "none" } } }]);
+          expect(again?.fact).toHaveProperty("answer", {
+            _tag: "chose",
+            pick: "again",
+            ...(note === undefined ? {} : { note }),
+          });
+          expect(again?.answer?.note).toBe(note ?? "");
+
+          if (note !== undefined) {
+            for (const build of builds.slice(0, 3)) {
+              expect(build.prompt).not.toContain(note);
+            }
+
+            expect(builds[3]?.prompt).toContain(note);
+          }
+
+          expect(runsOf(ran, "tests")).toHaveLength(2);
+          expect(bye(ran)).toContain("ended: done");
+          expect(onMain(ran.remote, "src/lower.ts")).toContain("replaceAll");
+        },
+      );
 
       // P28
       it("`again` counts as a round: a builder that keeps changing nothing ends stuck at the limit, in words", async () => {
@@ -135,7 +160,8 @@ describe("a lane, on what the real agents answered", () => {
       });
 
       // P26: the one path where a go_on asks again from inside the same step's end.
-      it("a finding marked against a decision, beside a row the review could not see: two questions, each with its own id and its own answer", async () => {
+      // scenario: the real lane stores and answers two questions from a local review process.
+      it("scenario: a finding marked against a decision, beside a row the review could not see: two questions, each with its own id and its own answer", async () => {
         const ran = await lane({
           within: 50,
           steps: ["go_on", "stop"],
@@ -147,9 +173,9 @@ describe("a lane, on what the real agents answered", () => {
         });
         const asked = ran.facts.filter((f) => f.type === "asked" && String(f.ask).startsWith("a-step"));
         expect(new Set(asked.map((f) => f.ask)).size).toBe(2);
-        const heard = ran.facts
-          .filter((f) => f.type === "answered" && String(f.ask).startsWith("a-step"))
-          .map((f) => [f.ask, f.pick]);
+        const heard = answersOf(ran)
+          .filter(({ fact }) => fact.ask.startsWith("a-step"))
+          .map(({ fact, answer }) => [fact.ask, answer?.pick]);
         expect(heard).toEqual([
           [asked[0]?.ask, "go_on"],
           [asked[1]?.ask, "stop"],
@@ -172,18 +198,32 @@ describe("a lane, on what the real agents answered", () => {
         };
 
         // P29
-        it("its question says the finding and the decision side by side, and that go_on lets the finding through", async () => {
+        // scenario: inspect the question and local pull request produced by one real lane.
+        it("scenario: its question says the finding and the decision side by side, and that go_on lets the finding through", async () => {
           const ran = await lane({
             within: 50,
             picks: { approve: "approve", step: "stop" },
             fake: { answers: MARKED_ONCE },
           });
           const { text } = readBy(ran, "a-step");
+          // The plan puts both in the evidence the person sees: the decision, then the finding
+          // against it, in one piece of that evidence, one line after the other.
+          const { shows } = Schema.decodeUnknownSync(Asked)(
+            ran.facts.find((f) => f.type === "asked" && String(f.ask).startsWith("a-step")),
+          );
+          const words = (value: unknown): readonly string[] =>
+            typeof value === "string"
+              ? [value]
+              : typeof value === "object" && value !== null
+                ? Object.values(value).flatMap(words)
+                : [];
+          const side = words(shows.evidence).filter((piece) => {
+            const lines = piece.split("\n");
+            const decided = lines.findIndex((line) => line.includes(RUN3_LEAN));
+            return decided > -1 && lines[decided + 1]?.includes(RUN3_FINDING.fault) === true;
+          });
+          expect(side).not.toEqual([]);
           const lines = text.split("\n");
-          const decided = lines.findIndex((line) => line.includes(RUN3_LEAN));
-          const faulted = lines.findIndex((line) => line.includes(RUN3_FINDING.fault));
-          expect(decided).toBeGreaterThan(-1);
-          expect(faulted).toBe(decided + 1);
           const goOn = lines.filter((line) => /go[ _]on/.test(line));
           expect(goOn.filter((line) => line.includes("lets that finding through"))).not.toEqual([]);
         });

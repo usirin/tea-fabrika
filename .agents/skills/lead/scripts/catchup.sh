@@ -20,9 +20,9 @@
 #     (after a catch-up, it waits for them on the pushed sha), then
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only). A PR
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
-#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands on
-#     purpose (0049): gh refuses BEHIND on its own side and never asks GitHub, so the squash goes
-#     to the REST merge endpoint with `sha` as the head pin, and no override flag
+#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands
+#     with the same plain pinned `gh pr merge`, no override flag: GitHub no longer requires an
+#     up-to-date branch (0049, 0097), and freshmain.ts's lint on the true merge is the guard
 #   - just before the squash it looks at main once more: when the head lacks it (a green head that
 #     did not catch up, or main moved after the checks),
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
@@ -35,6 +35,8 @@
 #   - ends at once on a pull request that is not open and ready: on start and on every round of
 #     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
 #     a bound and ends with a line naming what it waited for
+#   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
+#     background and the merge's own exit never waits on it
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -531,15 +533,6 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 		[ "$now" = "$tip" ] || { echo "pr $pr: head moved to $now after the checks at $tip" >&2; exit 1; }
 		gh stack merge "$pr" --squash --yes >/dev/null
 		;;
-	# gh 2.62.0 says this when it reads merge state BEHIND, and stops before any call. freshmain.ts
-	# has just passed lint on this head merged with main, so it lands behind main on purpose (0049).
-	# The REST endpoint takes `sha` as the head pin: a newer head is a 409, and GitHub's own rules
-	# still decide (a 405). It is a write, so it is never retried.
-	*"the head branch is not up to date with the base branch"*)
-		said=$(gh api -X PUT "repos/$GH_REPO/pulls/$pr/merge" -f merge_method=squash -f sha="$tip" 2>&1) ||
-			{ echo "pr $pr: merge behind main refused at $tip: $said" >&2; exit 1; }
-		echo "pr $pr: landed behind main on purpose (0049)"
-		;;
 	# Merged or closed by someone else since the last look: say that, not a refusal.
 	*) look; echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
 	esac
@@ -553,4 +546,7 @@ if cd "$MAIN"; then
 else
 	echo "kept cleanup: cannot leave catch-up checkout"
 fi
+# One box cleanup sweep after each merge (0101). kick returns at once and the sweep runs on, so
+# trouble here prints a line and never turns a landed merge red.
+node "$LEAD/gcloop.ts" kick --trigger merge || echo "pr $pr: box cleanup not started"
 exit 0

@@ -298,7 +298,8 @@ const world = (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
 ) => {
-  table.programs.counter = { hash: "counter-a", source: "counter" };
+  // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
+  table.programs["fabrika/counter"] = { hash: "counter-a", source: "counter" };
   table.programs.approvals = { hash: "approvals-a", source: "approvals" };
   table.programs.poison = { hash: "poison-a", source: "poison" };
   const key = identity(),
@@ -654,7 +655,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs.counter = { hash: "counter-b", source: "changed counter" };
+      table.programs["fabrika/counter"] = { hash: "counter-b", source: "changed counter" };
       project = projectObject(ctx, env);
       return project.info();
     },
@@ -737,7 +738,9 @@ describe("P12 Project configure recovery", () => {
       const descriptor = w.attempts[0]!;
       const saved = w.db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(descriptor.id);
       expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
-      expect(await w.reopen()).toMatchObject([{ process: descriptor.id, name: "counter:1", program: "counter" }]);
+      expect(await w.reopen()).toMatchObject([
+        { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
+      ]);
       expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
 
       for (const attempt of w.attempts) {

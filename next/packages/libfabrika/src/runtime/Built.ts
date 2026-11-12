@@ -1,13 +1,16 @@
 // The tables one built brain file carries (P16): each program's compiled source with its hash, and
-// each window script, chunk and stylesheet with its route. The Node build assembles them and the
+// each window script, chunk, stylesheet and tab page with its route. The Node build assembles them and the
 // Worker adapters serve them; both read these shapes from here, so nothing here needs a platform.
 import { Effect, Schema, SchemaGetter } from "effect";
 import { Digest } from "effect/crypto";
+import { ProgramName } from "../packs/ProgramName.ts";
 
 /** Why a build stopped: its `reason` names the phase (`table`, `read`, `compiler`, `bundle`, `publish`). */
 export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
   reason: Schema.String,
   message: Schema.optionalKey(Schema.String),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** The SHA-256 of a text's UTF-8 bytes, as lowercase hex. */
@@ -36,7 +39,12 @@ const hashed = <S extends Schema.Struct<{ readonly hash: typeof Hash }>>(
 export const BuiltProgram = hashed(Schema.Struct({ hash: Hash, source: Schema.String }), (p) => p.source);
 export type BuiltProgram = typeof BuiltProgram.Type;
 
-export const AssetType = Schema.Literals(["text/javascript; charset=utf-8", "text/css; charset=utf-8"]);
+// A tab's page (P14) is served at `/` from `/index.html`.
+export const AssetType = Schema.Literals([
+  "text/javascript; charset=utf-8",
+  "text/css; charset=utf-8",
+  "text/html; charset=utf-8",
+]);
 export type AssetType = typeof AssetType.Type;
 
 export const Asset = hashed(Schema.Struct({ hash: Hash, type: AssetType, body: Schema.String }), (a) => a.body);
@@ -44,11 +52,14 @@ export type Asset = typeof Asset.Type;
 
 /** An HTTP route under the brain's origin: slash-led names, no empty, `.` or `..` segment. */
 const ROUTE = /^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/;
+const isProgramName = Schema.is(ProgramName);
 
 export const Built = Schema.Struct({
   // A refined key would drop a bad name or route quietly, so each record checks its keys instead.
   programs: Schema.Record(Schema.String, BuiltProgram).check(
-    Schema.makeFilter((programs) => !Object.hasOwn(programs, "") || "a program has no name"),
+    Schema.makeFilter(
+      (programs) => Object.keys(programs).every(isProgramName) || "a program's name is not `pack/program`",
+    ),
   ),
   assets: Schema.Record(Schema.String, Asset).check(
     Schema.makeFilter(
@@ -60,5 +71,7 @@ export type Built = typeof Built.Type;
 
 /** Built tables from outside (disk, a generated module): a bad value is BuildError `table`. */
 export const decodeBuilt = Effect.fn("build.decode")(function* (raw: unknown) {
-  return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(Effect.mapError(() => new BuildError({ reason: "table" })));
+  return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(
+    Effect.mapError((cause) => new BuildError({ reason: "table", cause })),
+  );
 });

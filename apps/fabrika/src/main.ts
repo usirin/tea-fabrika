@@ -26,7 +26,7 @@ import {
   session,
   shell,
 } from "electron";
-import { type AsksNow, keysOf, newAsks, noticeOf } from "./asks.ts";
+import { type Ask, type AsksNow, keysOf, newAsks, noticeOf } from "./asks.ts";
 import { attach, NoHello, NoHost, restart } from "./attach.ts";
 import { isPortName, PORT_CHANNEL } from "./bridge.ts";
 import { defaults } from "./desk/keymap.ts";
@@ -543,6 +543,8 @@ const main = Effect.gen(function* () {
    * the Dock's badge. A new ask is told by the system's notification only when its window is not
    * in front, and never on a quiet start; a click on it brings that project's window back.
    */
+  /** An ask as a kept notice names it: its key, its ticket and whether it asks or is stuck. */
+  const noticedAsk = (a: Ask) => ({ key: a.key, ticket: a.ticket, kind: a.kind });
   const heardAsks = (win: Win, asks: AsksNow) => {
     const key = win.key;
 
@@ -563,7 +565,8 @@ const main = Effect.gen(function* () {
       return;
     }
 
-    const notice = new Notification(noticeOf([first, ...rest]));
+    const said = noticeOf([first, ...rest]);
+    const notice = new Notification(said);
     notices.add(notice);
     notice.on("close", () => notices.delete(notice));
     notice.on("click", () => {
@@ -576,6 +579,13 @@ const main = Effect.gen(function* () {
       }
     });
     notice.show();
+    // Each sent notice is kept once, on the ledger through the host: it interrupted the person.
+    toHost(win, {
+      type: "noticed",
+      asks: [noticedAsk(first), ...rest.map(noticedAsk)],
+      ...said,
+      sentAt: clock.currentTimeMillisUnsafe(),
+    });
   };
 
   /** What a project's host sends one window: the asks read on the way, ports made as it asks. */

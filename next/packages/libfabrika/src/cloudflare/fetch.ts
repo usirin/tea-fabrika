@@ -3,15 +3,19 @@ import { LedgerError } from "../ledger/Ledger.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
 import { projectStub, rpc, type BrainOptions, type Env } from "./runtime.ts";
 
+/** The tab's page in the window table, answered at `/` (P14). */
+const PAGE = "/index.html";
+
 /** A window file as served: its body, its hash for the ETag and its content type (`runtime/Built.ts`'s Asset). */
 type Served = { readonly hash: string; readonly type: string; readonly body: string };
 
-/** Answer a request from the brain's embedded window files. Nothing else is read: an unknown route is 404. */
+/** Answer a request from the brain's embedded window files. Nothing else is read: an unknown route is 404.
+ *  `route` is the request's path unless given. */
 export const serveAsset = Effect.fn("brain.asset")(function* (
   assets: Readonly<Record<string, Served>>,
   request: Request,
+  route = new URL(request.url).pathname,
 ) {
-  const route = new URL(request.url).pathname;
   const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
   yield* Effect.annotateCurrentSpan({
     "asset.found": asset !== undefined,
@@ -64,14 +68,21 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
     const target = yield* Effect.try({
       try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
-      catch: () => new LedgerError({ reason: "bad_row" }),
+      catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
     });
     return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
   }
 
-  // A window file is read by GET or HEAD from the embedded table; an unknown file is 404.
-  if (assets !== undefined && url.pathname !== "/" && (request.method === "GET" || request.method === "HEAD")) {
-    return yield* serveAsset(assets, request);
+  // A window file is read by GET or HEAD from the embedded table; an unknown file is 404. `/` is the
+  // tab's page when the build made one (P14), else the plain answer.
+  if (assets !== undefined && (request.method === "GET" || request.method === "HEAD")) {
+    if (url.pathname !== "/") {
+      return yield* serveAsset(assets, request);
+    }
+
+    if (Object.hasOwn(assets, PAGE)) {
+      return yield* serveAsset(assets, request, PAGE);
+    }
   }
 
   return new Response("fabrika", { headers: { "content-type": "text/plain" } });

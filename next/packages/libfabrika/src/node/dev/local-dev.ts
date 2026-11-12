@@ -3,6 +3,8 @@ import { BrainEvent } from "../../runtime/BrainEvent.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
   reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 // Events have no transforms. Validate without rebuilding them, keeping retry bytes in their saved order.
@@ -39,7 +41,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
-  }).pipe(Effect.mapError(() => new BrainError({ reason: "bad_row" })));
+  }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
   const durableWrite = Effect.fnUntraced(
     function* (target: string, text: string) {
       yield* fs.makeDirectory(home, { recursive: true });
@@ -60,7 +62,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         }),
       );
     },
-    Effect.mapError(() => new BrainError({ reason: "storage" })),
+    Effect.mapError((cause) => new BrainError({ reason: "storage", cause })),
   );
   const write = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
     durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
@@ -79,7 +81,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
         yield* fs.readFileString(lastFile),
       );
-    }).pipe(Effect.mapError(() => new BrainError({ reason: "bad_row" })));
+    }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
   });
   const saveLast = Effect.fnUntraced(function* () {
     const start = yield* last();
@@ -96,7 +98,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     add: Effect.fn("brain.pending")(function* (raw: unknown) {
       yield* Effect.gen(function* () {
         const event = yield* Schema.decodeUnknownEffect(PendingEvent)(raw).pipe(
-          Effect.mapError(() => new BrainError({ reason: "bad_row" })),
+          Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })),
         );
         const rows = yield* read;
         const old = rows.find((row) => row.id === event.id);

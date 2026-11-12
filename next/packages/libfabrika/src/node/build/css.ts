@@ -21,18 +21,18 @@ const refusal = (error: unknown) => {
   const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
 
   if (known !== undefined) {
-    return new BuildError({ reason: "bundle", message: known });
+    return new BuildError({ reason: "bundle", message: known, cause: error });
   }
 
   if (message.includes("BadString")) {
-    return new BuildError({ reason: "bundle", message: "stylesheet has a broken string" });
+    return new BuildError({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
   }
 
   if (message.includes("BadUrl")) {
-    return new BuildError({ reason: "bundle", message: "stylesheet has a broken url()" });
+    return new BuildError({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
   }
 
-  return new BuildError({ reason: "bundle", message: `stylesheet has a broken @import: ${message}` });
+  return new BuildError({ reason: "bundle", message: `stylesheet has a broken @import: ${message}`, cause: error });
 };
 
 // lightningcss reports a rule's start as a 0-based line and a 1-based UTF-16 column, and counts

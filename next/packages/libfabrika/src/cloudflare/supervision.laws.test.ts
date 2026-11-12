@@ -10,8 +10,8 @@ import { A, B, brain, data, first, from, ids, PIDS, read, storage } from "../pro
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { workerExecution } from "../runtime/Execution.ts";
-import { RecoveryStore } from "../runtime/RecoveryStore.ts";
-import { ProgramRunner } from "../runtime/Runner.ts";
+import { RecoveryStore, recoveryStore } from "../runtime/RecoveryStore.ts";
+import { ProgramRunner, Supervision } from "../runtime/Runner.ts";
 import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
@@ -85,7 +85,9 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
     wake: () => null,
   } as const;
   const manager = ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(data(ledger.sql)));
-  const recovery = RecoveryStore.layer(state.sql, { name: NAME, capacity: 1024 ** 3 });
+  const recovery = RecoveryStore.layer(state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
+  // The service is typed by what the store keeps; the journal is read through the machine's schema.
+  const journal = recoveryStore(state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   const layer = () => {
     const loader = Layer.effect(
       ProgramLoader,
@@ -173,16 +175,17 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
     calls: () => calls,
     boot: ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager)),
     receipt: (letter: string) => RecoveryStore.use((s) => s.receipt(letter)).pipe(Effect.provide(recovery)),
-    snapshot: RecoveryStore.use((s) => s.load).pipe(Effect.provide(recovery)),
+    snapshot: journal.load,
     recover: Effect.gen(function* () {
-      const saved = yield* RecoveryStore.use((s) => s.load).pipe(Effect.provide(recovery));
+      const saved = yield* journal.load;
       expect(saved).not.toBeNull();
-      // P34 keeps the restart wait in starting until the restart brake trips.
+      // The journal keeps the restart wait in its start until the restart brake trips (P34c slice 2).
+      const at = saved?.journal;
       const until =
-        saved?.recovery._tag === "down"
-          ? saved.recovery.until
-          : saved?.recovery._tag === "starting" && saved.pending?.type === "start"
-            ? saved.pending.until
+        at?._tag === "waiting_recovery" || at?._tag === "writing_down"
+          ? at.recovery.until
+          : at?._tag === "waiting_start" && at.timing._tag === "scheduled"
+            ? at.timing.until
             : undefined;
 
       if (until !== undefined) {
@@ -258,7 +261,8 @@ for (const source of ["rpc", "decode"] as const) {
                   value: { _tag: "ProgramDown", source: move },
                 });
                 const saved = yield* w.snapshot;
-                expect(saved?.attempt).toBeNull();
+                // No attempt is left open: the journal is not stepping.
+                expect(saved?.journal._tag).not.toBe("stepping");
                 expect(saved?.observations).toHaveLength(crashes);
               }
 

@@ -2,7 +2,8 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { go, home, options, plant, repo, source, word } from "./project.test-support.ts";
+import { CREDENTIALS, RECORD_FIELDS, SECRET_OUTPUTS, secretsCheck } from "../projects-e2e.ts";
+import { go, home, options, plant, repo, source } from "./project.test-support.ts";
 import { type ProjectsCmd, projectsMachine, restored, start_host } from "./projects.ts";
 
 type Machine = typeof projectsMachine;
@@ -429,23 +430,15 @@ plant("P14 key asks only by ticket number", crossFlows, async (flow) =>
   ),
 );
 
-const recordFields = {
-  opening: ["id", "project", "root", "window", "source", "picked", "by", "said", "at", "result", "why"],
-  migration: ["format", "project", "rule", "files", "digests", "phase", "at", "result"],
-  host: ["project", "root", "build", "pid", "settings", "reason"],
-  summon: ["project", "name", "folder", "run", "model", "effort", "by", "input", "output", "cost"],
-  turn: ["project", "name", "folder", "run", "model", "effort", "by", "input", "output", "cost"],
-  close: ["project", "window", "source", "at", "outcome"],
-} as const;
-
 /** A command of the machine, narrowed by its type, so its fields read as the product declares them. */
 const isCmd =
   <T extends ProjectsCmd["type"]>(...types: readonly T[]) =>
   (cmd: { readonly type: string }): cmd is Extract<ProjectsCmd, { type: T }> =>
     types.some((type) => type === cmd.type);
 
-const checkRecord = (kind: keyof typeof recordFields, row: Record<string, unknown>) => {
-  for (const field of recordFields[kind]) {
+/** The fields a record of this kind keeps: the one list the built-app half in projects-e2e.ts reads too. */
+const checkRecord = (kind: keyof typeof RECORD_FIELDS, row: Record<string, unknown>) => {
+  for (const field of RECORD_FIELDS[kind]) {
     expect(row).toHaveProperty(field);
   }
 };
@@ -547,186 +540,11 @@ plant("P17 send box for every pick", openFlows, async (flow) =>
   ),
 );
 
-// P17's built-app property drives the real built app like P29: three generated orders, each a real
-// Electron launch of about 15 s, so the test states its own limit, 150 s, instead of vitest's 5 s.
-const P17_LIMIT_MS = 150_000;
+// P17's and P29's built-app properties launch the built app, so they live in projects-e2e.ts
+// (`builtLaws`), which `pnpm e2e` runs after the build. The plants below feed planted leaks to
+// the very check that run makes on the real app, `secretsCheck`, over the same generated flows.
 
-const visitObjects = (texts: readonly string[]) => {
-  const objects: Record<string, unknown>[] = [];
-  const visit = (value: unknown): void => {
-    if (typeof value === "string") {
-      try {
-        visit(JSON.parse(value));
-      } catch {}
-
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const child of value) {
-        visit(child);
-      }
-
-      return;
-    }
-
-    if (value === null || typeof value !== "object") {
-      return;
-    }
-
-    objects.push(value as Record<string, unknown>);
-
-    for (const child of Object.values(value)) {
-      visit(child);
-    }
-  };
-
-  for (const text of texts) {
-    for (const line of text.split("\n")) {
-      visit(line);
-    }
-  }
-
-  return objects;
-};
-
-// Starts Electron, which cannot run inside a Stryker worker: it runs outside Stryker.
-it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
-  "P17: the built app's records keep each host, summon, turn and close, and each press's source and picked pair",
-  async () => {
-    // P11 checks migration records; this checks real host and agent output.
-    const { observeProjectFlow, observePresses, PRESS_RECORDS } = await import("../projects-e2e.ts");
-    await fc.assert(
-      fc.asyncProperty(
-        fc.array(fc.constantFrom("open", "focus", "cancel", "close"), { minLength: 1, maxLength: 6 }),
-        async (order) => {
-          const observed = await observeProjectFlow({
-            credential: "made-up-fixture-key",
-            refusal: false,
-            failure: "summon",
-            order,
-          });
-          const objects = visitObjects([...observed["app records"], ...observed["host logs"]]);
-
-          for (const kind of ["host", "summon", "turn", "close"] as const) {
-            const record = objects.find((row) => recordFields[kind].every((field) => field in row));
-            expect(record, `missing real ${kind} record`).toBeDefined();
-
-            if (record) {
-              checkRecord(kind, record);
-            }
-          }
-        },
-      ),
-      { ...options, numRuns: 3 },
-    );
-    await fc.assert(
-      fc.asyncProperty(
-        // At most one welcome press: only a fresh window shows welcome.
-        fc
-          .tuple(
-            fc.constantFrom("welcome row", "welcome folder"),
-            fc.shuffledSubarray(
-              (Object.keys(PRESS_RECORDS) as (keyof typeof PRESS_RECORDS)[]).filter(
-                (press) => !press.startsWith("welcome"),
-              ),
-              { minLength: 1 },
-            ),
-          )
-          .map(([welcome, rest]) => [welcome, ...rest]),
-        async (presses) => {
-          const steps = await observePresses(presses);
-          expect(presses.every((press) => steps.some((step) => step.press === press))).toBe(true);
-
-          for (const step of steps) {
-            expect(step.records.length, step.press).toBeGreaterThan(0);
-
-            for (const record of step.records) {
-              checkRecord("opening", record);
-              expect(record, step.press).toMatchObject(PRESS_RECORDS[step.press]);
-            }
-          }
-        },
-      ),
-      { ...options, numRuns: 3 },
-    );
-  },
-  P17_LIMIT_MS * 2,
-);
-
-const outputs = [
-  "app records",
-  "host logs",
-  "spans",
-  "outgoing URLs",
-  "visible errors",
-  "public capture labels",
-] as const;
-
-const credentials = fc.record({
-  credential: fc.tuple(word, word).map(([a, b]) => `made-up-${a}:${b}@pass /?&%`),
-  refusal: fc.boolean(),
-  failure: fc.constantFrom("git", "migration", "host", "summon"),
-  order: fc.array(fc.constantFrom("open", "cancel", "refuse", "retry", "focus", "close"), {
-    minLength: 1,
-    maxLength: 16,
-  }),
-});
-
-const forms = (credential: string) => [
-  credential,
-  encodeURI(credential),
-  encodeURIComponent(credential),
-  encodeURIComponent(encodeURIComponent(credential)),
-  new URLSearchParams({ key: credential }).toString().slice(4),
-  Buffer.from(credential).toString("base64"),
-  Buffer.from(credential).toString("base64url"),
-];
-
-const secretsCheck = (credential: string, observed: Readonly<Record<string, unknown>>) => {
-  for (const output of outputs) {
-    expect(observed).toHaveProperty(output);
-    const text = JSON.stringify(observed[output]);
-
-    for (const form of forms(credential)) {
-      expect(text).not.toContain(form);
-    }
-  }
-};
-
-// Each generated flow launches the real built Electron app, about 15 s (the plan's P29 is a
-// property over generated flows on the outside route). Three flows keep it a property at the seed
-// the other laws use, and the test's own limit is 3 flows at 15 s with room, 150 s, because vitest's
-// 60 s limit fits only three flows when nothing else runs. The plants below cover every output and
-// encoding, so a leak is still caught without more Electron launches.
-const P29_RUNS = 3;
-const P29_LIMIT_MS = 150_000;
-
-// Starts Electron, which cannot run inside a Stryker worker: it runs outside Stryker.
-it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
-  "P29: [secrets] generated refusals, failures and operation orders keep every named output clean",
-  async () => {
-    // Fail here while the checked-project product is absent. Never count an unbuilt Electron
-    // bundle as the feature's red. Once built, drive the real outside route on generated flows.
-    const { Project } = await import("./project.ts");
-    expect(Project).toBeDefined();
-    const { observeProjectFlow } = await import("../projects-e2e.ts");
-    await fc.assert(
-      fc.asyncProperty(credentials, async (flow) => {
-        const observed = await observeProjectFlow(flow);
-        secretsCheck(flow.credential, observed);
-        expect(observed["app records"].length).toBeGreaterThan(0);
-        expect(observed["host logs"].length).toBeGreaterThan(0);
-        expect(observed.spans.length).toBeGreaterThan(0);
-        expect(observed["public capture labels"].length).toBeGreaterThan(0);
-      }),
-      { ...options, numRuns: P29_RUNS },
-    );
-  },
-  P29_LIMIT_MS,
-);
-
-for (const output of outputs) {
+for (const output of SECRET_OUTPUTS) {
   for (const [encoding, encode] of [
     ["plain", (s: string) => s],
     ["URI", encodeURI],
@@ -736,11 +554,15 @@ for (const output of outputs) {
     ["base64", (s: string) => Buffer.from(s).toString("base64")],
     ["base64url", (s: string) => Buffer.from(s).toString("base64url")],
   ] as const) {
-    plant(`P29 leak into ${output}, ${encoding}`, credentials, ({ credential }) =>
-      secretsCheck(
-        credential,
-        Object.fromEntries(outputs.map((name) => [name, name === output ? encode(credential) : "clean"])),
-      ),
+    plant(
+      `P29 leak into ${output}, ${encoding}`,
+      CREDENTIALS,
+      ({ credential }) =>
+        secretsCheck(
+          credential,
+          Object.fromEntries(SECRET_OUTPUTS.map((name) => [name, name === output ? encode(credential) : "clean"])),
+        ),
+      secretsCheck,
     );
   }
 }

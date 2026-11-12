@@ -73,6 +73,29 @@ const HostHello = Schema.Struct({
   project: Schema.optionalKey(Schema.String),
 });
 
+/**
+ * One system notification the app showed of new asks: which asks, what it said, and when on the
+ * app's own clock. The host keeps it on the ledger, so later attention counts can fold every
+ * interruption; the ledger's own time stays the referee.
+ *
+ *   app  {"type":"noticed","asks":[{"key":"7/a-1","ticket":7,"kind":"ask"}],
+ *         "title":"#7 Read names","body":"Approve plan v2?","sentAt":1762600000000}
+ */
+export const Noticed = Schema.Struct({
+  type: Schema.Literal("noticed"),
+  asks: Schema.NonEmptyArray(
+    Schema.Struct({
+      key: Schema.String,
+      ticket: Schema.Int,
+      kind: Schema.Literals(["ask", "stuck"]),
+    }),
+  ),
+  title: Schema.String,
+  body: Schema.String,
+  sentAt: Schema.Finite,
+});
+export type Noticed = typeof Noticed.Type;
+
 /** What the app tells the host. */
 export const Up = Schema.Union([
   Hello,
@@ -82,6 +105,7 @@ export const Up = Schema.Union([
   Schema.Struct({ type: Schema.Literal("away") }),
   /** The page sent `m` on the port named `port`: for that tile, that run, or the desk alone. */
   Schema.Struct({ type: Schema.Literal("on"), port: Port, m: Schema.Unknown }),
+  Noticed,
 ]);
 export type Up = typeof Up.Type;
 

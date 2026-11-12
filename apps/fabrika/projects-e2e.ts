@@ -7,6 +7,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
 import type { BaseWindow, MessageBoxOptions, OpenDialogOptions } from "electron";
+import * as fc from "fast-check";
 import { _electron, type ElectronApplication, type Page } from "playwright";
 import { deskMachine, savedOf } from "./src/desk/desk.ts";
 
@@ -129,6 +130,14 @@ const launch = async (f: Fixture) => {
 };
 
 const openedPages = new WeakMap<ElectronApplication, Map<string, Page>>();
+
+/** The project windows this app has shown, by each project's real root. */
+const openedIn = (app: ElectronApplication) => {
+  const known = openedPages.get(app) ?? new Map<string, Page>();
+  openedPages.set(app, known);
+  return known;
+};
+
 const button = (page: Page) => page.getByRole("button", { name: /^Project .+, switch project$/ });
 const box = (page: Page) => page.getByRole("dialog", { name: "Open a project…", exact: true });
 const tile = (page: Page) => page.locator('[data-tile][aria-current="true"]');
@@ -236,13 +245,7 @@ export const openFixtureProject = async (app: ElectronApplication, from: Page, r
     });
   }
 
-  let known = openedPages.get(app);
-
-  if (!known) {
-    known = new Map();
-    openedPages.set(app, known);
-  }
-
+  const known = openedIn(app);
   await app.evaluate(({ dialog, BrowserWindow }, folder) => {
     // The sheet takes its window first, or only its options: the test's answer is for the first.
     dialog.showOpenDialog = async (...args: [BaseWindow, OpenDialogOptions] | [OpenDialogOptions]) => {
@@ -347,7 +350,24 @@ export const openFixtureProject = async (app: ElectronApplication, from: Page, r
         const why: unknown = Reflect.get(globalThis, "projectSheetRefusal");
         return typeof why === "string" ? why : null;
       }),
-  );
+  ).catch(async (error: unknown) => {
+    const windows = await Promise.all(
+      app
+        .windows()
+        .filter((p) => !p.isClosed())
+        .map(async (p) => ({
+          title: await p.title(),
+          button: await button(p).count(),
+          alerts: await p.getByRole("alert").allTextContents(),
+          new: !before.has(p),
+        })),
+    );
+    const asked: unknown = await app.evaluate(() => Reflect.get(globalThis, "projectSheetRefusal"));
+    throw new Error(
+      `no window showed the picked project; sheet ${JSON.stringify(asked)}, windows ${JSON.stringify(windows)}, ${await boxState(from)}`,
+      { cause: error },
+    );
+  });
   const found = required(page);
   known.set(canonical, found);
   return found;
@@ -510,7 +530,7 @@ const e1 = async () => {
   }
 };
 
-export interface RecordedProjectFlow {
+interface RecordedProjectFlow {
   readonly credential: string;
   readonly refusal: boolean;
   readonly failure: "git" | "migration" | "host" | "summon";
@@ -599,7 +619,7 @@ const observe = async (app: ElectronApplication, f: Fixture) => {
 
 // The property tests call this real outside route. There is no product-only testing API and
 // no fabricated output list. It reads only this run's record databases, JSON records and logs.
-export const observeProjectFlow = async (flow: RecordedProjectFlow) => {
+const observeProjectFlow = async (flow: RecordedProjectFlow) => {
   const f = fixture();
   f.env.FABRIKA_REPO = `https://fixture:${encodeURIComponent(flow.credential)}@fixture.invalid/repo`;
   f.env.OPENAI_API_KEY = flow.credential; // Made up, and only the fake agent is ever selected.
@@ -703,7 +723,7 @@ export const observeProjectFlow = async (flow: RecordedProjectFlow) => {
  * carry (T276 amendment 4): the box from Cmd-O, the project button or File > Open Project…, then a
  * row or its Open Folder…; File > Open Folder…; and a welcome row or welcome's Open Folder….
  */
-export const PRESS_RECORDS = {
+const PRESS_RECORDS = {
   "cmd-o row": { source: "box", picked: "recent" },
   "button row": { source: "button", picked: "recent" },
   "menu row": { source: "menu", picked: "recent" },
@@ -716,7 +736,7 @@ export const PRESS_RECORDS = {
 } as const;
 
 /** A press P17 drives in the built app: how the box was shown, or the sheet or welcome, then what was picked. */
-export type ProjectPress = keyof typeof PRESS_RECORDS;
+type ProjectPress = keyof typeof PRESS_RECORDS;
 
 /** The app's own opening records so far, in the order it wrote them (`<home>/records/projects.jsonl`). */
 const openingRecords = (home: string): Record<string, unknown>[] => {
@@ -792,7 +812,7 @@ const windowOf = async (app: ElectronApplication, parent: "left" | "right"): Pro
  * again. A row needs the other project among the recents, so a folder press comes before the first
  * row. Those setup presses are steps too: each step names the press it made.
  */
-export const observePresses = async (
+const observePresses = async (
   presses: readonly ProjectPress[],
 ): Promise<readonly { readonly press: ProjectPress; readonly records: readonly Record<string, unknown>[] }[]> => {
   const f = fixture();
@@ -828,7 +848,11 @@ export const observePresses = async (
       await recorded("welcome row", async () => {
         await again.getByRole("option").filter({ hasText: parents[0] }).click();
       });
-      page = await windowOf(app, parents[0]);
+      // One recent project, so its title has no parent folder to tell it by (project.ts `titles`):
+      // the one project window is the one in front. A later press that picks this project again
+      // finds it as open, as one opened through Open Folder… is.
+      page = await front(app);
+      openedIn(app).set(realpathSync(f.projects[0]), page);
     }
 
     let current: 0 | 1 = 0;
@@ -882,6 +906,190 @@ export const observePresses = async (
   }
 };
 
+// P17's and P29's built-app halves. They launch the built app, so they run here, in the e2e run
+// that builds it first (`pnpm e2e`, CI's e2e job), and not in vitest's test job, which never
+// builds it. projects.laws.test.ts keeps their machine halves and plants, and reads the field
+// list, the outputs, the credentials and the leak check from here, so a plant breaks the very
+// check this run makes on the real app.
+
+/** The shared seed (AGENTS.md); each property below is 3 real launches of about 15 s each. */
+const BUILT = { seed: 119120, numRuns: 3 };
+
+/** The fields each kind of record keeps (P17). */
+export const RECORD_FIELDS = {
+  opening: ["id", "project", "root", "window", "source", "picked", "by", "said", "at", "result", "why"],
+  migration: ["format", "project", "rule", "files", "digests", "phase", "at", "result"],
+  host: ["project", "root", "build", "pid", "settings", "reason"],
+  summon: ["project", "name", "folder", "run", "model", "effort", "by", "input", "output", "cost"],
+  turn: ["project", "name", "folder", "run", "model", "effort", "by", "input", "output", "cost"],
+  close: ["project", "window", "source", "at", "outcome"],
+} as const;
+
+/** Every object in some record or log lines, JSON inside strings included. */
+const objectsIn = (texts: readonly string[]) => {
+  const objects: Record<string, unknown>[] = [];
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      try {
+        visit(JSON.parse(value));
+      } catch {}
+
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        visit(child);
+      }
+
+      return;
+    }
+
+    if (value === null || typeof value !== "object") {
+      return;
+    }
+
+    objects.push(value as Record<string, unknown>);
+
+    for (const child of Object.values(value)) {
+      visit(child);
+    }
+  };
+
+  for (const text of texts) {
+    for (const line of text.split("\n")) {
+      visit(line);
+    }
+  }
+
+  return objects;
+};
+
+/** P29's named outputs: each must exist, and none may hold the credential in any form. */
+export const SECRET_OUTPUTS = [
+  "app records",
+  "host logs",
+  "spans",
+  "outgoing URLs",
+  "visible errors",
+  "public capture labels",
+] as const;
+
+const word = fc.stringMatching(/^[a-z][a-z0-9-]{0,14}$/);
+
+/** P29's generated flows: a made-up credential, a refusal or not, one failure and an order of operations. */
+export const CREDENTIALS = fc.record({
+  credential: fc.tuple(word, word).map(([a, b]) => `made-up-${a}:${b}@pass /?&%`),
+  refusal: fc.boolean(),
+  failure: fc.constantFrom("git", "migration", "host", "summon"),
+  order: fc.array(fc.constantFrom("open", "cancel", "refuse", "retry", "focus", "close"), {
+    minLength: 1,
+    maxLength: 16,
+  }),
+});
+
+const forms = (credential: string) => [
+  credential,
+  encodeURI(credential),
+  encodeURIComponent(credential),
+  encodeURIComponent(encodeURIComponent(credential)),
+  new URLSearchParams({ key: credential }).toString().slice(4),
+  Buffer.from(credential).toString("base64"),
+  Buffer.from(credential).toString("base64url"),
+];
+
+/** P29's check: throws when an output is missing or holds the credential, plain or encoded. */
+export const secretsCheck = (credential: string, observed: Readonly<Record<string, unknown>>) => {
+  for (const output of SECRET_OUTPUTS) {
+    check(output in observed, `P29: no ${output} was read`);
+    const text = JSON.stringify(observed[output]);
+
+    for (const [i, form] of forms(credential).entries()) {
+      check(!text.includes(form), `P29: the credential reached ${output}, in form ${i}`);
+    }
+  }
+};
+
+/** P17 and P29 on the real built app, each a property over generated flows. */
+export const builtLaws = async () => {
+  // P17: the built app's records keep each host, summon, turn and close.
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.constantFrom("open", "focus", "cancel", "close"), { minLength: 1, maxLength: 6 }),
+      async (order) => {
+        const observed = await observeProjectFlow({
+          credential: "made-up-fixture-key",
+          refusal: false,
+          failure: "summon",
+          order,
+        });
+        const objects = objectsIn([...observed["app records"], ...observed["host logs"]]);
+
+        for (const kind of ["host", "summon", "turn", "close"] as const) {
+          const fields: readonly string[] = RECORD_FIELDS[kind];
+          check(
+            objects.some((row) => fields.every((field) => field in row)),
+            `P17: missing real ${kind} record`,
+          );
+        }
+      },
+    ),
+    BUILT,
+  );
+  // P17: each press's opening records keep its source and picked pair. At most one welcome press:
+  // only a fresh window shows welcome.
+  await fc.assert(
+    fc.asyncProperty(
+      fc
+        .tuple(
+          fc.constantFrom("welcome row", "welcome folder"),
+          fc.shuffledSubarray(
+            (Object.keys(PRESS_RECORDS) as ProjectPress[]).filter((press) => !press.startsWith("welcome")),
+            { minLength: 1 },
+          ),
+        )
+        .map(([welcome, rest]): ProjectPress[] => [welcome, ...rest]),
+      async (presses) => {
+        const steps = await observePresses(presses);
+        check(
+          presses.every((press) => steps.some((step) => step.press === press)),
+          `P17: a press was not driven: ${presses.join(", ")}`,
+        );
+
+        for (const step of steps) {
+          check(step.records.length > 0, `P17: ${step.press} wrote no opening record`);
+
+          for (const record of step.records) {
+            const fields: readonly string[] = RECORD_FIELDS.opening;
+            const missing = fields.filter((field) => !(field in record));
+            check(missing.length === 0, `P17: ${step.press}'s opening record lacks ${missing.join(", ")}`);
+            const wanted = PRESS_RECORDS[step.press];
+            check(
+              record.source === wanted.source && record.picked === wanted.picked,
+              `P17: ${step.press} recorded ${String(record.source)}/${String(record.picked)}`,
+            );
+          }
+        }
+      },
+    ),
+    BUILT,
+  );
+  console.log("ok P17: the built app's records keep each host, summon, turn and close, and each press's pair");
+  // P29: generated refusals, failures and operation orders keep every named output clean.
+  await fc.assert(
+    fc.asyncProperty(CREDENTIALS, async (flow) => {
+      const observed = await observeProjectFlow(flow);
+      secretsCheck(flow.credential, observed);
+
+      for (const output of ["app records", "host logs", "spans", "public capture labels"] as const) {
+        check(observed[output].length > 0, `P29: ${output} is empty`);
+      }
+    }),
+    BUILT,
+  );
+  console.log("ok P29: [secrets] generated refusals, failures and orders keep every named output clean");
+};
+
 const setLook = async (app: ElectronApplication, page: Page, look: Look) => {
   await app.evaluate(({ nativeTheme }, look) => {
     nativeTheme.themeSource = look;
@@ -893,16 +1101,23 @@ const setLook = async (app: ElectronApplication, page: Page, look: Look) => {
   );
 };
 
+// A window just launched may still take its first size after this one is set: one welcome shot
+// came out 1584x1752 when the size was set once and only the small one was checked. So the size
+// is set until the window holds it, and a shot is never taken at another size.
 const resize = async (app: ElectronApplication, page: Page, small: boolean) => {
   const contents = await app.browserWindow(page);
-  await contents.evaluate((window, small) => {
-    window.setBounds({ width: small ? 1024 : 1400, height: small ? 700 : 900 });
-    const bounds = window.getBounds();
-
-    if (small && (bounds.width !== 1024 || bounds.height !== 700)) {
-      throw new Error("E2 requires a real 1024x700 window");
-    }
-  }, small);
+  const want = { width: small ? 1024 : 1400, height: small ? 700 : 900 };
+  await until(
+    async () => {
+      await contents.evaluate((window, want) => window.setBounds(want), want);
+      await page.waitForTimeout(100);
+      return contents.evaluate((window) => window.getBounds());
+    },
+    (bounds) => bounds.width === want.width && bounds.height === want.height,
+    5_000,
+  ).catch((error: unknown) => {
+    throw new Error(`E2 requires a real ${want.width}x${want.height} window`, { cause: error });
+  });
 };
 
 const tileBounds = (page: Page) =>
@@ -1472,6 +1687,8 @@ export const runProjectChecks = async (only?: "flow" | "captures") => {
         }
       }
     }
+
+    await builtLaws();
   }
 
   if (only === "flow") {

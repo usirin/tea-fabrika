@@ -1,4 +1,5 @@
 import { applyCell } from "@demlik/tea";
+import { AskActions } from "@tea-fabrika/tracker/ask-window";
 import { absurd, Effect } from "effect";
 import type { Ghostty } from "ghostty-web";
 import {
@@ -15,7 +16,8 @@ import { createRoot } from "react-dom/client";
 import type { AsksNow } from "../asks.ts";
 import { activeOf, type Desk, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
 import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
-import { defaults, type Keys, spell } from "../desk/keymap.ts";
+import { programCommandOn, defaults, type Keys, spell } from "../desk/keymap.ts";
+import { keyName } from "../desk/keys.ts";
 import {
   type ContainerNode,
   findTile,
@@ -186,6 +188,62 @@ const followed = new Set<string>();
 let ghostty: Ghostty | null = null;
 
 const toHost = (m: FromPage) => window.fabrika.send("desk", m);
+const answering = new Map<string, (why: string | null) => void>();
+
+const askActions: AskActions = {
+  command: (press, typing) => {
+    const key = keyName(press);
+
+    if (key === null) {
+      return undefined;
+    }
+
+    const command = programCommandOn(store.keys, "ask", key, {
+      focused: true,
+      typing,
+      prefix: store.desk?.at === "open" && store.desk.prefix.armed,
+      platform: false,
+    });
+    return command === undefined ? undefined : { key, value: command.value };
+  },
+  // From the tile the press came from; from the asks menu, over the desk, the focused tile.
+  openLane: (ticket) => {
+    const from =
+      document.activeElement?.closest<HTMLElement>("[data-tile]")?.dataset.tile ??
+      (store.desk?.at === "open" ? focusedOf(store.desk)?.id : undefined);
+
+    if (from !== undefined) {
+      toHost({ type: "open_lane", from, ticket });
+    }
+  },
+  answer: (value) =>
+    Effect.callback<unknown, { why: string }>((resume) => {
+      const id = crypto.randomUUID();
+      answering.set(id, (why) =>
+        resume(why === null ? Effect.succeed({ ticket: value.ticket }) : Effect.fail({ why })),
+      );
+      toHost({ type: "ask_answer", id, value });
+      return Effect.sync(() => {
+        answering.delete(id);
+      });
+    }).pipe(
+      Effect.timeoutOrElse({
+        duration: "15 seconds",
+        orElse: () => Effect.fail({ why: "The host did not answer. Try again." }),
+      }),
+    ),
+  later: (key) => toHost({ type: "later", key }),
+  get keys() {
+    const programs = store.keys.programs ?? defaults.programs ?? [];
+    return {
+      rec: programs.find((r) => r.does === "program.ask.rec")?.keys.map((k) => k.key) ?? [],
+      not: programs.find((r) => r.does === "program.ask.not")?.keys.map((k) => k.key) ?? [],
+      picks: programs.find((r) => r.does === "program.ask.picks")?.keys.map((k) => k.key) ?? [],
+      later: programs.find((r) => r.does === "program.ask.later")?.keys.map((k) => k.key) ?? [],
+    };
+  },
+  blocked: () => store.desk?.at === "open" && store.desk.prefix.armed,
+};
 
 const editKeys = (message: EditorMsg) => {
   if (store.keysEditor === null) {
@@ -627,8 +685,18 @@ const heard = (raw: unknown) => {
   const m = read.msg;
 
   switch (m.type) {
+    case "ask_answered":
+      answering.get(m.id)?.(m.why);
+      answering.delete(m.id);
+      return;
     case "keys":
-      store.keys = { prefix: m.prefix, rows: m.rows, ignore: m.ignore, file: m.file };
+      store.keys = {
+        prefix: m.prefix,
+        rows: m.rows,
+        programs: m.programs ?? defaults.programs ?? [],
+        ignore: m.ignore,
+        file: m.file,
+      };
       store.keyChanges = m.changes ?? [];
       editKeys({
         type: "keys",
@@ -888,6 +956,13 @@ const onKey = (e: KeyboardEvent) => {
 
 /** A key the frame, the over or the desk has (`keyRoute`'s `desk`): Escape first, then the over, then the hold. */
 const deskKey = (e: KeyboardEvent, name: string | null, press: Key["press"]) => {
+  const innerAsk =
+    e.target instanceof Element ? e.target.closest("[data-ask-editor=note], [data-ask-editor=picks]") : null;
+
+  if (e.key === "Escape" && innerAsk !== null && !midKey().armed) {
+    return;
+  }
+
   if (e.key === "Escape" && frameInstall(frameFor(e.key, "fresh"))) {
     return swallow(e);
   }
@@ -1298,7 +1373,11 @@ const boot = Effect.gen(function* () {
   const root = document.getElementById("root");
 
   if (root !== null) {
-    createRoot(root).render(<App />);
+    createRoot(root).render(
+      <AskActions.Provider value={askActions}>
+        <App />
+      </AskActions.Provider>,
+    );
   }
 });
 
