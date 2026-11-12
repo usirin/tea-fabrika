@@ -26,6 +26,7 @@ import {
   Schema,
   Stream,
 } from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { type Envelope, type NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -1351,6 +1352,63 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
+  it.effect.prop(
+    "A-Timer: a timer keeps its asked wake and delivery clock; repeated delivery keeps the same letter",
+    {
+      asked: Schema.Union([Schema.Literal(0), Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 }))]),
+      lag: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100_000 })),
+      repeats: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
+    },
+    ({ asked, lag, repeats }) =>
+      Effect.gen(function* () {
+        const w = yield* Effect.tryPromise({
+          try: () => world(),
+          catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+        });
+        const arrivedAt = 1_000_000 + asked + lag;
+        const timers = inbox.pipe(
+          Effect.map((rows) =>
+            rows.filter((row) =>
+              Schema.is(Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("timer") }) }))(row.body),
+            ),
+          ),
+        );
+        yield* Effect.gen(function* () {
+          const r: Runner = yield* w.ProgramRunner;
+          yield* r.msg(w.input(1, { type: "schedule", at: asked }));
+          yield* TestClock.setTime(arrivedAt);
+          yield* r.due(asked);
+          const first = yield* timers;
+          expect(first).toHaveLength(1);
+          expect(first[0]!.id).toBe(`${PROCESS}/due/${asked}`);
+          expect((yield* r.open("timer")).view).toMatchObject({ count: 1, replies: 1, wake: asked + 10 });
+
+          // Re-arm the same wake so deduplication, rather than the not-due guard, must stop it.
+          yield* r.msg(w.input(2, { type: "schedule", at: asked }));
+
+          for (let n = 0; n < repeats; n++) {
+            yield* TestClock.adjust(lag);
+            yield* r.due(asked);
+            expect(yield* timers).toEqual(first);
+            expect((yield* r.open("repeat")).view).toMatchObject({ count: 1, replies: 1, wake: asked });
+            expect(w.workCalls()).toBe(1);
+          }
+        }).pipe(Effect.provide(w.layer()));
+
+        w.reopen();
+        yield* Effect.gen(function* () {
+          const r: Runner = yield* w.ProgramRunner;
+          const before = yield* timers;
+          yield* TestClock.adjust(lag);
+          yield* r.due(asked);
+          expect(yield* timers).toEqual(before);
+          expect((yield* r.open("reopened")).view).toMatchObject({ count: 1, replies: 1, wake: asked });
+          expect(w.workCalls()).toBe(1);
+          expect(body(before[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
+        }).pipe(Effect.provide(w.layer()));
+      }),
+    { arbitrary: { seed: SEED, runs: 50 } },
+  );
   it("plant, mint a new timer id: a repeated due time saves and fires exactly once", async () => {
     const w = await world();
     await Effect.runPromise(
