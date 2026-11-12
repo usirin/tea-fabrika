@@ -1,0 +1,126 @@
+// T878, next/, L7. Resolve through the public Repository handle, using real tree and disk bytes.
+// The lead runs this file in the isolated Git container after build.
+import { NodeServices } from "@effect/platform-node";
+import { expect, it } from "@effect/vitest";
+import { Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Digest } from "effect/crypto";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as fc from "fast-check";
+import { Repositories } from "../../repositories/Repositories.ts";
+import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import * as RepositoriesGit from "./RepositoriesGit.ts";
+
+const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
+  return yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
+    ChildProcess.make("git", [...args], {
+      cwd,
+      extendEnv: true,
+      env: {
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_AUTHOR_NAME: "fixture",
+        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+        GIT_COMMITTER_NAME: "fixture",
+        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+      },
+    }),
+  );
+});
+
+const string = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
+
+it("L7: each prefix resolves from the winning file's base, pins committed bytes and follows outside targets", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(fc.record({ move: fc.nat(), pick: fc.nat() }), { minLength: 1, maxLength: 8 }),
+      async (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem,
+                path = yield* Path.Path;
+              const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-sources-" });
+              yield* RepositoryOpenTest.isolateGit(root);
+              const repo = path.join(root, "repo"),
+                origin = path.join(root, "origin.git"),
+                person = path.join(root, "person");
+              const outside = path.join(root, "outside space");
+              yield* fs.makeDirectory(person);
+              yield* fs.makeDirectory(outside);
+              yield* fs.writeFileString(path.join(outside, "entry.txt"), "outside 0");
+              yield* git(root, ["init", "--bare", "--initial-branch=stable", origin]);
+              yield* git(root, ["clone", origin, repo]);
+              yield* fs.makeDirectory(path.join(repo, ".fabrika"));
+              yield* fs.makeDirectory(path.join(repo, "inside space"));
+              yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), "");
+              yield* fs.writeFileString(path.join(repo, "inside space/entry.txt"), "commit 0");
+              yield* fs.symlink("../inside space", path.join(repo, ".fabrika/local-link"));
+              yield* fs.symlink("../../outside space", path.join(repo, ".fabrika/outside-link"));
+              yield* fs.symlink("cycle-b", path.join(repo, ".fabrika/cycle-a"));
+              yield* fs.symlink("cycle-a", path.join(repo, ".fabrika/cycle-b"));
+              yield* git(repo, ["add", "."]);
+              yield* git(repo, ["commit", "-m", "fixture"]);
+              yield* git(repo, ["push", "origin", "stable"]);
+              yield* Effect.gen(function* () {
+                const selected = yield* (yield* Repositories).open(repo);
+                const pinned = selected.snapshot.commit;
+                let disk = "outside 0",
+                  present = true;
+                const sources = ["../inside space", "./local-link", "../../outside space", "./outside-link"];
+
+                for (const [index, cell] of tape.entries()) {
+                  const move = cell.move % 4;
+
+                  if (move === 0) {
+                    yield* fs.writeFileString(path.join(repo, "inside space/entry.txt"), `dirty ${index}`);
+                    yield* fs.remove(path.join(repo, ".fabrika/local-link"));
+                    yield* fs.symlink("../../outside space", path.join(repo, ".fabrika/local-link"));
+                  } else if (move === 1) {
+                    present = true;
+                    disk = `outside ${index + 1}`;
+                    yield* fs.makeDirectory(outside, { recursive: true });
+                    yield* fs.writeFileString(path.join(outside, "entry.txt"), disk);
+                  } else if (move === 2) {
+                    present = false;
+                    yield* fs.remove(outside, { recursive: true, force: true });
+                  }
+
+                  const from = sources[cell.pick % sources.length]!;
+                  const committed = cell.pick % sources.length < 2;
+                  const resolved = yield* selected.resolve(from, "repo").pipe(Effect.exit);
+                  expect(Exit.isSuccess(resolved)).toBe(committed || present);
+
+                  if (Exit.isSuccess(resolved)) {
+                    expect(resolved.value._tag).toBe(committed ? "committed" : "disk");
+                    expect(string(yield* resolved.value.read("entry.txt"))).toBe(committed ? "commit 0" : disk);
+
+                    if (resolved.value._tag === "committed") {
+                      expect(resolved.value.commit).toBe(pinned);
+                    }
+
+                    expect(JSON.stringify(resolved.value)).not.toContain(root);
+                  } else {
+                    const reason = resolved.cause.reasons.find((r) => r._tag === "Fail");
+                    expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");
+                  }
+
+                  // Missing sources and cycles do not invalidate an unrelated committed source or selection.
+                  for (const bad of ["./missing", "./cycle-a"]) {
+                    expect(Exit.isFailure(yield* selected.resolve(bad, "repo").pipe(Effect.exit))).toBe(true);
+                  }
+
+                  const stillGood = yield* selected.resolve("../inside space", "repo");
+                  expect(string(yield* stillGood.read("entry.txt"))).toBe("commit 0");
+                  const own = yield* selected.resolve("../repo/inside space", "person");
+                  expect(own._tag).toBe("disk");
+                  expect(selected.snapshot.commit).toBe(pinned);
+                }
+              }).pipe(Effect.provide(RepositoriesGit.layer({ person })));
+            }),
+          ).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto))),
+        ),
+    ),
+    { seed: 119120, numRuns: 200 },
+  );
+});

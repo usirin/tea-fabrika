@@ -952,6 +952,7 @@
               "ledger",
               "transport",
               "settings",
+              "repositories",
               "processes",
               "presence",
               "jobs",
@@ -1195,7 +1196,8 @@
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/settings/**"
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/repositories/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
@@ -1213,7 +1215,8 @@
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
-        "next/packages/libfabrika/src/settings/internal/**"
+        "next/packages/libfabrika/src/settings/internal/**",
+        "next/packages/libfabrika/src/repositories/internal/**"
       ],
       "rules": { "unicorn/filename-case": ["error", { "case": "camelCase" }] }
     },

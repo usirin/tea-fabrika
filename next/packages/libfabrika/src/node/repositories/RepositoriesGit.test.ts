@@ -1,0 +1,276 @@
+// T878, next/, L1/L2/L10. Real Git owns the objects; failures are injected at its process edge.
+// Lead runs the real-Git laws in the isolated, network-disabled container after build.
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "@effect/vitest";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Sink, Stream } from "effect";
+import { Digest } from "effect/crypto";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as fc from "fast-check";
+import { Repositories } from "../../repositories/Repositories.ts";
+import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import * as RepositoriesGit from "./RepositoriesGit.ts";
+
+const runs = { seed: 119120, numRuns: 200 };
+const text = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
+const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
+
+const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  return (yield* spawner.string(
+    ChildProcess.make("git", [...args], {
+      cwd,
+      extendEnv: true,
+      env: {
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_AUTHOR_NAME: "fixture",
+        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+        GIT_COMMITTER_NAME: "fixture",
+        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+      },
+    }),
+  )).trim();
+});
+
+const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", branch: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-git-" });
+  yield* RepositoryOpenTest.isolateGit(root);
+  const origin = path.join(root, "origin.git"),
+    repo = path.join(root, "selected"),
+    person = path.join(root, "person");
+  yield* fs.makeDirectory(person);
+  yield* git(root, ["init", "--bare", `--object-format=${format}`, `--initial-branch=${branch}`, origin]);
+  yield* git(root, ["clone", origin, repo]);
+  yield* fs.makeDirectory(path.join(repo, ".fabrika"));
+  yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), 'fabrika-version = "0.0.0"\n');
+  yield* fs.writeFileString(path.join(repo, "source.txt"), "committed source");
+  yield* git(repo, ["add", "."]);
+  yield* git(repo, ["commit", "-m", "fixture"]);
+  yield* git(repo, ["push", "origin", branch]);
+  const commit = yield* git(repo, ["rev-parse", "HEAD"]);
+  return { fs, path, root, origin, repo, person, branch, commit };
+});
+
+const withReader = <A, E, R>(person: string, body: Effect.Effect<A, E, R>) =>
+  body.pipe(Effect.provide(RepositoriesGit.layer({ person })));
+
+describe("T878 pinned repository reads", () => {
+  it("L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom("sha1" as const, "sha256" as const),
+        fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
+        fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
+        async (format, branch, tape) =>
+          Effect.runPromise(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const f = yield* fixture(format, branch);
+                yield* withReader(
+                  f.person,
+                  Effect.gen(function* () {
+                    const service = yield* Repositories;
+                    const pinned = yield* service.open(f.repo);
+                    expect(pinned.snapshot).toMatchObject({
+                      branch,
+                      commit: f.commit,
+                      text: 'fabrika-version = "0.0.0"\n',
+                    });
+                    expect(pinned.snapshot.commit).toHaveLength(format === "sha1" ? 40 : 64);
+                    const hash = pinned.snapshot.hash;
+
+                    for (const cell of tape) {
+                      const move = cell % 3;
+
+                      if (move === 0) {
+                        yield* f.fs.writeFileString(f.path.join(f.repo, ".fabrika/fabrika.toml"), "dirty = true\n");
+                        yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `dirty ${cell}`);
+                        yield* f.fs.writeFileString(f.path.join(f.repo, "fabrika.toml"), "checkout-only legacy file");
+                      } else if (move === 1) {
+                        yield* git(f.repo, ["checkout", "--detach", f.commit]);
+                      } else {
+                        yield* git(f.repo, ["checkout", "-B", branch]);
+                        yield* f.fs.writeFileString(f.path.join(f.repo, "source.txt"), `new ${cell}`);
+                        yield* git(f.repo, ["add", "-u"]);
+                        yield* git(f.repo, ["commit", "--allow-empty", "-m", "move"]);
+                        yield* git(f.repo, ["push", "--force", "origin", branch]);
+                      }
+
+                      expect(text(yield* pinned.read("source.txt"))).toBe("committed source");
+                      expect(pinned.snapshot.hash).toBe(hash);
+                      expect(pinned.snapshot.commit).toBe(f.commit);
+                    }
+
+                    // A linked worktree is an alias for this clone, even when detached.
+                    const linked = f.path.join(f.root, "linked");
+                    yield* git(f.repo, ["worktree", "add", "--detach", linked, f.commit]);
+                    const alias = yield* service.open(linked);
+                    expect(alias.snapshot.key).toBe(pinned.snapshot.key);
+                  }),
+                );
+              }),
+            ).pipe(Effect.provide(services)),
+          ),
+      ),
+      runs,
+    );
+  });
+
+  it("L2: only an absent tree entry is an empty document; every requested Git failure refuses", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const f = yield* fixture("sha1", "release");
+              yield* git(f.repo, ["rm", ".fabrika/fabrika.toml"]);
+              yield* git(f.repo, ["commit", "-m", "absent"]);
+              yield* git(f.repo, ["push", "origin", f.branch]);
+              const absent = yield* withReader(
+                f.person,
+                Effect.gen(function* () {
+                  return yield* (yield* Repositories).open(f.repo);
+                }),
+              );
+              expect(absent.snapshot.text).toBeNull();
+              // Restore the committed document for blob/type failures, without touching this checkout's git.
+              yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
+              yield* git(f.repo, ["push", "origin", f.branch]);
+              const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+              const operations = ["fetch", "ls-tree", "cat-file", "ls-remote", "rev-parse"];
+
+              for (const cell of tape) {
+                const operation = operations[cell % operations.length]!;
+                let hits = 0;
+                const injected = ChildProcessSpawner.make((command) => {
+                  if (command._tag === "StandardCommand" && command.args.includes(operation)) {
+                    hits++;
+                    const bytes = new TextEncoder().encode(cell % 2 === 0 ? "invalid Git output\n" : "");
+                    return Effect.succeed(
+                      ChildProcessSpawner.makeHandle({
+                        pid: ChildProcessSpawner.ProcessId(1),
+                        exitCode: Effect.succeed(
+                          ChildProcessSpawner.ExitCode(operation === "fetch" || cell % 2 !== 0 ? 1 : 0),
+                        ),
+                        isRunning: Effect.succeed(false),
+                        kill: () => Effect.void,
+                        stdin: Sink.drain,
+                        stdout: Stream.make(bytes),
+                        stderr: Stream.empty,
+                        all: Stream.make(bytes),
+                        getInputFd: () => Sink.drain,
+                        getOutputFd: () => Stream.empty,
+                        unref: Effect.succeed(Effect.void),
+                      }),
+                    );
+                  }
+
+                  return real.spawn(command);
+                });
+                const exit = yield* withReader(
+                  f.person,
+                  Effect.gen(function* () {
+                    return yield* (yield* Repositories).open(f.repo);
+                  }),
+                ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, injected), Effect.exit);
+                expect(hits).toBeGreaterThan(0);
+                expect(Exit.isFailure(exit)).toBe(true);
+
+                if (Exit.isFailure(exit)) {
+                  const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                  expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
+                }
+              }
+
+              // Named replacement for Load's former repo disk-failure law.
+              const missingOrigin = yield* git(f.repo, ["remote", "remove", "origin"]);
+              void missingOrigin;
+              const refused = yield* withReader(
+                f.person,
+                Effect.gen(function* () {
+                  return yield* (yield* Repositories).open(f.repo);
+                }),
+              ).pipe(Effect.exit);
+              expect(Exit.isFailure(refused)).toBe(true);
+            }),
+          ).pipe(Effect.provide(services)),
+        ),
+      ),
+      runs,
+    );
+  });
+
+  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) => {
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            let directory = "";
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const f = yield* fixture("sha1", "stable");
+                directory = f.root;
+                const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+                for (const cell of tape) {
+                  let held = 0;
+                  const entered = yield* Deferred.make<void>();
+                  const tracked = ChildProcessSpawner.make((command) =>
+                    Effect.gen(function* () {
+                      yield* Effect.acquireRelease(
+                        Effect.sync(() => {
+                          held++;
+                        }),
+                        () =>
+                          Effect.sync(() => {
+                            held--;
+                          }),
+                      );
+                      yield* Deferred.succeed(entered, undefined);
+
+                      if (cell % 3 === 2) {
+                        return yield* Effect.never;
+                      }
+
+                      return yield* real.spawn(command);
+                    }),
+                  );
+
+                  if (cell % 3 === 1) {
+                    yield* git(f.repo, ["remote", "set-url", "origin", f.path.join(f.root, "missing.git")]);
+                  }
+
+                  const operation = Effect.scoped(
+                    withReader(
+                      f.person,
+                      Effect.gen(function* () {
+                        return yield* (yield* Repositories).open(f.repo);
+                      }),
+                    ),
+                  ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, tracked), Effect.exit);
+                  const fiber = yield* operation.pipe(Effect.forkScoped);
+                  yield* Deferred.await(entered);
+
+                  if (cell % 3 === 2) {
+                    yield* Fiber.interrupt(fiber);
+                  } else {
+                    yield* Fiber.join(fiber);
+                  }
+
+                  expect(held).toBe(0);
+                  yield* git(f.repo, ["remote", "set-url", "origin", f.origin]);
+                }
+              }),
+            );
+            expect(yield* fs.exists(directory)).toBe(false);
+          }).pipe(Effect.scoped, Effect.provide(services)),
+        );
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
+  });
+});

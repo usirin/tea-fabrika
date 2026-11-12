@@ -35,12 +35,11 @@ const home = Effect.gen(function* () {
     path = yield* Path.Path;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t664-start-" });
   const person = path.join(root, "fabrika.toml");
-  const repo = path.join(root, "repo-fabrika.toml");
   const write = (port: number | undefined) =>
     port === undefined
       ? fs.remove(person, { force: true })
       : fs.writeFileString(person, `# the person's\n[instance]\nport = ${port}\n`);
-  return { places: { person: { path: person, name: PERSON }, repo: { path: repo, name: REPO } }, write };
+  return { places: { person: { path: person, name: PERSON }, repo: { text: null, name: REPO } }, write };
 });
 
 const action = fc.oneof(
@@ -157,10 +156,10 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                 const h = yield* home;
                 const fs = yield* FileSystem.FileSystem;
                 yield* fs.writeFileString(h.places.person.path, place.person);
-                yield* fs.writeFileString(h.places.repo.path, place.repo);
                 // The founding facts reach dev.ts as flags; none is a setting, so none is a source.
                 const loaded = yield* Load.load({
                   ...h.places,
+                  repo: { name: REPO, text: place.repo },
                   flags: { founder: word, window: word, person: word },
                   env: { [field]: word },
                   version: "0.0.0",
