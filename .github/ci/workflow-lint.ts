@@ -120,9 +120,14 @@ export const lintWorkflow = (text: string): string[] => {
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "test", "next", "e2e", "field"]) {
+  for (const name of ["check", "typecheck", "test", "next", "e2e", "field"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
+  // alone (0133). check runs no second one.
+  require(commands(map(jobs["typecheck"])).includes("pnpm typecheck"), "the typecheck job runs pnpm typecheck");
+  require(!commands(map(jobs["check"])).includes("pnpm typecheck"), "check leaves the typecheck to its own job");
 
   require(commands(changes).includes("sh .agents/skills/lead/scripts/skillscheck.sh"), "changes runs the skills check");
   require(commands(changes).includes(
