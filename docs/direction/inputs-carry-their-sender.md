@@ -100,7 +100,9 @@ const Write = Schema.TaggedUnion({
   CRDTs](https://zed.dev/blog/crdts)). So no id is made twice, across restarts too.
 - **A client-sent id is refused.** A link that names its own `id` or `by` is broken or lying, and
   the refusal is recorded. Ignoring it would invite a later reader to trust the key. That is mass
-  assignment (OWASP API Security Top 10 2023, API3).
+  assignment (OWASP API Security Top 10 2023, API3). Decided in
+  [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md): refused and counted in the
+  gateway's hourly metric, never recorded, and a write with no cause is `own`.
 - **`at` and not `said`.** `at` is the referee's clock, as the [glossary](../../.glossary/TERMS.md)
   says. No sender gives its own clock today; if one does later, it goes in `said`, kept out of the
   deciding code's types. In `next/` the two are `arrivedAt` and `sentAt`.
