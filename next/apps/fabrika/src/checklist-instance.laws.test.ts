@@ -533,6 +533,12 @@ describe("L13: notices name their process", () => {
                 const { result } = Schema.decodeUnknownSync(
                   Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
                 )(opened);
+                // Ticket 866 saves wake 0 and delivers timer {at: 0}. That is a requested wake,
+                // not today's time: an item added just now must not already be a day old.
+                expect(
+                  result.view.items.find((item) => item.name === name)?.state,
+                  "a fresh item's immediate wake leaves it open, never late",
+                ).toBe("open");
                 expect(
                   result.view.items.map((item) => item.name),
                   "a late subscriber gets the current view",
