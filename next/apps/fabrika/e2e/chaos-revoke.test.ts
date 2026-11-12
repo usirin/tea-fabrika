@@ -547,7 +547,23 @@ it.live(
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
           entries.some((entry) => entry.id === "other-after"),
         );
-        expect(inbox.filter((row) => row._tag === "send").map((row) => row.id)).toEqual(["old-before", "other-after"]);
+        const sends = inbox.filter((row) => row._tag === "send");
+        const clientKeys = new Set([oldKey.fingerprint, otherKey.fingerprint]);
+        expect(sends.filter((row) => clientKeys.has(row.by)).map((row) => ({ id: row.id, by: row.by }))).toEqual([
+          { id: "old-before", by: oldKey.fingerprint },
+          { id: "other-after", by: otherKey.fingerprint },
+        ]);
+
+        // The checklist runner stamps its own timer letters with the program owner's key.
+        for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
+          const { m } = Schema.decodeUnknownSync(
+            Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }) }),
+          )(row.body);
+          expect(row.id).toBe(`${pid}/due/${m.at}`);
+          expect(row).toMatchObject({ by: root.fingerprint, for: RevokeTest.PERSON, parent: null });
+          expect(row.body).toEqual({ m });
+        }
+
         const surviving = inbox.find((row) => row.id === "other-after");
         expect(surviving?.rev).toBeGreaterThan(revoked.rev);
         expect(surviving?.arrivedAt).toBeGreaterThanOrEqual(revoked.arrivedAt);
