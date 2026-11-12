@@ -3,6 +3,7 @@
 // would, and never runs a Cmd: the runner does that, after the input is saved.
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as SchemaAST from "effect/SchemaAST";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 
@@ -344,6 +345,62 @@ const makeEffect = Effect.fn("program.make")(function* <
 });
 
 export const Program = { schema: Declaration, make, makeEffect };
+
+type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
+  ? Declared
+  : K extends keyof P["inputs"]
+    ? P["inputs"][K] extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+        readonly schema: infer S extends Declared;
+      }
+      ? S
+      : unknown extends P["msg"]["Type"]
+        ? Declared
+        : Schema.Codec<Omit<Extract<P["msg"]["Type"], { readonly type: K }>, "type">, unknown>
+    : Declared;
+
+/**
+ * Returns a read port's schema or a write message's fields without its `type`.
+ * A missing port or message member has no schema.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export function port<P extends typeof Declaration.Type, K extends string>(
+  program: P,
+  key: K,
+): Option.Option<PortSchema<P, K>>;
+export function port(program: typeof Declaration.Type, key: string): Option.Option<Declared> {
+  const input = Object.hasOwn(program.inputs, key) ? program.inputs[key] : undefined;
+
+  if (input === undefined) {
+    return Option.none();
+  }
+
+  if (input._tag === "read") {
+    return Option.some(input.schema);
+  }
+
+  const ast = program.msg.ast;
+  const members = SchemaAST.isUnion(ast) ? ast.types : [ast];
+  const member = members.find(
+    (m) =>
+      SchemaAST.isObjects(m) &&
+      m.propertySignatures.some((p) => p.name === "type" && SchemaAST.isLiteral(p.type) && p.type.literal === key),
+  );
+
+  if (member === undefined || !SchemaAST.isObjects(member)) {
+    return Option.none();
+  }
+
+  return Option.some(
+    Schema.make<Declared>(
+      new SchemaAST.Objects(
+        member.propertySignatures.filter((p) => p.name !== "type"),
+        member.indexSignatures,
+      ),
+    ),
+  );
+}
 
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
 const Event = Schema.Record(Schema.String, Schema.Json);
