@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -947,7 +947,8 @@ const OldModel = Schema.TaggedUnion({
 
 it.prop(
   "pinned: L17 every saved slice 1 state loads with its job and retry step intact",
-  { old: OldModel },
+  // Saved.model is JSON. Keep the pinned v1 schema, but draw only values its store could save.
+  { old: Arbitrary.schema(OldModel).pipe(Arbitrary.filter(Schema.is(Schema.Json))) },
   ({ old }) => {
     const p = merger(Effect.runSync(Settings.all.parse(ConfigProvider.fromUnknown({}))));
     const result = Saved.upgrade({ v: 1, build: "slice-1", model: old, after: 0 }, p.state, "slice-2");

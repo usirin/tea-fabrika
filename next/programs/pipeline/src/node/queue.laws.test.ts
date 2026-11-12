@@ -38,6 +38,7 @@ import {
   Exit,
   FileSystem,
   Layer,
+  Option,
   Path,
   Result,
   Schema,
@@ -401,12 +402,27 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
       saved,
     };
   });
+  const notify = Effect.fnUntraced(function* (name: string) {
+    const runner = yield* current.runner(name);
+    const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(current.context));
+    const checkpoint = yield* ProcessStore.use((s) => s.load).pipe(
+      Effect.provide(ProcessStore.layer(store.sql(`model:${status.state.process}`), { process: status.state.process })),
+      Effect.provide(current.context),
+    );
+    const incoming = yield* Mailbox.use((m) => Stream.runHead(m.read(name, checkpoint?.saved.after ?? 0))).pipe(
+      Effect.provide(current.context),
+    );
+
+    if (Option.isSome(incoming)) {
+      yield* runner.mailed;
+    }
+  });
   const step = Effect.gen(function* () {
-    yield* (yield* current.runner(NAME)).mailed;
+    yield* notify(NAME);
     const info = yield* statuses.pipe(Effect.provide(current.context));
 
     for (const child of info.filter((i) => i.program === "pipeline/merger" && i.state._tag === "live")) {
-      yield* (yield* current.runner(child.name)).mailed;
+      yield* notify(child.name);
     }
 
     const alarm = (yield* store.alarms)[0];
@@ -417,7 +433,7 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
       yield* (yield* current.runner(alarm.name)).due(alarm.at);
     }
 
-    yield* (yield* current.runner(NAME)).mailed;
+    yield* notify(NAME);
   });
   return {
     host,
