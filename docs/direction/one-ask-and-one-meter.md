@@ -408,6 +408,8 @@ One run on a Max login, traced (the run id and the numbers are made up):
   not money paid. Jev is still billed per token, so its dollars are real money.
 - Not changed here, and still open: whether an agent run on a subscription still needs a person's
   yes to a spend estimate before it starts. The rule above says it does; nobody has asked again.
+  *Settled 2026-11-11 in [0141](../../.decisions/0141-a-subscription-run-starts-with-no-spend-yes.md):
+  it does not; a run billed by the token still does.*
 
 ### 2. What every agent run records
 
