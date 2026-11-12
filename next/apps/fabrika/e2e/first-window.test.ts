@@ -12,12 +12,13 @@
 // the tile and makes it `inert`.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite"; // edge: inspect the instance's persisted SQLite cells, including records outside access history
 import { applyCell } from "@demlik/tea";
 import { checklist, checklistMachine } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
 import { Sent } from "@kampus/libfabrika";
 import { MemberEvent } from "@kampus/libfabrika/access/Access";
-import { valueFor } from "@kampus/libfabrika/ledger/Log";
+import { Row as LedgerRow, valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Fiber, Schema } from "effect";
@@ -532,6 +533,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   retained.some((entry) => entry._tag === "revoked"),
                   "the signed removal stays in its history",
                 ).toBe(true);
+                const accessBodies = new Map<string, string>();
                 const records = access.map((entry): readonly [string, string] => {
                   if (entry._tag !== "granted" && entry._tag !== "revoked") {
                     return ["access record", JSON.stringify(entry)];
@@ -549,8 +551,10 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   const object = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json));
                   const body = object(entry.body);
                   const { armored: _proof, ...signed } = object(body.signed);
+                  accessBodies.set(JSON.stringify(body), JSON.stringify({ ...body, signed }));
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
+                const disk = yield* stored(h.dir, accessBodies);
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
                   ...(yield* look(t.page, t.seen)),
@@ -563,15 +567,22 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   ["server console", dev.output()],
                   ["spans", JSON.stringify(spans)],
                   ...records,
-                  ...stored(h.dir),
+                  ...disk.outputs,
                 ];
 
                 const checkedOutputs = outputs.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
                   [output, text],
                   [output, percentDecoded(text)],
                 ]);
+                const credentialOutputs = [
+                  ...checkedOutputs,
+                  ...disk.raw.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
+                    [output, text],
+                    [output, percentDecoded(text)],
+                  ]),
+                ];
 
-                for (const [output, decoded] of checkedOutputs) {
+                for (const [output, decoded] of credentialOutputs) {
                   expect(
                     /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(decoded),
                     `${output} contains private key material`,
@@ -586,11 +597,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
 
                 for (const s of [...credentials, ...signatures]) {
                   for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
-                    // Raw database pages also hold Access.Signed.armored. Its logical records
-                    // above check copies outside that one field; credentials still check every byte.
-                    const checked = signatures.includes(s)
-                      ? checkedOutputs.filter(([o]) => !o.startsWith("home"))
-                      : checkedOutputs;
+                    const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
                       expect(text.includes(form), `${output} copies a secret`).toBe(false);
@@ -621,12 +628,82 @@ const percentDecoded = (text: string): string => {
   }
 };
 
-/** What the instance kept in its home, its records and spans among them, by file: never the key files. */
-const stored = (dir: string): ReadonlyArray<readonly [string, string]> =>
-  readdirSync(dir, { recursive: true, encoding: "utf8" })
-    .map((name) => join(dir, name))
-    .filter((file) => statSync(file).isFile() && !/[/]person(\.pub)?$/.test(file))
-    .map((file) => [`home ${file.slice(dir.length)}`, readFileSync(file).toString("latin1")] as const);
+/** Check every file and SQLite cell. Only a verified access entry's signed.armored is omitted.
+ *  Checking cells too catches a copy of that entire body in another table or stream. */
+const stored = (dir: string, accessBodies: ReadonlyMap<string, string>) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const files = readdirSync(dir, { recursive: true, encoding: "utf8" })
+        .map((name) => join(dir, name))
+        .filter((file) => statSync(file).isFile() && file !== join(dir, "person") && file !== join(dir, "person.pub"));
+      const raw: Array<readonly [string, string]> = files.map((file) => [
+        `home ${file.slice(dir.length)}`,
+        readFileSync(file).toString("latin1"),
+      ]);
+      const outputs: Array<readonly [string, string]> = [];
+      const retained = new Map<string, Map<string, string>>();
+
+      for (let n = 0; n < files.length; n++) {
+        const file = files[n]!;
+        const [label, bytes] = raw[n]!;
+
+        if (!bytes.startsWith("SQLite format 3\0")) {
+          continue;
+        }
+
+        const db = yield* Effect.acquireRelease(
+          Effect.sync(() => new DatabaseSync(file, { readOnly: true })),
+          (db) => Effect.sync(() => db.close()),
+        );
+        const allowed = new Map<string, string>();
+        retained.set(file, allowed);
+        const tables = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String })))(
+          db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all(),
+        );
+
+        for (const { name } of tables) {
+          for (const row of db.prepare(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all()) {
+            let cells = row;
+
+            if (
+              name === "entries" &&
+              row.stream === "gateway/access" &&
+              ["granted", "revoked"].includes(String(row._tag))
+            ) {
+              const entry = Schema.decodeUnknownSync(LedgerRow)(row);
+              const body = JSON.stringify(entry.body);
+              const replacement = Schema.decodeUnknownSync(Schema.String)(accessBodies.get(body));
+              allowed.set(body, replacement);
+              cells = { ...row, body: replacement };
+            }
+
+            for (const [column, value] of Object.entries(cells)) {
+              outputs.push([
+                `${label} table ${name} column ${column}`,
+                value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),
+              ]);
+            }
+          }
+        }
+      }
+
+      for (let n = 0; n < files.length; n++) {
+        const file = files[n]!;
+        const [label, bytes] = raw[n]!;
+        // SQLite's journal repeats the same cells. No other file gets this exception.
+        const database = file.replace(/-(?:wal|shm|journal)$/, "");
+        let checked = bytes;
+
+        for (const [body, replacement] of retained.get(database) ?? []) {
+          checked = checked.replaceAll(body, replacement);
+        }
+
+        outputs.push([label, checked]);
+      }
+
+      return { outputs, raw };
+    }),
+  );
 
 /** Every named output of a tab: its page text and markup, its rows, console lines, errors, URLs and sockets. */
 const look = (page: import("playwright").Page, seen: Seen) =>
