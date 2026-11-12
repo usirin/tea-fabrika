@@ -60,12 +60,12 @@ ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink 
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
 
-**Tier 1, dated 2026-11-11.** 20 of [its 45 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-11.** 20 of [its 44 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
 from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
-stage, joined Tier 1, so it had 44 rows; it said 43.* *Changed later on 2026-11-11 (owner): P18 was split into P18a, the desktop's layout as a process in the brain (ticket 838, plan being written, not waiting on P14), and P18b, the rest (ticket 290), so Tier 1 has 45 rows.* No Tier 1
+stage, joined Tier 1, so it has 44 rows; it said 43.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 

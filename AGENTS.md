@@ -61,11 +61,11 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
-`next/` is on main, and 20 of Tier 1's 45 rows have merged, plus P17a, half of P17
+`next/` is on main, and 20 of Tier 1's 44 rows have merged, plus P17a, half of P17
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
 added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
-P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), 44 since the merge queue's first stage, P43,
-[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md), and 45 since P18 was split into P18a and P18b on 2026-11-11). Everything
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), and 44 since the merge queue's first stage, P43,
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
