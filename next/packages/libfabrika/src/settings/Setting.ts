@@ -39,7 +39,21 @@ export const make = <A, const S extends Scope>(
   // Effect reads a string path as one key, so the dotted path is split here.
   const segments = path.split(".");
   const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
-  const config = Config.schema(options.schema, segments).pipe(Config.withDefault(options.default));
+  // Config treats a container supplied to a scalar schema as absent. Before defaulting,
+  // check every provider shape so a present value, including [], stays a failure.
+  const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
+  const config = Config.schema(options.schema, segments).pipe(
+    Config.orElse((error) => {
+      if (error.cause._tag === "SourceError") {
+        return Config.fail(error.cause);
+      }
+
+      return Config.schema(present, segments).pipe(
+        Config.flatMap(() => Config.fail(error.cause)),
+        Config.withDefault(options.default),
+      );
+    }),
+  );
   return Object.assign(config, { ...options, path, segments, env });
 };
 
