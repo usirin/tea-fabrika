@@ -460,7 +460,8 @@ describe("ticket 806 the checklist's laws", () => {
         for (const { record } of folded(checklist.machine, msgs)) {
           expect(roundTrip(record), "a reached model").toEqual(record);
           // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
-          const items = record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
+          const items: ReadonlyArray<Item> =
+            record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
           const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
           expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
         }
