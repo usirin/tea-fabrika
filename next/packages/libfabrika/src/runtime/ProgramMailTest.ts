@@ -392,10 +392,10 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           yield* Deferred.succeed(entered, undefined);
         }
 
-        yield* target.mailed;
+        yield* target.mailed.pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
 
         if (world.records !== undefined) {
-          const span = yield* Effect.currentSpan;
+          const span = yield* Effect.currentSpan.pipe(Effect.orDie);
           world.records.wakes.push({
             span: span.spanId,
             name,
@@ -522,7 +522,7 @@ const walk = (
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
-      records: recorded,
+      ...(recorded === undefined ? {} : { records: recorded }),
       current: new Map(),
       history: new Map(),
       stopped: new Set(),
@@ -1329,7 +1329,9 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
               );
               const checkpoint = yield* within(savedModel(store, name));
               const model =
-                checkpoint === null ? timerMachine.init(null)[0] : Schema.decodeUnknownSync(TimerModel)(checkpoint);
+                checkpoint === null
+                  ? timerMachine.init(null, stubCtxThrowingProxy<unknown>())[0]
+                  : Schema.decodeUnknownSync(TimerModel)(checkpoint);
               expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
               expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
             }
