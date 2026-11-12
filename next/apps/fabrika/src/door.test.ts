@@ -3244,7 +3244,7 @@ describe("P10 inputs, retries and signer", () => {
   })();
 
   it.effect.prop(
-    "p67 spoof: malformed stamped process.send is reserved without a request row and counts once",
+    "p67 spoof: malformed stamped process.send spends one budget place, is reserved without a request row and counts once (100 runs)",
     { write: MalformedStampedWrite },
     ({ write }) =>
       Effect.gen(function* () {
@@ -3268,10 +3268,14 @@ describe("P10 inputs, retries and signer", () => {
           const sink = yield* SpanSink;
           yield* sink.flush;
           const snapshot = () => [...w.databases()].map(([name, db]) => [name, allObjectRows(db)] as const);
-          const nonSums = (databases: ReturnType<typeof snapshot>) =>
+          const unchangedRows = (databases: ReturnType<typeof snapshot>) =>
             databases.map(([name, tables]) => [
               name,
-              Object.fromEntries(Object.entries(tables).filter(([table]) => name !== "object" || table !== "sums")),
+              Object.fromEntries(
+                Object.entries(tables).filter(
+                  ([table]) => name !== "object" || (table !== "sums" && table !== "gateway_limits"),
+                ),
+              ),
             ]);
           const before = snapshot();
           const usedInputs = [...w.usedInputs];
@@ -3298,8 +3302,24 @@ describe("P10 inputs, retries and signer", () => {
           expect(w.usedInputs).toEqual(usedInputs);
           expect(w.deliveries).toEqual(deliveries);
           const after = snapshot();
-          expect(nonSums(after)).toEqual(nonSums(before));
-          expect(after.find(([name]) => name === "object")![1].sums).toEqual(expectedSums);
+          expect(unchangedRows(after)).toEqual(unchangedRows(before));
+          const object = after.find(([name]) => name === "object")![1];
+          const until = REFUSED_HOUR + w.settings.rateLimit.window;
+          expect(object.gateway_limits).toEqual([{ sender: w.window.fingerprint, until, value: expect.any(String) }]);
+          expect(
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(object.gateway_limits![0]!.value),
+          ).toEqual({
+            v: 1,
+            build: w.settings.build,
+            model: {
+              _tag: "open",
+              policy: w.settings.rateLimit,
+              until,
+              at: REFUSED_HOUR + 1000,
+              used: 1,
+            },
+          });
+          expect(object.sums).toEqual(expectedSums);
           expect(archives).toEqual(uploaded);
           yield* TestClock.setTime(REFUSED_HOUR + HOUR);
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
