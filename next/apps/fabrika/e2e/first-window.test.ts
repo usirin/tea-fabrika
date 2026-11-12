@@ -15,9 +15,10 @@ import { join } from "node:path";
 import { applyCell } from "@demlik/tea";
 import { checklist, checklistMachine } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
+import { Sent } from "@kampus/libfabrika";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -98,12 +99,101 @@ const blockKeyStore = () => {
   };
 };
 
+/** Let the brain settle each press, then lose its first answer and the socket. The next dial
+ *  must resend that press before the page can see its terminal answer. */
+const loseFirstAnswers = () => {
+  const NativeSocket = WebSocket;
+  const observed: {
+    groups: Array<{ attempts: Array<{ dial: number; params: unknown }>; firstAnswer: unknown; result: unknown }>;
+  } = {
+    groups: [],
+  };
+  Reflect.set(globalThis, "__p14Resends", observed);
+  let active: (typeof observed.groups)[number] | undefined;
+  let dials = 0;
+  globalThis.WebSocket = class extends NativeSocket {
+    private readonly dial = ++dials;
+    private readonly sends = new Map<unknown, (typeof observed.groups)[number]>();
+
+    constructor(url: string | URL, protocols?: string | Array<string>) {
+      super(url, protocols);
+      this.addEventListener("message", (event) => {
+        if (typeof event.data !== "string" || event.data === "pong") {
+          return;
+        }
+
+        const frame = JSON.parse(event.data);
+        const group = this.sends.get(frame.id);
+
+        if (group === undefined || frame.result === undefined) {
+          return;
+        }
+
+        if (group.attempts.length === 1) {
+          group.firstAnswer = frame.result;
+          event.stopImmediatePropagation();
+          this.close(4001, "lost answer");
+        } else {
+          group.result = frame.result;
+          active = undefined;
+        }
+      });
+    }
+
+    override send(data: Parameters<WebSocket["send"]>[0]) {
+      if (typeof data === "string" && data !== "ping") {
+        const frame = JSON.parse(data);
+
+        if (frame.method === "process.send") {
+          if (active === undefined) {
+            active = { attempts: [], firstAnswer: null, result: null };
+            observed.groups.push(active);
+          }
+
+          active.attempts.push({ dial: this.dial, params: frame.params });
+          this.sends.set(frame.id, active);
+        }
+      }
+
+      super.send(data);
+    }
+  };
+};
+
+const Resends = Schema.Struct({
+  groups: Schema.Array(
+    Schema.Struct({
+      attempts: Schema.Array(
+        Schema.Struct({
+          dial: Schema.Int,
+          params: Schema.Struct({
+            pid: Schema.String,
+            letter: Schema.String,
+            m: checklistMachine.msg,
+            sentAt: Schema.String,
+            seen: Schema.Int,
+            traceId: Schema.optionalKey(Schema.String),
+          }),
+        }),
+      ),
+      firstAnswer: Schema.NullOr(Sent),
+      result: Schema.NullOr(Sent),
+    }),
+  ),
+});
+
+const resends = (page: import("playwright").Page) =>
+  Effect.promise(() => page.evaluate(() => Reflect.get(globalThis, "__p14Resends"))).pipe(
+    Effect.map(Schema.decodeUnknownSync(Resends)),
+  );
+
 /** Each move reads the selected tab's current rows, then presses a control enabled there. */
 const useChecklist = (
   tabs: ReadonlyArray<Effect.Success<ReturnType<typeof tab>>>,
   moves: ReadonlyArray<Control>,
   pool: ReadonlyArray<string>,
   observe: Effect.Effect<unknown> = Effect.void,
+  afterPress: (msg: Msg, at: number) => Effect.Effect<unknown> = () => Effect.void,
 ) =>
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
@@ -145,6 +235,7 @@ const useChecklist = (
         `tab ${at} after ${msg.type}`,
       );
       yield* observe;
+      yield* afterPress(msg, at);
     }
 
     for (const [at, t] of tabs.entries()) {
@@ -244,7 +335,7 @@ describe("L14: the first window (p29)", () => {
           const blockedProfile = yield* profile(b);
           yield* Effect.promise(() => blockedProfile.addInitScript(blockKeyStore));
           const blocked = yield* tab(blockedProfile, dev.url);
-          yield* Effect.promise(() => blocked.page.getByRole("heading", { name: "This window is blocked" }).waitFor());
+          yield* Effect.promise(() => blocked.page.getByRole("heading", { name: "Blocked", exact: true }).waitFor());
           const blockedText = yield* Effect.promise(() => blocked.page.locator("body").innerText());
           expect(blockedText).toContain("QuotaExceededError");
           expect(blockedText).not.toContain("grant.ts client");
@@ -266,6 +357,7 @@ describe("L15: use in two tabs (W2)", () => {
               const dev = yield* devServer(h);
               const b = yield* browser;
               const context = yield* profile(b);
+              yield* Effect.promise(() => context.addInitScript(loseFirstAnswers));
               const tabs = [yield* tab(context, dev.url), yield* tab(context, dev.url)];
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
@@ -273,7 +365,35 @@ describe("L15: use in two tabs (W2)", () => {
                 (t) => Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 })),
                 { concurrency: 1 },
               );
-              const pressed = yield* useChecklist(tabs, moves, ["milk", "bread", "eggs"]);
+              const settled = tabs.map(() => 0);
+              const accepted: Array<string> = [];
+              const pressed = yield* useChecklist(tabs, moves, ["milk", "bread", "eggs"], Effect.void, (msg, at) =>
+                Effect.gen(function* () {
+                  const index = settled[at]!;
+                  settled[at] = index + 1;
+                  yield* settle(
+                    resends(tabs[at]!.page),
+                    (s) => s.groups[index]?.result != null,
+                    "a lost terminal answer is recovered on the next dial",
+                  );
+                  const group = (yield* resends(tabs[at]!.page)).groups[index]!;
+                  expect(group.attempts.length, "the press was actually resent").toBeGreaterThanOrEqual(2);
+                  const first = group.attempts[0]!;
+                  expect(group.attempts.at(-1)!.dial, "the resend used a new socket").toBeGreaterThan(first.dial);
+                  expect(first.params.m).toEqual(msg);
+                  expect(group.result, "the brain returns the saved terminal answer on resend").toEqual(
+                    group.firstAnswer,
+                  );
+
+                  for (const attempt of group.attempts) {
+                    expect(attempt.params, "resends keep the whole body and letter id").toEqual(first.params);
+                  }
+
+                  if (group.result!._tag === "accepted") {
+                    accepted.push(first.params.letter);
+                  }
+                }),
+              );
               // No letter id lands twice: a duplicated add could hide as a taken refusal.
               const r = yield* reader(h, dev);
               const inbox = yield* r.read(`${NAME}/inbox`);
@@ -281,6 +401,9 @@ describe("L15: use in two tabs (W2)", () => {
               expect(ids.length, "every accepted press reached the inbox").toBeGreaterThan(0);
               expect(ids.length).toBeLessThanOrEqual(pressed);
               expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
+              expect(ids, "each accepted resend landed with its original letter id").toEqual(
+                expect.arrayContaining(accepted),
+              );
             }),
           ),
         ),

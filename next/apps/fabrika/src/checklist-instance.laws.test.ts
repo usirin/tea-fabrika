@@ -14,7 +14,9 @@
 //   process it is about, beside the update its Process published, which reaches the client unchanged.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { Cmd, Machine } from "@demlik/tea/effect";
 import { checklist } from "@kampus/checklist";
+import { checklistWindow } from "@kampus/checklist/window";
 import { counter } from "@kampus/counter";
 import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
@@ -29,10 +31,11 @@ import {
   signingReply,
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
+import { windowMachineFor } from "@kampus/tuval";
 import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { projectRuntime, type Env } from "./runtime.ts";
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
@@ -45,6 +48,39 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-11T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const BOOT = ["counter:1", "checklist:1"] as const;
+
+// L20 is checked by CI's typecheck, beside the app that may import both Tuval and a program.
+// The program type links the decoder and child's press without adding a program to saved state.
+it("pinned: L20 windowMachineFor checks the registration's decoder and tile presses against the program", () => {
+  const parent = windowMachineFor<typeof checklist>({
+    decode: () => Schema.decodeUnknownSync(checklistWindow.data),
+    tile: () => checklistWindow.tile,
+  });
+  expect(parent.init).toBeTypeOf("function");
+  type Checks = Parameters<typeof windowMachineFor<typeof checklist>>[0];
+  type Decode = ReturnType<NonNullable<Checks["decode"]>>;
+  expectTypeOf<ReturnType<Decode>>().toEqualTypeOf<typeof checklistWindow.data.Type>();
+
+  // @ts-expect-error a decoder for unknown does not check the program's view
+  windowMachineFor<typeof checklist>({ decode: () => Schema.decodeUnknownSync(Schema.Unknown) });
+  // @ts-expect-error another program's view does not match this registration
+  windowMachineFor<typeof checklist>({ decode: () => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int })) });
+
+  const wrongPress = Cmd.make("press", {
+    input: Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("unrelated") }) }),
+    ok: Schema.Null,
+    err: [],
+  });
+  const wrongTile = Machine.make({
+    model: Schema.Struct({}),
+    msg: Schema.Struct({ type: Schema.Literal("submit") }),
+    cmds: [wrongPress],
+    init: () => [{}, []],
+    update: { submit: (s) => [s, [wrongPress({ m: { type: "unrelated" } })]] },
+  });
+  // @ts-expect-error the parent may not erase an incompatible tile's press Msg to AnyTile
+  windowMachineFor<typeof checklist>({ tile: () => wrongTile });
+});
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
