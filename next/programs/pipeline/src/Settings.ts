@@ -1,4 +1,4 @@
-import * as Setting from "@kampus/libfabrika/settings/Setting";
+import { Setting } from "@kampus/libfabrika";
 import { Schema } from "effect";
 import { Kinds, Plan, type Kind } from "./Change.ts";
 

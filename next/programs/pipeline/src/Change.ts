@@ -1,5 +1,4 @@
-import { CheckRun, type Checks } from "@kampus/libfabrika/ci/Ci";
-import type { Path } from "@kampus/libfabrika/codehost/CodeHost";
+import { Ci, type CodeHost } from "@kampus/libfabrika";
 import { Array as Arr, Schema } from "effect";
 import picomatch from "picomatch/posix.js";
 
@@ -20,7 +19,10 @@ export const Glob = Schema.NonEmptyString.check(
 
 export const Kinds = Schema.Struct({ rows: Schema.Array(Glob), docs: Schema.Array(Glob) });
 
-export const kind = (kinds: typeof Kinds.Type, paths: ReadonlyArray<typeof Path.Type> | null): typeof Kind.Type => {
+export const kind = (
+  kinds: typeof Kinds.Type,
+  paths: ReadonlyArray<typeof CodeHost.Path.Type> | null,
+): typeof Kind.Type => {
   if (paths === null || paths.length === 0) {
     return "code";
   }
@@ -47,18 +49,18 @@ export const Plan = Schema.Struct({ rows: Schema.Array(Check), docs: Schema.Arra
 export const checksFor = (plan: typeof Plan.Type, kind: typeof Kind.Type) => plan[kind];
 
 export const Verdict = Schema.TaggedUnion({
-  green: { runs: Schema.NonEmptyArray(CheckRun) },
-  red: { runs: Schema.NonEmptyArray(CheckRun) },
+  green: { runs: Schema.NonEmptyArray(Ci.CheckRun) },
+  red: { runs: Schema.NonEmptyArray(Ci.CheckRun) },
   pending: { checks: Schema.NonEmptyArray(Check) },
-  lost: { runs: Schema.NonEmptyArray(CheckRun) },
+  lost: { runs: Schema.NonEmptyArray(Ci.CheckRun) },
 });
 
 export const verdict = (
   checks: Arr.NonEmptyReadonlyArray<typeof Check.Type>,
-  current: typeof Checks.Type,
+  current: typeof Ci.Checks.Type,
 ): typeof Verdict.Type => {
   const asked = Arr.dedupeWith(checks, (a, b) => a.name === b.name && a.source === b.source);
-  const matches = (c: typeof Check.Type, r: typeof CheckRun.Type) =>
+  const matches = (c: typeof Check.Type, r: typeof Ci.CheckRun.Type) =>
     c.name === r.name && (c.source === undefined || c.source === r.source);
   const selected = current.filter((r) => asked.some((c) => matches(c, r)));
   const red = selected.filter(
@@ -86,5 +88,5 @@ export const verdict = (
   }
 
   // At least one check was asked; without a matching run it would have been pending.
-  return Verdict.cases.green.make({ runs: Schema.decodeUnknownSync(Schema.NonEmptyArray(CheckRun))(selected) });
+  return Verdict.cases.green.make({ runs: Schema.decodeUnknownSync(Schema.NonEmptyArray(Ci.CheckRun))(selected) });
 };

@@ -1,7 +1,7 @@
 /**
  * Current check runs at an exact commit, independent of the CI host.
  *
- * @stability experimental
+ * @stability unstable
  */
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 /**
  * Schema for the conclusions a completed check can report.
  *
- * @stability experimental
+ * @stability unstable
  * @category models
  */
 export const Conclusion = Schema.Literals([
@@ -28,7 +28,7 @@ export const Conclusion = Schema.Literals([
 /**
  * Schema for queued, running and completed checks; only completed checks hold a conclusion.
  *
- * @stability experimental
+ * @stability unstable
  * @category models
  */
 export const Status = Schema.TaggedUnion({
@@ -42,7 +42,7 @@ const Ms = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 /**
  * Schema for one reported run. CI clock times are recorded, never used to decide a verdict.
  *
- * @stability experimental
+ * @stability unstable
  * @category models
  */
 export const CheckRun = Schema.Struct({
@@ -58,7 +58,7 @@ export const CheckRun = Schema.Struct({
 /**
  * Compares a run's name and source field by field, including any NUL characters.
  *
- * @stability experimental
+ * @stability unstable
  * @category guards
  */
 export const sameKey = Equivalence.Struct({ name: Equivalence.String, source: Equivalence.String });
@@ -66,7 +66,7 @@ export const sameKey = Equivalence.Struct({ name: Equivalence.String, source: Eq
 /**
  * Schema for one current run per name and source, in no defined order.
  *
- * @stability experimental
+ * @stability unstable
  * @category models
  */
 export const Checks = Schema.Array(CheckRun).check(
@@ -78,7 +78,7 @@ export const Checks = Schema.Array(CheckRun).check(
 /**
  * The CI host could not be reached.
  *
- * @stability experimental
+ * @stability unstable
  * @category errors
  */
 export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable", {
@@ -88,7 +88,7 @@ export class Unavailable extends Schema.TaggedError<Unavailable>()("Unavailable"
 /**
  * The CI host's request limit was reached.
  *
- * @stability experimental
+ * @stability unstable
  * @category errors
  */
 export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited", {
@@ -98,7 +98,7 @@ export class RateLimited extends Schema.TaggedError<RateLimited>()("RateLimited"
 /**
  * Error for a CI fault that permits another attempt.
  *
- * @stability experimental
+ * @stability unstable
  * @category errors
  */
 export class CiError extends Schema.TaggedError<CiError>()("CiError", {
@@ -111,7 +111,7 @@ export class CiError extends Schema.TaggedError<CiError>()("CiError", {
  * preserve other fields. Otherwise choose highest host order; ties take unfinished, red, lost,
  * then passing. Remaining ties take the greater id by code unit. No report answers [].
  *
- * @stability experimental
+ * @stability unstable
  * @category services
  */
 export class Ci extends Context.Service<

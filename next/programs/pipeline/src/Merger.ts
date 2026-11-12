@@ -1,9 +1,6 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Program } from "@kampus/libfabrika";
-import { Checks } from "@kampus/libfabrika/ci/Ci";
-import { Change as HostChange, ChangeId, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
-import { send, SendInput, Queued } from "@kampus/libfabrika/runtime/Send";
+import { Ci, CodeHost, Program, Send } from "@kampus/libfabrika";
 import { Array as Arr, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
@@ -14,16 +11,31 @@ const Faults = ["unavailable", "rate_limited", "refused", "handler_failed", "bad
 const Attempt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 export const Inputs = {
-  change: Schema.Struct({ attempt: Attempt, change: ChangeId }),
-  update: Schema.Struct({ attempt: Attempt, change: ChangeId, head: Commit }),
-  checks: Schema.Struct({ attempt: Attempt, head: Commit, start: Schema.Boolean }),
-  merge: Schema.Struct({ attempt: Attempt, change: ChangeId, head: Commit }),
+  change: Schema.Struct({ attempt: Attempt, change: CodeHost.ChangeId }),
+  update: Schema.Struct({ attempt: Attempt, change: CodeHost.ChangeId, head: CodeHost.Commit }),
+  checks: Schema.Struct({ attempt: Attempt, head: CodeHost.Commit, start: Schema.Boolean }),
+  merge: Schema.Struct({ attempt: Attempt, change: CodeHost.ChangeId, head: CodeHost.Commit }),
 };
 
-const change = Cmd.make("change", { input: Schema.toType(Inputs.change), ok: Schema.toType(HostChange), err: Faults });
-const update = Cmd.make("update", { input: Schema.toType(Inputs.update), ok: Schema.toType(Updated), err: Faults });
-const checks = Cmd.make("checks", { input: Schema.toType(Inputs.checks), ok: Schema.toType(Checks), err: Faults });
-const merge = Cmd.make("merge", { input: Schema.toType(Inputs.merge), ok: Schema.toType(Merged), err: Faults });
+const change = Cmd.make("change", {
+  input: Schema.toType(Inputs.change),
+  ok: Schema.toType(CodeHost.Change),
+  err: Faults,
+});
+
+const update = Cmd.make("update", {
+  input: Schema.toType(Inputs.update),
+  ok: Schema.toType(CodeHost.Updated),
+  err: Faults,
+});
+
+const checks = Cmd.make("checks", { input: Schema.toType(Inputs.checks), ok: Schema.toType(Ci.Checks), err: Faults });
+
+const merge = Cmd.make("merge", {
+  input: Schema.toType(Inputs.merge),
+  ok: Schema.toType(CodeHost.Merged),
+  err: Faults,
+});
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -38,7 +50,12 @@ const Step = Schema.TaggedUnion({
 
 const First = Schema.TaggedStruct("asking", { tries: Schema.Literal(0), at: Schema.Null });
 
-const Job = Schema.Struct({ ref: Land.fields.ref, change: ChangeId, head: Commit, reply: Land.fields.reply });
+const Job = Schema.Struct({
+  ref: Land.fields.ref,
+  change: CodeHost.ChangeId,
+  head: CodeHost.Commit,
+  reply: Land.fields.reply,
+});
 
 const counts = { attempt: Count, late: Count };
 const working = { ...counts, job: Job, step: Step };
@@ -48,13 +65,13 @@ const Model = Schema.TaggedUnion({
   idle: counts,
   reading: { ...working, step: Schema.Union([Step, First]) },
   updating: prepared,
-  checking: { ...prepared, head: Commit, tree: Tree, until: Schema.Number },
-  merging: { ...working, head: Commit, tree: Tree },
+  checking: { ...prepared, head: CodeHost.Commit, tree: CodeHost.Tree, until: Schema.Number },
+  merging: { ...working, head: CodeHost.Commit, tree: CodeHost.Tree },
 });
 
 type Model = typeof Model.Type;
 type Working = Exclude<Model, typeof Model.cases.idle.Type>;
-type Command = ReturnType<typeof change | typeof update | typeof checks | typeof merge | typeof send>;
+type Command = ReturnType<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send>;
 type Cell = readonly [Model, ReadonlyArray<Command>];
 
 // The runner accepts settled letters itself; declaring them here also lets pure clients decode them.
@@ -80,11 +97,11 @@ const Msg = Schema.Union([
   Land,
   Abandon,
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
-  answers(change.cmdType, Inputs.change, HostChange, Faults),
-  answers(update.cmdType, Inputs.update, Updated, Faults),
-  answers(checks.cmdType, Inputs.checks, Checks, Faults),
-  answers(merge.cmdType, Inputs.merge, Merged, Faults),
-  answers(send.cmdType, SendInput, Queued, send.errTags),
+  answers(change.cmdType, Inputs.change, CodeHost.Change, Faults),
+  answers(update.cmdType, Inputs.update, CodeHost.Updated, Faults),
+  answers(checks.cmdType, Inputs.checks, Ci.Checks, Faults),
+  answers(merge.cmdType, Inputs.merge, CodeHost.Merged, Faults),
+  answers(Send.send.cmdType, Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
 const clamp = (at: number) => Math.min(at, 8.64e15);
@@ -98,7 +115,7 @@ const identity = (s: Working) => ({ ref: s.job.ref, change: s.job.change });
 
 const finish = (s: Working, reply: typeof Reply.Type): Cell => [
   Model.cases.idle.make({ attempt: s.attempt, late: s.late }),
-  [send({ to: s.job.reply, m: reply })],
+  [Send.send({ to: s.job.reply, m: reply })],
 ];
 
 export const merger = (settings: Values) => {
@@ -123,7 +140,9 @@ export const merger = (settings: Values) => {
             : merge({ attempt, change: s.job.change, head: s.head });
     return [next, [cmd]];
   };
-  type Message = typeof Msg.Type | Settled<typeof change | typeof update | typeof checks | typeof merge | typeof send>;
+  type Message =
+    | typeof Msg.Type
+    | Settled<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send>;
   const reduce = (s: Model, m: Message): Cell => {
     if (m.type === "send_ok" || m.type === "send_err") {
       return [s, []];
@@ -180,11 +199,12 @@ export const merger = (settings: Values) => {
     if (s._tag === "reading" && m.type === "change_ok") {
       const v = m.value;
 
-      if (v._tag === "missing" || v.state !== "open") {
-        return finish(
-          s,
-          Reply.cases.closed.make({ ...identity(s), state: v._tag === "missing" ? "missing" : v.state }),
-        );
+      if (v._tag === "missing") {
+        return finish(s, Reply.cases.closed.make({ ...identity(s), state: "missing" }));
+      }
+
+      if (v.state !== "open") {
+        return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
       }
 
       if (v.head !== s.job.head) {
@@ -296,7 +316,7 @@ export const merger = (settings: Values) => {
   const machine = Machine.make({
     model: Model,
     msg: Msg,
-    cmds: [change, update, checks, merge, send],
+    cmds: [change, update, checks, merge, Send.send],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ attempt: 0, late: 0 }), []],
     update: {
       land: reduce,

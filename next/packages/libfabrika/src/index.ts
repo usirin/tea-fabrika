@@ -72,3 +72,19 @@ export {
   type WindowProps,
   type WindowRegistration,
 } from "./runtime/Window.ts";
+/**
+ * @stability unstable
+ */
+export * as Ci from "./ci/Ci.ts";
+/**
+ * @stability unstable
+ */
+export * as CodeHost from "./codehost/CodeHost.ts";
+/**
+ * @stability unstable
+ */
+export * as Send from "./runtime/Send.ts";
+/**
+ * @stability unstable
+ */
+export * as Setting from "./settings/Setting.ts";
