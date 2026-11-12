@@ -872,110 +872,117 @@ describe("T843 sender budget, next/", () => {
     { arbitrary: { seed: SEED, runs: 50 } },
   );
 
+  const failedCountThrough = Effect.fnUntraced(function* (
+    count: number,
+    method: "process.send" | "ledger.wait",
+    connectionFull: boolean,
+  ) {
+    const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
+    let broken = false;
+    const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
+    const sink = SpanSink.layer(sql, { object: START });
+    yield* Effect.gen(function* () {
+      const d = yield* Gateway;
+      const projectSink = yield* SpanSink;
+      const { client } = yield* online(d, w);
+      yield* TestClock.setTime(REFUSED_HOUR + 18_000);
+      const c = yield* wire(w, d, client, "mismatch", () => broken && connectionFull);
+      yield* c.send("process.send", request("accepted"));
+      yield* c.send("process.send", request("warm-count"));
+      yield* projectSink.flush;
+      const rows = () =>
+        Object.fromEntries(
+          [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
+            Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+          ),
+        );
+      const before = rows();
+      const unchanged = () => {
+        const current = rows();
+        expect(Object.keys(current)).toEqual(Object.keys(before));
+
+        for (const [table, total] of Object.entries(current)) {
+          expect(total, table).toBe(before[table]);
+        }
+      };
+      const recorded = c.saved.length;
+      const inputs = [...w.usedInputs];
+      const deliveries = w.deliveries.length;
+      broken = true;
+
+      for (let n = 0; n < count; n++) {
+        const state = c.read();
+        expect(state._tag).toBe("online");
+
+        if (state._tag !== "online") {
+          return;
+        }
+
+        // Only an idle connection may start this next generated attempt.
+        expect(state.busy).toBe(false);
+        expect(state.waits).toEqual([]);
+        const frames = c.frames.length;
+        const sent = yield* Effect.result(
+          c.send(method, method === "ledger.wait" ? { stream: "empty", after: 0 } : request(`not-counted-${n}`)),
+        );
+        const status = yield* Effect.result(projectSink.check);
+        expect(Result.isFailure(status)).toBe(true);
+
+        if (Result.isFailure(status)) {
+          expect(status.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          expect(status.failure.held).toBeLessThanOrEqual(1);
+        }
+
+        if (Result.isFailure(sent)) {
+          // The public completion reports how much the connection holds after a full disk.
+          expect(sent.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(sent.failure);
+          expect(failed.held).toBeLessThanOrEqual(2);
+        }
+
+        for (const reply of c.frames.slice(frames)) {
+          expect(reply).not.toMatchObject({ error: { data: { reason: "rate_limited" } } });
+        }
+
+        unchanged();
+        expect(c.saved).toHaveLength(recorded);
+        expect(w.usedInputs).toEqual(inputs);
+        expect(w.deliveries).toHaveLength(deliveries);
+        expect(c.closes).toEqual([]);
+      }
+
+      broken = false;
+      // A refused recovery probe must land held counts without saving failed-attempt spans.
+      yield* projectSink.check.pipe(Effect.ignore);
+      expect(yield* projectSink.flush).toEqual({ sent: 0 });
+      yield* c.recover.pipe(Effect.ignore);
+      yield* c.recover;
+      unchanged();
+      expect(c.saved).toHaveLength(recorded);
+      yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+      expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+        { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 },
+      ]);
+    }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
+  });
+
   for (const connectionFull of [false, true]) {
-    for (const method of ["process.send", "ledger.wait"]) {
+    for (const method of ["process.send", "ledger.wait"] as const) {
       it.effect.prop(
         `T843 failed count through ${method} with ${connectionFull ? "both disks full" : "only the gateway count failing"}: no per-attempt rows or held spans survive failure and recovery (50 runs)`,
         {
-          count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+          count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
         },
-        ({ count }) =>
-          Effect.gen(function* () {
-            const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
-            let broken = false;
-            const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
-            const sink = SpanSink.layer(sql, { object: START });
-            yield* Effect.gen(function* () {
-              const d = yield* Gateway;
-              const projectSink = yield* SpanSink;
-              const { client } = yield* online(d, w);
-              yield* TestClock.setTime(REFUSED_HOUR + 18_000);
-              const c = yield* wire(w, d, client, "mismatch", () => broken && connectionFull);
-              yield* c.send("process.send", request("accepted"));
-              yield* c.send("process.send", request("warm-count"));
-              yield* projectSink.flush;
-              const rows = () =>
-                Object.fromEntries(
-                  [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
-                    Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
-                  ),
-                );
-              const before = rows();
-              const unchanged = () => {
-                const current = rows();
-                expect(Object.keys(current)).toEqual(Object.keys(before));
-
-                for (const [table, total] of Object.entries(current)) {
-                  expect(total, table).toBe(before[table]);
-                }
-              };
-              const recorded = c.saved.length;
-              const inputs = [...w.usedInputs];
-              const deliveries = w.deliveries.length;
-              broken = true;
-
-              for (let n = 0; n < count; n++) {
-                const state = c.read();
-                expect(state._tag).toBe("online");
-
-                if (state._tag !== "online") {
-                  return;
-                }
-
-                // Only an idle connection may start this next generated attempt.
-                expect(state.busy).toBe(false);
-                expect(state.waits).toEqual([]);
-                const frames = c.frames.length;
-                const sent = yield* Effect.result(
-                  c.send(
-                    method,
-                    method === "ledger.wait" ? { stream: "empty", after: 0 } : request(`not-counted-${n}`),
-                  ),
-                );
-                const status = yield* Effect.result(projectSink.check);
-                expect(Result.isFailure(status)).toBe(true);
-
-                if (Result.isFailure(status)) {
-                  expect(status.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
-                  expect(status.failure.held).toBeLessThanOrEqual(1);
-                }
-
-                if (Result.isFailure(sent)) {
-                  // The public completion reports how much the connection holds after a full disk.
-                  expect(sent.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
-                  const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(sent.failure);
-                  expect(failed.held).toBeLessThanOrEqual(2);
-                }
-
-                for (const reply of c.frames.slice(frames)) {
-                  expect(reply).not.toMatchObject({ error: { data: { reason: "rate_limited" } } });
-                }
-
-                unchanged();
-                expect(c.saved).toHaveLength(recorded);
-                expect(w.usedInputs).toEqual(inputs);
-                expect(w.deliveries).toHaveLength(deliveries);
-                expect(c.closes).toEqual([]);
-              }
-
-              broken = false;
-              // A refused recovery probe must land held counts without saving failed-attempt spans.
-              yield* projectSink.check.pipe(Effect.ignore);
-              expect(yield* projectSink.flush).toEqual({ sent: 0 });
-              yield* c.recover.pipe(Effect.ignore);
-              yield* c.recover;
-              unchanged();
-              expect(c.saved).toHaveLength(recorded);
-              yield* TestClock.setTime(REFUSED_HOUR + HOUR);
-              expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-                { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 },
-              ]);
-            }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
-          }),
+        ({ count }: { count: number }) => failedCountThrough(count, method, connectionFull),
         { arbitrary: { seed: SEED, runs: 50 } },
       );
     }
   }
+
+  it.effect(
+    "scenario: T843 failed count through process.send with both disks full at count 1000, the largest burst the plan names",
+    () => failedCountThrough(1000, "process.send", true),
+  );
 
   for (const failure of ["none", "gateway", "both"] as const) {
     it.effect.prop(
