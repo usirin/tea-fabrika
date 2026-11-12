@@ -12,6 +12,8 @@
     "skills/lead/scripts/box/*.ts",
     "skills/lead/scripts/chain.ts",
     "skills/lead/scripts/chain.test.ts",
+    "skills/lead/scripts/clauderow.ts",
+    "skills/lead/scripts/clauderow.test.ts",
     "skills/lead/scripts/drive.ts",
     "skills/lead/scripts/drive.test.ts",
     "skills/lead/scripts/gc.ts",
