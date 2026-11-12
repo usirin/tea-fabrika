@@ -510,7 +510,6 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       }),
     );
     const services = Layer.mergeAll(
-      Layer.succeedContext(managerContext),
       ProcessStore.layer(storeSql, { process: entry.pid }),
       checked,
       Layer.succeed(MailDelivery, {
@@ -841,7 +840,14 @@ const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) =>
 
 // Fact bodies are read back as JSON: these shapes are the plan's, pinned to the runtime record (0135).
 type SwappedFact = { readonly program: string; readonly hash: string; readonly was: string };
-type RefusedFact = SwappedFact & { readonly reason: "shape" | "newer" | "load" };
+
+type RefusedFact = {
+  readonly program: string;
+  readonly hash: string;
+  readonly was: string;
+  readonly reason: "shape" | "newer" | "load";
+};
+
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.swapped"]["Type"], "_tag">>().toEqualTypeOf<SwappedFact>();
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.refused"]["Type"], "_tag">>().toEqualTypeOf<RefusedFact>();
 

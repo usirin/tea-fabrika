@@ -129,7 +129,10 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const completed: Array<Pushed> = [];
   const loadedAtPush: Array<ReadonlyArray<string>> = [];
   const swapGates = new Map<string, Effect.Effect<void>>();
-  const swapReplies = new Map<string, Effect.Effect<void>>();
+  const swapReplies = new Map<
+    string,
+    Effect.Effect<void, Effect.Error<ReturnType<ProjectService["Service"]["append"]>>>
+  >();
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const running = new Map<string, string>();
   const refusing = new Set<string>();

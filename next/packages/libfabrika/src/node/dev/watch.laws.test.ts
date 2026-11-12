@@ -319,7 +319,7 @@ describe("P15 slice 1: the watcher", () => {
 
               for (let n = 0; n < edits; n++) {
                 // Pick from the reached module's current state, then generate a distinct edit.
-                const moves = broken ? ["fix", "syntax"] : ["edit", "syntax"];
+                const moves: ReadonlyArray<"fix" | "syntax" | "edit"> = broken ? ["fix", "syntax"] : ["edit", "syntax"];
                 const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
                 value += g(fc.integer, { min: 1, max: 99 });
                 broken = move === "syntax";

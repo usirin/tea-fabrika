@@ -305,6 +305,8 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+    case "swapping":
+      return [{ name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } }, ...stale];
     case "writing_dead":
       return [{ name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } }, ...stale];
     case "writing_exit": {
