@@ -36,7 +36,8 @@
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
-//                      the step committed
+//                      the step committed, then the branch itself, with a draft pull request
+//                      when it has none (pr/Publish.ts, 0134); a refused push or draft is stuck
 //   recording  Act     the field row (with the plants the typed answer named, 0093),
 //                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
@@ -84,7 +85,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -116,6 +117,9 @@ import {
   workspaceGlobs,
 } from "./lane.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1370,13 +1374,25 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           problem: null,
         };
       }),
+    // The step's commit came out of the box: the backup first, then the lane's own branch and its
+    // draft pull request, opened at the lane's first commit (0134). A box cannot push: no key, no
+    // network (0045), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipOf(cmd.ask.branch), cmd.head]);
-        return {
-          ok: r.code === 0,
-          detail: r.code === 0 ? tail(r.out, 1) : `botpush: ${tail(r.out + r.err, 1)}`,
-        };
+
+        if (r.code !== 0) {
+          return { ok: false, detail: `botpush: ${tail(r.out + r.err, 1)}` };
+        }
+
+        const { ask } = cmd;
+        const text = { title: `T${ask.ticket} ${ask.lane}: the lane's steps are running`, body: Publish.DRAFT_BODY };
+        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
+          Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
+          Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
+          Effect.provide(Layer.provide(services, nodeServices)),
+        );
       }),
     record: (e: typeof Entry.Type) =>
       Effect.sync(() => {

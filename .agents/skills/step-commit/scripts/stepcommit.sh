@@ -167,4 +167,9 @@ if not only:
     signed = subprocess.run([*signer, "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
     if signed.returncode: sys.exit(signed.returncode)
 subprocess.run(["git", "log", "--oneline", "-1"])
+# 0134: a signed commit leaves the laptop now. A box's commit (STEPCOMMIT_BOX, a detached sign
+# worktree) is pushed by the lane's host part right after: drive.ts's pushing phase, the host step.
+if not only and not named_box:
+    publisher = os.environ["STEPCOMMIT_PUBLISHER"].split() if os.environ.get("STEPCOMMIT_PUBLISHER") else ["node", str(here / "../../lead/scripts/publish.ts")]
+    if subprocess.run([*publisher, branch]).returncode: refuse(f"committed and signed, but not pushed (0134); run node .agents/skills/lead/scripts/publish.ts {branch or '<branch>'} where the push can run", 6)
 PY
