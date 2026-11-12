@@ -778,6 +778,41 @@ describe("the box's changes are read from its status, today's tooling", () => {
     expect(sent.reason).toBe("a law");
     expect(nameOf(decide(ask, read).outcome)).toBe("stuck:step_said");
   });
+
+  // Ticket 850: a review asked for plant records that already ran, the tests step answered them with
+  // no file change, and the gate ended it stuck:no_commit until the budget stopped the lane
+  // (acpcancel and sjob1, 2026-11-11). Plants run once, all red: drop the plants check (no plants
+  // passes); drop the clean-tree check (changed files pass); keep the old stuck for every tests step.
+  it("property: a tests step with no commit is done only when it names plants and left its tree clean", () => {
+    const plant = fc.record({
+      law: fc.constantFrom("L1", "L2", "A4"),
+      plant: fc.string({ maxLength: 20 }),
+      result: fc.constantFrom("red" as const, "green" as const),
+    });
+    fc.assert(
+      fc.property(fc.array(plant, { maxLength: 4 }), fc.nat({ max: 3 }), (plants, changed) => {
+        const read = {
+          head: ask.base,
+          commits: 0,
+          unsigned: [],
+          exam: [],
+          leaks: [],
+          left: [],
+          manifests: [],
+          plancheck: null,
+          changed,
+          report: "",
+          problem: null,
+        };
+        const said: Answer = { verb: "done", to: null, reason: "the records", laws: null, plants };
+        const j = decide({ ...ask, step: "tests" }, read, said);
+        const records = plants.length > 0 && changed === 0;
+        expect(nameOf(j.outcome)).toBe(records ? "done" : "stuck:no_commit");
+        expect(j.reason.includes("the records")).toBe(records);
+      }),
+      options,
+    );
+  });
 });
 
 describe("T341 a step commit's subject says what the step did, today's tooling", () => {

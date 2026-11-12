@@ -67,3 +67,10 @@ use every part of a program without being a big one.**
   deletes the counter. Until then the counter stays only where a test still runs it.
 - The cost of that: about 16 test files change, and a richer test program makes a red test a
   little harder to read.
+
+## Amendments
+
+- 2026-11-11 (owner): no new slice leans on the counter. A slice not yet built that would show or
+  run the counter shows the checklist. The first case is P14 slice 2, the browser tab (ticket 828):
+  a person sees the list, adds an item, checks one and reads a refusal in words. "The counter stays
+  only where a test still runs it" covers tests that exist on main, never a new one.

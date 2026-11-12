@@ -55,8 +55,9 @@ gets stuck is a gap, and each run is an experiment
 - **Transport:** signed hello, unknown keys refused, code and Approve, one-time link.
 - **Data:** ledger behind a service; `granted` with `saw` and `as`; `denied`; revoke; each note's
   saved versions, with a check against stale saves; a backup sheet, recovery on a new Mac and
-  `added`; email recovery on the cloud, with a 24-hour wait any device can cancel (decided
-  2026-11-06); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health
+  `added`; email recovery on the cloud, which lets the device in at once and tells every live
+  device (decided 2026-11-06, the wait dropped 2026-11-11,
+  [0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health
   rows for about 2 weeks and hourly summaries forever, and nothing a chaos fault does left
   unexplained (owner, 2026-11-07).
 - **Coordination:** mailbox, who belongs, window and agent grants, every device a master with its

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-11-cmd-answer-echoes-large-input",
+  "date": "2026-11-11",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 998
+  },
+  "says": "Every answer to a Cmd carries a full copy of the Cmd, input included, and is mailed to the program as one ledger row, so a Cmd whose input is near or over the ledger's 2,000,000-byte row limit gets an answer the ledger refuses as too_big; the Cmd stays dispatched and the program is never told.",
+  "proof": "Runner.ts:996-1001 (ok) and :1004-1010 (err) build {type, cmd: job.cmd, ...}; a handled Cmd's answer is built by the box at Execution.ts:137-142 and :149-154, also with `cmd`. dispatch sends it as one letter at Runner.ts:1231-1233; ledgerStore.ts:21 sets MOST_BYTES = 2_000_000 and ledgerStore.ts:107-109 refuses a body over it as too_big (Log.ts:85). The refusal becomes a LedgerError at Runner.ts:1235-1236, which fails the public call at Runner.ts:1306; no Msg reaches the program, and the Cmd stays in the checkpoint's cmds (Runner.ts:1191-1192, 908-917, 937). Afterwards: a Send is tried again on every retryLater alarm (Runner.ts:1265-1266), refused the same way each time; a write is retried on restart (Runner.ts:766-768); any other Cmd (start_child, found on lane p42s1) is never retried. Shortest reproduction in words: a program's step returns one non-Send, non-write Cmd whose input is a 1.99 MB string; the handler succeeds; its answer row is input plus envelope, over 2,000,000 bytes, so append answers refused too_big, open/deliver fails, and the program waits forever. Not run as a test. The checkpoint: ProcessStore.ts:173-179 saves the model and every dispatched Cmd whole in one process_state row with no size check of its own; on Node, node:sqlite then only has SQLite's default SQLITE_MAX_LENGTH (1,000,000,000 bytes, not checked by a run); on Cloudflare the same sql.exec goes to Durable Object SQLite, whose limits page gives 2 MB per row (cited in docs/direction/an-agent-run-keeps-its-content.md:68), so a checkpoint over 2 MB would fail the save itself there and Node would not show it (Cloudflare behavior not checked by a run).",
+  "cost": "Any program that sends a Cmd with a large input (a long prompt, a file's text, a big child config) is left waiting with no answer and no error it can see; a Send loops on its retry alarm forever; and on Cloudflare a large dispatched set can fail the checkpoint save while Node tests pass. Lane p42s1's plan fixes start_child only, so every other Cmd keeps this.",
+  "head": "2fe12bf1db606b9f89c122231b7fff860bbfbe76",
+  "ticket": "usirin/tea-fabrika#770",
+  "pr": null
+}
