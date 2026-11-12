@@ -1,7 +1,22 @@
 // next/. SQLite laws, with no driver (0062). A decision tape chooses only a move allowed by
 // the calls so far. The oracle reads committed health and span rows, never the sink's model.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Result, Schema, Tracer, type Scope } from "effect";
+import {
+  Cause,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  References,
+  Result,
+  Schema,
+  Tracer,
+  type Scope,
+} from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -50,7 +65,13 @@ const Cell = fc.record({
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.array(Cell, { minLength: 2, maxLength: 24 });
-const DeliveryCell = fc.record({ n: fc.integer({ min: -1000, max: 1000 }), pick: fc.nat(), error: fc.string() });
+
+const DeliveryCell = fc.record({
+  n: fc.integer({ min: -1000, max: 1000 }),
+  pick: fc.nat(),
+  error: fc.string(),
+  elapsed: fc.integer({ min: 0, max: 30_000 }),
+});
 type DeliveryCell = typeof DeliveryCell extends fc.Arbitrary<infer A> ? A : never;
 const DeliveryTape = fc.array(DeliveryCell, { minLength: 1, maxLength: 24 });
 
@@ -275,15 +296,33 @@ export const suite = (rig: Rig) =>
         const once = (tape: ReadonlyArray<DeliveryCell>) =>
           Effect.scoped(
             Effect.gen(function* () {
+              // Both runners see the same controlled clock, including inside fast-check replays.
+              yield* TestClock.setTime(0);
               const control = yield* rig.runner;
               const measured = yield* rig.runner;
 
               for (const [n, cell] of tape.entries()) {
+                yield* TestClock.adjust(cell.elapsed);
                 const id = `letter-${n}`;
                 const behavior = ["ok", "fail", "hang"][cell.pick % 3];
                 const before = yield* measured.snapshot;
                 const entered = yield* Deferred.make<void>();
                 const spans: Array<Tracer.NativeSpan> = [];
+                const logs: Array<{ level: string; message: unknown; cause: string; fields: unknown }> = [];
+                const logger = Logger.layer([
+                  Logger.make((options: Logger.Options<ReadonlyArray<unknown>>) => {
+                    logs.push({
+                      level: options.logLevel,
+                      message: options.message.map((value) =>
+                        value instanceof Error
+                          ? { name: value.name, message: value.message, stack: value.stack }
+                          : value,
+                      ),
+                      cause: Cause.pretty(options.cause),
+                      fields: options.fiber.getRef(References.CurrentLogAnnotations),
+                    });
+                  }),
+                ]);
                 const tracer = Tracer.make({
                   span: (options) => {
                     const span = new Tracer.NativeSpan(options);
@@ -305,7 +344,11 @@ export const suite = (rig: Rig) =>
                       ),
                     ),
                 );
-                const pending = yield* delivery.pipe(Effect.withTracer(tracer), Effect.forkScoped);
+                const pending = yield* delivery.pipe(
+                  Effect.withTracer(tracer),
+                  Effect.provide(logger),
+                  Effect.forkScoped,
+                );
                 // Wait for the actual usage call, so the hung case overlaps the program step.
                 yield* Deferred.await(entered);
                 expect(yield* measured.snapshot).toEqual(before);
@@ -319,23 +362,25 @@ export const suite = (rig: Rig) =>
 
                 if (behavior !== "hang") {
                   yield* Fiber.join(pending);
-                  const failures = spans.filter((span) => span.name === "isolate.tail");
-                  expect(failures).toHaveLength(behavior === "fail" ? 1 : 0);
+                  // A3: an unreachable Process leaves one error log at the entrypoint, which has no sink.
+                  expect(spans.filter((span) => span.name === "isolate.tail")).toHaveLength(0);
+                  expect(logs).toHaveLength(behavior === "fail" ? 1 : 0);
 
                   if (behavior === "fail") {
-                    expect(failures[0]?.attributes.get("error.type")).toBe("TypeError");
+                    expect(logs[0]?.level).toBe("Error");
+                    expect(JSON.stringify(logs[0])).toContain("TypeError");
                   }
 
-                  expect(JSON.stringify(spans.map((span) => Object.fromEntries(span.attributes)))).not.toContain(
-                    `PRIVATE_DELIVERY_${cell.error}_END`,
-                  );
+                  expect(
+                    JSON.stringify([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
+                  ).not.toContain(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
                 }
 
                 yield* Fiber.interrupt(pending);
               }
             }),
-          );
-        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
+          ).pipe(Effect.provide(TestClock.layer()));
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay with its own test clock
         const property = fc.asyncProperty(DeliveryTape, (tape) => Effect.runPromise(once(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
