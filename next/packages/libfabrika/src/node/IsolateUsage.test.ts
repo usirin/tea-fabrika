@@ -301,6 +301,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
           for (const batch of batches) {
             // First commit only refusals. A later accepted span must not be needed to land counts.
             for (const keep of [0, batch.accepted]) {
+              yield* TestClock.setTime(0);
               yield* sink.batch(
                 Effect.gen(function* () {
                   for (const reason of batch.refused) {
@@ -319,6 +320,8 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
               expect(rows(store.sql)).toHaveLength(accepted);
               expect(store.sql.exec("SELECT * FROM measurements WHERE piece='gateway.route'")).toHaveLength(accepted);
               expect(rows(store.sql).every((row) => row.attributes[REFUSED] === undefined)).toBe(true);
+              // Read the sampled hour only after it closes; each batch above samples that same hour.
+              yield* TestClock.setTime(3_600_000);
               const sums = yield* sink.sums("gateway.route", 0, 3_600_000);
               expect(sums.map(({ refused, count }) => [refused, count])).toEqual([...counts].sort());
               expect(store.sql.exec("SELECT * FROM sums")).toHaveLength(counts.size);
