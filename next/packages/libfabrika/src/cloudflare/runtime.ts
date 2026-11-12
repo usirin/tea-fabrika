@@ -179,11 +179,32 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
   );
 
 // Child RPC failures cross the platform as rendered errors, so keep only their storage reason.
-const childStorage = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, LedgerError, R> =>
-  work.pipe(
+const childStorage = Effect.fnUntraced(function* <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+): Effect.fn.Return<A, LedgerError, R> {
+  const tracer = yield* Tracer.Tracer;
+  const safe = Tracer.make({
+    context: tracer.context,
+    span(options) {
+      const span = tracer.span(options);
+      const attribute = span.attribute.bind(span);
+      span.attribute = (key, value) => {
+        if (key !== "fab.ledger.code") {
+          attribute(key, key === "error.type" ? "LedgerError" : value);
+        }
+      };
+      const end = span.end.bind(span);
+      span.end = (time, exit) =>
+        end(time, Exit.isSuccess(exit) ? exit : Exit.fail(new LedgerError({ reason: "storage" })));
+      return span;
+    },
+  });
+  return yield* work.pipe(
+    Effect.withTracer(safe),
     Effect.mapError(() => new LedgerError({ reason: "storage" })),
     Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
   );
+});
 
 /** Checked refusals are replies; storage and descriptor failures remain retryable rejections. */
 const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof ChildReplies.Type, LedgerError> =>
@@ -826,7 +847,8 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     // ProcessManager over trusted Project RPC: refusals are reply data, mutations take the turn.
     processObject: (pid: string) => wrapped(processObject(pid)),
     processStart: (request: Start, origin: From) => wrapped(processReply(start(request, origin))),
-    processExit: (pid: string, reason: ExitReason, origin: From) => wrapped(processReply(exit(pid, reason, origin))),
+    processExit: (pid: string, reason: ExitReason, origin: From) =>
+      wrapped(childStorage(processReply(exit(pid, reason, origin)))),
     processStatus: (owner: string) => wrapped(processReply(processes.status(owner))),
     processResolve: (pid: string) => wrapped(processReply(processes.resolve(pid))),
     processDead: (pid: string, dead: Parameters<typeof processes.dead>[1], origin: From) =>
