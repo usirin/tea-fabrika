@@ -7,7 +7,8 @@
 #   - each pull request gets its own checkout (BOXES/catchup-<pr>), force-removed when the run ends
 #     unless it holds MAIN's Git storage, and one lock is held while it fetches, merges, signs and
 #     pushes, so two catch-ups never share a tree or the notes ref. The lock is dropped for each
-#     wait on the checks and taken again for the next look at main
+#     wait on the checks and taken again for the next look at main, then held through the squash, so
+#     no other catch-up looks at main between this one's last look and its merge
 #   - a merge of main that conflicts is refused: aborted, nothing pushed, exit 1. The lane merges
 #     main and pushes
 #   - catching up, merges origin/main in as fabrikalfa[bot] (the person as co-author), and signs
@@ -33,7 +34,8 @@
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
 #   - ends at once on a pull request that is not open and ready: on start and on every round of
 #     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
-#     a bound and ends with a line naming what it waited for
+#     a bound and ends with a line naming what it waited for, and asks GitHub once a minute: two
+#     gh calls a round on the checks (the state, the check runs), one a round after the squash
 #   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
 #     background and the merge's own exit never waits on it
 set -eu
