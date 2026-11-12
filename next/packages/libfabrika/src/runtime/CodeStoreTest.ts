@@ -4,7 +4,7 @@
 // walk's own record of each hash's first bytes.
 //
 // Test contract (the plan's shapes): `CodeStore.ts` holds the contract only, `CodeStore` with `put`
-// and `get` and `CodeStoreError` (`storage`, `bad_row`). `CodeStoreSql.layer(sql)` is its layer, one
+// and `get` and `CodeStoreError` (tagged `Storage` or `BadRow`, 0119). `CodeStoreSql.layer(sql)` is its layer, one
 // table `code (hash PRIMARY KEY, source TEXT)`. `get` decodes through `BuiltProgram`, so a row whose
 // bytes no longer hash to its key fails `bad_row`; it never reads as absent or as the wrong bytes.
 import { describe, expect, it } from "@effect/vitest";
@@ -28,7 +28,7 @@ type Service = CodeStore["Service"];
 expectTypeOf<Effect.Error<ReturnType<Service["put"]>>>().toEqualTypeOf<CodeStoreError>();
 expectTypeOf<Effect.Error<ReturnType<Service["get"]>>>().toEqualTypeOf<CodeStoreError>();
 expectTypeOf<Effect.Success<ReturnType<Service["get"]>>>().toEqualTypeOf<Option.Option<BuiltProgram>>();
-expectTypeOf<CodeStoreError["reason"]>().toEqualTypeOf<"storage" | "bad_row">();
+expectTypeOf<CodeStoreError["reason"]["_tag"]>().toEqualTypeOf<"Storage" | "BadRow">();
 expectTypeOf<Effect.Services<ReturnType<Service["get"]>>>().toEqualTypeOf<never>();
 
 const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
@@ -63,7 +63,7 @@ const built = (text: string) =>
 
 /** The reason a failed read gave, or none when it read. */
 const failure = <A>(exit: Exit.Exit<A, CodeStoreError>) =>
-  Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit))?.reason : undefined;
+  Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit))?.reason._tag : undefined;
 
 /** Every move the walks reached, across runs. */
 const seen = new Set<string>();
@@ -119,7 +119,7 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
           const digest = nth(hashes, cell.pick);
           const got = yield* Effect.exit(codes.get(digest));
           // A row whose bytes do not hash to its key fails as bad_row, never as absent or other bytes.
-          expect(failure(got)).toBe(broken.has(digest) ? "bad_row" : undefined);
+          expect(failure(got)).toBe(broken.has(digest) ? "BadRow" : undefined);
           expect(Exit.isSuccess(got) ? got.value : null).toEqual(
             broken.has(digest) ? null : Option.some({ hash: digest, source: text(digest) }),
           );
@@ -155,7 +155,7 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
 
     for (const [digest, first] of kept) {
       const got = yield* Effect.exit(codes.get(digest));
-      expect(failure(got)).toBe(broken.has(digest) ? "bad_row" : undefined);
+      expect(failure(got)).toBe(broken.has(digest) ? "BadRow" : undefined);
       expect(Exit.isSuccess(got) ? got.value : null).toEqual(
         broken.has(digest) ? null : Option.some({ hash: digest, source: first }),
       );

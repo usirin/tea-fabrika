@@ -307,7 +307,12 @@ describe("P15 slice 1: the watcher", () => {
                   (answer) => Queue.offer(answers, answer),
                 ).pipe(Effect.withTracer(tracer)),
               );
-              yield* Queue.take(answers).pipe(Effect.timeout("10 seconds"));
+              yield* Queue.take(answers).pipe(
+                Effect.timeoutOrElse({
+                  duration: "10 seconds",
+                  orElse: () => Effect.die(new Error("the watcher did not report its initial rebuild")),
+                }),
+              );
               let value = 0;
               let broken = false;
               const edits = g(fc.integer, { min: 2, max: 5 });
@@ -327,7 +332,12 @@ describe("P15 slice 1: the watcher", () => {
                     ? `export const own = ${JSON.stringify(sentinel)} +; // ${value}\n`
                     : `export const own = ${value};\n`,
                 );
-                const answer = yield* Queue.take(answers).pipe(Effect.timeout("3 seconds"));
+                const answer = yield* Queue.take(answers).pipe(
+                  Effect.timeoutOrElse({
+                    duration: "3 seconds",
+                    orElse: () => Effect.die(new Error("the watcher did not report the saved module's rebuild")),
+                  }),
+                );
                 expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
                 const rebuilds = spans.slice(before).filter((span) => span.name === "watch.rebuild");
                 expect(rebuilds).toHaveLength(1);
@@ -345,7 +355,7 @@ describe("P15 slice 1: the watcher", () => {
                 for (const output of [
                   JSON.stringify([...span.attributes]),
                   JSON.stringify(answer),
-                  JSON.stringify(yield* Queue.takeAll(b.failures)),
+                  JSON.stringify(yield* Queue.clear(b.failures)),
                 ]) {
                   for (const forbidden of [sentinel, home]) {
                     expect(output.includes(forbidden)).toBe(false);

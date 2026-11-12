@@ -2580,7 +2580,7 @@ describe("P11 recovery gaps and durable installation", () => {
       }).pipe(Effect.provide(w.layer())),
     );
   });
-  it("S3 plant, replace without recording: a successful upgrade records ran and the new build", async () => {
+  it("S3 plant, replace without recording: a successful wake upgrade records ran and the checkpoint's build (L6)", async () => {
     const w = await world({ build: "new-build" });
     const Legacy = Schema.Struct({ n: Schema.Int });
     const Middle = Schema.Struct({ count: Schema.Int });
