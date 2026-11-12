@@ -35,9 +35,20 @@ const SEED = 119120;
 const BUILD = "build_test";
 const ORIGIN = "http://127.0.0.1:18787";
 const PID = "process_01m6v5270hf3c8x2q7w9z4k5mn";
-const CountView = Schema.Struct({ count: Schema.Int });
-const window = windowMachineFor({ decode: () => Schema.decodeUnknownSync(CountView) });
-const tiles = [{ id: "tile_1", name: "counter:1" }];
+
+/** A list view, the checklist's shape cut to what these laws read. Tuval may not import a program. */
+const ListView = Schema.Struct({
+  items: Schema.Array(Schema.Struct({ name: Schema.String, state: Schema.String })),
+  left: Schema.Int,
+});
+
+const list = (n: number) => ({
+  items: Array.from({ length: n }, (_, i) => ({ name: `item ${i}`, state: "open" })),
+  left: n,
+});
+
+const window = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: () => undefined });
+const tiles = [{ id: "tile_1", name: "checklist:1" }];
 
 type SocketEvent =
   | { readonly event: "open" }
@@ -103,10 +114,10 @@ const peer = (script: Script) => {
       }
     } else if (frame.method === "ledger.read") {
       result({
-        entries: [{ _tag: "started", by: "brain", body: { process: PID, name: "counter:1" }, rev: 1, pos: 1 }],
+        entries: [{ _tag: "started", by: "brain", body: { process: PID, name: "checklist:1" }, rev: 1, pos: 1 }],
       });
     } else if (frame.method === "view.open" && script.open) {
-      result({ rev: 0, view: { count: 0 } });
+      result({ rev: 0, view: list(0) });
     } else if (frame.method === "process.send" && script.send) {
       result({ _tag: "accepted", rev: 2, pos: 1 });
     }
@@ -180,7 +191,7 @@ const services = (socket: Layer.Layer<ClientSocket>, rows: Array<unknown>) =>
 /** Moves TestClock in steps, reading the run's link after each. */
 const tick = (ms: number) => TestClock.adjust(ms).pipe(Effect.andThen(Effect.yieldNow));
 
-const press = { type: "press", tile: "tile_1", m: { type: "inc" }, via: "button" } as const;
+const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0" }, via: "button" } as const;
 
 describe("L10: real runtime progress", () => {
   it.effect.prop(
@@ -263,7 +274,7 @@ describe("L10: real runtime progress", () => {
 
 describe("L12: wire formats are refused as typed values", () => {
   it.effect(
-    "format: a malformed open_ok.value, a view notice without pid, an answer to an unknown id and a broken frame install nothing and stop nothing",
+    "format: a malformed open_ok.value, a view notice without pid, a refused answer without a string reason, an answer to an unknown id and a broken frame install nothing and stop nothing",
     () =>
       Effect.gen(function* () {
         const script: Script = {
@@ -272,12 +283,12 @@ describe("L12: wire formats are refused as typed values", () => {
           send: true,
           junk: [
             // JSON-RPC 2.0 answers as the door sends them, with a wrong shape, an unknown id or no frame.
-            () => JSON.stringify({ jsonrpc: "2.0", id: 999_999, result: { rev: 5, view: { count: 5 } } }),
+            () => JSON.stringify({ jsonrpc: "2.0", id: 999_999, result: { rev: 5, view: list(5) } }),
             () =>
               JSON.stringify({
                 jsonrpc: "2.0",
                 method: "view.whole",
-                params: { type: "whole", rev: 3, view: { count: 3 } },
+                params: { type: "whole", rev: 3, view: list(3) },
               }),
             () =>
               JSON.stringify({
@@ -311,17 +322,33 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(opened, "the page opened its tile").toBeDefined();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
         door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { count: "one" } } });
+        door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
         yield* tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
         // The run still folds: a well-formed notice with its pid installs.
         door.message({
           jsonrpc: "2.0",
           method: "view.whole",
-          params: { pid: PID, type: "whole", rev: 4, view: { count: 4 } },
+          params: { pid: PID, type: "whole", rev: 4, view: list(4) },
         });
         yield* tick(500);
-        expect(run.getState().client.views[PID]).toEqual({ rev: 4, view: { count: 4 } });
+        expect(run.getState().client.views[PID]).toEqual({ rev: 4, view: list(4) });
+        expect(run.getState().link._tag).toBe("online");
+        // A press goes out; its answer comes back refused with no reason, then with a reason that is
+        // not a string. Neither is an answer: the letter stays out and no tile shows a refusal.
+        script.send = false;
+        yield* run.dispatch(press);
+        yield* tick(500);
+        const sends = door.sent
+          .flatMap((t) => Option.toArray(decodeFrame(t)))
+          .filter((f) => f.method === "process.send");
+        expect(sends.length, "the press went out").toBeGreaterThan(0);
+        const id = sends.at(-1)!.id;
+        door.message({ jsonrpc: "2.0", id, result: { _tag: "refused" } });
+        door.message({ jsonrpc: "2.0", id, result: { _tag: "refused", reason: 7 } });
+        yield* tick(500);
+        expect(run.getState().client.pending, "a malformed refusal removed the letter").toHaveLength(1);
+        expect(run.getState().tiles.map((t) => t.refusal)).toEqual([null]);
         expect(run.getState().link._tag).toBe("online");
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.provide(TestClock.layer())),

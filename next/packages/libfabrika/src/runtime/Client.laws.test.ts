@@ -14,15 +14,15 @@
 //   patch{base, rev, patch}, by `type`. Cmd: ask{pid}.
 // - `sendable(client)`: the ready letters ahead of the first slot still dating, in slot order.
 //
-// libfabrika may not import a program (boundary B12, `boundary-rules.json`), so L5 steps a tea machine of
-// the counter's own shape, defined here, and turns each step into its notice with the real `diff`. The
-// real counter is pressed through the real page in L15.
+// libfabrika may not import a program (boundary B12, `boundary-rules.json`), so L5 gives each of 1 to 3
+// pids a generated view shape (a list of items, a bare array, or a record holding an array), changes
+// each value by generated edits that grow, shrink and edit its arrays, and turns each change into its
+// notice with the real `diff`. The real checklist goes through this client in its own L23.
 //
 // Each law walks the real machine from its real init. Each step reads the folded state (the pending
-// list, the letters this walk dated, the counter's real model and the notices already delivered) and
-// picks a move that state allows; stale and malformed input is built from what the walk delivered.
+// list, the letters this walk dated, each pid's values and the notices already delivered) and picks a
+// move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
-import { Machine } from "@demlik/tea/effect";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
@@ -59,27 +59,6 @@ type Model = {
 
 expectTypeOf<Model>().toEqualTypeOf<typeof Client.Type>();
 
-/** A program of the counter's shape: its model is its view. */
-const counterModel = Schema.Struct({ count: Schema.Int });
-type CounterView = typeof counterModel.Type;
-type CounterMsg = { readonly type: "inc" } | { readonly type: "dec" } | { readonly type: "reset" };
-
-const counterMachine = Machine.make({
-  model: counterModel,
-  msg: Schema.Union([
-    Schema.Struct({ type: Schema.Literal("inc") }),
-    Schema.Struct({ type: Schema.Literal("dec") }),
-    Schema.Struct({ type: Schema.Literal("reset") }),
-  ]),
-  cmds: [],
-  init: (loaded: CounterView | null) => [loaded ?? { count: 0 }, []],
-  update: {
-    inc: (s) => [{ count: s.count + 1 }, []],
-    dec: (s) => [{ count: s.count - 1 }, []],
-    reset: () => [{ count: 0 }, []],
-  },
-});
-
 type Answer =
   | { readonly _tag: "accepted"; readonly rev: number; readonly pos: number }
   | { readonly _tag: "refused"; readonly reason: string }
@@ -95,24 +74,84 @@ type Msg =
 
 type Out = ReadonlyArray<{ readonly type: string; readonly pid?: string }>;
 
-const COUNTER = "pid_counter";
-const OTHER = "pid_other";
-/** Another program's view, so a counter view on its pid, or its view on the counter's, is refused. */
-const otherModel = Schema.Struct({ title: Schema.String });
+// --- The view shapes L5 gives its pids ------------------------------------------------------------
+
+const Item = Schema.Struct({ name: Schema.String, done: Schema.Boolean });
+
+const SHAPES = {
+  list: Schema.Struct({ items: Schema.Array(Item), left: Schema.Int }),
+  tags: Schema.Array(Schema.String),
+  record: Schema.Struct({ title: Schema.String, n: Schema.Int, rows: Schema.Array(Schema.Int) }),
+} as const;
+
+type Kind = keyof typeof SHAPES;
+const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
+type ListView = typeof SHAPES.list.Type;
+type TagsView = typeof SHAPES.tags.Type;
+type RecordView = typeof SHAPES.record.Type;
+
+const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
+  list: { items: [], left: 0 },
+  tags: [],
+  record: { title: "", n: 0, rows: [] },
+};
+
+/** One generated edit of a value of `kind`, chosen from what the value holds now. */
+const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): unknown => {
+  if (kind === "list") {
+    const v = value as ListView;
+    const i = v.items.length === 0 ? 0 : at % v.items.length;
+    const items =
+      v.items.length === 0 || e % 4 === 0
+        ? [...v.items, { name: word, done: false }]
+        : e % 4 === 1
+          ? v.items.filter((_, j) => j !== i)
+          : e % 4 === 2
+            ? v.items.map((it, j) => (j === i ? { ...it, done: !it.done } : it))
+            : [{ name: word, done: false }, ...v.items];
+    return { items, left: items.filter((it) => !it.done).length };
+  }
+
+  if (kind === "tags") {
+    const v = value as TagsView;
+    const i = v.length === 0 ? 0 : at % v.length;
+    return v.length === 0 || e % 4 === 0
+      ? [...v, word]
+      : e % 4 === 1
+        ? v.filter((_, j) => j !== i)
+        : e % 4 === 2
+          ? v.map((t, j) => (j === i ? word : t))
+          : [word, ...v];
+  }
+
+  const v = value as RecordView;
+  const i = v.rows.length === 0 ? 0 : at % v.rows.length;
+  return e % 4 === 0
+    ? { ...v, title: word }
+    : e % 4 === 1
+      ? { ...v, n: v.n + 1 }
+      : e % 4 === 2 || v.rows.length === 0
+        ? { ...v, rows: [...v.rows, at] }
+        : { ...v, rows: v.rows.filter((_, j) => j !== i) };
+};
 
 /** Each pid's own decoder, counting which pid's decoder checked which notice. */
-const checksWith = (log: Array<string>) => ({
+const checksWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>) => ({
   decode: (pid: string) => (view: unknown) => {
     log.push(pid);
-    return pid === COUNTER ? Schema.decodeUnknownSync(counterModel)(view) : Schema.decodeUnknownSync(otherModel)(view);
+    return Schema.decodeUnknownSync(SHAPES[kinds.get(pid) ?? "list"])(view);
   },
 });
 
-const machineWith = (log: Array<string>) => clientMachineFor(checksWith(log));
+const machineWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>) => clientMachineFor(checksWith(kinds, log));
 type Machine = ReturnType<typeof machineWith>;
 const step = (machine: Machine, c: Model, m: Msg): readonly [Model, Out] => applyCell(machine, c, m);
 
 // --- L4: letters ----------------------------------------------------------------------------------
+
+/** L4's pids: each shows a bare list of words, so a press can capture the rev it shows. */
+const LETTER_PIDS = ["pid_a", "pid_b"] as const;
+const LETTER_KINDS: ReadonlyMap<string, Kind> = new Map(LETTER_PIDS.map((pid) => [pid, "tags"]));
 
 const letterChoice = fc.record({
   move: fc.nat(),
@@ -138,12 +177,20 @@ type LetterWalk = { c: Model; letters: Map<number, Ready>; settled: Array<string
 const letterMoves = (w: LetterWalk, c: LetterChoice): ReadonlyArray<Msg> => {
   const dating = w.c.pending.filter((p) => p._tag === "dating");
   const ready = w.c.pending.filter((p): p is Ready => p._tag === "ready");
-  const pid = c.pick % 2 === 0 ? COUNTER : OTHER;
+  const pid = LETTER_PIDS[c.pick % LETTER_PIDS.length]!;
   const out: Array<Msg> = [
-    { type: "press", pid, m: [{ type: "inc" }, { type: "dec" }, { type: "reset" }][c.answer % 3] },
+    {
+      type: "press",
+      pid,
+      m: [
+        { type: "add", name: c.word },
+        { type: "check", name: c.word },
+        { type: "remove", name: c.word },
+      ][c.answer % 3],
+    },
     { type: "read", rev: w.c.seen + (c.rev % 5) - 2 },
     // A whole view shown for the press to capture, through the real notice path.
-    { type: "notice", pid: COUNTER, note: { type: "whole", rev: c.rev, view: { count: c.rev } } },
+    { type: "notice", pid, note: { type: "whole", rev: c.rev, view: [`v${c.rev}`] } },
   ];
 
   if (dating.length > 0) {
@@ -175,7 +222,7 @@ const letterWalk = (
   list: ReadonlyArray<LetterChoice>,
   each: (prev: LetterWalk, m: Msg, next: Model, out: Out) => void,
 ): LetterWalk => {
-  const machine = machineWith([]);
+  const machine = machineWith(LETTER_KINDS, []);
   const w: LetterWalk = { c: machine.init(null, {})[0], letters: new Map(), settled: [] };
 
   for (const c of list) {
@@ -315,81 +362,94 @@ describe("L4: client letters (p1)", () => {
 const viewChoice = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
-  input: fc.constantFrom<CounterMsg>({ type: "inc" }, { type: "dec" }, { type: "reset" }),
+  edit: fc.nat(),
+  at: fc.nat({ max: 40 }),
   bad: fc.nat(),
+  word: fc.stringMatching(/^[a-z~/]{1,6}$/),
 });
 
 type ViewChoice = typeof viewChoice extends fc.Arbitrary<infer C> ? C : never;
 
-/** The brain's side of the walk: the real counter's model at each revision, and every notice it made. */
-type Brain = { rev: number; views: Array<CounterView>; made: Array<{ readonly note: unknown }> };
+/** The brain's side of one pid: its value at each revision, and every notice it made. */
+type Brain = { readonly kind: Kind; rev: number; views: Array<unknown>; made: Array<unknown> };
 
-const brainStep = (b: Brain, input: CounterMsg): unknown => {
+const brainStep = (b: Brain, c: ViewChoice): unknown => {
   const before = b.views[b.rev]!;
-  const [after] = applyCell(counterMachine, before, input);
+  const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
   b.rev += 1;
   return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(before, after) };
 };
 
-/** A notice this walk already made, broken one way: an op that is not RFC 6902, a path that is not
- *  there, a value of the wrong type, or the whole of another program. */
+/** The next notice the brain would send, broken one way: an op that is not RFC 6902, a path that is
+ *  not there, an array index past the end, a value of the wrong type, the whole of another shape, or no
+ *  list of ops at all. */
 const corrupt = (b: Brain, c: ViewChoice): unknown => {
-  // Each broken patch is the next one the brain would send, from the current rev to the one after.
   const rev = b.rev;
-  const view = b.views[rev]!;
+  const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
+  const wrongType =
+    b.kind === "list"
+      ? [{ op: "replace", path: "/left", value: "three" }]
+      : b.kind === "tags"
+        ? [{ op: "add", path: "/-", value: 3 }]
+        : [{ op: "replace", path: "/n", value: "x" }];
+  const pastEnd = b.kind === "list" ? "/items/99" : b.kind === "tags" ? "/99" : "/rows/99";
+  const other = KINDS.find((k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k]))!;
   return [
-    { type: "patch", base: rev, rev: rev + 1, patch: [{ op: "move", from: "/count", path: "/n" }] },
-    { type: "patch", base: rev, rev: rev + 1, patch: [{ op: "replace", path: "/missing/deep", value: 1 }] },
-    { type: "patch", base: rev, rev: rev + 1, patch: [{ op: "replace", path: "/count", value: "three" }] },
-    { type: "whole", rev, view: { title: `count ${view.count}` } },
-    { type: "whole", rev, view: { count: 1.5 } },
-    { type: "patch", base: rev, rev: rev + 1, patch: "not a list" },
+    next([{ op: "move", from: "/x", path: "/y" }]),
+    next([{ op: "replace", path: "/missing/deep", value: 1 }]),
+    next([{ op: "remove", path: pastEnd }]),
+    next(wrongType),
+    { type: "whole", rev, view: START[other] },
+    next("not a list"),
   ][c.bad % 6];
 };
 
-type ViewWalk = { c: Model; brain: Brain; log: Array<string> };
-
 type Notice = { readonly pid: string; readonly note: unknown };
+type ViewWalk = { c: Model; brains: Map<string, Brain>; log: Array<string>; delivered: Array<Notice> };
 
-/** The moves the walk's state allows, each made only when it is picked, since a step moves the brain. */
+/** The moves the walk's state allows, each made only when it is picked, since a step moves a brain. */
 const viewMoves = (w: ViewWalk, c: ViewChoice): ReadonlyArray<() => Notice> => {
-  const b = w.brain;
-  const delivered = b.made.map((d) => d.note);
+  const pids = [...w.brains.keys()];
+  const pid = pids[c.pick % pids.length]!;
+  const b = w.brains.get(pid)!;
+  const other = pids[(c.pick + 1) % pids.length]!;
   const out: Array<() => Notice> = [
-    // The counter steps and its patch arrives in order.
-    () => ({ pid: COUNTER, note: brainStep(b, c.input) }),
+    // The pid's value changes and its patch arrives in order.
+    () => ({ pid, note: brainStep(b, c) }),
     // A whole view of now, as an open's answer or a fresh watch gives it.
-    () => ({ pid: COUNTER, note: { type: "whole", rev: b.rev, view: b.views[b.rev] } }),
-    () => ({ pid: COUNTER, note: corrupt(b, c) }),
-    // The counter's view on the other program's pid, and that program's own view.
-    () => ({ pid: OTHER, note: { type: "whole", rev: b.rev, view: b.views[b.rev] } }),
-    () => ({ pid: OTHER, note: { type: "whole", rev: b.rev, view: { title: `t${b.rev}` } } }),
-    // A gap: the counter steps twice and only the second patch arrives.
+    () => ({ pid, note: { type: "whole", rev: b.rev, view: b.views[b.rev] } }),
+    () => ({ pid, note: corrupt(b, c) }),
+    // Another pid's current view sent on this pid: its decoder, not the other's, decides.
+    () => ({ pid, note: { type: "whole", rev: b.rev, view: w.brains.get(other)!.views.at(-1) } }),
+    // A gap: the value changes twice and only the second patch arrives.
     () => {
-      brainStep(b, c.input);
-      return { pid: COUNTER, note: brainStep(b, c.input) };
+      brainStep(b, c);
+      return { pid, note: brainStep(b, c) };
     },
   ];
 
-  if (delivered.length > 0) {
-    // A repeat or a reordering of a notice already delivered.
-    out.push(() => ({ pid: COUNTER, note: delivered[c.pick % delivered.length] }));
+  if (w.delivered.length > 0) {
+    // A repeat or a reordering of a notice already delivered, to the pid it was for.
+    out.push(() => w.delivered[c.pick % w.delivered.length]!);
   }
 
   return out;
 };
 
 const viewWalk = (
+  kinds: ReadonlyArray<Kind>,
   list: ReadonlyArray<ViewChoice>,
   each: (prev: ViewWalk, notice: Notice, next: Model, out: Out, w: ViewWalk) => void,
 ): void => {
   const log: Array<string> = [];
-  const machine = machineWith(log);
+  const pids = new Map(kinds.map((kind, i) => [`pid_${i}_${kind}`, kind] as const));
+  const machine = machineWith(pids, log);
   const w: ViewWalk = {
     c: machine.init(null, {})[0],
-    brain: { rev: 0, views: [counterMachine.init(null, {})[0]], made: [] },
+    brains: new Map([...pids].map(([pid, kind]) => [pid, { kind, rev: 0, views: [START[kind]], made: [] }])),
     log,
+    delivered: [],
   };
 
   for (const c of list) {
@@ -403,13 +463,18 @@ const viewWalk = (
     expect(notice.note, "a notice was changed").toEqual(snapshot);
     expect(w.c, "the old Model was changed").toEqual(before);
     each(prev, notice, next, out, w);
-    w.brain.made.push({ note: notice.note });
+    w.delivered.push(notice);
     w.c = next;
   }
 };
 
-const viewWalks = fc.array(viewChoice, { minLength: 1, maxLength: 50 });
-const decodes = (pid: string, view: unknown): boolean => Schema.is(pid === COUNTER ? counterModel : otherModel)(view);
+const viewWalks = fc.tuple(
+  fc.array(fc.constantFrom(...KINDS), { minLength: 1, maxLength: 3 }),
+  fc.array(viewChoice, { minLength: 1, maxLength: 50 }),
+);
+
+const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
+const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
 const noteType = (note: unknown): unknown =>
   typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
@@ -418,28 +483,28 @@ const noteRev = (note: unknown): unknown =>
   typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
 
 describe("L5: client views (p3)", () => {
-  it("every view shown decodes by its own pid's decoder, and the counter's is the real counter's at its rev", () => {
+  it("every view shown decodes by its own pid's decoder and is that pid's value at its rev", () => {
+    let arrays = 0;
     fc.assert(
-      fc.property(viewWalks, (list) => {
-        viewWalk(list, (_prev, _n, next, _out, w) => {
+      fc.property(viewWalks, ([kinds, list]) => {
+        viewWalk(kinds, list, (_prev, _n, next, _out, w) => {
           for (const [pid, shown] of Object.entries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
-
-            if (pid === COUNTER) {
-              expect(shown.view).toEqual(w.brain.views[shown.rev]);
-            }
+            expect(shown.view).toEqual(w.brains.get(pid)!.views[shown.rev]);
+            arrays += JSON.stringify(shown.view).includes("[") && shown.rev > 0 ? 1 : 0;
           }
         });
       }),
       opts,
     );
+    expect(arrays, "the walks installed views holding arrays").toBeGreaterThan(0);
   });
 
   it("a whole installs exactly when its pid's decoder passes, else keeps the last view and asks once", () => {
     const seen = { installed: 0, refused: 0 };
     fc.assert(
-      fc.property(viewWalks, (list) => {
-        viewWalk(list, (prev, notice, next, out) => {
+      fc.property(viewWalks, ([kinds, list]) => {
+        viewWalk(kinds, list, (prev, notice, next, out) => {
           if (noteType(notice.note) !== "whole") {
             return;
           }
@@ -460,10 +525,10 @@ describe("L5: client views (p3)", () => {
   });
 
   it("a patch installs only at rev + 1 from the shown rev and only when its result decodes; else the view stays and it asks at most once", () => {
-    const seen = { installed: 0, gap: 0, bad: 0 };
+    const seen = { installed: 0, removed: 0, gap: 0, bad: 0 };
     fc.assert(
-      fc.property(viewWalks, (list) => {
-        viewWalk(list, (prev, notice, next, out) => {
+      fc.property(viewWalks, ([kinds, list]) => {
+        viewWalk(kinds, list, (prev, notice, next, out, w) => {
           if (noteType(notice.note) !== "patch") {
             return;
           }
@@ -486,10 +551,12 @@ describe("L5: client views (p3)", () => {
 
           if (changed) {
             seen.installed++;
+            seen.removed +=
+              Array.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") ? 1 : 0;
             expect(shown).toBeDefined();
             expect(note.base).toBe(shown!.rev);
             expect(note.rev).toBe(shown!.rev + 1);
-            expect(decodes(notice.pid, next.views[notice.pid]!.view)).toBe(true);
+            expect(next.views[notice.pid]!.view).toEqual(w.brains.get(notice.pid)!.views[note.rev]);
             return;
           }
 
@@ -507,6 +574,7 @@ describe("L5: client views (p3)", () => {
       opts,
     );
     expect(seen.installed).toBeGreaterThan(0);
+    expect(seen.removed, "array removals installed").toBeGreaterThan(0);
     expect(seen.gap).toBeGreaterThan(0);
     expect(seen.bad).toBeGreaterThan(0);
   });
@@ -514,13 +582,17 @@ describe("L5: client views (p3)", () => {
   it("a notice for one pid is checked by that pid's decoder only, and changes no other pid's view", () => {
     let checked = 0;
     fc.assert(
-      fc.property(viewWalks, (list) => {
-        viewWalk(list, (_prev, notice, _next, _out, w) => {
+      fc.property(viewWalks, ([kinds, list]) => {
+        viewWalk(kinds, list, (prev, notice, next, _out, w) => {
           checked += w.log.length;
           expect(
             w.log.every((pid) => pid === notice.pid),
             `${notice.pid}'s notice checked by ${w.log.join(",")}`,
           ).toBe(true);
+
+          for (const pid of Object.keys(next.views).filter((p) => p !== notice.pid)) {
+            expect(next.views[pid]).toBe(prev.c.views[pid]);
+          }
         });
       }),
       opts,

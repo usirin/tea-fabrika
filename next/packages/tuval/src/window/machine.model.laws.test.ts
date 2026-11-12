@@ -1,20 +1,26 @@
+import { applyCell } from "@demlik/tea";
 // P14 slice 2, next/ (ticket 828): the window parent, laws L8 (connection) and L9 (records) of the
 // approved plan. Written before `window/machine.ts`.
 //
 // The shape these laws hold `machine.ts` to, from the plan (the build may add more):
-// - `windowMachineFor({ decode })`: one tea machine factory, whose ctx is `{ tiles: [{id, name}] }`.
+// - `windowMachineFor({ decode, tile })`: one tea machine factory, whose ctx is `{ tiles: [{id, name}] }`.
 //   `decode(pid)` is that pid's own view decoder (it returns the checked view or throws), passed to
-//   libfabrika's client machine, which captures it. Init is the link's `dialing` on dial 1, every tile
-//   `unresolved`, and one `key {rejected: null}` Cmd.
-// - Model `WindowModel`: {tiles: [{id, name, reach}], link, dials, client, serial, flight: [{id, dial,
-//   call}], sent, attempts, patches, persist: not_due | due | asked, rejected, trouble}. `reach` is
-//   unresolved{} | resolving{id} | opening{pid, id} | open{pid} | missing{}.
+//   libfabrika's client machine, which captures it. `tile(name)` is the tile machine of the window
+//   registered for that tile, or undefined when it has none: a tea machine whose one Cmd is
+//   `press {m}`, which the parent never runs but sends on as a letter. Init is the link's `dialing` on
+//   dial 1, every tile `unresolved` with `own` its tile machine's init Model (`{}` without one) and
+//   `refusal` null, and one `key {rejected: null}` Cmd.
+// - Model `WindowModel`: {tiles: [{id, name, reach, own, refusal}], link, dials, client, serial,
+//   flight: [{id, dial, call}], sent, attempts, patches, persist: not_due | due | asked, rejected,
+//   trouble}. `reach` is unresolved{} | resolving{id} | opening{pid, id} | open{pid} | missing{}.
+//   `refusal` is null or {m, reason}: the tile's last refused letter, until its next press.
 // - A brain call is `write {call, id, dial}`, settling when its frame is handed over (A13). `call` is
 //   read{stream, after} (ledger.read of `processes/<name>`), open{pid} (view.open), send{pid, letter,
 //   n, m, sentAt, seen, traceId?} (process.send) or knock{}. The link's knock may also go out as the
 //   link's own `knock` Cmd.
 // - Msgs by `type`: the link's own (admitted, not_granted, granted, closed, retry, beat, pong,
-//   stalled, renew, blocked, ask_again), each passed to the link machine; press{tile, m, via?}; a view
+//   stalled, renew, blocked, ask_again), each passed to the link machine; press{tile, m, via?}; a tile's
+//   own Msg tile{id, msg}, stepped through that tile's machine, whose `press` Cmd becomes a press; a view
 //   notice view{pid, note}; seen{rev}; resend{dial}; the socket's answers to writes, each naming its
 //   write's {id, dial}: read_ok{value: entries, ms}, read_err{error}, open_ok{value: {rev, view}, ms},
 //   open_err{error}, send_ok{value: accepted{rev, pos} | refused{reason}, ms}, send_err{error}; and
@@ -22,14 +28,19 @@
 //   {found: created | reused | replaced}), now (value {letter, sentAt, traceId?}), write, persist
 //   (value boolean), record and ping.
 // - Cmds: write, now{n}, record{record}, persist{}, key{rejected}, ping, knock. A `record` carries
-//   one libfabrika `ClientRecord`; its handler adds the row's id, tab, build and `sentAt` (L10).
+//   one libfabrika `ClientRecord`; its handler adds the row's id, tab, build and `sentAt` (L10). A
+//   refused `reply` row carries `reason`: the answer's reason when it is a word (/^[a-z_]{1,40}$/),
+//   else `other`. No input text reaches a row.
 //
 // The walk starts at the real init and folds the real update. Each step reads the folded model and the
 // walk's ledger of what is really waiting (the writes in flight, the Cmds not answered yet, the old
 // dials' flights) and picks one move possible there: a socket event legal for the link's state, an
-// answer to a current flight, a stale answer to an old one, a timer, a press, a view notice built from
-// a counter-shaped program's real steps and the real `diff`, or a Cmd's answer.
-import { applyCell } from "@demlik/tea";
+// answer to a current flight, a stale answer to an old one, a timer, a press, a tile's own Msg legal for
+// its Model, a view notice built from a list program's real edits and the real `diff`, or a Cmd's
+// answer. The tiles are the checklist's tile shape (a draft and a submit that presses `add`), a second
+// generated tile machine, and a tile with none. Tuval may not import a program, so the checklist's own
+// tile is stepped through its registration in the checklist's laws (L22, L24).
+import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { ClientRecord, diff } from "@kampus/libfabrika";
 import { linkTimer } from "@kampus/libfabrika/transport/Link";
@@ -39,11 +50,62 @@ import { type WindowModel, type WindowMsg, windowMachineFor } from "./machine.ts
 
 const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
-const NAMES = ["counter:1", "counter:2"] as const;
+const NAMES = ["checklist:1", "tally:1", "plain:1"] as const;
 const TILES = NAMES.map((name, i) => ({ id: `tile_${i + 1}`, name }));
-const CountView = Schema.Struct({ count: Schema.Int });
-const machine = windowMachineFor({ decode: () => Schema.decodeUnknownSync(CountView) });
+
+/** A list view, the checklist's own shape cut to what a parent law reads. */
+const ListView = Schema.Struct({
+  items: Schema.Array(Schema.Struct({ name: Schema.String, state: Schema.Literals(["open", "checked"]) })),
+  left: Schema.Int,
+});
+type ListView = typeof ListView.Type;
+const EMPTY: ListView = { items: [], left: 0 };
+
+const press = TeaCmd.make("press", { input: Schema.Struct({ m: Schema.Json }), ok: Schema.Null, err: [] });
+
+/** The checklist tile's shape: a draft, and a submit that presses `add` with it. */
+const draftTile = Machine.make({
+  model: Schema.Struct({ draft: Schema.String }),
+  msg: Schema.Union([
+    Schema.Struct({ type: Schema.Literal("typed"), text: Schema.String }),
+    Schema.Struct({ type: Schema.Literal("submit") }),
+  ]),
+  cmds: [press],
+  init: () => [{ draft: "" }, []],
+  update: {
+    typed: (_s, m) => [{ draft: m.text }, []],
+    submit: (s) => (s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: { type: "add", name: s.draft } })]]),
+  },
+});
+
+/** A second tile machine: it counts bumps and presses `check` on the item it counted to. */
+const tallyTile = Machine.make({
+  model: Schema.Struct({ n: Schema.Int }),
+  msg: Schema.Union([Schema.Struct({ type: Schema.Literal("bump") }), Schema.Struct({ type: Schema.Literal("go") })]),
+  cmds: [press],
+  init: () => [{ n: 0 }, []],
+  update: {
+    bump: (s) => [{ n: s.n + 1 }, []],
+    go: (s) => [{ n: 0 }, [press({ m: { type: "check", name: `item ${s.n}` } })]],
+  },
+});
+
+const TILE_MACHINES: Readonly<Record<string, typeof draftTile | typeof tallyTile>> = {
+  "checklist:1": draftTile,
+  "tally:1": tallyTile,
+};
+
+const tileFor = (name: string) => TILE_MACHINES[name];
+const machine = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: tileFor });
 const ctx = { tiles: TILES };
+
+/** Refusal reasons: the program's words, other words, and free text a reply row must not copy. */
+const REASONS = ["taken", "missing", "bad_msg", "too_many", "Not A Word!", "has space", "x".repeat(41)] as const;
+const isWord = (reason: string) => /^[a-z_]{1,40}$/.test(reason);
+/** What the walk's presses name: items, so a pressed letter's body is the program's Msg. */
+const POOL = ["milk", "bread", "eggs"] as const;
+/** A typed draft is marked, so a row or an unsent write that copies it shows. */
+const DRAFT = "draft~";
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
 type Call = { readonly _tag: string; readonly [key: string]: unknown };
@@ -59,8 +121,19 @@ const socketDial = (s: WindowModel): number | null =>
 
 const linkDial = (s: WindowModel): number | null => ("dial" in s.link ? s.link.dial : null);
 
-/** A counter-shaped program per pid, so a notice is a real step's whole or patch. */
-type Brain = { rev: number; views: Array<{ readonly count: number }> };
+/** A list program per pid, so a notice is a real edit's whole or patch, array ops included. */
+type Brain = { rev: number; views: Array<ListView> };
+
+const listEdit = (v: ListView, aux: number, word: string): ListView => {
+  const i = v.items.length === 0 ? 0 : aux % v.items.length;
+  const items =
+    v.items.length === 0 || aux % 3 === 0
+      ? [...v.items, { name: word, state: "open" as const }]
+      : aux % 3 === 1
+        ? v.items.filter((_, j) => j !== i)
+        : v.items.map((it, j) => (j === i ? { ...it, state: "checked" as const } : it));
+  return { items, left: items.filter((it) => it.state === "open").length };
+};
 
 const choice = fc.record({
   move: fc.nat(),
@@ -82,6 +155,9 @@ type World = {
   brains: Map<string, Brain>; // by pid
   pids: Map<string, string>; // by tile name: the live process the brain has for it
   dials: number;
+  from: Map<number, string>; // by Client slot: the tile whose press made that letter
+  typed: Set<string>; // every draft text typed into a tile
+  submitted: Set<string>; // the drafts a submit pressed as a letter
 };
 
 type Event = {
@@ -93,7 +169,7 @@ type Event = {
 };
 
 const brainFor = (w: World, pid: string): Brain => {
-  const b = w.brains.get(pid) ?? { rev: 0, views: [{ count: 0 }] };
+  const b = w.brains.get(pid) ?? { rev: 0, views: [EMPTY] };
   w.brains.set(pid, b);
   return b;
 };
@@ -143,8 +219,32 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
   out.push(() => ({
     type: "press",
     tile: tile.id,
-    m: [{ type: "inc" }, { type: "dec" }, { type: "reset" }][c.aux % 3]!,
+    m: { type: ["check", "uncheck", "remove"][c.aux % 3]!, name: POOL[c.ms % POOL.length]! },
   }));
+
+  // A tile's own Msg, legal for its machine's Model now.
+  const own = s.tiles.filter((t) => tileFor(t.name) !== undefined);
+
+  if (own.length > 0) {
+    const t = own[c.aux % own.length]!;
+
+    if (t.name === "checklist:1") {
+      const draft = c.ms % 5 === 0 ? "" : `${DRAFT}${c.word}`;
+      out.push(
+        () => {
+          w.typed.add(draft);
+          return { type: "tile", id: t.id, msg: { type: "typed", text: draft } };
+        },
+        () => ({ type: "tile", id: t.id, msg: { type: "submit" } }),
+      );
+    } else {
+      out.push(
+        () => ({ type: "tile", id: t.id, msg: { type: "bump" } }),
+        () => ({ type: "tile", id: t.id, msg: { type: "go" } }),
+      );
+    }
+  }
+
   out.push(() => ({ type: "seen", rev: c.ms % 50 }));
 
   if (dial !== null) {
@@ -159,7 +259,7 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
     out.push(() => {
       const b = brainFor(w, pid);
       const before = b.views[b.rev]!;
-      const after = c.aux % 3 === 0 ? { count: 0 } : { count: before.count + (c.aux % 2 === 0 ? 1 : -1) };
+      const after = listEdit(before, c.aux, POOL[c.ms % POOL.length]!);
       b.views.push(after);
       b.rev += 1;
       return { type: "view", pid, note: { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(before, after) } };
@@ -168,7 +268,7 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
       const b = brainFor(w, pid);
       return { type: "view", pid, note: { type: "whole", rev: b.rev, view: b.views[b.rev] } };
     });
-    out.push(() => ({ type: "view", pid, note: { type: "whole", rev: 1, view: { count: "bad" } } }));
+    out.push(() => ({ type: "view", pid, note: { type: "whole", rev: 1, view: { items: "bad", left: 0 } } }));
   }
 
   // Answers to the writes the brain has, on their own id and dial.
@@ -206,7 +306,7 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
         value:
           OUTCOMES[c.aux % 2] === "accepted"
             ? { _tag: "accepted", rev: c.ms, pos: c.aux }
-            : { _tag: "refused", reason: "too_many" },
+            : { _tag: "refused", reason: REASONS[c.ms % REASONS.length]! },
         ms: c.ms,
       }));
       out.push(() => ({ type: "send_err", ...on, error: { _tag: c.aux % 2 === 0 ? "unreachable" : "unknown" } }));
@@ -219,7 +319,7 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
     const on = { id: f.id, dial: f.dial };
     out.push(() =>
       f.call._tag === "open"
-        ? { type: "open_ok", ...on, value: { rev: 0, view: { count: 0 } }, ms: c.ms }
+        ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
         : f.call._tag === "send"
           ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
           : { type: "read_ok", ...on, value: [], ms: c.ms },
@@ -265,7 +365,18 @@ const moves = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
 /** Folds a walk, keeping the world beside the model, and hands each step to `each`. */
 const fold = (list: ReadonlyArray<Choice>, each: (e: Event) => void): World => {
   const [s0, cmds0] = machine.init(null, ctx);
-  const w: World = { s: s0, waiting: [], flights: [], old: [], brains: new Map(), pids: new Map(), dials: 1 };
+  const w: World = {
+    s: s0,
+    waiting: [],
+    flights: [],
+    old: [],
+    brains: new Map(),
+    pids: new Map(),
+    dials: 1,
+    from: new Map(),
+    typed: new Set(),
+    submitted: new Set(),
+  };
   const handOut = (cmds: ReadonlyArray<Cmd>) => {
     for (const cmd of cmds) {
       if (["key", "now", "write", "persist", "record"].includes(cmd.type)) {
@@ -310,6 +421,17 @@ const fold = (list: ReadonlyArray<Choice>, each: (e: Event) => void): World => {
     w.flights = w.flights.filter((f) => f.dial === open);
     handOut(cmds);
     w.dials = Math.max(w.dials, linkDial(next) ?? 0, next.dials);
+
+    // A new letter is from the tile that pressed it, by a button or through its own machine's press.
+    for (const p of next.client.pending.filter((p) => p.n >= prev.client.written)) {
+      w.from.set(p.n, m.type === "press" ? m.tile : m.type === "tile" ? m.id : "?");
+
+      if (m.type === "tile") {
+        const sent: unknown = Reflect.get(Object(p.m), "name");
+        w.submitted.add(typeof sent === "string" ? sent : "");
+      }
+    }
+
     w.s = next;
     each({ prev, m, next, cmds, world: w });
   }
@@ -511,7 +633,7 @@ describe("L8: the window parent's connection", () => {
               type: "open_ok",
               id: f.id,
               dial: f.dial,
-              value: { rev: 0, view: { count: 0 } },
+              value: { rev: 0, view: EMPTY },
               ms: 1,
             });
             expect(late[0], "a late open rolled the view back").toEqual(next);
@@ -551,6 +673,139 @@ describe("L8: the window parent's connection", () => {
     );
     expect(seen.open).toBeGreaterThan(0);
     expect(seen.closed).toBeGreaterThan(0);
+  });
+
+  it("a tile's own Msg steps only that tile's machine, and its press Cmd becomes exactly one Client press for that tile's pid", () => {
+    const seen = { stepped: 0, pressed: 0, closed: 0 };
+    fc.assert(
+      fc.property(walks, (list) => {
+        fold(list, ({ prev, m, next, cmds }) => {
+          if (m.type !== "tile") {
+            return;
+          }
+
+          const before = prev.tiles.find((t) => t.id === m.id)!;
+          const tileMachine = tileFor(before.name)!;
+          const [own, out] = applyCell(tileMachine, before.own as never, m.msg as never) as readonly [
+            unknown,
+            ReadonlyArray<Cmd>,
+          ];
+          seen.stepped++;
+          expect(next.tiles.find((t) => t.id === m.id)!.own, "the tile's Model is its own machine's").toEqual(own);
+          expect(
+            next.tiles.filter((t) => t.id !== m.id).map((t) => t.own),
+            "another tile's Model moved",
+          ).toEqual(prev.tiles.filter((t) => t.id !== m.id).map((t) => t.own));
+          expect(
+            cmds.filter((c) => c.type === "press"),
+            "a tile machine's press left the parent as a Cmd",
+          ).toEqual([]);
+
+          const pressed = out.filter((c) => c.type === "press");
+          const open = before.reach._tag === "open" ? before.reach : null;
+          const letters = next.client.pending.filter((p) => p.n >= prev.client.written);
+
+          if (pressed.length === 0 || open === null) {
+            seen.closed += pressed.length > 0 ? 1 : 0;
+            expect(next.client, "no press, or a tile that is not open, made a letter").toEqual(prev.client);
+            return;
+          }
+
+          seen.pressed++;
+          expect(letters).toEqual([
+            {
+              _tag: "dating",
+              n: prev.client.written,
+              pid: open.pid,
+              m: pressed[0]!["m"],
+              seen: prev.client.seen,
+              viewRev: prev.client.views[open.pid]?.rev ?? 0,
+            },
+          ]);
+          expect(cmds.filter((c) => c.type === "now")).toEqual([{ type: "now", n: prev.client.written }]);
+        });
+      }),
+      opts,
+    );
+    expect(seen.stepped).toBeGreaterThan(0);
+    expect(seen.pressed).toBeGreaterThan(0);
+    expect(seen.closed, "some tile presses came while the tile was not open").toBeGreaterThan(0);
+  });
+
+  it("a tile's refusal is set only by a refused reply to its own letter, and cleared by its next press", () => {
+    const seen = { set: 0, cleared: 0, others: 0 };
+    fc.assert(
+      fc.property(walks, (list) => {
+        fold(list, ({ prev, m, next, world }) => {
+          const flight =
+            "id" in m && typeof m.id === "number"
+              ? prev.flight.find((f) => f.id === m.id && f.dial === m.dial)
+              : undefined;
+          const refusedLetter =
+            m.type === "send_ok" && flight?.call._tag === "send" && m.value._tag === "refused"
+              ? prev.client.pending.find((p) => p._tag === "ready" && p.letter === flight.call["letter"])
+              : undefined;
+          const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
+          const made = next.client.pending.filter((p) => p.n >= prev.client.written);
+          const aimed = m.type === "press" ? m.tile : m.type === "tile" ? m.id : null;
+
+          for (const t of next.tiles) {
+            const was = prev.tiles.find((x) => x.id === t.id)!.refusal;
+            const pressedHere = made.some((p) => world.from.get(p.n) === t.id);
+
+            const own = refusedLetter !== undefined && owner === t.id;
+            seen.set += own ? 1 : 0;
+            seen.others += !own && refusedLetter !== undefined ? 1 : 0;
+            seen.cleared += !own && pressedHere && was !== null ? 1 : 0;
+
+            const [allowed, label]: readonly [ReadonlyArray<unknown>, string] = own
+              ? [
+                  [
+                    {
+                      m: refusedLetter.m,
+                      reason: (m as { readonly value: { readonly reason: string } }).value.reason,
+                    },
+                  ],
+                  `${t.id}'s own refused letter`,
+                ]
+              : pressedHere
+                ? [[null], `${t.id}'s next press clears its refusal`]
+                : aimed === t.id && made.length === 0
+                  ? // A press that made no letter (the tile is not open) may clear the words or keep them.
+                    [[was, null], `${t.id} after a press that sent nothing`]
+                  : [[was], `${t.id} after ${m.type}`];
+            expect(allowed, label).toContainEqual(t.refusal);
+          }
+        });
+      }),
+      opts,
+    );
+    expect(seen.set).toBeGreaterThan(0);
+    expect(seen.cleared, "a refusal was cleared by its tile's next press").toBeGreaterThan(0);
+    expect(seen.others, "a refusal for one tile left the other tiles alone").toBeGreaterThan(0);
+  });
+
+  it("the tile's own Model never leaves the tab: no record holds a draft, and no write holds one never submitted", () => {
+    let typed = 0;
+    fc.assert(
+      fc.property(walks, (list) => {
+        fold(list, ({ cmds, world }) => {
+          typed = Math.max(typed, world.typed.size);
+
+          for (const c of cmds) {
+            const text = JSON.stringify(c);
+            const drafts = [...world.typed].filter((d) => d !== "" && text.includes(d));
+
+            const recorded = c.type === "record" ? drafts : [];
+            const unsent = isWrite(c) ? drafts.filter((d) => !world.submitted.has(d)) : [];
+            expect(recorded, "a record copied typed text").toEqual([]);
+            expect(unsent, "a write carried a draft nobody submitted").toEqual([]);
+          }
+        });
+      }),
+      opts,
+    );
+    expect(typed).toBeGreaterThan(0);
   });
 });
 
@@ -613,7 +868,7 @@ describe("L9: the records the window emits", () => {
   });
 
   it("a press row comes before its letter's first write, and one reply row at settlement counts every send", () => {
-    const seen = { press: 0, reply: 0, resent: 0 };
+    const seen = { press: 0, reply: 0, resent: 0, free: 0 };
     fc.assert(
       fc.property(walks, (list) => {
         const pressed = new Set<string>();
@@ -656,8 +911,18 @@ describe("L9: the records the window emits", () => {
               seen.reply++;
               const letter = String(f.call.letter);
               seen.resent += (sends.get(letter) ?? 0) > 1 ? 1 : 0;
+              const reason =
+                m.value._tag === "refused" ? { reason: isWord(m.value.reason) ? m.value.reason : "other" } : {};
+              seen.free += m.value._tag === "refused" && !isWord(m.value.reason) ? 1 : 0;
               expect(replies).toEqual([
-                { _tag: "reply", letter, result: m.value._tag, attempts: sends.get(letter) ?? 0, ms: m.ms },
+                {
+                  _tag: "reply",
+                  letter,
+                  result: m.value._tag,
+                  attempts: sends.get(letter) ?? 0,
+                  ms: m.ms,
+                  ...reason,
+                },
               ]);
               return;
             }
@@ -671,6 +936,7 @@ describe("L9: the records the window emits", () => {
     expect(seen.press).toBeGreaterThan(0);
     expect(seen.reply).toBeGreaterThan(0);
     expect(seen.resent, "some letters went more than once").toBeGreaterThan(0);
+    expect(seen.free, "some refusals had free-text reasons").toBeGreaterThan(0);
   });
 
   it("a whole row per whole installed, an asked row per ask, and one patch row per ended run with its count", () => {

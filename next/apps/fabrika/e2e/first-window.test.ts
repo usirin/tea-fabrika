@@ -5,11 +5,16 @@
 //
 // What these laws hold the page to, from the plan: `/` boots `startWindow` outside React and mounts
 // `Window` under Strict Mode; the screens by link state are a waiting screen with the code, the
-// fingerprint and the one `grant.ts client` line, the desk with one named tile region per tile (its
-// count in the tile's own status, its buttons by the program's input descriptions), a removed screen
-// with an Ask again button, and a blocked screen. A lost link dims the tile and makes it `inert`.
+// fingerprint and the one `grant.ts client` line, the desk with one named tile region per tile (the
+// checklist `checklist:1`: a box per item named by the item, a `Remove <name>` button per item, and a
+// text field named by the add input's description, with its refusal words tied to it by
+// `aria-describedby`), a removed screen with an Ask again button, and a blocked screen. A lost link dims
+// the tile and makes it `inert`.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { applyCell } from "@demlik/tea";
+import { checklist, checklistMachine } from "@kampus/checklist";
+import { checklistWindow } from "@kampus/checklist/window";
 import { Effect } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -21,7 +26,9 @@ import {
   home,
   type Home,
   profile,
+  reader,
   remove,
+  type Row,
   rows,
   type Seen,
   stopped,
@@ -32,15 +39,27 @@ import {
 } from "./p14.test-support.ts";
 
 const SEED = 119120;
-const NAME = "counter:1";
+const NAME = "checklist:1";
 
-const INPUTS = [
-  ["inc", "Add one"],
-  ["dec", "Take one away"],
-  ["reset", "Back to zero"],
-] as const;
+type Model = typeof checklistMachine.model.Type;
+type Msg = typeof checklistMachine.msg.Type;
 
-const fold = (count: number, input: string) => (input === "inc" ? count + 1 : input === "dec" ? count - 1 : 0);
+/** What a tab must show for `model`: each item's box, checked when the item is. */
+const foldRows = (model: Model): ReadonlyArray<Row> =>
+  model.items.map((i) => ({ name: i.name, checked: i.state._tag === "checked" }));
+
+/** Polls until `check` holds, or fails with the last value it read after 30 s. */
+const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: string) =>
+  Effect.gen(function* () {
+    let last: A = yield* read;
+
+    for (let tries = 0; tries < 120 && !check(last); tries++) {
+      yield* Effect.sleep("250 millis");
+      last = yield* read;
+    }
+
+    expect(check(last), `${label}: ${JSON.stringify(last)}`).toBe(true);
+  });
 
 /** Runs one suite body in its own scope, racing the worker's stop, with the planted test fault. */
 const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>) =>
@@ -119,8 +138,8 @@ describe("L14: the first window (p29)", () => {
           // The person's grant brings both tabs online on the same socket: no reload, no new dial.
           const before = first.seen.sockets.length;
           expect((yield* grant(h, w1)).ok).toBe(true);
-          yield* Effect.promise(() => tile(first.page, NAME).count.waitFor({ timeout: 30_000 }));
-          yield* Effect.promise(() => tile(second.page, NAME).count.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(second.page, NAME).field.waitFor({ timeout: 30_000 }));
           expect(first.seen.sockets.length, "online without a new dial").toBe(before);
           expect(
             yield* Effect.promise(() => tile(first.page, NAME).region.getAttribute("inert")),
@@ -128,7 +147,7 @@ describe("L14: the first window (p29)", () => {
           ).toBeNull();
           // A reload uses the same key and needs no new grant.
           yield* Effect.promise(() => first.page.reload());
-          yield* Effect.promise(() => tile(first.page, NAME).count.waitFor({ timeout: 30_000 }));
+          yield* Effect.promise(() => tile(first.page, NAME).field.waitFor({ timeout: 30_000 }));
           expect(
             yield* Effect.promise(() => first.page.locator("body").innerText()),
             "a reload shows no code",
@@ -148,10 +167,10 @@ describe("L14: the first window (p29)", () => {
   );
 });
 
-describe("L15: presses in two tabs", () => {
+describe("L15: use in two tabs (W2)", () => {
   it(
-    "after any presses in either tab, both tabs show the count the counter folds from the accepted letters",
-    { timeout: 600_000 },
+    "after any adds, checks, unchecks and removes in either tab, both tabs show the checklist's fold of the accepted letters, each tab shows its own refusals, and no letter lands twice",
+    { timeout: 900_000 },
     async () => {
       await suite(
         Effect.gen(function* () {
@@ -163,43 +182,94 @@ describe("L15: presses in two tabs", () => {
           yield* online(h, tabs[0]!.page);
           yield* Effect.forEach(
             tabs,
-            (t) => Effect.promise(() => tile(t.page, NAME).count.waitFor({ timeout: 30_000 })),
+            (t) => Effect.promise(() => tile(t.page, NAME).field.waitFor({ timeout: 30_000 })),
             { concurrency: 1 },
           );
-          let count = Number(yield* Effect.promise(() => tile(tabs[0]!.page, NAME).count.innerText()));
+          // The brain's own fold of every accepted letter, and the words each tab must show now.
+          let model: Model = checklistMachine.init(null, {})[0];
+          const words: Array<string> = tabs.map(() => "");
+          let pressed = 0;
+          yield* settle(tile(tabs[0]!.page, NAME).shown, (r) => r.length === 0, "a fresh brain's list is empty");
           yield* Effect.promise(() =>
             fc.assert(
               fc.asyncProperty(
-                fc.array(fc.record({ tab: fc.nat(), input: fc.nat() }), { minLength: 1, maxLength: 6 }),
-                async (presses) => {
-                  for (const p of presses) {
-                    const t = tile(tabs[p.tab % tabs.length]!.page, NAME);
-                    // Pick from the buttons enabled now, as a person can press only those.
-                    const enabled: Array<(typeof INPUTS)[number]> = [];
+                fc.array(
+                  fc.record({
+                    tab: fc.nat(),
+                    control: fc.nat(),
+                    row: fc.nat(),
+                    name: fc.constantFrom("milk", "bread", "eggs"),
+                  }),
+                  { minLength: 1, maxLength: 6 },
+                ),
+                (moves) =>
+                  Effect.runPromise(
+                    Effect.gen(function* () {
+                      for (const p of moves) {
+                        const at = p.tab % tabs.length;
+                        const t = tile(tabs[at]!.page, NAME);
+                        // A control enabled in this tab now: the field, or a row it shows (maybe stale).
+                        const shown = yield* t.shown;
+                        const row = shown.length === 0 ? null : shown[p.row % shown.length]!;
+                        const pick = row === null ? 0 : p.control % 3;
+                        let msg: Msg;
 
-                    for (const input of INPUTS) {
-                      if (await t.button(input[1]).isEnabled()) {
-                        enabled.push(input);
+                        if (pick === 0) {
+                          msg = { type: "add", name: p.name };
+                          yield* Effect.promise(() => t.field.fill(p.name));
+                          yield* Effect.promise(() => t.field.press("Enter"));
+                        } else if (pick === 1) {
+                          msg = { type: row!.checked ? "uncheck" : "check", name: row!.name };
+                          yield* Effect.promise(() => t.box(row!.name).click());
+                        } else {
+                          msg = { type: "remove", name: row!.name };
+                          yield* Effect.promise(() => t.remove(row!.name).click());
+                        }
+
+                        pressed++;
+                        const refusal = checklist.refuse(model, msg);
+
+                        if (refusal === null) {
+                          model = applyCell(checklistMachine, model, msg)[0];
+                        }
+
+                        words[at] = refusal === null ? "" : checklistWindow.refused!(msg, refusal.reason);
+                        // The tab that pressed settles on the fold and on its own words before the next move.
+                        const want = foldRows(model);
+                        yield* settle(
+                          Effect.all([t.shown, t.refusal], { concurrency: 1 }),
+                          ([r, said]) =>
+                            JSON.stringify(r) === JSON.stringify(want) &&
+                            (words[at] === "" ? said === "" : said.includes(words[at]!)),
+                          `tab ${at} after ${JSON.stringify(msg)}`,
+                        );
                       }
-                    }
 
-                    expect(enabled.length, "an online tile offers its inputs").toBeGreaterThan(0);
-                    const [type, label] = enabled[p.input % enabled.length]!;
-                    await t.button(label).click();
-                    count = fold(count, type);
-                  }
-
-                  // Every letter lands once: both tabs settle on the counter's fold of every press.
-                  for (const t of tabs) {
-                    await tile(t.page, NAME)
-                      .count.filter({ hasText: new RegExp(`^${count}$`) })
-                      .waitFor({ timeout: 30_000 });
-                  }
-                },
+                      // Both tabs settle on the fold, each with its own words and no other's.
+                      for (const [at, t] of tabs.entries()) {
+                        const want = foldRows(model);
+                        yield* settle(
+                          Effect.all([tile(t.page, NAME).shown, tile(t.page, NAME).refusal], { concurrency: 1 }),
+                          ([r, said]) =>
+                            JSON.stringify(r) === JSON.stringify(want) &&
+                            (words[at] === "" ? said === "" : said.includes(words[at]!)) &&
+                            words.every((w, other) => other === at || w === "" || w === words[at] || !said.includes(w)),
+                          `tab ${at} at the end`,
+                        );
+                      }
+                    }),
+                  ),
               ),
               { seed: SEED, numRuns: 5 },
             ),
           );
+          // No letter id lands twice in checklist:1's inbox: a duplicated add would hide as a refusal.
+          const r = yield* reader(h, dev);
+          const inbox = yield* r.read(`${NAME}/inbox`);
+          const ids = inbox.map((e) => e.id);
+          expect(ids.length, "every press reached the inbox").toBeGreaterThan(0);
+          expect(ids.length).toBeLessThanOrEqual(pressed);
+          expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
         }),
       );
     },
@@ -216,9 +286,10 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
           fc.record({
             token: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
             secret: fc.stringMatching(/^[A-Za-z0-9_-]{24,40}$/),
+            item: fc.stringMatching(/^[a-z]{24,40}$/),
             failFirst: fc.boolean(),
           }),
-          async ({ token, secret, failFirst }) => {
+          async ({ token, secret, item, failFirst }) => {
             await suite(
               Effect.gen(function* () {
                 const h = yield* home;
@@ -238,9 +309,17 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 yield* grant(h, w);
-                yield* Effect.promise(() => tile(t.page, NAME).count.waitFor({ timeout: 30_000 }));
-                yield* Effect.promise(() => tile(t.page, NAME).button("Add one").click());
-                yield* Effect.sleep("2 seconds");
+                // A sentinel item name, added twice: the second add is refused `taken`. The name is
+                // input text, so the page may show it but no row, record, URL or console line may.
+                const field = tile(t.page, NAME).field;
+                yield* Effect.promise(() => field.waitFor({ timeout: 30_000 }));
+
+                for (let n = 0; n < 2; n++) {
+                  yield* Effect.promise(() => field.fill(`itm_${item}`));
+                  yield* Effect.promise(() => field.press("Enter"));
+                  yield* Effect.sleep("2 seconds");
+                }
+
                 const tt = yield* target(w).pipe(Effect.orElseSucceed(() => null));
                 const revoked = tt === null ? null : yield* remove(h, dev, tt);
                 const personKey = yield* Effect.sync(() => readFileSync(h.key, "utf8"));
@@ -253,6 +332,12 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     : revoked.armored.split("\n").filter((l) => l.length > 20 && !l.startsWith("-----"))),
                 ];
                 const outputs = [...(yield* look(t.page, t.seen)), ...stored(h.dir)];
+
+                for (const form of [`itm_${item}`, encodeURIComponent(`itm_${item}`)]) {
+                  for (const [output, text] of outputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
+                    expect(text.includes(form), `${output} copies an item's name`).toBe(false);
+                  }
+                }
 
                 for (const s of secrets) {
                   for (const form of [s, encodeURIComponent(s), btoa(s)]) {

@@ -8,8 +8,10 @@
 // release to, and `P14_E2E_FAULT` to `{at, kind}`: right after acquiring `at`, fail setup (`setup`),
 // fail the test (`test`), or wait to be interrupted (`hold`). Without them the fixture runs plainly.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { checklist } from "@kampus/checklist";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Effect, Schema } from "effect";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket } from "playwright";
@@ -18,7 +20,7 @@ import { heldPort } from "../src/port.test-support.ts";
 const APP = resolve(import.meta.dirname, "..");
 export const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
-export const RESOURCES = ["home", "server", "browser", "context", "page"] as const;
+export const RESOURCES = ["home", "server", "browser", "context", "page", "socket"] as const;
 type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
@@ -346,12 +348,217 @@ export const rows = (page: Page): Effect.Effect<ReadonlyArray<unknown>> =>
   // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's evaluate is a Promise
   Effect.promise(() => page.evaluate<ReadonlyArray<unknown>>(ROWS));
 
-/** The tile of `name`, its count and its buttons, found by role as a person or a screen reader finds them. */
+/** One row of a checklist tile as a person or a screen reader meets it: its box's name and state. */
+export type Row = { readonly name: string; readonly checked: boolean };
+
+/** format: Playwright's ARIA snapshot lines for a checkbox, `- checkbox "<name>"` with `[checked]`. */
+const BOX = /^\s*- checkbox "((?:[^"\\]|\\.)*)"(.*)$/;
+
+/** The checklist tile of `name`, found by role: its region, its add field, a row's box and remove
+ *  button, the rows it shows now, and the words tied to the field. */
 export const tile = (page: Page, name: string) => {
   const region = page.getByRole("region", { name: new RegExp(name.replace(/[:]/g, "\\:")) });
+  const field = region.getByRole("textbox", { name: checklist.inputs.add.description });
   return {
     region,
-    count: region.getByRole("status"),
-    button: (label: string) => region.getByRole("button", { name: label }),
+    field,
+    box: (item: string) => region.getByRole("checkbox", { name: item, exact: true }),
+    remove: (item: string) => region.getByRole("button", { name: `Remove ${item}`, exact: true }),
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
+    shown: Effect.promise(() => region.ariaSnapshot()).pipe(
+      Effect.map((yaml): ReadonlyArray<Row> =>
+        yaml.split("\n").flatMap((line) => {
+          const m = BOX.exec(line);
+          const [, item = "", state = ""] = m ?? [];
+          return m === null ? [] : [{ name: item.replace(/\\(.)/g, "$1"), checked: state.includes("[checked]") }];
+        }),
+      ),
+    ),
+    /** The text of every element the field's `aria-describedby` names: its refusal words, or "". */
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's evaluate is a Promise
+    refusal: Effect.promise(() =>
+      field.evaluate((el) =>
+        (el.getAttribute("aria-describedby") ?? "")
+          .split(/\s+/)
+          .filter((id) => id !== "")
+          .map((id) => document.getElementById(id)?.textContent ?? "")
+          .join(" ")
+          .trim(),
+      ),
+    ),
   };
+};
+
+// --- A reader of the instance's streams ----------------------------------------------------------
+
+const field = (value: Buffer | string) => {
+  const body = Buffer.from(value),
+    size = Buffer.alloc(4);
+  size.writeUInt32BE(body.length);
+  return Buffer.concat([size, body]);
+};
+
+/** A client key of the reader's own, signing as the door's hello and SSHSIG ask. */
+const identity = () => {
+  const pair = generateKeyPairSync("ed25519"),
+    bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x ?? "", "base64url"),
+    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+  return {
+    raw: bytes.toString("base64url"),
+    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    proof: (text: string) => {
+      const payload = Buffer.concat([
+        Buffer.from("SSHSIG"),
+        field("fabrika-client"),
+        field(""),
+        field("sha512"),
+        field(createHash("sha512").update(text).digest()),
+      ]);
+      const version = Buffer.alloc(4);
+      version.writeUInt32BE(1);
+      const packet = Buffer.concat([
+        Buffer.from("SSHSIG"),
+        version,
+        field(blob),
+        field("fabrika-client"),
+        field(""),
+        field("sha512"),
+        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
+      ]);
+      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
+      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+    },
+  };
+};
+
+class WireClosed extends Schema.TaggedError<WireClosed>()("WireClosed", {}) {}
+
+const Frame = Schema.Struct({
+  id: Schema.optionalKey(Schema.Unknown),
+  method: Schema.optionalKey(Schema.String),
+  params: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Unknown),
+  error: Schema.optionalKey(Schema.Unknown),
+});
+type Frame = typeof Frame.Type;
+
+const Entries = Schema.Struct({
+  entries: Schema.Array(Schema.Struct({ id: Schema.String, rev: Schema.Number })),
+});
+
+/** A client of the instance with a key of its own, granted by the person as the tab is, through the
+ *  waiting code and `grant.ts client`. Its socket is acquired in the caller's scope. `read(stream)`
+ *  answers every entry of `stream`, page by page. */
+export const reader = (h: Home, dev: Dev) =>
+  Effect.gen(function* () {
+    const key = identity();
+    const tab = "p14-reader";
+    const frames: Array<Frame> = [];
+    let closed = false;
+    const ws = yield* owned(
+      "socket",
+      Effect.sync(() => {
+        const socket = new WebSocket(
+          `${dev.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+        );
+        socket.addEventListener("message", ({ data }) => {
+          const text = String(data);
+
+          if (text !== "pong") {
+            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+          }
+        });
+        socket.addEventListener("close", () => {
+          closed = true;
+        });
+        socket.addEventListener("error", () => {
+          closed = true;
+        });
+        return socket;
+      }),
+      (socket) => Effect.sync(() => socket.close()),
+    );
+    const next = (test: (f: Frame) => boolean) =>
+      Effect.gen(function* () {
+        for (;;) {
+          const at = frames.findIndex(test);
+
+          const [frame] = at >= 0 ? frames.splice(at, 1) : [];
+
+          if (frame !== undefined) {
+            return frame;
+          }
+
+          if (closed) {
+            return yield* new WireClosed();
+          }
+
+          yield* Effect.sleep("20 millis");
+        }
+      }).pipe(Effect.timeout("60 seconds"), Effect.orDie);
+    let serial = 0;
+    const call = (method: string, params: unknown) =>
+      Effect.gen(function* () {
+        while (ws.readyState === WebSocket.CONNECTING) {
+          yield* Effect.sleep("20 millis");
+        }
+
+        const id = ++serial;
+        ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+        return yield* next((f) => f.id === id);
+      });
+    const hello = (nonce: string) =>
+      call("initialize", {
+        versions: [1],
+        has: ["seal"],
+        ping: "30s",
+        key: key.raw,
+        tab,
+        nonce,
+        platform: "headless",
+        os: "linux",
+        sentAt: new Date().toISOString(),
+        signed: key.proof(`fabrika-hello\n${dev.url}\n${tab}\n${nonce}`),
+      });
+    const nonceIn = (f: Frame) => String(Reflect.get(Object(f.params), "nonce"));
+    const first = yield* hello(nonceIn(yield* next((f) => f.method === "challenge")));
+    expectWaiting(first);
+    const knocked = yield* call("gateway.knock", { label: "p14 reader" });
+    const code = String(Reflect.get(Object(knocked.result), "code"));
+    const granted = yield* grant(h, { line: "", url: dev.url, fingerprint: key.fingerprint, code });
+
+    if (!granted.ok) {
+      return yield* Effect.die(new Error("the person could not grant the reader"));
+    }
+
+    const again = yield* hello(nonceIn(yield* next((f) => f.method === "client.granted")));
+
+    if (again.error !== undefined) {
+      return yield* Effect.die(new Error("the granted reader was not admitted"));
+    }
+
+    return {
+      read: (stream: string) =>
+        Effect.gen(function* () {
+          const all: Array<(typeof Entries.Type.entries)[number]> = [];
+
+          for (;;) {
+            const page = yield* call("ledger.read", { stream, after: all.at(-1)?.rev ?? 0 });
+            const { entries } = yield* Schema.decodeUnknownEffect(Entries)(page.result).pipe(Effect.orDie);
+
+            if (entries.length === 0) {
+              return all;
+            }
+
+            all.push(...entries);
+          }
+        }),
+    };
+  });
+
+/** The door's first answer to a key it has not granted: not admitted, so the reader must knock. */
+const expectWaiting = (f: Frame) => {
+  if (f.error === undefined) {
+    throw new Error("the reader's fresh key was admitted without a grant");
+  }
 };
