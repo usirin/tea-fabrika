@@ -17,7 +17,10 @@ const options = { seed: SEED, numRuns: RUNS };
 type ChaosProgram = typeof chaos;
 type Model = typeof Fabrika.ChaosMachine.Model.Type;
 type Msg = typeof Fabrika.ChaosMachine.Msg.Type;
-type Command = ReturnType<ChaosProgram["machine"]["init"]>[1][number];
+
+type Command = ReturnType<
+  typeof Fabrika.ChaosMachine.now | typeof Fabrika.ChaosMachine.fire | typeof Fabrika.ChaosMachine.inspect
+>;
 
 const id = (n: number) =>
   Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
@@ -117,7 +120,7 @@ const completed = (
   const ticks: Array<{ readonly at: number; readonly cmds: ReadonlyArray<Command>; readonly model: Model }> = [];
   const step = (msg: Msg) => {
     msgs.push(msg);
-    const [next, out] = applyCell(chaos.machine, model, msg);
+    const [next, out] = applyCell<Model, Msg, Command>(chaos.machine, model, msg);
     model = next;
     commands.push(...out);
     return out;
@@ -373,7 +376,7 @@ it("unsafe deadline arithmetic ends incomplete and produces no fire or unsafe wa
   fc.assert(
     fc.property(starts, fc.integer({ min: 1, max: 10000 }), (start, gap) => {
       const initial = chaos.machine.init(null, {})[0];
-      const [starting, cmds] = applyCell(chaos.machine, initial, { type: "start", ...start, gap });
+      const [starting, cmds] = applyCell<Model, Msg, Command>(chaos.machine, initial, { type: "start", ...start, gap });
       const cmd = cmds[0];
       expect(cmd?.type).toBe("now");
 
@@ -395,7 +398,14 @@ it("the public stepper refuses a second active start without saving it", () => {
   fc.assert(
     fc.property(starts, (start) => {
       const pure = Result.getOrThrow(Fabrika.stepper(chaos));
-      const first = pure.step(pure.init(null).model, { type: "start", ...start });
+      const initial = pure.init(null);
+      expect(initial._tag).toBe("stepped");
+
+      if (initial._tag !== "stepped") {
+        throw new Error("initial state was refused");
+      }
+
+      const first = pure.step(initial.model, { type: "start", ...start });
       expect(first._tag).toBe("stepped");
 
       if (first._tag !== "stepped") {
