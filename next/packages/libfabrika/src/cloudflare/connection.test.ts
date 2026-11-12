@@ -93,6 +93,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     INSTANCE: JSON.stringify(input),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(input),
         route: (_client: string, method: string, params: unknown) => {
           calls.push({ method, params });
           // edge: the platform RPC returns a Promise

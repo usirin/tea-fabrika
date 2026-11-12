@@ -2,7 +2,9 @@
 // callback the runtime really composes: `projectRuntime` builds its project layer, the layer's door
 // builds the Gateway layer, and both are captured here. An independent copy of the guard before that
 // change is the oracle: the same name, and the same reads of `type` in the same order.
+import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
+import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
@@ -15,10 +17,11 @@ const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Arra
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 vi.mock("@kampus/libfabrika/workers/gateway", () => ({ connectionLayer: () => Layer.empty }));
 
-vi.mock("@kampus/libfabrika/workers/runtime", () => ({
-  projectLayer: (_ctx: unknown, _env: unknown, options: unknown) => {
+vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
+  ...(await original<typeof import("@kampus/libfabrika/workers/runtime")>()),
+  projectRuntime: (_ctx: unknown, _env: unknown, options: unknown) => {
     held.project.push(options);
-    return Layer.empty;
+    return { runPromise: Effect.runPromise, dispose: async () => {} };
   },
 }));
 
@@ -53,14 +56,20 @@ StartsTest.law(
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const env: unknown = { INSTANCE: JSON.stringify(settingsFixture(settings)) };
+  const input = settingsFixture(settings);
+  const env = { INSTANCE: JSON.stringify(input) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);
   await runtime.dispose();
   const project = held.project.at(-1);
   const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
   expect(typeof door).toBe("function");
-  Reflect.apply(door, undefined, [{ deliver: () => Effect.void }]);
+  const checked = await Effect.runPromise(readSettings(env));
+  await Effect.runPromise(
+    Reflect.apply(door, undefined, [{ deliver: () => Effect.void }]).pipe(
+      Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) }),
+    ),
+  );
   const options = held.door.at(-1);
   const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
   const name = typeof inputs === "object" && inputs !== null ? Reflect.get(inputs, "name") : undefined;

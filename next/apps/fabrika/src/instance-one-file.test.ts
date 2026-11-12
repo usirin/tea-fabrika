@@ -12,6 +12,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
+import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
@@ -344,7 +345,8 @@ describe("P16 stack and sealed loader", () => {
             window: null,
             build: built.build,
           });
-          const result = await Effect.runPromise(Effect.result(stack(built, settings)));
+          const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
+          const result = await Effect.runPromise(Effect.result(stack(built, checked)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
 
           if (expectedBytes >= 5 * 1024) {

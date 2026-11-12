@@ -51,7 +51,7 @@ const settingsExec =
   (query, ...args) => {
     const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
 
-    if (settings && /SELECT \* FROM entries WHERE stream/i.test(query)) {
+    if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");
 
       if (failed()) {
@@ -123,6 +123,7 @@ for (const path of entryPaths) {
 
           const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
           let consumers = 0;
+          let settingsCalls = 0;
           const bad = StartsTest.corrupt(deployment, Math.floor(choice / moves.length));
           const sql = w.ctx.storage.sql;
           const ctx = {
@@ -157,7 +158,19 @@ for (const path of entryPaths) {
               }),
             },
           };
-          const env = { ...w.env, INSTANCE: JSON.stringify(bad) };
+          const env = {
+            ...w.env,
+            INSTANCE: JSON.stringify(bad),
+            PROJECT: {
+              ...w.env.PROJECT,
+              getByName: () => ({
+                settingsStart: async (wire: StartsTest.Input) => {
+                  settingsCalls++;
+                  return StartsTest.reply(wire);
+                },
+              }),
+            },
+          };
           const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
           const local = {
             ...config,
@@ -222,6 +235,8 @@ for (const path of entryPaths) {
           }
 
           expect(consumers).toBe(0);
+          // A remote receipt check must not hide a skipped local snapshot check.
+          expect(settingsCalls).toBe(0);
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
@@ -846,6 +861,25 @@ SettingsTest.suite((recipe, secret) =>
         owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
       });
       const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+      let attached = Attached.cases.online.make({
+        client: "fixture-client",
+        identity: { key: "fixture-public", person: input.founding.person, as: "window" },
+        version: 1,
+        waits: [],
+        watching: false,
+        busy: false,
+      });
+      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies hibernating socket methods without workerd's nominal brand
+      const socket = {
+        deserializeAttachment: () => attached,
+        serializeAttachment: (next: typeof attached) => {
+          attached = next;
+        },
+        send: (frame: string) => {
+          captured.transport.push(frame);
+        },
+        close: () => {},
+      } as unknown as WebSocket;
       // Only platform handles are doubled. The five consumer implementations run unchanged.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
       const ctx = {
@@ -886,16 +920,22 @@ SettingsTest.suite((recipe, secret) =>
         },
         getWebSockets: () => {
           consumers++;
-          return [];
+          return path === "Connection" ? [socket] : [];
         },
-        getTags: () => [],
+        getTags: () => ["fixture-session", "fixture-tab", "fixture-public"],
+        getWebSocketAutoResponseTimestamp: () => null,
         setWebSocketAutoResponse: () => {},
       } as unknown as DurableObjectState;
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
       const env = {
         INSTANCE: encoded,
         UNRELATED_PASSWORD: secret,
-        PROJECT: { getByName: () => ({ settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)) }) },
+        PROJECT: {
+          getByName: () => ({
+            settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
+            route: async () => ({ _tag: "ok", result: {} }),
+          }),
+        },
         PROCESS: {
           getByName: () => ({
             configure: async (descriptor: unknown) => {
@@ -994,7 +1034,9 @@ SettingsTest.suite((recipe, secret) =>
               const work =
                 path === "Connection"
                   ? ConnectionService.use((service) =>
-                      choice % 2 === 0 ? service.probe("absent") : service.notify("absent", {}),
+                      choice % 2 === 0
+                        ? service.message(socket, JSON.stringify({ jsonrpc: "2.0", method: "ping", id: choice }))
+                        : service.probe("fixture-session"),
                     )
                   : path === "Process"
                     ? ProcessService.use((service) => service.alarm())

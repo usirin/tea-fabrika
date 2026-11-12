@@ -14,11 +14,12 @@ export const options = { arbitrary: { seed: 119120, runs: 100 } };
 export const law = <A>(
   name: string,
   arbitrary: fc.Arbitrary<A>,
-  check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
+  check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
   examples?: Array<[A]>,
 ) => {
+  const scoped = (value: A) => Effect.scoped(check(value)).pipe(Effect.provide(Digest.layerWebCrypto));
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
-  const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(check(value))));
+  const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(scoped(value)));
   const options = { seed: 119120, numRuns: 100, examples };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect

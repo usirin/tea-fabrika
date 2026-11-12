@@ -5,10 +5,11 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import * as Start from "../settings/Start.ts";
 import { Starts, StartsError, Decode, Refused, Storage, Unreachable } from "../settings/Starts.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
-import { settingsReply } from "./runtime.ts";
+import { projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 import * as SettingsStartsRemote from "./SettingsStartsRemote.ts";
 
@@ -64,6 +65,106 @@ const open = Effect.gen(function* () {
 }).pipe(Effect.provide(Digest.layerWebCrypto));
 
 StartsTest.suite(open);
+
+StartsTest.law(
+  "L5 the public Project settings endpoint records and reads without constructing consumers",
+  fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 8, maxLength: 30 })),
+  ([recipe, choices]) =>
+    Effect.gen(function* () {
+      const db = yield* Effect.acquireRelease(
+        Effect.sync(() => new DatabaseSync(":memory:")),
+        (owned) => Effect.sync(() => owned.close()),
+      );
+      const sql = nodeSql(db);
+      let consumers = 0;
+      const unexpected = () => {
+        consumers++;
+        return {};
+      };
+      const input = yield* StartsTest.input(recipe);
+      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only Alchemy can construct a full object state; these are its SQLite handles
+      const ctx = {
+        id: { name: input.name },
+        storage: {
+          sql: {
+            exec: (query: string, ...args: Parameters<typeof sql.exec> extends [string, ...infer A] ? A : never) => {
+              if (/CREATE TABLE IF NOT EXISTS (unsent|spans|content|process_state)/i.test(query)) {
+                consumers++;
+              }
+
+              return sql.exec(query, ...args);
+            },
+            get databaseSize() {
+              return sql.size();
+            },
+          },
+          transactionSync: sql.transaction,
+          get: async () => unexpected(),
+          put: async () => unexpected(),
+        },
+      } as unknown as DurableObjectState;
+      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
+      const env = {
+        INSTANCE: JSON.stringify(input),
+        PROJECT: { getByName: unexpected },
+        PROCESS: { getByName: unexpected },
+        CONNECTION: { getByName: unexpected },
+        RECORD: { getByName: unexpected },
+        LOADER: { get: unexpected },
+        MEASUREMENTS: { put: unexpected, head: unexpected },
+      } as unknown as Env;
+      const runtime = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          projectRuntime(ctx, env, {
+            programs: {},
+            bootstrap: { id: "unexpected", name: "unexpected", program: "unexpected" },
+            door: () => Effect.sync(unexpected).pipe(Effect.andThen(Effect.die("unexpected consumer construction"))),
+          }),
+        ),
+        (owned) => owned.disposeEffect,
+      );
+      const saved = new Map<string, Start.Receipt>();
+      let current = input;
+
+      for (const [index, choice] of choices.entries()) {
+        const moves = saved.has(current.start) ? ["repeat", "read", "concurrent", "deploy"] : ["record", "lost"];
+        const move = moves[choice % moves.length];
+
+        if (move === "deploy") {
+          current = yield* StartsTest.input({ ...recipe, start: `${recipe.start}-${index}` });
+          continue;
+        }
+
+        if (move === "lost") {
+          // The caller loses the first answer after the endpoint has placed the entry.
+          yield* runtime.settingsStart(current);
+        }
+
+        const replies = yield* Effect.forEach(
+          Array.from({ length: move === "concurrent" ? 2 + (choice % 4) : 1 }),
+          () => (move === "read" ? runtime.settingsRead(current.start) : runtime.settingsStart(current)),
+          { concurrency: "unbounded" },
+        );
+
+        for (const raw of replies) {
+          const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw);
+          expect(reply._tag).toBe("ok");
+
+          if (reply._tag === "ok") {
+            expect(reply.value).toMatchObject({
+              start: current.start,
+              settings: current.settings,
+              build: current.build,
+            });
+            expect(reply.value).toEqual(saved.get(current.start) ?? reply.value);
+            saved.set(current.start, reply.value);
+          }
+        }
+
+        expect(consumers).toBe(0);
+      }
+    }),
+);
 
 describe("L5 minimal start path, next/", () => {
   StartsTest.law(

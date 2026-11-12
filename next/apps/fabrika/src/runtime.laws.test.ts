@@ -11,12 +11,13 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
-import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Schema, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { settingsFixture } from "./record-wire.test-support.ts";
@@ -31,7 +32,7 @@ vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 vi.mock("effect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("effect")>();
-  return { ...actual, ManagedRuntime: { ...actual.ManagedRuntime } };
+  return { ...actual, Layer: { ...actual.Layer } };
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -227,27 +228,26 @@ const world = async (trace = TRACE, build = "counter-b") => {
     },
   } as unknown as Env;
   const span = Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" });
-  const make = ManagedRuntime.make;
-  // ManagedRuntime builds its layer before the requested Effect runs, in a separate fiber.
-  // Put the caller's span on that real layer so it is current during bootstrap.
+  const buildLayer = Layer.buildWithMemoMap;
+  // The shared holder builds consumers on first entry, after the outer runtime starts.
   const startup = vi
-    .spyOn(ManagedRuntime, "make")
-    .mockImplementationOnce((layer, options) => make(layer.pipe(Layer.withParentSpan(span)), options));
-  let runtime: ReturnType<typeof projectRuntime>;
-
-  try {
-    runtime = projectRuntime(ctx, env);
-  } finally {
-    startup.mockRestore();
-  }
-
+    .spyOn(Layer, "buildWithMemoMap")
+    .mockImplementation((layer, memo, scope) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, scope));
+  let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
   closers.push(async () => {
     await runtime.dispose();
     db.close();
     rmSync(home, { recursive: true, force: true });
   });
-  const p = await run(ProjectService);
+  let p: ProjectService["Service"];
+
+  try {
+    p = await run(ProjectService);
+  } finally {
+    startup.mockRestore();
+  }
+
   const from: From = {
     by: key.fingerprint,
     for: PERSON,
@@ -761,7 +761,11 @@ describe("P12 Connection recording", () => {
       } as unknown as DurableObjectState;
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
       const project = {
-        getByName: () => ({ leave: async () => {}, disconnect: async () => {} }),
+        getByName: () => ({
+          settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
+          leave: async () => {},
+          disconnect: async () => {},
+        }),
       } as unknown as Env["PROJECT"];
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
@@ -836,6 +840,7 @@ describe("P12 Connection recording", () => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
         route: async () => {
           throw fault;
         },
