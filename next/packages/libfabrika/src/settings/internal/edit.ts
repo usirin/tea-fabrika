@@ -145,7 +145,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
   const checked = check(index, path);
 
   if (Result.isFailure(checked)) {
-    return checked;
+    return Result.fail<Refusal>(checked.failure);
   }
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));
@@ -192,7 +192,7 @@ export const set = (
   const checked = check(index, path);
 
   if (Result.isFailure(checked)) {
-    return checked;
+    return Result.fail<Refusal>(checked.failure);
   }
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));

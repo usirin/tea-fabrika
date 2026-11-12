@@ -78,7 +78,13 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   ];
   const visit = (parent: Edit.Path, node: AST.TOMLKeyValue, inline?: Edit.Range): Edit.Assignment => {
     const path = [...parent, ...key(node.key)];
-    const assignment = { ...range(node), path, line: node.loc.start.line, value: range(node.value), inline };
+    const assignment = {
+      ...range(node),
+      path,
+      line: node.loc.start.line,
+      value: range(node.value),
+      ...(inline ? { inline } : {}),
+    };
     assignments.push(assignment);
 
     if (node.value.type === "TOMLInlineTable") {
