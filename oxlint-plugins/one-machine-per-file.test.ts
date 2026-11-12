@@ -96,7 +96,18 @@ it("L1: default exports and local default bindings count with every generated ne
   );
 });
 
-const PARTS = ["local", "{}", "Schema.Struct({ f: Imported })", "Imported", "Remote.Model", 'Remote["Model"]'] as const;
+const PARTS = [
+  "local",
+  "{}",
+  "Schema.Struct({ f: Imported })",
+  "Imported",
+  "Remote.Model",
+  "Remote.Never",
+  'Remote["Model"]',
+  "Schema.Never",
+  "Schema.String",
+  'Schema["Never"]',
+] as const;
 
 it("L2: only a part whose value is an import or imported member fires", () => {
   fc.assert(
@@ -108,8 +119,18 @@ it("L2: only a part whose value is an import or imported member fires", () => {
       }),
       (parts) => {
         const lines = Object.entries(parts).map(([key, value]) => `${key}: ${value},`);
-        const errors = Object.values(parts).flatMap((value, i) =>
-          ["Imported", "Remote.Model", 'Remote["Model"]'].includes(value) ? [{ line: i + 5, message: OWN }] : [],
+        const errors = Object.entries(parts).flatMap(([key, value], i) =>
+          [
+            "Imported",
+            "Remote.Model",
+            "Remote.Never",
+            'Remote["Model"]',
+            "Schema.Never",
+            "Schema.String",
+            'Schema["Never"]',
+          ].includes(value) && !(key === "msg" && (value === "Schema.Never" || value === 'Schema["Never"]'))
+            ? [{ line: i + 5, message: OWN }]
+            : [],
         );
         check(
           [
@@ -124,7 +145,11 @@ it("L2: only a part whose value is an import or imported member fires", () => {
         );
       },
     ),
-    RUNS,
+    {
+      ...RUNS,
+      // pinned: A1, the lead flow machine has no Msg and uses Effect's Schema.Never directly.
+      examples: [[{ model: "local", msg: "Schema.Never", update: "local" }]],
+    },
   );
 });
 

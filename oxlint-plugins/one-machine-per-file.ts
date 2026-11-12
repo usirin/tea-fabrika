@@ -2,6 +2,7 @@
 // model, msg and update, and no imports from the closed I/O list below. Private top-level helpers
 // used inside a parent's Machine.make arguments do not count. An exported program wrapping a
 // private machine does count. A factory's two calls count twice, even if one is a helper.
+// A msg of Effect's Schema.Never passes: it says the machine has no messages (plan amendment A1).
 // Misses: aliases of Machine.make, destructuring, re-exports and machines made by imported helpers.
 // Review keeps control-state judgment, relative/workspace I/O, globals, dynamic imports, hand edits
 // of another file's Model, and whether a factory returns its machine or receives a service.
@@ -119,6 +120,14 @@ export const oneMachinePerFile: CreateRule = {
     };
     const rootImported = (node: Node): boolean =>
       node.type === "MemberExpression" ? rootImported(node.object) : imported(node) !== null;
+    const neverMsg = (node: Node): boolean => {
+      if (node.type !== "MemberExpression" || member(node) !== "Never") {
+        return false;
+      }
+
+      const at = imported(node.object);
+      return at?.from === "effect" && at.name === "Schema";
+    };
 
     return {
       "Program:exit"(program) {
@@ -209,7 +218,11 @@ export const oneMachinePerFile: CreateRule = {
                   ? prop.key.value
                   : null;
 
-            if ((name === "model" || name === "msg" || name === "update") && rootImported(prop.value)) {
+            if (
+              (name === "model" || name === "msg" || name === "update") &&
+              rootImported(prop.value) &&
+              !(name === "msg" && neverMsg(prop.value))
+            ) {
               context.report({
                 node: prop,
                 message: `The machine's ${name} must be defined in this file, not imported (0046).`,

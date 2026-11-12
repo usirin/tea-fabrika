@@ -571,6 +571,9 @@ imports and literal `["make"]` access are recognized. Local shadows and type-onl
 
 For each reached call, an imported value or imported member used directly as `model`, `msg` or
 `update` fires. A local value, inline expression or schema built from imported fields passes.
+Effect's `Schema.Never` as `msg` passes too: it says the machine has no messages, as approved
+in plan amendment A1. Other imported Schema members still fire, and `Schema.Never` used as
+`model` or `update` still fires.
 Every file with a machine call, even a private call, also refuses imports from the closed I/O
 list in the rule. That list covers the named Effect runtime, clock, storage and stream modules,
 Effect's process/http/cli/unstable subpaths, `@effect/*`, `node:`, tea runners, and the platform
@@ -578,11 +581,11 @@ imports named in 0042. Pure `effect/encoding` and `effect/crypto` imports pass. 
 pass, both whole declarations and individual specifiers.
 
 The approved plan measured 13 files with exported machines or factories and expected zero hits.
-The rule's replay on 2026-11-11 finds **1 hit**, in lead tooling's `flow/machine.ts:101`:
-`msg: Schema.Never` is an imported member. The other 12 files pass. All 13 copied files with a
-second exported call fire for that added call. The zero-hit law remains red pending a plan
-amendment; no disable or ledger entry hides the hit. A zero-hit measurement would still say
-nothing about the false-alarm rate of forms not yet written.
+The first replay on 2026-11-11 found one false alarm, `msg: Schema.Never` in lead tooling's
+`flow/machine.ts:101`. Amendment A1 allows that exact case. The corrected replay finds **0 hits**
+over `next/` and `.agents/`, and all 13 measured file copies pass. Each copy with a second
+exported call fires once for that added call. No disable or ledger entry hides a hit. This
+zero-hit measurement says nothing about the false-alarm rate of forms not yet written.
 
 Review keeps these parts of 0046:
 
