@@ -491,9 +491,12 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     return policy;
   };
 
+  const bootProcesses: Array<Descriptor> = [];
+
   for (const process of yield* processes.info) {
     yield* configure(process.process);
     const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process));
+    bootProcesses.push(descriptor);
     const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
@@ -979,10 +982,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       Effect.gen(function* () {
         const pushes: Array<Fiber.Fiber<void>> = [];
 
-        for (const process of yield* processes.info) {
+        for (const process of bootProcesses) {
           const chosen = selected[process.program];
 
-          if (chosen !== undefined) {
+          if (chosen !== undefined && process.build !== chosen.hash) {
             pushes.push(
               yield* Effect.forkChild(
                 push(chosen.load, process.program, chosen.hash, process.name).pipe(Effect.ignore),
