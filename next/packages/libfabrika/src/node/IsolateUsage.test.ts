@@ -414,7 +414,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
   }),
 );
 
-it.effect("U8 the Process runtime binds every first load, reload and successor to its own process", () =>
+it.effect("U8 Process and rebuilt Project runtimes bind every load to its own process", () =>
   Effect.gen(function* () {
     const once = (tape: ReadonlyArray<boolean>) =>
       Effect.scoped(
@@ -573,34 +573,39 @@ it.effect("U8 the Process runtime binds every first load, reload and successor t
             },
             exports: loopbacks,
           } as unknown as Parameters<typeof projectLayer>[0];
-          // oxlint-disable-next-line fabrika/no-type-assertions -- the bootstrap object only receives its descriptor; no program calls are simulated
+          const descriptors = new Map<string, typeof saved>();
+          // oxlint-disable-next-line fabrika/no-type-assertions -- native Process RPC handles only; descriptors come from the processes started below
           const projectEnv = {
             ...env,
-            PROCESS: { getByName: () => ({ configure: () => Promise.resolve() }) },
+            PROCESS: {
+              getByName: (object: string) => ({
+                configure: () => Promise.resolve(),
+                descriptor: () => Promise.resolve(descriptors.get(object)),
+              }),
+            },
           } as unknown as Env;
           let policy: Parameters<ProjectOptions["door"]>[0]["policy"] = () =>
             Effect.die("Project door not initialized");
           const beforeProject = seen.length;
-          const projectServices = yield* Layer.build(
-            projectLayer(projectCtx, projectEnv, {
-              config: {
-                name: "project-test",
-                person: FROM.for,
-                founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-                window: null,
-                port: 18787,
-                build: "fixture-build",
-              },
-              programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
-              bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
-              door: (options) =>
-                Effect.sync(() => {
-                  policy = options.policy;
-                  // The loader law uses only the door's policy callback and retirement call.
-                  return { retire: () => Effect.void } as Effect.Success<ReturnType<ProjectOptions["door"]>>;
-                }),
-            }),
-          );
+          const projectOptions: ProjectOptions = {
+            config: {
+              name: "project-test",
+              person: FROM.for,
+              founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              window: null,
+              port: 18787,
+              build: "fixture-build",
+            },
+            programs: { "usage-fixture": { hash: "fixture-build", source: "fixture" } },
+            bootstrap: { name: "bootstrap:1", id: "bootstrap", program: "usage-fixture" },
+            door: (options) =>
+              Effect.sync(() => {
+                policy = options.policy;
+                // The loader law uses only the door's policy callback and retirement call.
+                return { retire: () => Effect.void } as Effect.Success<ReturnType<ProjectOptions["door"]>>;
+              }),
+          };
+          const projectServices = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
           const p = Context.get(projectServices, ProjectService);
           const bootstrap = seen.slice(beforeProject);
           expect(bootstrap.length).toBeGreaterThan(0);
@@ -646,12 +651,37 @@ it.effect("U8 the Process runtime binds every first load, reload and successor t
               FROM,
             );
             const after = successor.process;
+            descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
             yield* policy(after);
             const load = seen.at(-1);
             expect(load?.key).toBe(`fixture-build/${after}`);
             expect(load?.tails).toHaveLength(1);
             expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
               { project: "project-test", name, process: after },
+            ]);
+          }
+
+          // Rebuild with an empty policy cache over the populated, reopened Project log.
+          const live = yield* p.info;
+          expect(live).toHaveLength(tape.length + 1);
+          yield* projectStore.reopen;
+          const beforeRestore = seen.length;
+          const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
+          expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
+          const restoredLoads = seen.slice(beforeRestore);
+          const bootstrapLoads = restoredLoads.filter((load) => load.key.startsWith("fixture-build/project:"));
+          expect(bootstrapLoads).toHaveLength(1);
+          expect(bootstrapLoads[0]?.tails).toBeUndefined();
+          const programLoads = restoredLoads.filter((load) => !load.key.startsWith("fixture-build/project:"));
+          expect(programLoads.map((load) => load.key).sort()).toEqual(
+            live.map((process) => `fixture-build/${process.process}`).sort(),
+          );
+
+          for (const process of live) {
+            const load = programLoads.find((load) => load.key === `fixture-build/${process.process}`);
+            expect(load?.tails).toHaveLength(1);
+            expect(load?.tails?.map((tail) => bound.get(tail))).toEqual([
+              { project: "project-test", name: process.name, process: process.process },
             ]);
           }
         }),
