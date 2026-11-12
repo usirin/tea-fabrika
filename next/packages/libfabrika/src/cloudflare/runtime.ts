@@ -178,10 +178,10 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
     ),
   );
 
-// Child RPC failures cross the platform as rendered errors, so keep only their storage reason.
-const childStorage = Effect.fnUntraced(function* <A, E, R>(
+// Project initialization and calls cross RPC as rendered errors. Keep storage details inside the library.
+const projectStorage = Effect.fnUntraced(function* <A, E, R>(
   work: Effect.Effect<A, E, R>,
-): Effect.fn.Return<A, LedgerError, R> {
+): Effect.fn.Return<A, E | LedgerError, R> {
   const tracer = yield* Tracer.Tracer;
   const safe = Tracer.make({
     context: tracer.context,
@@ -201,7 +201,7 @@ const childStorage = Effect.fnUntraced(function* <A, E, R>(
   });
   return yield* work.pipe(
     Effect.withTracer(safe),
-    Effect.mapError(() => new LedgerError({ reason: "storage" })),
+    Effect.mapError((error) => (Schema.is(LedgerError)(error) ? new LedgerError({ reason: error.reason }) : error)),
     Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
   );
 });
@@ -215,7 +215,6 @@ const childReply = (work: Effect.Effect<Started, unknown>): Effect.Effect<typeof
         ? Effect.succeed(ChildReplies.cases.ChildrenError.make({ reason: error.reason }))
         : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
-    childStorage,
   );
 
 const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
@@ -486,42 +485,40 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     const program = yield* loader.load(process.program, process.process);
     remember(process.name, program.declaration);
 
-    yield* childStorage(
-      Effect.gen(function* () {
-        if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
-          const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
-            processes.table(turn).life(process.process),
-          );
-          const requester =
-            Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
-          // A child's start may have committed before its descriptor. Its object has never been
-          // configured, so rebuild from the saved life and its requester's recorded owner.
-          const descriptor = yield* requester?._tag === "process"
-            ? Effect.gen(function* () {
-                const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
-                const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
-                  saved?.value,
-                ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
-                return {
-                  id: process.process,
-                  name: process.name,
-                  program: process.program,
-                  build: process.build,
-                  owner,
-                };
-              })
-            : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
-          sql.exec(
-            "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
-            process.process,
-            JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
-            requester?._tag === "process" ? 2 : 0,
-          );
-        }
+    yield* Effect.gen(function* () {
+      if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
+        const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
+          processes.table(turn).life(process.process),
+        );
+        const requester =
+          Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
+        // A child's start may have committed before its descriptor. Its object has never been
+        // configured, so rebuild from the saved life and its requester's recorded owner.
+        const descriptor = yield* requester?._tag === "process"
+          ? Effect.gen(function* () {
+              const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
+              const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
+                saved?.value,
+              ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+              return {
+                id: process.process,
+                name: process.name,
+                program: process.program,
+                build: process.build,
+                owner,
+              };
+            })
+          : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
+        sql.exec(
+          "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
+          process.process,
+          JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+          requester?._tag === "process" ? 2 : 0,
+        );
+      }
 
-        yield* configure(process.process);
-      }),
-    );
+      yield* configure(process.process);
+    });
   }
 
   // Routing follows history: an earlier ID of a name takes its name's policy.
@@ -707,7 +704,8 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           }),
           yield* from(),
         );
-  const wrapped = <A, E>(effect: Effect.Effect<A, E>) => complete(effect).pipe(Effect.provideContext(services));
+  const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
+    complete(effect).pipe(projectStorage, Effect.provideContext(services));
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
       return yield* new LedgerError({ reason: "refused" });
@@ -847,8 +845,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     // ProcessManager over trusted Project RPC: refusals are reply data, mutations take the turn.
     processObject: (pid: string) => wrapped(processObject(pid)),
     processStart: (request: Start, origin: From) => wrapped(processReply(start(request, origin))),
-    processExit: (pid: string, reason: ExitReason, origin: From) =>
-      wrapped(childStorage(processReply(exit(pid, reason, origin)))),
+    processExit: (pid: string, reason: ExitReason, origin: From) => wrapped(processReply(exit(pid, reason, origin))),
     processStatus: (owner: string) => wrapped(processReply(processes.status(owner))),
     processResolve: (pid: string) => wrapped(processReply(processes.resolve(pid))),
     processDead: (pid: string, dead: Parameters<typeof processes.dead>[1], origin: From) =>
@@ -864,7 +861,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
     boot,
   };
-});
+}, projectStorage);
 
 export class ProjectService extends Context.Service<ProjectService, Effect.Success<ReturnType<typeof projectLogic>>>()(
   "@kampus/libfabrika/cloudflare/runtime.ProjectService",
