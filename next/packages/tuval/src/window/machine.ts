@@ -27,6 +27,9 @@ const Reach = Schema.TaggedUnion({
   missing: {},
 });
 
+// A bad recovery answer does not permit another ask. A checked whole or a new dial does.
+const Recovery = Schema.Literals(["ready", "asked"]);
+
 const Call = Schema.TaggedUnion({
   read: { stream: Schema.String, after: Schema.Int },
   open: { pid: Schema.String },
@@ -59,6 +62,7 @@ export const WindowModel = Schema.Struct({
       name: Schema.String,
       last: Schema.NullOr(Schema.String),
       reach: Reach,
+      recovery: Recovery,
       own: Schema.Json,
       refusal: Schema.NullOr(Schema.Struct({ m: Schema.Json, reason: Schema.String })),
     }),
@@ -238,7 +242,10 @@ const noticed = (
   pid: string,
   note: unknown,
 ): readonly [WindowModel, Out, ReadonlyArray<string>] => {
-  const [client, asks] = step(s.client, { type: "notice", pid, note });
+  const [client, requested] = step(s.client, { type: "notice", pid, note });
+  const asks = requested.filter(
+    (p) => !s.tiles.some((t) => "pid" in t.reach && t.reach.pid === p && t.recovery === "asked"),
+  );
   const shown = client.views[pid];
   const changed = shown !== undefined && shown !== s.client.views[pid];
   const patch = Predicate.isObject(note) && Predicate.hasProperty(note, "type") && note.type === "patch";
@@ -267,7 +274,16 @@ const noticed = (
     ),
   ];
   return [
-    { ...s, client, patches: Object.fromEntries(Object.entries(s.patches).filter(([p]) => p !== pid)) },
+    {
+      ...s,
+      client,
+      tiles: s.tiles.map((t) =>
+        "pid" in t.reach && t.reach.pid === pid
+          ? { ...t, recovery: Recovery.make(changed ? "ready" : asks.includes(pid) ? "asked" : t.recovery) }
+          : t,
+      ),
+      patches: Object.fromEntries(Object.entries(s.patches).filter(([p]) => p !== pid)),
+    },
     rows,
     asks,
   ];
@@ -390,7 +406,11 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     return [
       {
         ...next,
-        tiles: next.tiles.map((t) => ({ ...t, reach: Reach.cases.unresolved.make({}) })),
+        tiles: next.tiles.map((t) => ({
+          ...t,
+          reach: Reach.cases.unresolved.make({}),
+          recovery: Recovery.make("ready"),
+        })),
         sent: [],
         patches: s.link._tag === "online" ? {} : s.patches,
       },
@@ -456,6 +476,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           tiles: ctx.tiles.map((t) => ({
             ...t,
             reach: Reach.cases.unresolved.make({}),
+            recovery: "ready",
             own: checks.tile?.(t.name)?.init(null, {})[0] ?? {},
             refusal: null,
             last: null,
