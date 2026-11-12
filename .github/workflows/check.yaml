@@ -7,13 +7,17 @@ on:
   push:
     branches:
       - main
+  # A draft runs only the fast jobs; marking it ready (`ready_for_review`) starts the full set on
+  # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11).
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # A newer push to the same pull request stops the run it replaces. Main's runs
-# all finish, one per commit.
+# all finish, one per commit. Only a new head cancels: the run that marking ready starts waits for
+# the draft run on the same head to end, so no check of that head is left canceled.
 concurrency:
   group: check-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
 
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
@@ -35,6 +39,7 @@ jobs:
       next: ${{ steps.diff.outputs.next }}
       e2e: ${{ steps.diff.outputs.e2e }}
       field: ${{ steps.diff.outputs.field }}
+      build: ${{ steps.diff.outputs.build }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,6 +49,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: node .github/ci/changes.mjs
       - run: sh .agents/skills/lead/scripts/skillscheck.sh
         if: ${{ !cancelled() }}
@@ -65,6 +71,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: node .github/ci/changes.mjs
       - uses: pnpm/action-setup@v6
         if: steps.diff.outputs.field == 'true'
@@ -83,7 +90,10 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
 
+  # On a draft this job is lint alone, and it says so in its name: a draft's `lint` never stands in
+  # for the ready run's `check` on the same head, which catchup.sh waits for.
   check:
+    name: ${{ github.event.pull_request.draft && 'lint' || 'check' }}
     needs: changes
     if: >-
       ${{ !cancelled() &&
@@ -124,6 +134,7 @@ jobs:
       # a check is red at this head, or when a planted break is not caught. A change to a
       # check itself is listed for the owner, here and in the step summary.
       - name: promises
+        if: ${{ needs.changes.outputs.build != 'false' }}
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -136,6 +147,7 @@ jobs:
       # The builds of @kampus/fabrika-old and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build
+        if: ${{ needs.changes.outputs.build != 'false' }}
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
@@ -385,7 +397,12 @@ jobs:
   # same output its `if:` reads. `commits` is commits.yaml's own job, from `pull_request_target`, and
   # stays required beside this one: folding it in here would judge it from the pull request's copy.
   # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
+  # On a draft it is named `ci-required (draft)`: GitHub makes a job's check run only when its needs
+  # end, so for the whole ready run the draft's green `ci-required` on the same head would be the
+  # latest one and would satisfy the ruleset. Under its own name it never does; a draft cannot
+  # merge anyway.
   ci-required:
+    name: ${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}
     needs: [changes, field, check, typecheck, e2e, test, next]
     if: always()
     runs-on: ubuntu-latest
