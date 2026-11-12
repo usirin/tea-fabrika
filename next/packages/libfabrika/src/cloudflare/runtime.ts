@@ -40,7 +40,7 @@ import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
 import type { Selected } from "../runtime/Code.ts";
-import { code as codeMachine, CodeEvent } from "../runtime/Code.ts";
+import { code as codeMachine, CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import { CodeStore } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
@@ -55,8 +55,6 @@ import { SinkError } from "../telemetry/Trace.ts";
 import { Answer } from "../transport/Wire.ts";
 import {
   CommitReply,
-  Install,
-  Installed,
   MailReplies,
   type MailReply,
   ProcessReplies,

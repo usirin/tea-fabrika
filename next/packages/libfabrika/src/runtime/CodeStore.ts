@@ -2,9 +2,12 @@ import type { Effect, Option } from "effect";
 import { Context, Schema } from "effect";
 import type { BuiltProgram } from "./Built.ts";
 
+export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+
+export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+
 export class CodeStoreError extends Schema.TaggedError<CodeStoreError>()("CodeStoreError", {
-  reason: Schema.Literals(["storage", "bad_row"]),
-  cause: Schema.optional(Schema.Defect()),
+  reason: Schema.Union([Storage, BadRow]),
 }) {}
 
 export class CodeStore extends Context.Service<

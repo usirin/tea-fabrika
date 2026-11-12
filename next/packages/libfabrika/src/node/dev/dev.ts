@@ -5,9 +5,9 @@ import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, S
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
-import { Installed, type Install } from "../../cloudflare/bindings.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import { Installed, type Install } from "../../runtime/Code.ts";
 import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";

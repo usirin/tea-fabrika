@@ -1,9 +1,8 @@
 import type { Scope } from "effect";
 import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { watch, type RolldownWatcherEvent } from "rolldown";
-import { Installed, type Install } from "../../cloudflare/bindings.ts";
 import * as Id from "../../Id.ts";
-import { CodeEvent } from "../../runtime/Code.ts";
+import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
 import { ControlError } from "./dev.ts";

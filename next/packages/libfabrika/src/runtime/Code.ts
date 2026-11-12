@@ -3,6 +3,7 @@ import { Machine, Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
 import { ProgramName } from "../packs/ProgramName.ts";
 import { Hash } from "./Built.ts";
+import { Swapped } from "./Runner.ts";
 
 export const From = Schema.Literals(["watch", "deploy", "boot", "restart"]);
 
@@ -16,6 +17,22 @@ export const CodeEvent = Schema.TaggedUnion({
     line: Schema.optionalKey(Schema.Int),
   },
 });
+
+export const Install = Schema.Struct({
+  id: Schema.String,
+  program: ProgramName,
+  hash: Hash,
+  source: Schema.String,
+  from: From,
+});
+export type Install = typeof Install.Type;
+
+export const Installed = Schema.TaggedUnion({
+  same: {},
+  failed: { reason: CodeEvent.cases["code.failed"].fields.reason },
+  loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
+});
+export type Installed = typeof Installed.Type;
 
 export const Selected = Schema.Record(ProgramName, Schema.Struct({ hash: Hash, load: Schema.String }));
 

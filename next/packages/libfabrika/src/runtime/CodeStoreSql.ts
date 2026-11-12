@@ -1,10 +1,10 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
 import { BuiltProgram } from "./Built.ts";
-import { CodeStore, CodeStoreError } from "./CodeStore.ts";
+import { BadRow, CodeStore, CodeStoreError, Storage } from "./CodeStore.ts";
 
 const stored = <A>(step: () => A) =>
-  Effect.try({ try: step, catch: (cause) => new CodeStoreError({ reason: "storage", cause }) });
+  Effect.try({ try: step, catch: (cause) => new CodeStoreError({ reason: new Storage({ cause }) }) });
 
 export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
   Layer.succeed(CodeStore, {
@@ -25,7 +25,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
       }
 
       const code = yield* Schema.decodeUnknownEffect(BuiltProgram)(row).pipe(
-        Effect.mapError((cause) => new CodeStoreError({ reason: "bad_row", cause })),
+        Effect.mapError((cause) => new CodeStoreError({ reason: new BadRow({ cause }) })),
       );
       return Option.some(code);
     }),

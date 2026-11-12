@@ -2,7 +2,6 @@ import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
-import { ProgramName } from "../packs/ProgramName.ts";
 import type { Connections } from "../presence/Connections.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
@@ -10,30 +9,12 @@ import type { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { BuiltProgram } from "../runtime/Built.ts";
-import { Hash } from "../runtime/Built.ts";
-import { CodeEvent, From as CodeFrom } from "../runtime/Code.ts";
+import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
-import { Swapped } from "../runtime/Runner.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
-
-export const Install = Schema.Struct({
-  id: Schema.String,
-  program: ProgramName,
-  hash: Hash,
-  source: Schema.String,
-  from: CodeFrom,
-});
-export type Install = typeof Install.Type;
-
-export const Installed = Schema.TaggedUnion({
-  same: {},
-  failed: { reason: CodeEvent.cases["code.failed"].fields.reason },
-  loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
-});
-export type Installed = typeof Installed.Type;
 
 export const MailReplies = Schema.TaggedUnion({
   ok: {
