@@ -19,7 +19,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   const recording = yield* Layer.build(
     recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
   );
-  const recorded = <A, E>(work: Effect.Effect<A, E>) => complete(work).pipe(Effect.provideContext(recording));
+  const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>
+    complete(work, counted).pipe(Effect.provideContext(recording));
   const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
     return yield* work.pipe(
       Effect.catch((error) => {
@@ -184,6 +185,8 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         yield* (yield* connected(ws)).ring(stream, rev, onRefused);
       }
     }
+
+    return span.attributes.has(REFUSED);
   });
   const probe = Effect.fn("connection.probe")(function* (session: string) {
     for (const ws of ctx.getWebSockets(session)) {
@@ -262,7 +265,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     close: Effect.fnUntraced(function* (ws: WebSocket) {
       return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);
     }),
-    ring: (stream: string, rev: number) => recorded(ring(stream, rev)),
+    ring: (stream: string, rev: number) => recorded(ring(stream, rev), (counted) => counted).pipe(Effect.asVoid),
     probe: (session: string) => recorded(probe(session)),
     notify: Effect.fnUntraced(function* (client: string, news: unknown) {
       const states = yield* Effect.forEach(ctx.getWebSockets(), attached, { concurrency: 1 });

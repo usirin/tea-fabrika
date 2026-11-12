@@ -266,7 +266,10 @@ const recordLayer = (env: Env, project: string) => RecordManager.remote((name) =
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 const flushed = SpanSink.use((sink) => sink.flush);
 
-export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
+export const complete = Effect.fn(function* <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+  counted: (value: A) => boolean = () => false,
+) {
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
@@ -277,8 +280,8 @@ export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, 
       // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
       if (
         Exit.isSuccess(exit) &&
-        Schema.is(Answer.cases.refused)(exit.value) &&
-        ["reserved", "rate_limited"].includes(exit.value.reason)
+        (counted(exit.value) ||
+          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
       ) {
         return exit;
       }
