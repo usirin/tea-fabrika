@@ -27,9 +27,11 @@ const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
 export const label = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ]{0,23}$/);
 const code = fc.integer({ min: 0, max: 999999 }).map((n) => String(n).padStart(6, "0"));
 const digest = fc.constantFrom("digest-a", "digest-b", "digest-c");
+// Waiting and admitted snapshots arrive independently, so either can still hold the same key.
+const key = fc.constantFrom("waiting-a", "waiting-b", "waiting-c", "client-a", "client-b", "client-c");
 
 export const row: fc.Arbitrary<Row> = fc.record({
-  key: fc.constantFrom("waiting-a", "waiting-b", "waiting-c"),
+  key,
   label,
   location: fc.constantFrom("this Mac", "another Mac"),
   code,
@@ -40,7 +42,7 @@ export const row: fc.Arbitrary<Row> = fc.record({
 });
 
 const client: fc.Arbitrary<Client> = fc.record({
-  key: fc.constantFrom("client-a", "client-b", "client-c"),
+  key,
   label,
   location: fc.constantFrom("this Mac", "another Mac"),
   as: kind,
