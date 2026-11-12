@@ -135,9 +135,9 @@ export class ProcessClient extends Context.Service<
 >()("fabrika/ProcessClient") {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     return {
-      mailed: () =>
+      mailed: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
-        Effect.tryPromise({ try: () => stub.mailed(), catch: unreachable }),
+        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),

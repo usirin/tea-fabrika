@@ -181,9 +181,9 @@ export class ProgramRunner extends Context.Service<
     readonly open: (client: string) => Effect.Effect<Opened, RunnerFailure>;
     /** Takes one delivered input: P10's internal delivery, never a public request. */
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
-    /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     /** Save the one alarm for newly arrived mail, without running or starting the recipient. */
     readonly mailed: Effect.Effect<void, RunnerFailure>;
+    /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }

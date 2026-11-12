@@ -9,7 +9,8 @@ import { type Env, processStub, projectStub, rpc } from "./runtime.ts";
 
 const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
   const checked = yield* Schema.decodeUnknownEffect(MailReplies)(reply).pipe(
-    Effect.mapError((cause) => new ProgramMailError({ reason: "storage", cause })),
+    // The decode error shows the reply, which may hold mail; the reason alone is kept.
+    Effect.mapError(() => new ProgramMailError({ reason: "storage" })),
   );
 
   if (checked._tag === "refused") {
@@ -37,10 +38,15 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
           }),
         }),
         Layer.succeed(MailWakeups, {
-          wake: (name) =>
-            rpc(ProcessClient.make(processStub(env, project, name)).mailed()).pipe(
-              Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })),
-            ),
+          wake: Effect.fnUntraced(function* (name) {
+            const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+            yield* rpc(
+              ProcessClient.make(processStub(env, project, name)).mailed({
+                traceId: span.traceId,
+                spanId: span.spanId,
+              }),
+            ).pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
+          }),
         }),
       ),
     ),

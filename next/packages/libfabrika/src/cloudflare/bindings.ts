@@ -170,7 +170,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
-    mailed: RemoteCall<() => Runner["mailed"]>;
+    mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
     configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
     descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;

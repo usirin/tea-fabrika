@@ -232,9 +232,9 @@ export class Process extends DurableObject<Env> {
     return this.runtime.runPromise(ProcessService.use((p) => p.open(client)));
   }
 
-  mailed() {
+  mailed(trace?: { traceId: string; spanId: string }) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
-    return this.runtime.runPromise(ProcessService.use((p) => p.mailed));
+    return this.runtime.runPromise(ProcessService.use((p) => p.mailed(trace)));
   }
 
   due(at: number) {

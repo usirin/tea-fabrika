@@ -873,7 +873,10 @@ const processLogic = Effect.fnUntraced(function* (
       const sent = Schema.decodeUnknownOption(Delivered)(input);
       return Option.isSome(sent) ? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span))) : work;
     },
-    mailed: attributed(complete(runner.mailed)),
+    mailed: (trace?: { traceId: string; spanId: string }) => {
+      const work = attributed(complete(runner.mailed));
+      return trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)));
+    },
     open: (client: string) => attributed(runner.open(client)),
     due: (at: number) => attributed(runner.due(at)),
     restart: (request: unknown) =>
