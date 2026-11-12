@@ -21,8 +21,8 @@ an agent fabrika starts            Tier 1       Tier 5   (no row yet)
 a flow fabrika runs                Tier 1 P43   Tier 6   (P43: the merge queue, for landing changes)
 
                 transport   data   coordination   app   desktop
-Tier 1 works    ---------------------------------------------->  notes drawn as Markdown, written by agents through MCP, plus the six slices
-Tier 2 programs ---------------------------------------------->  your own tickets: fabsh, tracker | ticket
+Tier 1 works    ---------------------------------------------->  a checklist a person fills and agents check with a note through MCP, read from any window or a phone, plus the six slices
+Tier 2 programs ---------------------------------------------->  your own tickets: fabsh, tracker | ticket; notes, its first real app
 Tier 3 few      ---------------------------------------------->  a few people share one fabrika, from browsers and phones
 Tier 4 hands    ---------------------------------------------->  hands take jobs: a Cloudflare container, a Mac, a VM, a first tab (proposed split)
 Tier 5 agents   ---------------------------------------------->  an agent does a job, a person watches (proposed split)
@@ -33,7 +33,7 @@ Tier 7 others   ---------------------------------------------->  someone else ca
 Only Tier 1 is committed. It started 2026-11-05 with its exam. `next/` does not wait on today's
 pipeline, which is paused: the lead session's agents build Tier 1 by hand, with the pipeline's steps
 for each pull request, one [Tier 1 row](./tier-1.md#the-pull-requests-one-at-a-time) at a time.
-Tier 1 has 44 rows. How many are on main, and where the rest stand, is in
+Tier 1 has 43 rows. How many are on main, and where the rest stand, is in
 [the plan's state](./README.md#where-we-are-now). A tier is a project. The approval of 2026-11-01
 covers what Tier 1 builds, not its breakdown.
 
@@ -64,8 +64,10 @@ gets stuck is a gap, and each run is an experiment
   grant tree; a slice of C2 to C5: dead letters, one crashed program restarted with a brake and
   backoff, exit, info and monitors, each start a new process with its own id, who is online, and the
   brain restarted (decided by the owner, 2026-11-06).
-- **App:** sealed programs, notes drawn as Markdown that agents write through MCP, each agent
-  approved once, a counter as the test, chaos monkey. The foundation for loading settings, P38,
+- **App:** sealed programs, a checklist a person fills and agents check with a note through MCP,
+  read from any window or a phone, each agent approved once, chaos monkey (2026-11-11,
+  [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md); it said notes drawn as Markdown
+  that agents write, and a counter as the test). The foundation for loading settings, P38,
   moved here from Tier 5 ([0069](../../.decisions/0069-choices-are-settings.md)). Tier 1 only reads
   the keybindings and theme files; the programs for them are Tier 2's.
 - **Desktop (Tuval):** one core; Electron, browser and headless; menu bar with Approve and Remove.
@@ -309,8 +311,9 @@ or this moves up. That is the cost of placing it here.
 **The test for every tier: a whole vehicle, never a part of one.** Bicycle, motorbike,
 car, truck. Each one takes a person somewhere. Two wheels and an axle don't, however
 well they're built. So every tier has to do a real job for someone, and the job gets
-bigger. Tier 1 passes: nobody needs a counter, but notes that agents write and a person
-reads drawn do a real job. The counter was the test until 2026-11-11; the checklist takes that job
+bigger. Tier 1 passes: nobody needs a counter, but a checklist a person fills and agents
+check with a note does a real job ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md);
+it said notes that agents write and a person reads drawn). The counter was the test until 2026-11-11; the checklist takes that job
 over, slice by slice, and the counter is removed
 ([0125](../../.decisions/0125-the-example-program-is-a-checklist.md)).
 

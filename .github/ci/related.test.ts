@@ -12,6 +12,8 @@ import { measured } from "../../vitest.shards.ts";
 // Keep the real config and every test in the walk, including tests outside the skills folders.
 // T375 plants caught: restoring skill force triggers selects every test; deleting box.test.ts's
 // box.sh declaration omits that test. The latter first survived mixed subsets; singletons catch it.
+// Since the reads are derived (oxlint-plugins/script-reads.mjs), the same plant is dropping the
+// vitest.config.ts plugin that hands them to Vitest: every script alone then selects no test.
 const root = join(import.meta.dirname, "../..");
 
 const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withFileTypes: true })
@@ -26,15 +28,16 @@ const tree = new Map(
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
 const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
 
-// Independent expected readers: follow source names, not the imports whose absence we plant.
-// This intentionally shares the plan's over-match of names in comments and fixture strings.
+// Independent expected readers: follow source names, not the derivation under test.
+// This intentionally shares its over-match of names in comments and fixture strings. A name may
+// hold a dot, as `catchup.test-support.ts` does.
 const readers = new Map(
   tests.map((test) => {
     const reached = new Set<string>();
     const queue = [test];
 
     for (const path of queue) {
-      const names = new Set((tree.get(path) ?? "").match(/[\w-]+\.(?:sh|py|mjs|ts|json)\b/g));
+      const names = new Set((tree.get(path) ?? "").match(/[\w.-]+\.(?:sh|py|mjs|ts|json)\b/g));
 
       for (const script of scripts) {
         if (names.has(basename(script)) && !reached.has(script)) {
