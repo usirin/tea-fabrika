@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -65,6 +65,95 @@ const open = Effect.gen(function* () {
 }).pipe(Effect.provide(Digest.layerWebCrypto));
 
 StartsTest.suite(open);
+
+for (const kind of StartsTest.originKinds) {
+  StartsTest.law(
+    `L3 saved reads and repeats reject forbidden ${kind} origins`,
+    fc.tuple(StartsTest.recipe, StartsTest.originFault(kind), fc.array(fc.nat(), { minLength: 8, maxLength: 30 })),
+    ([recipe, fault, choices]) =>
+      Effect.gen(function* () {
+        const db = yield* Effect.acquireRelease(
+          Effect.sync(() => new DatabaseSync(":memory:")),
+          (owned) => Effect.sync(() => owned.close()),
+        );
+        const context = yield* Layer.build(SettingsStartsLedger.layer(nodeSql(db)));
+        const starts = Context.get(context, Starts);
+        const input = yield* StartsTest.input(recipe);
+        const original = yield* starts.record(input);
+        const bad = StartsTest.changeOrigin(input, fault);
+        let poisoned = false;
+
+        for (const choice of choices) {
+          const moves = poisoned ? ["read", "repeat", "restore"] : ["read", "repeat", "poison"];
+          const move = moves[choice % moves.length];
+
+          if (move === "poison" || move === "restore") {
+            poisoned = move === "poison";
+            // Simulate a saved entry received from storage, bypassing today's writer.
+            db.prepare("UPDATE entries SET body = ? WHERE id = ?").run(
+              JSON.stringify({
+                start: input.start,
+                settings: poisoned ? bad.settings : input.settings,
+                build: input.build,
+                repo: input.repo,
+              }),
+              input.start,
+            );
+          }
+
+          const work = move === "repeat" ? starts.record(input) : starts.read(input.start);
+          const exit = yield* Effect.exit(work);
+          expect(Exit.isFailure(exit)).toBe(poisoned);
+
+          if (Exit.isFailure(exit)) {
+            expect(exit.cause).toMatchObject({
+              reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Decode" } } }],
+            });
+          } else {
+            expect(exit.value).toEqual(original);
+          }
+
+          expect(db.prepare("SELECT count(*) AS total FROM entries").get()).toMatchObject({ total: 1 });
+        }
+      }),
+  );
+
+  StartsTest.law(
+    `L3 remote reads and matching acknowledgements reject forbidden ${kind} origins`,
+    fc.tuple(StartsTest.recipe, StartsTest.originFault(kind), fc.array(fc.nat(), { minLength: 8, maxLength: 30 })),
+    ([recipe, fault, choices]) =>
+      Effect.gen(function* () {
+        const input = yield* StartsTest.input(recipe);
+        const bad = StartsTest.changeOrigin(input, fault);
+        let poisoned = false;
+        const call = async () => StartsTest.reply(poisoned ? bad : input);
+        const context = yield* Layer.build(SettingsStartsRemote.layer({ settingsStart: call, settingsRead: call }));
+        const starts = Context.get(context, Starts);
+
+        for (const choice of choices) {
+          const moves = poisoned ? ["read", "record", "restore"] : ["read", "record", "poison"];
+          const move = moves[choice % moves.length];
+
+          if (move === "poison" || move === "restore") {
+            poisoned = move === "poison";
+          }
+
+          // Match even the poisoned input, so body comparison cannot mask missing origin validation.
+          const work = move === "record" ? starts.record(poisoned ? bad : input) : starts.read(input.start);
+          const exit = yield* Effect.exit(work);
+          expect(Exit.isFailure(exit)).toBe(poisoned);
+
+          if (Exit.isFailure(exit)) {
+            expect(exit.cause).toMatchObject({
+              reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Decode" } } }],
+            });
+          } else {
+            expect(exit.value).toEqual(StartsTest.receipt(input));
+          }
+        }
+      }),
+  );
+}
 
 StartsTest.law(
   "L5 the public Project settings endpoint records and reads without constructing consumers",

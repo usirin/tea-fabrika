@@ -99,147 +99,158 @@ const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Sche
 
 const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
 
-for (const path of entryPaths) {
-  StartsTest.law(
-    `T753 L3 ${path} rejects a corrupt snapshot before consumer construction`,
-    fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 8, maxLength: 25 })),
-    ([recipe, choices]) =>
-      Effect.gen(function* () {
-        let deployment = yield* StartsTest.input(recipe);
+for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
+  for (const path of entryPaths) {
+    StartsTest.law(
+      `T753 L3 ${path} rejects corrupt ${corruption} before consumer construction`,
+      fc.tuple(
+        StartsTest.recipe,
+        fc.array(fc.nat(), { minLength: 8, maxLength: 25 }),
+        corruption === "snapshot" ? fc.constant(undefined) : StartsTest.originFault(corruption),
+      ),
+      ([recipe, choices, origin]) =>
+        Effect.gen(function* () {
+          let deployment = yield* StartsTest.input(recipe);
 
-        for (const [index, choice] of choices.entries()) {
-          // A reopen keeps immutable input; a deployment chooses a fresh start and snapshot.
-          const moves = ["deliver", "reopen", "deploy"];
-          const move = moves[choice % moves.length];
+          for (const [index, choice] of choices.entries()) {
+            // A reopen keeps immutable input; a deployment chooses a fresh start and snapshot.
+            const moves = ["deliver", "reopen", "deploy"];
+            const move = moves[choice % moves.length];
 
-          if (move === "deploy") {
-            deployment = yield* StartsTest.input({
-              ...recipe,
-              start: `${recipe.start}-${index}`,
-              port: 1 + (choice % 65535),
-            });
-            continue;
-          }
+            if (move === "deploy") {
+              deployment = yield* StartsTest.input({
+                ...recipe,
+                start: `${recipe.start}-${index}`,
+                port: 1 + (choice % 65535),
+              });
+              continue;
+            }
 
-          const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
-          let consumers = 0;
-          let settingsCalls = 0;
-          const bad = StartsTest.corrupt(deployment, Math.floor(choice / moves.length));
-          const sql = w.ctx.storage.sql;
-          const ctx = {
-            ...w.ctx,
-            id: {
-              ...w.ctx.id,
-              name:
-                path === "Process"
-                  ? JSON.stringify(["settings-law", "worker"])
-                  : path === "RecordPart"
-                    ? JSON.stringify(["settings-law", "spans/0"])
-                    : "settings-law",
-            },
-            getWebSockets: () => {
-              consumers++;
-              return [];
-            },
-            storage: {
-              ...w.ctx.storage,
-              get: (...args: Parameters<typeof w.ctx.storage.get>) => {
-                consumers++;
-                return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
+            const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
+            let consumers = 0;
+            let settingsCalls = 0;
+            const bad =
+              origin === undefined
+                ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
+                : StartsTest.changeOrigin(deployment, origin);
+            const sql = w.ctx.storage.sql;
+            const ctx = {
+              ...w.ctx,
+              id: {
+                ...w.ctx.id,
+                name:
+                  path === "Process"
+                    ? JSON.stringify(["settings-law", "worker"])
+                    : path === "RecordPart"
+                      ? JSON.stringify(["settings-law", "spans/0"])
+                      : "settings-law",
               },
-              sql: new Proxy(sql, {
-                get: (target, key) =>
-                  key === "exec"
-                    ? (...args: unknown[]) => {
-                        consumers++;
-                        return Reflect.apply(target.exec, target, args);
-                      }
-                    : Reflect.get(target, key),
-              }),
-            },
-          };
-          const env = {
-            ...w.env,
-            INSTANCE: JSON.stringify(bad),
-            PROJECT: {
-              ...w.env.PROJECT,
-              getByName: () => ({
-                settingsStart: async (wire: StartsTest.Input) => {
-                  settingsCalls++;
-                  return StartsTest.reply(wire);
+              getWebSockets: () => {
+                consumers++;
+                return [];
+              },
+              storage: {
+                ...w.ctx.storage,
+                get: (...args: Parameters<typeof w.ctx.storage.get>) => {
+                  consumers++;
+                  return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
                 },
-              }),
-            },
-          };
-          const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
-          const local = {
-            ...config,
-            name: "settings-law",
-            port: recipe.port,
-            person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-            founder: publicKey ?? "missing-public-key",
-            window: config.founding.window,
-          };
-          let exit: Exit.Exit<unknown, unknown>;
-
-          if (path === "HTTP") {
-            exit = yield* Effect.exit(
-              fetch(
-                new Request(`http://127.0.0.1:${recipe.port}/window.js`, {
-                  headers: { host: `127.0.0.1:${recipe.port}` },
+                sql: new Proxy(sql, {
+                  get: (target, key) =>
+                    key === "exec"
+                      ? (...args: unknown[]) => {
+                          consumers++;
+                          return Reflect.apply(target.exec, target, args);
+                        }
+                      : Reflect.get(target, key),
                 }),
-                env,
-                local,
-                { "/window.js": { hash: "asset", type: "text/javascript", body: "window.fixture = true" } },
-              ),
-            );
-          } else if (path === "RecordPart") {
-            const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
-            exit = yield* Effect.exit(
-              Effect.gen(function* () {
-                const build = yield* constructor;
-                const part = yield* build;
-                return yield* part.read(Chain.cases.spans.make({}), 0, 0);
-              }).pipe(
-                Effect.provideService(WorkerEnvironment, env),
-                Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
-              ),
-            );
-          } else {
-            const runtime =
-              path === "Connection"
-                ? connectionRuntime(ctx, env, local)
-                : path === "Process"
-                  ? processRuntime(ctx, env, {})
-                  : projectRuntime(ctx, env, {
-                      config: local,
-                      programs: {},
-                      bootstrap: { id: "boot", name: "boot", program: "missing" },
-                      door: () => Effect.die("consumer before start"),
-                    });
-            yield* Effect.addFinalizer(() => Effect.promise(() => runtime.dispose()));
-            const service =
-              path === "Connection" ? ConnectionService : path === "Process" ? ProcessService : ProjectService;
-            exit = yield* Effect.promise(() => Reflect.apply(runtime.runPromiseExit, runtime, [service]));
+              },
+            };
+            const env = {
+              ...w.env,
+              INSTANCE: JSON.stringify(bad),
+              PROJECT: {
+                ...w.env.PROJECT,
+                getByName: () => ({
+                  ...w.env.PROJECT.getByName("settings-law"),
+                  settingsStart: async (wire: StartsTest.Input) => {
+                    settingsCalls++;
+                    return StartsTest.reply(wire);
+                  },
+                }),
+              },
+            };
+            const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+            const local = {
+              ...config,
+              name: "settings-law",
+              port: recipe.port,
+              person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+              founder: publicKey ?? "missing-public-key",
+              window: config.founding.window,
+            };
+            let exit: Exit.Exit<unknown, unknown>;
+
+            if (path === "HTTP") {
+              exit = yield* Effect.exit(
+                fetch(
+                  new Request(`http://127.0.0.1:${recipe.port}/window.js`, {
+                    headers: { host: `127.0.0.1:${recipe.port}` },
+                  }),
+                  env,
+                  local,
+                  { "/window.js": { hash: "asset", type: "text/javascript", body: "window.fixture = true" } },
+                ),
+              );
+            } else if (path === "RecordPart") {
+              const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
+              exit = yield* Effect.exit(
+                Effect.gen(function* () {
+                  const build = yield* constructor;
+                  const part = yield* build;
+                  return yield* part.read(Chain.cases.spans.make({}), 0, 0);
+                }).pipe(
+                  Effect.provideService(WorkerEnvironment, env),
+                  Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
+                ),
+              );
+            } else if (path === "Connection") {
+              const runtime = connectionRuntime(ctx, env, local);
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ConnectionService));
+            } else if (path === "Process") {
+              const runtime = processRuntime(ctx, env, {});
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ProcessService));
+            } else {
+              const runtime = projectRuntime(ctx, env, {
+                config: local,
+                programs: {},
+                bootstrap: { id: "boot", name: "boot", program: "missing" },
+                door: () => Effect.die("consumer before start"),
+              });
+              yield* Effect.addFinalizer(() => runtime.disposeEffect);
+              exit = yield* Effect.promise(() => runtime.runPromiseExit(ProjectService));
+            }
+
+            expect(Exit.isFailure(exit)).toBe(true);
+
+            if (Exit.isFailure(exit)) {
+              expect(Cause.hasDies(exit.cause)).toBe(false);
+              expect(Cause.hasFails(exit.cause)).toBe(true);
+              expect(Cause.findErrorOption(exit.cause)).toMatchObject({
+                _tag: "Some",
+                value: { _tag: "StartsError", reason: { _tag: "Decode" } },
+              });
+            }
+
+            expect(consumers).toBe(0);
+            // A remote receipt check must not hide a skipped local snapshot check.
+            expect(settingsCalls).toBe(0);
           }
-
-          expect(Exit.isFailure(exit)).toBe(true);
-
-          if (Exit.isFailure(exit)) {
-            expect(Cause.hasDies(exit.cause)).toBe(false);
-            expect(Cause.hasFails(exit.cause)).toBe(true);
-            expect(Cause.findErrorOption(exit.cause)).toMatchObject({
-              _tag: "Some",
-              value: { _tag: "StartsError", reason: { _tag: "Decode" } },
-            });
-          }
-
-          expect(consumers).toBe(0);
-          // A remote receipt check must not hide a skipped local snapshot check.
-          expect(settingsCalls).toBe(0);
-        }
-      }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  );
+        }).pipe(Effect.provide(Digest.layerWebCrypto)),
+    );
+  }
 }
 
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
@@ -1029,7 +1040,7 @@ SettingsTest.suite((recipe, secret) =>
                 });
         close = Effect.promise(() => runtime.dispose());
         yield* Effect.addFinalizer(() => close);
-        enter = (choice) =>
+        enter = (choice: number) =>
           Effect.tryPromise({
             try: () => {
               const work =
@@ -1065,7 +1076,7 @@ SettingsTest.suite((recipe, secret) =>
                       );
               return Reflect.apply(runtime.runPromise, runtime, [work]);
             },
-            catch: (cause) => cause,
+            catch: (cause: unknown) => cause,
           });
       }
 

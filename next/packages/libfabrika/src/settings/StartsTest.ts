@@ -23,7 +23,7 @@ export const law = <A>(
   const options = { seed: 119120, numRuns: 100, examples };
   it.effect(name, () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
-    Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause) => cause }),
+    Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause: unknown) => cause }),
   );
 };
 
@@ -36,6 +36,44 @@ export const recipe = fc.record({
 });
 
 export type Recipe = fc.ArbitraryValue<typeof recipe>;
+
+export const originKinds = ["flag", "env", "file"] as const;
+
+export interface OriginFault {
+  readonly path: string;
+  readonly origin: Origin;
+}
+
+// These strings fit Origin's wire schema but name no declared source, or reveal an absolute path.
+export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<OriginFault> =>
+  fc
+    .tuple(
+      fc.constantFrom(...Declarations.all.declarations.map((declaration) => declaration.path)),
+      fc.uuid(),
+      fc.nat(),
+    )
+    .map(([path, word, choice]) => ({
+      path,
+      origin:
+        kind === "flag"
+          ? Origin.cases.flag.make({ name: `--undeclared.${word}` })
+          : kind === "env"
+            ? Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${word.replaceAll("-", "_")}` })
+            : Origin.cases.file.make({
+                file:
+                  choice % 3 === 0
+                    ? `/${word}/fabrika.toml`
+                    : choice % 3 === 1
+                      ? `C:\\${word}\\fabrika.toml`
+                      : `\\\\fixture\\${word}\\fabrika.toml`,
+                line: 1 + (choice % 1000),
+              }),
+    }));
+
+export const changeOrigin = (value: Input, fault: OriginFault): Input => ({
+  ...value,
+  settings: { ...value.settings, origins: { ...value.settings.origins, [fault.path]: fault.origin } },
+});
 
 export interface Input {
   readonly settings: Snapshot.Snapshot;
