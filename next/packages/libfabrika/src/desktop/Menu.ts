@@ -202,7 +202,12 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
     ],
     update: {
       link: (s, m) => [{ ...s, link: m.link }, []],
-      clients: (s, m) => [{ ...s, clients: unique(m.clients) }, []],
+      clients: (s, m) => {
+        const clients = unique(m.clients);
+        // Snapshots arrive separately. The latest list decides a shared key's row.
+        const rows = s.rows.filter((row) => !clients.some((client) => client.key === row.key));
+        return [{ ...s, rows, clients }, []];
+      },
       rows: (s, m) => {
         let passes = s.passes.filter((p) => m.at < p.until);
         const commands: Array<ReturnType<typeof signGrant>> = [];
@@ -215,7 +220,8 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
           }
         }
 
-        return [{ ...s, rows, passes }, commands];
+        const clients = s.clients.filter((client) => !rows.some((row) => row.key === client.key));
+        return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
         if (s._tag !== "idle") {
