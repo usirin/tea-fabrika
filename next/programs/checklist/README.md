@@ -59,15 +59,16 @@ input marked `personOnly: true` in `inputs` is refused by the runner when an age
 
 A program never reads a clock. `wake(model)` says when the program wants to hear the time next, in
 milliseconds since 1970, or `null` for never. When that time comes, the runner sends
-`{ type: "timer", at }` with its own clock, and the step reads `at`.
+`{ type: "timer", at, arrivedAt }`. `at` is the wake the program asked for; `arrivedAt` is the
+runner's clock when it delivered the timer. The step reads `arrivedAt` as the current time.
 
 The checklist answers:
 
 - `0` while any item is `new`: a time in the past, so the alarm fires at once and the timer stamps
-  every new item `open {since: at}`. An input's own `sentAt` is the sender's clock and decides
+  every new item `open {since: arrivedAt}`. An input's own `sentAt` is the sender's clock and decides
   nothing, so this is how an item gets a time it can trust.
 - else the oldest open item's `since` plus one day (`LATE`): that timer makes it `late`, exactly
-  when `at >= since + LATE`.
+  when `arrivedAt >= since + LATE`.
 - else `null`.
 
 ## The view, the query and the output

@@ -1,6 +1,6 @@
 // The checklist, next/: the example program that uses every part of a program (0125). A pure tea
 // machine and its declarations, on P11's `Program.make` until ticket 302 moves it to the decided
-// shape. Time comes in only as the runner's `timer {at}`, never from a clock here.
+// shape. Time comes in only as the runner's `timer {at, arrivedAt}`, never from a clock here.
 import { Machine } from "@demlik/tea/effect";
 import { Input, Program, type Refusal } from "@kampus/libfabrika";
 import { Schema } from "effect";
@@ -29,7 +29,7 @@ export const NOTE_MOST = 256;
 
 const Note = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(NOTE_MOST));
 
-/** An item's control state (0037). `since` is ms since 1970, from a timer's `at`. */
+/** An item's control state (0037). `since` is ms since 1970, from a timer's `arrivedAt`. */
 const ItemState = Schema.TaggedUnion({
   new: {},
   open: { since: Schema.Int },
@@ -51,7 +51,7 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("check"), name: Name, note: Schema.optionalKey(Note) }),
   Schema.Struct({ type: Schema.Literal("uncheck"), name: Name }),
   // Only the runner sends it, when the alarm `wake` asked for fires.
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
 ]);
 type Msg = typeof Msg.Type;
 
@@ -87,7 +87,7 @@ export const checklistMachine = Machine.make({
       [],
     ],
     uncheck: (m, msg) => [each(m, msg.name, (s) => (s._tag === "checked" ? fresh : s)), []],
-    timer: (m, msg) => [{ items: m.items.map((i) => ({ name: i.name, state: tick(i.state, msg.at) })) }, []],
+    timer: (m, msg) => [{ items: m.items.map((i) => ({ name: i.name, state: tick(i.state, msg.arrivedAt) })) }, []],
   },
 });
 

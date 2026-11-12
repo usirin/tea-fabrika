@@ -1439,8 +1439,20 @@ export class ProgramRunner extends Context.Service<
                 }
 
                 const id = `${process.id}/due/${time}`;
+                const placed = yield* store.placed(id);
+                const saved = yield* Stream.runHead(
+                  mailbox
+                    .read(process.name, placed === null ? state.after : placed.rev - 1)
+                    .pipe(Stream.filter((letter) => letter.id === id)),
+                );
+                const arrivedAt = yield* Clock.currentTimeMillis;
                 const sent = yield* mailbox
-                  .send(process.name, id, { type: "timer", at: time }, yield* from(null, yield* traceId))
+                  .send(
+                    process.name,
+                    id,
+                    Option.isSome(saved) ? saved.value.m : { type: "timer", at: time, arrivedAt },
+                    yield* from(null, yield* traceId),
+                  )
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
                 if (sent._tag === "refused") {
