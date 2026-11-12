@@ -12,7 +12,7 @@
 // `swap({load, program, hash})` on its Process object. `control.ts` allows `codeInstall` and
 // `codeFailed` on the project target only. A source that does not hash to its name fails the call
 // with nothing stored. The Project's own boot appends `code.loaded {from: "boot", was: null}` for a
-// built-in program with no selection, and pushes the selected hash to every live process.
+// built-in program with no selection, and pushes the selected hash to live processes on other code.
 //
 // Generator contract: every walk starts from a booted Project and reads what it has made so far (the
 // selected spec, the hashes that failed, the live processes) to pick the next move and its
@@ -296,6 +296,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
           window: null,
           port: 18787,
+          rateLimit: { limit: 100_000, window: 60_000 },
           build: BRAIN_BUILD,
         },
         programs: { [PROGRAM]: bundled, ...otherPrograms },
@@ -483,11 +484,16 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       const added = code(i).slice(before);
       expect(added.map((e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, null]]);
     } else if (move === "restart") {
+      const expected = [...i.descriptors.values()]
+        .filter((d) => i.running.get(d.id) !== selected)
+        .map((d) => [d.name, selected, d.program]);
       yield* i.restart;
-      // The boot pushes the selected hash to every live process again, and only it.
-      expect(new Set(i.pushed.slice(pushes).map((p) => p.hash))).toEqual(
-        i.descriptors.size === 0 ? new Set() : new Set([selected]),
-      );
+      expect(
+        i.pushed
+          .slice(pushes)
+          .map((p) => [p.name, p.hash, p.program])
+          .sort(),
+      ).toEqual(expected.sort());
     } else if (move === "own") {
       const live = [...i.descriptors.values()];
       const descriptor = live[g(fc.nat, { max: live.length - 1 })]!;
@@ -563,7 +569,11 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             const rounds = g(fc.integer, { min: 1, max: 4 });
 
             for (let n = 0; n < rounds; n++) {
-              const was = i.running.get(pid)!;
+              // Keep the process behind the selection so boot has a real swap to push.
+              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              i.refusing.add("counter:1");
+              const { digest: was } = yield* install(i, `before_boot_order_${n}`, current);
+              i.refusing.delete("counter:1");
               const entered = yield* Deferred.make<void>();
               const release = yield* Deferred.make<void>();
               i.swapGates.set(was, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))));
@@ -909,6 +919,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const replacement = { ...current, k: current.k + g(fc.integer, { min: 10, max: 99 }) };
               const before = code(i);
               const pushes = i.pushed.length;
+              const expected = i.running.get(i.descriptors.get("counter:1")!.id) === selected ? [] : [selected];
               // Check persistence before reopening too, so a missing bundle reports its cause.
               const recorded = new Set(before.filter((e) => e.tag === "code.loaded").map((e) => String(e.body.hash)));
 
@@ -924,7 +935,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
               yield* i.reopen(replacement);
               expect(code(i)).toEqual(before);
-              expect(i.pushed.slice(pushes).map((p) => p.hash)).toEqual([selected]);
+              expect(i.pushed.slice(pushes).map((p) => p.hash)).toEqual(expected);
 
               for (const digest of recorded) {
                 expect(yield* i.run(i.p.code(digest))).toEqual({ hash: digest, source: i.sources.get(digest) });

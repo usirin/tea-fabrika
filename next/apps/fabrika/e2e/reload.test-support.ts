@@ -88,6 +88,7 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
       founder: founder.line,
       window: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       port: port.port,
+      rateLimit: { limit: 100_000, window: 60_000 },
       home,
     });
     const answers = yield* Queue.unbounded<unknown>();
