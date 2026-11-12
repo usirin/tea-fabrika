@@ -15,9 +15,10 @@
 //   environment name, flag (`--` and the path), reload, since, default and doc, in Markdown that
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { ByteSize, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
+import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -31,6 +32,52 @@ const REPO = ".fabrika/fabrika.toml";
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
   title: "a port",
   description: "A port is a whole number from 1 to 65535.",
+});
+
+it("T753 L7–L8 byte references distinguish file input from recorded values and keep explicit defaults visible", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({ count: fc.bigInt({ min: 1n, max: 2n ** 80n }), doc, explicit: fc.boolean(), all: fc.boolean() }),
+      async (v) => {
+        const d = Setting.make("limits.record", {
+          schema: Schema.ByteSize,
+          default: ByteSize.bytes(v.count),
+          doc: v.doc,
+          scope: ["repo"],
+          reload: "restart",
+          since: "1.2.3",
+          format: "text",
+        });
+        const group = Setting.group({ record: d });
+        const origins = {
+          [d.path]: v.explicit
+            ? Sources.Origin.cases.file.make({ file: REPO, line: 2 })
+            : Sources.Origin.cases.default.make({}),
+        };
+        const snapshot = await Effect.runPromise(
+          Snapshot.make(group, { values: { record: d.default }, origins }).pipe(Effect.provide(Digest.layerWebCrypto)),
+        );
+        const rows = Reference.rows(group, snapshot);
+        expect(rows[0]).toMatchObject({
+          path: d.path,
+          value: String(v.count),
+          default: String(v.count),
+          origin: origins[d.path],
+          doc: d.doc,
+          since: d.since,
+        });
+        const report = Print.report(rows, { all: v.all });
+        expect(report.includes(`${d.path} =`)).toBe(v.explicit || v.all);
+        const text = plain(Reference.markdown(group));
+        // The reference must show the declaration-derived file spelling separately from JSON digits.
+        const fileDefault = Schema.encodeSync(Schema.toCodecStringTree(d.schema))(d.default);
+        expect(text).toContain(String(fileDefault));
+        expect(text).toContain(JSON.stringify(String(v.count)));
+        expect(text).toContain(collapse(d.doc));
+      },
+    ),
+    check,
+  );
 });
 
 // Release triples near 9 and 10, where text order and number order part.
