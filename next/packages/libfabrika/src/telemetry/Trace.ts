@@ -120,7 +120,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
 
 /** A thrown error as a typed one: a row that does not decode is `bad_row`, the rest `storage`. */
 export const sinkError = (error: unknown): SinkError =>
-  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0 });
+  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0, cause: error });
 
 /** The class of a thrown or failed value, for `error.type`. */
 export const errorClass = (error: unknown): string => (error instanceof Error ? error.name : typeof error);

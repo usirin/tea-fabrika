@@ -28,7 +28,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
         const event = decodeEvent(valueFor(row));
 
         if (Result.isFailure(event)) {
-          return Result.fail(new LedgerError({ reason: "bad_row" }));
+          return Result.fail(new LedgerError({ reason: "bad_row", cause: event.failure }));
         }
 
         events.push(event.success);

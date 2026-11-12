@@ -116,7 +116,7 @@ export class SessionManager extends Context.Service<
           );
         };
         const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({ try: step, catch: () => new LedgerError({ reason: "storage" }) });
+          return yield* Effect.try({ try: step, catch: (cause) => new LedgerError({ reason: "storage", cause }) });
         });
         const ended = (process: string) =>
           sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;

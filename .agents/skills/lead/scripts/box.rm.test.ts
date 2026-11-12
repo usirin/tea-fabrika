@@ -60,6 +60,10 @@ import "./sizecap.ts?raw";
 import "../../step-commit/scripts/exam.py?raw";
 import "../../step-commit/scripts/stepcommit.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./gcloop.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./flow/Beat.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./box/BoxGitTest.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./box/RunsTest.ts?raw";

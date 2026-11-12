@@ -134,7 +134,9 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   );
 });
 
-class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {}) {}
+class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
 export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(function* (a: {
   readonly text: string;
@@ -173,7 +175,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   const { blob, key, ints } = parsed.value;
   const decoded = yield* Effect.try({
     try: () => Schema.decodeUnknownSync(Client)(text(client)),
-    catch: () => new BadAssertion({}),
+    catch: (cause) => new BadAssertion({ cause }),
   });
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 
