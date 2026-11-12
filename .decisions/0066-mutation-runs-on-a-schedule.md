@@ -1,7 +1,7 @@
 ---
 id: 0066
 title: Mutation testing leaves the pull request's steps and runs hourly against main, with its findings filed as tickets
-status: amended-in-part by [0067](0067-hourly-mutation-runs-in-ci.md), [0077](0077-mutation-gaps-carry-a-category.md), [0089](0089-mutation-covers-lane-code.md)
+status: amended-in-part by [0067](0067-hourly-mutation-runs-in-ci.md), [0077](0077-mutation-gaps-carry-a-category.md), [0089](0089-mutation-covers-lane-code.md), [0117](0117-every-mutation-gap-gets-a-ticket.md)
 date: 2026-11-10
 tags: [mutation, steps, schedule, merge, exam, loosening, tracker]
 ---

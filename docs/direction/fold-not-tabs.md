@@ -5,6 +5,11 @@ runs one of two ways, horizontal or vertical, as in AeroSpace. Any tile can
 fold into a thin strip that keeps its place. This replaces
 tabbed is an orientation.
 
+Its decided rules are in: [0505](../../.decisions/0505-the-desk-has-no-tabs.md),
+[0506](../../.decisions/0506-a-fold-is-stored-on-the-tile.md),
+[0507](../../.decisions/0507-a-line-opens-in-place.md),
+[0508](../../.decisions/0508-closing-a-line-tile-ends-one-process.md).
+
 ```ts
 // apps/fabrika/src/desk/layout/node.ts
 type Orientation = "horizontal" | "vertical";

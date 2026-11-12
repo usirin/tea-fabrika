@@ -3,6 +3,10 @@
 Decided 2026-11-01 by the owner, not built yet. This is about today's version. It replaces the faint tint described in
 [fold, not tabs](./fold-not-tabs.md) when the change lands, and `next/` takes it as a lesson.
 
+Its decided rules are in: [0477](../../.decisions/0477-a-pipe-is-marked-by-a-wash.md),
+[0478](../../.decisions/0478-a-pipe-color-says-which-pipe.md),
+[0479](../../.decisions/0479-a-pipes-focus-edge-reads-3-to-1.md).
+
 Changed 2026-11-08: design foundations PR 1 builds slate a9 focus in both looks for plain tiles
 in today's version. Dark pipes keep a8, and light pipes keep the a9 to a11 steps listed below.
 

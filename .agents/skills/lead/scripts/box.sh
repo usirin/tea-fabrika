@@ -32,7 +32,11 @@ def refuse_check(check, why):
 if len(args) < 2: refuse("box command and name required")
 cmd, name, *args = args
 if not re.fullmatch(r"[A-Za-z0-9_-]+", name): refuse("invalid box name")
-work, gitdata = boxes / name, boxes / (name + "-gitdata")
+# The tree sits in BOXES/box, apart from the files kept beside the boxes, so Codex's fence has few
+# names to close beside it (lane.ts boxTree, ticket 659). A box made before that layout keeps its
+# tree in BOXES until gc removes it; only `new` never looks there.
+work, gitdata = boxes / "box" / name, boxes / (name + "-gitdata")
+if cmd != "new" and name != "box" and not work.exists() and (boxes / name).is_dir(): work = boxes / name
 state_dir = boxes / "state"; state_dir.mkdir(parents=True, exist_ok=True)
 state_path = state_dir / (name + ".box")
 def call(argv, **kw):
@@ -127,6 +131,9 @@ def new_box():
     if lane is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", lane): refuse("invalid lane name")
     if not branch.startswith("fabrikalfa/"): refuse("branch prefix must be fabrikalfa/")
     if not ticket or not plan: refuse("plan and ticket required")
+    # One name, one tree: an older box's tree in BOXES under this name would make two.
+    if (boxes / name).exists(): refuse("box name taken by an older box")
+    work.parent.mkdir(exist_ok=True)
     plan = str(pathlib.Path(plan).absolute())
     checked = call(["sh", str(here / "../../plan/scripts/plancheck.sh"), "--approved", plan])
     if checked.returncode: refuse_check("plan_unapproved", checked.stdout.decode())
@@ -157,7 +164,7 @@ def new_box():
             if got.returncode: refuse("shared_ticket " + ticket + " on " + other + ": open PRs cannot be read")
             open_heads[0] = set(got.stdout.decode().split())
         if lane in open_heads[0]: return True
-        return any(facts(p).get("branch") == lane and (boxes / p.stem).is_dir() for p in state_dir.glob("*.box") if p.stem != name)
+        return any(facts(p).get("branch") == lane and any((d / p.stem).is_dir() for d in (boxes / "box", boxes)) for p in state_dir.glob("*.box") if p.stem != name)
     # A branch whose change is only field rows is the lead logging runs, not a lane writing the
     # ticket (field-rows PR 601 on ticket 276, 2026-11-09): a field/*.jsonl file, or a row file in
     # field/notes/, field/runs/ or field/findings/ (decision 0090). Judged by its paths, not its name,

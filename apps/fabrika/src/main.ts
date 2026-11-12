@@ -34,7 +34,7 @@ import { answer, DESK, isDesk, isOurs, SCHEME } from "./files.ts";
 import { settingsFolder } from "./host/settings.ts";
 import { pathsOf, reach } from "./host/socket.ts";
 import { NotStopped, stopHost } from "./host/stop.ts";
-import { type Launch, launchOf, QUIET_SWITCHES } from "./launch.ts";
+import { hidden, type Launch, launchOf, QUIET_SWITCHES } from "./launch.ts";
 import type { Down, Up } from "./link.ts";
 import { type LinkNow, readAsks, readToApp, type ToPage, type WindowLook } from "./messages.ts";
 import { Browser, NotOpened, openOutside } from "./outside.ts";
@@ -112,10 +112,13 @@ import { Unattached, type Wire } from "./wire.ts";
 //   Cmd-Q           quits the app, and only the app: every host runs on
 //
 // A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
-// accessory app, with no Dock icon, never the active app. Its windows are drawn while hidden,
-// made fully transparent and click-through in a corner of the screen, shown without focus and
-// never focused, so they never take the person's keys or pointer (AGENTS.md, "Go easy on the
-// machine"). FABRIKA_FOREGROUND=1 shows them as the owner's.
+// accessory app, with no Dock icon, never the active app. Each of its windows is drawn while
+// hidden, and before it is first shown it is made see-through, click-through and put in the work
+// area's bottom-right corner (launch.ts, `hidden`), then shown without focus and never focused,
+// not even by the dock-activate path. So it never takes the person's keys or pointer, not even for
+// a moment at launch (AGENTS.md, "Go easy on the machine"). FABRIKA_FOREGROUND=1 shows them as the
+// owner's. DOM focus inside the page is not OS focus: a tile's terminal still takes keys sent over
+// the DevTools protocol.
 //
 // The app's home is Electron's userData folder: FABRIKA_HOME, when set, or Electron's own folder.
 // Its own records are `<home>/records/projects.jsonl`, and its session `<home>/session.json`.
@@ -190,9 +193,9 @@ const FRAME =
     : {};
 
 /**
- * One window, with the same safe settings the app's windows always had. Quiet, it is drawn
- * hidden, then made transparent and click-through in the work area's corner, and shown without
- * taking focus: an agent reads it over the DevTools protocol, and the person never sees it.
+ * One window, with the same safe settings the app's windows always had. Quiet, it is made hidden
+ * and drawn anyway, then made see-through, click-through and put in the corner, and only then
+ * shown, without taking focus: an agent reads it over the DevTools protocol.
  */
 const deskWindow = (preload: string, icon: string, launch: Launch) => {
   const quiet = launch.kind === "quiet";
@@ -218,10 +221,10 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
   followLook(nativeTheme, window);
 
   if (quiet) {
-    window.setOpacity(0);
-    window.setIgnoreMouseEvents(true);
-    const area = screen.getPrimaryDisplay().workArea;
-    window.setPosition(area.x + area.width - 1, area.y + area.height - 1);
+    const at = hidden(screen.getPrimaryDisplay().workArea, window.getBounds());
+    window.setOpacity(at.opacity);
+    window.setIgnoreMouseEvents(at.ignoreMouse);
+    window.setPosition(at.x, at.y);
     window.showInactive();
   }
 

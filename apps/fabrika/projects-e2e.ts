@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
@@ -8,14 +7,15 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import { Effect, Layer } from "effect";
 import type { BaseWindow, MessageBoxOptions, OpenDialogOptions } from "electron";
 import * as fc from "fast-check";
-import { _electron, type ElectronApplication, type Page } from "playwright";
+import type { ElectronApplication, Page } from "playwright";
 import { deskMachine, savedOf } from "./src/desk/desk.ts";
+import * as TestWindow from "./test-window.ts";
 
 // Today's app, T276 PR 1. Real git projects and real windows. Only the native folder sheet's
 // answer is supplied by the test. All navigation and changes use keys, buttons and menu items.
 // Run through e2e.ts --projects. The builder owns the resulting images, not this test step.
-const here = import.meta.dirname;
-const executablePath: string = createRequire(import.meta.url)("electron");
+// Every launch goes through test-window.ts, so each window stays out of the way, and its `close`
+// fails the run when one took OS focus or was seen.
 
 const prepareProject = async (home: string, root = join(home, "fixture-project")) => {
   const { Project } = await import("./src/project.ts");
@@ -122,7 +122,7 @@ type Fixture = ReturnType<typeof fixture>;
 
 const launch = async (f: Fixture) => {
   try {
-    return await _electron.launch({ executablePath, args: [here], env: f.env });
+    return await TestWindow.launch({ home: f.home, env: f.env });
   } catch (error) {
     rmSync(f.home, { recursive: true, force: true });
     throw error;
@@ -394,8 +394,15 @@ const alive = (pid: number) => {
   }
 };
 
-const dispose = async (app: ElectronApplication | null, f: Fixture) => {
-  await app?.close().catch(() => {});
+/**
+ * Close the window, stop this run's hosts and remove its home. A window that got in the way fails
+ * the run, but only after the hosts are stopped and the home is gone.
+ */
+const dispose = async (win: TestWindow.TestWindow, f: Fixture) => {
+  const inWay = await win.close().then(
+    () => null,
+    (e: unknown) => (e instanceof Error ? e : new Error(String(e))),
+  );
   // Only hosts this run started, from its own private project homes. Never pgrep or a key file.
   const projects = join(f.home, "projects");
   let keys: string[] = [];
@@ -439,11 +446,16 @@ const dispose = async (app: ElectronApplication | null, f: Fixture) => {
   }
 
   rmSync(f.home, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+
+  if (inWay !== null) {
+    throw inWay;
+  }
 };
 
 const e1 = async () => {
   const f = fixture();
-  let app: ElectronApplication | null = await launch(f);
+  let win = await launch(f);
+  let { app } = win;
 
   try {
     const welcome = await app.firstWindow();
@@ -487,8 +499,9 @@ const e1 = async () => {
       await page.close();
     }
 
-    await app.close();
-    app = await launch(f);
+    await win.close();
+    win = await launch(f);
+    ({ app } = win);
     let recent = await app.firstWindow();
     await recent.getByRole("heading", { name: "Open a folder to start" }).waitFor();
     check(app.windows().length === 1, "E1: PR 1 automatically reopened projects");
@@ -518,15 +531,16 @@ const e1 = async () => {
         (text) => /scout.*idle/.test(text),
       );
       await page.close();
-      await app.close();
-      app = await launch(f);
+      await win.close();
+      win = await launch(f);
+      ({ app } = win);
       recent = await app.firstWindow();
       await recent.getByRole("heading", { name: "Open a folder to start" }).waitFor();
     }
 
     console.log("ok E1: open, switch, cancel, close, and reopen from recents kept independent work");
   } finally {
-    await dispose(app, f);
+    await dispose(win, f);
   }
 };
 
@@ -573,7 +587,8 @@ const recordText = (folder: string): string[] => {
   return text;
 };
 
-const observe = async (app: ElectronApplication, f: Fixture) => {
+const observe = async (win: TestWindow.TestWindow, f: Fixture) => {
+  const { app } = win;
   const captures = await app.evaluate(
     () => Reflect.get(globalThis, "projectTestOutputs") as { urls: string[]; errors: string[] },
   );
@@ -585,7 +600,7 @@ const observe = async (app: ElectronApplication, f: Fixture) => {
     errors.push(...(await page.getByRole("alert").allTextContents()));
   }
 
-  await app.close();
+  await win.close();
   let keys: string[] = [];
 
   try {
@@ -623,7 +638,8 @@ const observeProjectFlow = async (flow: RecordedProjectFlow) => {
   const f = fixture();
   f.env.FABRIKA_REPO = `https://fixture:${encodeURIComponent(flow.credential)}@fixture.invalid/repo`;
   f.env.OPENAI_API_KEY = flow.credential; // Made up, and only the fake agent is ever selected.
-  const app = await launch(f);
+  const win = await launch(f);
+  const { app } = win;
 
   try {
     await app.evaluate(({ shell, dialog }) => {
@@ -712,9 +728,9 @@ const observeProjectFlow = async (flow: RecordedProjectFlow) => {
       await openFixtureProject(app, page, f.projects[1]);
     }
 
-    return await observe(app, f);
+    return await observe(win, f);
   } finally {
-    await dispose(app, f);
+    await dispose(win, f);
   }
 };
 
@@ -818,7 +834,8 @@ const observePresses = async (
   const f = fixture();
   const parents = ["left", "right"] as const;
   const steps: { press: ProjectPress; records: Record<string, unknown>[] }[] = [];
-  let app: ElectronApplication | null = await launch(f);
+  let win = await launch(f);
+  let { app } = win;
 
   /** Run one press and keep the opening records it wrote, waiting for the one that ends it. */
   const recorded = async (press: ProjectPress, act: () => Promise<void>) => {
@@ -841,8 +858,9 @@ const observePresses = async (
     });
 
     if (welcomeFirst === "welcome row") {
-      await app.close();
-      app = await launch(f);
+      await win.close();
+      win = await launch(f);
+      ({ app } = win);
       const again = await app.firstWindow();
       await again.getByRole("heading", { name: "Open a folder to start" }).waitFor();
       await recorded("welcome row", async () => {
@@ -899,10 +917,10 @@ const observePresses = async (
       current = target;
     }
 
-    await app.close();
+    await win.close();
     return steps;
   } finally {
-    await dispose(app, f);
+    await dispose(win, f);
   }
 };
 
@@ -1103,17 +1121,17 @@ const setLook = async (app: ElectronApplication, page: Page, look: Look) => {
 
 // A window just launched may still take its first size after this one is set: one welcome shot
 // came out 1584x1752 when the size was set once and only the small one was checked. So the size
-// is set until the window holds it, and a shot is never taken at another size.
-const resize = async (app: ElectronApplication, page: Page, small: boolean) => {
-  const contents = await app.browserWindow(page);
+// is set until the window holds it, and a shot is never taken at another size. It is sized through
+// the test window (`size`), which puts it back in the corner each time.
+const resize = async (win: TestWindow.TestWindow, page: Page, small: boolean) => {
+  const contents = await win.app.browserWindow(page);
   const want = { width: small ? 1024 : 1400, height: small ? 700 : 900 };
   await until(
     async () => {
-      await contents.evaluate((window, want) => window.setBounds(want), want);
-      await page.waitForTimeout(100);
-      return contents.evaluate((window) => window.getBounds());
+      await win.size(want.width, want.height, page);
+      return contents.evaluate((window) => window.getContentSize());
     },
-    (bounds) => bounds.width === want.width && bounds.height === want.height,
+    ([width, height]) => width === want.width && height === want.height,
     5_000,
   ).catch((error: unknown) => {
     throw new Error(`E2 requires a real ${want.width}x${want.height} window`, { cause: error });
@@ -1178,7 +1196,7 @@ const geometry = async (page: Page, layout: Layout | "normal", hostless: boolean
 };
 
 const shot = async (
-  app: ElectronApplication,
+  win: TestWindow.TestWindow,
   page: Page,
   shots: string,
   state: string,
@@ -1187,8 +1205,8 @@ const shot = async (
   hostless: boolean,
   verify: () => Promise<void>,
 ) => {
-  await resize(app, page, layout === "small");
-  await setLook(app, page, look);
+  await resize(win, page, layout === "small");
+  await setLook(win.app, page, look);
   await geometry(page, layout, hostless);
   await verify();
   check(await page.evaluate((look) => matchMedia(`(prefers-color-scheme: ${look})`).matches, look), "E2: wrong look");
@@ -1354,7 +1372,8 @@ const migrationCaptures = async (shots: string) => {
     // These are real saved host formats. No seeded renderer or fake tile is used.
     writeFileSync(join(f.home, "desk.json"), failed ? '{"unknownSavedShape":true}' : saved);
     writeFileSync(join(f.home, "history"), "fixture-migration-history\n");
-    const app: ElectronApplication | null = await launch(f);
+    const win = await launch(f);
+    const { app } = win;
 
     try {
       const welcome = await app.firstWindow();
@@ -1368,7 +1387,7 @@ const migrationCaptures = async (shots: string) => {
 
         for (const size of ["normal", "small"] as const) {
           for (const look of ["dark", "light"] as const) {
-            await shot(app, welcome, shots, "migration-failed", size, look, true, async () => {
+            await shot(win, welcome, shots, "migration-failed", size, look, true, async () => {
               check(
                 await welcome.getByRole("button", { name: /Try Again|Retry/ }).isEnabled(),
                 "migration failure has no retry",
@@ -1401,7 +1420,7 @@ const migrationCaptures = async (shots: string) => {
           await layoutWithKeys(page, layout);
 
           for (const look of ["dark", "light"] as const) {
-            await shot(app, page, shots, "migration-ready", layout, look, false, async () => {
+            await shot(win, page, shots, "migration-ready", layout, look, false, async () => {
               await orientation(page);
               await page.keyboard.press("ArrowUp");
               // The redraw after ArrowUp is async: wait for the history line on the current tile.
@@ -1427,7 +1446,7 @@ const migrationCaptures = async (shots: string) => {
         }
       }
     } finally {
-      await dispose(app, f);
+      await dispose(win, f);
     }
   }
 };
@@ -1435,7 +1454,8 @@ const migrationCaptures = async (shots: string) => {
 const captures = async (shots: string) => {
   for (const layout of layouts) {
     const f = fixture();
-    let app: ElectronApplication | null = await launch(f);
+    let win = await launch(f);
+    let { app } = win;
 
     try {
       let page = await app.firstWindow();
@@ -1448,14 +1468,14 @@ const captures = async (shots: string) => {
       if (layout === "one" || layout === "small") {
         for (const look of ["dark", "light"] as const) {
           const size = layout === "one" ? "normal" : "small";
-          await shot(app, page, shots, "welcome-empty", size, look, true, async () => {
+          await shot(win, page, shots, "welcome-empty", size, look, true, async () => {
             check(
               await page.getByText("Open Folder…", { exact: true }).isVisible(),
               "empty welcome lacks folder action",
             );
           });
           await page.keyboard.press("Meta+o");
-          await shot(app, page, shots, "welcome-selection", size, look, true, async () => {
+          await shot(win, page, shots, "welcome-selection", size, look, true, async () => {
             check((await page.getByRole("dialog").count()) === 0, "P27: Cmd-O stacked a welcome dialog");
             const selected = () =>
               page
@@ -1477,7 +1497,7 @@ const captures = async (shots: string) => {
 
         for (const look of ["dark", "light"] as const) {
           await shot(
-            app,
+            win,
             page,
             shots,
             "welcome-rejected",
@@ -1533,7 +1553,7 @@ const captures = async (shots: string) => {
         }
 
         for (const look of ["dark", "light"] as const) {
-          await shot(app, page, shots, state, layout, look, false, async () => {
+          await shot(win, page, shots, state, layout, look, false, async () => {
             await orientation(page);
             const native = await currentApp.browserWindow(page);
             const chrome = await native.evaluate((window) => ({
@@ -1583,7 +1603,7 @@ const captures = async (shots: string) => {
             await box(page).getByRole("combobox").fill("left");
           }
 
-          await shot(app, page, shots, `projects-box-${mode}`, layout, look, false, async () => {
+          await shot(win, page, shots, `projects-box-${mode}`, layout, look, false, async () => {
             if (mode === "already-open") {
               await until(
                 () => box(page).getByText("open", { exact: true }).count(),
@@ -1617,14 +1637,15 @@ const captures = async (shots: string) => {
         "P26: native menu shortcut absent",
       );
       check(menu?.some((item) => item.label === "Open Folder…" && !item.accelerator) === true, "P26: folder has Cmd-O");
-      await app.close();
-      app = await launch(f);
+      await win.close();
+      win = await launch(f);
+      ({ app } = win);
       page = await app.firstWindow();
 
       if (layout === "one" || layout === "small") {
         for (const look of ["dark", "light"] as const) {
           await shot(
-            app,
+            win,
             page,
             shots,
             "welcome-populated",
@@ -1651,7 +1672,7 @@ const captures = async (shots: string) => {
         }
       }
     } finally {
-      await dispose(app, f);
+      await dispose(win, f);
     }
   }
 };

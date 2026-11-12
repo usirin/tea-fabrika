@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { _electron, type ElectronApplication, type Page } from "playwright";
+import type { ElectronApplication, Page } from "playwright";
 import { openFixtureProject, testProject } from "./projects-e2e.ts";
+import * as TestWindow from "./test-window.ts";
 
 // An agent summoned and talked to, in the real built app, on a temp home and a temp git
 // repository, with the fake ACP agent: no model, no key, nothing real touched. Today's version.
@@ -21,7 +21,6 @@ import { openFixtureProject, testProject } from "./projects-e2e.ts";
 // including the refusal of ultra. An MCP client called observer attaches without running a model.
 
 const here = import.meta.dirname;
-const electronPath: string = createRequire(import.meta.url)("electron");
 const shots = process.env.SHOTS ?? mkdtempSync(join(tmpdir(), "summon-shots-"));
 mkdirSync(shots, { recursive: true });
 
@@ -329,7 +328,8 @@ const states = async (app: ElectronApplication, page: Page, layout: string) => {
   await shows(page, id, "scout dismissed", (t) => t.includes("scout dismissed") && lastRow(t) === "tsh$");
 };
 
-const app = await _electron.launch({ executablePath: electronPath, args: [here], env });
+const win = await TestWindow.launch({ home, env });
+const { app } = win;
 const selected = await testProject(home, repo);
 const observer = new Client({ name: "summon-shots", version: "0.0.0" });
 let failed = false;
@@ -339,16 +339,8 @@ try {
   await welcome.getByRole("heading", { name: "Open a folder to start", exact: true }).waitFor();
   check("T276: welcome starts no tiles", (await welcome.locator("[data-tile]").count()) === 0);
   const page = await openFixtureProject(app, welcome, repo);
-  const bounds = await app.evaluate(({ BrowserWindow }) => {
-    const [window] = BrowserWindow.getAllWindows();
-
-    if (window === undefined) {
-      throw new Error("no app window");
-    }
-
-    window.setBounds({ x: 0, y: 0, width: 1200, height: 640 });
-    return window.getBounds();
-  });
+  await win.size(1200, 640, page);
+  const bounds = await (await app.browserWindow(page)).evaluate((window) => window.getBounds());
   check("the native window fits the CI screen", bounds.width <= 1440 && bounds.height <= 674, bounds);
   await prompted(page, "t1");
   await lookIs(app, page, "dark");
@@ -434,7 +426,10 @@ try {
     10,
   );
   await observer.close().catch(() => {});
-  await app.close().catch(() => {});
+  await win.close().catch((e: unknown) => {
+    failed = true;
+    console.error(e);
+  });
 
   // This run started that host, on its own temp home, and only this run stops it.
   if (!Number.isNaN(pid)) {

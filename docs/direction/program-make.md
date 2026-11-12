@@ -3,6 +3,8 @@
 **Decided by the owner, 2026-11-07.** Written here on 2026-11-08, late: the decision lived only in
 chat for a day, and Tier 1's P11 was built without it. `next/` only.
 
+Its decided rules are in: [0256](../../.decisions/0256-a-program-is-one-program-make.md).
+
 **Changed 2026-11-08 by the owner: the shape below gets rethought.** Too many parts are linked
 only by matching names (an input's key to a Msg, an output to a Cmd), and an empty field is still
 required. A study writes the real ticket program in three shapes, and the owner picks one. The

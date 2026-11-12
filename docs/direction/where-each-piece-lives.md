@@ -36,13 +36,18 @@ libfabrika client, the way Ghostty is one libghostty client.
 The test for any file in next/apps/fabrika:
   would a from-scratch client have to write it again?
     yes  ->  it belongs in libfabrika
-    no   ->  it may stay in the app (wiring, the deploy stack, what starts things)
+    no   ->  it may stay in the app (its choices: which programs, which settings, its window)
 ```
+
+Changed 2026-11-11 ([0126](../../.decisions/0126-the-library-makes-an-instance-from-an-apps-choices.md)):
+the list used to say "wiring, the deploy stack, what starts things". That named kinds of file, not
+kinds of content, and the brain's object classes and the deploy stack fail the test above. They
+move into the library. The app keeps choices.
 
 - **A from-scratch client gets the same product.** The door, the ledger, the program runtime,
   the rules for who may write: all in the library, so a second client cannot drift from fabrika.
-- **The app holds only what is fabrika's own choice:** which Layers it hands in, its entries, its
-  deploy stack. Tier 1's "if a file there holds a decision, it moves" is this same test.
+- **The app holds only what is fabrika's own choice:** which programs, settings and Layers it
+  hands in. Tier 1's "if a file there holds a decision, it moves" is this same test.
 - **What it cannot tell us yet:** which of the current `next/apps/fabrika/src` files fail the test.
   Main's door (`door.ts`, `door-nonce.ts`) is a likely one; a sweep names each file.
 

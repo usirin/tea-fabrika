@@ -32,6 +32,20 @@ export interface HostPaths {
 /** The longest socket path macOS takes, in bytes (`sun_path`, less its closing zero). */
 export const MAX_SOCKET_PATH = 103;
 
+const fits = (sock: string) => new TextEncoder().encode(sock).length <= MAX_SOCKET_PATH;
+
+/**
+ * Does this home's socket path fit? `pathsOf` dies exactly where this says no: both join the path
+ * the same way, POSIX's, with Effect's own `Path` here, so a test's env can be checked without Node.
+ */
+export const fitsSocket = (home: string): boolean =>
+  Effect.runSync(
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      return fits(path.join(home, "host", "sock"));
+    }).pipe(Effect.provide(Path.layer)),
+  );
+
 export const pathsOf = (home: string) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
@@ -45,7 +59,7 @@ export const pathsOf = (home: string) =>
       log: path.join(dir, "log"),
     };
 
-    if (new TextEncoder().encode(paths.sock).length > MAX_SOCKET_PATH) {
+    if (!fits(paths.sock)) {
       return yield* Effect.die(`the host's socket path is longer than ${MAX_SOCKET_PATH} bytes: use a shorter home`);
     }
 

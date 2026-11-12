@@ -36,6 +36,8 @@ import "./fieldrow.py?raw";
 import "./runplan.sh?raw";
 import "./env.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
 import "./redact.sh?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
@@ -101,10 +103,12 @@ import {
   phasesIn,
   reportOf,
   rowOf,
+  runNames,
   startedOf,
   STEPS,
   tailFor,
 } from "./drive.ts";
+import { boxTree } from "./lane.ts";
 import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
@@ -866,7 +870,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
       "git",
       [
         `--git-dir=${join(root, "b-gitdata")}`,
-        `--work-tree=${join(root, "b")}`,
+        `--work-tree=${boxTree(root, "b")}`,
         "-c",
         "user.email=t@example.com",
         "-c",
@@ -883,7 +887,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   // Plants: drop --untracked-files=all; read through the box's own `.git` file; call a box whose
   // data is gone a box with no changes.
   it("scenario: every edited, deleted and new file is named, a new folder file by file, whatever the box's `.git` file says", () => {
-    const box = join(root, "b");
+    const box = boxTree(root, "b");
     spawnSync("git", ["init", "-q", "--separate-git-dir", join(root, "b-gitdata"), box]);
     writeFileSync(join(box, "a.ts"), "1\n");
     writeFileSync(join(box, "gone.ts"), "1\n");
@@ -921,7 +925,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   // Plants: read only git status; take a file whose folder differs; name the old path as edited.
   it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
     const top = mkdtempSync(join(tmpdir(), "drive-case-"));
-    const box = join(top, "c");
+    const box = boxTree(top, "c");
     const cgit = (...args: string[]) =>
       spawnSync(
         "git",
@@ -1045,7 +1049,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
               const started = Object.values(rows).flatMap((row) => row.seen.started);
               expect(started.length).toBe(1);
               const folder = started[0]?.folder ?? "";
-              expect(folder).toBe(step === "plan" ? env.MAIN : join(env.BOXES, `${name}-${step}${n}`));
+              expect(folder).toBe(step === "plan" ? env.MAIN : boxTree(env.BOXES, `${name}-${step}${n}`));
               expect(env.BOXES.startsWith(folder)).toBe(false);
               expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
             }),
@@ -1097,6 +1101,18 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
       }),
       options,
     );
+  });
+
+  // Plants: read only the boxes folder, so a tree under BOXES/box is missed and its id taken again.
+  it("scenario: a box's tree under BOXES/box holds its run id, beside the files in the boxes folder", () => {
+    const boxes = mkdtempSync(join(tmpdir(), "drive-names-"));
+    const empty = RunId.next("p12", "build", runNames(boxes, "p12"));
+    mkdirSync(boxTree(boxes, "p12-build2"), { recursive: true });
+    writeFileSync(join(boxes, "p12-build1.md"), "old\n");
+    const next = RunId.next("p12", "build", runNames(boxes, "p12"));
+    rmSync(boxes, { recursive: true, force: true });
+    expect(empty).toBe("p12-build1");
+    expect(next).toBe("p12-build3");
   });
 
   // Plants: return the path whenever the file exists; compare to the ms without the whole second.
@@ -1590,7 +1606,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                   ],
                 ]);
                 expect(ran.started.length).toBe(1);
-                expect(ran.started[0]?.folder).toBe(join(env.BOXES, name));
+                expect(ran.started[0]?.folder).toBe(boxTree(env.BOXES, name));
                 const prompt = ran.started[0]?.prompt ?? "";
                 expect(prompt).toContain(brief);
                 expect(prompt).toContain(report);

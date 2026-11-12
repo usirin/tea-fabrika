@@ -4,14 +4,21 @@
 //   a box is kept while   a process has its cwd there, or its git index, HEAD log or folder changed
 //                         in the last 2 h (lastTouched; gc's own reads write none of them),
 //                         or drive kept it stuck less than 24 h ago and its lane has not landed,
-//                         or it holds uncommitted
-//                         or untracked files (a backup saves only HEAD, so they would be lost)
+//                         or it holds uncommitted or untracked files and its lane has not landed
+//                         (a backup saves only HEAD, so they would be lost); once it landed, the
+//                         files go first into the main checkout as a stash (keepFiles), and a box
+//                         whose git data is not its own `<box>-gitdata` keeps them
 //   else it is removed    when its branch (minus -wip) has a merged pull request, or its HEAD is
 //                         on a remote branch; else its HEAD is pushed as the bot to <branch>-wip
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
 //   then                  every state/<box>.box whose box folder is gone is removed too, and every
 //                         linked worktree of the main checkout outside the boxes folder whose
 //                         lane landed (decideWorktree): its branch stays in the main checkout
+//   and                   boxfiles.ts sweeps what a landed lane's gone boxes left beside the boxes:
+//                         their files and mutation folders move to the main checkout's runs/, their
+//                         views and Codex homes go (boxfiles.ts says when)
+//
+// A box's tree is in BOXES/box (lane.ts boxTree); one made before that layout is still in BOXES.
 //
 // Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
 // checkout's runs/<folder>/; when that fails, the folder is kept.
@@ -28,11 +35,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { Schema } from "effect";
-import { wipOf } from "./lane.ts";
+import { boxTree, boxTrees, IDLE, oldBoxTree, wipOf } from "./lane.ts";
 import { GC_SECONDS } from "./mutbox.ts";
 
 const HOUR = 3_600_000;
-export const IDLE = 2 * HOUR;
 export const STUCK = 24 * HOUR;
 
 /** What gc saw of one box. All of it is read before anything is decided. */
@@ -97,12 +103,14 @@ export const decide = (s: Seen): Verdict => {
   }
 
   // A backup pushes HEAD only, so files never committed would go with the folder (field note
-  // 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them.
+  // 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them,
+  // until the lane lands: then gc keeps them in the main checkout first (`refs/keep/box/<box>-files`,
+  // a stash), since a drive box never commits and so always holds its step's files uncommitted.
   if (s.dirty === null) {
     return keep("its files could not be read");
   }
 
-  if (s.dirty > 0) {
+  if (s.dirty > 0 && !s.merged) {
     return keep(`${s.dirty} uncommitted files`);
   }
 
@@ -240,6 +248,27 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
   // No rename pairs, so each NUL-ended entry is one file.
   return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
 };
+
+/** Keep a box's uncommitted and untracked files in `main` at `ref`, as one stash commit (`git stash
+ * push -u`, ignored files left out), read and fetched with hooks and fsmonitor off; false: not kept. */
+export const keepFiles = (gitDir: string, box: string, main: string, ref: string): boolean =>
+  sh(
+    "git",
+    [
+      ...SAFE,
+      `--git-dir=${gitDir}`,
+      `--work-tree=${box}`,
+      "-c",
+      "user.name=gc",
+      "-c",
+      "user.email=gc@localhost",
+      "stash",
+      "push",
+      "-q",
+      "-u",
+    ],
+    box,
+  ).code === 0 && sh("git", ["-C", main, ...SAFE, "fetch", "-q", "-f", gitDir, `refs/stash:${ref}`]).code === 0;
 
 /** The folder a box's `.git` file points at, or the `.git` folder itself. */
 const gitDirOf = (box: string): string | null => {
@@ -422,13 +451,26 @@ const main = () => {
   let removed = 0;
   let freed = 0;
   let keptCount = 0;
-  const names = readdirSync(env.BOXES, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && d.name !== "state" && !d.name.endsWith("-gitdata"))
-    .map((d) => d.name)
-    .sort();
+  const foldersIn = (dir: string, skip: (name: string) => boolean) =>
+    existsSync(dir)
+      ? readdirSync(dir, { withFileTypes: true })
+          .filter((d) => d.isDirectory() && !skip(d.name))
+          .map((d) => d.name)
+      : [];
+  const boxes = [
+    ...foldersIn(boxTrees(env.BOXES), (n) => n.endsWith("-view")).map((name) => ({
+      name,
+      box: boxTree(env.BOXES, name),
+    })),
+    ...foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n.endsWith("-gitdata")).map((name) => ({
+      name,
+      box: oldBoxTree(env.BOXES, name),
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+  // The boxes this run removed, or would remove: boxfiles.ts sweeps only a box whose tree is gone.
+  const gone: string[] = [];
 
-  for (const name of names) {
-    const box = join(env.BOXES, name);
+  for (const { name, box } of boxes) {
     const gitDir = gitDirOf(box);
     const git =
       gitDir === null
@@ -473,6 +515,29 @@ const main = () => {
       }
 
       why += `, HEAD kept at refs/keep/box/${name}`;
+    }
+
+    // A landed lane's box with files never committed: they go into the main checkout as a stash, the
+    // untracked ones too (git ignores node_modules), before the folder goes.
+    if (verdict._tag === "remove" && (seen.dirty ?? 0) > 0) {
+      const kept = `refs/keep/box/${name}-files`;
+
+      // Only a box's own git data: a stash in a worktree of the main checkout would land in its refs.
+      if (gitDir !== join(env.BOXES, `${name}-gitdata`)) {
+        console.log(`keep ${name}: ${seen.dirty} uncommitted files`);
+        keptCount += 1;
+        continue;
+      }
+
+      if (!dry) {
+        if (!keepFiles(gitDir, box, env.MAIN, kept)) {
+          console.log(`keep ${name}: could not keep its ${seen.dirty} uncommitted files`);
+          keptCount += 1;
+          continue;
+        }
+      }
+
+      why += `, ${seen.dirty} uncommitted files ${dry ? "would be " : ""}kept at ${kept}`;
     }
 
     if (verdict._tag === "backup") {
@@ -530,15 +595,12 @@ const main = () => {
 
     removed += 1;
     freed += mb;
+    gone.push(name);
     console.log(`${dry ? "would remove" : "removed"} ${name}: ${why}, ${mb} MB`);
   }
 
   const state = join(env.BOXES, "state");
-  const left = new Set(
-    readdirSync(env.BOXES, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name),
-  );
+  const left = new Set([...foldersIn(boxTrees(env.BOXES), () => false), ...foldersIn(env.BOXES, () => false)]);
   const dead = existsSync(state) ? deadFacts(readdirSync(state), left) : [];
 
   for (const f of dead) {
@@ -548,6 +610,28 @@ const main = () => {
 
     console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
   }
+
+  // What a landed lane's gone boxes left beside the boxes. Landed is the lane's own branch with a
+  // merged pull request and no open one, from the listing above: boxfiles.ts judges it per lane.
+  const swept = spawnSync(
+    process.execPath,
+    [
+      join(import.meta.dirname, "boxfiles.ts"),
+      "--boxes",
+      env.BOXES,
+      "--main",
+      env.MAIN,
+      ...(dry ? ["--dry-run"] : []),
+      ...gone.flatMap((name) => ["--gone", name]),
+      ...[...prsOf].flatMap(([ref, states]) => [
+        ...(states.includes("MERGED") ? ["--merged", ref] : []),
+        ...(states.includes("OPEN") ? ["--open", ref] : []),
+      ]),
+    ],
+    { encoding: "utf8" },
+  );
+  process.stdout.write(swept.stdout ?? "");
+  process.stderr.write(swept.stderr ?? "");
 
   if (!dry) {
     repo("worktree", "prune");

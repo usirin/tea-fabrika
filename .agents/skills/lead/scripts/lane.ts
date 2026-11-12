@@ -3,6 +3,28 @@
 
 import { dirname, matchesGlob } from "node:path";
 
+/**
+ * Where a box's tree is: in `BOXES/box/`, a folder that holds only trees and their git views, never
+ * beside the files drive and the lead keep for each box. Codex's fence walks every folder on the way
+ * to the tree and closes, by name, each entry that shares the tree's first two letters, and it takes
+ * at most 600 lines (`FENCE_LIMIT` in packages/fabrika/src/agents/acp/harness.ts). Beside about
+ * 5,900 files, a `p14-build5` tree needed 1,255, and Codex refused to start (ticket 659).
+ * A box made before this layout stays at `BOXES/<box>` (`oldBoxTree`) until gc removes it.
+ */
+export const boxTrees = (boxes: string): string => `${boxes}/box`;
+
+/** One box's tree, in `boxTrees`. */
+export const boxTree = (boxes: string, box: string): string => `${boxTrees(boxes)}/${box}`;
+
+/** The read-only git view drive gives a box's agent. The fence opens it too, so it sits by the tree. */
+export const boxView = (boxes: string, box: string): string => `${boxTrees(boxes)}/${box}-view`;
+
+/** Where a box's tree was before `boxTree`. */
+export const oldBoxTree = (boxes: string, box: string): string => `${boxes}/${box}`;
+
+/** How long a box or worktree must sit untouched before gc or boxfiles takes anything of it: 2 h. */
+export const IDLE = 2 * 3_600_000;
+
 /** The lane's backup branch: `<branch>-wip`, and a branch that already ends in -wip as it is. */
 export const wipOf = (branch: string): string => `${branch.replace(/(-wip)+$/, "")}-wip`;
 

@@ -10,6 +10,10 @@ coordination, and added the desktop on top.* It changes
 [sweep the core](./sweep-the-core-rebuild-the-pipeline.md) (2026-10-22): the
 core is no longer swept in place. It is rebuilt too, on the new picture.
 
+Its decided rules are in: [0217](../../.decisions/0217-next-grows-beside-today.md),
+[0218](../../.decisions/0218-experiments-and-field-stay-files.md),
+[0219](../../.decisions/0219-tracker-switch-needs-checked-copy.md).
+
 *Changed 2026-10-31, build beside: the new code grows in `next/`, and today's
 version keeps running until each job has moved. Nothing moves first. This
 replaces the first rule (below, marked wrong) and the first order.*

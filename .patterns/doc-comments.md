@@ -99,8 +99,8 @@ Every public export of a library under `next/packages/` (today `libfabrika`), an
 files. App code in `next/apps/` does not require it. A test helper (`*.test-support.ts`) does not
 either. Today no file in `next/` has a `@since` tag, and Effect's checker finds 92 places in
 `next/packages/libfabrika/src` that need a block or its tags. `@since` carries the library's own
-version, which is `0.0.0` while it is unpublished; [0023](../.decisions/0023-next-follows-effects-code-style.md)
-leaves that value open.
+version, which is `0.0.0` while it is unpublished, so our blocks leave the tag out until a first
+release ([0118](../.decisions/0118-no-since-tag-before-a-release.md)).
 
 Not yet, in `next/packages/libfabrika/src`:
 
