@@ -10,6 +10,13 @@ machine" ([an old host is named, then restarted](./an-old-host-is-named-then-res
 owner approved [experiment 189](../../experiments/189-games-study.md) and asked for this study over
 its top ideas, `seen` first.
 
+Its decided rules are in: [0225](../../.decisions/0225-entries-carry-what-writers-saw.md),
+[0226](../../.decisions/0226-every-machine-passes-sync-test.md),
+[0227](../../.decisions/0227-saved-state-carries-shape-number.md),
+[0228](../../.decisions/0228-code-step-keys-from-reads.md),
+[0229](../../.decisions/0229-diverged-names-first-difference.md),
+[0230](../../.decisions/0230-replay-reruns-code-only.md).
+
 Built from [experiment 190](../../experiments/190-saved-state.md), which read about twenty makers
 and ran GGPO's sync test on today's lane, and a private page, "Saved state guidelines". Neither is a
 measurement of `next/`; the one probe ran on today's version. Tags such as [g1] and [i3] are

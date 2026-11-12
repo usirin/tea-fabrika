@@ -3,6 +3,10 @@
 Decided 2026-10-29. Changed the same day from `Schema.Class` to `Schema.Opaque`,
 after a test showed the trap below.
 
+Its decided rules are in: [0213](../../.decisions/0213-data-is-a-schema-opaque.md),
+[0214](../../.decisions/0214-unions-are-tagged-with-tag.md),
+[0215](../../.decisions/0215-untrusted-input-never-throws.md).
+
 ```ts
 // Before: a struct, and a loose function named after what it returns.
 export const One = Schema.Struct({ready: Schema.Boolean, ticket: Schema.NullOr(Ticket), now: Schema.Finite});

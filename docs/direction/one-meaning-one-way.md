@@ -3,6 +3,8 @@
 **Decided 2026-11-08 by the owner.** `next/` only. It applies first to the study of
 [Program.make's shape](./program-make.md).
 
+Its decided rules are in: [0212](../../.decisions/0212-one-meaning-one-way.md).
+
 ```ts
 // A sketch, with rules already decided elsewhere as the examples.
 
