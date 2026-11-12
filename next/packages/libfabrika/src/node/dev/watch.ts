@@ -1,3 +1,4 @@
+import { run } from "@demlik/tea/effect";
 import type { Scope } from "effect";
 import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { watch, type RolldownWatcherEvent } from "rolldown";
@@ -6,6 +7,7 @@ import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
 import { ControlError } from "./dev.ts";
+import { watcher } from "./internal/watcher.ts";
 
 type Failed = (typeof CodeEvent.cases)["code.failed"]["Type"];
 
@@ -138,6 +140,8 @@ export const watchPrograms = (options: {
       );
       const root = yield* fs.realPath(options.root).pipe(Effect.orElseSucceed(() => options.root));
       const ids = yield* Id.Generator.pipe(Effect.provide(Id.Generator.layer));
+      const handle = yield* run(watcher, { ctx: {} });
+      const phase = yield* handle.ready.pipe(Effect.orDie);
       const failure = Effect.fn("watch.failed")(function* (reason: Failed["reason"], cause: unknown) {
         const fact = CodeEvent.cases["code.failed"].make({
           program: selected.name,
@@ -156,40 +160,37 @@ export const watchPrograms = (options: {
       return Stream.fromQueue(events).pipe(
         Stream.split((event) => event.code === "END"),
         Stream.map((events) => events.find((event) => event.code === "ERROR") ?? { code: "END" as const }),
-        Stream.mapAccumEffect(
-          () => 0,
+        Stream.mapEffect(
           Effect.fn("watch.rebuild")(function* (
-            index: number,
             event: Extract<RolldownWatcherEvent, { code: "ERROR" }> | { readonly code: "END" },
-          ): Effect.fn.Return<readonly [number, ReadonlyArray<Reloaded>], never, FileSystem.FileSystem | Path.Path> {
+          ): Effect.fn.Return<Reloaded, never, FileSystem.FileSystem | Path.Path> {
             const started = yield* Clock.currentTimeMillis;
-            const finish = Effect.fnUntraced(function* (result: readonly [number, ReadonlyArray<Reloaded>], bytes = 0) {
+            const finish = Effect.fnUntraced(function* (result: Reloaded, bytes = 0) {
               yield* Effect.annotateCurrentSpan({
                 program: selected.name,
                 bytes,
                 ms: (yield* Clock.currentTimeMillis) - started,
-                outcome: result[1][0]?._tag ?? "failed",
+                outcome: result._tag,
               });
               return result;
             });
 
             if (event.code === "ERROR") {
-              return yield* finish([index, [yield* failure("bundle", event.error)]]);
+              return yield* finish(yield* failure("bundle", event.error));
             }
 
             const built = yield* Effect.result(buildPrograms({ root, entry: options.entry, programs: [selected] }));
 
             if (built._tag === "Failure") {
-              return yield* finish([
-                index,
-                [yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause)],
-              ]);
+              return yield* finish(
+                yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause),
+              );
             }
 
             const code = built.success[selected.name];
 
             if (code === undefined) {
-              return yield* finish([index, [yield* failure("bundle", null)]]);
+              return yield* finish(yield* failure("bundle", null));
             }
 
             const answer = yield* options
@@ -197,11 +198,12 @@ export const watchPrograms = (options: {
                 id: yield* ids.next(InstallId).pipe(Effect.orDie),
                 program: selected.name,
                 ...code,
-                from: index === 0 ? "boot" : "watch",
+                from: phase.getState()._tag === "booting" ? "boot" : "watch",
               })
               .pipe(Effect.catch(() => Effect.succeed(Installed.cases.failed.make({ reason: "load" }))));
+            yield* phase.dispatch({ type: "attempted" }).pipe(Effect.orDie);
             return yield* finish(
-              [index + 1, [{ ...answer, program: selected.name, hash: code.hash }]],
+              { ...answer, program: selected.name, hash: code.hash },
               new TextEncoder().encode(code.source).byteLength,
             );
           }),
