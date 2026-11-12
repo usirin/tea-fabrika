@@ -64,7 +64,7 @@ const rows: ReloadTest.Rig["rows"] = (sql) =>
     ? []
     : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
         const row = decode(raw);
-        return { stream: row.stream, id: row.id, event: row._tag, body: row.body };
+        return { stream: row.stream, id: row.id, event: row._tag, body: row.body, build: row.build };
       });
 
 ReloadTest.suite({ open, coordination, rows });

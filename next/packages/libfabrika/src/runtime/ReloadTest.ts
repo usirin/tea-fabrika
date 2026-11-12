@@ -6,7 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
-import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
+import { LedgerError, Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
 import { Start } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
@@ -19,7 +19,15 @@ import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner, type Swapped } from "./Runner.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
-export type Row = { readonly stream: string; readonly id: string; readonly event: string; readonly body: unknown };
+
+export type Row = {
+  readonly stream: string;
+  readonly id: string;
+  readonly event: string;
+  readonly body: unknown;
+  readonly build: string;
+};
+
 type StoreNeeds = ReturnType<typeof ProcessStore.layer> extends Layer.Layer<infer _A, infer _E, infer R> ? R : never;
 
 export type Rig = {
@@ -359,6 +367,7 @@ type World = {
   readonly scope: Scope.Scope;
   readonly code: Code;
   readonly names: Map<string, Name>;
+  readonly cuts: { armed: string | null; readonly hits: Array<string> };
   letters: number;
 };
 
@@ -377,7 +386,16 @@ const world = Effect.fnUntraced(function* (rig: Rig, specs: ReadonlyArray<Spec>)
   const ledger = yield* rig.open;
   const manager = yield* rig.open;
   const code = yield* makeCode(specs);
-  return { rig, ledger, manager, scope, code, names: new Map<string, Name>(), letters: 0 } satisfies World;
+  return {
+    rig,
+    ledger,
+    manager,
+    scope,
+    code,
+    names: new Map<string, Name>(),
+    letters: 0,
+    cuts: { armed: null, hits: [] },
+  } satisfies World;
 });
 
 const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(
@@ -449,7 +467,19 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
     const layer = ProgramRunner.withLoader(
       { id: entry.pid, name, program: PROGRAM, build: entry.build, owner: PERSON },
       loader(w.code),
-      { recovery: { sql: storeSql, name, capacity: 1024 ** 3 } },
+      {
+        recovery: { sql: storeSql, name, capacity: 1024 ** 3 },
+        fault: (cut) =>
+          Effect.suspend(() => {
+            if (w.cuts.armed !== cut) {
+              return Effect.void;
+            }
+
+            w.cuts.armed = null;
+            w.cuts.hits.push(cut);
+            return Effect.fail(new LedgerError({ reason: "unreachable" }));
+          }),
+      },
     ).pipe(Layer.provideMerge(services));
     const context = yield* Layer.build(layer);
     const runner = Context.get(context, ProgramRunner);
@@ -506,7 +536,12 @@ const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
 // --- Reading back -----------------------------------------------------------------------------
 
 /** One entry of a process's own stream, as the ledger holds it. */
-type Fact = { readonly tag: string; readonly id: string; readonly body: Readonly<Record<string, unknown>> };
+type Fact = {
+  readonly tag: string;
+  readonly id: string;
+  readonly body: Readonly<Record<string, unknown>>;
+  readonly build: string;
+};
 
 /** The name's process stream, every life of it, and its inbox, read through the open session. */
 const history = Effect.fnUntraced(function* (w: World, name: string) {
@@ -522,6 +557,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
           tag: e.event,
           id: e.id,
           body: e.body as Readonly<Record<string, unknown>>,
+          build: e.build,
         }));
       const inbox = yield* Stream.runCollect(mailbox.read(name, 0));
       const checkpoint = yield* ProcessStore.use((store) => store.load);
@@ -694,6 +730,16 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
   const view = (yield* (yield* session(w, name)).runner.open(`check-${w.letters}`)).view;
   expect(view, "the process's own view").toEqual(a.model);
   expect(checkpoint?.saved.build ?? start).toBe(a.build);
+  expect((yield* supervision(w, name))?.build, "the supervisor restarts on the running build").toBe(a.build);
+
+  for (const fact of facts) {
+    if (fact.tag === "code.swapped" || fact.tag === "state.upgraded") {
+      expect(fact.build, "the fact belongs to the code that kept the model").toBe(
+        fact.tag === "code.swapped" ? fact.body.hash : fact.body.build,
+      );
+    }
+  }
+
   return { facts, inbox, checkpoint };
 });
 
@@ -941,7 +987,7 @@ export const suite = (rig: Rig): void => {
       TIMEOUT,
     );
 
-    // L4, p70. Plant: save the checkpoint before the letter's acceptance; drop `after` on swap.
+    // L4, p70. Plants: save before acceptance; drop `after`; forget the prepared swap after its checkpoint write.
     it.live(
       "L4: no accepted letter and no answered fact is lost by a swap or an object restart after one, and they read back in order",
       () =>
@@ -956,7 +1002,7 @@ export const suite = (rig: Rig): void => {
                 const steps = g(fc.integer, { min: 1, max: 12 });
 
                 for (let n = 0; n < steps; n++) {
-                  const move = pick(g, ["press", "press", "swap", ...(a.swaps > 0 ? ["restart"] : [])]);
+                  const move = pick(g, ["press", "press", "swap", "cut_swap", ...(a.swaps > 0 ? ["restart"] : [])]);
                   seen.add(move);
 
                   if (move === "press") {
@@ -967,6 +1013,67 @@ export const suite = (rig: Rig): void => {
                       a,
                       g(() => fcFitting(a.model, a.v)),
                     );
+                  } else if (move === "cut_swap") {
+                    const s = yield* session(w, NAME);
+                    const before = yield* history(w, NAME);
+                    const client = `cut-watcher-${n}`;
+                    yield* s.runner.open(client);
+                    const updates = Option.getOrThrow(Option.fromNullishOr(w.names.get(NAME))).updates;
+                    const notices = updates.get(client)?.length ?? 0;
+                    // These are completed writes in an upgrade this model can take, not arbitrary cuts.
+                    const spec = { ...g(() => fcFitting(a.model, a.v)), v: a.v + 1 };
+                    const hash = yield* learn(w.code, spec);
+                    const load = `install_${++a.loads}`;
+                    const cut = pick(g, [
+                      "after_swap_prepared",
+                      "after_swap_checkpoint",
+                      "after_swap_upgrade",
+                      "after_swap_record",
+                      "after_swap_alarm",
+                      "after_swap_publish",
+                      "after_swap_supervisor",
+                    ]);
+                    w.cuts.armed = cut;
+                    const result = yield* Effect.exit(swap(s, load, hash));
+                    expect(Exit.isFailure(result), `the call lost its answer at ${cut}`).toBe(true);
+                    expect(w.cuts.armed, "the write was reached").toBeNull();
+                    expect(w.cuts.hits.at(-1)).toBe(cut);
+                    seen.add(cut);
+                    a.model = climb(spec, a.model, a.v);
+                    a.v = spec.v;
+                    a.build = hash;
+                    a.ran.push(hash);
+                    a.swaps++;
+                    // A lost answer is retried on the same object or after an eviction.
+                    const reopen = g(fc.boolean);
+
+                    if (reopen) {
+                      yield* evict(w, NAME);
+                    }
+
+                    seen.add(reopen ? "cut_reopen" : "cut_retry");
+                    const resumed = yield* session(w, NAME);
+                    expect(yield* swap(resumed, load, hash)).toEqual(SwapAnswer.cases.same.make({}));
+
+                    if (!reopen) {
+                      const fresh = (updates.get(client) ?? []).slice(notices);
+                      expect(fresh.length, "recovery finishes the view notice").toBeGreaterThan(0);
+                      const rev = before.inbox.filter((l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
+                      expect(fresh).toEqual(fresh.map(() => ({ type: "whole", rev, view: a.model })));
+                    }
+
+                    const after = yield* agrees(w, a, base);
+                    expect(after.checkpoint?.saved.after, "the inbox position survives the swap").toBe(
+                      before.checkpoint?.saved.after ?? 0,
+                    );
+                    const upgrade = after.facts.findIndex((f) => f.id === `state.upgraded:${load}`);
+                    const swapped = after.facts.findIndex((f) => f.id === `code.swapped:${load}`);
+                    expect(upgrade, "the upgrade is recorded before the swap").toBeGreaterThanOrEqual(0);
+                    expect(swapped).toBeGreaterThan(upgrade);
+                    expect(after.facts.filter((f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
+                    expect(after.facts.filter((f) => f.id === `state.upgraded:${load}`)).toHaveLength(1);
+                    // The first later letter must use the recovered code and kept model.
+                    yield* pressOnce(w, a, g);
                   } else {
                     yield* evict(w, NAME);
                   }
@@ -985,7 +1092,21 @@ export const suite = (rig: Rig): void => {
               }),
             ),
           );
-          expect(seen.has("restart")).toBe(true);
+
+          for (const move of [
+            "restart",
+            "cut_retry",
+            "cut_reopen",
+            "after_swap_prepared",
+            "after_swap_checkpoint",
+            "after_swap_upgrade",
+            "after_swap_record",
+            "after_swap_alarm",
+            "after_swap_publish",
+            "after_swap_supervisor",
+          ]) {
+            expect(seen.has(move), `the walk reaches ${move}`).toBe(true);
+          }
         }),
       TIMEOUT,
     );

@@ -78,7 +78,7 @@ type InstallShape = {
 
 expectTypeOf<Install>().toEqualTypeOf<InstallShape>();
 // L20 (type): the install answer is a closed union a caller must match whole.
-expectTypeOf<(typeof Dev.Installed.Type)["_tag"]>().toEqualTypeOf<"same" | "failed" | "loaded">();
+expectTypeOf<Effect.Success<ReturnType<Options["install"]>>["_tag"]>().toEqualTypeOf<"same" | "failed" | "loaded">();
 // The handle `startDev` answers installs over its control socket in the watcher's own shape.
 expectTypeOf<Effect.Success<ReturnType<typeof Dev.startDev>>["install"]>().toEqualTypeOf<Options["install"]>();
 

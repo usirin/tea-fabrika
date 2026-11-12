@@ -72,7 +72,8 @@ const seen = new Set<string>();
 const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
   Effect.gen(function* () {
     const open = yield* database;
-    let scope = yield* Scope.make();
+    const parent = yield* Scope.Scope;
+    let scope = yield* Scope.fork(parent);
     let sql = yield* open.pipe(Scope.provide(scope));
     const store = () => CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
     let codes = yield* store();
@@ -138,7 +139,7 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
         }
         case "reopen": {
           yield* Scope.close(scope, Exit.void);
-          scope = yield* Scope.make();
+          scope = yield* Scope.fork(parent);
           sql = yield* open.pipe(Scope.provide(scope));
           codes = yield* store();
           seen.add("reopened");
