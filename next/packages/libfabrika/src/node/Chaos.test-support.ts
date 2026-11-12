@@ -1,7 +1,8 @@
 // P17b slice 2, next/. Real runner storage. Each session opens new scoped connections.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite transaction handle
+import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Schema, type Scope, Stream, Tracer } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Ref, Schema, type Scope, Stream, Tracer } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -84,13 +85,40 @@ const managerLayer = (sql: Sql) =>
     Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer), Effect.orDie),
   ).pipe(Layer.provide(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))));
 
+const errors = { TypeError, RangeError, URIError };
+
+const faultControl = Effect.fnUntraced(function* () {
+  const state = yield* Ref.make(StepFaultTest.controller.init(null, {})[0]);
+  const send = (msg: typeof StepFaultTest.Msg.Type) =>
+    Ref.modify(state, (previous) => {
+      const [next] = applyCell(StepFaultTest.controller, previous, msg);
+      return [[previous, next] as const, next];
+    });
+  return {
+    arm: (name: string, letter: string, classes: ReadonlyArray<typeof StepFaultTest.ErrorClass.Type>) =>
+      send({ type: "arm", name, letter, errors: classes }).pipe(Effect.asVoid),
+    before: Effect.fnUntraced(function* (input: typeof StepFaultTest.Before.Type) {
+      const [previous, next] = yield* send({ type: "before", ...input });
+
+      if (previous._tag === "armed" && next._tag === "armed" && next.attempts.length > previous.attempts.length) {
+        const attempt = next.attempts.at(-1);
+
+        if (attempt !== undefined) {
+          return yield* Effect.die(new errors[attempt.error]("controlled private step failure"));
+        }
+      }
+    }),
+    saved: Ref.get(state),
+  };
+});
+
 /** A fresh folder of real databases. Closing a session closes all its connections before reopen. */
 export const open = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-runner-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
-  const fault = yield* StepFaultTest.make();
+  const fault = yield* faultControl();
 
   const session = Effect.fnUntraced(function* (
     name: string,
