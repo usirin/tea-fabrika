@@ -142,6 +142,7 @@ export const childInstance = Effect.fnUntraced(
       founder: key.line,
       window: key.raw,
       port: port.port,
+      rateLimit: { limit: 100_000, window: 60_000 },
       starts,
     } as Parameters<typeof localInstance>[1]);
     const from: From = {
@@ -287,6 +288,7 @@ export const childProject = Effect.fnUntraced(function* () {
       founder: key.line,
       window: key.raw,
       port: 18787,
+      rateLimit: { limit: 100_000, window: 60_000 },
       build: "p42-project",
       starts: [{ source: "fabrika/counter", to: "p42/child" }],
     }),
