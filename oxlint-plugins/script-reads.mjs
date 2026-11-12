@@ -87,8 +87,8 @@ export const reached = (tree, exists, test) => {
     }
 
     const paths = new Set([
-      ...source.matchAll(RELATIVE).map(([token]) => posix.join(posix.dirname(from), token)),
-      ...source.matchAll(TOP).map(([token]) => posix.normalize(token)),
+      ...Array.from(source.matchAll(RELATIVE), ([token]) => posix.join(posix.dirname(from), token)),
+      ...Array.from(source.matchAll(TOP), ([token]) => posix.normalize(token)),
     ]);
 
     for (const path of paths) {
