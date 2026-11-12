@@ -6,6 +6,7 @@ import { Id } from "@kampus/libfabrika";
 import { Saw } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { grantText } from "@kampus/libfabrika/access/Text";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
@@ -16,6 +17,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Cause, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -183,6 +185,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
     location: "test",
     build: "test-build",
     waiting: { most: 3, ttl: 600_000 },
+    rateLimit: { limit: 100_000, window: 60_000 },
     ping: { min: 10_000, max: 60_000 },
     inputCap: 100,
     spentCap: 100,
@@ -200,6 +203,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
         records,
         Archive.memory,
         SpanSink.layer(sql, { object: PROCESS }),
+        RateLimiter.layer.pipe(
+          Layer.provide(RateLimiterSql.layer(sql, { build: "test-build", policy: { limit: 100_000, window: 60_000 } })),
+        ),
       ),
     ),
   );
