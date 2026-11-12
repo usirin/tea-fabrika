@@ -131,6 +131,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.own(pid, id, stream, event, trace)));
   }
 
+  mail(...args: Parameters<ContextProject["mail"]>) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.mail(...args)));
+  }
+
   inbox(pid: string, input: Incoming) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
@@ -230,6 +235,11 @@ export class Process extends DurableObject<Env> {
   open(client: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProcessService.use((p) => p.open(client)));
+  }
+
+  mailed(trace?: { traceId: string; spanId: string }) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProcessService.use((p) => p.mailed(trace)));
   }
 
   due(at: number) {

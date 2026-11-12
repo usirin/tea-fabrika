@@ -117,6 +117,9 @@ export class ProjectClient extends Context.Service<
       commit: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project commit RPC enters Effect
         Effect.tryPromise({ try: () => stub.commit(...args), catch: unreachable }),
+      mail: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project mail RPC enters Effect
+        Effect.tryPromise({ try: () => stub.mail(...args), catch: unreachable }),
       inbox: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project inbox RPC enters Effect
         Effect.tryPromise({ try: () => stub.inbox(...args), catch: unreachable }),
@@ -187,6 +190,9 @@ export class ProcessClient extends Context.Service<
         }>(stub)
           .usage(...args)
           .pipe(Effect.mapError((error) => unreachable(error.cause))),
+      mailed: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Process mailed RPC enters Effect
+        Effect.tryPromise({ try: () => stub.mailed(...args), catch: unreachable }),
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),

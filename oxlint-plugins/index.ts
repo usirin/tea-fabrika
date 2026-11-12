@@ -33,6 +33,7 @@ import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
 import { oneIdModule } from "./one-id-module.ts";
+import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
@@ -76,6 +77,7 @@ const plugin: Plugin = {
     "no-type-assertions": noTypeAssertions,
     "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
+    "one-machine-per-file": oneMachinePerFile,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,

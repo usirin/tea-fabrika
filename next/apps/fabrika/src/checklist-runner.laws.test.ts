@@ -2,7 +2,8 @@
 // (0062, plan amendment A2). A library test may not import a program, and a program may not import
 // the library's inner pieces, so the app owns the runner's wiring and runs the suite. Each run
 // gets a fresh temporary folder; each open is a new connection to the same file, closed with its scope,
-// and each restart loads the program module again.
+// and each restart loads the program module again. Ticket 839: `letters` reads the inbox back on a
+// connection of its own, so L16 and L17 can count rows and read a saved note and writer.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import type { checklist } from "@kampus/checklist";
@@ -18,7 +19,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
 
 const NAME = "checklist:1";
 const BUILD = "checklist-build";
@@ -148,6 +149,19 @@ const open: RunnerTest.Open = Effect.gen(function* () {
       Effect.flatMap(session(files, alarms, program), (layer) => ProgramRunner.pipe(Effect.provide(layer))),
     person,
     agent,
+    key: (writer: unknown) => (writer === agent ? agent.key : person.key),
+    letters: Effect.scoped(
+      Effect.flatMap(files("ledger"), (sql) =>
+        Mailbox.use((m) => Stream.runCollect(m.read(NAME, 0))).pipe(
+          Effect.provide(
+            Mailbox.layer.pipe(
+              Layer.provide(LedgerSql.layer(sql, { reader: "checklist-law" }).pipe(Layer.provide(quiet))),
+            ),
+          ),
+          Effect.map((all) => Array.from(all, ({ id, m, by, sentAt }) => ({ id, m, by, sentAt }))),
+        ),
+      ),
+    ).pipe(Effect.orDie),
   };
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 

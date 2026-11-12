@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { firstOnPath, pinnedBin, pnpmBin } from "./boxnode.ts";
+import { firstOnPath, holdsPin, pinnedBin, pnpmBin } from "./boxnode.ts";
 
 const segment = fc.stringMatching(/^[a-z0-9.]{1,8}$/);
 const dir = fc.array(segment, { minLength: 1, maxLength: 4 }).map((parts) => `/${parts.join("/")}`);
@@ -41,6 +41,23 @@ describe("pinnedBin", () => {
     expect(pinnedBin("", "26.13.0")).toBeNull();
     expect(pinnedBin("node\nv26.13.0", "26.13.0")).toBeNull();
     expect(pinnedBin("/a/bin/nodejs\nv26.13.0", "26.13.0")).toBeNull();
+  });
+});
+
+describe("holdsPin", () => {
+  it("property: the probe holds the pin only when both of its lines are that pin", () =>
+    fc.assert(
+      fc.property(version, version, version, (pin, a, b) => {
+        expect(holdsPin(`v${a}\nv${b}\n`, pin)).toBe(a === pin && b === pin);
+      }),
+    ));
+
+  it("scenario: a refused, empty or one-line answer never holds the pin, so no step starts on it", () => {
+    // A shell that found no node prints nothing; one whose pnpm broke prints only the first line.
+    expect(holdsPin("", "26.13.0")).toBe(false);
+    expect(holdsPin("v26.13.0\n", "26.13.0")).toBe(false);
+    expect(holdsPin("v26.13.0\nv26.13.0\nv22.22.3\n", "26.13.0")).toBe(false);
+    expect(holdsPin("v26.13.0\nv26.13.0\n", "26.13.0")).toBe(true);
   });
 });
 
