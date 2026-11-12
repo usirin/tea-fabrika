@@ -299,7 +299,6 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
           schema: Msg,
           personOnly: [],
           raw: [],
-          log: Schema.toCodecJson(Msg),
           name: (m) => m.type,
         },
         events: { personOnly: [] },

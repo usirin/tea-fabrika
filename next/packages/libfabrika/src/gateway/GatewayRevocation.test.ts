@@ -218,7 +218,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         Effect.sync(() => {
           notices.push({ client, news });
         }),
-      inputs: { schema: input, personOnly: [], raw: [], log: Schema.toCodecJson(input) },
+      inputs: { schema: input, personOnly: [], raw: [] },
       events: { personOnly: [] },
     }).pipe(Layer.provideMerge(env));
     return { layer, env };

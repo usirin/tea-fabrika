@@ -20,6 +20,7 @@
 // process authority of the fold's own. Each cell picks one of the moves possible now. The oracle is
 // the fold's own account (crashes, restart times, receipts, captured attempts), never the reducer.
 import { applyCell } from "@demlik/tea";
+import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
@@ -273,6 +274,30 @@ const moves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+    case "checking":
+      return [
+        {
+          name: "admitted",
+          msg: { type: "admitted", seq: j.attempt.seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) },
+        },
+        {
+          name: "check_threw",
+          weight: 4,
+          msg: {
+            type: "check_threw",
+            seq: j.attempt.seq,
+            receipt: receiptFor(j.attempt.letter, j.attempt.process),
+            error: cell.error,
+            reason: reasonFor("fresh", cell.error),
+            from: meta,
+          },
+        },
+        ...stale,
+      ];
+    case "writing_reply":
+      return [{ name: "reply_written", msg: { type: "reply_written", seq: j.attempt.seq } }, ...stale];
+    case "clearing_attempt":
+      return [{ name: "attempt_cleared", msg: { type: "attempt_cleared", seq: j.attempt.seq } }, ...stale];
     case "writing_dead":
       return [{ name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } }, ...stale];
     case "writing_exit": {
@@ -393,9 +418,10 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
       w.limit = msg.maxDeliveries === null ? null : Number(msg.maxDeliveries);
       return;
     case "threw":
+    case "check_threw":
     case "interrupted_attempt":
     case "interrupted_activity": {
-      if (before.journal._tag === "stepping") {
+      if (before.journal._tag === "stepping" || before.journal._tag === "checking") {
         const attempt = before.journal.attempt;
 
         if (w.captured.has(attempt.seq)) {
@@ -404,7 +430,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
 
         w.captured.add(attempt.seq);
 
-        if (move.name === "threw" && attempt.phase === "fresh") {
+        if ((move.name === "threw" || move.name === "check_threw") && attempt.phase === "fresh") {
           w.errors.set(attempt.letter, [...(w.errors.get(attempt.letter) ?? []), String(msg.error)]);
         }
       }
@@ -546,7 +572,11 @@ describe("P34c slice 2: one saved recovery journal", () => {
           }
 
           // p80: a fresh throw at its letter's limit writes dead for that exact failure, and only then.
-          if (move.name === "threw" && before.journal._tag === "stepping" && before.journal.attempt.phase === "fresh") {
+          if (
+            (move.name === "threw" || move.name === "check_threw") &&
+            (before.journal._tag === "stepping" || before.journal._tag === "checking") &&
+            before.journal.attempt.phase === "fresh"
+          ) {
             const attempt = before.journal.attempt;
             const tries = w.errors.get(attempt.letter)?.length ?? 0;
             const terminal = tries >= (w.limit ?? p.maxDeliveries);
@@ -571,7 +601,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
           }
 
           // A second report of a captured attempt, from either source, is a no-op.
-          if (before.journal._tag === "stepping" && after.journal._tag !== "stepping" && move.name !== "finished") {
+          if (
+            (before.journal._tag === "stepping" || before.journal._tag === "checking") &&
+            after.journal._tag !== "stepping" &&
+            after.journal._tag !== "checking" &&
+            move.name !== "finished"
+          ) {
             const seq = before.journal.attempt.seq;
             const again = step(after, {
               type: "interrupted",
@@ -779,6 +814,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           at += cycle.alive;
           send({ type: "begin", process, letter, build: model.build, phase: "fresh", at });
           const seq = model.seq;
+          send({ type: "admitted", seq, receipt: receiptFor(letter, process) });
           send({ type: "threw", seq, error: cycle.error, reason: reasonFor("fresh", cycle.error), from: from() });
           crashes++;
           tries.set(letter, tries.get(letter)! + 1);
@@ -981,3 +1017,165 @@ const j13 = () => {
 };
 
 void j13;
+
+describe("P13 A11 saved admission work", () => {
+  it("A11: checking, admission, reply and cleanup survive every JSON cut; stale completion cannot close work", () => {
+    const reached = new Set<string>();
+    const paths = tapes.map((tape) => {
+      let model = supervisor.init(null, ctx())[0];
+      let letters = 0;
+      const messages: Array<typeof supervisor.msg.Type> = [];
+      const send = (msg: Msg) => {
+        const checked = Schema.decodeUnknownSync(supervisor.msg)(msg);
+        messages.push(checked);
+        model = applyCell(supervisor, model, checked)[0];
+      };
+
+      for (const cell of tape) {
+        const j = model.journal;
+
+        if (j._tag === "idle") {
+          send({
+            type: "begin",
+            process: j.process,
+            letter: `fresh-${++letters}`,
+            build: BUILD,
+            phase: "fresh",
+            at: cell.gap,
+          });
+        } else if (j._tag === "checking") {
+          const choices = ["admitted", "refused", "abandoned"];
+          const move = choices[cell.move % choices.length]!;
+          const seq = j.attempt.seq;
+
+          if (move === "admitted") {
+            send({ type: move, seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) });
+          } else if (move === "refused") {
+            send({
+              type: move,
+              seq,
+              reply: {
+                name: NAME,
+                id: j.attempt.letter,
+                parent: "input_0000000000e008000000000001",
+                by: from().by,
+                for: from().for,
+                digest: `sha256:${j.attempt.letter}`,
+                answer: { _tag: "refused", reason: "changed_elsewhere", now: cell.gap },
+              },
+            });
+          } else {
+            send({ type: move, seq });
+          }
+        } else if (j._tag === "stepping") {
+          send({ type: cell.move % 2 === 0 ? "finished" : "abandoned", seq: j.attempt.seq });
+        } else if (j._tag === "writing_reply") {
+          send({ type: "reply_written", seq: j.attempt.seq });
+        } else if (j._tag === "clearing_attempt") {
+          send({ type: "attempt_cleared", seq: j.attempt.seq });
+        }
+      }
+
+      return messages;
+    });
+    propertyTrace(
+      supervisor,
+      ctx(),
+      paths,
+      (steps) => {
+        for (const trace of steps) {
+          const before = trace.prev;
+          const after = trace.next;
+          const message = trace.msg;
+          reached.add(message.type);
+          expect(after.crashes).toBe(0);
+          expect(after.observations).toEqual([]);
+
+          if (message.type === "begin") {
+            expect(after.journal).toMatchObject({
+              _tag: "checking",
+              attempt: { letter: message.letter, phase: "fresh" },
+            });
+            expect(after.receipts).toEqual(before.receipts);
+          }
+
+          if (message.type === "admitted") {
+            expect(after.journal).toMatchObject({ _tag: "stepping", attempt: { seq: message.seq } });
+            expect(after.receipts.find((r) => r.letter === message.receipt.letter)?.input).toEqual(
+              message.receipt.input,
+            );
+            expect(
+              decodes({ ...(roundTrip(after) as object), receipts: [] }),
+              "fresh stepping without the admitted input cannot load",
+            ).toBe(false);
+          }
+
+          if (message.type === "refused") {
+            expect(after.journal).toMatchObject({ _tag: "writing_reply", reply: message.reply });
+            expect(after.receipts).toEqual(before.receipts);
+          }
+
+          if (
+            after.journal._tag === "checking" ||
+            after.journal._tag === "writing_reply" ||
+            after.journal._tag === "clearing_attempt"
+          ) {
+            expect(step(after, { type: "finished", seq: after.journal.attempt.seq })).toEqual(after);
+          }
+
+          if ("attempt" in after.journal) {
+            for (const type of [
+              "admitted",
+              "refused",
+              "reply_written",
+              "abandoned",
+              "attempt_cleared",
+              "check_threw",
+            ]) {
+              const stale = {
+                ...message,
+                type,
+                seq: after.journal.attempt.seq + 1000,
+                receipt: receiptFor("stale", A),
+                reply: {
+                  name: NAME,
+                  id: "stale",
+                  parent: "input_0000000000e008000000000001",
+                  by: from().by,
+                  for: from().for,
+                  digest: "stale",
+                  answer: { _tag: "refused", reason: "stale" },
+                },
+                error: "TypeError",
+                reason: reasonFor("fresh", "TypeError"),
+                from: from(),
+              };
+              expect(step(after, stale)).toEqual(after);
+            }
+          }
+        }
+
+        syncTest(supervisor, ctx(), {
+          msgs: steps.map((s) => s.msg),
+          encode: Schema.encodeSync(Supervision),
+          decode: Schema.decodeUnknownSync(Supervision),
+          equals: (a, b) => canon(a) === canon(b),
+          seed: SEED,
+        });
+        return true;
+      },
+      { seed: SEED, numRuns: 100 },
+    );
+    expect([...reached]).toEqual(
+      expect.arrayContaining([
+        "begin",
+        "admitted",
+        "refused",
+        "abandoned",
+        "finished",
+        "reply_written",
+        "attempt_cleared",
+      ]),
+    );
+  });
+});

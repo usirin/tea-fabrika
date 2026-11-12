@@ -5,7 +5,7 @@ import { Effect, Schema, type SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { ProgramLoader } from "./Entry.ts";
-import { Input, Program, Write } from "./Program.ts";
+import { type Admission, type Prepared, type Stepper, Input, Program, Write } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
@@ -236,3 +236,45 @@ function authoringTypeErrors() {
 }
 
 void authoringTypeErrors;
+
+// A14 is a type law. The lead runs tsc after the product contracts exist.
+function admissionTypeErrors(pure: Stepper, admitted: Admission) {
+  expectTypeOf<Admission>().not.toHaveProperty("model");
+  expectTypeOf<Admission>().not.toHaveProperty("view");
+  expectTypeOf<Admission>().not.toHaveProperty("cmds");
+  // @ts-expect-error Admission carries no prepared model, view, Cmds or wake time.
+  const prepared: Prepared = admitted;
+  const metadata = Schema.Struct({ type: Schema.String, total: Schema.Int });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      select: (msg) => {
+        expectTypeOf(msg).toEqualTypeOf<typeof Msg.Type>();
+        return { type: msg.type, total: msg.type === "add" ? msg.n : 0 };
+      },
+    },
+  });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      // @ts-expect-error The audit selector consumes this machine's fresh Msg.
+      select: (_msg: { type: "foreign" }) => ({ type: "foreign", total: 0 }),
+    },
+  });
+  Program.make({
+    ...fields,
+    view: (m) => m,
+    audit: {
+      data: metadata,
+      // @ts-expect-error The selected value must match the declared metadata schema.
+      select: () => ({ type: "add", total: "invalid" }),
+    },
+  });
+  return [pure.fresh({}, {}), pure.update({}, {}), prepared];
+}
+
+void admissionTypeErrors;

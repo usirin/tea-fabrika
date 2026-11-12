@@ -234,6 +234,14 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.step(model, msg),
+                fresh: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.fresh(model, msg),
+                update: (model: unknown, msg: unknown) =>
+                  controls.transport
+                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    : loaded.execution.update(model, msg),
               },
             })),
         };

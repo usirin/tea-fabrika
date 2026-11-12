@@ -101,6 +101,19 @@ const world = (adapter: "node" | "worker", limit: number, failure: unknown) => {
             ? loaded.execution
             : workerExecution({
                 init: (s) => box.init(s),
+                fresh: async (s, m) => {
+                  if (move === "rpc") {
+                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                  }
+
+                  if (move === "decode") {
+                    return { unrecognized: true };
+                  }
+
+                  return box.fresh(s, m);
+                },
+                update: (s, m) => box.update(s, m),
+                audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
                     return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));

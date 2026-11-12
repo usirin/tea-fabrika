@@ -56,6 +56,97 @@ const program = {
 } as const;
 
 const input = fc.record({ n: fc.integer(), letter: fc.uuid() });
+
+const AuditInput = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int, body: Schema.String });
+const AuditMetadata = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int });
+
+const auditThrow = (body: string): never => {
+  throw new Error(body);
+};
+
+it("A5, A12 [secrets]: checked audit replies and printed Worker failures never carry a submitted body", async () => {
+  const reached = new Set<string>();
+  await fc.assert(
+    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 8, maxLength: 24 }), (tape) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            let mode = "ok";
+            const p = {
+              ...program,
+              machine: Machine.make({
+                model: Schema.Int,
+                msg: AuditInput,
+                cmds: [],
+                init: (saved) => [saved ?? 0, []],
+                update: { save: (s) => [s + 1, []] },
+              }),
+              state: { v: 1, schema: Schema.Int, upgrades: [] },
+              msg: AuditInput,
+              view: { data: Schema.Int, select: (s: number) => s },
+              audit: {
+                data: AuditMetadata,
+                select: (m: typeof AuditInput.Type) =>
+                  mode === "throw"
+                    ? auditThrow(m.body)
+                    : mode === "output"
+                      ? { type: "save", base: m.body }
+                      : { type: m.type, base: m.base },
+              },
+            };
+            const Box = programBox(p, "audit-build");
+            const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+            const remote = workerExecution({
+              init: (s) => box.init(s),
+              step: (s, m) => box.step(s, m),
+              fresh: (s, m) => box.fresh(s, m),
+              update: (s, m) => box.update(s, m),
+              fold: (s, m) => box.fold(s, m),
+              reply: (c, o) => box.reply(c, o),
+              upgrade: (s) => box.upgrade(s),
+              audit: (m) => box.audit(m),
+            });
+            let base = 0;
+
+            for (const [n, entropy] of tape.entries()) {
+              const modes = ["ok", "throw", "output", "decode"];
+              mode = modes[entropy % modes.length]!;
+              reached.add(mode);
+              const body = `BODY-${entropy}-${n} "/雪\n`;
+              const input = AuditInput.make({ type: "save", base, body });
+              const submitted = mode === "decode" ? { ...input, base: body } : input;
+              const raw = yield* Effect.promise(() => box.audit(submitted));
+              const answer = yield* Effect.exit(remote.audit(submitted));
+              expect(answer._tag).toBe(mode === "ok" ? "Success" : "Failure");
+              const shown = Exit.isFailure(answer) ? Cause.pretty(answer.cause) : JSON.stringify(answer.value);
+              const outputs = [JSON.stringify(raw), String(raw), shown];
+
+              for (const output of outputs) {
+                for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                  expect(output).not.toContain(form);
+                }
+              }
+
+              if (mode === "ok") {
+                expect(raw).toEqual({ _tag: "ok", value: { type: "save", base } });
+                base++;
+              } else if (Exit.isFailure(answer)) {
+                expect(Cause.hasDies(answer.cause)).toBe(false);
+                expect(Cause.squash(answer.cause)).toMatchObject({
+                  _tag: "AuditError",
+                  reason: { _tag: expect.any(String) },
+                });
+              }
+            }
+          }),
+        ),
+      ),
+    ),
+    { seed: SEED, numRuns: 40 },
+  );
+  expect([...reached]).toEqual(expect.arrayContaining(["ok", "throw", "output", "decode"]));
+});
+
 // Final review's lost-reply probe, kept beside generated inputs.
 const lostReply = { n: 7, letter: "00000000-0000-1000-8000-000000000007" };
 
@@ -101,6 +192,9 @@ const replyCase = (
       const remote = workerExecution({
         init: (saved) => box.init(saved),
         step: (model, msg) => box.step(model, msg),
+        fresh: (model, msg) => box.fresh(model, msg),
+        update: (model, msg) => box.update(model, msg),
+        audit: (msg) => box.audit(msg),
         fold: (model, msg) => box.fold(model, msg),
         upgrade: (saved) => box.upgrade(saved),
         admit: (msg) => box.admit(msg),
