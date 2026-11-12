@@ -115,13 +115,13 @@ Toyota      daily kaizen on the standing line is the norm; a kaizen event is the
 | There are no epics. An epic is a plan with many tasks. | same note, :19 and :30 |
 | Milestones leave the loop. A roadmap is a view built from plans. | same note, :49 |
 | A tier is a project. | [free-form plan to planner](../docs/direction/free-form-plan-to-planner.md), [tiers](../docs/plan/tiers.md):10 |
-| fabrika is project machinery first, with agents attached. | [built for projects](../docs/direction/built-for-projects.md) |
+| fabrika is project machinery first, with agents attached. | [built for projects](../.decisions/0223-built-for-projects.md) |
 | Triage answers duplicate, decline, accept or escalate. No "later", no snooze, no priority. "Later" is a reopened "no". | [sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md) |
 | No ticket-kind label (bug, feature, chore, ...) enters the ledger. From experiment 88, on routing. | same note, :96 |
 | Bug urgency has no home in the core; it waits for an on-call pack. | same note, :106 |
 | Labels never gate a build. The approved plan is the only go. | same note, "Who approves building" |
 | The ledger starts small: priority, types, labels and links wait for a run that needed them. | [the smallest ledger](../docs/direction/smallest-ledger-proof-to-grow.md):16 |
-| The tracker is like Linear, and grows toward Linear's model on purpose, "a run is not needed to justify each part". This replaces the smallest ledger's rule for the tracker's own fields. | [the tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md):20 |
+| The tracker is like Linear, and grows toward Linear's model on purpose, "a run is not needed to justify each part". This replaces the smallest ledger's rule for the tracker's own fields. | [0346](../.decisions/0346-the-tracker-is-built-like-linear.md) |
 | Every ticket has an assignee, and the assignee's host runs its lane. | same note, "First piece" |
 | A scheduled job never changes code; it files a ticket, as an agent writer. | [scheduled jobs](../docs/direction/scheduled-jobs-on-the-host.md):33 |
 | A check too long for a pull request runs daily, and what it finds becomes a ticket. | [fast and daily mutation](../docs/direction/fast-and-daily-mutation.md):37 |
@@ -397,7 +397,7 @@ The lean handed to this study: an optional **area** (one at most, never ends), a
   (`fold-not-tabs.md:176`), a small clash. Lean: `area`, 70%.
 - **Holds, with one add.** The makers give an area an owner who routes intake [j2] [l5] [g7].
   For two people, the owner is the default assignee, and the assignee's host runs the lane
-  ([the tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md)). So an area
+  ([the tracker is like Linear](../.decisions/0346-the-tracker-is-built-like-linear.md)). So an area
   can say who gets its new tickets. That is a lean to test in step 5, not a rule.
 
 ### Project

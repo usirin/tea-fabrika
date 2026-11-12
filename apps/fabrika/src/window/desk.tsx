@@ -16,8 +16,8 @@ import { createRoot } from "react-dom/client";
 import type { AsksNow } from "../asks.ts";
 import { activeOf, type Desk, focusedOf, type Open, questionOf, tilesOf, type Workspace } from "../desk/desk.ts";
 import { type Hold, type HoldCmd, type HoldMsg, holdMachine, type Key } from "../desk/hold.ts";
-import { commandOn, programCommandOn, defaults, Key as KeyCase, type Keys, spell } from "../desk/keymap.ts";
-import { keyName, keyOwner, matchPress, THE_MACS } from "../desk/keys.ts";
+import { programCommandOn, defaults, type Keys, spell } from "../desk/keymap.ts";
+import { keyName } from "../desk/keys.ts";
 import {
   type ContainerNode,
   findTile,
@@ -40,7 +40,9 @@ import {
   readToWindow,
   type ToApp,
   type ToWindow,
+  type WindowLook,
 } from "../messages.ts";
+import type { ProjectRow } from "../projects.ts";
 import {
   EXPLAIN_ON,
   focusFollows,
@@ -48,17 +50,23 @@ import {
   type Frame,
   type FrameMsg,
   type Delivery,
+  focusBack,
   frameKey,
   frameUpdate,
   keyGoesTo,
+  keyRoute,
   type MidKey,
   deliver,
   passOn,
   type Ports,
+  type Press,
+  type Recording,
   type Shapes,
+  type Target,
   ticketsShown,
 } from "./frame.ts";
 import { Band, BottomArea, type FrameProps, Over, TopBar } from "./frame.tsx";
+import { Welcome } from "./projects.tsx";
 import { loadGhostty, type TileTerminal, terminalFor } from "./terminal.ts";
 import { Strip, Tile } from "./tile.tsx";
 import { WINDOWS } from "./windows.tsx";
@@ -128,6 +136,13 @@ const store: {
   frame: Frame;
   /** What the window shows of the link, as the app said last. */
   link: LinkNow;
+  /** Welcome or one project, as the app said last (ticket 276); `null` until it says. */
+  look: WindowLook | null;
+  /** The projects box's rows, as the app sent them last. */
+  projectRows: readonly ProjectRow[];
+  /** Welcome's selected row, and a count of Cmd-O presses that move focus to it. */
+  welcomeSelected: string;
+  welcomeFocus: number;
   readonly views: Map<string, ToWindow>;
   readonly listeners: Set<() => void>;
   version: number;
@@ -143,6 +158,10 @@ const store: {
   host: null,
   frame: FRAME,
   link: { kind: "up" },
+  look: null,
+  projectRows: [],
+  welcomeSelected: "folder",
+  welcomeFocus: 0,
   views: new Map(),
   listeners: new Set(),
   version: 0,
@@ -474,8 +493,8 @@ const frameInstall = (next: Frame): boolean => {
     return false;
   }
 
-  const wasKeys = store.frame.over.kind === "palette" && store.frame.over.title === "keys";
-  const isKeys = next.over.kind === "palette" && next.over.title === "keys";
+  const wasKeys = store.frame.over.kind === "palette" && store.frame.over.source._tag === "keys";
+  const isKeys = next.over.kind === "palette" && next.over.source._tag === "keys";
 
   if (wasKeys && !isKeys) {
     toHost({ type: "keys.close" });
@@ -493,9 +512,50 @@ const frameInstall = (next: Frame): boolean => {
     noteTimer = setTimeout(() => frameStep({ type: "unnote" }), NOTE_MS);
   }
 
+  // The palette or the projects box closed: focus goes back to where the first was opened from.
+  const back = focusBack(store.frame, next);
   store.frame = next;
-  changed();
+
+  if (back === null) {
+    changed();
+  } else {
+    // The desk's focus effect gives it back, in place of the tile, once the over is gone.
+    focusBackTo = back;
+    flushSync(changed);
+  }
+
   return true;
+};
+
+/**
+ * The page opened the palette or the projects box at a key: the host is told, so it records the
+ * key and puts an armed prefix down. It shows nothing back, as the page already did.
+ */
+const said = (does: "palette.open" | "projects.open", name: string | null) =>
+  toHost({ type: "run", does, via: { keys: spell(name ?? "") } });
+
+/** Where focus goes once the palette or the projects box closes, said once (`frameStep`). */
+let focusBackTo: string | null = null;
+
+/** Focus what `focusName` named, if it is still there: a tile's screen, a top bar item, a text box. */
+const focusNamed = (name: string): boolean => {
+  const [kind, id = ""] = name.split(/:(.*)/s);
+  const css = (v: string) => CSS.escape(v);
+  const el =
+    kind === "tile"
+      ? document.querySelector<HTMLElement>(`[data-tile="${css(id)}"] .screen, [data-view="${css(id)}"]`)
+      : kind === "button"
+        ? document.querySelector<HTMLElement>(`[data-item="${css(id)}"]`)
+        : kind === "input"
+          ? document.querySelector<HTMLElement>(`input[name="${css(id)}"], input#${css(id)}`)
+          : null;
+
+  if (el === null || !el.isConnected) {
+    return false;
+  }
+
+  el.focus();
+  return document.activeElement === el;
 };
 
 const cycleFocus = (to: "next" | "previous") => {
@@ -540,7 +600,7 @@ interface KeyedFrom {
 /**
  * The bottom line's item keyboard focus was on when Ctrl-B was pressed, or `null`. While the desk
  * is mid-key, the line's right side says `esc cancels` in place of its items, so focus on one falls
- * to the page. It goes back to that item once the key is done (`focusBack`), and info mode, turned
+ * to the page. It goes back to that item once the key is done (`focusKeyedFrom`), and info mode, turned
  * on in between, explains that item.
  */
 let keyedFrom: KeyedFrom | null = null;
@@ -560,7 +620,7 @@ const noteKeyedFrom = (at: EventTarget | null) => {
 };
 
 /** Focus goes back to the bottom line's item it fell from while the desk was mid-key. */
-const focusBack = () => {
+const focusKeyedFrom = () => {
   const from = keyedFrom;
   keyedFrom = null;
 
@@ -571,6 +631,48 @@ const focusBack = () => {
   const items = document.querySelectorAll<HTMLElement>(".bottomline [data-item]");
   [...items].find((el) => el.dataset.item === from.item)?.focus();
 };
+
+/** Where focus is now, by name, for the palette to give it back to: `tile:t1`, `button:project`. */
+const focusName = (at: Element | null): string => {
+  const tile = at?.closest<HTMLElement>("[data-tile]")?.dataset.tile;
+
+  if (tile !== undefined) {
+    return `tile:${tile}`;
+  }
+
+  const item = at?.closest<HTMLElement>("[data-item]")?.dataset.item;
+
+  if (item !== undefined) {
+    return `button:${item}`;
+  }
+
+  if (at instanceof HTMLInputElement) {
+    return `input:${at.name || at.id || "text"}`;
+  }
+
+  return "page";
+};
+
+/**
+ * Cmd-O, File > Open Project…, `show projects`: on welcome, focus goes to its first row, with no
+ * second box over it (P27); over a project's desk, the projects box opens in the palette's place.
+ */
+const openProjects = (press: Press) => {
+  if (store.look === null) {
+    return;
+  }
+
+  if (store.look._tag === "welcome") {
+    store.welcomeSelected = store.look.recent[0]?.project.key ?? "folder";
+    store.welcomeFocus += 1;
+    return changed();
+  }
+
+  frameStep({ type: "projects", rows: store.projectRows, focus: focusName(document.activeElement), press });
+};
+
+/** The window's title: the project's full name, so two windows of equal folders differ (P15). */
+const titleOf = (look: WindowLook): string => (look._tag === "project" ? look.name : "fabrika");
 
 /** What the host, or the app when the host is not there, tells the page on the desk's port. */
 const heard = (raw: unknown) => {
@@ -640,6 +742,17 @@ const heard = (raw: unknown) => {
         return cycleFocus(m.what === "focus-next" ? "next" : "previous");
       }
 
+      // The palette and the projects box take the keys: what a key pressed before them shows,
+      // answered late, never covers them.
+      if (store.frame.over.kind === "palette" && m.what !== "palette" && m.what !== "projects") {
+        return;
+      }
+
+      // The `show projects` word is the opening binding's own command.
+      if (m.what === "projects") {
+        return openProjects("box");
+      }
+
       return m.what === "info"
         ? frameStep({ type: "info", focus: focusWords() })
         : frameStep({ type: "show", what: m.what });
@@ -671,8 +784,50 @@ const heard = (raw: unknown) => {
       }
 
       return changed();
+    case "window":
+      store.look = m.look;
+      document.title = titleOf(m.look);
+
+      if (m.look._tag === "welcome") {
+        const keys = m.look.recent.map((r) => r.project.key);
+
+        if (!keys.includes(store.welcomeSelected)) {
+          store.welcomeSelected = keys[0] ?? "folder";
+        }
+      }
+
+      return changed();
+    case "project_rows":
+      store.projectRows = m.rows;
+      frameStep({ type: "project_rows", rows: m.rows });
+      return changed();
+    // The app's File > Open Project….
+    case "projects":
+      return openProjects("menu");
   }
 };
+
+/** Where keyboard focus is, as `keyRoute` reads it: a tile's terminal, a text field, a button, or the page. */
+const targetOf = (at: EventTarget | null): Target => {
+  if (!(at instanceof Element)) {
+    return "page";
+  }
+
+  if (at.closest(".term") !== null) {
+    return "terminal";
+  }
+
+  if (at.closest("button") !== null) {
+    return "button";
+  }
+
+  const field = at instanceof HTMLInputElement || at instanceof HTMLTextAreaElement;
+  return field || (at instanceof HTMLElement && at.isContentEditable) ? "field" : "page";
+};
+
+/** The keys editor's recording, as `keyRoute` reads it: none while no editor records. */
+const recordingOf = (editor: Editor | null): Recording =>
+  editor === null || editor.recording._tag === "idle" ? "none" : editor.recording._tag;
 
 /**
  * On macOS, the window has no title bar of its own, so the top bar keeps room for its three
@@ -723,113 +878,84 @@ const onKey = (e: KeyboardEvent) => {
     composing: e.isComposing,
     altGraph: e.getModifierState("AltGraph"),
   };
-  const rawName = keyName(pressed);
+  const route = keyRoute(
+    {
+      look: store.look?._tag ?? "project",
+      over: store.frame.over,
+      desk: midKey(),
+      recording: recordingOf(store.keysEditor),
+      target: targetOf(e.target),
+    },
+    pressed,
+    store.keys,
+    MAC,
+  );
 
-  if (MAC && rawName !== null && THE_MACS.has(rawName)) {
-    e.stopPropagation();
-    return;
-  }
+  switch (route._tag) {
+    case "mac":
+      e.stopPropagation();
+      return;
+    case "pass":
+      return;
+    case "swallow":
+      return swallow(e);
+    case "interrupt": {
+      swallow(e);
+      const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
 
-  const recording = store.keysEditor?.recording;
+      if (tile !== null) {
+        window.fabrika.send(`tile:${tile.id}`, { type: "keys", data: "\u0003" });
+      }
 
-  if (recording !== undefined && recording._tag !== "idle" && rawName === "<c-c>") {
-    swallow(e);
-    const tile = store.desk?.at === "open" ? focusedOf(store.desk) : null;
-
-    if (tile !== null) {
-      window.fabrika.send(`tile:${tile.id}`, { type: "keys", data: "\u0003" });
-    }
-
-    return;
-  }
-
-  if (recording?._tag === "waiting") {
-    if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       return;
     }
+    case "record":
+      swallow(e);
+      return editKeys({ type: "press", press: pressed });
+    case "cancel":
+      swallow(e);
+      return editKeys({ type: "cancel" });
+    case "system":
+      if (targetOf(e.target) === "terminal") {
+        e.stopPropagation();
+      }
 
-    if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.closest("button") !== null) {
+      if (store.frame.over.kind !== "none") {
+        focusOver(e.target);
+      }
+
       return;
-    }
+    // The projects box is the page's own, before any tile, prefix or popover hears the key (P18).
+    case "projects":
+      swallow(e);
+      openProjects("box");
 
-    swallow(e);
-    return editKeys({ type: "press", press: pressed });
-  }
+      if (store.look?._tag === "project") {
+        said("projects.open", route.name);
+      }
 
-  if (recording?._tag === "candidate" || recording?._tag === "saving") {
-    if (e.key === "Escape") {
+      return;
+    case "palette":
+      swallow(e);
+      frameStep({ type: "show", what: "palette" });
+      said("palette.open", route.name);
+      return;
+    case "focus":
       swallow(e);
 
-      if (recording._tag === "candidate") {
-        editKeys({ type: "cancel" });
+      if (store.frame.over.kind !== "none") {
+        frameStep({ type: "close" });
       }
 
+      toHost({ type: "run", does: route.does, via: { keys: spell(route.name) } });
       return;
-    }
-
-    // Keep candidates away from app shortcuts while the native controls still receive their keys.
-    if (pressed.meta || pressed.ctrl || pressed.alt) {
-      if (keyOwner(pressed, MAC, store.keys) === "system") {
-        return;
-      }
-
-      return swallow(e);
-    }
-
-    return;
+    case "desk":
+      return deskKey(e, route.name, pressed);
   }
+};
 
-  const afterPrefix = midKey().armed
-    ? matchPress(
-        pressed,
-        store.keys.rows.flatMap((row) => row.keys.filter((key) => key._tag === "after_prefix")),
-        MAC,
-      )
-    : null;
-  const owner = afterPrefix === null ? keyOwner(pressed, MAC, store.keys) : "app";
-
-  if (owner === "nobody") {
-    return swallow(e);
-  }
-
-  if (owner === "system") {
-    if (e.target instanceof Element && e.target.closest(".term") !== null) {
-      e.stopPropagation();
-    }
-
-    if (store.frame.over.kind !== "none") {
-      focusOver(e.target);
-    }
-
-    return;
-  }
-
-  const applicable = [
-    KeyCase.cases.alone.make({ key: store.keys.prefix }),
-    ...store.keys.rows.flatMap((row) =>
-      row.keys.filter((key) => key._tag === (midKey().armed ? "after_prefix" : "alone")),
-    ),
-  ];
-  const name = matchPress(pressed, applicable, MAC)?.key ?? rawName;
-  const alone = name === null ? undefined : commandOn(store.keys, KeyCase.cases.alone.make({ key: name }));
-
-  if (alone === "palette.open") {
-    swallow(e);
-    toHost({ type: "run", does: "palette.open", via: { keys: spell(name ?? "") } });
-    return;
-  }
-
-  if (alone === 'tezgah."focus --to next"' || alone === 'tezgah."focus --to previous"') {
-    swallow(e);
-
-    if (store.frame.over.kind !== "none") {
-      frameStep({ type: "close" });
-    }
-
-    toHost({ type: "run", does: alone, via: { keys: spell(name ?? "") } });
-    return;
-  }
-
+/** A key the frame, the over or the desk has (`keyRoute`'s `desk`): Escape first, then the over, then the hold. */
+const deskKey = (e: KeyboardEvent, name: string | null, press: Key["press"]) => {
   const innerAsk =
     e.target instanceof Element ? e.target.closest("[data-ask-editor=note], [data-ask-editor=picks]") : null;
 
@@ -854,8 +980,6 @@ const onKey = (e: KeyboardEvent) => {
   if (forOver === "moved in") {
     return swallow(e);
   }
-
-  const press = pressed;
 
   if (name === store.keys.prefix) {
     noteKeyedFrom(e.target);
@@ -1094,6 +1218,7 @@ const linkView = (now: LinkNow): Shown => {
 
 function App(): ReactNode {
   useSyncExternalStore(subscribe, () => store.version);
+  const look = store.look;
   const desk = store.desk;
   const view = linkView(store.link);
   /** The desk is out of reach: the link is down, or there is no desk to reach. */
@@ -1126,7 +1251,14 @@ function App(): ReactNode {
     }
   });
   useLayoutEffect(() => {
-    if (!away && over === "none") {
+    if (away || over !== "none") {
+      return;
+    }
+
+    const back = focusBackTo;
+    focusBackTo = null;
+
+    if (back === null || !focusNamed(back)) {
       focusTile();
     }
   }, [shown, away, over]);
@@ -1134,7 +1266,7 @@ function App(): ReactNode {
   const mid = (open?.prefix.armed ?? false) || open?.ask != null;
   useLayoutEffect(() => {
     if (!mid) {
-      focusBack();
+      focusKeyedFrom();
     }
   }, [mid]);
   const props: FrameProps = {
@@ -1155,7 +1287,33 @@ function App(): ReactNode {
     toApp,
     toRun,
     step: frameStep,
+    project: look?._tag === "project" ? look.project : undefined,
+    name: look?._tag === "project" ? look.name : undefined,
+    projectRows: store.projectRows,
   };
+
+  if (look?._tag === "welcome") {
+    return (
+      <div className={`desk welcome-desk${MAC ? " mac" : ""}`}>
+        <Band />
+        <Welcome
+          recent={look.recent}
+          selected={store.welcomeSelected}
+          now={Date.now()}
+          refusal={look.refusal}
+          focusTick={store.welcomeFocus}
+          onSelect={(id) => {
+            store.welcomeSelected = id;
+            changed();
+          }}
+          onOpen={(key) => toApp({ type: "open", key, source: "welcome" })}
+          onFolder={() => toApp({ type: "folder", source: "welcome" })}
+          onRetry={() => toApp({ type: "retry" })}
+        />
+      </div>
+    );
+  }
+
   const bare = store.frame.bare;
   const zoomed = ws?.layout.zoomed ?? null;
   return (
@@ -1176,7 +1334,8 @@ function App(): ReactNode {
           ref={measure}
           data-workspace={ws.id}
           data-zoomed={zoomed ?? undefined}
-          inert={view.dim}
+          // The palette is a modal dialog: the tiles under it take no key and no press (P24).
+          inert={view.dim || over === "palette"}
         >
           {zoomed !== null ? (
             <ZoomedTile ws={ws} id={zoomed} desk={open} />

@@ -1,0 +1,16 @@
+{
+  "id": "2026-11-09-projectwin-mutation-dry-run-never-passed",
+  "date": "2026-11-09",
+  "lanes": [
+    "projectwin"
+  ],
+  "stage": "mutation",
+  "kind": "failure",
+  "what": "Mutation round 1 never passed Stryker's dry run: P13 (two settings worker processes) ran over the 10 s limit, P17 and P29 start Electron, and a name filter through run.sh did not survive Stryker's own name pattern. P1 in host/main.test.ts failed only under Stryker.",
+  "cause": "Stryker's vitest runner runs tests in a worker thread, where process.umask(mode) throws, and it sets its own test name pattern.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Tests round 10 skips P13, P17 and P29 only inside a Stryker worker (STRYKER_MUTATOR_WORKER), and stubs umask in worker threads so P1 stays in the run.",
+  "test": "A narrow one-worker Stryker dry run on main.ts and main.test.ts failed before and passed after.",
+  "links": []
+}

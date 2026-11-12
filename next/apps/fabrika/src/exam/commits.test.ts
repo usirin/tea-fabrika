@@ -850,6 +850,10 @@ describe("trusted config files", () => {
           "why": "today's app tests, including configurable keys"
         },
         { "glob": "apps/fabrika/e2e.ts", "why": "today's app end-to-end runner and screenshot checks" },
+        { "glob": "apps/fabrika/projects-e2e.ts", "why": "T276 real project flows and capture steps" },
+        { "glob": "apps/fabrika/summon-e2e.ts", "why": "the real fake-agent summon capture steps" },
+        { "glob": "apps/fabrika/src/project.test-support.ts", "why": "T276 generated project fixtures and plant checks" },
+        { "glob": "apps/fabrika/src/host/settings.shared.fixture.ts", "why": "T276 cross-process shared-settings worker" },
         { "glob": "fixtures/keybindings/**", "why": "hand-written keybinding files used by the exam" },
         { "glob": ".oxlintrc.json", "why": "the lint rules" },
         { "glob": ".oxfmtrc.json", "why": "the format settings" },

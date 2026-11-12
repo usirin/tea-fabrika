@@ -36,7 +36,7 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
     [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.~~
     Replaced 2026-10-27: the tracker is built like Linear, as the base the
     pipeline, milestones and packs build on
-    ([the tracker is like Linear](./the-tracker-is-like-linear.md)).
+    ([the tracker is like Linear](../../.decisions/0346-the-tracker-is-built-like-linear.md)).
 - **A ticket's window is its timeline** (decided 2026-10-24). Every fact about
   the ticket shows in one list, oldest first: filed, edited, comments, each
   stage's answer. It is the one place to see what is being done.

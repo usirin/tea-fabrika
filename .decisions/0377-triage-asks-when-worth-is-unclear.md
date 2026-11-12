@@ -23,7 +23,7 @@ flowchart LR
 
 The owner decided this on 2026-10-30, picking option A of experiment 163 parts 4 and 5: about 130
 to 190 asks a week with about 10% wrong keeps, over B's about 45%
-([triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md#what-was-decided)).
+(in the note "triage asks when worth is unclear", since removed: this file holds its rules).
 The note's sketch says `close`, `keep` and `ask`; triage's answers are named
 duplicate, decline, accept and escalate ([0373](0373-triage-answers-by-what-they-do.md)).
 

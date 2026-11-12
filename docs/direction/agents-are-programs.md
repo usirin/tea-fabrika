@@ -36,7 +36,7 @@ self.startChild("claude", {schema: sorted.schema, folder});
 
 *(updated 2026-11-08 to Program.make.)* The block above is today's code. In `next/`, an agent program is
 `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, with no `main`
-and no `machines` table ([Program.make](./program-make.md)).
+and no `machines` table ([Program.make](../../.decisions/0256-a-program-is-one-program-make.md)).
 
 
 ## Why

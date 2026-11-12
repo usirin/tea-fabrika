@@ -27,18 +27,20 @@
 //                      the lane to build with the command's last lines, no section is a skip
 //   judging    Draft   one read-only Codex turn in the main checkout, one typed answer: send a step
 //                      again with a note, or park the lane for the lead
-//   typechecking Act   one `pnpm typecheck` of the reviewed head merged with origin/main, on the
-//                      laptop (./flow/typecheck.ts): red sends the lane back with the error lines,
-//                      to tests when every error is in an exam path, else to build, counted as a
-//                      send back (0076); one that cannot run goes on, and the last line says why
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
+//   typechecking Listen CI's `typecheck` job at the pushed head, polled until that one job ends
+//                      (./ci/typecheck.ts; no laptop typecheck, 0133): red sends the lane back with
+//                      the error lines from the job's log, to tests when every error is in an exam
+//                      path, else to build, counted as a send back (0076), and the PR stays open
+//                      for the next push; no answer in time, or no type error in a failed job,
+//                      goes on, and the last line says why
 //   loosening  Check   loosening.sh on the lane's exam diff, its output posted on the PR (0014):
 //                      0 hits lands, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     catchup.sh: merge main in, wait for CI, squash-land
 //   over               done (landed), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> (typecheck) -> open ->
-// loosen -> land. Every
+// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> open -> (CI's typecheck)
+// -> loosen -> land. Every
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A lane runs no
 // mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
@@ -51,7 +53,8 @@
 // an overridable default (the defaults: a step retried every 5 minutes, 6 times; 3 stucks in a row
 // on one step; 16 steps a lane with no backstop; 20 minutes a host command), and
 // `CHAIN_WAIT_MINUTES`, `CHAIN_WAITS`, `CHAIN_STUCKS`, `CHAIN_STEPS`, `CHAIN_HOST_MINUTES` and
-// `CHAIN_TYPECHECK_MINUTES` override them from outside. Running out of retries is a typed
+// `CHAIN_TYPECHECK_MINUTES` (20, the wait for CI's typecheck job) and `CHAIN_TYPECHECK_EVERY` (10
+// seconds between reads of it) override them from outside. Running out of retries is a typed
 // `RetriesExhausted`, reported as stuck (decided with the clanka walk, 2026-11-09). Exit codes: 0
 // landed, 20 parked (ask), 30 stuck, 2 usage.
 //
@@ -105,6 +108,8 @@ import { Cmd, run } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
+import * as ChecksGh from "./ci/ChecksGh.ts";
+import * as Typecheck from "./ci/typecheck.ts";
 import {
   type AgentName,
   type DrivePhase,
@@ -125,7 +130,6 @@ import {
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
-import * as Typecheck from "./flow/typecheck.ts";
 import { stepOf, wipOf } from "./lane.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -161,9 +165,14 @@ export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { 
 /** Minutes each host command may run (./flow/host.ts says where the default comes from). */
 export const HostMinutes = Context.Reference<number>("chain/HostMinutes", { defaultValue: () => Host.MINUTES });
 
-/** Minutes the typecheck may wait for another, and each of its install and check may run. */
+/** Minutes the lane waits for CI's typecheck job at its pushed head to end (./ci/typecheck.ts). */
 export const TypecheckMinutes = Context.Reference<number>("chain/TypecheckMinutes", {
   defaultValue: () => Typecheck.MINUTES,
+});
+
+/** Seconds between two reads of that job while it runs (./ci/typecheck.ts says why this many). */
+export const TypecheckEvery = Context.Reference<number>("chain/TypecheckEvery", {
+  defaultValue: () => Typecheck.EVERY,
 });
 
 /** The one schedule for a step drive refused for a slot: every `minutes`, `times` times. */
@@ -655,15 +664,15 @@ const hostRun = Cmd.make("host_run", {
   err: ["unknown"],
 });
 
-/** The host typecheck of the reviewed head merged with origin/main, before the PR opens. */
-const typecheckRun = Cmd.make("typecheck_run", {
-  input: Schema.Struct({ head: Schema.String }),
+/** CI's typecheck job at the pushed head, read the moment it ends, once the PR is open (0133). */
+const typecheckRead = Cmd.make("typecheck_read", {
+  input: Schema.Struct({ pr: Schema.Number, head: Schema.String }),
   ok: Typecheck.Verdict,
   err: ["unknown"],
 });
 
 type Cmds =
-  | ReturnType<typeof typecheckRun>
+  | ReturnType<typeof typecheckRead>
   | ReturnType<typeof stepRun>
   | ReturnType<typeof judge>
   | ReturnType<typeof prOpen>
@@ -703,7 +712,7 @@ type Lane = {
   readonly window: readonly Mark[];
   /** List-price dollars this chain spent, steps and judgments. */
   readonly dollars: number;
-  /** Why the last host typecheck did not run; `null` when it ran, or has not been reached. */
+  /** Why CI's typecheck job last gave no answer; `null` when it answered, or was not reached. */
   readonly unchecked: string | null;
 };
 
@@ -728,8 +737,8 @@ type Model =
     }
   | { readonly phase: "hosting"; readonly lane: Lane; readonly note: string }
   | { readonly phase: "judging"; readonly lane: Lane; readonly step: StepName; readonly line: Line }
-  | { readonly phase: "typechecking"; readonly lane: Lane }
   | { readonly phase: "opening"; readonly lane: Lane }
+  | { readonly phase: "typechecking"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "loosening"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "landing"; readonly lane: Lane; readonly pr: number }
   | { readonly phase: "over"; readonly lane: Lane; readonly end: End };
@@ -760,6 +769,12 @@ const backstopStop = (lane: Lane, backstop: Budget | null): Stop | null => {
     ? null
     : Stop.cases.backstop.make({ passed, backstop, steps: lane.round, dollars: lane.dollars });
 };
+
+/** loosening.sh on the reviewed head of the open PR, before anything lands (0014). */
+const loosenAt = (lane: Lane, pr: number): Step => [
+  { phase: "loosening", lane, pr },
+  [loosen({ pr, head: lane.head })],
+];
 
 const runStep = (lane: Lane, step: StepName, note: string): Step => {
   const round = lane.round + 1;
@@ -806,9 +821,9 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits
         ? stopped(lane, backstop)
         : [{ phase: "judging", lane, step, line }, [judge({ step, line, round: lane.round })]];
     }
-    // The host typecheck comes first: the boxes run none.
+    // No laptop typecheck first (0133): CI's typecheck job answers once the head is pushed.
     case "open":
-      return [{ phase: "typechecking", lane }, [typecheckRun({ head: lane.head })]];
+      return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
     default:
       return over(lane, { kind: "ask", reason: move.reason });
   }
@@ -817,7 +832,7 @@ const take = (lane: Lane, step: StepName, line: Line, move: Move, limits: Limits
 export const makeMachine = (limits: Limits) =>
   defineMachine({
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
-    cmds: [stepRun, judge, typecheckRun, prOpen, loosen, land, hostRun],
+    cmds: [stepRun, judge, prOpen, typecheckRead, loosen, land, hostRun],
     init: (): Step => [
       {
         phase: "idle",
@@ -916,9 +931,24 @@ export const makeMachine = (limits: Limits) =>
               reason: `${s.step} ${s.line.outcome}: ${s.line.reason} (the judgment agent failed)`,
             })
           : stay(s),
-      // Green opens the PR. Red is a send back (0076): its mark joins the window, and the step it
-      // names gets the error lines. One that could not run opens the PR and keeps why it did not.
-      typecheck_run_ok: (s, m): Step => {
+      // The PR is open and the head pushed: CI's typecheck job at that head is next (0133).
+      pr_open_ok: (s, m): Step => {
+        if (s.phase !== "opening") {
+          return stay(s);
+        }
+
+        const { pr } = m.value;
+
+        if (pr === null) {
+          return over(s.lane, { kind: "stuck", reason: m.value.detail });
+        }
+
+        return [{ phase: "typechecking", lane: s.lane, pr }, [typecheckRead({ pr, head: s.lane.head })]];
+      },
+      // Green goes on to loosening.sh. Red is a send back (0076): its mark joins the window, and
+      // the step it names gets the error lines; the PR stays open for the next push. No answer
+      // goes on too, and the lane keeps why.
+      typecheck_read_ok: (s, m): Step => {
         if (s.phase !== "typechecking") {
           return stay(s);
         }
@@ -927,8 +957,7 @@ export const makeMachine = (limits: Limits) =>
 
         if (verdict._tag !== "red") {
           const unchecked = verdict._tag === "skipped" ? verdict.reason : null;
-          const lane: Lane = { ...s.lane, unchecked };
-          return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
+          return loosenAt({ ...s.lane, unchecked }, s.pr);
         }
 
         const window = [...s.lane.window, "send" as const].slice(-limits.intensity.within);
@@ -939,29 +968,13 @@ export const makeMachine = (limits: Limits) =>
           return stopped(lane, intensity);
         }
 
-        const at = `${lane.head.slice(0, 8)} merged with origin/main`;
-        const said = `the host typecheck of ${at} answered send:${verdict.to}`;
+        const said = `CI's typecheck job at ${lane.head.slice(0, 8)} (PR ${s.pr}) answered send:${verdict.to}`;
         return next(lane, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
       },
-      typecheck_run_err: (s): Step => {
-        if (s.phase !== "typechecking") {
-          return stay(s);
-        }
-
-        const lane: Lane = { ...s.lane, unchecked: "the typecheck threw" };
-        return [{ phase: "opening", lane }, [prOpen({ head: lane.head })]];
-      },
-      pr_open_ok: (s, m): Step => {
-        if (s.phase !== "opening") {
-          return stay(s);
-        }
-
-        if (m.value.pr === null) {
-          return over(s.lane, { kind: "stuck", reason: m.value.detail });
-        }
-
-        return [{ phase: "loosening", lane: s.lane, pr: m.value.pr }, [loosen({ pr: m.value.pr, head: s.lane.head })]];
-      },
+      typecheck_read_err: (s): Step =>
+        s.phase === "typechecking"
+          ? loosenAt({ ...s.lane, unchecked: "reading CI's typecheck job threw" }, s.pr)
+          : stay(s),
       loosen_ok: (s, m): Step => {
         if (s.phase !== "loosening") {
           return stay(s);
@@ -1391,16 +1404,19 @@ const handlers = (s: Setup) => {
 
         return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
-    typecheck_run: (cmd: { head: string }) =>
+    // CI's typecheck job alone, polled until it ends: never the whole run or ci-required (0133).
+    typecheck_read: (cmd: { pr: number; head: string }) =>
       Effect.gen(function* () {
-        const head = cmd.head || (saved().head ?? "");
-        note(`typecheck: \`pnpm typecheck\` of ${head.slice(0, 8)} merged with origin/main`);
+        s.beats.enter("typecheck", null);
         const minutes = yield* TypecheckMinutes;
-        const { MAIN: main, BOXES: boxes } = env;
-        const verdict = yield* Typecheck.run({ main, boxes, lane: s.lane, head, minutes });
-        note(`typecheck: ${Typecheck.summary(verdict)}`);
+        const every = yield* TypecheckEvery;
+        note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${cmd.head.slice(0, 8)} (PR ${cmd.pr})`);
+        const pushed = Date.now();
+        const verdict = yield* Typecheck.wait({ main: env.MAIN, head: cmd.head, minutes, every });
+        const took = Math.round((Date.now() - pushed) / 1000);
+        note(`typecheck: ${Typecheck.summary(verdict)} (${took} s after the push)`);
         return verdict;
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(Layer.provideMerge(ChecksGh.layer(env.GH_REPO), NodeServices.layer))),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("pr", null);
@@ -1752,8 +1768,8 @@ export const chainMain = (args: string[], env: Env) =>
         reason: end.end.reason,
         dollars: Math.round(end.lane.dollars * 100) / 100,
         ...(stop === undefined ? {} : { stop }),
-        // Never a silent skip: a typecheck that did not run says so on the last line.
-        ...(end.lane.unchecked === null ? {} : { typecheck: `did not run: ${end.lane.unchecked}` }),
+        // Never a silent skip: a typecheck that gave no answer says so on the last line.
+        ...(end.lane.unchecked === null ? {} : { typecheck: `no answer: ${end.lane.unchecked}` }),
         exit: exitOf(end.end),
       }),
     );
@@ -1814,6 +1830,7 @@ const main = () => {
       overridden(BackstopTimes, "CHAIN_BACKSTOP"),
       overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
       overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
+      overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
     ),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));

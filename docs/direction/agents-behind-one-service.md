@@ -40,7 +40,7 @@ const drafted = yield* Agents.run({
   earlier try at the same shape, and the first map.
   - Wrong, kept for the record: the first version of this note said "the
     service's default implementation is our ACP client", restating the
-    2026-10-19 ruling in [Helpers, and one supervisor](./helpers-and-the-supervisor.md)
+    2026-10-19 ruling of the old helpers note (its adapter rule is now [0419](../../.decisions/0419-a-harness-adapter-is-the-official-one.md))
     that our contract with a harness is ACP.
 - **A provider is swapped by config.** Claude, Codex, the fake, and later
   others are rows in one provider table. A stage's provider and model are

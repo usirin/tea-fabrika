@@ -20,7 +20,7 @@ flowchart LR
 
 ## Context
 
-From [helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md#what-was-decided),
+From the note "helpers, and one supervisor", since removed,
 decided 2026-10-12. A reviewer with no shell could not see a line that needed a command, and the
 first idea, sending it back to the builder, would have started a loop between two agents.
 

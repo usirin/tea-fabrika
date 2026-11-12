@@ -18,7 +18,7 @@ Its decided rules are in: [0480](../../.decisions/0480-the-inbox-is-one-program-
 
 Decided by the owner before this note, and not asked again: asks to the
 owner are fine, even many; the owner's call of 2026-10-30 stands
-([triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md): about 130 to 190 asks
+([triage asks when worth is unclear](../../.decisions/0377-triage-asks-when-worth-is-unclear.md): about 130 to 190 asks
 a week, with no ask budget set yet); the owner makes every decision the system thinks needs them. What is needed is a desk where
 most asks are one key in one sitting ("approve", "do your rec", or "no, with a note"), and a desk
 that learns from the owner's answers so the system automates better over time. Folded in the same
@@ -435,7 +435,7 @@ offers one press to make that kind automatic. One press undoes it. Some kinds ne
 - **Never automatic.** The exam kinds ([nobody writes their own exam](./nobody-writes-their-own-exam.md)),
   `spend` (a dollar limit points at a person's yes; its automation is the project's standing limit,
   [one meter](./one-ask-and-one-meter.md#limits-that-point-at-a-yes)) and a security triage ask
-  ([triage asks](./triage-asks-when-worth-is-unclear.md)). The type says so: `Automatable`.
+  ([triage asks](../../.decisions/0377-triage-asks-when-worth-is-unclear.md)). The type says so: `Automatable`.
 - **Linear.** Auto-apply per team and per property, set by hand [l3]. We differ: we offer it only
   after a measured, blind count, and show the bound in words, because we record every answer and
   Linear's setting does not say what it is based on.
@@ -660,7 +660,7 @@ Small fixes offered, not filed. Sizes in lines and agent hours.
   fact, and once it holds the machine does not put that question to a person. `auto` is code's fact
   and never looks like a person's. It does move judgments to code, which
   [jidoka](./jidoka-and-andon.md) allows when a person says so.
-- **[Triage asks when worth is unclear](./triage-asks-when-worth-is-unclear.md)** is unchanged: A5
+- **[Triage asks when worth is unclear](../../.decisions/0377-triage-asks-when-worth-is-unclear.md)** is unchanged: A5
   lowers the load only through rules the owner makes, never through a cap.
 - **[Popovers](./popovers.md)** (settled 2026-10-30) says the asks list "never opens a new tile". "Open all"
   does, so that line changes if this lands, with the five rules above.

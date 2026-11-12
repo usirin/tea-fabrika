@@ -13,7 +13,8 @@ stands on its own, and types that come from it.
 
 ## Context
 
-Decided by the owner in [a program is one typed Program.make](../docs/direction/program-make.md).
+Decided by the owner on 2026-11-07, in the note "a program is one typed Program.make", since
+removed: this file holds its rules.
 The owner then had the shape inside `Program.make` rethought; the pick is
 [a program's shape](../docs/direction/program-shape.md), in
 [0257](0257-a-programs-api-has-one-way.md) to [0260](0260-an-output-is-a-model-value.md). The

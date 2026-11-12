@@ -14,7 +14,7 @@ tags: [live-runs, demlik, merge-rules, ship, todays-version]
 
 Decided 2026-10-18. From 2026-10-17 the machine could write to one sandbox repo only; that lock
 was removed on 2026-10-18 (experiment 83), because a sandbox has no real constraints and cannot
-show what breaks. See [demlik is the first real repo](../docs/direction/demlik-is-the-first-real-repo.md).
+show what breaks. It was the note "demlik is the first real repo", since removed.
 AGENTS.md's live-run rules say the same.
 
 ## Decision

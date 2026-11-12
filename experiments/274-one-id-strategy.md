@@ -3,7 +3,7 @@
 Read on 2026-11-07; moved here on 2026-11-11. **This is reading, not a measurement,** plus one
 throwaway script that made the example ids and did the collision math (not kept). Nothing was
 built or run in the repo, no model was called beyond the one agent that read, and it cost $0. It is
-about `next/` only. The decision it led to is [one id per thing](../docs/direction/one-id-per-thing.md),
+about `next/` only. The decision it led to is [0211, one id per thing](../.decisions/0211-one-typeid-per-thing.md),
 decided the same day and extended on 2026-11-08; that note holds the rule, and this write-up holds
 the math and the sources behind it. Where the decision differs from the study's lean, the section
 "What was decided" says so.
@@ -172,7 +172,7 @@ database keys. Stripe's "two separate Event objects" are each source's adapter's
 
 ## What was decided
 
-- [One id per thing](../docs/direction/one-id-per-thing.md), 2026-11-07: every thing has one TypeID,
+- [One id per thing](../.decisions/0211-one-typeid-per-thing.md), 2026-11-07: every thing has one TypeID,
   `<type>_<UUIDv7 in 26 base32>`, made with `Id.make`; a thing people count also gets `n:
   Schema.Int`, printed only by its owning program. **The study's "kind 1, a number in place of an
   id" did not survive:** a ticket is `ticket_…` with `n: 193` beside it, not `{ticket: 41}` alone.

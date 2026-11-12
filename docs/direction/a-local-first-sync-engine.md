@@ -630,7 +630,7 @@ Cloudflare, which a keystroke-echo test would settle.
   `entries`. The memory and disk versions already share them; a synced one
   would be a third.
 - **The `Ledger` has no GitHub in it**, and safety never rests on a code host's
-  permissions ([North Star first](./north-star-first-harden-later.md)).
+  permissions ([North Star first](../../.decisions/0324-security-follows-the-goal.md)).
 - **Data first** ([markdown is a view](./data-first-markdown-is-a-view.md)):
   state is folded from facts on every read, so a client that receives new lines
   just folds again.

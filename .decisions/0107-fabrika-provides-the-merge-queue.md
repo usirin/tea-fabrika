@@ -34,7 +34,7 @@ lead has landed changes with scripts and three rules written around that gap
 
 Moving the repo to an organization would give GitHub's queue. The owner ruled on 2026-11-11 not
 to: GitHub is the code host and nothing more, reached through `CodeHost`
-([we use the tools we build](../docs/direction/we-use-the-tools-we-build.md),
+([0349](0349-we-build-and-use-our-tools.md),
 [0079](0079-size-counts-governed-paths-name-who.md)). A team on another code host, or on none
 with a queue, needs the same job done. So fabrika has to provide it.
 

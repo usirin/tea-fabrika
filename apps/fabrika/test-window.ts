@@ -40,9 +40,15 @@ export interface TestWindow {
   readonly app: ElectronApplication;
   readonly home: string;
   readonly page: () => Promise<Page>;
-  /** setContentSize, then back to the corner: a test never moves a window by hand. */
-  readonly size: (width: number, height: number) => Promise<void>;
-  /** Fails when any window took OS focus or was seen with opacity above 0, then closes. */
+  /**
+   * setContentSize, then back to the corner: a test never moves a window by hand. It sizes the
+   * window that shows `page`, or the app's first window when no page is given.
+   */
+  readonly size: (width: number, height: number, page?: Page) => Promise<void>;
+  /**
+   * Fails when any window took OS focus or was seen with opacity above 0, then closes. A second
+   * call answers as the first did, so a cleanup may call it again after the test closed it.
+   */
   readonly close: () => Promise<void>;
 }
 
@@ -94,17 +100,20 @@ const read = (app: ElectronApplication) =>
     windows: BrowserWindow.getAllWindows().map((w) => ({ window: w.id, opacity: w.getOpacity(), ...w.getBounds() })),
   }));
 
-/** The app's first window's bounds, and the work area it sits in, read at one moment. */
-const placement = (app: ElectronApplication) =>
-  app.evaluate(({ BrowserWindow, screen }) => {
-    const [window] = BrowserWindow.getAllWindows();
+/** A window by its Electron id, or the app's first window when the id is null. */
+type Target = number | null;
 
-    if (window === undefined) {
+/** The target window's bounds, and the work area it sits in, read at one moment. */
+const placement = (app: ElectronApplication, target: Target) =>
+  app.evaluate(({ BrowserWindow, screen }, id) => {
+    const window = id === null ? BrowserWindow.getAllWindows()[0] : BrowserWindow.fromId(id);
+
+    if (window === undefined || window === null) {
       throw new Error("no app window to place");
     }
 
     return { area: screen.getPrimaryDisplay().workArea, bounds: window.getBounds() };
-  });
+  }, target);
 
 /** How long a sized window must hold the corner before `size` answers, and how often it is placed. */
 const SETTLE_MS = 500;
@@ -136,28 +145,30 @@ export const launch = async (options: {
   // ended at y 106 in 2 of 4 runs of the same code. So `size` places it, waits, and answers only
   // once the window has held the corner of the work area for SETTLE_MS, placing it again each time
   // it moved. Each move is printed, so a red run says when the OS moved it.
-  const size = async (width: number, height: number) => {
+  const size = async (width: number, height: number, page?: Page) => {
+    const target: Target = page === undefined ? null : await (await app.browserWindow(page)).evaluate((w) => w.id);
     await app.evaluate(
       ({ BrowserWindow }, to) => {
-        const [window] = BrowserWindow.getAllWindows();
+        const window = to.id === null ? BrowserWindow.getAllWindows()[0] : BrowserWindow.fromId(to.id);
 
-        if (window === undefined) {
+        if (window === undefined || window === null) {
           throw new Error("no app window to size");
         }
 
         window.setContentSize(to.width, to.height);
       },
-      { width, height },
+      { id: target, width, height },
     );
 
     for (let placed = 1; ; placed++) {
-      const { area, bounds } = await placement(app);
+      const { area, bounds } = await placement(app, target);
       await app.evaluate(
-        ({ BrowserWindow }, at) => BrowserWindow.getAllWindows()[0]?.setPosition(at.x, at.y),
-        corner(area, bounds),
+        ({ BrowserWindow }, at) =>
+          (at.id === null ? BrowserWindow.getAllWindows()[0] : BrowserWindow.fromId(at.id))?.setPosition(at.x, at.y),
+        { id: target, ...corner(area, bounds) },
       );
       await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-      const now = await placement(app);
+      const now = await placement(app, target);
       const want = corner(now.area, now.bounds);
 
       if (now.bounds.x === want.x && now.bounds.y === want.y) {
@@ -172,7 +183,7 @@ export const launch = async (options: {
     }
   };
 
-  const close = async () => {
+  const closeOnce = async () => {
     const now = await Promise.all([seenBy(app), read(app)]).then(
       ([seen, windows]) => (seen === null ? { failed: "the watch never loaded" } : { seen, ...windows }),
       (e: unknown) => ({ failed: String(e) }),
@@ -197,6 +208,9 @@ export const launch = async (options: {
       );
     }
   };
+
+  let closing: Promise<void> | undefined;
+  const close = () => (closing ??= closeOnce());
 
   return { app, home, page: () => app.firstWindow(), size, close };
 };

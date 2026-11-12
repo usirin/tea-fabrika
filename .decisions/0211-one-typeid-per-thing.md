@@ -30,8 +30,8 @@ export const Input = make("input");
 
 ## Context
 
-Decided 2026-11-07. Input ids followed on 2026-11-08, which closed Tier 1's question 20. See
-[one id per thing](../docs/direction/one-id-per-thing.md).
+Decided 2026-11-07. Input ids followed on 2026-11-08, which closed Tier 1's question 20. The note
+"one id per thing" held it first; it is removed, and this file holds its rules.
 
 ## Decision
 
