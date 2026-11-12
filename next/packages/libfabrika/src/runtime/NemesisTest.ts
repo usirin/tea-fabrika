@@ -1,11 +1,6 @@
 // P17b slice 1, next/. The driver owns handles; this suite owns real-ledger read laws (0062).
-// After build, run each plant once and restore by copy:
-// Off: return success from fire/check. Fire outcomes: replace refused with fired or alter the request.
-// Fire errors: replace the cause or leak a lower error. Paging/reopen: read only the first page.
-// Captured/parked heads: chase the new tail or treat parked as a fresh head.
-// Corruption: skip a bad send/position. Partial reads: swallow wait/read failures as clean.
-// Secrets: inject each marker separately into the report, returned outcome, span attributes,
-// events, links and health. Answer letters, shown program state and URLs belong to later slices.
+// The tests step's field row records the failing plants for all nine laws (0093).
+// Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
@@ -106,8 +101,8 @@ const failed = Effect.fnUntraced(function* <A>(
   return error;
 });
 
-const readReport = Effect.fnUntraced(function* (nemesis: Service) {
-  const report = yield* nemesis.check(target);
+const readReport = Effect.fnUntraced(function* (nemesis: Service, binding = target) {
+  const report = yield* nemesis.check(binding);
   const codec = Schema.toCodecJson(Chaos.Report);
   expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(report))).toEqual(report);
   return report;
@@ -117,11 +112,11 @@ const marker = Arbitrary.schema(Schema.String.check(Schema.isMinLength(12), Sche
   Arbitrary.map((text) => `PRIVATE_${text}_" /ü_END`),
 );
 
-const noLeak = (output: unknown, secret: string) => {
+const noLeak = (output: unknown, secret: string, name = "output") => {
   const text = JSON.stringify(output);
 
   for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret), encodeURI(secret)]) {
-    expect(text.includes(form), "private content entered public output").toBe(false);
+    expect(text.includes(form), `private content entered ${name}`).toBe(false);
   }
 };
 
@@ -331,8 +326,15 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
 
     it.effect.prop(
       "[secrets] reports, fire/refusal outputs, stored job spans and health omit private content",
-      [marker, marker, fire, fired, Arbitrary.schema(Schema.Boolean)],
-      ([body, errorText, fault, outcome, refuse]) =>
+      [
+        marker.pipe(Arbitrary.map((value) => `body:${value}`)),
+        marker.pipe(Arbitrary.map((value) => `error:${value}`)),
+        marker.pipe(Arbitrary.map((value) => `key:${value}`)),
+        fire,
+        fired,
+        Arbitrary.schema(Schema.Boolean),
+      ],
+      ([body, errorText, keyText, fault, outcome, refuse]) =>
         Effect.scoped(
           Effect.gen(function* () {
             const open = yield* database;
@@ -347,12 +349,21 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
                 : Effect.succeed(outcome),
             );
             const off = Context.get(yield* Layer.build(NemesisNone.layer), Nemesis);
+            const binding = Chaos.Target.make({ ...target, key: keyText });
+            const privateFault = Chaos.Fault.cases.revoke_key.make({ client: target.client, key: keyText });
             const outputs = yield* Effect.gen(function* () {
-              const report = yield* readReport(live);
-              const answer = yield* Effect.result(live.fire(request(fault, 1)));
-              const offFire = yield* failed(off.fire(request(fault, 2)), "Off");
-              const offCheck = yield* failed(off.check(target), "Off");
-              return { report, answer, offFire, offCheck };
+              const report = yield* readReport(live, binding);
+              const answers = [];
+              const offFire = [];
+
+              for (const selected of [fault, privateFault]) {
+                const asked = Chaos.Fire.make({ ...request(selected, 1), target: binding });
+                answers.push(yield* Effect.result(live.fire(asked)));
+                offFire.push(yield* failed(off.fire(asked), "Off"));
+              }
+
+              const offCheck = yield* failed(off.check(binding), "Off");
+              return { report, answers, offFire, offCheck };
             }).pipe(Effect.withSpan("chaos.test", { attributes: { [PROCESS]: process } }), Effect.withTracer(tracer));
             // The operation spans have ended before flush. These are stored JobRecord rows, not a spy.
             const records = RecordManager.sql(() => sql, 1024 ** 3);
@@ -371,11 +382,23 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             // Each named output is visited separately; an empty list cannot stand in for stored spans.
             // Failed fire keeps its private cause in memory; it produces no public outcome.
             // Its real stored span and health row are inspected below, including the failure branch.
-            const returned = outputs.answer._tag === "Success" ? [outputs.answer.success] : [];
+            const returned = outputs.answers.flatMap((answer) => (answer._tag === "Success" ? [answer.success] : []));
+            const publicOutputs = {
+              report: outputs.report,
+              returned,
+              offFire: outputs.offFire,
+              offCheck: outputs.offCheck,
+              health,
+              attributes: own.map((row) => row.attributes),
+              events: own.flatMap((row) => row.events),
+              links: own.flatMap((row) => row.links),
+              records: own,
+            };
 
-            for (const output of [outputs.report, ...returned, outputs.offFire, outputs.offCheck, own, health]) {
-              noLeak(output, body);
-              noLeak(output, errorText);
+            for (const [name, output] of Object.entries(publicOutputs)) {
+              for (const secret of [body, errorText, keyText]) {
+                noLeak(output, secret, name);
+              }
             }
           }),
         ),
