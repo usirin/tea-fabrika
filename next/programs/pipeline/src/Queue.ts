@@ -239,6 +239,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       enqueue: "Add a change at its pinned head to the line",
       drop: "Abandon a waiting change or ask its merger to abandon it",
       resume: { description: "Continue landing after a stop", personOnly: true },
+      reply: "Receive the current merger's reply",
     },
     outputs: {},
     writes: {},
