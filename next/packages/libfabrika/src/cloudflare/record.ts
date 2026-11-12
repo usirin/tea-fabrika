@@ -1,6 +1,6 @@
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
@@ -93,13 +93,9 @@ export const RecordPartLive = RecordPart.make(
         ),
       ),
     ).pipe(Layer.provide(recorded));
+    // Alchemy closes the constructor's scope before the first RPC. The runtime owns the
+    // activation context, as Project and Process do; workerd has no teardown callback.
     const owner = SettingsRuntime.runtime(ready);
-    const scope = yield* Effect.serviceOption(Scope.Scope);
-
-    if (Option.isSome(scope)) {
-      yield* Scope.addFinalizer(scope.value, owner.disposeEffect);
-    }
-
     const cap = settingsFailure(owner.context).pipe(
       Effect.map((context) => Context.get(context, RecordedStart).input.limits?.recordBytes),
     );
