@@ -29,7 +29,7 @@ it.effect.prop(
         pid,
       });
     }),
-  { arbitrary: { seed: 119120, numRuns: 200 } },
+  { arbitrary: { seed: 119120, runs: 200 } },
 );
 
 it.effect.prop(
@@ -54,7 +54,7 @@ it.effect.prop(
         expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { cause: expect.anything() } });
       }
     }),
-  { arbitrary: { seed: 119120, numRuns: 200 } },
+  { arbitrary: { seed: 119120, runs: 200 } },
 );
 
 it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupported", () => {

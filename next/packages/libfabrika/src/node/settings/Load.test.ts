@@ -363,5 +363,5 @@ it.effect.prop(
         }
       }
     }).pipe(Effect.provide(services)),
-  { arbitrary: { seed: 119120, numRuns: 100 } },
+  { arbitrary: { seed: 119120, runs: 100 } },
 );

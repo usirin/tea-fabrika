@@ -26,18 +26,23 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   fault: BrainFilesTest.Fault | "spawn" = "none",
   answer: Response = { code: 0, stdout: "", stderr: "" },
   input: Partial<BrainSpec> = {},
+  directoryName = "",
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "p19-unit-" });
-  const home = yield* fs.realPath(temporary);
+  const folder = directoryName === "" ? temporary : path.join(temporary, directoryName);
+  yield* fs.makeDirectory(folder, { recursive: true });
+  const home = yield* fs.realPath(folder);
+  let failing = true;
+  let directoryFault = fault === "directory-sync";
   const events: Array<string> = [],
     seen: Array<Seen> = [],
     jobs: Array<unknown> = [];
   const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
     home,
     executable: path.join(home, "Electron"),
-    args: [path.join(home, "brain.mjs"), 'spaces & <angles> "雪"'],
+    args: [path.join(home, "brain.mjs"), "spaces & <angles> 雪"],
     ...input,
     url: "http://127.0.0.1:18787",
     build: "p19-test-build",
@@ -126,9 +131,19 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
               get(target, key, receiver) {
                 if (key === "sync") {
                   return Effect.sync(() => {
+                    if (file === home) {
+                      events.push("directory-sync");
+                    }
+
                     events.push("sync");
                     events.push(`sync:${file}`);
-                  }).pipe(Effect.andThen(fault === "sync" ? Effect.fail(failure("sync")) : target.sync));
+                  }).pipe(
+                    Effect.andThen(
+                      (failing && fault === "sync") || (directoryFault && file === home)
+                        ? Effect.fail(failure("sync"))
+                        : target.sync,
+                    ),
+                  );
                 }
 
                 return Reflect.get(target, key, receiver);
@@ -151,6 +166,13 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     Launchd.layer(spec, settings).pipe(Layer.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
   );
   return {
+    recover: Effect.sync(() => {
+      failing = false;
+      directoryFault = false;
+    }),
+    failDirectorySync: Effect.sync(() => {
+      directoryFault = true;
+    }),
     control: Context.get(context, BrainControl),
     spec,
     home,

@@ -95,7 +95,11 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
     ),
     cleanup: invoke("cleanup").pipe(
       Effect.mapError((cause) => new BrainProbeError({ reason: new Cleanup({ cause }) })),
-      Effect.map(() => (world.children === "gone" ? Children.cases.gone.make({}) : Children.cases.waiting.make({}))),
+      Effect.map(() =>
+        world.children === "gone" && world.listener === "waiting"
+          ? Children.cases.gone.make({})
+          : Children.cases.waiting.make({}),
+      ),
     ),
   });
   return {

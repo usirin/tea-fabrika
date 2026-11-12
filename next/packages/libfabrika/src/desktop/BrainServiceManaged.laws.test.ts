@@ -15,7 +15,7 @@ const schedule = Schema.Struct({
   initial: Schema.Literals(["absent", "matching", "foreign", "starting"]),
 });
 
-const checks = (numRuns: number) => ({ arbitrary: { seed: 119120, numRuns } });
+const checks = (runs: number) => ({ arbitrary: { seed: 119120, runs } });
 type Outside = Effect.Success<ReturnType<typeof Outside.make>>;
 
 const progress = Effect.fnUntraced(function* (outside: Outside, n: number, action: "up" | "stop", wait = false) {
@@ -127,13 +127,73 @@ it.effect.prop(
       for (let i = 0; i < v.repeat; i++) {
         const from = outside.calls.length;
         const stopped = yield* Effect.forkScoped(brain.stop);
-        yield* Effect.yieldNow;
-        expect(stopped.pollUnsafe()).toBeUndefined();
-        const result = yield* finish(outside, stopped, "stop", v.steps);
-        expect(Exit.isSuccess(result)).toBe(true);
+        let loaded = 1 + ((v.steps[0] ?? 0) % 3);
+        let children = 1 + ((v.steps[1] ?? 0) % 3);
+        let listener = 1 + ((v.steps[2] ?? 0) % 3);
+
+        // These facts are controlled independently: bootout never implies child or listener cleanup.
+        for (let n = 0; n < 100 && stopped.pollUnsafe() === undefined; n++) {
+          yield* Effect.yieldNow;
+          const held = yield* outside.take;
+
+          if (held === undefined) {
+            yield* TestClock.adjust("1 millis");
+            continue;
+          }
+
+          const world = yield* outside.read;
+          expect(stopped.pollUnsafe(), `stop waits for ${held.action}`).toBeUndefined();
+
+          if (held.action === "inspect" && outside.calls.slice(from).includes("stop")) {
+            // First confirm that a successful bootout while still loaded cannot finish stop.
+            if (world.job._tag === "loaded") {
+              yield* held.release;
+              yield* Effect.yieldNow;
+              expect(stopped.pollUnsafe()).toBeUndefined();
+              expect(outside.calls.slice(from)).not.toContain("remove");
+
+              if (--loaded === 0) {
+                yield* outside.observe({ job: Outside.absent });
+              }
+
+              continue;
+            }
+          }
+
+          if (held.action === "cleanup" && (world.children === "alive" || world.listener === "ready")) {
+            yield* held.release;
+            yield* Effect.yieldNow;
+            expect(stopped.pollUnsafe()).toBeUndefined();
+            expect(outside.calls.slice(from)).not.toContain("remove");
+
+            if (world.children === "alive" && --children === 0) {
+              yield* outside.observe({ children: "gone" });
+            } else if (world.children === "gone" && --listener === 0) {
+              yield* outside.observe({ listener: "waiting" });
+            }
+
+            continue;
+          }
+
+          if (held.action === "remove") {
+            expect(world).toMatchObject({
+              job: Outside.absent,
+              children: "gone",
+              listener: "waiting",
+              file: i === 0 ? "matching" : "absent",
+            });
+          }
+
+          yield* held.release;
+          yield* Effect.yieldNow;
+        }
+
+        expect(stopped.pollUnsafe()).toBeDefined();
+        expect(Exit.isSuccess(yield* Fiber.await(stopped))).toBe(true);
         const calls = outside.calls.slice(from);
         expect(calls[0]).toBe("inspect");
         expect(calls).toContain("cleanup");
+        expect(calls).toContain("remove");
         expect(calls.indexOf("remove")).toBeGreaterThan(calls.indexOf("cleanup"));
         expect(yield* outside.read).toMatchObject({ job: Outside.absent, file: "absent", children: "gone" });
       }
@@ -151,28 +211,47 @@ it.effect.prop(
       const context = yield* Layer.build(ServiceTest.layer(outside, settings));
       const brain = Context.get(context, BrainService);
       const up = yield* Effect.forkScoped(brain.up);
-      yield* Effect.yieldNow;
+
+      for (let n = 0; n < 10 && !outside.pending.some((call) => call.action === "start"); n++) {
+        yield* progress(outside, n, "up");
+      }
+
       const held = yield* outside.take;
-      expect(held?.action).toBe("inspect");
+      expect(held?.action).toBe("start");
+      const before = outside.calls.slice();
       const stop = yield* Effect.forkScoped(brain.stop);
       const repeat = yield* Effect.forkScoped(brain.up);
       yield* Effect.yieldNow;
       expect(outside.pending).toHaveLength(0);
-      expect(outside.calls).toEqual(["inspect"]);
+      expect(outside.calls).toEqual(before);
+      expect(stop.pollUnsafe()).toBeUndefined();
+      expect(repeat.pollUnsafe()).toBeUndefined();
 
       if (cancel) {
         yield* Fiber.interrupt(repeat);
       }
 
-      yield* held?.release ?? Effect.die("no held inspect");
-      expect(Exit.isSuccess(yield* finish(outside, up, "up", v.steps))).toBe(true);
+      yield* outside.observe({ job: Outside.loaded(), listener: "ready", children: "alive" });
+
+      if ((v.steps[1] ?? 0) % 2 === 0) {
+        yield* Fiber.interrupt(up);
+        const interrupted = yield* Fiber.await(up);
+        expect(Exit.isFailure(interrupted)).toBe(true);
+        // A late native completion after cancellation cannot complete the following stop.
+        yield* held?.release ?? Effect.die("no held start");
+      } else {
+        yield* held?.release ?? Effect.die("no held start");
+        expect(Exit.isSuccess(yield* finish(outside, up, "up", v.steps))).toBe(true);
+      }
+
       expect(Exit.isSuccess(yield* finish(outside, stop, "stop", v.steps))).toBe(true);
 
       if (!cancel) {
         expect(Exit.isSuccess(yield* finish(outside, repeat, "up", v.steps))).toBe(true);
       }
 
-      expect(outside.calls.indexOf("stop")).toBeGreaterThan(outside.calls.indexOf("ready"));
+      expect(outside.calls.filter((action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
+      expect(outside.calls.indexOf("stop")).toBeGreaterThan(outside.calls.indexOf("start"));
     }),
   checks(150),
 );

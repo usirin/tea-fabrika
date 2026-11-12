@@ -10,8 +10,9 @@ import * as ServiceLaunchd from "./BrainServiceLaunchd.ts";
 import * as LaunchdTest from "./Launchd.test-support.ts";
 
 FilesTest.suite(LaunchdTest.nodeFiles);
-const options = { arbitrary: { seed: 119120, numRuns: 100 } };
+const options = { arbitrary: { seed: 119120, runs: 100 } };
 const Value = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9 &<>"雪]{1,30}$/));
+const NativeValue = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9雪][a-zA-Z0-9 &<>雪]{0,28}[a-zA-Z0-9雪]$/));
 
 const Job = Schema.Struct({
   Label: Schema.NonEmptyString,
@@ -25,7 +26,7 @@ const Job = Schema.Struct({
 
 it.effect.prop(
   "L7 install compiles checked JSON with exact argv and a closed environment",
-  [Value],
+  [NativeValue],
   ([word]) =>
     Effect.gen(function* () {
       const disk = yield* LaunchdTest.open("none", undefined, { args: ["entry.mjs", word] });
@@ -73,7 +74,7 @@ it.effect.prop(
         expect(output).not.toContain(encodeURIComponent(secret));
       }
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { seed: 119120, numRuns: 200 } },
+  { arbitrary: { seed: 119120, runs: 200 } },
 );
 
 it.effect.prop(
@@ -217,6 +218,58 @@ it.effect.prop(
         ]) {
           expect(output).not.toContain(form);
         }
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  options,
+);
+
+it.effect.prop(
+  "L7 values launchctl print cannot represent are refused before publication or bootstrap",
+  [
+    NativeValue,
+    Schema.Literals(["quote", "backslash", "brace", "leading", "trailing"]),
+    Schema.Literals(["args", "executable", "build", "home"]),
+  ],
+  ([word, corruption, field]) =>
+    Effect.gen(function* () {
+      const value =
+        corruption === "quote"
+          ? `${word}"tail`
+          : corruption === "backslash"
+            ? `${word}\\tail`
+            : corruption === "brace"
+              ? `${word}{tail}`
+              : corruption === "leading"
+                ? ` ${word}`
+                : `${word} `;
+      const input =
+        field === "args"
+          ? { args: [value] }
+          : field === "executable"
+            ? { executable: corruption === "leading" ? `/test/${word} ` : `/test/${value}` }
+            : field === "build"
+              ? { build: value }
+              : {};
+      const opened: Array<Effect.Success<ReturnType<typeof LaunchdTest.open>>> = [];
+      const exit = yield* Effect.gen(function* () {
+        const disk = yield* LaunchdTest.open(
+          "none",
+          undefined,
+          input,
+          field === "home" ? (corruption === "leading" ? `${word} ` : value) : "",
+        );
+        opened.push(disk);
+        yield* disk.control.install;
+      }).pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null).toMatchObject({
+        _tag: "BrainControlError",
+        reason: { _tag: "Unsupported", cause: expect.anything() },
+      });
+
+      for (const disk of opened) {
+        expect(yield* disk.read).toBeNull();
+        expect(disk.seen.some((call) => call.args.includes("bootstrap"))).toBe(false);
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   options,

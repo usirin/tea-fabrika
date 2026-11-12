@@ -5,7 +5,7 @@ import { Effect, Exit, Schema } from "effect";
 import type { BrainControl } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 
-export type Fault = "none" | "compile" | "sync" | "publish";
+export type Fault = "none" | "compile" | "sync" | "publish" | "directory-sync";
 
 type Files = {
   readonly control: BrainControl["Service"];
@@ -14,6 +14,8 @@ type Files = {
   readonly seed: (text: string) => Effect.Effect<void>;
   readonly entries: Effect.Effect<ReadonlyArray<string>>;
   readonly events: Array<string>;
+  readonly recover: Effect.Effect<void>;
+  readonly failDirectorySync: Effect.Effect<void>;
 };
 
 export type Open = (fault: Fault) => Effect.Effect<Files, unknown, Scope.Scope>;
@@ -21,20 +23,20 @@ export type Open = (fault: Fault) => Effect.Effect<Files, unknown, Scope.Scope>;
 export const suite = (open: Open) =>
   describe("P19 shared atomic publication laws", () => {
     it.effect.prop(
-      "L6 failed compile, sync and publication leave existing bytes untouched",
-      [Schema.Literals(["compile", "sync", "publish"]), Schema.String],
-      ([fault, tail]) =>
+      "L2/L6 failed install or removal leaves foreign bytes untouched",
+      [Schema.Literals(["compile", "sync", "publish"]), Schema.String, Schema.Literals(["install", "remove"])],
+      ([fault, tail, action]) =>
         Effect.gen(function* () {
           const disk = yield* open(fault);
           yield* disk.seed(`foreign-job-${tail}`);
           const original = yield* disk.read;
           expect(original).not.toBeNull();
-          const exit = yield* disk.control.install.pipe(Effect.exit);
+          const exit = yield* disk.control[action].pipe(Effect.exit);
           expect(Exit.isFailure(exit)).toBe(true);
           expect(yield* disk.read).toBe(original);
           expect(disk.events).not.toContain("replaced");
         }),
-      { arbitrary: { seed: 119120, numRuns: 100 } },
+      { arbitrary: { seed: 119120, runs: 100 } },
     );
 
     it.effect.prop(
@@ -47,7 +49,42 @@ export const suite = (open: Open) =>
           expect(yield* disk.read).toBeNull();
           expect((yield* disk.entries).filter((name) => name !== "records")).toEqual([]);
         }),
-      { arbitrary: { seed: 119120, numRuns: 100 } },
+      { arbitrary: { seed: 119120, runs: 100 } },
+    );
+
+    it.effect.prop(
+      "L6 a directory-sync failure keeps matching bytes and retry confirms durability",
+      [Schema.Literals(["install", "remove"])],
+      ([action]) =>
+        Effect.gen(function* () {
+          const disk = yield* open(action === "install" ? "directory-sync" : "none");
+
+          if (action === "remove") {
+            yield* disk.control.install;
+          }
+
+          if (action === "install") {
+            expect(Exit.isFailure(yield* disk.control.install.pipe(Effect.exit))).toBe(true);
+            const bytes = yield* disk.read;
+            expect(bytes).not.toBeNull();
+            yield* disk.recover;
+            const from = disk.events.length;
+            yield* disk.control.install;
+            expect(yield* disk.read).toBe(bytes);
+            expect(disk.events.slice(from)).toContain("directory-sync");
+          } else {
+            const bytes = yield* disk.read;
+            yield* disk.failDirectorySync;
+            expect(Exit.isFailure(yield* disk.control.remove.pipe(Effect.exit))).toBe(true);
+            expect(yield* disk.read).toBe(bytes);
+            yield* disk.recover;
+            const from = disk.events.length;
+            yield* disk.control.remove;
+            expect(yield* disk.read).toBeNull();
+            expect(disk.events.slice(from)).toContain("directory-sync");
+          }
+        }),
+      { arbitrary: { seed: 119120, runs: 100 } },
     );
 
     it.effect.prop(
@@ -78,6 +115,6 @@ export const suite = (open: Open) =>
             }
           }
         }),
-      { arbitrary: { seed: 119120, numRuns: 100 } },
+      { arbitrary: { seed: 119120, runs: 100 } },
     );
   });

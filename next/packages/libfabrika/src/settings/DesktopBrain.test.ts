@@ -54,7 +54,7 @@ it.effect.prop(
         expect(saved.origins[path]?._tag).toBe("flag");
       }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  { arbitrary: { seed: 119120, numRuns: 100 } },
+  { arbitrary: { seed: 119120, runs: 100 } },
 );
 
 it.effect.prop(
@@ -81,5 +81,5 @@ it.effect.prop(
       ).pipe(Effect.exit);
       expect(Exit.isFailure(failed)).toBe(true);
     }).pipe(Effect.provide(TomlParser.layer)),
-  { arbitrary: { seed: 119120, numRuns: 100 } },
+  { arbitrary: { seed: 119120, runs: 100 } },
 );
