@@ -1,7 +1,7 @@
 // next/. Contract: tail(env, {project, name, process}, items) returns an Effect<void>.
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Tracer } from "effect";
+import { Effect, Layer, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
 import { workerLoader } from "./index.ts";
 import type { Env } from "./runtime.ts";
@@ -12,6 +12,8 @@ const PROCESS = "process_0000000000e008000000000001";
 const methods = ["describe", "init", "step", "fold", "upgrade", "reply", "admit", "check", "other"] as const;
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
 const word = fc.string();
+
+class TailImportError extends Schema.TaggedError<TailImportError>()("TailImportError", { cause: Schema.Defect() }) {}
 
 const event = fc.record({
   method: fc.option(fc.oneof(fc.constantFrom(...methods), word), { nil: null }),
@@ -26,7 +28,7 @@ const loadTail = Effect.gen(function* () {
   const url = new URL("./tail.ts", import.meta.url).href;
   const api: typeof import("./tail.ts") = yield* Effect.tryPromise({
     try: () => import(/* @vite-ignore */ url),
-    catch: (cause) => cause,
+    catch: (cause) => new TailImportError({ cause }),
   });
   return api.tail;
 });
