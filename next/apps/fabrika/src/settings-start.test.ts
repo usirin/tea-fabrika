@@ -16,7 +16,7 @@ import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, Stream } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -238,29 +238,19 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
         constructor(ctx, env) {
           let fail = false;
           const counts = { reads: 0, appends: 0 };
-          const sql = new Proxy(ctx.storage.sql, { get(target, key) {
-            if (key !== "exec") return Reflect.get(target, key);
-            return (query, ...args) => {
-              if (/SELECT \\* FROM entries WHERE stream = \\? AND rev > \\?/i.test(query)) counts.reads++;
-              if (/INSERT INTO entries/i.test(query)) {
-                counts.appends++;
-                if (fail) throw new Error("injected settings storage failure");
-              }
-              if (fail && /SELECT \\* FROM entries WHERE stream/i.test(query)) throw new Error("injected settings storage failure");
-              return target.exec(query, ...args);
-            };
-          } });
-          const storage = new Proxy(ctx.storage, { get(target, key) {
-            if (key === "sql") return sql;
-            const value = Reflect.get(target, key);
-            return typeof value === "function" ? value.bind(target) : value;
-          } });
-          const state = new Proxy(ctx, { get(target, key) {
-            if (key === "storage") return storage;
-            const value = Reflect.get(target, key);
-            return typeof value === "function" ? value.bind(target) : value;
-          } });
-          super(state, env);
+          // workerd needs the real object state; intercept only SQL execution.
+          const sql = ctx.storage.sql;
+          const exec = sql.exec.bind(sql);
+          sql.exec = (query, ...args) => {
+            if (/SELECT \\* FROM entries WHERE stream = \\? AND rev > \\?/i.test(query)) counts.reads++;
+            if (/INSERT INTO entries/i.test(query)) {
+              counts.appends++;
+              if (fail) throw new Error("injected settings storage failure");
+            }
+            if (fail && /SELECT \\* FROM entries WHERE stream/i.test(query)) throw new Error("injected settings storage failure");
+            return exec(query, ...args);
+          };
+          super(ctx, env);
           this.testStorage = ctx.storage;
           this.testCounts = counts;
           this.testFault = value => { fail = value; };
@@ -371,7 +361,13 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
 
     expect(yield* probe).toEqual(recordCold);
     yield* killWorkerd(process.pid);
-    yield* request.pipe(Effect.retry({ times: 100 }));
+    // The proxy can reply 502 while workerd reopens, so retry non-200 replies too.
+    yield* request.pipe(
+      Effect.flatMap((response) =>
+        response.status === 200 ? Effect.succeed(response) : Effect.fail(new Error("Worker has not reopened")),
+      ),
+      Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
+    );
     expect((yield* request).status).toBe(200);
     const reopened = yield* probe;
     expect(reopened.rows).toEqual(cold.rows);
