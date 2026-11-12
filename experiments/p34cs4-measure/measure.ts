@@ -108,7 +108,13 @@ type Raw = {
     readonly tbl: string;
     readonly op: string;
     readonly k: string;
+    /** UTF-8 bytes of the whole row as written (a delete: the row removed). Runs before R4 saved none. */
+    readonly b?: number;
+    /** The journal's state in a `process_recovery` row as written. Runs before R2 saved none. */
+    readonly j?: string | null;
   }>;
+  /** Each distinct size the activity marker's own row (`_cf_KV`) was seen at: key plus value. */
+  readonly markers?: ReadonlyArray<{ readonly file: string; readonly bytes: number }>;
   readonly calls: ReadonlyArray<{ readonly file: string; readonly piece: string; readonly at: number }>;
   readonly sizes: ReadonlyArray<{ readonly file: string; readonly at: number; readonly bytes: number }>;
   readonly descriptors: ReadonlyArray<{ readonly process: string; readonly bytes: number }>;
@@ -300,7 +306,7 @@ const instrument = (file: string) =>
       Effect.sync(() => {
         const counted = tablesIn(db).filter((name) => !SKIPPED.test(name) && !PLATFORM.test(name) && name !== "rings");
         db.exec(
-          "CREATE TABLE IF NOT EXISTS m_log (n INTEGER PRIMARY KEY AUTOINCREMENT, tbl TEXT NOT NULL, op TEXT NOT NULL, k TEXT NOT NULL)",
+          "CREATE TABLE IF NOT EXISTS m_log (n INTEGER PRIMARY KEY AUTOINCREMENT, tbl TEXT NOT NULL, op TEXT NOT NULL, k TEXT NOT NULL, b INTEGER NOT NULL DEFAULT 0, j TEXT)",
         );
         const before: Array<{ tbl: string; rows: number }> = [];
 
@@ -320,8 +326,13 @@ const instrument = (file: string) =>
           const rest = columns.filter((c) => Number(c.pk) === 0).map((c) => String(c.name));
           const key = (row: string) =>
             keys.length === 0 ? "''" : keys.map((c) => `${row}."${c}"`).join(" || '|' || ");
+          // The whole row's bytes, by the same rule as `size`: every column, keys included.
+          const whole = (row: string) =>
+            columns.map((c) => `coalesce(length(CAST(${row}."${String(c.name)}" AS BLOB)), 0)`).join(" + ");
+          const state = (row: string) =>
+            name === "process_recovery" ? `json_extract(${row}."value", '$.journal._tag')` : "NULL";
           const log = (op: string, row: string) =>
-            `BEGIN INSERT INTO m_log (tbl, op, k) VALUES ('${name}', '${op}', ${key(row)}); END`;
+            `BEGIN INSERT INTO m_log (tbl, op, k, b, j) VALUES ('${name}', '${op}', ${key(row)}, ${whole(row)}, ${state(row)}); END`;
           db.exec(`CREATE TRIGGER IF NOT EXISTS "m_i_${name}" AFTER INSERT ON "${name}" ${log("i", "NEW")}`);
           db.exec(`CREATE TRIGGER IF NOT EXISTS "m_d_${name}" AFTER DELETE ON "${name}" ${log("d", "OLD")}`);
 
@@ -394,6 +405,12 @@ type Settings = {
   readonly largeOnly: boolean;
   /** Seconds to wait for a restart in the large-checkpoint part. */
   readonly wait: number;
+  /** Run the recovery episodes alone, with no steady load and no bursts. */
+  readonly episodesOnly: boolean;
+  /** Above zero: run only a person restart over this many accepted letters, on each program. */
+  readonly history: number;
+  /** With `history`: fill and restart the poison name alone, to halve the inputs before the restart. */
+  readonly oneName: boolean;
 };
 
 const until = <A>(label: string, look: Effect.Effect<A>, done: (value: A) => boolean, ms = 30_000) =>
@@ -514,7 +531,9 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
           const text = `${method}: ${String(cause).slice(0, 200)}${reason}${inner}`;
 
           if (!failures.has(text)) {
-            console.error(`trusted call failed: ${text}`);
+            console.error(
+              `trusted call failed after ${Math.round(performance.now() / 1000)} s of this process and ${ops.length} inputs: ${text}`,
+            );
           }
 
           failures.set(text, (failures.get(text) ?? 0) + 1);
@@ -638,6 +657,7 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
   const polls: Array<Raw["polls"][number]> = [];
   const bytes: Array<Raw["bytes"][number]> = [];
   const seen = new Map<string, number>();
+  const markers = new Map<string, Set<number>>();
   let ticks = 0;
   const sample = Effect.gen(function* () {
     const at = yield* Clock.currentTimeMillis;
@@ -655,6 +675,14 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
       if (n !== (seen.get(row.file) ?? 0)) {
         seen.set(row.file, n);
         polls.push({ at, file: row.file, n });
+      }
+
+      if (row.location === "process") {
+        const marker = db.prepare(`SELECT ${SIZED._cf_KV?.row} AS bytes FROM _cf_KV WHERE key = 'activity'`).get();
+
+        if (marker !== undefined) {
+          markers.set(row.file, (markers.get(row.file) ?? new Set()).add(Number(marker.bytes)));
+        }
       }
 
       if (ticks % 5 === 1) {
@@ -933,7 +961,112 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
     );
   });
 
-  if (!settings.largeOnly) {
+  /** Nothing new in the name's change log or on the ledger for two seconds: a replay has ended. */
+  const quiet = (name: string, ms: number) =>
+    Effect.gen(function* () {
+      const look = Effect.sync(() => {
+        const mine = Number(fileFor(name)?.prepare("SELECT coalesce(max(n), 0) AS n FROM m_log").get()?.n ?? 0);
+        const ledger = [...handles.values()]
+          .filter((db) => tablesIn(db).includes("entries"))
+          .map((db) => Number(db.prepare("SELECT coalesce(max(rev), 0) AS n FROM entries").get()?.n ?? 0));
+        return `${mine}/${ledger.join("/")}`;
+      });
+      const end = (yield* Clock.currentTimeMillis) + ms;
+      let last = yield* look;
+      let since = yield* Clock.currentTimeMillis;
+
+      while ((yield* Clock.currentTimeMillis) < end) {
+        yield* Effect.sleep("250 millis");
+        const now = yield* look;
+
+        if (now !== last) {
+          last = now;
+          since = yield* Clock.currentTimeMillis;
+        } else if ((yield* Clock.currentTimeMillis) - since >= 2000) {
+          return;
+        }
+      }
+    });
+
+  // R3: a person restart over a history of `settings.history` accepted letters, once on each program.
+  const history = Effect.gen(function* () {
+    const more = settings.history - 1;
+    const fillPoison = Effect.gen(function* () {
+      for (let n = 0; n < more; n++) {
+        yield* send(a, "poison:2", pid("poison:2"), { type: "inc" });
+      }
+    });
+    // Whole add-to-remove rounds, then toggles of the first item: nothing but the first item is left
+    // `new`, so today's alarm loop does not start.
+    const fillList = Effect.gen(function* () {
+      const whole = Math.floor(more / 6) * 6;
+
+      for (let n = 0; n < more; n++) {
+        const round = Math.floor(n / 6);
+        const item = `h${round} ${WORDS[round % WORDS.length]}`;
+        const moved = `${item} ✓`;
+        const step = n % 6;
+        const m =
+          n >= whole
+            ? { type: (n - whole) % 2 === 0 ? "check" : "uncheck", name: "ısınma" }
+            : step === 0
+              ? { type: "add", name: item }
+              : step === 1
+                ? { type: "rename", name: item, to: moved }
+                : step === 2
+                  ? { type: "check", name: moved, note: `tamam, görüldü: ${WORDS[(round + 3) % WORDS.length]}` }
+                  : step === 3
+                    ? { type: "uncheck", name: moved }
+                    : step === 4
+                      ? { type: "check", name: moved }
+                      : { type: "remove", name: moved };
+        yield* send(b, "checklist:r", pid("checklist:r"), m);
+      }
+    });
+    // The control door refused every call after a long stretch without one, in each run that left it
+    // alone. A read-only call every five seconds through the fill tests whether use keeps it open.
+    let asked = 0;
+    let answered = 0;
+    const warm = yield* Effect.forkChild(
+      Effect.gen(function* () {
+        asked++;
+        answered += (yield* project("info")) === undefined ? 0 : 1;
+        yield* Effect.sleep("5 seconds");
+      }).pipe(Effect.forever),
+    );
+    yield* Fiber.joinAll([
+      yield* Effect.forkChild(fillPoison),
+      yield* Effect.forkChild(settings.oneName ? Effect.void : fillList),
+    ]);
+    yield* Fiber.interrupt(warm);
+    yield* Console.log(`the control door answered ${answered} of ${asked} keep-warm calls during the fill`);
+    yield* quiet("checklist:r", 30_000);
+
+    for (const [name, program] of (
+      [
+        ["poison:2", POISON],
+        ["checklist:r", CHECKLIST],
+      ] as const
+    ).slice(0, settings.oneName ? 1 : 2)) {
+      yield* episode(
+        `person restart, history ${settings.history}`,
+        name,
+        Effect.gen(function* () {
+          yield* object(pid(name), "restart", { id: `restart-h-${name}`, build: hash(program) });
+          const next = yield* restarted(name, 1, settings.wait * 1000);
+          yield* quiet(name, settings.wait * 1000);
+          return `successor ${next.slice(-6)}`;
+        }),
+      );
+      yield* Effect.sleep("2 seconds");
+    }
+  });
+
+  if (settings.history > 0) {
+    yield* history;
+  } else if (settings.episodesOnly) {
+    yield* recoveries;
+  } else if (!settings.largeOnly) {
     const fibers = [
       yield* Effect.forkChild(steady(a)),
       yield* Effect.forkChild(Effect.sleep(`${Math.round(settings.gap / 2)} millis`).pipe(Effect.andThen(steady(b)))),
@@ -952,7 +1085,11 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
   yield* Effect.sleep("5 seconds");
   const doorBeforeLarge = (yield* project("info")) !== undefined;
   const workerdBeforeLarge = yield* workerds;
-  yield* large;
+
+  if (settings.history === 0) {
+    yield* large;
+  }
+
   const workerdAfterLarge = yield* workerds;
   yield* Effect.sleep("4 seconds");
   yield* sample;
@@ -980,8 +1117,16 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
     }
 
     if (tables.has("m_log")) {
-      for (const c of db.prepare("SELECT n, tbl, op, k FROM m_log ORDER BY n").all()) {
-        changes.push({ file: row.file, n: Number(c.n), tbl: String(c.tbl), op: String(c.op), k: String(c.k) });
+      for (const c of db.prepare("SELECT n, tbl, op, k, b, j FROM m_log ORDER BY n").all()) {
+        changes.push({
+          file: row.file,
+          n: Number(c.n),
+          tbl: String(c.tbl),
+          op: String(c.op),
+          k: String(c.k),
+          b: Number(c.b),
+          j: c.j === null ? null : String(c.j),
+        });
       }
     }
 
@@ -1045,6 +1190,7 @@ const run = Effect.fnUntraced(function* (settings: Settings) {
     bytes,
     entries,
     changes,
+    markers: [...markers].flatMap(([file, sizes]) => [...sizes].map((n) => ({ file, bytes: n }))),
     calls,
     sizes,
     descriptors,
@@ -1529,6 +1675,534 @@ const analyze = (raw: Raw) => {
 };
 
 // ---------------------------------------------------------------------------------------------
+// Amendment A-Calibration's re-analysis, R1 to R4: pure, over the saved raw file
+//
+// The account follows the cause of a write (the amendment's A1), so each counted row gets one class:
+// - program: a ledger entry ordinary work causes (an input, a timer letter, their `stepped` record).
+// - local: a Process row a healthy life writes while it steps an admitted letter.
+// - recovery: a write made while the journal is in a recovery state, or by a restart.
+// - copy: the successor's checkpoint row. rebuild: a checkpoint update while a restart replays.
+// - replay: a row that steps a letter which already has a `stepped` record under an earlier life.
+// - unsplit: a Process row from a run that saved no journal state, so local and recovery cannot be told
+//   apart. Replay, copy and rebuild are still found by position.
+type Cls = "program" | "local" | "recovery" | "copy" | "rebuild" | "replay" | "unsplit" | "admin" | "door" | "script";
+type Row = { readonly at: number; readonly name: string; readonly kind: string; readonly bytes: number; cls: Cls };
+
+/** Sums in `(end - 60,000, end]` for each whole-minute window ending inside `[from, to]`, one a second. */
+const rollingSum = (points: ReadonlyArray<{ readonly at: number; readonly n: number }>, from: number, to: number) => {
+  const sorted = [...points].sort((x, y) => x.at - y.at);
+  const sums: Array<number> = [];
+  let low = 0;
+  let high = 0;
+  let sum = 0;
+
+  for (let end = from + MINUTE; end <= to; end += 1000) {
+    while (high < sorted.length && (sorted[high]?.at ?? 0) <= end) {
+      sum += sorted[high]?.n ?? 0;
+      high++;
+    }
+
+    while (low < sorted.length && (sorted[low]?.at ?? 0) <= end - MINUTE) {
+      sum -= sorted[low]?.n ?? 0;
+      low++;
+    }
+
+    sums.push(sum);
+  }
+
+  return sums;
+};
+
+// The activity marker is one row of the platform's own key-value table: the key `activity` and the value
+// in V8's serialized form. Its size is worked out here and checked against the sizes the sampler saw.
+const v8Text = (text: string) => 1 + (utf8(text) >= 128 ? 2 : 1) + utf8(text);
+
+const v8Object = (fields: Readonly<Record<string, string>>) =>
+  3 + Object.entries(fields).reduce((n, [key, value]) => n + v8Text(key) + v8Text(value), 0) + 2;
+
+const markerBytes = (process: string, step?: { readonly letter: string; readonly build: string }) =>
+  utf8("activity") + v8Object(step === undefined ? { _tag: "idle", process } : { _tag: "stepping", process, ...step });
+
+const amend = (raw: Raw) => {
+  const { from, to } = raw.load;
+  const program = new Map<string, string>();
+  const nameOf = new Map<string, string>();
+  const firstPid = new Map<string, string>();
+  const buildOf = new Map<string, string>();
+  const bodies = raw.entries.map((e) => ({ e, body: JSON.parse(e.body) }));
+
+  for (const { e, body } of bodies) {
+    if (e._tag === "registered" && e.stream === "processes") {
+      program.set(body.name, body.program);
+    }
+
+    if (e._tag === "started" && e.stream.startsWith("processes/")) {
+      nameOf.set(body.process, body.name);
+      buildOf.set(body.process, body.hash);
+
+      if (!firstPid.has(body.name)) {
+        firstPid.set(body.name, body.process);
+      }
+    }
+  }
+
+  // --- The ledger: every entry's class ---
+  const inbox = new Map<string, { readonly kind: string; readonly at: number; readonly name: string }>();
+  /** For each accepted letter, the lives that wrote a `stepped` record for it, in order. */
+  const steppedBy = new Map<string, Array<string>>();
+  /** For each successor, the letters it replayed, in order. */
+  const replayed = new Map<string, Array<string>>();
+  const ledger: Array<Row & { readonly tag: string; readonly process: string | null }> = [];
+
+  for (const { e, body } of bodies) {
+    const bytes = entryBytes(e);
+    const add = (name: string | null, cls: Cls, kind: string, process: string | null = null) =>
+      ledger.push({ at: e.arrivedAt, name: name ?? "", kind, bytes, cls, tag: e._tag, process });
+    const box = /^(.*)\/inbox$/.exec(e.stream);
+    const life = /^processes\/(.*)$/.exec(e.stream);
+    const own = /^(process_[^/]+)(\/dead)?$/.exec(e.stream);
+
+    if (box !== null) {
+      const name = box[1] ?? "";
+      const down = body.m !== null && typeof body.m === "object" && body.m._tag === "DOWN";
+      const kind = /^process_[^/]+\/due\//.test(e.id) ? "timer letter" : down ? "DOWN letter" : "a person's input";
+      inbox.set(`${name}|${e.id}`, { kind, at: e.arrivedAt, name });
+      add(name, down ? "recovery" : "program", `inbox: ${kind}`);
+    } else if (life !== null) {
+      add(
+        life[1] ?? "",
+        firstPid.get(life[1] ?? "") === body.process && e._tag === "started" ? "admin" : "recovery",
+        `lifecycle: ${e._tag}`,
+        body.process ?? null,
+      );
+    } else if (e.stream === "processes") {
+      add(body.name ?? null, "admin", `processes: ${e._tag}`);
+    } else if (own !== null) {
+      const pid = own[1] ?? "";
+      const name = nameOf.get(pid) ?? "";
+
+      if (own[2] === undefined && e._tag === "stepped") {
+        const key = `${name}|${body.input}`;
+        const lives = steppedBy.get(key) ?? [];
+        const again = lives.some((p) => p !== pid);
+        steppedBy.set(key, [...lives, pid]);
+
+        if (again) {
+          replayed.set(pid, [...(replayed.get(pid) ?? []), String(body.input)]);
+        }
+
+        add(
+          name,
+          again ? "replay" : inbox.get(key)?.kind === "DOWN letter" ? "recovery" : "program",
+          again ? "stepped record, replay" : "stepped record",
+          pid,
+        );
+      } else {
+        add(name, "recovery", own[2] === undefined ? `record: ${e._tag}` : "dead letter", pid);
+      }
+    } else if (e.stream === "gateway/inputs") {
+      add(nameOf.get(body.target) ?? null, "door", "door: input envelope");
+    } else {
+      add(null, "door", `door: ${e.stream} ${e._tag}`);
+    }
+  }
+
+  // --- The side table: every Process row's class, and the Project rows a recovery writes ---
+  const pollsBy = new Map<string, Array<{ at: number; n: number }>>();
+
+  for (const p of raw.polls) {
+    pollsBy.set(p.file, [...(pollsBy.get(p.file) ?? []), { at: p.at, n: p.n }]);
+  }
+
+  const seenAt = (file: string, n: number) => (pollsBy.get(file) ?? []).find((p) => p.n >= n)?.at ?? to;
+  const sizedRows = raw.changes.some((c) => c.b !== undefined);
+  const journalSaved = raw.changes.some((c) => c.j !== undefined && c.j !== null);
+  const descriptorBytes = new Map(raw.descriptors.map((d) => [d.process, d.bytes]));
+  const processRows: Array<Row> = [];
+  const projectRows: Array<Row> = ledger.filter((r) => r.name !== "");
+  const markerCheck: Array<{ name: string; puts: number; expected: number; planted: number }> = [];
+  const interruptions = raw.episodes.filter((e) => e.kind === "interruption");
+
+  for (const file of raw.files) {
+    const changes = raw.changes.filter((c) => c.file === file.file);
+
+    if (file.location === "project") {
+      for (const c of changes) {
+        const name = nameOf.get(c.k);
+
+        if ((c.tbl === "dev_descriptors" || c.tbl === "gateway_ended") && name !== undefined) {
+          const first = c.tbl === "dev_descriptors" && firstPid.get(name) === c.k;
+          const bytes = c.b ?? (c.tbl === "gateway_ended" ? utf8(c.k) : (descriptorBytes.get(c.k) ?? 0));
+          projectRows.push({
+            at: seenAt(c.file, c.n),
+            name,
+            kind: `${c.tbl} ${c.op}`,
+            bytes,
+            cls: first ? "admin" : "recovery",
+          });
+        }
+      }
+
+      continue;
+    }
+
+    if (file.name === null) {
+      continue;
+    }
+
+    const name = file.name;
+    const rows: Array<Row> = [];
+    /** What each marker put after the triggers should be, in order: the class of the step that made it. */
+    const puts: Array<{ row: Row | null; stepping: boolean; letter: string | null }> = [];
+    let mode: Cls = journalSaved ? "local" : "unsplit";
+    let left = 0;
+    let letters: ReadonlyArray<string> = [];
+    let open: Row | null = null;
+
+    for (const c of changes) {
+      const row: Row = { at: seenAt(c.file, c.n), name, kind: `${c.tbl} ${c.op}`, bytes: c.b ?? 0, cls: mode };
+
+      if (c.tbl === "process_recovery" && !journalSaved) {
+        // No journal state was saved: the two journal rows of each replayed letter follow the copy.
+        row.cls = left > 0 ? "replay" : "unsplit";
+        left = Math.max(0, left - 0.5);
+        mode = row.cls;
+      } else if (c.tbl === "process_recovery" && c.j === "stepping") {
+        row.cls = left > 0 ? "replay" : "local";
+        open = row;
+        puts.push({ row, stepping: true, letter: left > 0 ? (letters[letters.length - left] ?? null) : null });
+        mode = row.cls;
+      } else if (c.tbl === "process_recovery" && c.j === "idle" && open !== null) {
+        row.cls = open.cls;
+        left = row.cls === "replay" ? left - 1 : left;
+        puts.push({ row, stepping: false, letter: null });
+        open = null;
+        mode = row.cls;
+      } else if (c.tbl === "process_recovery") {
+        row.cls = "recovery";
+
+        // A step that ended in a recovery state was a captured attempt; its idle marker follows the observation.
+        if (open !== null) {
+          open.cls = "recovery";
+          puts.push({ row, stepping: false, letter: null });
+          open = null;
+        }
+
+        mode = "recovery";
+      } else if (c.tbl === "process_state" && c.op === "i") {
+        row.cls = "copy";
+        letters = replayed.get(c.k) ?? [];
+        left = letters.length;
+        mode = left > 0 ? "replay" : journalSaved ? "recovery" : "unsplit";
+      } else if (c.tbl === "process_state") {
+        row.cls = mode === "replay" ? "rebuild" : mode;
+      } else if (c.tbl === "process_letters") {
+        const [life = "", ...id] = c.k.split("|");
+        row.cls = (replayed.get(life) ?? []).includes(id.join("|")) ? "replay" : mode === "replay" ? "local" : mode;
+      } else if (c.tbl === "process_receipts" && c.op === "i" && journalSaved) {
+        row.cls = "local";
+      }
+
+      rows.push(row);
+    }
+
+    // Marker puts are not in the side table; the product's own health rows time them. Each one follows a
+    // journal row of a step, in order, so the nth put takes the nth such row's class.
+    const lives = [...nameOf].filter(([, n]) => n === name).map(([p]) => p);
+    const lifeAt = (at: number) =>
+      ledger
+        .filter((r) => r.name === name && r.tag === "started" && r.at <= at)
+        .map((r) => r.process)
+        .at(-1) ??
+      lives[0] ??
+      "";
+    const nearest = (at: number) =>
+      [...inbox]
+        .filter(([, v]) => v.name === name)
+        .sort((x, y) => Math.abs(x[1].at - at) - Math.abs(y[1].at - at))[0]?.[0]
+        .slice(name.length + 1) ?? "";
+    const planted = new Set<number>();
+    const measured = raw.calls
+      .filter((c) => c.file === file.file && c.piece === "process.activity" && c.at >= from)
+      .map((c) => c.at)
+      .sort((x, y) => x - y);
+
+    for (const e of interruptions.filter((i) => i.name === name)) {
+      const index = measured.findIndex((at, i) => at >= e.from && !planted.has(i));
+
+      if (index >= 0) {
+        planted.add(index);
+      }
+    }
+
+    let next = 0;
+    let restartAt = 0;
+    let replayPuts = 0;
+
+    for (const [index, at] of measured.entries()) {
+      const process = lifeAt(at);
+      const build = buildOf.get(process) ?? "";
+
+      if (planted.has(index)) {
+        rows.push({
+          at,
+          name,
+          kind: "activity marker put, the script's own",
+          bytes: markerBytes(process, { letter: "cut-1", build }),
+          cls: "script",
+        });
+        continue;
+      }
+
+      if (!journalSaved) {
+        // By position: the first two puts per replayed letter after the successor's `restarted` entry.
+        const restart = ledger.filter((r) => r.name === name && r.tag === "restarted" && r.at <= at).at(-1);
+
+        if (restart !== undefined && restart.at !== restartAt) {
+          restartAt = restart.at;
+          replayPuts = 2 * (replayed.get(restart.process ?? "")?.length ?? 0);
+        }
+
+        const replay = replayPuts > 0;
+        replayPuts = Math.max(0, replayPuts - 1);
+        rows.push({ at, name, kind: "activity marker put", bytes: 0, cls: replay ? "replay" : "unsplit" });
+        continue;
+      }
+
+      const put = puts[next++];
+      const bytes =
+        put?.stepping === true
+          ? markerBytes(process, { letter: put.letter ?? nearest(at), build })
+          : markerBytes(process);
+      rows.push({ at, name, kind: "activity marker put", bytes, cls: put?.row?.cls ?? "recovery" });
+    }
+
+    markerCheck.push({ name, puts: measured.length - planted.size, expected: puts.length, planted: planted.size });
+    processRows.push(...rows);
+  }
+
+  // --- R1 ---
+  const programs = [...new Set(program.values())];
+  const inboxRows = ledger.filter((r) => r.kind.startsWith("inbox: ") && r.at >= from && r.at <= to);
+  const r1Programs = programs.map((name) => {
+    const mine = inboxRows.filter((r) => program.get(r.name) === name);
+    const kinds = (kind: string) => mine.filter((r) => r.kind === `inbox: ${kind}`).length;
+    return {
+      program: name,
+      inboxEntries: mine.length,
+      persons: kinds("a person's input"),
+      timers: kinds("timer letter"),
+      downs: kinds("DOWN letter"),
+      perRollingMinute: stats(
+        rolling(
+          mine.map((r) => r.at),
+          from,
+          to,
+        ),
+      ),
+    };
+  });
+  const perEntry = [...inbox].map(([key, v]) => {
+    const lives = steppedBy.get(key) ?? [];
+    return {
+      key,
+      kind: v.kind,
+      all: lives.length,
+      lives: new Set(lives).size,
+      first: lives.filter((p) => p === lives[0]).length,
+    };
+  });
+  const spread = (values: ReadonlyArray<number>) => {
+    const counts: Record<string, number> = {};
+
+    for (const v of values) {
+      counts[v] = (counts[v] ?? 0) + 1;
+    }
+
+    return counts;
+  };
+  const r1 = {
+    programs: r1Programs,
+    acceptedInboxEntries: perEntry.length,
+    steppedRecords: ledger.filter((r) => r.kind.startsWith("stepped record")).length,
+    replayRecords: ledger.filter((r) => r.cls === "replay").length,
+    /** Every `stepped` record, every life: how many accepted entries have 0, 1, 2 ... */
+    steppedPerEntryAllLives: spread(perEntry.map((p) => p.all)),
+    /** The same with replays under a later life left out. */
+    steppedPerEntryFirstLife: spread(perEntry.map((p) => p.first)),
+    notExactlyOne: perEntry.filter((p) => p.first !== 1).map((p) => `${p.key} (${p.kind}): ${p.first}`),
+    replayedTwiceOrMore: perEntry.filter((p) => p.all > 2).length,
+  };
+
+  // --- R2 ---
+  const window = (rows: ReadonlyArray<Row>, name: string, keep: (r: Row) => boolean) =>
+    rows.filter((r) => r.name === name && r.at >= from && r.at <= to && keep(r));
+  const series = (rows: ReadonlyArray<Row>) => ({
+    total: rows.length,
+    bytesTotal: rows.reduce((n, r) => n + r.bytes, 0),
+    writes: stats(
+      rolling(
+        rows.map((r) => r.at),
+        from,
+        to,
+      ),
+    ),
+    bytes: stats(
+      rollingSum(
+        rows.map((r) => ({ at: r.at, n: r.bytes })),
+        from,
+        to,
+      ),
+    ),
+  });
+  const REPLAY: ReadonlySet<Cls> = new Set<Cls>(["replay", "rebuild"]);
+  const OUTSIDE: ReadonlySet<Cls> = new Set<Cls>(["admin", "door", "script"]);
+  /** As the amendment words R2: every counted row of the name the first analysis called recovery, replay out. */
+  const worded = (r: Row) => !REPLAY.has(r.cls) && !OUTSIDE.has(r.cls) && !r.kind.startsWith("inbox: a person");
+  /** By A1: only writes a recovery made. Bytes leave the checkpoint copy out, as A6 says. */
+  const split = (r: Row) => r.cls === "recovery" || r.cls === "copy";
+  const recoveryNames = [...new Set(raw.episodes.map((e) => e.name))];
+  const r2 = recoveryNames.map((name) => ({
+    name,
+    process: {
+      worded: series(window(processRows, name, worded)),
+      split: journalSaved ? series(window(processRows, name, split)) : null,
+      splitBytesWithoutCopy: journalSaved ? series(window(processRows, name, (r) => r.cls === "recovery")).bytes : null,
+    },
+    project: {
+      worded: series(window(projectRows, name, worded)),
+      split: series(window(projectRows, name, split)),
+      splitBytesWithoutCopy: series(window(projectRows, name, (r) => r.cls === "recovery")).bytes,
+    },
+  }));
+  /** Every recovery name's whole-minute windows as one sample. */
+  const pooledOver = (rows: ReadonlyArray<Row>, keep: (r: Row) => boolean) =>
+    stats(
+      recoveryNames.flatMap((name) =>
+        rolling(
+          window(rows, name, keep).map((r) => r.at),
+          from,
+          to,
+        ),
+      ),
+    );
+  const r2Pooled = {
+    names: recoveryNames,
+    process: { worded: pooledOver(processRows, worded), split: journalSaved ? pooledOver(processRows, split) : null },
+    project: { worded: pooledOver(projectRows, worded), split: pooledOver(projectRows, split) },
+  };
+
+  // --- R3 and R4: every episode, by class ---
+  const chainOf = raw.episodes.filter((e) => e.name === "poison:1" && !e.kind.startsWith("duplicate"));
+  const chain: ReadonlyArray<Episode> =
+    chainOf.length < 2
+      ? []
+      : [
+          {
+            kind: "whole poison chain",
+            name: "poison:1",
+            from: chainOf[0]?.from ?? 0,
+            to: chainOf.at(-1)?.to ?? 0,
+            note: `${chainOf.length} episodes as one`,
+          },
+        ];
+  const tally = (rows: ReadonlyArray<Row>) => {
+    const classes: Record<string, { writes: number; bytes: number; kinds: Record<string, number> }> = {};
+
+    for (const r of rows) {
+      const c = (classes[r.cls] ??= { writes: 0, bytes: 0, kinds: {} });
+      c.writes++;
+      c.bytes += r.bytes;
+      c.kinds[r.kind] = (c.kinds[r.kind] ?? 0) + 1;
+    }
+
+    return classes;
+  };
+  const episodes = [...raw.episodes, ...chain].map((e) => {
+    const inside = (r: Row) => r.name === e.name && r.at >= e.from && r.at <= e.to;
+    const successors = ledger.filter((r) => inside(r) && r.tag === "restarted").map((r) => r.process ?? "");
+    const letters = successors.reduce((n, p) => n + (replayed.get(p)?.length ?? 0), 0);
+    const processIn = tally(processRows.filter(inside));
+    const projectIn = tally(projectRows.filter(inside));
+    const per = (c: { writes: number; bytes: number } | undefined) =>
+      letters === 0 || c === undefined ? null : { writes: c.writes / letters, bytes: c.bytes / letters };
+    return {
+      kind: e.kind,
+      name: e.name,
+      program: program.get(e.name),
+      ms: e.to - e.from,
+      failed: e.note.startsWith("FAILED"),
+      duplicate: e.kind.startsWith("duplicate"),
+      replayedLetters: letters,
+      acceptedInboxEntriesBefore: [...inbox.values()].filter((v) => v.name === e.name && v.at < e.from).length,
+      process: processIn,
+      project: projectIn,
+      perReplayedLetter: { process: per(processIn.replay), project: per(projectIn.replay) },
+    };
+  });
+  const complete = episodes.filter((e) => !e.failed);
+  const most = (values: ReadonlyArray<number>) => (values.length === 0 ? null : Math.max(...values));
+  const recoveryOf = (c: Record<string, { writes: number; bytes: number }>, copy: boolean) => ({
+    writes: (c.recovery?.writes ?? 0) + (c.copy?.writes ?? 0),
+    bytes: (c.recovery?.bytes ?? 0) + (copy ? (c.copy?.bytes ?? 0) : 0),
+  });
+  const ten = (value: number | null) => (value === null ? null : Math.ceil(10 * value));
+  const peak = (values: ReadonlyArray<number | null>) => most(values.flatMap((v) => (v === null ? [] : [v])));
+  const largest = {
+    process: {
+      writes: journalSaved ? most(complete.map((e) => recoveryOf(e.process, false).writes)) : null,
+      bytes: sizedRows ? most(complete.map((e) => recoveryOf(e.process, false).bytes)) : null,
+    },
+    project: {
+      writes: most(complete.map((e) => recoveryOf(e.project, false).writes)),
+      bytes: most(complete.map((e) => recoveryOf(e.project, false).bytes)),
+    },
+  };
+  const minute = {
+    process: {
+      writes: peak(r2.map((n) => n.process.split?.writes.p99 ?? null)),
+      bytes: peak(r2.map((n) => n.process.splitBytesWithoutCopy?.p99 ?? null)),
+    },
+    project: {
+      writes: peak(r2.map((n) => n.project.split.writes.p99)),
+      bytes: peak(r2.map((n) => n.project.split.bytes.p99)),
+    },
+  };
+  const letter = (location: "process" | "project", field: "writes" | "bytes") =>
+    peak(complete.map((e) => e.perReplayedLetter[location]?.[field] ?? null));
+  const greater = (x: number | null, y: number | null) => (x === null || y === null ? null : Math.max(x, y));
+  const checklist = r1Programs.reduce((n, p) => Math.max(n, p.perRollingMinute.p99 ?? 0), 0);
+
+  return {
+    saved: { rowSizes: sizedRows, journalStates: journalSaved },
+    markerSizesSeen: [...new Set((raw.markers ?? []).map((m) => m.bytes))].sort((x, y) => x - y),
+    markerPutsAgainstJournalRows: markerCheck,
+    r1,
+    r2,
+    r2Pooled,
+    episodes,
+    largestCompleteRecovery: largest,
+    worstNameP99PerMinute: minute,
+    largestPerReplayedLetter: {
+      process: { writes: letter("process", "writes"), bytes: letter("process", "bytes") },
+      project: { writes: letter("project", "writes"), bytes: letter("project", "bytes") },
+    },
+    // Each value is null where this run cannot give it. The write-up takes the largest across runs.
+    defaults: {
+      "limits.writes": { p99: checklist, value: ten(2 * checklist) },
+      "limits.recovery.process.writes": ten(greater(minute.process.writes, largest.process.writes)),
+      "limits.recovery.project.writes": ten(greater(minute.project.writes, largest.project.writes)),
+      "limits.recovery.process.bytes": sizedRows ? ten(greater(minute.process.bytes, largest.process.bytes)) : null,
+      "limits.recovery.project.bytes": sizedRows ? ten(greater(minute.project.bytes, largest.project.bytes)) : null,
+      "limits.recovery.process.letter.writes": ten(letter("process", "writes")),
+      "limits.recovery.project.letter.writes": ten(letter("project", "writes")),
+      "limits.recovery.process.letter.bytes": sizedRows ? ten(letter("process", "bytes")) : null,
+      "limits.recovery.project.letter.bytes": ten(letter("project", "bytes")),
+    },
+  };
+};
+
+// ---------------------------------------------------------------------------------------------
 // The command
 
 const stamp = Effect.map(Clock.currentTimeMillis, (ms) => new Date(ms).toISOString().replace(/[:.]/g, "-"));
@@ -1556,6 +2230,18 @@ const measure = Command.make(
       Flag.withDescription("Run only the large-checkpoint part"),
       Flag.withDefault(false),
     ),
+    episodesOnly: Flag.Boolean("episodes-only").pipe(
+      Flag.withDescription("Run only the recovery episodes: no steady load, no bursts"),
+      Flag.withDefault(false),
+    ),
+    history: Flag.Int("history").pipe(
+      Flag.withDescription("Run only a person restart over this many accepted letters, on each program"),
+      Flag.withDefault(0),
+    ),
+    oneName: Flag.Boolean("one-name").pipe(
+      Flag.withDescription("With --history: the poison name alone"),
+      Flag.withDefault(false),
+    ),
   },
   Effect.fn(function* (flags) {
     const fs = yield* FileSystem.FileSystem;
@@ -1576,9 +2262,14 @@ const measure = Command.make(
           burst: flags.burst,
           largeOnly: flags.largeOnly,
           wait: flags.wait,
+          episodesOnly: flags.episodesOnly,
+          history: flags.history,
+          oneName: flags.oneName,
         });
     const summary = analyze(raw);
     yield* fs.writeFileString(path.join(out, "summary.json"), JSON.stringify(summary, null, 2));
+    const amendment = amend(raw);
+    yield* fs.writeFileString(path.join(out, "amendment.json"), JSON.stringify(amendment, null, 2));
     yield* Console.log(JSON.stringify({ ...summary, before: undefined, objects: undefined }, null, 1));
     yield* Console.log(`raw samples and summary: ${path.relative(root, out)}`);
   }),
