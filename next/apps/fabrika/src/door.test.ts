@@ -27,6 +27,7 @@ import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import { ProcessEvent, Recipient, Owner, Down, Start } from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
@@ -556,9 +557,14 @@ const wire = Effect.fnUntraced(function* (
     getTags: () => ["test-session", "test-tab", w.window.fingerprint],
     getWebSocketAutoResponseTimestamp: () => null,
   };
+  const input = StartsTest.fixture({ name: "t843-project", port: 8787 }, (algorithm, data) =>
+    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
   const env = {
+    INSTANCE: JSON.stringify(input),
     PROJECT: {
       getByName: () => ({
+        settingsStart: async () => StartsTest.reply(input),
         route: (_client: string, method: string, params: unknown) =>
           Effect.runPromise(d.route(client, method, params).pipe(Effect.provideContext(projectContext))),
       }),
@@ -579,11 +585,7 @@ const wire = Effect.fnUntraced(function* (
       head: () => Promise.resolve(null),
     },
   };
-  const layer: ReturnType<typeof connectionLayer> = Reflect.apply(connectionLayer, undefined, [
-    state,
-    env,
-    { name: "t843-project", port: 8787, rateLimit: w.settings.rateLimit },
-  ]);
+  const layer: ReturnType<typeof connectionLayer> = Reflect.apply(connectionLayer, undefined, [state, env, input]);
   const context = yield* Layer.build(layer);
   const service = yield* ConnectionService.pipe(Effect.provideContext(context));
   let id = 0;
