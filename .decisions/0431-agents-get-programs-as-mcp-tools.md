@@ -13,7 +13,7 @@ tags: [tsh, mcp, agents, policy, programs, todays-version]
 ## Context
 
 Agents starting real, typed programs is the main gain of tsh. From
-[tsh: a shell for tea programs](../docs/direction/tsh-a-shell-for-tea-programs.md#what-was-decided)
+the note "tsh: a shell for tea programs", since removed
 (the policy parts 2026-10-17, MCP 2026-10-18). The note says tsh would serve the tools; in today's
 code the host does, on its agents' socket (`packages/fabrika/src/mcp.ts`). This file writes that
 current form.

@@ -19,7 +19,7 @@ jobs                                  # a built-in, like ps
 ## Context
 
 Unix already has the ideas, and a new word for each is one more thing to learn. From
-[tsh: a shell for tea programs](../docs/direction/tsh-a-shell-for-tea-programs.md#what-was-decided).
+the note "tsh: a shell for tea programs", since removed.
 This is today's version (`packages/fabrika/src/shell`); `next/`'s shell is `fabsh`
 ([0432](0432-next-has-fabsh-rethought-from-tsh.md)).
 

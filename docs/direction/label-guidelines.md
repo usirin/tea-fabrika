@@ -264,7 +264,7 @@ b  the first label group: group_made {name: "Area", pick: "one", guess: true}; t
 
 **Decided 2026-11-06: b, Area is the first label group** (lean was 65%). Labels are coming (`labeled` is in tracker views' sketch), and two systems would
 double make, rename, merge, pickers and filter doors for one act
-([reuse before special rules](./reuse-before-special-rules.md)). Area's best parts (numbers,
+([reuse before special rules](../../.decisions/0421-reuse-before-special-rules.md)). Area's best parts (numbers,
 merge, the guess) are what phoenix's labels lacked, so every label gets them. Linear does it this
 way [l1]; Jira and Shortcut do not [j1] [s1]. The doubt: an area may need an owner or a strategy
 (L6), and the glossary already says an area has an owner, which no decided note gives it. Since

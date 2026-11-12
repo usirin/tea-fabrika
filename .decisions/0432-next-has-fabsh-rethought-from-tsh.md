@@ -13,7 +13,7 @@ tags: [tsh, fabsh, shell, names, next, todays-version]
 ## Context
 
 `next/` rebuilds what today's code learned, without porting it. From the 2026-11-01 change in
-[tsh: a shell for tea programs](../docs/direction/tsh-a-shell-for-tea-programs.md). AGENTS.md says
+the note "tsh: a shell for tea programs", since removed. AGENTS.md says
 the same; no decision file held it.
 
 ## Decision

@@ -1012,7 +1012,7 @@ const Talk = Schema.Struct({
   hosts, clients and servers, with tools, resources and prompts
   ([spec](https://modelcontextprotocol.io/specification/2025-11-25)). It is
   agent to tool, not agent to agent. An agent here already gets its tools
-  through tsh ([tsh](./tsh-a-shell-for-tea-programs.md)).
+  through tsh ([tsh](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md)).
 
 **What exists here.**
 

@@ -104,12 +104,12 @@ const Level = Schema.TaggedUnion({
 | Tabbed is an orientation | none | retire | Replaced the same day by fold, not tabs. |
 | [Modes](./modes.md) | pattern | keep | Spans the status bar, the title, Esc and every program. |
 | [The ask desk](./ask-desk.md) | pattern and product | split | A2, A3, A6 are the asking pattern; the rest is the inbox program. |
-| [Ask for decisions, not facts](./ask-for-decisions-not-facts.md) | pattern | merge with the asking pattern | Its one rule is the pattern's first line. |
+| [Ask for decisions, not facts](../../.decisions/0415-ask-a-person-for-decisions.md) | pattern | merge with the asking pattern | Its one rule is the pattern's first line. |
 | [Errors are diagnostics](./errors-are-diagnostics.md) | pattern | keep | How an error shows, in a terminal, a window or JSON. |
 | [Program guidelines](./program-guidelines.md) | pattern and guides | split | G2 to G6 and C1 to C11 are patterns; G7 is the kit's contract; G8 goes to the content guide. |
 | [One ask and one meter](./one-ask-and-one-meter.md) | engineering | keep | Data, not UI. |
 | [Every wait is a queue](./every-wait-is-a-queue.md) | engineering | retire | Never taken up; the ask desk and the inbox carry it. Lean 60%. |
-| [The tracker is like Linear](./the-tracker-is-like-linear.md) | product | merge with tracker views and areas | One program in three notes. |
+| [The tracker is like Linear](../../.decisions/0346-the-tracker-is-built-like-linear.md) | product | merge with tracker views and areas | One program in three notes. |
 | [Tracker views are programs](./tracker-views-are-programs.md) | product | merge into the tracker's page | Its section 7 goes to program guidelines. |
 | [Areas](./areas.md) | product | merge into the tracker's page, once decided | Same program. |
 | [The ticket is the lane's view](./the-ticket-is-the-lane-view.md) | product | merge with what a ticket shows | One view in two notes. |

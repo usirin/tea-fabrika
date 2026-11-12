@@ -18,7 +18,7 @@ tags: [pipeline, ledger, review, build, box]
 
 ## Context
 
-From [nothing is pushed before review](../docs/direction/push-after-review.md#what-was-decided),
+From the note "nothing is pushed before review", since removed,
 decided 2026-10-24. The ledger syncs to other people's machines, so code on it would leave this
 machine before anyone reviewed it.
 

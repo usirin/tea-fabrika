@@ -21,7 +21,7 @@
 import { fileURLToPath } from "node:url";
 
 /** The jobs that skip on changes' output of the same name; workflow-lint.ts reads this list. */
-export const gated = /** @type {const} */ (["check", "test", "next", "e2e"]);
+export const gated = /** @type {const} */ (["check", "typecheck", "test", "next", "e2e"]);
 
 /** @typedef {{ pass: boolean, lines: string[] }} Verdict */
 

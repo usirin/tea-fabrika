@@ -51,7 +51,7 @@ carries it ([talk where you work](./talk-where-you-work.md)).
   objects) and Amershi et al.'s guidelines G3, G11 and G17. In the CHI 2026 study, agent-started
   comments piled up and were ignored.
 - **Breaks it:** an agent that speaks first often, a reply copied in two places, a person asked
-  for a fact the ledger holds ([ask for decisions, not facts](./ask-for-decisions-not-facts.md)).
+  for a fact the ledger holds ([ask for decisions, not facts](../../.decisions/0415-ask-a-person-for-decisions.md)).
 
 ## 3. Talk where people are, then bring them in
 

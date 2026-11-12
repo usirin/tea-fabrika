@@ -326,12 +326,14 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
-  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
-  send back with the error lines: to tests when every error is in an exam path, else to build. One
-  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
-  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
-  steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
+  and a merge-ready review pushes the branch as the bot at once and opens the PR (or finds the open
+  one) with a steps-and-dollars table in its body. No laptop typecheck runs first (0133): the chain
+  reads CI's own `typecheck` job at the pushed head (`ci/typecheck.ts`), the moment that one job
+  ends, never the whole run. Red is a send back with the error lines from the job's log: to tests
+  when every error is in an exam path, else to build, and the PR stays open for the next push. No
+  answer within `CHAIN_TYPECHECK_MINUTES` (20), or a failed job with no type error, lets the lane go
+  on, and the chain's last line says `typecheck: no answer: ...`. A red `check` job (lint, build) is
+  not read here: `ci-required` holds the merge for it. Then the chain runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
   an error, or a comment that did not post, ends it `stuck`. The chain passes no mapping table, so

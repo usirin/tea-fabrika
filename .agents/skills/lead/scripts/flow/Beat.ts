@@ -19,7 +19,8 @@ import { Schema } from "effect";
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
  * start's checks, or the box's removal at the end; the box sweep left the start with 0101), `wait` (a slot, the Electron
  * lock or a free typecheck), `box` (the box made), `agent` (the agent's turn), `collect` (the tree
- * read and signed) and `commit` (the backup push). The rest are the chain's own moves.
+ * read and signed) and `commit` (the backup push). The rest are the chain's own moves; `typecheck`
+ * is the wait for CI's typecheck job at the pushed head.
  */
 export const PHASES = [
   "cleanup",
@@ -31,6 +32,7 @@ export const PHASES = [
   "host",
   "judge",
   "pr",
+  "typecheck",
   "loosening",
   "land",
 ] as const;

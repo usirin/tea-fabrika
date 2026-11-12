@@ -12,7 +12,7 @@ tags: [pipeline, supervision, otp, names]
 
 ## Context
 
-From [helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md#what-was-decided),
+From the note "helpers, and one supervisor", since removed,
 whose one-supervisor part was replaced 2026-10-20. [0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md)
 holds `next/`'s root supervisor.
 

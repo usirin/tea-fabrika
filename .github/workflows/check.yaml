@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       check: ${{ steps.diff.outputs.check }}
+      typecheck: ${{ steps.diff.outputs.typecheck }}
       test: ${{ steps.diff.outputs.test }}
       next: ${{ steps.diff.outputs.next }}
       e2e: ${{ steps.diff.outputs.e2e }}
@@ -104,7 +105,6 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
       - run: pnpm lint
       # `pnpm lint` fails on a dead export the ledger does not name (code-graph 0.12.0:
       # 0 of 4 findings wrong on 2026-10-29). It also prunes entries whose finding is
@@ -133,6 +133,32 @@ jobs:
       # The builds of @kampus/fabrika-old and @kampus/pipeline (dist/): the published
       # packages. Nothing above needs them.
       - run: pnpm build
+
+  # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
+  # lint's answer, and a lane reads this one job's conclusion for its head the moment it ends
+  # (chain.ts's `typechecking` phase). It runs where check runs: changes gives it check's flag.
+  typecheck:
+    needs: changes
+    if: >-
+      ${{ !cancelled() &&
+          (needs.changes.result != 'success' ||
+           needs.changes.outputs.typecheck != 'false') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
 
   # The app end to end (apps/fabrika/e2e.ts): Playwright drives the real built app in Electron.
   # It checks macOS's window rules (the close button keeps the app running, the dock icon brings
@@ -357,7 +383,7 @@ jobs:
   # stays required beside this one: folding it in here would judge it from the pull request's copy.
   # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
   ci-required:
-    needs: [changes, field, check, e2e, test, next]
+    needs: [changes, field, check, typecheck, e2e, test, next]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

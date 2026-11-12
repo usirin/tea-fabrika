@@ -19,7 +19,7 @@ const options = { seed: 119120, numRuns: 100 };
 // T375 plants caught: skill readTrees and shared scripts at the red baseline;
 // script Markdown counted as prose, scripts skipping test, all Markdown safe,
 // prose masking shared paths, and every skill-tree path counted as prose.
-const heavy = { check: true, test: true, next: true, e2e: true };
+const heavy = { check: true, typecheck: true, test: true, next: true, e2e: true };
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
@@ -111,6 +111,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
     fc.property(fc.array(fc.oneof(safe, prose), { minLength: 1, maxLength: 12 }), (paths) => {
       expect(ci.classify(paths, "pull_request")).toEqual({
         check: false,
+        typecheck: false,
         test: false,
         next: false,
         e2e: false,
@@ -143,6 +144,7 @@ it("skill scripts run check and test; other version flags follow their readers",
         const flags = ci.classify([...scripts, ...others], "pull_request");
         expect(flags).toEqual({
           check: true,
+          typecheck: true,
           test: true,
           next: others.some((p) => p.startsWith("next/")),
           e2e: others.some((p) => !p.startsWith("next/")),
@@ -204,7 +206,7 @@ it("shared paths run everything; adding paths never disables a job", () => {
       const before = ci.classify(paths, "pull_request");
       const after = ci.classify([...paths, ...more], "pull_request");
 
-      for (const key of ["check", "test", "next", "e2e", "field"] as const) {
+      for (const key of ["check", "typecheck", "test", "next", "e2e", "field"] as const) {
         expect(!before[key] || after[key]).toBe(true);
       }
 

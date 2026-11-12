@@ -82,7 +82,7 @@ this rule  replay of A's diff onto main: tree of A; the formatter on it: tree of
   as the reviewer reads main's rules, and runs only on the paths the reviewed diff touched. A pull
   request cannot bring the formatter that excuses it.
 
-This changes one line of [nothing is pushed before review](./push-after-review.md): "only a commit
+This changes one line of [nothing is pushed before review](../../.decisions/0391-the-ledger-holds-the-commit-hash.md): "only a commit
 with a passing `reviewed` fact can be pushed" becomes "only a commit whose `reviewed` fact carries
 to it as `kept`, or through a glance that said yes".
 

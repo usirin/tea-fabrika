@@ -1415,7 +1415,7 @@ is the security rule, then keep worth, then bundles.
 **The owner's pick (2026-10-30): the first way, more asks with clean builds.**
 The ask budget stays open until triage runs on real weeks, and the pick is
 checked against those weeks. The security rule is the next piece to build. See
-[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md).
+[Triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md).
 
 ### What part 5 cannot tell us
 
@@ -1436,7 +1436,7 @@ checked against those weeks. The security rule is the next piece to build. See
 ## Part 6: can Jev attach a precedent to an ask?
 
 Run on 2026-10-30. The owner picked more asks with clean builds (see
-[Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md)),
+[Triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md)),
 so each ask should be quick to answer. Part 5 tried precedents as verdicts and
 found almost none. Here a precedent is only advice: "the owner settled #N like
 this", shown beside the ask. It never answers, closes or builds anything.
