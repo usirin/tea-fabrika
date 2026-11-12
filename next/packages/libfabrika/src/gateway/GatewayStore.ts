@@ -24,7 +24,7 @@ export const gatewayStore = (sql: Sql) => {
           ensure();
           return step();
         }),
-      catch: () => new LedgerError({ reason: "storage" }),
+      catch: (cause) => new LedgerError({ reason: "storage", cause }),
     });
   });
   const get = <A>(name: string, schema: Schema.Codec<A>) => {
@@ -37,7 +37,7 @@ export const gatewayStore = (sql: Sql) => {
     const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema))(row.value);
 
     if (Result.isFailure(decoded)) {
-      throw new LedgerError({ reason: "bad_row" });
+      throw new LedgerError({ reason: "bad_row", cause: decoded.failure });
     }
 
     return decoded.success;

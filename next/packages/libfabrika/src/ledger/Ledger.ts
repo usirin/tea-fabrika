@@ -15,6 +15,8 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
   reason: Schema.Literals(["unreachable", "bad_row", "storage", "refused", "crypto"]),
   /** What the thrown error said. It rides in the span's failure, never in a tag. */
   message: Schema.optional(Schema.String),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** Rings a waiter, at most once. P12's thin class gives the real one: a call to the gateway. */

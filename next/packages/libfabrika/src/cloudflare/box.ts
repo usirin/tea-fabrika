@@ -24,7 +24,7 @@ const reply = Effect.fnUntraced(function* (execution: Execution, cmd: unknown, o
 export const programBox = (declared: unknown, build: string) => {
   const execution = nodeExecution(declared, build);
   const declaration = Effect.fromResult(stepper(declared)).pipe(
-    Effect.mapError(() => new ProgramDown({ reason: "load" })),
+    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     Effect.map((pure) =>
       Declaration.make({
         name: pure.program.name,

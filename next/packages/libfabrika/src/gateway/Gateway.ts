@@ -302,7 +302,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         rows,
         (row) =>
           Schema.decodeUnknownEffect(MemberEvent)(valueFor(row)).pipe(
-            Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
           ),
         { concurrency: 1 },
       ),
@@ -577,7 +577,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const loaded = saved === null ? null : Schema.decodeUnknownResult(Waiting.Stored)(saved);
 
     if (loaded !== null && Result.isFailure(loaded)) {
-      throw new LedgerError({ reason: "bad_row" });
+      throw new LedgerError({ reason: "bad_row", cause: loaded.failure });
     }
 
     const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
@@ -709,7 +709,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const decoded = decodeBinding(row.value);
 
       if (Result.isFailure(decoded)) {
-        throw new LedgerError({ reason: "bad_row" });
+        throw new LedgerError({ reason: "bad_row", cause: decoded.failure });
       }
 
       return decoded.success;
@@ -1078,7 +1078,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const digest = yield* hash(JSON.stringify(params));
     const bodyHash = yield* hash(JSON.stringify(message));
     const process = yield* allocateStart();
-    const inputId = yield* ids.next(InputId).pipe(Effect.mapError(() => new LedgerError({ reason: "storage" })));
+    const inputId = yield* ids
+      .next(InputId)
+      .pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })));
     const at = yield* clock;
     const letter =
       refusal === null && request !== null && Result.isSuccess(request) ? `${target}/${request.success.letter}` : null;
@@ -1099,7 +1101,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           const decoded = decodeBinding(prior.value);
 
           if (Result.isFailure(decoded)) {
-            return Result.fail(new LedgerError({ reason: "bad_row" }));
+            return Result.fail(new LedgerError({ reason: "bad_row", cause: decoded.failure }));
           }
 
           const old = decoded.success;
@@ -1208,7 +1210,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             ...event,
             door: binding.door,
             n: binding.n,
-          }).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })))
+          }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })))
         : event;
       const placed = yield* appendChecked(binding.client, {
         stream: "gateway/inputs",
@@ -1276,7 +1278,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                 binding.process,
                 {
                   id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-                    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                   ),
                   by: binding.by,
                   arrivedAt: binding.arrivedAt,
@@ -1287,7 +1289,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                   id: request.success.letter,
                   envelope: {
                     id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
-                      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                     ),
                     by: binding.by,
                     arrivedAt: binding.arrivedAt,
@@ -1343,7 +1345,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                   Effect.flatMap(
                     Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} })),
                   ),
-                  Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                 );
           return waited._tag === "parked" ? Answer.cases.parked.make(p.success) : ok({ rev: waited.rev });
         }
@@ -1401,7 +1403,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   /** The runner may save only the exact input whose checked binding the door delivered. */
   const accept = Effect.fn("gateway.accept")(function* (input: Incoming) {
     const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const parent = Schema.decodeUnknownResult(InputId)(incoming.envelope.id);
 
@@ -1455,7 +1457,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const m = yield* Schema.decodeUnknownEffect(Schema.Json)(message).pipe(
-      Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     return yield* appendChecked(binding.client, {
       stream,
@@ -1644,7 +1646,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
   }
 
   const body = new Uint8Array(bytes.success);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", body), catch: fail });
   const digest = yield* work;
@@ -1653,7 +1655,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
 
 const hash = Effect.fnUntraced(function* (text: string) {
   const bytes = new TextEncoder().encode(text);
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;
