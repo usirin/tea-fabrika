@@ -386,14 +386,29 @@ const timed = Effect.fnUntraced(function* (c: Client, pid: string, letter: strin
 const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: string) {
   const allowed: Array<Call> = [];
 
-  for (let n = 0; n < 10 * ratePolicy.limit; n++) {
-    const call = yield* timed(c, pid, letter);
+  for (let n = 0; n < 10 * ratePolicy.limit; n += ratePolicy.limit + 1) {
+    const sent = yield* Clock.currentTimeMillis;
+    // The socket is already open. Send the whole batch before waiting for any reply.
+    const pending = yield* Effect.sync(() =>
+      Array.from({ length: Math.min(ratePolicy.limit + 1, 10 * ratePolicy.limit - n) }, () => send(c, pid, letter)),
+    );
+    const calls = yield* Effect.forEach(
+      pending,
+      (reply) =>
+        Effect.gen(function* () {
+          const answer = yield* Effect.promise(() => reply);
+          return { sent, replied: yield* Clock.currentTimeMillis, reply: answer };
+        }),
+      { concurrency: "unbounded" },
+    );
+    // Drain every reply: calls after the first refusal can still spend a later window's budget.
+    allowed.push(...calls.filter((call) => !call.reply.error));
+    const refused = calls.find((call) => call.reply.error);
 
-    if (call.reply.error) {
-      return { allowed, refused: call };
+    if (refused) {
+      const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
+      return { allowed, refused, last };
     }
-
-    allowed.push(call);
   }
 
   return yield* Effect.die(new Error(`no refusal in ${10 * ratePolicy.limit} sends`));
@@ -466,7 +481,7 @@ it.live.each(["flags", "env", "file"] as const)(
       placing(accepted);
       expect(settled.refused.reply.error?.data?.reason).toBe("rate_limited");
       yield* Effect.sleep(retryAfter(settled.refused) + 5);
-      let previous = settled.refused;
+      let previous = settled.last;
       const rounds: Array<string> = [];
       const times = ({ sent, replied, reply }: Call) => ({ sent, replied, retryAfter: reply.error?.data?.retryAfter });
       const round = yield* Effect.gen(function* () {
