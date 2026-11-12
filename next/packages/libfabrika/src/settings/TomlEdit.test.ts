@@ -337,6 +337,81 @@ describe("T877 public TOML edits, next/", () => {
     check,
   );
 
+  for (const operation of ["set", "remove"] as const) {
+    it.effect.prop(
+      `L2 ${operation} keeps nested inline member comments in order across state-selected edits`,
+      {
+        seed: Schema.Int,
+        depth: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })),
+        members: Schema.Array(Scalar).check(Schema.isBetweenLength(2, 8)),
+        values: Schema.Array(Value).check(Schema.isBetweenLength(1, 8)),
+      },
+      ({ seed, depth, members, values }) =>
+        Effect.gen(function* () {
+          const toml = yield* Toml;
+          const l = layout(seed);
+          const array = (value: unknown, marker: string) => `[${literal(value)}, "# string text", ${marker}${l.eol}]`;
+          const keys = members.map((_, i) => segments[i]!);
+          let markers = members.map((_, i) => `# member-${i}-雪`);
+          let inline = `{ ${members
+            .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
+            .join(", ")} }`;
+          let model: Tree = Object.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
+          let paths: Array<Path> = keys.map((key) => [key]);
+          const siblings: Array<string> = [];
+
+          for (let level = 0; level < depth; level++) {
+            const before = `# before-${level}-雪`;
+            const after = `# after-${level}-雪`;
+            const first = pick(members, level);
+            const last = pick(members, level + 1);
+            const head = `before${l.space}${array(first, before)}`;
+            const tail = `after${l.space}${array(last, after)}`;
+            siblings.push(head, tail);
+            inline = `{ ${head}, child${l.space}${inline}, ${tail} }`;
+            model = { before: [first, "# string text"], child: model, after: [last, "# string text"] };
+            paths = paths.map((path) => ["child", ...path]);
+            markers = [before, ...markers, after];
+          }
+
+          const prefix = `# first-雪${l.eol}`;
+          const suffix = ` # attached-雪${l.eol}${l.eol}[next]${l.eol}peer = 'unchanged # text'${l.final ? l.eol : ""}`;
+          const source = `${prefix}box${l.space}${inline}${suffix}`;
+          let text = source;
+          model = { box: model, next: { peer: "unchanged # text" } };
+          paths = paths.map((path) => ["box", ...path]);
+          const original = model;
+          const comments = ["# first-雪", ...markers, "# attached-雪"];
+
+          // Select only members still present in both the model and the reparsed document.
+          for (let i = 0; paths.length > 0; i++) {
+            const parsed = yield* toml.parse(text);
+            expect(parsed.value).toEqual(model);
+            const hint = l.hints[i % l.hints.length]!;
+            const choices = paths.filter(
+              (path) => get(model, path) !== undefined && get(parsed.value, path) !== undefined,
+            );
+            const path = pick(choices, hint.pick);
+            const value = frozen(pick(values, hint.key));
+            text = yield* operation === "set" ? toml.set(text, path, value) : toml.remove(text, path);
+            model = operation === "set" ? put(model, path, value) : drop(model, path);
+            expect((yield* toml.parse(text)).value).toEqual(model);
+            retained(text, comments);
+            expect(text.startsWith(prefix)).toBe(true);
+            expect(text.endsWith(suffix)).toBe(true);
+
+            for (const sibling of siblings) {
+              expect(text).toContain(sibling);
+            }
+
+            expect((yield* toml.parse(source)).value).toEqual(original);
+            paths = paths.filter((candidate) => !same(candidate, path));
+          }
+        }).pipe(Effect.provide(TomlParser.layer)),
+      check,
+    );
+  }
+
   it.effect.prop(
     "L3 insertion keeps legal root, explicit, implicit, dotted and inline parents",
     Input,
