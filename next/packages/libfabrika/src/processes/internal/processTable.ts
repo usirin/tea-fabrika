@@ -28,7 +28,8 @@ export const Recipient = Schema.TaggedUnion({
 
 /** @internal */
 export const Start = Schema.TaggedUnion({
-  first: { id: Text, name: Text, code: Code },
+  /** `requester` is who asked for a child (P42); the boot's start and old rows have none. */
+  first: { id: Text, name: Text, code: Code, requester: Schema.optionalKey(Recipient) },
   again: { id: Text, name: Text, code: Code, after: ProcessId, reason: Text },
 });
 /** @internal */
@@ -44,7 +45,7 @@ export const State = Schema.TaggedUnion({
 /** @internal */
 export const ProcessEvent = Schema.TaggedUnion({
   registered: { name: Text, program: Text, owner: Owner },
-  started: { process: ProcessId, name: Text, program: Text, hash: Text },
+  started: { process: ProcessId, name: Text, program: Text, hash: Text, requester: Schema.optionalKey(Recipient) },
   exited: { process: ProcessId, reason: ExitReason },
   restarted: { process: ProcessId, after: ProcessId, name: Text, reason: Text, build: Text },
   down: { process: ProcessId, reason: Text, crashes: Count, until: Schema.Int },
@@ -161,7 +162,12 @@ export const processTableFor = (by: string) =>
           const life = {
             name: event.name,
             state: State.cases.live.make({ process: event.process, code }),
-            request: Start.cases.first.make({ id: entry.id, name: event.name, code }),
+            request: Start.cases.first.make({
+              id: entry.id,
+              name: event.name,
+              code,
+              ...(event.requester === undefined ? {} : { requester: event.requester }),
+            }),
             from: entry,
             rev: entry.rev,
           };
