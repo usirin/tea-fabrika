@@ -137,7 +137,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
         const beats = yield* until(
           "three beat facts",
-          Effect.promise(() => instance.project(PROJECT).read("beats", 0, "audit")).pipe(
+          Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
             Effect.map(Schema.decodeUnknownSync(Schema.Array(Beat))),
           ),
           (rows) => rows.length >= 3,
@@ -153,7 +153,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         }
 
         const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
-          yield* Effect.promise(() => instance.project(PROJECT).read(`${NAME}/inbox`, 0, "audit")),
+          yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
         const timers = rows.filter((row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
@@ -173,11 +173,11 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           "stable idle view around saved alarm",
           Effect.gen(function* () {
             const before = Schema.decodeUnknownSync(View)(
-              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
+              yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
-            const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
+            const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
             const after = Schema.decodeUnknownSync(View)(
-              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
+              yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
             return { before, alarm, after };
           }),
