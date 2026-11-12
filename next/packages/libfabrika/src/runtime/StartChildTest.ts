@@ -938,8 +938,14 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         ?.answers ?? [];
     const letters = (yield* entries(["starter:1"]).pipe(Effect.provide(life.context as Context.Context<never>)))
       .filter((e) => e.stream === "starter:1/inbox" && e.id.endsWith("/answer"))
-      // tea's answer Msg echoes the program's own Cmd back to it as `cmd`; the answer is the rest.
-      .map((e) => JSON.stringify({ ...body(e), m: { ...(body(e)["m"] as object), cmd: undefined } }));
+      // Whole, its `cmd` echo included: an answer row is an output, and a refused Cmd's echo is in it.
+      .map((e) => JSON.stringify(body(e)));
+
+    // A start's case reached the answer row it inspects, its ok or its err.
+    if (mode !== 2) {
+      expect(letters.length, "L11: the start's answer row was written and inspected").toBeGreaterThan(0);
+    }
+
     const outputs = [...seenBy.exported(), ...seenBy.lines, JSON.stringify(answers), ...letters];
     // Each case reached the path it is about: a started answer, a refusal, a storage cut at the exit.
     const told = answers.at(-1) as { type?: string; outcome?: unknown } | undefined;
