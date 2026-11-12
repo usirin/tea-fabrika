@@ -5,6 +5,7 @@ import { TestClock } from "effect/testing";
 import {
   EPOCH,
   EFFECT,
+  PURE,
   RecoveryFlow,
   LEDGER,
   RetryFlow,
@@ -168,7 +169,7 @@ it.effect.prop(
       expect(one.add).toEqual(add);
       expect(tags(h, "added")).toHaveLength(1);
     }),
-  EFFECT,
+  PURE,
 );
 
 // Plants after build: strand a redeeming row; accept a changed retry; allocate another add id;
