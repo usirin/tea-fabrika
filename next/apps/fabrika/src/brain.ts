@@ -1,5 +1,6 @@
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
+import type { Child } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
@@ -161,6 +162,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processStart(request, from)));
   }
 
+  processChild(child: Child, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.processChild(child, from)));
+  }
+
   processExit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
@@ -217,9 +223,9 @@ export class Process extends DurableObject<Env> {
     return this.runtime.runPromise(ProcessService.use((p) => p.usage(rows)));
   }
 
-  configure(descriptor: Descriptor) {
+  configure(descriptor: Descriptor, drain?: boolean) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
-    return Effect.runPromise(configureProcess(this.ctx, descriptor));
+    return Effect.runPromise(configureProcess(this.ctx, descriptor, drain));
   }
 
   descriptor() {

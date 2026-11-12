@@ -57,7 +57,7 @@ request goes by hand, by its own agent, and is logged.
 
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
-21 of Tier 1's 43 rows. P34c's third slice, each isolate call's CPU and wall time recorded, merged
+21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day, [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). P34c's third slice, each isolate call's CPU and wall time recorded, merged
 as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
 minutes between the two: each pull request passed alone and they broke together, which is why a
 pull request now lands only when its checks ran on a head that holds main
@@ -97,14 +97,15 @@ record and the first byte setting, `limits.record`. Slice 3c adds the remaining 
 stays open until its whole settings stack lands
 ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
 
-**Tier 1, dated 2026-11-12.** 21 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
+**Tier 1, dated 2026-11-12.** 21 of [its 44 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, P17 the newest (*it said, dated 2026-11-11: 20 rows, plus P17a, half of P17*), so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
 from P6 to P12, P16 and P17, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
 stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner,
 [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): P20 and P22 left for Tier 2 with
-notes and P44, the checklist, joined, so it has 43 rows; it said 44.* No Tier 1
+notes and P44, the checklist, joined, so it has 43 rows; it said 44.* *Changed 2026-11-12 (owner,
+[0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)): P45, a thin inbox that shows the brain's notices, joined, so it has 44 rows; it said 43.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
