@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
-import { basename, isAbsolute, relative } from "node:path";
-import { configDefaults, defineConfig } from "vitest/config";
+import { basename, isAbsolute, join, relative } from "node:path";
+import { configDefaults, defineConfig, type Plugin } from "vitest/config";
 import { parseCLI } from "vitest/node";
+import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
 import { Shards } from "./vitest.shards.ts";
 
@@ -131,9 +132,32 @@ const localLimits = () => {
   return { test: { maxWorkers: requested } };
 };
 
+const root = import.meta.dirname;
+
+// A lead-script test starts its scripts as child processes, which Vitest's import graph cannot see.
+// The files each one reaches are derived from the scripts (oxlint-plugins/script-reads.mjs) and
+// handed to Vitest as watched files, which its `--changed` and `--related` walk follows as edges.
+// Nothing is declared in a test.
+const scriptReads: Plugin = {
+  name: "fabrika-script-reads",
+  transform(_code, id) {
+    const path = relative(root, id);
+
+    if (isScript(path) && isTest(path)) {
+      const { tree, exists } = load(root);
+
+      for (const file of reached(tree, exists, path).keys()) {
+        this.addWatchFile(join(root, file));
+      }
+    }
+
+    return null;
+  },
+};
+
 export default defineConfig({
   ...testConfig,
   test: { ...testConfig.test, maxWorkers: workers },
   // Vite runs this hook only while resolving a run. Importers can merge or spread the object.
-  plugins: [{ name: "fabrika-local-test-limits", enforce: "post", config: localLimits }],
+  plugins: [{ name: "fabrika-local-test-limits", enforce: "post", config: localLimits }, scriptReads],
 });

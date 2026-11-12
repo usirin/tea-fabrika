@@ -3,8 +3,6 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished } from "vitest";
-// Declared so vitest's `--changed` walk reaches this test when the script changes.
-import "./apt.sh?raw";
 
 // Today's CI. Covers apt.sh, the apt step of the test job and of next's chromium step. No root
 // and no network: a fake `apt-get` fails while the Azure mirror is listed, for the verbs a case
