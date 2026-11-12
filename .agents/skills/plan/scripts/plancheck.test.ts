@@ -1008,11 +1008,11 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
 };
 
 describe("T686 size advice in the draft check, today's tooling", () => {
-  // Plant: let a slice over the cap fail the draft, or drop the advice. 0087 says it advises until
-  // the replay, so the exit code is the same either way, and only a slice over 600 is named.
-  it("property: the draft names each slice over 600 product lines and never changes the exit code", () => {
+  // Plant: let a slice's size fail the draft, name a slice by its size, or drop the size line. 0099
+  // says no number caps a pull request, so the exit code is the same whatever the slices expect.
+  it("property: the draft prints the plan's size, names no slice by its line count and never changes the exit code", () => {
     fc.assert(
-      fc.property(fc.array(fc.integer({ min: 1, max: 1200 }), { minLength: 1, maxLength: 4 }), (slices) => {
+      fc.property(fc.array(fc.integer({ min: 1, max: 5000 }), { minLength: 1, maxLength: 4 }), (slices) => {
         const listed = slices.map((lines, at) => `${at + 1}. **Slice ${at + 1}: ${lines} lines.**`).join("\n");
         const body = complete().replace(
           "Size: 1 agent hour, 80 lines. Confidence: 85%.",
@@ -1020,8 +1020,8 @@ describe("T686 size advice in the draft check, today's tooling", () => {
         );
         const ran = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
         expect(ran.code, ran.text).toBe(0);
-        const named = [...ran.text.matchAll(/size: slice (\d+) .* over the cap of 600/g)].map((m) => Number(m[1]));
-        expect(named).toEqual(slices.flatMap((lines, at) => (lines > 600 ? [at + 1] : [])));
+        expect(ran.text).toContain(`${slices.length} slices, the largest ${Math.max(...slices)}\n`);
+        expect(ran.text).not.toMatch(/size: slice \d+|\bcap\b/);
       }),
       { seed: 686, numRuns: 4 },
     );
