@@ -3,7 +3,7 @@
 // into done; retry interrupted fire; leak a marker into each saved answer/view/report/reason.
 import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Chaos, type Handler, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
+import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 
@@ -57,7 +57,7 @@ export type Open = Effect.Effect<
       }>
     >;
     readonly check: (target: Chaos.Target) => Effect.Effect<Chaos.Report, Nemesis.NemesisError>;
-    readonly letter: (n: number, input: unknown) => unknown;
+    readonly letter: (n: number, input: unknown) => Incoming;
   },
   never,
   Scope.Scope
@@ -80,8 +80,8 @@ const experiments = Arbitrary.all({
 const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
-const now = () => Effect.succeed(Outcome.Ok(100));
-const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.Ok));
+const now = () => Effect.succeed(Outcome.ok(100));
+const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.ok));
 const phase = (raw: unknown) => Schema.decodeUnknownSync(chaos.state.schema)(raw);
 
 const target = (process: string) =>
@@ -125,6 +125,63 @@ const noLeak = (value: unknown, marker: string, output: string) => {
 export const suite = (open: Open, checklist: unknown) =>
   describe("P17b slice 2 real runner", () => {
     it.effect.prop(
+      "a forged chaos declaration cannot grant fire to another registered program",
+      [experiments, Arbitrary.schema(Schema.NonEmptyString)],
+      ([input, generated]) =>
+        Effect.forEach(
+          [...new Set(["fabrika/chaos", "chaos", "queue", generated, `${generated}/chaos`])],
+          (registered) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const world = yield* open;
+                const binding = yield* startTarget(world, checklist);
+                const calls: Array<unknown> = [];
+                // The declaration always claims the qualified owner. Registration is trusted by the host.
+                const { runner } = yield* world.session(NAME, registered, chaos, {
+                  now,
+                  fire: (request) =>
+                    Effect.sync(() => {
+                      calls.push(request);
+                      return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
+                    }),
+                  inspect: read(world, binding),
+                });
+                yield* runner.msg(
+                  world.letter(1, {
+                    type: "start",
+                    id: experimentId,
+                    seed: input.seed,
+                    most: 1,
+                    gap: input.gap,
+                    target: binding,
+                  }),
+                );
+                const deadline = yield* nextDeadline(world);
+
+                if (deadline === null) {
+                  return yield* Effect.die(new Error("experiment lost its deadline"));
+                }
+
+                yield* runner.due(deadline);
+                const allowed = registered === chaos.name;
+                expect(calls).toHaveLength(allowed ? 1 : 0);
+                const answers = (yield* world.letters(NAME)).filter((letter) =>
+                  Schema.is(Schema.Struct({ type: Schema.Literals(["fire_ok", "fire_err"]) }))(letter.m),
+                );
+                expect(answers).toHaveLength(1);
+                expect(answers[0]?.m).toMatchObject(
+                  allowed
+                    ? { type: "fire_ok" }
+                    : { type: "fire_err", error: Schema.TaggedStruct("bad_cmd", {}).make({}), reason: "bad_cmd" },
+                );
+              }),
+            ),
+          { concurrency: 1, discard: true },
+        ),
+      { arbitrary, timeout: 120_000 },
+    );
+
+    it.effect.prop(
       "a checklist-shaped target cannot name the chaos process or its registered name",
       [experiments, Arbitrary.schema(Schema.Literals(["name", "process"]))],
       ([input, collision]) =>
@@ -138,11 +195,11 @@ export const suite = (open: Open, checklist: unknown) =>
               fire: (request) =>
                 Effect.sync(() => {
                   calls.push(request);
-                  return Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }));
+                  return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
                 }),
               inspect: read(world, binding),
             });
-            yield* runner.open("watch");
+            const before = yield* runner.open("watch");
             const unsafe = { ...binding, [collision]: collision === "name" ? NAME : process };
             expect(Schema.is(Chaos.Target)(unsafe), "the schema alone cannot check the trusted binding").toBe(true);
             const sent = yield* runner.msg(
@@ -158,7 +215,9 @@ export const suite = (open: Open, checklist: unknown) =>
             expect(sent._tag).toBe("refused");
             yield* runner.due(100_000_000);
             expect(calls).toEqual([]);
-            expect(chaos.wake(phase((yield* world.snapshot(NAME)).model))).toBeNull();
+            const after = yield* runner.open("after-refusal");
+            expect(after.view).toEqual(before.view);
+            expect(chaos.wake(phase(after.view))).toBeNull();
           }),
         ),
       { arbitrary, timeout: 120_000 },
@@ -174,29 +233,25 @@ export const suite = (open: Open, checklist: unknown) =>
             const binding = yield* startTarget(world, checklist);
             const calls: Array<Chaos.Fire> = [];
             const published: Array<Update> = [];
+            const observations: Array<{
+              readonly request: Chaos.Fire;
+              readonly model: ReturnType<typeof phase>;
+              readonly pos: number | undefined;
+              readonly view: number | undefined;
+            }> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 const saved = yield* world.snapshot(NAME);
-                const model = phase(saved.model);
-
-                if (model.phase._tag !== "active" && model.phase._tag !== "checking") {
-                  return yield* Effect.die(new Error("fire began before the experiment was saved"));
-                }
-
-                expect(model.phase.experiment.asked).toContainEqual(
-                  expect.objectContaining({
-                    ordinal: request.ordinal,
-                    fault: request.fault,
-                  }),
-                );
                 const installed = (yield* world.letters(NAME)).find((letter) => letter.rev === saved.after);
-                expect(installed, "saved turn has an inbox letter").toBeDefined();
-                expect(published.at(-1)?.rev, "view installed at this inbox position before outside effect").toBe(
-                  installed?.pos,
-                );
+                observations.push({
+                  request,
+                  model: phase(saved.model),
+                  pos: installed?.pos,
+                  view: published.at(-1)?.rev,
+                });
                 calls.push(request);
-                return Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }));
+                return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
               });
             const handlers = { now, fire, inspect: read(world, binding) };
             const start = { type: "start", id: experimentId, ...input, target: binding };
@@ -238,6 +293,25 @@ export const suite = (open: Open, checklist: unknown) =>
                   const at = deadline + input.late;
                   yield* runner.due(at);
                   expect(calls).toHaveLength(ordinal);
+                  expect(observations).toHaveLength(ordinal);
+                  const observed = observations.at(-1);
+
+                  if (observed === undefined) {
+                    return yield* Effect.die(new Error("the controlled fire did not observe storage"));
+                  }
+
+                  const savedPhase = observed.model.phase;
+                  expect(["active", "checking"]).toContain(savedPhase._tag);
+
+                  if (savedPhase._tag !== "active" && savedPhase._tag !== "checking") {
+                    return yield* Effect.die(new Error("fire began before the experiment was saved"));
+                  }
+
+                  expect(savedPhase.experiment.asked).toContainEqual(
+                    expect.objectContaining({ ordinal: observed.request.ordinal, fault: observed.request.fault }),
+                  );
+                  expect(observed.pos, "saved turn has an inbox letter").toBeDefined();
+                  expect(observed.view, "view installed before outside effect").toBe(observed.pos);
 
                   for (let n = 0; n < input.duplicates; n++) {
                     yield* runner.due(at);
@@ -269,7 +343,16 @@ export const suite = (open: Open, checklist: unknown) =>
             const letters = yield* world.letters(NAME);
             const answers = letters.filter((l) => Schema.is(Schema.Struct({ type: Schema.Literal("fire_ok") }))(l.m));
             expect(answers).toHaveLength(input.most);
-            expect(answers.every((l) => l.parent !== null)).toBe(true);
+            const timers = letters.filter((l) => Schema.is(Schema.Struct({ type: Schema.Literal("timer") }))(l.m));
+            expect(timers).toHaveLength(input.most);
+
+            for (const [index, answer] of answers.entries()) {
+              const timer = timers[index];
+              expect(timer).toBeDefined();
+              expect(answer.id.endsWith(`/${timer?.pos}/0/answer`)).toBe(true);
+              expect(answer.parent).toBe(timer?.parent);
+            }
+
             expect(new Set(answers.map((l) => l.id)).size).toBe(input.most);
           }),
         ),
@@ -290,16 +373,17 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 calls.push(request.ordinal);
+                expect(calls.filter((ordinal) => ordinal === request.ordinal)).toHaveLength(1);
 
                 if (request.ordinal !== 1) {
-                  return Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }));
+                  return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
                 }
 
                 switch (mode) {
                   case "refused":
-                    return Outcome.Ok(Chaos.Fired.cases.refused.make({ reason: "stale" }));
+                    return Outcome.ok(Chaos.Fired.cases.refused.make({ reason: "stale" }));
                   case "off":
-                    return Outcome.Err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) }));
+                    return Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) }));
                   case "failed":
                     return yield* Effect.die(new TypeError("controlled outside failure"));
                   case "interrupted":
@@ -407,10 +491,10 @@ export const suite = (open: Open, checklist: unknown) =>
             const binding = yield* startTarget(world, checklist);
             const handlers: Readonly<Record<string, Handler<never>>> = {
               now,
-              fire: () => Effect.succeed(Outcome.Ok(Chaos.Fired.cases.fired.make({ hit: null }))),
+              fire: () => Effect.succeed(Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }))),
               inspect: () =>
                 mode === "off"
-                  ? Effect.succeed(Outcome.Err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) })))
+                  ? Effect.succeed(Outcome.err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: null }) })))
                   : Effect.die(new RangeError("controlled check failure")),
             };
             yield* Effect.scoped(
@@ -450,103 +534,108 @@ export const suite = (open: Open, checklist: unknown) =>
       { arbitrary, timeout: 120_000 },
     );
 
-    it.effect.prop(
-      "[secrets] body and private error markers stay out of each saved answer, shown state, report and reason",
-      [
-        experiments,
-        Arbitrary.schema(Schema.String.check(Schema.isMinLength(12), Schema.isMaxLength(40))),
-        Arbitrary.schema(Schema.Literals(["off", "failed", "refused", "fired"])),
-      ],
-      ([input, text, mode]) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const marker = `private-${Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0"))
-              .join("")
-              .slice(0, 80)}-end`;
-            const world = yield* open;
-            const binding = yield* startTarget(world, checklist);
-            const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
-            yield* body.runner.msg(world.letter(102, { type: "uncheck", name: "task" }));
-            yield* body.runner.msg(world.letter(103, { type: "check", name: "task", note: marker }));
-            const handlers: Readonly<Record<string, Handler<never>>> = {
-              now,
-              fire: () =>
-                mode === "off"
-                  ? Effect.succeed(
-                      Outcome.Err(new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: new Error(marker) }) })),
-                    )
-                  : mode === "failed"
-                    ? Effect.die(new URIError(marker))
-                    : Effect.succeed(
-                        Outcome.Ok(
-                          mode === "refused"
-                            ? Chaos.Fired.cases.refused.make({ reason: "stale" })
-                            : Chaos.Fired.cases.fired.make({ hit: null }),
+    for (const output of ["answers", "view", "report", "reasons", "attributes", "events", "links", "health"] as const) {
+      it.effect.prop(
+        `[secrets] ${output} keeps body and private error markers out, including encoded forms`,
+        [
+          experiments,
+          Arbitrary.schema(Schema.String.check(Schema.isMinLength(12), Schema.isMaxLength(40))),
+          Arbitrary.schema(Schema.Literals(["off", "failed", "refused", "fired"])),
+        ],
+        ([input, text, mode]) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const marker = `private-${Array.from(new TextEncoder().encode(text), (b) =>
+                b.toString(16).padStart(2, "0"),
+              )
+                .join("")
+                .slice(0, 80)}-end ?/+=%`;
+              const world = yield* open;
+              const binding = yield* startTarget(world, checklist);
+              const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
+              yield* body.runner.msg(world.letter(102, { type: "uncheck", name: "task" }));
+              yield* body.runner.msg(world.letter(103, { type: "check", name: "task", note: marker }));
+              const handlers: Readonly<Record<string, Handler<never>>> = {
+                now,
+                fire: () =>
+                  mode === "off"
+                    ? Effect.succeed(
+                        Outcome.err(
+                          new Nemesis.NemesisError({ reason: new Nemesis.Off({ cause: new Error(marker) }) }),
                         ),
-                      ),
-              inspect: read(world, binding),
-            };
-            const { runner, recorded } = yield* world.session(NAME, chaos.name, chaos, handlers);
-            yield* runner.open("watch");
-            yield* runner.msg(
-              world.letter(1, {
-                type: "start",
-                id: experimentId,
-                seed: input.seed,
-                most: 1,
-                gap: input.gap,
-                target: binding,
-              }),
-            );
-            const deadline = yield* nextDeadline(world);
+                      )
+                    : mode === "failed"
+                      ? Effect.die(new URIError(`https://invalid.test/?private=${encodeURIComponent(marker)}`))
+                      : Effect.succeed(
+                          Outcome.ok(
+                            mode === "refused"
+                              ? Chaos.Fired.cases.refused.make({ reason: "stale" })
+                              : Chaos.Fired.cases.fired.make({ hit: null }),
+                          ),
+                        ),
+                inspect: read(world, binding),
+              };
+              const { runner, recorded } = yield* world.session(NAME, chaos.name, chaos, handlers);
+              yield* runner.open("watch");
+              yield* runner.msg(
+                world.letter(1, {
+                  type: "start",
+                  id: experimentId,
+                  seed: input.seed,
+                  most: 1,
+                  gap: input.gap,
+                  target: binding,
+                }),
+              );
+              const deadline = yield* nextDeadline(world);
 
-            if (deadline === null) {
-              return yield* Effect.die(new Error("experiment lost its deadline"));
-            }
+              if (deadline === null) {
+                return yield* Effect.die(new Error("experiment lost its deadline"));
+              }
 
-            yield* runner.due(deadline);
-            const letters = yield* world.letters(NAME);
-            const answers = letters.filter(
-              (l) =>
-                Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
-            );
-            expect(answers.length).toBeGreaterThanOrEqual(3);
+              yield* runner.due(deadline);
+              const letters = yield* world.letters(NAME);
+              const answers = letters.filter(
+                (l) =>
+                  Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
+                  /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
+              );
+              expect(answers.length).toBeGreaterThanOrEqual(3);
 
-            for (const answer of answers) {
-              noLeak(answer.m, marker, `answer ${answer.id}`);
-            }
+              const view = (yield* runner.open("shown")).view;
+              const report = yield* world.check(binding);
+              const reasons = answers.map(
+                (a) =>
+                  Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).reason ??
+                  "ok",
+              );
+              expect(reasons).toHaveLength(answers.length);
+              const { rows, health } = yield* recorded;
+              const commands = rows.filter((row) => row.name === "runner.cmd");
+              expect(commands.length, "real Cmd spans reached the stored job record").toBeGreaterThanOrEqual(3);
+              expect(health.length, "ended spans reached stored health").toBeGreaterThan(0);
 
-            noLeak((yield* runner.open("shown")).view, marker, "shown state");
-            noLeak(yield* world.check(binding), marker, "report JSON");
-            const reasons = answers.map(
-              (a) =>
-                Schema.decodeUnknownSync(Schema.Struct({ reason: Schema.optional(Schema.String) }))(a.m).reason ?? "ok",
-            );
-            expect(reasons).toHaveLength(answers.length);
-            noLeak(reasons, marker, "answer reasons");
-            const { rows, health } = yield* recorded;
-            const commands = rows.filter((row) => row.name === "runner.cmd");
-            expect(commands.length, "real Cmd spans reached the stored job record").toBeGreaterThanOrEqual(3);
-            expect(health.length, "ended spans reached stored health").toBeGreaterThan(0);
+              const outputs = {
+                answers: answers.map((answer) => answer.m),
+                view,
+                report,
+                reasons,
+                attributes: commands.map((row) => row.attributes),
+                events: commands.map((row) => row.events),
+                links: commands.map((row) => row.links),
+                health,
+              };
+              noLeak(outputs[output], marker, output);
 
-            for (const [name, output] of Object.entries({
-              attributes: commands.map((row) => row.attributes),
-              events: commands.map((row) => row.events),
-              links: commands.map((row) => row.links),
-              health,
-            })) {
-              noLeak(output, marker, name);
-            }
+              if (mode === "failed") {
+                expect(commands.some((row) => row.attributes["error.type"] === "URIError")).toBe(true);
+              }
 
-            if (mode === "failed") {
-              expect(commands.some((row) => row.attributes["error.type"] === "URIError")).toBe(true);
-            }
-
-            const saved = JSON.stringify(yield* world.letters(TARGET));
-            expect(saved, "the private body reached real storage").toContain(marker);
-          }),
-        ),
-      { arbitrary, timeout: 120_000 },
-    );
+              const saved = JSON.stringify(yield* world.letters(TARGET));
+              expect(saved, "the private body reached real storage").toContain(marker);
+            }),
+          ),
+        { arbitrary, timeout: 120_000 },
+      );
+    }
   });

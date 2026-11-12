@@ -20,7 +20,7 @@ type Msg = typeof Fabrika.ChaosMachine.Msg.Type;
 type Command = ReturnType<ChaosProgram["machine"]["init"]>[1][number];
 
 const id = (n: number) =>
-  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(32).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
 const process = Schema.decodeUnknownSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
@@ -43,7 +43,7 @@ const starts = fc.record({
       client: `client:${n}`,
       key: `public:${n}`,
       process: Schema.decodeUnknownSync(Fabrika.Id.Process)(
-        `process_0000000000e008${n.toString(32).padStart(12, "0")}`,
+        `process_0000000000e008${n.toString(16).padStart(12, "0")}`,
       ),
     }),
   ),
@@ -266,6 +266,19 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
               const [next, cmds] = applyCell(chaos.machine, current, msg);
               expect(cmds).toEqual([]);
               expect(chaos.wake(next)).toBeNull();
+
+              if (
+                current.phase._tag === "stopped" &&
+                (msg.type === "fire_ok" || msg.type === "fire_err") &&
+                msg.cmd.id === current.phase.start.id &&
+                current.phase.asked.some((asked) => asked.ordinal === msg.cmd.ordinal) &&
+                !current.phase.answers.some((did) => did.ordinal === msg.cmd.ordinal)
+              ) {
+                expect(next.phase).toMatchObject({
+                  answers: expect.arrayContaining([expect.objectContaining({ ordinal: msg.cmd.ordinal, at: msg.at })]),
+                });
+              }
+
               current = next;
             }
           }),
