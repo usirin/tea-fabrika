@@ -109,6 +109,8 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           };
         }
 
+        // A zero poll was once missed by this generated table's invalid-value draw.
+        expect(Exit.isFailure(read({ ...table, merger: { ...table.merger, poll: 0 } }))).toBe(true);
         const refused = read(broken);
         expect(Exit.isFailure(refused)).toBe(true);
 

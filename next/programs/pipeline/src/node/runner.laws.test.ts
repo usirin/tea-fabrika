@@ -1,37 +1,30 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// edge: Effect has no node:sqlite driver for the Sql contract
 import { DatabaseSync } from "node:sqlite";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Scope } from "effect";
 import * as RunnerTest from "../RunnerTest.ts";
-
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "merger-laws-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-);
 
 RunnerTest.suite(
   Effect.gen(function* () {
-    const path = yield* folder;
-    const opened = new Map<string, DatabaseSync>();
-    const sqls = new Map<string, Sql>();
-    const connect = (part: string) => {
-      const db = new DatabaseSync(join(path, `${part}.db`));
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const folder = yield* fs.makeTempDirectoryScoped({ prefix: "merger-laws-" });
+    const parent = yield* Scope.Scope;
+    let scope = yield* Scope.fork(parent, "sequential");
+    const opened = new Map<string, Sql>();
+    const connect = Effect.fnUntraced(function* (part: string) {
+      const db = yield* Effect.acquireRelease(
+        Effect.sync(() => new DatabaseSync(path.join(folder, `${part}.db`))),
+        (handle) => Effect.sync(() => handle.close()),
+      ).pipe(Scope.provide(scope));
       db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-      opened.set(part, db);
-      return db;
-    };
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        for (const db of opened.values()) {
-          if (db.isOpen) {
-            db.close();
-          }
-        }
-      }),
-    );
+      opened.set(part, nodeSql(db));
+    });
+    const parts = ["ledger", "process", "recovery", "alarms"];
+    yield* Effect.forEach(parts, connect, { discard: true, concurrency: 1 });
+    const sqls = new Map<string, Sql>();
     const sql = (part: string): Sql => {
       const known = sqls.get(part);
 
@@ -39,7 +32,16 @@ RunnerTest.suite(
         return known;
       }
 
-      const handle = () => nodeSql(opened.get(part) ?? connect(part));
+      const handle = () => {
+        const current = opened.get(part);
+
+        if (current === undefined) {
+          // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- edge: Sql is synchronous; an unknown harness part is a programming defect
+          throw new Error(`unknown database part: ${part}`);
+        }
+
+        return current;
+      };
       const adapter: Sql = {
         exec: (query, ...params) => handle().exec(query, ...params),
         transaction: (f) => handle().transaction(f),
@@ -55,11 +57,10 @@ RunnerTest.suite(
     };
     return {
       sql,
-      reopen: Effect.sync(() => {
-        for (const [part, db] of opened) {
-          db.close();
-          connect(part);
-        }
+      reopen: Effect.gen(function* () {
+        yield* Scope.close(scope, Exit.void);
+        scope = yield* Scope.fork(parent, "sequential");
+        yield* Effect.forEach(parts, connect, { discard: true, concurrency: 1 });
       }),
       alarms: {
         set: (name, at) =>
@@ -81,5 +82,5 @@ RunnerTest.suite(
           }),
       },
     } satisfies RunnerTest.Store;
-  }),
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)), Effect.orDie),
 );

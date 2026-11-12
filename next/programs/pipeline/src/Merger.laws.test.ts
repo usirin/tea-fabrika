@@ -28,6 +28,7 @@ const positive = fc.oneof(
 
 const world = fc.record({
   complete: fc.boolean(),
+  ending: fc.constantFrom("merged", "checks", "merge"),
   size: fc.constantFrom(40, 64),
   ref: CiTest.word,
   name: CiTest.word,
@@ -149,9 +150,9 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
       ? 2
       : cmd.type === "update"
         ? 4
-        : cmd.type === "checks"
+        : cmd.type === "checks" && w.ending !== "checks"
           ? 7
-          : cmd.type === "merge"
+          : cmd.type === "merge" && w.ending === "merged"
             ? 3
             : drawn
     : drawn;
@@ -191,63 +192,102 @@ const guided = (p: Program, w: World) => {
       answers: cells,
     },
     { maxLength: 120, size: "max" },
-  ).map((raw) => {
-    let model = p.machine.init(null, ctx)[0];
-    let out: ReadonlyArray<Command> = [];
-    let clock = 0;
-    let started = false;
-    const msgs: Array<Msg> = [];
+  ).chain((raw) =>
+    fc.array(draw, { minLength: 12, maxLength: 80, size: "max" }).map((tail) => {
+      let model = p.machine.init(null, ctx)[0];
+      let out: ReadonlyArray<Command> = [];
+      let clock = 0;
+      let started = false;
+      const msgs: Array<Msg> = [];
 
-    for (const event of raw) {
-      let msg = event;
+      for (const event of raw) {
+        let msg = event;
 
-      if (event.type === "timer") {
-        const due = p.wake(model);
+        if (event.type === "timer") {
+          const due = p.wake(model);
 
-        const at =
-          due === null
-            ? clamp(clock + (event.at % 10_000))
-            : event.at % 3 === 0
-              ? Math.max(clock, due - 1)
-              : Math.max(clock, due);
-        msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at });
-        clock = at;
-      } else if ("cmd" in event && event.cmd.type !== "send") {
-        const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
+          const at =
+            due === null
+              ? clamp(clock + (event.at % 10_000))
+              : event.at % 3 === 0
+                ? Math.max(clock, due - 1)
+                : Math.max(clock, due);
+          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at });
+          clock = at;
+        } else if ("cmd" in event && event.cmd.type !== "send") {
+          const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
 
-        if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
-          continue;
+          if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
+            continue;
+          }
+
+          clock = clamp(
+            Math.max(
+              clock,
+              event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
+            ),
+          );
+          msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
+        } else if ("cmd" in event && event.cmd.type === "send") {
+          clock = Math.max(clock, event.at);
+          msg = Schema.decodeUnknownSync(p.msg)({ ...event, at: clock });
+        } else if (event.type === "land" || event.type === "abandon") {
+          if (p.refuse(model, event) !== null) {
+            continue;
+          }
+
+          if (event.type === "land" && started) {
+            break;
+          }
+
+          if (event.type === "land") {
+            started = true;
+          }
         }
 
-        clock = clamp(
-          Math.max(clock, event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000)),
-        );
-        msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
-      } else if ("cmd" in event && event.cmd.type === "send") {
-        clock = Math.max(clock, event.at);
-        msg = Schema.decodeUnknownSync(p.msg)({ ...event, at: clock });
-      } else if (event.type === "land" || event.type === "abandon") {
-        if (p.refuse(model, event) !== null) {
-          continue;
-        }
-
-        if (event.type === "land" && started) {
-          break;
-        }
-
-        if (event.type === "land") {
-          started = true;
-        }
+        msgs.push(msg);
+        const [next, commands] = applyCell<Model, Msg, Command>(p.machine, model, msg);
+        model = next;
+        out = [...out, ...commands];
       }
 
-      msgs.push(msg);
-      const [next, commands] = applyCell<Model, Msg, Command>(p.machine, model, msg);
-      model = next;
-      out = [...out, ...commands];
-    }
+      // Continue from the state the fold reached. Tea's blind picks can leave an old request
+      // unanswered after a retry; this tail answers only the current attempt and fires saved waits.
+      for (const cell of tail) {
+        let msg: Msg;
 
-    return msgs;
-  });
+        if (model._tag === "idle") {
+          if (started) {
+            break;
+          }
+
+          msg = land(w);
+          started = true;
+        } else if (model.step._tag === "waiting" || (model.step.at !== null && cell.pick % 7 === 0)) {
+          clock = Math.max(clock, model.step.at!);
+          msg = Schema.decodeUnknownSync(p.msg)({ type: "timer", at: clock });
+        } else {
+          const cmd = out.findLast((c) => c.type !== "send" && c.attempt === model.attempt);
+
+          if (cmd === undefined) {
+            break;
+          }
+
+          clock = clamp(
+            Math.max(clock, model._tag === "checking" && cell.at % 3 === 0 ? model.until : clock + (cell.at % 10_000)),
+          );
+          msg = answer(p, w, cmd, cell.pick, clock);
+        }
+
+        msgs.push(msg);
+        const [next, commands] = applyCell<Model, Msg, Command>(p.machine, model, msg);
+        model = next;
+        out = [...out, ...commands];
+      }
+
+      return msgs;
+    }),
+  );
 };
 
 const service = (cmd: Command) => cmd.type !== "send";
@@ -438,7 +478,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     ) {
       const kind = ChangeKind.kindOf(settingsFor(w).kinds, msg.value.paths);
 
-      if (ChangeKind.checksFor(settingsFor(w).checks, kind).length === 0) {
+      if (settingsFor(w).checks[kind].length === 0) {
         reached = true;
         expect(asked).toEqual([]);
         expect(next._tag).toBe("idle");

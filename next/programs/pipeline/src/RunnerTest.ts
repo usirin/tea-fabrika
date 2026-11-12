@@ -353,7 +353,16 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         yield* h.land("r2");
         const before = yield* store.alarms.saved;
         expect(before.length).toBeGreaterThan(0);
+        const model = yield* h.current().model;
+        expect(model?._tag).toBe("checking");
+
+        if (model?._tag === "checking") {
+          expect(model.step._tag).toBe("waiting");
+          expect(before).toContainEqual({ name: NAME, at: model.step.at });
+        }
+
         yield* h.reopen;
+        expect(yield* h.current().model).toEqual(model);
         expect(yield* store.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
@@ -420,7 +429,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         } else if (move === "fault") {
           if (state._tag === "checking" && cell.pick % 3 !== 0) {
             yield* r.h.ci.fail(
-              "at",
+              cell.pick % 3 === 1 ? "start" : "at",
               cell.pick % 2 === 0
                 ? { kind: "fault", reason: cell.reason === "refused" ? "unavailable" : cell.reason }
                 : { kind: "defect" },
@@ -471,6 +480,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         const h = yield* start(store, Redacted.make(value.text));
         yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
         yield* h.host.fail("update", { kind: "defect" });
+        yield* h.ci.fail("start", { kind: "fault", reason: "unavailable" });
+        yield* h.ci.fail("start", { kind: "defect" });
         yield* h.ci.fail("at", { kind: "fault", reason: "rate_limited" });
         yield* h.ci.fail("at", { kind: "defect" });
         yield* h.land("initial");
@@ -489,6 +500,29 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             ],
             [value.text, value.token, encodeURIComponent(value.text)],
           );
+        });
+        // Drain the scripted failures through the saved alarms before the random walk can abandon.
+        yield* inspect;
+        yield* finish(h);
+        yield* inspect;
+        const failures = (yield* h.current().letters(NAME)).map((letter) => letter.m);
+
+        for (const reason of ["unavailable", "handler_failed"]) {
+          expect(failures).toContainEqual(
+            expect.objectContaining({
+              type: "checks_err",
+              cmd: expect.objectContaining({ start: true }),
+              error: Schema.TaggedStruct(reason, {}).make({}),
+            }),
+          );
+        }
+
+        yield* inspect;
+        yield* h.host.put({
+          ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
+          base: head,
+          tree: checked,
+          conflict: null,
         });
         const model = { n: 0 };
 

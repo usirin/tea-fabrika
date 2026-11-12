@@ -243,6 +243,13 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
               const changed = { ...found, head: commit(hex(6)) };
               m.changes.set(id, changed);
               sync(r.control.put(changed));
+              const previous = m.updates.get(id);
+
+              if (changed.state === "open" && previous?.answer._tag === "updated") {
+                expect(sync(r.host.update(id, previous.asked))).toEqual(
+                  Updated.cases.moved.make({ head: changed.head }),
+                );
+              }
             } else if (cell.move % 7 === 3) {
               const answer = sync(r.host.change(id));
               expect(Schema.is(Change)(answer)).toBe(true);
@@ -301,6 +308,13 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
                   m.updates.set(id, { asked: head, answer });
                   m.changes.set(id, { ...found, head: answer.head, tree: answer.tree, base: m.main });
                   expect(sync(r.host.update(id, head))).toEqual(answer);
+
+                  if (cell.pick % 3 !== 0) {
+                    const pushed = { ...found, head: commit(hex(8)), tree: answer.tree, base: m.main };
+                    m.changes.set(id, pushed);
+                    sync(r.control.put(pushed));
+                    expect(sync(r.host.update(id, head))).toEqual(Updated.cases.moved.make({ head: pushed.head }));
+                  }
                 }
               }
             }
