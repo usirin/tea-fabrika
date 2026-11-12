@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p17b2-lead-host",
+  "ticket": "287",
+  "pr": "1046",
+  "started": "2026-11-12T05:36:00-08:00",
+  "ended": "2026-11-12T05:44:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ only. The lead's host checks for P17b slice 2 at b549d00e8, merged with main 60a92404a with no conflict, by one helper agent. Format changed nothing and lint passed. Four test files passed: program.laws 9, the app's chaos.laws (the shared suite) 14, Runner.test 108, the layer exam 19. One full typecheck passed. No slice 2 law needs the real local runtime; the p90 revoke run is slice 3. Eight plants ran once each: seven red, one green. The green one: with the fire owner check loosened to a name suffix, the program suite's forged-declaration law stays green because its generator makes no name ending in the owner's name; Runner.test's ownership law catches the same plant. The nine loosening.sh hits were read by hand: new files, added rows, and one law renamed and made stricter (fire only for the exact name, three name cases for two, four values for two). No law got narrower. Notes for a later read: the generic runner names one program in its start check, and one schema const shadows the global Error in ChaosMachine.ts. Tokens are the subagent total; no dollar figure was reported.",
+  "tokens": 137711,
+  "tools": 22,
+  "minutes": 7.5,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": 137711,
+  "plants": [
+    {
+      "law": "next/programs/chaos/src/program.laws.test.ts:201",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts:222, the next gap counted from the deadline, not the alarm",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/chaos/src/program.laws.test.ts:301",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts:251, the missing-answer compare forced false",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/chaos/src/RunnerTest.ts:231",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts, the timer handler drops the Asked append",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/chaos/src/RunnerTest.ts:189",
+      "plant": "next/packages/libfabrika/src/runtime/Runner.ts:1543, the target process check dropped",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Runner.test.ts:1293",
+      "plant": "next/packages/libfabrika/src/runtime/Entry.ts:119, the owner compare loosened to a suffix",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Runner.test.ts:1293",
+      "plant": "next/packages/libfabrika/src/runtime/Entry.ts:69, the owner back to the bare name",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/chaos/src/RunnerTest.ts:132",
+      "plant": "next/packages/libfabrika/src/runtime/Entry.ts:69, the owner back to the bare name",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/chaos/src/RunnerTest.ts:132",
+      "plant": "next/packages/libfabrika/src/runtime/Entry.ts:119, the owner compare loosened to a suffix",
+      "result": "green"
+    }
+  ]
+}

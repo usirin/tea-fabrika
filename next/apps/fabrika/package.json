@@ -30,6 +30,7 @@
     "playwright": "catalog:",
     "react-dom": "catalog:",
     "@kampus/checklist": "workspace:*",
+    "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",

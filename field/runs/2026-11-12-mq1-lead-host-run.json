@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-mq1-lead-host-run",
+  "ticket": "usirin/tea-fabrika#765",
+  "pr": "usirin/tea-fabrika#1030",
+  "started": "2026-11-12T02:04:00-08:00",
+  "ended": "2026-11-12T02:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "claude-fable-5-2",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The new version (next/). What the lead owes before the merge for ticket 765, P43 slice 1 (the merger), at head 5074127a22bb13a53ce8066d87a437bf64ef161e, in a detached worktree on the laptop, Node 26.13.0, one worker. Main (0f7a3a95794ce8266855d48deb3f06dcb0f6a656) was merged in without a commit. Two conflicts, both mechanical: boundary-rules.json keeps both sides' rows in path order (checklist, counter, pipeline), and pnpm-lock.yaml is main's plus what `pnpm install --lockfile-only` adds for the new pack (39 lines: the next/programs/pipeline importer, picomatch 4.0.7 and @types/picomatch 4.0.3). Narrow runs on the merged tree, one file each, all passed first time: ci/Ci.test.ts 1, codehost/CodeHost.test.ts 2, Change.test.ts 2, Settings.test.ts 1, handlers.test.ts 1, Merger.laws.test.ts 9, node/runner.laws.test.ts 4, and settings/Setting.test.ts 8, which the branch does not change but which reads the changed Setting.ts. loosening.sh from the merge base 259704b1f6576a0b069965d5e1f515046f122c1c to the head printed 5 hits, all read by hand: three rule files gain rows for the new modules and the new pack (.oxlintrc.json, boundary-rules.json, layer-rules.json), and two files are new (node/runner.laws.test.ts, the pack's tsconfig.json). No law got narrower, was removed or runs fewer times. pnpm format changed nothing; pnpm lint passed. pnpm typecheck was not run here, so L7, the compiler law, is left to CI. This was a hand run by a lead helper, not a pipeline step; no dollar figure or token count was reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": null,
+  "costUsd": null,
+  "billed": null
+}
