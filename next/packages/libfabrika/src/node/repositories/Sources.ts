@@ -38,7 +38,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
       relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
     );
   };
-  type Location = { readonly location: string; readonly committed: boolean };
+  type Location = { readonly location: string; readonly committed: boolean; readonly directory: boolean };
   const target: (
     base: string,
     name: string,
@@ -51,13 +51,23 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     active: ReadonlySet<string> = new Set(),
   ) {
     let location = path.isAbsolute(name) ? path.parse(name).root : base;
+    let directory = true;
     const pending = name.split(path.sep).filter((part) => part !== "");
+
+    // A trailing separator requires a directory, just like a following dot segment.
+    if (name.endsWith(path.sep)) {
+      pending.push(".");
+    }
 
     while (pending.length > 0) {
       const part = pending.shift();
 
       if (part === undefined) {
         break;
+      }
+
+      if (!directory) {
+        return yield* failed("source parent is not a folder");
       }
 
       if (part === ".") {
@@ -85,10 +95,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
           .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
 
         if (stat.type !== "SymbolicLink") {
-          if (pending.length > 0 && stat.type !== "Directory") {
-            return yield* failed("source parent is not a folder");
-          }
-
+          directory = stat.type === "Directory";
           location = next;
           continue;
         }
@@ -103,10 +110,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         }
 
         if (entry.mode !== "120000") {
-          if (pending.length > 0 && entry.type !== "tree") {
-            return yield* failed("source parent is not a folder");
-          }
-
+          directory = entry.type === "tree";
           location = next;
           continue;
         }
@@ -133,9 +137,10 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
       const linked = yield* target(location, link, committed, new Set([...active, next]));
       location = linked.location;
+      directory = linked.directory;
     }
 
-    return { location, committed: committed && contains(options.root, location) };
+    return { location, committed: committed && contains(options.root, location), directory };
   });
   const readAt = Effect.fnUntraced(function* (base: string, file: string, committed: boolean) {
     const located = yield* target(base, file, committed).pipe(
