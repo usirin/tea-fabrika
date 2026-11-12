@@ -51,7 +51,12 @@ export type Store = {
     sql: Sql,
     next: Effect.Effect<string>,
   ) => Layer.Layer<
-    Children | ProgramMail | ProcessManager | Mailbox | Layer.Services<ReturnType<typeof ProcessStore.layer>>
+    | Children
+    | ProgramMail
+    | ProcessManager
+    | Mailbox
+    | Layer.Services<ReturnType<typeof ProcessManager.layer>>
+    | Layer.Services<ReturnType<typeof ProcessStore.layer>>
   >;
   readonly entries: (names: Iterable<string>) => Effect.Effect<ReadonlyArray<Entry>>;
   readonly probe: { readonly open: () => number };
