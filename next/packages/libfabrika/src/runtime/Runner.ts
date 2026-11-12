@@ -722,11 +722,11 @@ export class ProgramRunner extends Context.Service<
         /** A throw in the program's init is supervision's, as a step's is: observed, then the wait.
          *  The journal takes the attempt, under the letter `<pid>/init`, only once init has thrown,
          *  so a load whose init returns leaves the journal and its counts as they were. */
-        const booted = (init: Effect.Effect<Step, ProgramDown>) =>
+        const booted = (init: Effect.Effect<Step, ProgramDown>): Effect.Effect<Step, RunnerFailure> =>
           init.pipe(
             Effect.catchIf(
-              (down) => supervision !== null && down.source === undefined,
-              Effect.fnUntraced(function* (down) {
+              (down: ProgramDown) => supervision !== null && down.source === undefined,
+              Effect.fnUntraced(function* (down: ProgramDown): Effect.fn.Return<never, RunnerFailure> {
                 const { at } = yield* (yield* coordinator).status(process.name);
                 const letter = `${process.id}/init`;
                 yield* complete({
