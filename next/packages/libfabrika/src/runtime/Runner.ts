@@ -1028,7 +1028,7 @@ export class ProgramRunner extends Context.Service<
 
             const owed = !accepted || letter.id === options.mine;
             // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
-            const recovering = Option.exists(prepared, (turn) => turn.id === letter.id);
+            const preparedTurn = Option.exists(prepared, (turn) => turn.id === letter.id);
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
               id: `${process.id}/${letter.pos}/${index}`,
               cmd,
@@ -1036,7 +1036,7 @@ export class ProgramRunner extends Context.Service<
               parent: letter.parent,
               traceId: letter.traceId,
               build: process.build,
-              ...((owed || recovering) && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type))
+              ...((owed || preparedTurn) && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type))
                 ? { mail: true as const }
                 : {}),
               ...Option.getOrElse(oversized(cmd), () => ({})),
@@ -1347,6 +1347,12 @@ export class ProgramRunner extends Context.Service<
             context: tracer.context,
             span(options) {
               const span = tracer.span(options);
+              const attribute = span.attribute.bind(span);
+              span.attribute = (key, value) => {
+                if (key !== "fab.ledger.code") {
+                  attribute(key, key === "error.type" ? "LedgerError" : value);
+                }
+              };
               const end = span.end.bind(span);
               span.end = (time, exit) =>
                 end(time, Exit.isSuccess(exit) ? exit : Exit.fail(new LedgerError({ reason: "storage" })));

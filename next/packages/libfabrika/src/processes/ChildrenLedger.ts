@@ -176,6 +176,12 @@ export const layer = (config: {
             context: tracer.context,
             span(options) {
               const span = tracer.span(options);
+              const attribute = span.attribute.bind(span);
+              span.attribute = (key, value) => {
+                if (key !== "fab.ledger.code") {
+                  attribute(key, key === "error.type" ? "ChildrenError" : value);
+                }
+              };
               const end = span.end.bind(span);
               span.end = (time, exit) => {
                 const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();

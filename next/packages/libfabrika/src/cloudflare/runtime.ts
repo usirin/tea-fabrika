@@ -180,10 +180,12 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
 
 /** A child start's refusal becomes reply data. Storage still fails the call, by its reason only, so
  *  the caller asks again and no cause crosses the RPC. */
-const childReply = <E>(work: Effect.Effect<Started, ChildrenError | E>) =>
+const childReply = <E>(
+  work: Effect.Effect<Started, ChildrenError | E>,
+): Effect.Effect<typeof ChildReplies.Type, E | LedgerError> =>
   work.pipe(
     Effect.map((value) => ChildReplies.cases.ok.make({ value })),
-    Effect.catch((error) =>
+    Effect.catch((error): Effect.Effect<typeof ChildReplies.Type, E | LedgerError> =>
       !(error instanceof ChildrenError)
         ? Effect.fail(error)
         : error.reason === "storage"
