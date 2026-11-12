@@ -66,15 +66,38 @@ P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31
 from P6 to P12 and P16, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
 (owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
 stage, joined Tier 1, so it has 44 rows; it said 43.* No Tier 1
-row merged on 2026-11-11.
+row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
+below). *It said: no Tier 1 row merged on 2026-11-11.*
+
+*2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
+([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2
+([PR 896](https://github.com/usirin/tea-fabrika/pull/896),
+[PR 926](https://github.com/usirin/tea-fabrika/pull/926)), P38's slices 1 and 2
+([PR 901](https://github.com/usirin/tea-fabrika/pull/901),
+[PR 954](https://github.com/usirin/tea-fabrika/pull/954)), P39's slice 1
+([PR 917](https://github.com/usirin/tea-fabrika/pull/917)), P40's slice 1
+([PR 939](https://github.com/usirin/tea-fabrika/pull/939)), P41's slice 1
+([PR 929](https://github.com/usirin/tea-fabrika/pull/929)) and P14's slice 1 of 9
+([PR 912](https://github.com/usirin/tea-fabrika/pull/912)); P14's old
+[PR 810](https://github.com/usirin/tea-fabrika/pull/810) was closed. The checklist program's slice 1
+(ticket 806) merged as [PR 987](https://github.com/usirin/tea-fabrika/pull/987), on
+[0125](../../.decisions/0125-the-example-program-is-a-checklist.md): the checklist replaces the
+counter as the example. In flight: P14's slice 2 (ticket 828) and P42's slice 1 (ticket 770) have
+tests on their branches; P41's slice 2 (ticket 764) is at its tests step, draft
+[PR 993](https://github.com/usirin/tea-fabrika/pull/993); and the scheduled job piece (ticket 762,
+[0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)) has a build on its
+branch, draft [PR 992](https://github.com/usirin/tea-fabrika/pull/992).
+[0132](../../.decisions/0132-a-path-pack-may-sit-anywhere.md) answers P40's question before its
+slice 2. The 2026-11-11 entry below says what was being built earlier that day.
 
 *2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
 [0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
 `instance.json`, the `INSTANCE` binding and the `node/dev` subpaths, with a lint rule,
 `fabrika/no-stage-word`, that keeps the old word out. Alchemy's own `stage` keys and two saved quotes keep the word.
 
-*2026-11-11:* big rows are cut into stacks of slices of at most 600 product lines each
-([0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)). P13, notes (ticket 281), is
+*2026-11-11:* big rows are cut into stacks of slices, each landing whole
+([0087](../../.decisions/0087-a-pull-request-caps-product-lines.md); its 600-line cap is gone,
+[0099](../../.decisions/0099-no-number-caps-a-pull-request.md)). P13, notes (ticket 281), is
 re-planned as 4 slices; slice 1, durable terminal replies, is being built on a fresh branch, and
 the old branch is not continued ([0072](../../.decisions/0072-a-churning-lane-is-redone.md)). P34c
 (ticket 404) has an approved plan cut into 10 slices; slice 1, structured exit reasons, is being
@@ -99,7 +122,9 @@ lands each slice once its steps pass
 [PR 687](https://github.com/usirin/tea-fabrika/pull/687): each program and its window scripts ride
 inside the brain, and the local bar did not get worse ([experiment 241](../../experiments/241-one-file-build.md)).
 → next: P15, P17b, P18 to P20, P23 to
-P25, P27a and P36 have tests on their branches and wait for builds; P28's tests are in, and its
+P25, P27a and P36 have tests on their branches and wait for builds. P36's tests change first:
+email recovery now lets the device in at once, with no wait and no Cancel (2026-11-11,
+[0138](../../.decisions/0138-email-recovery-lets-in-at-once.md), tracker ticket 840). P28's tests are in, and its
 build waits on P19, P21 and P26. Ticket 331 names both P24 and P28, a clash to fix
 ([P24's row](./tier-1.md#the-pull-requests-one-at-a-time)).
 P34c, new on 2026-11-09 ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
@@ -252,10 +277,12 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent merges, and `catchup.sh` comments on each ticket it closes with the pull request and its merge commit (`.agents/skills/lead/scripts/catchup.sh:86`). No row per merge is written in `field/` yet: that note's M1 is proposed. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead merges product code and exam changes the same way, with `catchup.sh`, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md), owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
 - **Auto-merge on a hand pull request** (owner, 2026-11-08). The repo allows auto-merge and deletes head branches on merge. A hand pull request, never a live run's, gets auto-merge armed once its checks are known to pass, e2e included. `ask owner exam_read` stays a warning, so an agent's pull request that edits the exam can merge before the owner reads it. The owner accepts that, to test the pipeline's own limits. The lead agent never writes "owner read" unless the owner did, and each such merge gets a field note, so what slipped through can be counted.
 - **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)). *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
-- **A pull request changes at most 600 lines of product code** (owner, 2026-11-10, a trial that
-  only advises until it is replayed on this repo's merged pull requests). Bigger work is a stack of
-  slices the plan cuts, each its own pull request through every step, landing whole with its tests
-  ([0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)).
+- **No number caps a pull request's size** (owner, 2026-11-11). Bigger work is a stack of
+  slices the plan cuts by what lands whole, each its own pull request through every step, with its
+  tests. Size picks who looks, never whether it lands
+  ([0099](../../.decisions/0099-no-number-caps-a-pull-request.md), which drops
+  [0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)'s 600-line cap). *It said: at
+  most 600 lines of product code, a trial that only advises (owner, 2026-11-10).*
 - **The tests step writes each law as a property that walks the machine** (owner, 2026-11-11, a
   trial). Its generator reads the state it folds. Each plant is run once to show the law can fail,
   recorded in the report and the run row, and not committed. A single example stays only with a

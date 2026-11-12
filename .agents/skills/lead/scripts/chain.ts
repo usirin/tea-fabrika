@@ -131,6 +131,7 @@ import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
 import { stepOf, wipOf } from "./lane.ts";
+import * as Plants from "./plants.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
@@ -418,6 +419,8 @@ export type Facts = {
   readonly note: string;
   /** The last host step's outcome and head, for a review; `null` for any other step. */
   readonly host: string | null;
+  /** The lane's plant records (./plants.ts), for a review; `null` for any other step or with none. */
+  readonly plants: string | null;
 };
 
 /** One commit on the lane, and the step its `fabrika` note names (`unsigned` with none). */
@@ -472,6 +475,10 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     lines.push(
       `Host run, by chain.ts on the laptop outside any box (the brief's \`## host\` commands, e2e laws and shots): ${f.host}`,
     );
+  }
+
+  if (step === "review" && f.plants !== null) {
+    lines.push("", f.plants);
   }
 
   // Only a lane started at mutation, parked inside that step before 0066, gets here.
@@ -1172,6 +1179,8 @@ const handlers = (s: Setup) => {
     root?: string;
     steps: { step: string; outcome: string; head: string }[];
   } => (existsSync(state) ? JSON.parse(readFileSync(state, "utf8")) : { steps: [] });
+  /** A step's report beside the lane, for its plant table; `null` once the file is gone. */
+  const readReport = (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : null);
   const { readRecord, writeRecord } = chainFile(chainState, s.lane);
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
@@ -1217,6 +1226,7 @@ const handlers = (s: Setup) => {
       Effect.gen(function* () {
         const lane = saved();
         const round = earlier + cmd.round;
+        const heads = headsOf();
         const facts: Facts = {
           ticket: s.ticket,
           branch: s.branch,
@@ -1224,10 +1234,12 @@ const handlers = (s: Setup) => {
           root: lane.root ?? "",
           head: lane.head ?? "",
           round,
-          heads: headsOf(),
+          heads,
           commits: laneCommits(lane.root ?? "", lane.head ?? ""),
           note: cmd.note,
           host: cmd.step === "review" ? Host.lastHost(lane.steps) : null,
+          plants:
+            cmd.step === "review" ? Plants.section(Plants.records(lane.steps, readReport), heads.build ?? null) : null,
         };
         const brief = join(env.BOXES, `${s.lane}-chain${round}-${cmd.step}-brief.md`);
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
