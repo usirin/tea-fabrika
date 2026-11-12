@@ -2,6 +2,8 @@
 
 Decided 2026-10-18.
 
+Its decided rules are in: [0421](../../.decisions/0421-reuse-before-special-rules.md).
+
 ## What was decided
 
 Every part of the pipeline is built from the moves and combos that already

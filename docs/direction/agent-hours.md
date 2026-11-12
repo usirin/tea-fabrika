@@ -6,6 +6,10 @@ confidence. A ticket's size is an `estimate` in agent hours, written by the plan
 build, and the work's real size is `spent`, folded from the ticket's own run facts and never
 typed.
 
+Its decided rules are in: [0388](../../.decisions/0388-an-agent-hour-is-wall-clock.md),
+[0389](../../.decisions/0389-an-estimate-is-on-a-doubling-scale.md),
+[0390](../../.decisions/0390-a-run-records-ticket-and-pr-apart.md).
+
 The five open questions, as answered on the same day:
 
 | Question | Answer | Sure | Where |
