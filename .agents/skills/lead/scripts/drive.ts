@@ -476,9 +476,22 @@ const readAnswer = (report: string): typeof Said.Type => {
   return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
 };
 
+const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, reason: Schema.String }));
+
+/**
+ * The text a review's verdict is read from: the report, or, when the report is the typed answer
+ * alone, that answer's `reason`. A review sometimes puts its whole report there (tickets 869 and
+ * 871, 2026-11-12), and a correct merge-ready was refused.
+ */
+const verdictText = (report: string) =>
+  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+    onNone: () => report,
+    onSome: (answer) => answer.reason,
+  });
+
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
-  const lines = outsideFences(report).map((l) => l.replace(/^[`*#\s]+/, ""));
+  const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
   return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
