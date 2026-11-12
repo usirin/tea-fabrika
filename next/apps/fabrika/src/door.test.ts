@@ -972,9 +972,12 @@ describe("T843 sender budget, next/", () => {
 
   for (const failure of ["none", "gateway", "both"] as const) {
     it.effect.prop(
-      `T843 ring bound with ${failure} failing: parked rechecks retain delays and add only counts, including recovery (50 runs)`,
-      { count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 63 })) },
-      ({ count }) =>
+      `T843 ring bound with ${failure} failing: parked rechecks retain delays and add only counts despite aged failed archives, including recovery (50 runs)`,
+      {
+        count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 63 })),
+        archiveFailure: Schema.Literals(["unreachable", "mismatch"]),
+      },
+      ({ count, archiveFailure }) =>
         Effect.gen(function* () {
           // The connection admits at most 64 waits, including the warm-up wait.
           const w = yield* world({ rateLimit: { limit: count + 2, window: 60_000 } });
@@ -985,8 +988,10 @@ describe("T843 sender budget, next/", () => {
             const d = yield* Gateway;
             const projectSink = yield* SpanSink;
             const { client } = yield* online(d, w);
+            yield* TestClock.setTime(REFUSED_HOUR - 16 * 24 * HOUR);
+            const c = yield* wire(w, d, client, archiveFailure, () => broken && failure === "both");
+            yield* c.send("ledger.read", { stream: "old-archive", after: 0 });
             yield* TestClock.setTime(REFUSED_HOUR + 18_000);
-            const c = yield* wire(w, d, client, "mismatch", () => broken && failure === "both");
             yield* c.send("ledger.wait", { stream: "warm-ring", after: 0 });
 
             for (let n = 0; n < count; n++) {
@@ -1003,6 +1008,9 @@ describe("T843 sender budget, next/", () => {
             });
             yield* c.send("process.send", request("warm-ring-frame-count"));
             yield* projectSink.flush;
+            // An ordinary call already tried the due archive and kept it for a later retry.
+            expect(c.archives.length).toBeGreaterThan(0);
+            const archived = c.archives.length;
             const rows = () =>
               Object.fromEntries(
                 [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
@@ -1054,6 +1062,7 @@ describe("T843 sender budget, next/", () => {
 
               expect(Object.keys(current)).toEqual(Object.keys(before));
               expect(c.saved).toHaveLength(recorded);
+              expect(c.archives).toHaveLength(archived);
               expect(w.usedInputs).toEqual(inputs);
               expect(w.deliveries).toEqual(deliveries);
               expect(c.closes).toEqual([]);
@@ -1067,6 +1076,7 @@ describe("T843 sender budget, next/", () => {
             yield* c.recover;
             expect(rows()).toEqual(before);
             expect(c.saved).toHaveLength(recorded);
+            expect(c.archives).toHaveLength(archived);
             yield* TestClock.setTime(REFUSED_HOUR + HOUR);
             expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
               { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 4 },
