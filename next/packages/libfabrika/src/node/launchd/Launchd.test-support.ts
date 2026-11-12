@@ -43,9 +43,9 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     home,
     executable: path.join(home, "Electron"),
     args: [path.join(home, "brain.mjs"), "spaces & <angles> 雪"],
+    build: "p19-test-build",
     ...input,
     url: "http://127.0.0.1:18787",
-    build: "p19-test-build",
   });
   const spawner = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
