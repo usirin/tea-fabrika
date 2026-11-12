@@ -9,7 +9,8 @@ const Integer = Schema.Int.check(
 
 const Positive = Integer.check(Schema.isGreaterThan(0));
 
-const Model = Schema.TaggedUnion({
+/** @internal The saved budget schema retains its synchronous codecs. */
+export const Model = Schema.TaggedUnion({
   fresh: {},
   open: { policy: Policy, until: Integer, at: Integer, used: Positive },
   full: { policy: Policy, until: Integer, at: Integer },

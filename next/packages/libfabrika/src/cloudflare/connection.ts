@@ -23,11 +23,11 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     complete(work, counted).pipe(Effect.provideContext(recording));
   const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
     return yield* work.pipe(
-      Effect.catch((error) => {
+      Effect.mapError((error) => {
         const failure = rejected(error);
         return Schema.is(RateCountFailure)(failure)
-          ? Effect.fail(new SinkError({ reason: "storage", held: 0, message: failure.message, cause: error }))
-          : Effect.fail(error);
+          ? new SinkError({ reason: "storage", held: 0, message: failure.message, cause: error })
+          : error;
       }),
       Effect.tap((answer) =>
         answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)

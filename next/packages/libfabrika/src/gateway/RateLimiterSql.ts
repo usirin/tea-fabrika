@@ -17,7 +17,7 @@ import { Policy } from "./RateLimit.ts";
 const Saved = Schema.Struct({
   v: Schema.Literal(1),
   build: Schema.NonEmptyString,
-  model: Rate.machine.model.check(Schema.makeFilter((s) => s._tag !== "fresh")),
+  model: Rate.Model.check(Schema.makeFilter((s) => s._tag !== "fresh")),
 });
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Saved));
