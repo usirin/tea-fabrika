@@ -1,293 +1,58 @@
 import { describe, expect, it } from "@effect/vitest";
-import type { Ci } from "@kampus/libfabrika/ci/Ci";
-import { Status } from "@kampus/libfabrika/ci/Ci";
-import * as CiTest from "@kampus/libfabrika/ci/CiTest";
-import type { CodeHost } from "@kampus/libfabrika/codehost/CodeHost";
-import { Change } from "@kampus/libfabrika/codehost/CodeHost";
-import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
-import { InputId, Writer } from "@kampus/libfabrika/coordination";
-import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
-import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
-import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
-import { Mailbox } from "@kampus/libfabrika/processes/Mailbox";
-import { Owner, Recipient, Start } from "@kampus/libfabrika/processes/Process";
-import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
-import * as ProgramMailLedger from "@kampus/libfabrika/processes/ProgramMailLedger";
-import {
-  Alarm,
-  CheckedWriter,
-  type Incoming,
-  ProgramLoader,
-  Recording,
-  WatcherManager,
-} from "@kampus/libfabrika/runtime/Entry";
-import * as MailDeliveryLive from "@kampus/libfabrika/runtime/MailDeliveryLive";
-import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
-import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
-import { Replies } from "@kampus/libfabrika/runtime/Replies";
-import * as RepliesSql from "@kampus/libfabrika/runtime/RepliesSql";
-import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
-import type { Sql } from "@kampus/libfabrika/Sql";
-import {
-  Arbitrary,
-  Cause,
-  Clock,
-  ConfigProvider,
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Redacted,
-  Result,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
-import { TestClock } from "effect/testing";
-import { handlers } from "./handlers.ts";
+import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
 import * as Mail from "./Mail.ts";
-import { merger } from "./Merger.ts";
-import * as Settings from "./Settings.ts";
+import type { merger } from "./Merger.ts";
 
-export type Saved = { readonly name: string; readonly at: number };
+type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+type Saved = { readonly name: string; readonly at: number };
 
-export type Store = {
-  readonly sql: (part: string) => Sql;
-  readonly reopen: Effect.Effect<void>;
-  readonly alarms: {
-    readonly set: (name: string, at: number | null) => Effect.Effect<void>;
-    readonly saved: Effect.Effect<ReadonlyArray<Saved>>;
-    readonly take: (alarm: Saved) => Effect.Effect<void>;
+type Fault<R> =
+  | { readonly kind: "fault"; readonly reason: R }
+  | { readonly kind: "defect" }
+  | { readonly kind: "interrupt" };
+
+/** The Node caller supplies the real runner, stores and service controls. The suite owns the laws. */
+export type World = {
+  readonly host: {
+    readonly fail: (
+      method: "change" | "update" | "merge",
+      fault: Fault<"unavailable" | "rate_limited" | "refused">,
+    ) => Effect.Effect<void>;
+    readonly crashMerge: Effect.Effect<void>;
+    readonly calls: () => ReadonlyArray<{ readonly method: string }>;
+    readonly read: (change: number) => Effect.Effect<{ readonly state: string } | undefined>;
   };
+  readonly ci: {
+    readonly fail: (method: "start" | "at", fault: Fault<"unavailable" | "rate_limited">) => Effect.Effect<void>;
+  };
+  readonly alarms: { readonly saved: Effect.Effect<ReadonlyArray<Saved>> };
+  readonly current: () => {
+    readonly model: Effect.Effect<Model | null, unknown>;
+    readonly letters: (name: string) => Effect.Effect<ReadonlyArray<{ readonly m: unknown }>, unknown>;
+    readonly checkpoint: Effect.Effect<unknown, unknown>;
+  };
+  readonly reset: Effect.Effect<void>;
+  readonly reopen: Effect.Effect<void, unknown>;
+  readonly fire: Effect.Effect<void, unknown>;
+  readonly green: Effect.Effect<void>;
+  readonly deliver: (input: unknown) => Effect.Effect<unknown, unknown>;
+  readonly land: (ref: string) => Effect.Effect<unknown, unknown>;
+  readonly savedReplies: Effect.Effect<ReadonlyArray<unknown>, unknown>;
+};
+
+export type Driver = {
+  readonly open: (token?: Redacted.Redacted<string>) => Effect.Effect<World, unknown, Scope.Scope>;
+  readonly capture: () => { readonly tracer: Tracer.Tracer; readonly text: () => ReadonlyArray<string> };
+  readonly unleaked: (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => void;
 };
 
 const NAME = "merger:1";
-const BUILD = "merge-law";
-const PROCESS = "process_0000000000e008000000000000";
-const QUEUE = "process_0000000000e008000000000001";
-const SESSION = "process_0000000000e008000000000002";
-const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-const owner = Writer.cases.agent.make({ key: "SHA256:law", for: "law" });
 
-const from = {
-  by: "SHA256:brain",
-  for: "brain",
-  sentAt: "2026-11-11T00:00:00Z",
-  seen: 0,
-  parent: null,
-  traceId: TRACE,
-  build: BUILD,
-};
-
-const head = CodeHostTest.commit("a".repeat(40));
-const base = CodeHostTest.commit("d".repeat(40));
-const checked = CodeHostTest.tree("e".repeat(40));
-
-// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: shared runner suite constructs its pure program once
-const settings = Effect.runSync(
-  Settings.all.parse(
-    ConfigProvider.fromUnknown({
-      queue: { checks: { rows: [{ name: "check" }], docs: [{ name: "check" }], code: [{ name: "check" }] } },
-      merger: { wait: 1, poll: 1, backoff: 4 },
-    }),
-  ),
-);
-
-const program = merger(settings);
-
-const life = Effect.fnUntraced(function* (
-  store: Store,
-  services: Context.Context<CodeHost | CodeHostTest.Control | Ci | CiTest.Control>,
-  scope: Scope.Scope,
-) {
-  const data = Layer.merge(
-    LedgerSql.layer(store.sql("ledger"), { reader: "merge-laws" }),
-    LedgerTransactionSql.layer(store.sql("ledger")),
-  ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
-  let serial = 0;
-  const manager = ProcessManager.layer(
-    {
-      by: from.by,
-      owner: Owner.cases.brain.make({}),
-      recipient: Recipient.cases.client.make({ client: "brain", session: SESSION }),
-    },
-    Effect.sync(() => (serial++ === 0 ? PROCESS : QUEUE)),
-  );
-  const shared = MailDeliveryLive.layer.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        ProgramMailLedger.layer({ grants: { [NAME]: ["queue"] } }),
-        Layer.succeed(MailWakeups, { wake: () => Effect.void }),
-      ),
-    ),
-    Layer.provideMerge(manager),
-    Layer.provideMerge(Mailbox.layer),
-    Layer.provideMerge(data),
-  );
-  const context = yield* Layer.buildWithScope(shared, scope);
-
-  for (const [name, code] of [
-    [NAME, "merger"],
-    ["queue", "queue"],
-  ] as const) {
-    const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context), Effect.result);
-
-    if (Result.isFailure(status)) {
-      yield* ProcessManager.use((p) =>
-        p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program: code, hash: BUILD } }), from),
-      ).pipe(Effect.provide(context));
-    }
-  }
-
-  const checkedWriter = Layer.effect(
-    CheckedWriter,
-    Effect.gen(function* () {
-      const mailbox = yield* Mailbox;
-      return {
-        append: (i: Incoming) =>
-          mailbox.send(NAME, i.id, i.envelope.input, {
-            by: i.envelope.by.key,
-            for: i.envelope.by.for,
-            sentAt: i.sentAt,
-            seen: i.seen,
-            parent: i.envelope.id,
-            traceId: i.span.traceId,
-            build: BUILD,
-          }),
-        commit: () => Effect.die("no writes"),
-        own: () => Effect.die("no own command"),
-      };
-    }),
-  );
-  const own = Layer.mergeAll(
-    ProgramLoader.layer({ merger: program }, handlers).pipe(Layer.provide(Layer.succeedContext(services))),
-    ProcessStore.layer(store.sql("process"), { process: PROCESS }),
-    Layer.succeed(Alarm, { set: (at: number | null) => store.alarms.set(NAME, at) }),
-    Layer.succeed(WatcherManager, { publish: () => Effect.void }),
-    Layer.succeed(Recording, { flush: Effect.void }),
-    checkedWriter,
-  ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
-  const built = yield* Layer.buildWithScope(
-    ProgramRunner.layer(
-      { id: PROCESS, name: NAME, program: "merger", build: BUILD, owner },
-      { recovery: { sql: store.sql("recovery"), name: NAME, capacity: 1024 ** 3 } },
-    ).pipe(Layer.provide(own)),
-    scope,
-  );
-  const runner = Context.get(built, ProgramRunner);
-  const letters = (name: string) =>
-    Mailbox.use((m) => Stream.runCollect(m.read(name, 0))).pipe(Effect.provide(context));
-  const checkpoint = ProcessStore.use((s) => s.load).pipe(
-    Effect.provide(ProcessStore.layer(store.sql("process"), { process: PROCESS })),
-    Effect.provide(context),
-  );
-  return {
-    runner,
-    letters,
-    checkpoint,
-    reply: (id: string) =>
-      Replies.use((replies) => replies.reply(NAME, id)).pipe(
-        Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
-      ),
-    model: Effect.map(checkpoint, (saved) =>
-      saved === null ? null : Schema.decodeUnknownSync(program.machine.model)(saved.saved.model),
-    ),
-  };
-});
-
-const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redacted<string>) {
-  const options = token === undefined ? {} : { token };
-  const services = yield* Layer.build(Layer.merge(CodeHostTest.layer(options), CiTest.layer(options)));
-  const host = Context.get(services, CodeHostTest.Control);
-  const ci = Context.get(services, CiTest.Control);
-  yield* host.main(base);
-  yield* host.put({
-    ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
-    base: head,
-    tree: checked,
-    conflict: null,
-  });
-  let scope = yield* Scope.make();
-  yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-  let current = yield* life(store, services, scope);
-  let serial = 0;
-  const deliver = (input: unknown) =>
-    current.runner.msg({
-      id: `incoming-${++serial}`,
-      envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
-        by: owner,
-        arrivedAt: serial,
-        input,
-      },
-      sentAt: from.sentAt,
-      seen: 0,
-      span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
-    });
-  const reopen = Effect.gen(function* () {
-    yield* Scope.close(scope, Exit.void);
-    yield* store.reopen;
-    scope = yield* Scope.make();
-    current = yield* life(store, services, scope);
-  });
-  const fire = Effect.gen(function* () {
-    const alarm = (yield* store.alarms.saved).find((a) => a.name === NAME);
-    expect(alarm, "a working merger has a saved alarm").toBeDefined();
-
-    if (alarm !== undefined) {
-      yield* store.alarms.take(alarm);
-      yield* TestClock.setTime(Math.max(yield* Clock.currentTimeMillis, alarm.at));
-      yield* current.runner.due(alarm.at);
-    }
-  });
-  const green = Effect.gen(function* () {
-    const found = yield* host.read(1);
-    expect(found?._tag).toBe("found");
-
-    if (found !== undefined) {
-      yield* ci.report({
-        commit: found.head,
-        order: 1,
-        run: {
-          name: "check",
-          source: "push",
-          id: "run",
-          status: Status.cases.done.make({ conclusion: "success" }),
-          startedAt: 0,
-          completedAt: 1,
-          url: null,
-        },
-      });
-    }
-  });
-  return {
-    host,
-    ci,
-    services,
-    deliver,
-    reopen,
-    fire,
-    green,
-    current: () => current,
-    savedReplies: Effect.suspend(() =>
-      Effect.forEach(
-        Array.from({ length: serial }, (_, index) => `incoming-${index + 1}`),
-        (id) => current.reply(id),
-        { concurrency: 1 },
-      ),
-    ),
-    land: (ref: string) => deliver(Mail.Land.make({ type: "land", ref, change: 1, head, reply: "queue" })),
-  };
-});
-
-const replies = Effect.fnUntraced(function* (h: Effect.Success<ReturnType<typeof start>>) {
+const replies = Effect.fnUntraced(function* (h: World) {
   return (yield* h.current().letters("queue")).map((letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
 });
 
-const finish = Effect.fnUntraced(function* (h: Effect.Success<ReturnType<typeof start>>) {
+const finish = Effect.fnUntraced(function* (h: World) {
   for (let i = 0; i < 128; i++) {
     if ((yield* h.current().model)?._tag === "idle") {
       return;
@@ -327,13 +92,12 @@ const secret = Arbitrary.schema(
   }),
 );
 
-export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
+export const suite = (driver: Driver) =>
   describe("the merger on the real Node runner", () => {
     it.effect("scenario: R1 lands one checked change through saved commands and alarms", () =>
       Effect.gen(function* () {
         // Only the runner saves commands, answers and alarms; one change keeps this integration short.
-        const store = yield* open;
-        const h = yield* start(store);
+        const h = yield* driver.open();
         yield* h.land("r1");
         expect((yield* h.current().model)?._tag).toBe("checking");
         yield* h.green;
@@ -342,16 +106,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         expect(all).toHaveLength(1);
         expect(all[0]?._tag).toBe("merged");
         expect(all[0]?.ref).toBe("r1");
-        expect(yield* store.alarms.saved).toEqual([]);
+        expect(yield* h.alarms.saved).toEqual([]);
       }),
     );
     it.effect("scenario: R2 reopens while checking and fires the same saved alarm", () =>
       Effect.gen(function* () {
         // Reopen exercises the runner's own database recovery, not a pure reducer's JSON round trip.
-        const store = yield* open;
-        const h = yield* start(store);
+        const h = yield* driver.open();
         yield* h.land("r2");
-        const before = yield* store.alarms.saved;
+        const before = yield* h.alarms.saved;
         expect(before.length).toBeGreaterThan(0);
         const model = yield* h.current().model;
         expect(model?._tag).toBe("checking");
@@ -363,7 +126,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
         yield* h.reopen;
         expect(yield* h.current().model).toEqual(model);
-        expect(yield* store.alarms.saved).toEqual(before);
+        expect(yield* h.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
         expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
@@ -373,8 +136,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     it.effect("scenario: R3 retries an interrupted merge only at its saved asking deadline", () =>
       Effect.gen(function* () {
         // The handler merged before interruption. Recovery cannot assume it is safe to call it again.
-        const store = yield* open;
-        const h = yield* start(store);
+        const h = yield* driver.open();
         yield* h.land("r3");
         yield* h.green;
         yield* h.host.crashMerge;
@@ -393,7 +155,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
-    type Real = { h: Effect.Success<ReturnType<typeof start>>; inspect: Effect.Effect<void, unknown> };
+    type Real = { h: World; inspect: Effect.Effect<void, unknown> };
     const Cell = Schema.Struct({
       pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
       reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
@@ -470,14 +232,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       value: typeof secret extends Arbitrary.Arbitrary<infer A> ? A : never,
       commands: ReadonlyArray<typeof Cell.Type>,
     ) {
-      const captured = RepliesTest.capture();
+      const captured = driver.capture();
       const logs: Array<string> = [];
       const logger = Logger.map(Logger.formatSimple, (line) => {
         logs.push(line);
       });
       yield* Effect.gen(function* () {
-        const store = yield* open;
-        const h = yield* start(store, Redacted.make(value.text));
+        const h = yield* driver.open(Redacted.make(value.text));
         yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
         yield* h.host.fail("update", { kind: "defect" });
         yield* h.ci.fail("start", { kind: "fault", reason: "unavailable" });
@@ -490,7 +251,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const letters = [...(yield* h.current().letters(NAME)), ...(yield* h.current().letters("queue"))];
           const checkpoint = yield* h.current().checkpoint;
           const savedReplies = yield* h.savedReplies;
-          RepliesTest.unleaked(
+          driver.unleaked(
             [
               JSON.stringify(letters),
               JSON.stringify(checkpoint),
@@ -518,12 +279,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         }
 
         yield* inspect;
-        yield* h.host.put({
-          ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
-          base: head,
-          tree: checked,
-          conflict: null,
-        });
+        yield* h.reset;
         const model = { n: 0 };
 
         for (const command of commands) {
@@ -535,12 +291,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         const status = yield* h.host.read(1);
 
         if (status?.state === "open") {
-          yield* h.host.put({
-            ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
-            base: head,
-            tree: checked,
-            conflict: null,
-          });
+          yield* h.reset;
           yield* h.land("finish");
           yield* finish(h);
         }

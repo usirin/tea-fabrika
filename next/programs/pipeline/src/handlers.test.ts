@@ -21,27 +21,29 @@ describe("L12: handlers map faults", () => {
           const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
-          const fault =
-            cell.method === "checks"
-              ? new Ci.CiError({
-                  reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
-                })
-              : new CodeHost.CodeHostError({
-                  reason:
-                    reason === "refused"
-                      ? new CodeHost.Refused({ cause })
-                      : reason === "rate_limited"
-                        ? new CodeHost.RateLimited({ cause })
-                        : new CodeHost.Unavailable({ cause }),
-                });
-          const fail =
+          const hostFault = new CodeHost.CodeHostError({
+            reason:
+              reason === "refused"
+                ? new CodeHost.Refused({ cause })
+                : reason === "rate_limited"
+                  ? new CodeHost.RateLimited({ cause })
+                  : new CodeHost.Unavailable({ cause }),
+          });
+          const ciFault = new Ci.CiError({
+            reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
+          });
+          const fail = <E>(fault: E): Effect.Effect<never, E> =>
             cell.kind === "interrupt"
               ? Effect.interrupt
               : cell.kind === "defect"
                 ? Effect.die(new Error(cell.cause ?? "defect"))
                 : Effect.fail(fault);
-          const host = Layer.succeed(CodeHost.CodeHost, { change: () => fail, update: () => fail, merge: () => fail });
-          const ci = Layer.succeed(Ci.Ci, { start: () => fail, at: () => fail });
+          const host = Layer.succeed(CodeHost.CodeHost, {
+            change: () => fail(hostFault),
+            update: () => fail(hostFault),
+            merge: () => fail(hostFault),
+          });
+          const ci = Layer.succeed(Ci.Ci, { start: () => fail(ciFault), at: () => fail(ciFault) });
           const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
 
           if (cell.kind === "bad_head") {

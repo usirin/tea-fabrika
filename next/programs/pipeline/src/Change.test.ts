@@ -4,7 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
 import { Schema } from "effect";
 import * as fc from "fast-check";
-import picomatch from "picomatch/posix";
+import picomatch from "picomatch/posix.js";
 import * as Change from "./Change.ts";
 import type { merger } from "./Merger.ts";
 

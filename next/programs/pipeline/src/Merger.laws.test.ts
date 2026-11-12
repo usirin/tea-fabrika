@@ -201,7 +201,7 @@ const guided = (p: Program, w: World) => {
       const msgs: Array<Msg> = [];
 
       for (const event of raw) {
-        let msg = event;
+        let msg: Msg = event;
 
         if (event.type === "timer") {
           const due = p.wake(model);
