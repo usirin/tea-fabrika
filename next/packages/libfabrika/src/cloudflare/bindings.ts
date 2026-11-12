@@ -172,7 +172,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
 export type ProcessBinding = Rpc.DurableObjectBranded &
   Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
     configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
-    descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
+    descriptor: RemoteCall<(process?: string) => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
     recover: RemoteCall<() => Effect.Effect<unknown>>;
     savedAlarm: RemoteCall<() => Effect.Effect<number | null>>;

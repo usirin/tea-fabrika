@@ -15,8 +15,6 @@ import { devRecording } from "./dev-recording.ts";
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
-export { Installed } from "../../cloudflare/bindings.ts";
-
 export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
   /** The failure this error translates, kept in memory for diagnosis. */

@@ -166,9 +166,9 @@ export class ProcessClient extends Context.Service<
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),
-      descriptor: () =>
+      descriptor: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process descriptor RPC enters Effect
-        Effect.tryPromise({ try: () => stub.descriptor(), catch: unreachable }),
+        Effect.tryPromise({ try: () => stub.descriptor(...args), catch: unreachable }),
       msg: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process msg RPC enters Effect
         Effect.tryPromise({ try: () => stub.msg(...args), catch: unreachable }),

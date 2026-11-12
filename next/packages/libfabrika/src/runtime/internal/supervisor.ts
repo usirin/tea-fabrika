@@ -7,6 +7,7 @@ import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
+import { Checkpoint } from "../ProcessStore.ts";
 import { AttemptFields, Count, Deliveries, Failure, Millis, Observation, Policy, Receipt, Text } from "./recovery.ts";
 
 /** @internal */
@@ -33,9 +34,34 @@ type Origin = typeof Origin.Type;
 
 const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Millis } });
 
+const CodeChange = Schema.Struct({
+  process: ProcessId,
+  load: Text,
+  program: Text,
+  was: Text,
+  checkpoint: Checkpoint,
+  from: Schema.Int,
+  ran: Schema.Array(Text),
+  origin: From,
+  pos: Millis,
+  view: Schema.Unknown,
+  wake: Schema.NullOr(Millis),
+  maxDeliveries: Schema.NullOr(Deliveries),
+}).check(
+  Schema.makeFilter(
+    (change) =>
+      (change.was !== change.checkpoint.saved.build &&
+        change.from <= change.checkpoint.saved.v &&
+        change.checkpoint.turn === null &&
+        change.origin.build === change.checkpoint.saved.build) ||
+      "a prepared swap keeps a new checkpoint and its build's origin",
+  ),
+);
+
 const Journal = Schema.TaggedUnion({
   idle: { process: ProcessId },
   stepping: { attempt: Attempt },
+  swapping: { change: CodeChange },
   writing_dead: { failure: Failure.cases.fresh, reason: ExitReason, from: From },
   writing_exit: { process: ProcessId, origin: Origin, from: From },
   writing_down: { recovery: DownRecord, origin: Origin, from: From },
@@ -64,6 +90,10 @@ export const Supervision = Schema.Struct({
 }).check(
   Schema.makeFilter((s) => {
     const j = s.journal;
+
+    if (j._tag === "swapping") {
+      return s.build === j.change.was || "an unfinished swap keeps the previous build";
+    }
 
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
     if (j._tag === "writing_dead") {
@@ -113,6 +143,8 @@ const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: 
 
 const Msg = Schema.Union([
   msg("swapped", { process: ProcessId, build: Text }),
+  msg("swap_prepared", { change: CodeChange }),
+  msg("swap_completed", { load: Text }),
   msg("received", { receipt: Receipt }),
   msg("compacted", { letter: Text, digest: Text }),
   msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
@@ -215,6 +247,27 @@ export const supervisor = Machine.make({
     [],
   ],
   update: {
+    swap_prepared: (s, m) =>
+      s.journal._tag === "idle" && s.journal.process === m.change.process && s.build === m.change.was
+        ? [{ ...s, journal: Journal.cases.swapping.make({ change: m.change }) }, []]
+        : unchanged(s),
+    swap_completed: (s, m) => {
+      if (s.journal._tag !== "swapping" || s.journal.change.load !== m.load) {
+        return unchanged(s);
+      }
+
+      const { change } = s.journal;
+      const { maxDeliveries: _limit, ...kept } = s;
+      return [
+        {
+          ...kept,
+          build: change.checkpoint.saved.build,
+          journal: Journal.cases.idle.make({ process: change.process }),
+          ...(change.maxDeliveries === null ? {} : { maxDeliveries: change.maxDeliveries }),
+        },
+        [],
+      ];
+    },
     swapped: (s, m) =>
       s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
     received: (s, m) =>

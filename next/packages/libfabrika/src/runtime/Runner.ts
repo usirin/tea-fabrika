@@ -20,6 +20,7 @@ import {
 } from "effect";
 import {
   Activity,
+  Checkpoint,
   DeadInput,
   Down,
   type Appended,
@@ -341,6 +342,75 @@ export class ProgramRunner extends Context.Service<
           live = null;
           retry = [];
         });
+        /** The existing supervisor keeps the unfinished swap until its writes and notice finish. */
+        const finishSwap = Effect.fnUntraced(function* (prepared?: Live) {
+          const s = yield* currentRecovery;
+
+          if (s.journal._tag !== "swapping") {
+            return;
+          }
+
+          const { change } = s.journal;
+          const { checkpoint: kept } = change;
+          yield* adopt(change.process, s.build);
+          const loaded = prepared?.loaded ?? (yield* loader.load(change.program, kept.saved.build));
+          const cmds = yield* Schema.decodeUnknownEffect(Schema.Array(Dispatched))(kept.cmds).pipe(
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
+          const next: Live = prepared ?? {
+            loaded,
+            model: kept.saved.model,
+            v: kept.saved.v,
+            after: kept.saved.after,
+            cmds,
+            pos: change.pos,
+            view: change.view,
+            wake: change.wake,
+          };
+          yield* store.save(kept);
+          yield* fault("after_swap_checkpoint");
+
+          if (change.ran.length > 0 || change.from !== kept.saved.v) {
+            yield* store.record(
+              `state.upgraded:${change.load}`,
+              RuntimeRecord.cases["state.upgraded"].make({
+                program: change.program,
+                from: change.from,
+                to: kept.saved.v,
+                ran: change.ran,
+                build: kept.saved.build,
+              }),
+              change.origin,
+            );
+            yield* fault("after_swap_upgrade");
+          }
+
+          yield* store.record(
+            `code.swapped:${change.load}`,
+            RuntimeRecord.cases["code.swapped"].make({
+              program: change.program,
+              hash: kept.saved.build,
+              was: change.was,
+            }),
+            change.origin,
+          );
+          yield* fault("after_swap_record");
+          const wake =
+            next.wake === null || mailRetry === null ? (next.wake ?? mailRetry) : Math.min(next.wake, mailRetry);
+          yield* alarm.set(wake);
+          alarmAt = wake;
+          yield* fault("after_swap_alarm");
+
+          for (const client of clients) {
+            yield* watchers.publish(client, { type: "whole", rev: next.pos, view: next.view });
+          }
+
+          yield* fault("after_swap_publish");
+          yield* complete({ type: "swap_completed", load: change.load });
+          yield* fault("after_swap_supervisor");
+          process = { ...process, build: kept.saved.build };
+          live = next;
+        });
         /** Performs the work the saved journal names, sending each completion after its write. */
         const resume = Effect.fnUntraced(function* () {
           while (supervision !== null) {
@@ -349,6 +419,10 @@ export class ProgramRunner extends Context.Service<
             const p = yield* coordinator;
 
             switch (j._tag) {
+              case "swapping": {
+                yield* finishSwap();
+                break;
+              }
               case "writing_dead": {
                 const { failure } = j;
                 const receipt = s.receipts.find(
@@ -1430,39 +1504,29 @@ export class ProgramRunner extends Context.Service<
                   v: upgraded.saved.v,
                 };
                 const old = process.build;
-                yield* store.save({
+                const kept = yield* Schema.decodeUnknownEffect(Checkpoint)({
                   ...checkpoint(next, null),
                   saved: { v: next.v, build: request.hash, model: next.model, after: next.after },
+                }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+                yield* complete({
+                  type: "swap_prepared",
+                  change: {
+                    process: process.id,
+                    load: request.load,
+                    program: request.program,
+                    was: old,
+                    checkpoint: kept,
+                    from: state.v,
+                    ran: upgraded.ran,
+                    origin: { ...(yield* from(null, yield* traceId)), build: request.hash },
+                    pos: next.pos,
+                    view: next.view,
+                    wake: next.wake,
+                    maxDeliveries: loaded.declaration.maxDeliveries ?? null,
+                  },
                 });
-                yield* send({ type: "swapped", process: process.id, build: request.hash });
-                process = { ...process, build: request.hash };
-
-                if (upgraded.ran.length > 0 || state.v !== next.v) {
-                  yield* store.record(
-                    `state.upgraded:${request.load}`,
-                    RuntimeRecord.cases["state.upgraded"].make({
-                      program: request.program,
-                      from: state.v,
-                      to: next.v,
-                      ran: upgraded.ran,
-                      build: request.hash,
-                    }),
-                    yield* from(null, yield* traceId),
-                  );
-                }
-
-                yield* store.record(
-                  `code.swapped:${request.load}`,
-                  RuntimeRecord.cases["code.swapped"].make({ program: request.program, hash: request.hash, was: old }),
-                  yield* from(null, yield* traceId),
-                );
-                live = next;
-
-                for (const client of clients) {
-                  yield* watchers.publish(client, { type: "whole", rev: next.pos, view: next.view });
-                }
-
-                yield* setAlarm();
+                yield* fault("after_swap_prepared");
+                yield* finishSwap(next);
                 yield* Effect.annotateCurrentSpan({
                   outcome: "swapped",
                   upgrades: upgraded.ran.length,

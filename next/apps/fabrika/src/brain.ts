@@ -227,9 +227,9 @@ export class Process extends DurableObject<Env> {
     return Effect.runPromise(configureProcess(this.ctx, descriptor));
   }
 
-  descriptor() {
+  descriptor(process?: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object descriptor lookup returns a Promise
-    return Effect.runPromise(processDescriptor(this.ctx));
+    return Effect.runPromise(processDescriptor(this.ctx, process));
   }
 
   msg(input: unknown) {

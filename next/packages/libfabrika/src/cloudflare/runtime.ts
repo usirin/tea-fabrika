@@ -40,7 +40,7 @@ import { code as codeMachine, CodeEvent } from "../runtime/Code.ts";
 import { CodeStore } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
-import { ProcessStore } from "../runtime/ProcessStore.ts";
+import { Checkpoint, ProcessStore } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
@@ -216,11 +216,28 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
   return yield* rpc(StorageClient.make(ctx.storage).get<number>("wake"));
 });
 
-export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState) {
-  const descriptor = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
-  return yield* Schema.decodeUnknownEffect(SavedDescriptor)(descriptor).pipe(
+export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState, pid?: string) {
+  const raw = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
+  const descriptor = yield* Schema.decodeUnknownEffect(SavedDescriptor)(raw).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+  const sql = cloudflareSql(ctx.storage);
+  const saved = yield* Effect.try({
+    try: () =>
+      sql.exec("SELECT name FROM sqlite_master WHERE name='process_state'").length === 0
+        ? undefined
+        : sql.exec("SELECT checkpoint FROM process_state WHERE process=?", pid ?? descriptor.id)[0],
+    catch: (cause) => new LedgerError({ reason: "storage", cause }),
+  });
+
+  if (saved === undefined) {
+    return { ...descriptor, id: pid ?? descriptor.id };
+  }
+
+  const checkpoint = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Checkpoint))(saved.checkpoint).pipe(
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+  );
+  return { ...descriptor, id: pid ?? descriptor.id, build: checkpoint.saved.build };
 });
 
 const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
@@ -432,19 +449,16 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   };
 
   for (const process of yield* processes.info) {
-    const program = yield* loader.load(process.program, process.process);
+    yield* configure(process.process);
+    const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process));
+    const program = yield* loader.load(process.program, process.process, descriptor.build);
     remember(process.name, program.declaration);
 
-    if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
-      const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor());
-      sql.exec(
-        "INSERT INTO dev_descriptors (process,value) VALUES (?,?)",
-        process.process,
-        JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
-      );
-    }
-
-    yield* configure(process.process);
+    sql.exec(
+      "INSERT INTO dev_descriptors (process,value) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET value=excluded.value",
+      process.process,
+      JSON.stringify(descriptor),
+    );
   }
 
   // Routing follows history: an earlier ID of a name takes its name's policy.
@@ -456,8 +470,9 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return known;
     }
 
+    const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, life.name)).descriptor(life.state.process));
     const program = yield* loader
-      .load(life.state.code.program, life.state.process)
+      .load(life.state.code.program, life.state.process, descriptor.build)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
