@@ -63,6 +63,8 @@ export class ToolsError extends Schema.TaggedError<ToolsError>()("ToolsError", {
 }) {}
 
 type AnyProgram = typeof Program.Program.schema.Type;
+const closed = { onExcessProperty: "error" } as const;
+const PsArguments = Schema.Record(Schema.String, Schema.Never);
 
 const ports = (programs: ReadonlyArray<AnyProgram>) =>
   programs.flatMap((program) =>
@@ -76,7 +78,7 @@ const ports = (programs: ReadonlyArray<AnyProgram>) =>
 const ps = Tool.make({
   name: "ps",
   description: "List the running processes.",
-  inputSchema: { type: "object" },
+  inputSchema: Schema.decodeUnknownSync(Schema.Json)(Schema.toJsonSchemaDocument(PsArguments, closed).schema),
   annotations: { readOnlyHint: true },
 });
 
@@ -108,7 +110,7 @@ export const list = (programs: ReadonlyArray<AnyProgram>): Result.Result<Readonl
 
     const tool = Result.try({
       try: () => {
-        const document = Schema.toJsonSchemaDocument(Schema.Struct({ value: schema.value }));
+        const document = Schema.toJsonSchemaDocument(Schema.Struct({ value: schema.value }), closed);
         return Tool.make({
           name,
           description: input.description,
@@ -153,7 +155,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
     }
 
     if (name === "ps") {
-      return Result.isSuccess(Schema.decodeUnknownResult(Schema.Struct({}))(args))
+      return Result.isSuccess(Schema.decodeUnknownResult(PsArguments, closed)(args))
         ? Call.cases.ps.make({})
         : refused({ reason: "bad_input" });
     }
@@ -171,7 +173,7 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
       return refused({ reason: "bad_input" });
     }
 
-    const value = Schema.decodeUnknownResult(Schema.Struct({ value: schema.value }))(args);
+    const value = Schema.decodeUnknownResult(Schema.toCodecJson(Schema.Struct({ value: schema.value })), closed)(args);
 
     if (Result.isFailure(value)) {
       return refused({ reason: "bad_input" });

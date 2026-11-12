@@ -346,6 +346,8 @@ const makeEffect = Effect.fn("program.make")(function* <
 
 export const Program = { schema: Declaration, make, makeEffect };
 
+type PortFields<M> = M extends Typed ? Omit<M, "type"> : never;
+
 type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
   ? Declared
   : K extends keyof P["inputs"]
@@ -355,8 +357,55 @@ type PortSchema<P extends typeof Declaration.Type, K extends string> = string ex
       ? S
       : unknown extends P["msg"]["Type"]
         ? Declared
-        : Schema.Codec<Omit<Extract<P["msg"]["Type"], { readonly type: K }>, "type">, unknown>
+        : Schema.Codec<PortFields<Extract<P["msg"]["Type"], { readonly type: K }>>, unknown>
     : Declared;
+
+// Message checks still see their discriminator even though a port's value omits it.
+const portCheck = (check: SchemaAST.Check<unknown>, key: string): SchemaAST.Check<unknown> =>
+  check._tag === "FilterGroup"
+    ? new SchemaAST.FilterGroup(
+        [portCheck(check.checks[0], key), ...check.checks.slice(1).map((c) => portCheck(c, key))],
+        check.annotations,
+      )
+    : new SchemaAST.Filter(
+        (value, ast, options) => check.run(Predicate.isObject(value) ? { ...value, type: key } : value, ast, options),
+        check.annotations,
+        check.aborted,
+      );
+
+const writePortSchema = (ast: SchemaAST.AST, key: string): Option.Option<Declared> => {
+  const checks =
+    ast.checks === undefined
+      ? undefined
+      : ([portCheck(ast.checks[0], key), ...ast.checks.slice(1).map((check) => portCheck(check, key))] as const);
+
+  if (SchemaAST.isUnion(ast)) {
+    const [first, ...rest] = ast.types.flatMap((member) => Option.toArray(writePortSchema(member, key)));
+
+    if (first === undefined) {
+      return Option.none();
+    }
+
+    const schema = rest.length === 0 ? first : Schema.Union([first, ...rest], ast.options);
+    return Option.some(checks === undefined ? schema : schema.check(...checks));
+  }
+
+  if (
+    !SchemaAST.isObjects(ast) ||
+    !ast.propertySignatures.some((p) => p.name === "type" && SchemaAST.isLiteral(p.type) && p.type.literal === key)
+  ) {
+    return Option.none();
+  }
+
+  const schema = Schema.make<Declared>(
+    new SchemaAST.Objects(
+      ast.propertySignatures.filter((p) => p.name !== "type"),
+      ast.indexSignatures,
+      ast.annotations,
+    ),
+  );
+  return Option.some(checks === undefined ? schema : schema.check(...checks));
+};
 
 /**
  * Returns a read port's schema or a write message's fields without its `type`.
@@ -380,26 +429,7 @@ export function port(program: typeof Declaration.Type, key: string): Option.Opti
     return Option.some(input.schema);
   }
 
-  const ast = program.msg.ast;
-  const members = SchemaAST.isUnion(ast) ? ast.types : [ast];
-  const member = members.find(
-    (m) =>
-      SchemaAST.isObjects(m) &&
-      m.propertySignatures.some((p) => p.name === "type" && SchemaAST.isLiteral(p.type) && p.type.literal === key),
-  );
-
-  if (member === undefined || !SchemaAST.isObjects(member)) {
-    return Option.none();
-  }
-
-  return Option.some(
-    Schema.make<Declared>(
-      new SchemaAST.Objects(
-        member.propertySignatures.filter((p) => p.name !== "type"),
-        member.indexSignatures,
-      ),
-    ),
-  );
+  return writePortSchema(program.msg.ast, key);
 }
 
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
