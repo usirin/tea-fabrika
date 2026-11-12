@@ -150,9 +150,9 @@ const brain = Effect.gen(function* () {
 });
 
 /** Every install that arrives within `ms` of the last one. */
-const drain = (queue: Queue.Queue<Install>, ms: number) =>
+const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
   Effect.gen(function* () {
-    const got: Array<Install> = [];
+    const got: Array<A> = [];
 
     while (true) {
       const next = yield* Queue.take(queue).pipe(Effect.timeoutOption(ms));
@@ -351,11 +351,23 @@ describe("P15 slice 1: the watcher", () => {
                 const acquired = opened.results.slice(results);
                 expect(acquired.some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
                 expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
+                // A late graph notification can retry unchanged bytes. L2 permits `same`, never a second failure fact.
+                const late = yield* drain(answers, 300);
+
+                for (const repeated of late) {
+                  expect(repeated, "one save produced a second change or failure answer").toMatchObject({
+                    _tag: "same",
+                  });
+                }
+
+                const failures = yield* Queue.clear(b.failures);
+                expect(failures, "one failed save writes one code.failed fact").toHaveLength(broken ? 1 : 0);
 
                 for (const output of [
                   JSON.stringify([...span.attributes]),
                   JSON.stringify(answer),
-                  JSON.stringify(yield* Queue.clear(b.failures)),
+                  JSON.stringify(late),
+                  JSON.stringify(failures),
                 ]) {
                   for (const forbidden of [sentinel, home]) {
                     expect(output.includes(forbidden)).toBe(false);

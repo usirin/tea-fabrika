@@ -106,11 +106,21 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
     return { home, founder, url: `http://127.0.0.1:${port.port}`, handle, answers };
   });
 
-/** The next answer the watcher gave, within `ms`. */
-export const nextAnswer = (answers: Queue.Queue<unknown>, ms = 60_000) =>
-  Queue.take(answers).pipe(
-    Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.die("the watcher gave no answer") }),
-  );
+/** Wait for an answer that belongs to the save, within one deadline, including skipped no-ops. */
+export const nextAnswer = (
+  answers: Queue.Queue<unknown>,
+  ms = 60_000,
+  accept: (answer: unknown) => boolean = () => true,
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const answer = yield* Queue.take(answers);
+
+      if (accept(answer)) {
+        return answer;
+      }
+    }
+  }).pipe(Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.die("the watcher gave no answer") }));
 
 /** Runs dev.ts's real CLI and printer, with the fixture's build and watch configuration. */
 export const cli = Effect.fnUntraced(function* (

@@ -9,14 +9,15 @@
 //
 // These start workerd, a port, Chromium and a file watcher. They run through the exam's e2e runner
 // (`node next/apps/fabrika/e2e.ts`), one file at a time, never in a sandbox that refuses them.
-import { execFileSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, type Layer, Schedule, type Scope } from "effect";
+import { build } from "@kampus/libfabrika/build";
+import { Effect, FileSystem, type Layer, Path, Schedule, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
+import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   APP,
   cli,
@@ -168,21 +169,28 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
     const knock = yield* rpc(p, "gateway.knock", { label: "Chromium" });
     const env = { ...process.env };
     delete env.TYPESAFE_API_KEY;
-    yield* Effect.sync(() =>
-      execFileSync(
-        process.execPath,
-        [
-          `${APP}/grant.ts`,
-          "client",
-          url,
-          fingerprint,
-          `--code=${knock.result.code}`,
-          "--label=Chromium",
-          `--key=${key}`,
-        ],
-        { cwd: APP, env, encoding: "utf8" },
-      ),
+    // The instance listens on this thread too, so the grant command must leave it free to answer.
+    const [printed, exitCode] = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const command = yield* ChildProcess.make(
+          process.execPath,
+          [
+            `${APP}/grant.ts`,
+            "client",
+            url,
+            fingerprint,
+            `--code=${knock.result.code}`,
+            "--label=Chromium",
+            `--key=${key}`,
+          ],
+          { cwd: APP, env, stdin: "ignore", stderr: "inherit" },
+        );
+        return yield* Effect.all([Stream.mkString(Stream.decodeText(command.stdout)), command.exitCode], {
+          concurrency: 2,
+        });
+      }),
     );
+    expect(Number(exitCode), `grant.ts client: ${printed}`).toBe(0);
     yield* Effect.promise(() => p.waitForFunction(() => window.p15.frames.some((f) => f.method === "reinitialized")));
   });
 
@@ -243,6 +251,70 @@ const edited = (source: string, k: number, more: (s: string) => string = (s) => 
   more(source.replace("inc: (s) => [{ count: s.count + 1 }, []]", `inc: (s) => [{ count: s.count + ${k} }, []]`));
 
 describe("P15 slice 1: hot reload on the real instance", () => {
+  // L17: the real build's warning printer, including importers outside the project root.
+  it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          folder: fc.stringMatching(/^[a-z][a-z0-9 -]{1,24}$/),
+          missing: fc.stringMatching(/^[a-z]{4,16}$/),
+        }),
+        ({ folder, missing }) =>
+          scoped(
+            Effect.gen(function* () {
+              const fs = yield* FileSystem.FileSystem;
+              const path = yield* Path.Path;
+              const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p15log." });
+              const root = path.join(home, folder);
+              const dependency = path.join(home, "dependency");
+              yield* fs.makeDirectory(root, { recursive: true });
+              yield* fs.makeDirectory(dependency, { recursive: true });
+              const entry = path.join(root, "brain.ts");
+              const imported = path.join(dependency, "imported.ts");
+              const specifiers = [`p15-missing-${missing}`, `p15-dependency-${missing}`];
+              yield* fs.writeFileString(
+                entry,
+                `import ${JSON.stringify(specifiers[0])}; import "../dependency/imported.ts";\n`,
+              );
+              yield* fs.writeFileString(imported, `import ${JSON.stringify(specifiers[1])};\n`);
+              const warnings = yield* Effect.acquireRelease(
+                Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
+                (spy) => Effect.sync(() => spy.mockRestore()),
+              );
+              yield* build({
+                root,
+                entry,
+                out: path.join(home, "out"),
+                programs: [],
+                files: [],
+                ledger: [],
+                chaos: false,
+              });
+              const printed = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+
+              for (const specifier of specifiers) {
+                expect(printed.includes(specifier), "the unresolved import warning is still printed").toBe(true);
+              }
+
+              for (const file of [entry, imported]) {
+                expect(
+                  printed.includes(path.relative(root, file)),
+                  "the warning names its importer relative to root",
+                ).toBe(true);
+              }
+
+              for (const forbidden of [home, yield* fs.realPath(home)]) {
+                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
+                  expect(printed.includes(form), "a printed warning holds an absolute path").toBe(false);
+                }
+              }
+            }),
+          ),
+      ),
+      { seed: 119120, numRuns: 10, endOnFailure: true },
+    );
+  });
+
   // L16. Plant: rebuild the brain file instead of installing (workerd restarts, the T421 watch fires).
   it("scenario: L16, the real path: a fitting save keeps the count and the next press runs the new code; a refused save and a syntax error leave it running; a later good save swaps", async () => {
     await scoped(
@@ -253,6 +325,8 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         const run = yield* instance(copy);
         // The watcher's first build is the boot's own bytes: nothing to swap.
         expect(outcome(yield* nextAnswer(run.answers))).toEqual({ _tag: "same" });
+        // L2 permits late notifications of unchanged bytes. They do not answer the next distinct save.
+        const changed = () => nextAnswer(run.answers, 60_000, (answer) => outcome(answer)._tag !== "same");
         const s = yield* session(run.url, run.founder.key);
 
         for (let n = 0; n < 3; n++) {
@@ -263,7 +337,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
         // A save that fits: inc adds 2. The count stays, and the next press runs the new code.
         yield* copy.write(edited(source, 2));
-        expect(outcome(yield* nextAnswer(run.answers))).toMatchObject({ _tag: "swapped" });
+        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
         expect(yield* s.view()).toEqual({ count: 3 });
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 5 });
@@ -278,7 +352,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             s.replace("Schema.Struct({ count: Schema.Int })", "Schema.Struct({ count: Schema.Int, step: Schema.Int })"),
           ),
         );
-        expect(outcome(yield* nextAnswer(run.answers))).toEqual({
+        expect(outcome(yield* changed())).toEqual({
           _tag: "refused",
           was: swapped[0].body.hash,
           reason: "shape",
@@ -288,7 +362,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
         // A syntax error: nothing reaches the process; the brain records where.
         yield* copy.write(`${source}\nexport const broken = ;\n`);
-        expect(outcome(yield* nextAnswer(run.answers))).toMatchObject({ _tag: "failed", reason: "bundle" });
+        expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
         const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
         expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
         expect(typeof failed?.body.line).toBe("number");
@@ -297,7 +371,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
         // Its fix: inc adds 3, and it swaps.
         yield* copy.write(edited(source, 3));
-        expect(outcome(yield* nextAnswer(run.answers))).toMatchObject({ _tag: "swapped" });
+        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 12 });
       }),
@@ -321,15 +395,21 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const copy = yield* fixture;
               const run = yield* instance(copy);
               const answers: Array<unknown> = [yield* nextAnswer(run.answers)];
+              const changed = () =>
+                nextAnswer(run.answers, 60_000, (answer) => {
+                  // Inspect every answer for L17, including late same-hash notifications from L2.
+                  answers.push(answer);
+                  return outcome(answer)._tag !== "same";
+                });
               const s = yield* session(run.url, run.founder.key);
               yield* s.press("inc");
               // The sentinel in the source the bundle carries, then in the line its error names.
               yield* copy.write(edited(source, k, (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(sentinel)};\n`));
-              answers.push(yield* nextAnswer(run.answers));
+              yield* changed();
               yield* copy.write(
                 `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
               );
-              answers.push(yield* nextAnswer(run.answers));
+              yield* changed();
               const outputs = [
                 ...answers.map((a) => JSON.stringify(a)),
                 ...(yield* s.read("gateway/code")).map((e) => JSON.stringify(e)),
