@@ -1,11 +1,7 @@
 // T714, next/. A4 and A6-A12 walk the real authenticated gateway and durable Jobs.
 // The Node runner supplies its layers and scoped SQL; this module imports no driver or ledger.
-// After build: plant role/capability/push bypasses (A4), reassignment/finished offers/ambiguity (A6),
-// wrong-owner admission (A7), pre-turn or cached admission (A8), person Writer for hands (A9),
-// replaced receipts/metadata (A10), permissive parameter decoding/recording (A11), and one private
-// sentinel in each inspected output (A12). Product paths are outside this step's write list.
-// A-Kept plants after build: omit connection or has on start/finish, reuse the take's hello facts,
-// discard those fields on ledger reload, or replace the first assignment after reconnect.
+// A4 and A6-A12 plant trials, including A-Kept's reconnect metadata, are in the tests-step report.
+// Temporary edits are restored after each trial. A14 runs on the lead's host.
 import { expect, it } from "@effect/vitest";
 import {
   Arbitrary,
@@ -210,8 +206,8 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     spans: Array<Tracer.Span> = [],
     attachments: Array<unknown> = [];
   const logger = Logger.layer([
-    Logger.make((entry) => {
-      logs.push({ message: entry.message, annotations: [...entry.annotations] });
+    Logger.map(Logger.formatStructured, (entry) => {
+      logs.push(entry);
     }),
   ]);
   const urls: Array<string> = [URL];
@@ -935,7 +931,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             Base64.encode(text(sentinel)),
             Base64Url.encode(text(sentinel)),
           ]) {
-            expect(encoded, name).not.toContain(form);
+            expect(encoded.includes(form), name).toBe(false);
           }
         }
       }

@@ -502,6 +502,8 @@ it.prop(
 
       if (move === "knock") {
         const key = choice % 2 === 0 && rows.length > 0 ? rows[choice % rows.length]!.key : `key-${n}`;
+        const previous = rows.find((row) => row.key === key);
+        const as = (["hands", "window", "agent"] as const)[choice % 3]!;
         pending = step(pending, {
           type: "knock",
           key,
@@ -510,10 +512,11 @@ it.prop(
           location: saw.location,
           code: saw.code,
           has: saw.has,
-          as: (["hands", "window", "agent"] as const)[choice % 3]!,
+          as,
           pass: null,
           at,
         });
+        expect(pending.rows.find((row) => row.key === key)?.as).toBe(previous?.as ?? as);
         expect(Access.admitted(Access.members(access), key)).toEqual(
           grants.has(key) && !revoked.has(key)
             ? { key, person: "person-test", as: grants.get(key) }
