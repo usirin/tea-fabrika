@@ -29,7 +29,6 @@ import {
 } from "../../processes/Process.test-support.ts";
 import { brainOnly, canRestart, Dead, ProcessEvent, Start } from "../../processes/Process.ts";
 import { ProcessManager } from "../../processes/ProcessManager.ts";
-import { Recovery } from "./recovery.ts";
 
 const deadInput = {
   tries: 3,
@@ -332,7 +331,14 @@ describe("P34 coordination recovery", () => {
 
   it.effect.prop(
     "p80 plant, info loses ended state: status preserves down deadline and refuses another parent",
-    { generated: Recovery.cases.down.mapFields(({ _tag, process, ...fields }) => fields) },
+    {
+      // A down record's policy fields, as the recovery journal saves them (P34c slice 2).
+      generated: Schema.Struct({
+        reason: Schema.NonEmptyString,
+        crashes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+        until: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      }),
+    },
     ({ generated }) =>
       Effect.forEach(
         [{ reason: "saved_letter", crashes: 2, until: 5001 }, generated],

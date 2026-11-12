@@ -44,7 +44,7 @@ import {
 // the frame holds one `over` (frame.ts).
 
 /** Keycaps, Manti's, in the UI's own font, with the Mac's glyphs: `⌃B` `A` (the design package's tokens.css). */
-function Caps(props: { readonly caps: readonly Cap[] }): ReactNode {
+export function Caps(props: { readonly caps: readonly Cap[] }): ReactNode {
   return (
     <span className="caps">
       {props.caps.map((c) => (
@@ -110,7 +110,14 @@ export function IconOf(props: { readonly icon: Icon }): ReactNode {
  * else. A press on the item that opened it (`aria-controls` its id) is left to that item, which
  * closes it as a menu button does.
  */
-const useOverlay = (box: RefObject<HTMLElement | null>, id: string, into: () => void, onClose: () => void) => {
+export const useOverlay = (
+  box: RefObject<HTMLElement | null>,
+  id: string,
+  into: () => void,
+  onClose: () => void,
+  /** A modal box: a press outside closes it and goes no further, to no tile and no focus. */
+  modal = false,
+) => {
   const moveIn = useEffectEvent(into);
   useLayoutEffect(() => {
     const before = document.activeElement;
@@ -137,15 +144,33 @@ const useOverlay = (box: RefObject<HTMLElement | null>, id: string, into: () => 
         return;
       }
 
+      if (modal) {
+        e.preventDefault();
+        e.stopPropagation();
+        const click = (c: MouseEvent) => {
+          c.preventDefault();
+          c.stopPropagation();
+        };
+        // It eats the click of this press only: gone as soon as the press ends, so a press the box
+        // no longer sees (it closed, and its scrim with it) leaves nothing to eat the next one.
+        const drop = () => document.removeEventListener("click", click, { capture: true });
+        document.addEventListener("click", click, { capture: true, once: true });
+        document.addEventListener("pointerup", () => setTimeout(drop, 0), {
+          capture: true,
+          once: true,
+        });
+        setTimeout(drop, 500);
+      }
+
       onClose();
     };
     document.addEventListener("pointerdown", down, true);
     return () => document.removeEventListener("pointerdown", down, true);
-  }, [box, id, onClose]);
+  }, [box, id, onClose, modal]);
 };
 
 /** A footer of key hints: `↑ ↓ Move   ↵ Open   H Later   Esc Close`. */
-function Foot(props: { readonly hints: readonly Hint[]; readonly children?: ReactNode }): ReactNode {
+export function Foot(props: { readonly hints: readonly Hint[]; readonly children?: ReactNode }): ReactNode {
   return (
     <div className="pop-foot" aria-hidden="true">
       {props.children}
@@ -476,7 +501,7 @@ interface Option {
 }
 
 /** A name or a word in runs, the matched ones bold: `<mark>`. */
-function Marked(props: { readonly text: string; readonly query: string }): ReactNode {
+export function Marked(props: { readonly text: string; readonly query: string }): ReactNode {
   // A text's runs never move: their place is their key.
   return marked(props.text, props.query).map((r, k) =>
     r.mark ? <mark key={k}>{r.text}</mark> : <span key={k}>{r.text}</span>,
@@ -521,7 +546,7 @@ export function Palette(props: PaletteProps): ReactNode {
   const input = useRef<HTMLInputElement>(null);
   const list = `${props.id}-list`;
   const optionId = (i: number) => `${props.id}-o${i}`;
-  useOverlay(box, props.id, () => input.current?.focus(), props.onClose);
+  useOverlay(box, props.id, () => input.current?.focus(), props.onClose, true);
   const picked = optionId(props.at);
   useLayoutEffect(() => {
     document.getElementById(picked)?.scrollIntoView({ block: "nearest" });

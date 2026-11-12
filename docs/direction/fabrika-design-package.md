@@ -6,6 +6,10 @@ in the public [kamp-us/phoenix](https://github.com/kamp-us/phoenix/tree/main/pac
 Moved in P31 ([PR 431](https://github.com/usirin/tea-fabrika/pull/431)): `packages/fabrika-design`
 holds the themes (`src/themes.ts`) and `src/tokens.css`, the tokens with Manti's set from them.
 
+Its decided rules are in: [0456](../../.decisions/0456-one-design-package-both-versions.md),
+[0453](../../.decisions/0453-every-token-is-toml-data.md),
+[0451](../../.decisions/0451-tokens-take-four-tiers-one-grammar.md).
+
 Decided by the owner, 2026-11-08: every token is TOML data, not only the colors: type sizes,
 fonts, spacing, radius, row heights and motion, with the same build, schema and drift check. It
 starts after typography PR 1 merges; its plan is in progress.

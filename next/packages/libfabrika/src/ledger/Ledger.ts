@@ -15,13 +15,15 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
   reason: Schema.Literals(["unreachable", "bad_row", "storage", "refused", "crypto"]),
   /** What the thrown error said. It rides in the span's failure, never in a tag. */
   message: Schema.optional(Schema.String),
+  /** The failure this error translates, kept in memory for diagnosis. */
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 /** Rings a waiter, at most once. P12's thin class gives the real one: a call to the gateway. */
 export class Doorbell extends Context.Service<
   Doorbell,
   { readonly ring: (to: string, stream: string, rev: Rev) => Effect.Effect<void, LedgerError> }
->()("@kampus/libfabrika/Doorbell") {}
+>()("@kampus/libfabrika/ledger/Ledger.Doorbell") {}
 
 /** What the project object answers across an object call. Its answers are decoded by the caller. */
 export type LedgerCalls = {
@@ -39,4 +41,4 @@ export class Ledger extends Context.Service<
     /** Never blocks: `ready` with the stream's newest rev, or `parked` until a ring. */
     readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>;
   }
->()("@kampus/libfabrika/Ledger") {}
+>()("@kampus/libfabrika/ledger/Ledger") {}

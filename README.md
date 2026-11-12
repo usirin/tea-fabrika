@@ -207,7 +207,8 @@ These still run, but they are not the way forward:
 | Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
-| Learn the host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
+| Write a program for `next/` | [`docs/how-to/write-a-next-program.md`](./docs/how-to/write-a-next-program.md) |
+| Learn today's host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
 | See what happened on real tickets | [`field/`](./field/README.md) |

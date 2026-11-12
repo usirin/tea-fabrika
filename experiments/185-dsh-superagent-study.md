@@ -16,7 +16,7 @@ Walked with the owner. The findings below are unchanged; these are the calls.
   `next/` (172).
 - **Steal 1, attention as a counted cost, goes into the ask desk guidelines study.** The desk
   records what each ask cost a person, and learns from their answers. It does not cut asks: the
-  10-30 call in [triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md)
+  10-30 call in [triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md)
   stands. The answer to many asks is making each one cheap, not a cap.
 - **Tests 1 and 2 run,** as one experiment ticket (173).
 - **Test 3, triage under a hard ask cap, is dropped,** for the same reason as steal 1.
@@ -296,8 +296,8 @@ the worker.
     done.
 - **We:**
   - The owner approves a plan's Properties and changes to the exam, and says yes before merge.
-  - We ask for decisions, never facts ([that note](../docs/direction/ask-for-decisions-not-facts.md)).
-  - [Triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md):
+  - We ask for decisions, never facts ([0415](../.decisions/0415-ask-a-person-for-decisions.md)).
+  - [Triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md):
     about 130 to 190 asks a week, with no budget set.
   - [One way to ask](../docs/direction/one-ask-and-one-meter.md) (proposed) keeps a hash of what
     the person saw, which is better data than theirs. But it meters money, not attention.

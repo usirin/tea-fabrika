@@ -173,6 +173,22 @@ Two smaller findings:
 - The late span is counted nowhere. Fine while it stays rare; it should be a written rule before a
   monitor reads counts.
 
+## Added 2026-11-11: counts from today's recorded runs
+
+Today's version, not `next/`. Read-only, from the 85 job records today's app keeps on the owner's
+laptop, one SQLite file per job.
+
+- **An agent run holds few spans.** 121 spans named `run` were found. Counting each with the spans
+  under it: the median is 1, nine in ten hold 10 or fewer, and the largest holds 86. So the guess
+  above of 50 spans per run is high for today's recording. `next/` records more inside a run
+  (ledger appends, envelopes), so this bounds the guess from below and does not replace it.
+- **One poll is nearly everything.** Of 2,047,223 saved spans, 2,046,647 are named `POST`: the
+  ledger read poll, about 1.9 a second, traced by the HTTP client. One tracker window open for 62
+  hours wrote 432,501 spans and a 173 MB record. The volume risk is a span per poll, not agents.
+- The owner decided the rule the same day:
+  [0124](../.decisions/0124-metrics-stay-rows-and-reading-comes-next.md), a poll with no news is
+  never a saved span.
+
 ## What it cannot tell us
 
 - How many spans a real `next/` lane ends. No real lane runs on `next/` yet, so every day and month

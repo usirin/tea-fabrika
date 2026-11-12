@@ -1,9 +1,11 @@
-import { Cause, Effect, Exit, Schema } from "effect";
+import { AskAnswer } from "@tea-fabrika/tracker";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import { AskKey, AsksNow } from "./asks.ts";
 import { DeskSchema, TileIdSchema } from "./desk/desk.ts";
 import { Does, KeyName, Keys } from "./desk/keymap.ts";
 import { SHOWS } from "./desk/keys.ts";
 import { Change, Edit } from "./keys/program.ts";
+import { ProjectRow, ProjectSchema, Recent } from "./projects.ts";
 
 // What the app's one window and the host say to each other. The window draws the desk
 // (desk/desk.ts, run in the host), a terminal per tile, and a view per run of a program with one;
@@ -194,6 +196,23 @@ export const HostNow = Schema.Struct({
 export type HostNow = typeof HostNow.Type;
 
 /**
+ * What a window shows (ticket 276): welcome, with the recent projects and why the last folder or
+ * move was refused, if it was; or one project, with its name as the top bar and title say it.
+ *
+ *   {_tag: "welcome", recent: [...], refusal: {_tag: "folder", why: "Choose a folder in a git repository"}}
+ *   {_tag: "project", project: {root: "~/code/demlik", key: "3f9a…"}, name: "demlik"}
+ */
+export const WindowLook = Schema.Union([
+  Schema.Struct({
+    _tag: Schema.Literal("welcome"),
+    recent: Schema.Array(Recent),
+    refusal: Schema.NullOr(Schema.Struct({ _tag: Schema.Literals(["folder", "migration"]), why: Schema.String })),
+  }),
+  Schema.Struct({ _tag: Schema.Literal("project"), project: ProjectSchema, name: Schema.String }),
+]);
+export type WindowLook = typeof WindowLook.Type;
+
+/**
  * What the host tells the page, on the desk's port. The desk runs in the host (host/serve.ts);
  * the page draws what it is sent and nothing else. `keys` is the keys file's table (desk/keymap.ts):
  * the prefix, one row per command, the keys eaten and what came of the file, sent as the page
@@ -226,6 +245,11 @@ export type HostNow = typeof HostNow.Type;
  *    ledger: {kind: "own"}, agents: [{name: "claude", since: 1793400060000}]}}
  */
 export const ToPage = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("ask_answered"),
+    id: Schema.String,
+    why: Schema.NullOr(Schema.String),
+  }),
   Schema.Struct({
     type: Schema.Literal("keys"),
     ...Keys.fields,
@@ -263,6 +287,12 @@ export const ToPage = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("answer"), id: PressId, took: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("link"), now: LinkNow }),
+  // The app's own, from main (ticket 276): what this window shows, welcome or one project.
+  Schema.Struct({ type: Schema.Literal("window"), look: WindowLook }),
+  /** The projects box's rows, sent again as windows open and close. */
+  Schema.Struct({ type: Schema.Literal("project_rows"), rows: Schema.Array(ProjectRow) }),
+  /** Cmd-O, File > Open Project…: the box opens, or welcome selects its first row. */
+  Schema.Struct({ type: Schema.Literal("projects") }),
 ]);
 export type ToPage = typeof ToPage.Type;
 
@@ -274,9 +304,25 @@ export type ToPage = typeof ToPage.Type;
  *   {type: "again"}
  *   {type: "restart"}
  */
+/** Where a page's opening came from (docs/direction/project-window.md, "What the ledger records"). */
+const PageSource = Schema.Literals(["welcome", "box", "button", "menu"]);
+
 export const ToApp = Schema.Union([
   Schema.Struct({ type: Schema.Literal("again") }),
   Schema.Struct({ type: Schema.Literal("restart") }),
+  /**
+   * A recent project picked, in welcome or the box, by its key, and the press it came from:
+   * `welcome`, or what showed the box (`box` for Cmd-O, `button`, `menu` for File > Open Project…).
+   */
+  Schema.Struct({
+    type: Schema.Literal("open"),
+    key: Schema.String,
+    source: PageSource,
+  }),
+  /** Open Folder…: the system's folder sheet, over this window, from the press it came from. */
+  Schema.Struct({ type: Schema.Literal("folder"), source: PageSource }),
+  /** Try Again, after the old desk did not move. */
+  Schema.Struct({ type: Schema.Literal("retry") }),
 ]);
 export type ToApp = typeof ToApp.Type;
 
@@ -303,6 +349,8 @@ export type ToApp = typeof ToApp.Type;
  *   {type: "seen"}                    the asks list was opened: no ask is new any more
  */
 export const FromPage = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("open_lane"), from: TileIdSchema, ticket: Schema.Int }),
+  Schema.Struct({ type: Schema.Literal("ask_answer"), id: Schema.String, value: AskAnswer }),
   Schema.Struct({
     type: Schema.Literal("keys.edit"),
     request: Schema.String,
@@ -368,6 +416,12 @@ export const readToWindow = reader(ToWindow);
 export const readFromPage = reader(FromPage);
 /** What the page reads from the host, on the desk's port. */
 export const readToPage = reader(ToPage);
+const AnswerId = Schema.Struct({ type: Schema.Literal("ask_answer"), id: Schema.String });
+
+/** The id of an answer the page sent, even one whose value does not read: its reply needs it. `null`: no answer. */
+export const answerIdOf = (raw: unknown): string | null =>
+  Option.getOrNull(Option.map(Schema.decodeUnknownOption(AnswerId)(raw), (m) => m.id));
+
 /** What main reads from the page, on the desk's port, before it passes the rest on to the host. */
 export const readToApp = reader(ToApp);
 /** What main reads of the host's messages on the desk's port: the asks, for the Dock badge. */

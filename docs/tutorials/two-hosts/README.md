@@ -1,5 +1,7 @@
 # Two hosts, one ledger
 
+> This tutorial teaches today's version (`@kampus/fabrika-old`), not `next/`. To write a program for `next/`, read [Write a program for `next/`](../../how-to/write-a-next-program.md).
+
 A tutorial for the host in `@kampus/fabrika-old`. You start one ledger and two hosts on your laptop and run
 two programs that talk to each other: a kettle that brews each order and pours it into a glass,
 and a glass that counts what is poured. Then you kill a host with `kill -9` in the middle of

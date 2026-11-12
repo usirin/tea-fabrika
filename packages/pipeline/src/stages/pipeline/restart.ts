@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect";
-import { type Checked, Entry, type FactOf } from "../../tickets/ticket.ts";
+import { type Checked, Entry, type FactOf, readAnswer } from "../../tickets/ticket.ts";
 import { Tickets, type TicketsFailed } from "../../tickets/tickets.ts";
 import { nameOf } from "../outcome.ts";
 import { HeldDraft } from "../plan/plan.ts";
@@ -251,7 +251,7 @@ export const fold = (seen: Seen): Folded => {
         break;
       }
       case "asked": {
-        const kind = askedFor(fact.ask);
+        const kind = askedFor("format" in fact ? (fact.replaces ?? fact.ask) : fact.ask);
 
         if (kind === null) {
           break;
@@ -263,26 +263,44 @@ export const fold = (seen: Seen): Folded => {
         break;
       }
       case "answered": {
+        const answer = readAnswer(seen.timeline, fact);
+
+        if (answer === null) {
+          break;
+        }
+
         // The first answer to a lane's question is the one it took.
-        const kind = kinds.get(fact.ask);
+        const kind = kinds.get(fact.ask) ?? kinds.get(answer.ask);
 
         if (kind === undefined) {
           break;
         }
 
         kinds.delete(fact.ask);
-        trail = [...trail, { step: fact.ask, said: fact.pick }];
+        // The question's own identity, never a replacement's `/sealed` id: `boundOf` reads its grant by it.
+        trail = [...trail, { step: answer.ask, said: answer.pick }];
         // A `merge` on the exam's pull request is a yes on what its review read, as the lane lays it.
-        const said = kind === "exam_merge" && fact.pick === "merge" ? saidYes(carry) : carry;
-        const noted = withNote(said, fact.note);
-        carry = fact.pick === "go_on" ? letThrough(noted) : noted;
+        const said = kind === "exam_merge" && answer.pick === "merge" ? saidYes(carry) : carry;
+        const noted = withNote(said, answer.note);
+        carry = answer.pick === "go_on" ? letThrough(noted) : noted;
 
-        if (kind === "approve" && fact.pick === "approve") {
+        if (kind === "approve" && answer.pick === "approve") {
           approved = true;
+          const asked = seen.timeline.find((e) => e.fact.type === "asked" && e.fact.ask === fact.ask)?.fact;
+
+          if (asked?.type === "asked" && "format" in asked && asked.shows.evidence._tag === "plan") {
+            carry = {
+              ...carry,
+              decided: {
+                questions: asked.shows.evidence.plan.questions,
+                said: carry.decided?.said ?? [],
+              },
+            };
+          }
         }
 
         const step = askedStep(kind, last);
-        at = resumeOf({ ask: fact.ask, what: "", picks: [], for: kind, step }, fact.pick);
+        at = resumeOf({ ask: fact.ask, what: "", picks: [], for: kind, step }, answer.pick);
         break;
       }
       case "restarted":

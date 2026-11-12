@@ -4,7 +4,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Layer, Option, Schema } from "effect";
 import * as fc from "fast-check";
-import { Mailbox, ProcessManager, ProcessStore, RecoveryStore, Writer } from "../coordination/index.ts";
+import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -17,7 +17,9 @@ import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { workerExecution } from "./Execution.ts";
+import { Supervision } from "./internal/supervisor.ts";
 import { stepper } from "./Program.ts";
+import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
 const PID = Effect.runSync(processId);
@@ -167,13 +169,15 @@ describe("P12 saved mail recovery", () => {
                     mailbox = yield* Mailbox,
                     store = yield* ProcessStore;
                   /** Every counted program failure: a fresh receipt's errors, or a saved-mail observation. */
-                  const spent = RecoveryStore.pipe(
-                    Effect.flatMap((r) => r.load),
+                  const spent = recoveryStore(sql, {
+                    name: "counter:1",
+                    capacity: 1024 ** 3,
+                    schema: Supervision,
+                  }).load.pipe(
                     Effect.map((saved) => [
                       ...(saved?.receipts ?? []).filter((r) => r.tries > 0 || r.errors.length > 0),
                       ...(saved?.observations ?? []),
                     ]),
-                    Effect.provide(RecoveryStore.layer(sql, { name: "counter:1", capacity: 1024 ** 3 })),
                   );
                   expect(yield* runner.open("before")).toMatchObject({ rev: 0, view: { count: 0 } });
 

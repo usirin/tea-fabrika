@@ -1,53 +1,3 @@
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./land.ts?raw";
-import "./catchup.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./freshmain.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.ts?raw";
-import "./mutbox-entry.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./mutbox.Dockerfile?raw";
-import "../../mutation/scripts/run.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/limit.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/sample.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "../../mutation/scripts/scope.ts?raw";
-import "./skillscheck.sh?raw";
-import "./leakgrep.sh?raw";
-import "./loosening.sh?raw";
-import "./box.sh?raw";
-import "./keepruns.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./drive.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./runid.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./pgrep.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./agents.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./codexexec.ts?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./boxnode.ts?raw";
-import "./fieldrow.py?raw";
-import "./runplan.sh?raw";
-import "./env.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./gc.ts?raw";
-import "./redact.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./botpush.mjs?raw";
-import "./clauderow.py?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./lane.ts?raw";
-import "../../plan/scripts/plancheck.sh?raw";
-// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
-import "./sizecap.ts?raw";
-import "../../step-commit/scripts/exam.py?raw";
-import "../../step-commit/scripts/stepcommit.sh?raw";
 import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -559,26 +509,26 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
         // "removed": review round 1, finding 10, a deleted source dropped its clauses.
         fc.constantFrom("missing", "wrong-section", "fenced", "wrong-skill", "removed"),
         fc.constantFrom(" ", "\n"),
-        (where, wrap) => {
+        (mutation, wrap) => {
           for (const [i, [skill, section, check, text]] of clauses.entries()) {
             const got = clauseTree((dir) => {
               let content = skillText(skill, i, wrap);
 
-              if (where === "wrong-section" && section) {
+              if (mutation === "wrong-section" && section) {
                 content += `\n## Elsewhere\n${text}\n`;
               }
 
-              if (where === "fenced") {
+              if (mutation === "fenced") {
                 content += `\n## ${section || "Example"}\n~~~md\n${text}\n~~~\n`;
               }
 
               writeFileSync(join(dir, ".agents/skills", skill, "SKILL.md"), content);
 
-              if (where === "removed") {
+              if (mutation === "removed") {
                 rmSync(join(dir, ".agents/skills", skill, "SKILL.md"));
               }
 
-              if (where === "wrong-skill") {
+              if (mutation === "wrong-skill") {
                 writeFileSync(
                   join(dir, ".agents/skills", skill === "plan" ? "lead" : "plan", "SKILL.md"),
                   `${skillText(skill === "plan" ? "lead" : "plan")}\n${text}\n`,

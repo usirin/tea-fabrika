@@ -19,7 +19,7 @@ const options = { seed: 119120, numRuns: 100 };
 // T375 plants caught: skill readTrees and shared scripts at the red baseline;
 // script Markdown counted as prose, scripts skipping test, all Markdown safe,
 // prose masking shared paths, and every skill-tree path counted as prose.
-const heavy = { check: true, test: true, next: true, e2e: true };
+const heavy = { check: true, typecheck: true, test: true, next: true, e2e: true };
 type Runner = (args: string[]) => { status: number | null; stdout: string };
 const word = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
@@ -111,6 +111,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
     fc.property(fc.array(fc.oneof(safe, prose), { minLength: 1, maxLength: 12 }), (paths) => {
       expect(ci.classify(paths, "pull_request")).toEqual({
         check: false,
+        typecheck: false,
         test: false,
         next: false,
         e2e: false,
@@ -143,6 +144,7 @@ it("skill scripts run check and test; other version flags follow their readers",
         const flags = ci.classify([...scripts, ...others], "pull_request");
         expect(flags).toEqual({
           check: true,
+          typecheck: true,
           test: true,
           next: others.some((p) => p.startsWith("next/")),
           e2e: others.some((p) => !p.startsWith("next/")),
@@ -204,7 +206,7 @@ it("shared paths run everything; adding paths never disables a job", () => {
       const before = ci.classify(paths, "pull_request");
       const after = ci.classify([...paths, ...more], "pull_request");
 
-      for (const key of ["check", "test", "next", "e2e", "field"] as const) {
+      for (const key of ["check", "typecheck", "test", "next", "e2e", "field"] as const) {
         expect(!before[key] || after[key]).toBe(true);
       }
 
@@ -371,6 +373,53 @@ it("skill script and prose rules apply only at the repo root", () => {
           field: false,
         });
       }
+    }),
+    options,
+  );
+});
+
+// 0134's amendment (2026-11-11): a draft pull request runs only the fast jobs; marking it ready
+// runs the rest on the same head. Plants caught: a draft that still runs test, main honoring the
+// draft flag, a draft that skips typecheck, and a ready docs-only PR that builds (that one survived
+// until the pinned example below).
+const events = fc.constantFrom("pull_request", "push", "workflow_dispatch", "");
+const paths = fc.option(list, { nil: null });
+
+it("property: a ready pull request and every other event run what classify says, build with check", () => {
+  fc.assert(
+    fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
+      const flags = ci.classify(paths, event);
+      const ready = event !== "pull_request" || !draft;
+      fc.pre(ready);
+      expect(ci.jobs(paths, event, draft)).toEqual({ ...flags, build: flags.check });
+    }),
+    // Lists where check is off are rare in `list`, so one is pinned: a docs-only ready PR builds nothing.
+    { ...options, examples: [[["docs/a.md"], "pull_request", false]] },
+  );
+});
+
+it("property: a draft keeps lint, typecheck and field as ready, and skips build, test, next and e2e", () => {
+  fc.assert(
+    fc.property(paths, (paths) => {
+      const ready = ci.jobs(paths, "pull_request", false);
+      expect(ci.jobs(paths, "pull_request", true)).toEqual({
+        check: ready.check,
+        typecheck: ready.typecheck,
+        field: ready.field,
+        build: false,
+        test: false,
+        next: false,
+        e2e: false,
+      });
+    }),
+    options,
+  );
+});
+
+it("property: the draft flag never skips a job on main", () => {
+  fc.assert(
+    fc.property(paths, fc.boolean(), (paths, draft) => {
+      expect(Object.values(ci.jobs(paths, "push", draft)).every(Boolean)).toBe(true);
     }),
     options,
   );

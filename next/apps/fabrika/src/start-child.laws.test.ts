@@ -10,11 +10,14 @@ import { describe, expect, it, vi } from "vitest";
 import { childProject, childInstance, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
 vi.mock("virtual:fabrika-built", () => ({
-  programs: { counter: { hash: "counter-test", source: "counter" }, child: { hash: "child-test", source: "child" } },
+  programs: {
+    "fabrika/counter": { hash: "counter-test", source: "counter" },
+    "p42/child": { hash: "child-test", source: "child" },
+  },
   assets: {},
 }));
 
-const STARTS = [{ source: "starter", to: "child" }];
+const STARTS = [{ source: "p42/starter", to: "p42/child" }];
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
@@ -165,7 +168,7 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
   return {
     start: async (name: string, program: "starter" | "child") => {
       const started = await Reflect.get(project(), "start")(
-        { _tag: "first", id: `start-${name}`, name, code: { program, hash: hashes[program] } },
+        { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
         from,
       );
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -193,7 +196,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           const child = {
             id: `${boot}/1/0`,
             name: "child:cut",
-            code: { program: "child", hash: "child-test" },
+            code: { program: "p42/child", hash: "child-test" },
             requester: Recipient.cases.process.make({ process: boot }),
             input: { type: "inc" },
           };
@@ -225,7 +228,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
               descriptor: {
                 id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
                 name: child.name,
-                program: "child",
+                program: "p42/child",
                 build: "child-test",
                 owner: fixture.configured[0]?.descriptor.owner,
               },
@@ -265,7 +268,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     const descriptor: Descriptor = {
       id: "process_0000000000e008000000000001",
       name: "child:alarm",
-      program: "child",
+      program: "p42/child",
       build: "p42-alarm",
       owner: Writer.cases.person.make({ key: "SHA256:test", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" }),
     };
@@ -291,7 +294,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const quiet = client.pushed.length;
       const sent = await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
       );
       expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
       const child = await until(
@@ -326,7 +329,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
       );
       const first = String(
         await until(

@@ -20,19 +20,35 @@ const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
-const diff = { id: "diff", env, run: "node .github/ci/changes.mjs" };
+const diff = {
+  id: "diff",
+  env: { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` },
+  run: "node .github/ci/changes.mjs",
+};
+
+const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
 
 const valid = (label: string, extra: string) => ({
   name: label,
-  on: { push: { branches: ["main"] }, pull_request: null },
+  on: {
+    push: { branches: ["main"] },
+    pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+  },
+  concurrency: {
+    group: `check-\${{ github.event.pull_request.number || github.sha }}`,
+    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`,
+  },
   jobs: {
     changes: {
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["check", "test", "next", "e2e", "field"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
+        ["check", "typecheck", "test", "next", "e2e", "field", "build"].map((key) => [
+          key,
+          `\${{ steps.diff.outputs.${key} }}`,
+        ]),
       ),
       steps: [
         { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
@@ -43,10 +59,21 @@ const valid = (label: string, extra: string) => ({
       ],
     },
     check: {
+      name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
       needs: "changes",
       if: guard("check"),
       "timeout-minutes": 10,
-      steps: [{ run: "pnpm typecheck" }, { run: "pnpm lint" }, { run: "pnpm build" }],
+      steps: [
+        { run: "pnpm lint" },
+        { name: "promises", if: build, run: "pnpm promises gate" },
+        { run: "pnpm build", if: build },
+      ] as Record<string, unknown>[],
+    },
+    typecheck: {
+      needs: "changes",
+      if: guard("typecheck"),
+      "timeout-minutes": 10,
+      steps: [{ run: "pnpm install --frozen-lockfile" }, { run: "pnpm typecheck" }],
     },
     test: {
       needs: "changes",
@@ -119,6 +146,16 @@ const valid = (label: string, extra: string) => ({
         { run: "node .github/ci/field-check.ts", if: fieldIf, env },
       ],
     },
+    "ci-required": {
+      name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
+      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "next"],
+      if: "always()",
+      "timeout-minutes": 5,
+      steps: [
+        { uses: "actions/checkout@v7", with: { "sparse-checkout": ".github/ci" } },
+        { env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
+      ] as Record<string, unknown>[],
+    },
   },
 });
 
@@ -174,6 +211,63 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: [string, (workflow: Workflow) => void][] = [
+  // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
+  ...["opened", "synchronize", "reopened", "ready_for_review"].map((type): [string, (w: Workflow) => void] => [
+    `pull requests lose the ${type} trigger`,
+    (w) => {
+      w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+    },
+  ]),
+  [
+    "every pull request event cancels the run before it",
+    (w) => {
+      w.concurrency["cancel-in-progress"] = `\${{ github.event_name == 'pull_request' }}`;
+    },
+  ],
+  [
+    "a draft's check keeps the name check",
+    (w) => {
+      w.jobs.check.name = "check";
+    },
+  ],
+  [
+    "a draft's ci-required keeps the name ci-required",
+    (w) => {
+      w.jobs["ci-required"].name = "ci-required";
+    },
+  ],
+  [
+    "the build runs on a draft",
+    (w) => {
+      delete w.jobs.check.steps[2]!["if"];
+    },
+  ],
+  [
+    "the promises gate skips on the check flag",
+    (w) => {
+      w.jobs.check.steps[1]!["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+    },
+  ],
+  [
+    "lint skips on a draft",
+    (w) => {
+      w.jobs.check.steps[0]!["if"] = build;
+    },
+  ],
+  [
+    "changes hides the build flag",
+    (w) => {
+      delete (w.jobs.changes.outputs as Record<string, string>)["build"];
+    },
+  ],
+  [
+    "the classifier is not told the draft",
+    (w) => {
+      for (const step of [w.jobs.changes.steps[1]!, w.jobs.field.steps[1]!]) {
+        Object.assign(step, { env });
+      }
+    },
+  ],
   [
     "L1: main loses lane exclude",
     (w) => {
@@ -523,13 +617,79 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.test.steps[1]!.run = lines.join("\n");
     },
   ]),
-  // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "field", "check", "test", "next", "e2e"] as const).map((job): [string, (w: Workflow) => void] => [
-    `${job} without a time limit`,
+  // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
+  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e"] as const).map(
+    (job): [string, (w: Workflow) => void] => [
+      `ci-required does not need ${job}`,
+      (w) => {
+        w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
+      },
+    ],
+  ),
+  // The lane reads the typecheck job's answer alone (0133), so the typecheck lives there only.
+  [
+    "the typecheck job runs no typecheck",
     (w) => {
-      Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+      w.jobs.typecheck.steps = [{ run: "pnpm install --frozen-lockfile" }];
+    },
+  ],
+  [
+    "check runs the typecheck again",
+    (w) => {
+      w.jobs.check.steps.unshift({ run: "pnpm typecheck" });
+    },
+  ],
+  [
+    "a new job ci-required does not need",
+    (w) => {
+      Object.assign(w.jobs, { lint: { "timeout-minutes": 5, steps: [{ run: "pnpm lint" }] } });
+    },
+  ],
+  ...["!cancelled()", "success()", ""].map((condition): [string, (w: Workflow) => void] => [
+    `ci-required runs only on ${condition || "no condition"}`,
+    (w) => {
+      w.jobs["ci-required"].if = condition;
     },
   ]),
+  [
+    "ci-required ignores its failure",
+    (w) => {
+      Object.assign(w.jobs["ci-required"], { "continue-on-error": true });
+    },
+  ],
+  [
+    "ci-required judge ignores its failure",
+    (w) => {
+      Object.assign(w.jobs["ci-required"].steps[1]!, { "continue-on-error": true });
+    },
+  ],
+  [
+    "ci-required bypassed",
+    (w) => {
+      w.jobs["ci-required"].steps[1]!["run"] = "echo pass";
+    },
+  ],
+  [
+    "ci-required reads needs.*.result only",
+    (w) => {
+      w.jobs["ci-required"].steps[1]!["env"] = { NEEDS: `\${{ toJSON(needs.*.result) }}` };
+    },
+  ],
+  [
+    "ci-required second step",
+    (w) => {
+      w.jobs["ci-required"].steps.push({ run: "exit 0" });
+    },
+  ],
+  // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
+  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e", "ci-required"] as const).map(
+    (job): [string, (w: Workflow) => void] => [
+      `${job} without a time limit`,
+      (w) => {
+        Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+      },
+    ],
+  ),
   [
     "a time limit past the default",
     (w) => {

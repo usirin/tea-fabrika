@@ -7,7 +7,20 @@
 // held in memory and tried again at each later `end`, and the next `flush` fails the step with
 // `storage`: let it crash. The sink's own calls end no span.
 import { applyCell } from "@demlik/tea";
-import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Result, Schema, Tracer } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Redacted,
+  Result,
+  Schema,
+  Tracer,
+} from "effect";
 import type { Sql } from "../Sql.ts";
 import type { Archive } from "./Archive.ts";
 import {
@@ -106,6 +119,16 @@ const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   return lags.length === 0 ? null : Math.max(...lags);
 };
 
+/** A typed failure as code wrote it: its tag and reason. Its message and the cause it keeps may hold
+ *  input, so they stay in memory and out of stored content. A thrown value keeps its own text. */
+const summary = (error: unknown): unknown =>
+  error instanceof Error && Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
+    ? {
+        name: error._tag,
+        message: Predicate.hasProperty(error, "reason") && Predicate.isString(error.reason) ? error.reason : "",
+      }
+    : error;
+
 const cutContent = (text: string): string =>
   text.length <= MOST_CONTENT ? text : `${text.slice(0, MOST_CONTENT)}\n[cut: ${text.length} characters]`;
 
@@ -171,7 +194,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
       onSome: (process) => Chain.cases.job.make({ process }),
     }),
     row,
-    content: Option.getOrNull(Option.map(failure, (cause) => cutContent(Cause.pretty(cause)))),
+    content: Option.getOrNull(Option.map(failure, (cause) => cutContent(Cause.pretty(Cause.map(cause, summary))))),
   };
 };
 
@@ -207,19 +230,19 @@ export class SpanSink extends Context.Service<
     /** The summaries whose hour is in `[from, to)`, after rolling up every closed hour. */
     readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<MetricPoint>, SinkError>;
   }
->()("@kampus/libfabrika/SpanSink") {
+>()("@kampus/libfabrika/telemetry/Sink.SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
    *  the tables come with the first span. */
-  static readonly layer = (sql: Sql, who: { readonly object: string }): Layer.Layer<SpanSink> =>
+  static readonly layer = (sql: Sql, options: { readonly object: string }): Layer.Layer<SpanSink> =>
     Layer.unwrap(
       Effect.sync(() => {
-        const { tracer, sink } = make(sql, who);
+        const { tracer, sink } = make(sql, options);
         return Layer.merge(Layer.succeed(SpanSink, sink), Layer.succeed(Tracer.Tracer, tracer));
       }),
     );
 }
 
-const make = (sql: Sql, who: { readonly object: string }) => {
+const make = (sql: Sql, options: { readonly object: string }) => {
   let ready = false;
   /** Spans held after a full disk, a failure owed to the next flush, and the newest hour sized.
    *  Changed only by what `applyCell` returns. Memory only: a wake checks once more. */
@@ -280,9 +303,9 @@ const make = (sql: Sql, who: { readonly object: string }) => {
   };
 
   const tracer = Tracer.make({
-    span: (options) =>
-      new SinkSpan(options, (span, endTime, exit) => {
-        commit([ended(span, endTime, exit, who.object)], Number(endTime / 1_000_000n), true);
+    span: (init) =>
+      new SinkSpan(init, (span, endTime, exit) => {
+        commit([ended(span, endTime, exit, options.object)], Number(endTime / 1_000_000n), true);
       }),
   });
 
@@ -367,7 +390,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
       }
     }
 
-    yield* archiveDays(sql, who.object, yield* Clock.currentTimeMillis);
+    yield* archiveDays(sql, options.object, yield* Clock.currentTimeMillis);
     return { sent };
   });
 
@@ -375,7 +398,7 @@ const make = (sql: Sql, who: { readonly object: string }) => {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
     if (Result.isFailure(done)) {
-      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length }));
+      return yield* Effect.fail(new SinkError({ reason: "storage", held: held(state).length, cause: done.failure }));
     }
 
     return yield* attempt(() => readSummaries(sql, from, to));

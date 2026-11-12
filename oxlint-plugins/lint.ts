@@ -5,13 +5,16 @@
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { checkTracked } from "./gitignore.mjs";
-import { type Finding, fingerprint, LEDGER_ROOT, outside, settle } from "./ledger.ts";
-import { scriptReads } from "./script-reads.mjs";
+import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
+import { load, scriptReads } from "./script-reads.mjs";
 
 const ADVICE = new Set([
+  // Ticket 737: bare JSON.parse and service IDs advise until their false alarms are counted.
+  "eslint(no-restricted-properties)",
+  "fabrika(service-id)",
   "fabrika(law-shape)",
   "fabrika(no-effect-promise)",
   "fabrika(no-raw-try-catch)",
@@ -27,19 +30,33 @@ interface Diagnostic {
 
 const ROOT = join(import.meta.dirname, "..");
 
-const scripts = readdirSync(join(ROOT, ".agents/skills"), { recursive: true, withFileTypes: true })
-  .filter((entry) => entry.isFile())
-  .map((entry) => join(entry.parentPath, entry.name).slice(ROOT.length + 1))
-  .filter((path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path));
+// A run with no path is over the whole repo, as `pnpm lint` and `pnpm format` make it. Only it sees
+// every finding, so only it prunes a ledger, and only it runs the check below.
+const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
 
-const missing = scriptReads(new Map(scripts.map((path) => [path, readFileSync(join(ROOT, path), "utf8")])));
+// What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
+// derivation cannot see, and on a test that declares by hand what is derived. It reads the whole
+// scripts tree whatever the paths given, so a run on a folder or a file leaves it to the whole run:
+// it took most of a one-file run's second, and a test that starts 32 of those timed out in CI.
+if (whole) {
+  const { tree, exists, prose } = load(ROOT);
+  const { raw, unreached } = scriptReads(tree, exists, prose);
 
-for (const row of missing) {
-  console.error(`${row.test}: declare ${row.path}?raw, read through ${row.via}`);
-}
+  for (const row of raw) {
+    console.error(
+      `${row.test}: delete the bare import of ${row.path}?raw. A script's reads are derived; one it reads through a built path is named in that script, in a comment`,
+    );
+  }
 
-if (missing.length) {
-  process.exit(1);
+  for (const path of unreached) {
+    console.error(
+      `${path}: no test reaches it and its SKILL.md names no such tool. Name it in the script that reads it, give it a test, or delete it`,
+    );
+  }
+
+  if (raw.length || unreached.length) {
+    process.exit(1);
+  }
 }
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
@@ -95,17 +112,19 @@ const where = ({ filename, labels }: Diagnostic) => {
   return at === undefined ? (filename ?? "") : `${filename}:${at.line}:${at.column}`;
 };
 
-// `.agents/`'s findings from the day it joined next/'s rules, which only shrink (0033, ledger.ts).
-const LEDGER = join(ROOT, "agents-ledger.json");
+// What a folder broke the day a rule joined it, which only shrinks (ledger.ts).
+const ledgers = LEDGERS.map((ledger) => {
+  const path = join(ROOT, ledger.file);
+  const read: { readonly entries: readonly Finding[] } = existsSync(path)
+    ? JSON.parse(readFileSync(path, "utf8"))
+    : { entries: [] };
+  return { ...ledger, path, entries: read.entries, refused: outside(read.entries, ledger.root) };
+});
 
-const ledger: { readonly entries: readonly Finding[] } = existsSync(LEDGER)
-  ? JSON.parse(readFileSync(LEDGER, "utf8"))
-  : { entries: [] };
-
-const { entries } = ledger;
-
-for (const entry of outside(entries)) {
-  console.error(`agents-ledger.json: ${entry.file} is outside ${LEDGER_ROOT}, and only .agents/ has a ledger`);
+for (const { file, root, refused } of ledgers) {
+  for (const entry of refused) {
+    console.error(`${file}: ${entry.file} is outside ${root}, the one folder this ledger holds`);
+  }
 }
 
 const lines = new Map<string, readonly string[]>();
@@ -128,8 +147,18 @@ const finding = (d: Diagnostic): Finding => {
 
 const found = diagnostics.filter((d) => !ADVICE.has(d.code ?? ""));
 const findings = found.map(finding);
-const settled = settle(entries, findings);
-const waived = new Set(settled.waived);
+
+// Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
+// so the order changes nothing.
+let open: readonly Finding[] = findings;
+
+const settled = ledgers.map((ledger) => {
+  const result = settle(ledger.entries, open, ledger.root);
+  open = result.blocks;
+  return { ...ledger, ...result };
+});
+
+const waived = new Set(settled.flatMap((ledger) => ledger.waived));
 
 const blocks = found.filter((_, i) => {
   const at = findings[i];
@@ -142,18 +171,20 @@ for (const d of [...advises, ...blocks]) {
   console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
 }
 
-// Only a run over the whole repo sees every finding, so only it prunes. A run on a folder or a file
-// leaves the ledger as it is.
-const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
-const pruned = entries.length - settled.kept.length;
+// Only a whole run prunes. A run on a folder or a file leaves each ledger as it is.
+for (const { file, path, entries, kept } of settled) {
+  const pruned = entries.length - kept.length;
 
-if (whole && pruned > 0) {
-  writeFileSync(LEDGER, `${JSON.stringify({ entries: settled.kept }, null, "\t")}\n`);
-  console.log(`agents-ledger.json: pruned ${pruned} fixed entries; commit the file`);
+  if (whole && pruned > 0) {
+    writeFileSync(path, `${JSON.stringify({ entries: kept }, null, "\t")}\n`);
+    console.log(`${file}: pruned ${pruned} fixed entries; commit the file`);
+  }
 }
 
 console.log(
-  `oxlint: ${blocks.length} blocking, ${advises.length} advice, ${settled.waived.length} in agents-ledger.json`,
+  `oxlint: ${blocks.length} blocking, ${advises.length} advice, ${settled
+    .map(({ file, waived }) => `${waived.length} in ${file}`)
+    .join(", ")}`,
 );
 
-process.exit(blocks.length === 0 && outside(entries).length === 0 ? 0 : 1);
+process.exit(blocks.length === 0 && ledgers.every(({ refused }) => refused.length === 0) ? 0 : 1);

@@ -27,6 +27,10 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
                   @kampus/tuval, and a menu bar with Approve and Remove
 ```
 
+*Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): pass D is
+now the checklist, which a person fills and agents check with a note through MCP, and D2 brings the
+same checklist back; notes, drawn as Markdown, is Tier 2's first real app.*
+
 - **Tier 1 builds a slice of coordination's C2 to C5** (decided by the owner, 2026-11-06), as
   [the five layers](./a-local-first-sync-engine.md)' header says: Tier 1 builds layers 1 to 3. A
   skateboard must ride, not be a polished wheel: a program that crashes has to come back, or be

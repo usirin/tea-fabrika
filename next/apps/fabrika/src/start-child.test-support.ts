@@ -74,7 +74,7 @@ const starterSource = [
   "const Model = Schema.Struct({asked: Schema.Int, told: Schema.Array(Schema.Json)});",
   'const Msg = Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String, input: Schema.optionalKey(Schema.Json)});',
   "const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild], init: (loaded) => [loaded ?? {asked: 0, told: []}, []], update: {start: (s, m) => [{...s, asked: s.asked + 1}, [startChild({program: m.program, name: m.name, ...(m.input === undefined ? {} : {input: m.input})})]], start_child_ok: (s, m) => [{...s, told: [...s.told, m.value]}, []], start_child_err: (s, m) => [{...s, told: [...s.told, m.reason]}, []]}});",
-  'export const program = {name: "starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  'export const program = {name: "p42/starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
 ].join("\n");
 
 /** Counts `inc` and throws on `throw`: the supervision the boot's child has must restart it. */
@@ -84,7 +84,7 @@ const childSource = [
   "const Model = Schema.Struct({count: Schema.Int});",
   'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
   'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("child failure P42");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  'export const program = {name: "child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  'export const program = {name: "p42/child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
 ].join("\n");
 
 /** Sets one env value for the scope; the release puts the old value back, or deletes it when unset. */
@@ -122,9 +122,12 @@ export const childInstance = Effect.fnUntraced(
     yield* fs.writeFileString(path.join(home, "child.ts"), childSource);
     const built = yield* build({
       out: path.join(home, "dist"),
-      programs: { starter: path.join(home, "starter.ts"), child: path.join(home, "child.ts") },
+      programs: { "p42/starter": path.join(home, "starter.ts"), "p42/child": path.join(home, "child.ts") },
     });
-    const hashes = { starter: built.programs["starter"]?.hash ?? "", child: built.programs["child"]?.hash ?? "" };
+    const hashes = {
+      starter: built.programs["p42/starter"]?.hash ?? "",
+      child: built.programs["p42/child"]?.hash ?? "",
+    };
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     const key = identity();
@@ -199,7 +202,7 @@ export const childProject = Effect.fnUntraced(function* () {
       window: key.raw,
       port: 18787,
       build: "p42-project",
-      starts: [{ source: "counter", to: "child" }],
+      starts: [{ source: "fabrika/counter", to: "p42/child" }],
     }),
     PROCESS: {
       getByName: (name: string) => {
@@ -231,7 +234,7 @@ export const childProject = Effect.fnUntraced(function* () {
           describe: () =>
             remote(
               Effect.sync(() => ({
-                name: id.startsWith("child-") ? "child" : "counter",
+                name: id.startsWith("child-") ? "p42/child" : "fabrika/counter",
                 v: 1,
                 writes: {},
                 inputs: { inc: { write: true, personOnly: false } },

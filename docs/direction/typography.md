@@ -15,6 +15,11 @@ changed two things:
   (MDN [t24]), as in Tailwind's Catalyst [t25] and Shopify Polaris [t26]. Not `DataList`, Radix's
   name [t20], since it clashes with HTML's `<datalist>`. Manti 0.13.0 has no description list.
 
+Its decided rules are in: [0457](../../.decisions/0457-six-text-styles-set-every-size.md),
+[0458](../../.decisions/0458-what-you-act-on-leads.md),
+[0459](../../.decisions/0459-a-label-never-wraps.md),
+[0460](../../.decisions/0460-mono-only-for-typed-words.md).
+
 Earlier the same day, after the look step, the owner decided the look built from the six text
 styles; the rec at `heading` (15/600) and the question at `strong` (13/500, still the `h2`); prose
 from 14 in the low gray to `body` (13, step 12); Activity's mono agent id and cost to sans in the

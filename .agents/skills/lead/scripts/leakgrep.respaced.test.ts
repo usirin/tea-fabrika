@@ -1,4 +1,3 @@
-import "./leakgrep.sh?raw";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -132,11 +131,11 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
         fc.nat(),
         fc.constantFrom(...leaks),
         fc.constantFrom(" ", "; ", ", "),
-        ([before, after], at, where, leak, joint) => {
+        ([before, after], at, position, leak, joint) => {
           lab(({ diff, hits }) => {
             const n = at % before.length;
             const tokens = (after[n] as string).trim().split(/[ \t]+/);
-            const spot = where % (tokens.length + 1);
+            const spot = position % (tokens.length + 1);
             // The new word may bring a ; or , of its own.
             const changed = [...tokens.slice(0, spot), leak + joint.trim(), ...tokens.slice(spot)].join(" ");
             const edited = after.map((text, i) => (i === n ? changed : text));

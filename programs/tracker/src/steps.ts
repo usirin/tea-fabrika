@@ -1,5 +1,5 @@
 import { endedAs } from "@kampus/pipeline/stages/status";
-import type { Entry } from "@kampus/pipeline/tickets/ticket";
+import { type Entry, picksOf, questionOf, readAnswer } from "@kampus/pipeline/tickets/ticket";
 import { Schema } from "effect";
 
 // The plan's nine steps for one ticket, each with where it stands, read off the ticket's facts
@@ -56,7 +56,7 @@ export const stepWords = (step: string): string => step.replaceAll("_", " ");
 const isApproval = (picks: readonly string[]) => picks.includes("approve");
 
 const approvalOf = (timeline: readonly Entry[]): StepNow => {
-  const asks = timeline.flatMap((e) => (e.fact.type === "asked" && isApproval(e.fact.picks) ? [e.fact] : []));
+  const asks = timeline.flatMap((e) => (e.fact.type === "asked" && isApproval(picksOf(e.fact)) ? [e.fact] : []));
   const last = asks.at(-1);
 
   if (last === undefined) {
@@ -65,8 +65,14 @@ const approvalOf = (timeline: readonly Entry[]): StepNow => {
 
   const answer = timeline.findLast((e) => e.fact.type === "answered" && e.fact.ask === last.ask)?.fact;
   return answer?.type === "answered"
-    ? { step: "approval", state: "done", runs: asks.length, usd: 0, last: `answered: ${answer.pick}` }
-    : { step: "approval", state: "you", runs: asks.length, usd: 0, last: last.what };
+    ? {
+        step: "approval",
+        state: "done",
+        runs: asks.length,
+        usd: 0,
+        last: `answered: ${readAnswer(timeline, answer)?.pick ?? "unknown"}`,
+      }
+    : { step: "approval", state: "you", runs: asks.length, usd: 0, last: questionOf(last) };
 };
 
 const stageOf = (step: StepName, timeline: readonly Entry[]): StepNow => {

@@ -13,6 +13,8 @@ export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArr
   return shared.length === 0 ? null : Math.max(...shared);
 };
 
+const decodeUrl = Schema.decodeUnknownResult(Schema.URLFromString);
+
 export const sameOrigin = (a: {
   readonly origin: string | null;
   readonly host: string;
@@ -28,20 +30,17 @@ export const sameOrigin = (a: {
     return true;
   }
 
-  try {
-    const url = new URL(a.origin);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      url.origin === a.origin &&
-      a.origins.includes(url.origin)
-    );
-  } catch {
-    return false;
-  }
+  const url = decodeUrl(a.origin);
+  return (
+    Result.isSuccess(url) &&
+    (url.success.protocol === "https:" || url.success.protocol === "http:") &&
+    url.success.origin === a.origin &&
+    a.origins.includes(url.success.origin)
+  );
 };
 
 const CheckedHello = Schema.TaggedUnion({
-  online: { who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
+  online: { identity: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
   refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
 });
 
@@ -129,7 +128,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   }
 
   return CheckedHello.cases.online.make({
-    who: admitted.who,
+    identity: admitted.identity,
     hello,
     version,
     ping: pingMs(hello.ping, a.ping.min, a.ping.max),

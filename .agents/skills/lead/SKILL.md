@@ -149,19 +149,22 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `box.sh new <name> <base> <branch> --ticket <n> --plan <path> [--root <sha>]` | check the start and save its facts (the lane root that build order and the commits check read from), then clone and install |
 | `box.sh run <name> <prompt> <out> --step <step>` | run Codex, save redacted output and the run row |
 | `box.sh fetch <name> <branch> --sign <step> --ticket <n>` | fetch without force, sign the recorded run and check commits |
-| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit; before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason, and drive runs it at start, at most once in 30 minutes across all starts and always on a nearly full disk (`gcDue`), and names those keeps when it still refuses on disk. Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
+| `box.sh gc [--dry-run]` | remove every box that sat idle 2 h (24 h when drive kept it stuck) once its work is on a remote, backing unpushed commits up to `<branch>-wip` first (a box with uncommitted files is kept, since a backup saves only HEAD, until its lane lands: then its files go into the main checkout as a stash at `refs/keep/box/<box>-files` first), then every `state/<box>.box` whose box is gone, then every clean, idle linked worktree whose lane's pull request merged or closed, found by its branch, by a remote branch at its HEAD or by the PR's head commit, then `boxfiles.ts` moves a landed lane's gone boxes' files and mutation folders into the main checkout's `runs/boxes/<lane>/` and removes their git views and Codex homes (its header says when; `--dry-run` lists it all with sizes); before any folder goes, `keepruns.sh` moves its `runs/` (raw samples, never in git) into the main checkout's `runs/<folder>/`, and a folder it cannot move is kept, as in `box.sh rm` and `catchup.sh`; it prints each keep with its reason. No step's start runs it: `gcloop.ts` does, on a timer and after each merge ([below](#box-cleanup-on-a-timer)). Cleanup is the tooling's job: never ask the owner to free disk (owner, 2026-11-09) |
+| `gcloop.ts sweep [--trigger timer\|merge\|hand]` / `kick --trigger merge` / `status [--keeps]` / `plist` | the box cleanup's loop ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)): `sweep` runs `box.sh gc` under `nice` for at most one period, unless another sweep holds `state/gc.lock` (then it records `skipped` and exits 0), and appends one line to `state/gc.jsonl` either way: start, end, outcome (`ok`, `failed` with its reason, `skipped`), what it removed and kept, MB freed, free space before and after. `kick` starts a sweep in the background and returns; `catchup.sh` kicks one after each merge. `status` prints one line, `LATE` when the newest sweep that ran started more than two periods ago; drive puts it in a `low_disk` refusal. `plist` prints the timer's unit. The period is `GC_MINUTES`, default 30 |
 | `drive.ts <lane> <step> <brief>` | one Codex step end to end, with no agent waiting: box, run, fetch, checks, backup push, field row, state; one JSON line (below) |
 | `chain.ts <lane> <lane-brief.md>` | the whole lane end to end, with no lead agent holding it: tests, build, review through `drive.ts`, then the PR, `loosening.sh` and `catchup.sh`; a short judgment agent only on an ask or a stuck ([below](#run-a-whole-lane-with-chaints)) |
 | `flow/run.ts <flow-file> [--resume] [--lead] [--state <file>]` | run one flow, a list of typed steps saved to `BOXES/state/flow-<name>.json` before it starts, with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); one JSON line, exit 0 done, 20 parked on an ask, 30 stuck, 2 usage. A step marked `lead` runs only with `--lead`, so a run started by anyone else parks there. `flow/flows/land-decision.ts` lands a docs-only decision PR |
 | `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the hourly mutation run's Stryker sample in a container (0066; also a lane's mutation step started before it): `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
+| `publish.ts <branch>` | in a checkout: leak-grep `origin/main..HEAD` (fails closed), push HEAD to the branch (`botpush.mjs` for `fabrikalfa/`, else the notes as the bot and the branch on your own login, never forced), and open a draft PR when the branch has none ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)); `stepcommit.sh` runs it after each signed commit; exit 0 pushed, 1 refused |
+| `unlisted.ts` | in the main checkout, every round: fetch origin with `--prune`, then one line per branch, local or on origin, with commits not on `origin/main` and no open PR on its lane (`no pull request: ...`: open its draft the same turn), then the ones whose work is on main already, by a merged PR at that head or a trial merge that changes nothing (`safe to delete: ...`); it deletes nothing; exit 0, 1 when a read fails |
 | `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the two PR files it is a mid-lane handover to `-wip` |
 | `land.ts run <lane> <ticket>` | the lead session only, in the background: refuses unless the tree is clean and at the ready head, leak-greps the PR body, merges `origin/main` in as the bot (never a rebase), leak-greps the change and each commit, signs each named lead commit and then the merge as lead through main's own signer, pushes with `botpush.mjs`, opens or updates the PR and runs `catchup.sh`. A conflict stops it with each file and the step that owns it in the plan's files table; every refusal before the push puts HEAD and the notes back. It never resolves a conflict and never reads a key |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
-| `catchup.sh <pr> <ticket>` | a head that lacks `main` but is green on every check, commits trusted, lands as it is: no merge, no push, only the lint on its true merge ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md)); any other head: merge `main` in as the bot, sign `lead`, push, check that exact head; then look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR whose freshmain lint passed lands even when gh refuses it as behind main, through the REST merge with `sha` as the pin ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
+| `catchup.sh <pr> <ticket>` | a head that lacks `main` but is green on every check, commits trusted, lands as it is: no merge, no push, only the lint on its true merge ([0097](../../../.decisions/0097-a-green-pull-request-lands-without-catching-up.md)); any other head: merge `main` in as the bot, sign `lead`, push, check that exact head; then look at main once more with `freshmain.ts`, and squash-land pinned to that head; a PR in a gh stack lands with `gh stack merge`; a green PR behind main whose freshmain lint passed lands with the same pinned `gh pr merge`, since GitHub no longer requires an up-to-date branch ([0049](../../../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)) |
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
-| `sizecap.ts diff <base> <head>` / `sizecap.ts plan <plan.md>` | 0087's cap as advice: `diff` prints one line with the product lines from the merge base to `<head>` (tests, docs, lock, `linguist-generated` and paths outside `next/`, `apps/`, `programs/` and `packages/` counted apart) against `[review] lines`, default 600, the lower of base and head; `catchup.sh` prints it before it waits on checks. `plan` names each `## Size` slice over the cap, and a plan with no slices whose "Product lines expected" column is over it; `plancheck.sh --draft` prints it. Neither refuses until a replay on merged pull requests lets it block |
+| `sizecap.ts diff <base> <head>` / `sizecap.ts plan <plan.md>` | size as advice only, since no number caps a pull request ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)): `diff` prints one line with the product lines from the merge base to `<head>` (tests, docs, lock, `linguist-generated` and paths outside `next/`, `apps/`, `programs/` and `packages/` counted apart), and past `ADVICE_LINES` (600, 0087's starting number until a count from our merged pull requests replaces it) asks whether it should have been sliced; `catchup.sh` prints it before it waits on checks. `plan` prints the plan's size and names each `## Size` slice with no estimate; `plancheck.sh --draft` prints it. Neither ever refuses |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs/` row from a Codex run's events, printed for `fieldfile.ts` |
 | `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs/` row from a Claude subagent's transcript, printed for `fieldfile.ts`, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 | `fieldfile.ts <log> <rows>` | save each JSON line of `rows` as its own row file, `field/<log>/<date>-<slug>.json`, named by its id; a lane's run id gets the row's date in front; a taken or missing name writes nothing (0090) |
@@ -240,7 +243,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   with `stepcommit.sh --commit-only lead`; a lane agent then runs `land.ts ready` without PR files
   and stops, and the lead session runs `land.ts run`, which signs it and pushes it to `-wip`. The
   next step starts at that tip.
-- Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
+- Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, and
+  the branch itself, with a draft PR when it has none (`pr/Publish.ts`, 0134): so the lane's PR is
+  a draft from its first commit, and chain.ts marks it ready after review. A refused push or draft
+  ends the step `stuck:push_failed`. Then it writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
   step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
@@ -249,10 +255,11 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   is in `reason`), 30 stuck, 40 skip (`answer: skip <why>`: nothing here for the step, such as a
   mutation step whose diff has no product lines; its field row says `skip`, which review's order
   check takes in place of a mutation row), 2 usage, 3 refused before any agent ran, printed as
-  `refused:<check>`: `agent_cap` (8 agents running: Codex boxes plus Claude steps drive started),
-  `low_disk` (under 20 GB free after `box.sh gc`), `branch_checked_out` (the lane's branch checked
-  out in a worktree, which the end-of-step fetch could not update), `docker_busy` (a mutation step
-  while another run holds the one Docker box), or a `box.sh new` start check
+  `refused:<check>`: `agent_cap` (12 agents running, 0012: Codex boxes plus Claude steps drive
+  started), `low_disk` (under 20 GB free; drive starts no cleanup, and the reason carries
+  `gcloop.ts status --keeps`), `branch_checked_out` (the lane's branch checked out in a worktree,
+  which the end-of-step fetch could not update), `docker_busy` (a mutation step while another run
+  holds the one Docker box), or a `box.sh new` start check
   (`plan_unapproved`, `base_not_signed`, `shared_ticket`, `root_not_ancestor`). A refusal is not a
   step outcome, so the stuck count holds only steps an agent ran. It never retries. A stuck step keeps its
   box. A box's number is the first that no older run's files hold, and the line's `report` is `null`
@@ -276,7 +283,7 @@ its box or only reads it (plan, review), Claude runs in its own OS sandbox. The 
 outside the box, so the agent commits nothing: it leaves its changes in the tree, and drive copies
 them into a worktree of the main checkout and signs them as one step commit (0028). A box reads
 nothing beside itself, so drive puts the approved plan's text in the step's prompt, and gives the
-box a git view to read: a hard-linked mirror of the main checkout's git data, `BOXES/<box>-view`,
+box a git view to read: a hard-linked mirror of the main checkout's git data, `BOXES/box/<box>-view` beside the box's tree `BOXES/box/<box>` (a folder of trees only, so Codex's fence has few names to close, ticket 659),
 which the harness opens read-only and drive removes when the step ends (`git diff`, `log` and
 `show` work; nothing git keeps can be written). A brief names no file outside the box. The step
 answers with one JSON object (verb, to, reason, laws), read by the agents package's schema.
@@ -312,6 +319,11 @@ node .agents/skills/lead/scripts/chain.ts <lane> BOXES/<lane>-CHAIN.md \
 and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`). `drive.ts` takes
 `--agent codex-exec` for one step.
 
+A lane keeps one version of its scripts from start to end (ticket 835): chain.ts copies `.agents/`
+at the main checkout's commit into `BOXES/pins/<lane>.<pid>` and runs from there, so a pull of main
+while it runs changes nothing it spawns. Its chain record's `scripts` names the commit. To take new
+scripts, stop the lane and start it again with `--start <step>`; it prints the commit it ran on before.
+
 - **The lane brief** is one Markdown file. Its text before the first `## ` heading goes to every
   step (the ticket, its version, the approved plan, the decided notes). Then one section per step,
   `## tests`, `## build` and `## review`, written as a step brief is written today
@@ -324,12 +336,15 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   head so far, what the last step said, `Reviewed head` and `Parent base` for a review, `T=` and
   `BUILD=` for a mutation. The chain saves each one as `BOXES/<lane>-chain<round>-<step>-brief.md`.
 - **The moves:** tests done leads to build, build to review (0066),
-  and a merge-ready review first runs one `pnpm typecheck` on the laptop, in a throwaway worktree of
-  the reviewed head merged with `origin/main` (`flow/typecheck.ts`), since no box runs one. Red is a
-  send back with the error lines: to tests when every error is in an exam path, else to build. One
-  that cannot run lets the lane go on, and the chain's last line says `typecheck: did not run: ...`.
-  Then the chain pushes the branch as the bot, opens the PR (or finds the open one) with a
-  steps-and-dollars table in its body, then runs `loosening.sh` from the lane's merge-base with
+  and a merge-ready review pushes the branch as the bot at once and opens the PR (or finds the open
+  one) with a steps-and-dollars table in its body. No laptop typecheck runs first (0133): the chain
+  reads CI's own `typecheck` job at the pushed head (`ci/typecheck.ts`), the moment that one job
+  ends, never the whole run. Red is a send back with the error lines from the job's log: to tests
+  when every error is in an exam path, else to build, and the PR stays open for the next push. No
+  answer within `CHAIN_TYPECHECK_MINUTES` (20), or a failed job with no type error, lets the lane go
+  on, and the chain's last line says `typecheck: no answer: ...`. A red `check` job (lint, build) is
+  not read here: `ci-required` holds the merge for it. A draft runs only CI's fast jobs; the full set runs when the PR is marked ready, and
+  `catchup.sh` waits for that run's `check`, never the draft's `lint` (0134). Then the chain runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
   an error, or a comment that did not post, ends it `stuck`. The chain passes no mapping table, so
@@ -375,7 +390,39 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   record holds, so no earlier round's record, brief or judgment file is written over. Read the
   line's own `exit`, never the shell's: `volta run` answers 126 for any exit that is not 0.
 
+## Box cleanup on a timer
+
+`box.sh gc` runs on a launchd timer every `GC_MINUTES` (default 30) and once after each merge, and
+never on a step's start ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)). The unit
+is `gc.plist` beside this file; `gcloop.ts plist` fills in this laptop's paths and the period. Run
+these from the main checkout. Install:
+
+```sh
+node .agents/skills/lead/scripts/gcloop.ts plist > ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+```
+
+Uninstall:
+
+```sh
+launchctl bootout gui/$(id -u)/local.tea-fabrika.gc
+rm ~/Library/LaunchAgents/local.tea-fabrika.gc.plist
+```
+
+`launchctl list local.tea-fabrika.gc` lists it (its pid while a sweep runs, and the last exit
+status). The `bootout` line alone stops it. A new `GC_MINUTES`, or a new Node, needs both install
+lines again. At each check, read `node .agents/skills/lead/scripts/gcloop.ts status`: a `LATE` line
+means the timer is dead or every sweep was skipped behind a hung one. Fix the cause the same turn.
+The timer's own output goes to `BOXES/state/gc-timer.log`.
+
 ## Pushes and protected refs
+
+Every commit leaves the laptop when it is made
+([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
+runs `publish.ts` itself, and a lane's box commit is pushed by drive's pushing phase, so neither
+step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
+where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
+line the same turn.
 
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
 bot and branch-only as the person are two intended writes. A refusal stops the step.

@@ -2,7 +2,7 @@
 // only through its real `init` and update cells: `Waiting.machine.init(loaded, { most, ttl })`, and
 // `applyCell(Waiting.machine, model, msg)` with a `knock`, `leave`, `expire` or `accepted` Msg.
 // `Waiting.Stored` is the codec for the saved value: the Model in memory, and the flat
-// `{ rows, most, ttl }` with each row's legacy `where` and derived `tabs` when encoded.
+// `{ rows, most, ttl }` with each row's `location` and derived `tabs` when encoded.
 // Access prunes; duplicate client ids do not count twice. Persistence is owned by door.test.ts.
 // Plants: code per tab; increment on every knock; no expiry/cap; newest-first eviction. The walk's
 // plants are named on each law and were run once, then undone (decision 0093).
@@ -304,12 +304,12 @@ const fold = (walk: Walk) => {
 // The spec's own words for expiry: a row lives while `until > at`.
 const live = (s: Model, t: number) => s.rows.filter((r) => r.until > t);
 
-const legacy = (s: Model) =>
+const savedShape = (s: Model) =>
   JSON.stringify({
     rows: s.rows.map((r) => ({
       key: r.key,
       label: r.label,
-      where: r.location,
+      location: r.location,
       code: r.code,
       until: r.until,
       tabs: r.clients.length,
@@ -449,9 +449,9 @@ describe("ticket 707: the waiting machine walks", () => {
 
         for (const [cut, { after }] of steps.entries()) {
           const bytes = Schema.encodeSync(json())(after);
-          // format: the saved value keeps the flat rows-and-settings shape, its legacy `where` key
-          // and a `tabs` count derived from clients, so rows written before 707 stay readable.
-          expect(bytes).toBe(legacy(after));
+          // format: the saved value keeps the flat rows-and-settings shape, each row's `location` key
+          // and a `tabs` count derived from clients.
+          expect(bytes).toBe(savedShape(after));
           const reloaded = state(walk.ttl, walk.most, Schema.decodeUnknownSync(json())(bytes));
           expect(reloaded).toEqual(after);
           let s = reloaded;

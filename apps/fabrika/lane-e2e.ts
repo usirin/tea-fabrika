@@ -1,15 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fakeEnv, makeLaneHome } from "@kampus/pipeline/stages/pipeline/lane-fixture";
-import { _electron, type ElectronApplication, type Page } from "playwright";
+import type { Page } from "playwright";
+import * as TestWindow from "./test-window.ts";
 
 // One tracker ticket through the whole lane, in the real built app, on a temp home. Today's version.
 // The machines, the Codex adapter, the box, git and Stryker are all real. The agents are a fake
 // `codex` and the code host is a bare folder, so no live agent runs and nothing real is touched.
-// Not part of `pnpm test`: it opens a window, kept unseen by the app's quiet start.
+// Not part of `pnpm test`: it opens a window, kept out of the way by test-window.ts.
 //
 //   pnpm --filter @kampus/fabrika-app-old e2e:lane
 //   SHOTS=<folder> ...e2e:lane     the screenshots there: programs/pipeline/docs for the real ones
@@ -23,7 +23,6 @@ import { _electron, type ElectronApplication, type Page } from "playwright";
 //   the ticket window               the person's merge yes, then the merge on the bare remote
 
 const here = import.meta.dirname;
-const electronPath: string = createRequire(import.meta.url)("electron");
 const shots = process.env.SHOTS ?? mkdtempSync(join(tmpdir(), "lane-shots-"));
 mkdirSync(shots, { recursive: true });
 
@@ -43,7 +42,7 @@ for (const [name, value] of Object.entries(process.env)) {
   }
 }
 
-Object.assign(env, fakeEnv(dir), { FABRIKA_HOME: home });
+Object.assign(env, fakeEnv(dir));
 
 const check = (what: string, ok: boolean, seen?: unknown) => {
   if (!ok) {
@@ -131,13 +130,8 @@ const shot = async (page: Page, name: string) => {
   console.log(`shot ${name}`);
 };
 
-const sized = async (app: ElectronApplication, page: Page, width: number, height: number) => {
-  await app.evaluate(
-    ({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
-    },
-    { width, height },
-  );
+const sized = async (win: TestWindow.TestWindow, page: Page, width: number, height: number) => {
+  await win.size(width, height);
   await until(
     `the window to be ${width}x${height}`,
     () => page.evaluate(() => [window.innerWidth, window.innerHeight]),
@@ -178,7 +172,8 @@ const hostPid = () => {
 
 // Started in the toy checkout, as a person starts the app in theirs: the host it starts runs there,
 // and the lane reads its repository off that checkout's origin.
-const app = await _electron.launch({ executablePath: electronPath, args: [here], env, cwd: seed });
+const win = await TestWindow.launch({ home, cwd: seed, env });
+const { app } = win;
 let failed = false;
 
 try {
@@ -192,7 +187,7 @@ try {
     30_000,
   );
   // Sized only now: a tiling window manager resizes a new window soon after it opens.
-  await sized(app, page, 1600, 1000);
+  await sized(win, page, 1600, 1000);
   const first = await split(page, "|");
   await prefixed(page, "h");
   await typed(page, "t1", "tracker");
@@ -360,9 +355,9 @@ try {
   );
   check("the ticket window says the pull request merged", /merged/.test(closedView));
   await shot(page, "merged-2x2");
-  await sized(app, page, 1024, 700);
+  await sized(win, page, 1024, 700);
   await shot(page, "merged-2x2-small-window");
-  await sized(app, page, 1600, 1000);
+  await sized(win, page, 1600, 1000);
   await prefixed(page, "z");
   await shot(page, "merged-one-tile");
   await prefixed(page, "z");
@@ -402,7 +397,10 @@ try {
   }
 } finally {
   const pid = hostPid();
-  await app.close().catch(() => {});
+  await win.close().catch((e: unknown) => {
+    failed = true;
+    console.error(e);
+  });
 
   // This run started that host, on its own temp home, and only this run stops it.
   if (!Number.isNaN(pid)) {

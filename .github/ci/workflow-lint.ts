@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { gated } from "./required.mjs";
 
 export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
 export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
@@ -45,6 +46,22 @@ const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
+// The classifier also reads whether the pull request is a draft (0134's amendment of 2026-11-11).
+const classifier = { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` };
+
+// A draft's check and ci-required carry their own names, so a draft's green answer on a head never
+// stands in for the ready run's on the same head (catchup.sh reads `check`, the ruleset
+// `ci-required`).
+const DRAFT_NAMES = {
+  check: "github.event.pull_request.draft&&'lint'||'check'",
+  "ci-required": "github.event.pull_request.draft&&'ci-required (draft)'||'ci-required'",
+};
+
+// Marking a draft ready starts the full run; only a new head cancels the run before it.
+const TYPES = ["opened", "synchronize", "reopened", "ready_for_review"];
+const CANCEL = "github.event_name=='pull_request'&&github.event.action=='synchronize'";
+const BUILD = "needs.changes.outputs.build!='false'";
+
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
 const chromium =
   "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
@@ -82,8 +99,25 @@ export const lintWorkflow = (text: string): string[] => {
   }
 
   require(!("branches" in pr), "all PR bases remain enabled");
+  const types = pr["types"];
+  require(Array.isArray(types) &&
+    types.length === TYPES.length &&
+    TYPES.every((type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
+  require(compact(map(workflow["concurrency"])["cancel-in-progress"]) === CANCEL, "only a new head cancels a run");
 
-  for (const name of ["check", "test", "next", "e2e"]) {
+  for (const [job, expected] of Object.entries(DRAFT_NAMES)) {
+    require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
+  }
+
+  // A draft's check is lint alone: the promises gate and the build skip on changes' build flag.
+  const checkSteps = steps(map(jobs["check"]));
+
+  for (const step of checkSteps) {
+    const slow = step["name"] === "promises" || step["run"] === "pnpm build";
+    require(slow ? compact(step["if"]) === BUILD : !("if" in step), "only promises and build skip, on the build flag");
+  }
+
+  for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
     require(needs === "changes" ||
@@ -100,13 +134,33 @@ export const lintWorkflow = (text: string): string[] => {
     require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
   }
 
+  // The one required check: it waits on every other job, never skips, and judges them all.
+  const summary = map(jobs["ci-required"]),
+    others = Object.keys(jobs).filter((name) => name !== "ci-required");
+  const needed = Array.isArray(summary["needs"]) ? summary["needs"] : [];
+  require(needed.length === others.length &&
+    others.every((name) => needed.includes(name)), "ci-required needs every other job");
+  require(compact(summary["if"]) === "always()" &&
+    summary["continue-on-error"] === undefined, "ci-required runs after any result and its failure blocks");
+  const judged = steps(summary).filter((s) => "run" in s);
+  require(judged.length === 1 &&
+    judged[0]?.["run"] === "node .github/ci/required.mjs" &&
+    compact(map(judged[0]?.["env"])["NEEDS"]) === "toJSON(needs)" &&
+    !("if" in (judged[0] ?? {})) &&
+    judged[0]?.["continue-on-error"] === undefined, "ci-required judges toJSON(needs) with required.mjs");
+
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
   require(!("if" in changes) && !("needs" in changes), "changes starts on every event");
 
-  for (const name of ["check", "test", "next", "e2e", "field"]) {
+  for (const name of ["check", "typecheck", "test", "next", "e2e", "field", "build"]) {
     require(compact(outputs[name]) === `steps.diff.outputs.${name}`, `changes exposes ${name}`);
   }
+
+  // The typecheck is its own job, so its answer comes as soon as it ends and a lane can read it
+  // alone (0133). check runs no second one.
+  require(commands(map(jobs["typecheck"])).includes("pnpm typecheck"), "the typecheck job runs pnpm typecheck");
+  require(!commands(map(jobs["check"])).includes("pnpm typecheck"), "check leaves the typecheck to its own job");
 
   require(commands(changes).includes("sh .agents/skills/lead/scripts/skillscheck.sh"), "changes runs the skills check");
   require(commands(changes).includes(
@@ -138,7 +192,7 @@ export const lintWorkflow = (text: string): string[] => {
     const diff = list.find((s) => s["id"] === "diff");
     require(diff?.["run"] === "node .github/ci/changes.mjs" && !("if" in (diff ?? {})), `${name} calls the classifier`);
 
-    for (const [key, expected] of Object.entries(env)) {
+    for (const [key, expected] of Object.entries(classifier)) {
       require(map(diff?.["env"])[key] === expected, `${name} passes event ${key} through env`);
     }
   }

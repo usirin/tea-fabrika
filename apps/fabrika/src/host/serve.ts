@@ -22,10 +22,20 @@ import {
   StopAnswer,
   StopRefused,
 } from "@kampus/fabrika-old/mcp";
-import { Author, PullRequests, RepoTree } from "@tea-fabrika/tracker";
+import { Author, PullRequests, RepoTree, saveCell } from "@tea-fabrika/tracker";
 import { Data, Deferred, Duration, Effect, Option, Queue, Ref, Stream } from "effect";
 import { type Socket, SocketServer } from "effect/socket";
-import { type AsksMsg, asksMachine, asksNow, asksOptions, type Marks, marksOf, NO_MARKS, readMarks } from "../asks.ts";
+import {
+  type AsksMsg,
+  asksMachine,
+  asksNow,
+  asksOptions,
+  type Marks,
+  marksOf,
+  NO_MARKS,
+  noticeCell,
+  readMarks,
+} from "../asks.ts";
 import { BUILD } from "../build-id.ts";
 import {
   claims,
@@ -48,7 +58,7 @@ import type { SharedHistory } from "../editor/history.ts";
 import { jobLines } from "../job-lines.ts";
 import { keysProgram, type Snapshot } from "../keys/program.ts";
 import { type Down, PROTOCOL, type Up } from "../link.ts";
-import { type AgentOn, type FromPage, type LedgerLink, readFromPage, type ToPage } from "../messages.ts";
+import { type AgentOn, answerIdOf, type FromPage, type LedgerLink, readFromPage, type ToPage } from "../messages.ts";
 import { startTiles } from "../tiles.ts";
 import { appPrograms, type Screen, tshList, type WindowScreen } from "../tsh.ts";
 import { hostWire } from "../wire.ts";
@@ -217,6 +227,11 @@ export const serve = (options: {
     | (Extract<LedgerLink, { kind: "server" }> & { readonly sessionFor: AgentSessions });
   /** The restart before this host, and where the next is left; none, no `restart` tool. */
   readonly restarts?: Restarts | undefined;
+  /**
+   * The project this host serves, by its key (project.ts): its hello names it, and an app's
+   * hello for another project is refused. None: a test's host, or a home from before projects.
+   */
+  readonly project?: string | undefined;
 }) =>
   Effect.gen(function* () {
     const { history, jobs, desk: home, asks: asksHome, ours = PROTOCOL, build = BUILD, agents, restarts } = options;
@@ -228,6 +243,7 @@ export const serve = (options: {
     const server = yield* SocketServer.SocketServer;
     const scope = yield* Effect.scope;
     const services = yield* Effect.context<never>();
+    const author = yield* Author;
     const clock = yield* Effect.clockWith(Effect.succeed);
     const since = clock.currentTimeMillisUnsafe();
     const warn = (what: string) => {
@@ -413,7 +429,6 @@ export const serve = (options: {
       Effect.runForkWith(services)(asks.dispatch(msg).pipe(Effect.ignore));
     };
     const ledger = yield* Ledger;
-    const author = yield* Author;
     /** The agents the person summoned here, when the host keeps any (its repository is known). */
     const summons = Option.getOrUndefined(yield* Effect.serviceOption(Shell.SummonManager));
     const programs = programsOf(
@@ -945,6 +960,62 @@ export const serve = (options: {
     /** What the page sent on the desk's port. */
     const fromPage = (client: Client, m: FromPage) => {
       switch (m.type) {
+        case "open_lane": {
+          if (desk.at !== "open") {
+            return;
+          }
+
+          const source = desk.workspaces.flatMap(tilesOf).find((t) => t.id === m.from);
+
+          if (source === undefined) {
+            return;
+          }
+
+          const root = source.shows.kind === "tsh" ? source.id : source.shows.line.from;
+          Effect.runForkWith(services)(
+            tiles.lane(root, m.ticket).pipe(
+              Effect.match({
+                onSuccess: (run) => {
+                  if (desk.at !== "open") {
+                    return;
+                  }
+
+                  const tile = desk.workspaces.flatMap(tilesOf).find((t) => t.shows.run?.id === run);
+
+                  if (tile !== undefined) {
+                    step({ type: "go", tile: tile.id });
+                  }
+
+                  shout();
+                },
+                onFailure: (error) => warn(error.why),
+              }),
+            ),
+          );
+          return;
+        }
+        case "ask_answer":
+          // Only a page the person opened answers: a link that never opened one saw no ask.
+          if (!client.page) {
+            toPage(client, {
+              type: "ask_answered",
+              id: m.id,
+              why: "Open fabrika's window to answer",
+            });
+            return;
+          }
+
+          Effect.runForkWith(services)(
+            saveCell({ type: "save", id: m.id, next: 1, write: { kind: "answer", ...m.value } }).pipe(
+              Effect.provideService(Ledger, ledger),
+              Effect.provideService(Author, author),
+              Effect.match({
+                onSuccess: () => toPage(client, { type: "ask_answered", id: m.id, why: null }),
+                onFailure: (error) => toPage(client, { type: "ask_answered", id: m.id, why: error.why }),
+              }),
+            ),
+          );
+          return;
         case "keys.open":
         case "keys.close":
         case "keys.edit":
@@ -1022,8 +1093,21 @@ export const serve = (options: {
         case "run":
           did(m.does, m.via === undefined ? Via.palette() : Via.key(m.via));
 
-          if (m.does === "palette.open") {
-            toPage(client, { type: "show", what: "palette" });
+          // The palette's and the projects box's are the page's own. At a key, the page has
+          // shown it already and the prefix is put down; from the palette, it is told to.
+          if (m.does === "palette.open" || m.does === "projects.open") {
+            if (step({ type: "run", does: m.does }, client)) {
+              shout();
+            }
+
+            if (m.via !== undefined) {
+              return;
+            }
+
+            toPage(client, {
+              type: "show",
+              what: m.does === "palette.open" ? "palette" : "projects",
+            });
             return;
           }
 
@@ -1072,6 +1156,15 @@ export const serve = (options: {
           }
 
           return;
+        // The app showed a system notification of new asks: kept, so attention counts can fold it.
+        case "noticed":
+          Effect.runForkWith(services)(
+            noticeCell(m, writerText(author)).pipe(
+              Effect.provideService(Ledger, ledger),
+              Effect.catch((e) => Effect.logWarning(`fabrika host: could not keep a notice: ${String(e._tag)}`)),
+            ),
+          );
+          return;
         case "away":
           Queue.offerUnsafe(editorQueue, { client, message: { type: "keys.close" } });
           hide(client);
@@ -1083,8 +1176,19 @@ export const serve = (options: {
 
             if (read.kind === "read") {
               fromPage(client, read.msg);
-            } else {
-              warn(`refused a message from a page: ${read.why}`);
+              return;
+            }
+
+            warn(`refused a message from a page: ${read.why}`);
+            // An answer the host cannot read still gets its reply, so the window never waits on it.
+            const id = answerIdOf(m.m);
+
+            if (id !== null) {
+              toPage(client, {
+                type: "ask_answered",
+                id,
+                why: "The answer could not be read, so nothing was saved",
+              });
             }
 
             return;
@@ -1115,7 +1219,7 @@ export const serve = (options: {
           page: false,
           shown: new Map(),
         };
-        const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build);
+        const wire = yield* hostWire(socket, (m) => fromApp(client, m), ours, build, options.project ?? null);
         client.send = wire.send;
         client.up = () => wire.state().at === "up";
         clients.add(client);

@@ -2,7 +2,7 @@ import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { Clock, Effect, Exit, Schedule, Schema, Scope } from "effect";
 import { BUILD } from "./build-id.ts";
 import { forgetNote, leaveNote, personOn } from "./host/restart.ts";
-import { pathsOf, reach } from "./host/socket.ts";
+import { type HostPaths, pathsOf, reach } from "./host/socket.ts";
 import { stopHost } from "./host/stop.ts";
 import { type Down, foundOf, PROTOCOL, type Up } from "./link.ts";
 import type { Attached } from "./messages.ts";
@@ -59,6 +59,11 @@ interface AttachOptions<E, R> {
   readonly ours?: number;
   /** The app's build, to compare with the host's: `BUILD`, but in a test. */
   readonly build?: string;
+  /**
+   * A project's host: its paths (project.ts, `Project.paths`), and its key, which the hello
+   * names, so a host of another project is never attached. Not said: `<home>/host/`, no project.
+   */
+  readonly project?: { readonly key: string; readonly paths: HostPaths } | undefined;
 }
 
 /** Attached: the link, and what the app found of the host's build. */
@@ -70,7 +75,7 @@ interface Attachment {
 export const attach = <E, R>(options: AttachOptions<E, R>) =>
   Effect.gen(function* () {
     const { home, deliver, start, ours = PROTOCOL, build = BUILD } = options;
-    const paths = yield* pathsOf(home);
+    const paths = options.project?.paths ?? (yield* pathsOf(home));
 
     if ((yield* reach(paths.sock)) !== "live") {
       const exited = yield* start;
@@ -102,7 +107,7 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
     // so its socket is not left open until the caller's scope ends.
     const link = yield* Scope.fork(yield* Effect.scope);
     const socket = yield* NodeSocket.makeNet({ path: paths.sock });
-    const wire = yield* appWire(socket, deliver, ours).pipe(Scope.provide(link));
+    const wire = yield* appWire(socket, deliver, ours, options.project?.key ?? null).pipe(Scope.provide(link));
     const theirs = yield* wire.up.pipe(
       Effect.timeoutOrElse({
         duration: HELLO_WITHIN,
@@ -123,7 +128,7 @@ export const attach = <E, R>(options: AttachOptions<E, R>) =>
  */
 export const restart = <E, R>(options: AttachOptions<E, R>) =>
   Effect.gen(function* () {
-    const paths = yield* pathsOf(options.home);
+    const paths = options.project?.paths ?? (yield* pathsOf(options.home));
 
     if ((yield* reach(paths.sock)) === "live") {
       const by = yield* personOn(options.home);
@@ -136,6 +141,6 @@ export const restart = <E, R>(options: AttachOptions<E, R>) =>
       }
     }
 
-    yield* stopHost(options.home).pipe(Effect.tapError(() => forgetNote(paths)));
+    yield* stopHost(options.home, paths).pipe(Effect.tapError(() => forgetNote(paths)));
     return yield* attach(options);
   });

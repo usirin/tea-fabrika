@@ -102,6 +102,10 @@
 
     // Code never reaches a primitive (design language, call 3): it reads a token. Only the token
     // build imports Radix, so it is turned off for that folder alone below.
+    // A test window is launched only through apps/fabrika/test-window.ts, which keeps it out of a
+    // person's way (AGENTS.md, "Go easy on the machine"). On main before ticket 733, 3 of 3
+    // `_electron` imports were real bypasses. An override replaces a rule's options, so every
+    // override of this rule repeats the two `_electron` entries.
     "eslint/no-restricted-imports": [
       "error",
       {
@@ -109,6 +113,16 @@
           {
             "name": "@radix-ui/colors",
             "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+          },
+          {
+            "name": "playwright",
+            "importNames": ["_electron"],
+            "message": "Launch a test window through apps/fabrika/test-window.ts."
+          },
+          {
+            "name": "@playwright/test",
+            "importNames": ["_electron"],
+            "message": "Launch a test window through apps/fabrika/test-window.ts."
           }
         ],
         "patterns": [
@@ -433,6 +447,16 @@
               {
                 "name": "fs/promises",
                 "importNames": ["lstat", "realpath", "readlink"]
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ]
           }
@@ -445,6 +469,18 @@
         "eslint/no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
             "patterns": [
               {
                 "group": [
@@ -464,8 +500,9 @@
     },
     {
       // Test files only: an `expect` that sits only inside an `if` may never run.
-      // `!` is allowed here: a test that hits a missing value fails on its own.
-      "files": ["**/*.test.ts"],
+      // `!` is allowed here: a test that hits a missing value fails on its own. The record-part
+      // suite (0062) holds the laws its runner registers, so it is a test file here too.
+      "files": ["**/*.test.ts", "next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
       "rules": {
         "fabrika/no-expect-in-if": "error",
         "typescript/no-non-null-assertion": "off",
@@ -489,8 +526,27 @@
     },
     {
       // The token build reads Radix's steps and writes them out as tokens (design foundations, PR 2).
+      // It keeps the top level's `_electron` ban (ticket 733): an override replaces a rule's options.
       "files": ["packages/fabrika-design/src/build/**"],
-      "rules": { "eslint/no-restricted-imports": "off" }
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       // `ownRules` is the one place that says where a Claude run's settings come from.
@@ -575,9 +631,13 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
+        "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -590,6 +650,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -630,9 +700,13 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        "fabrika/no-why-key": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
         "fabrika/one-store-hook": "error",
+        "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -645,6 +719,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -676,11 +760,17 @@
       // and those stay review work. A conversation room, which 0091 keeps, takes a local
       // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`).
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
+      // override replaces a rule's whole list, so this one repeats the five question words (0081).
       "files": ["next/**/*"],
       "rules": {
         "eslint/id-denylist": [
           "error",
+          "where",
+          "why",
+          "what",
+          "who",
+          "how",
           "room",
           "rooms",
           "Room",
@@ -716,8 +806,30 @@
       }
     },
     {
+      // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
+      // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
+      "files": ["next/**/*.ts"],
+      "rules": { "fabrika/no-wall-clock": "error" }
+    },
+    {
+      // A test helper is test code: it may read the clock as a test does.
+      "files": ["next/**/*.test-support.ts"],
+      "rules": { "fabrika/no-wall-clock": "off" }
+    },
+    {
+      // Shared law suites and helpers contain fixture machines, not exported product machines.
+      "files": ["next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/one-machine-per-file": "off" }
+    },
+    {
+      // A resource is released by the scope that acquired it, never by an after-hook that a thrown
+      // error or a killed test can skip (0061). Setup hooks stay.
+      "files": ["next/**/*.ts", "next/**/*.tsx"],
+      "rules": { "vitest/no-hooks": ["error", { "allow": ["beforeAll", "beforeEach"] }] }
+    },
+    {
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
-      // `no-of` and `no-why-key` stay on, since tests follow the same naming rules.
+      // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {
@@ -726,12 +838,27 @@
         "fabrika/no-effect-run-outside-edge": "off",
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off",
         "react/refs": "off",
         "react/immutability": "off",
         "react/display-name": "off",
         "react/purity": "off",
-        "fabrika/no-clock-in-view": "off"
+        "fabrika/no-clock-in-view": "off",
+        "fabrika/no-wall-clock": "off"
+      }
+    },
+    {
+      // The record-part suite (0062) is the laws its runner registers. It is a test, as above, except
+      // that it keeps the edge rules on and marks its Promise edges: only `next/`'s `.test.ts` files
+      // may turn one off (`edge-comment.test.ts`).
+      "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts"],
+      "rules": {
+        "fabrika/prefer-schema-arbitrary": "warn",
+        "fabrika/effect-functions": "off",
+        "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
+        "fabrika/one-store-hook": "off"
       }
     },
     {
@@ -741,12 +868,15 @@
       "rules": {
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
+        "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off"
       }
     },
     {
-      // T664, L15: start code in next/apps selects the settings Layers, the TOML adapter included.
-      "files": ["next/apps/**"],
+      // T664, L15, narrowed by T730's L9: only these start files in next/apps choose the TOML
+      // adapter, `settings-start.test.ts` standing in for the start it tests. Every other app file,
+      // tests included, keeps the `next/**` ban, and the parser stays banned here too.
+      "files": ["next/apps/fabrika/dev.ts", "next/apps/fabrika/cli.ts", "next/apps/fabrika/src/settings-start.test.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -759,6 +889,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -813,6 +953,7 @@
               "processes",
               "presence",
               "jobs",
+              "packs",
               "access",
               "runtime",
               "gateway"
@@ -833,6 +974,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -883,6 +1034,16 @@
               {
                 "name": "toml-eslint-parser",
                 "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -920,6 +1081,16 @@
               {
                 "name": "@radix-ui/colors",
                 "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
               }
             ],
             "patterns": [
@@ -936,6 +1107,70 @@
                   "./../../*/internal/**"
                 ],
                 "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The module above never sees what is two layers down: `runtime/`, `access/` and `gateway/`
+      // never import `ledger/`, types included, and tests keep the layers too (0043, rule 11 and
+      // its amendments; 0062). What they import today is in `next-ledger.json`. An override replaces
+      // a rule's options, so the modules override's Radix, TOML (L15) and `internal/` entries are
+      // repeated here.
+      "files": [
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/gateway/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              }
+            ],
+            "patterns": [
+              {
+                // A front file of ledger/, PascalCase by the case override below. Its `internal/` is the
+                // `internal/` entry's, so one import is reported once: oxlint reads a `!` in any group
+                // as a pass for every group.
+                "group": ["../ledger/[A-Z]*", "./../ledger/[A-Z]*", "../../ledger/[A-Z]*", "./../../ledger/[A-Z]*"],
+                "message": "runtime/, access/ and gateway/ never import ledger/, two layers down (0043, rule 11): use the service of the module below, in its own words and errors."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "./*/internal/**",
+                  "../*/internal/**",
+                  "./../*/internal/**",
+                  "../../*/internal/**",
+                  "./../../*/internal/**"
+                ],
+                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -994,6 +1229,96 @@
             ]
           }
         ]
+      }
+    },
+    {
+      // Ticket 733: an e2e script launches and sizes its window only through test-window.ts. The
+      // top-level paths, plus the Electron binary and a window moved by hand. On main before it,
+      // 3 of 3 `createRequire` calls in these scripts found that binary, and 2 of 2 `setBounds`
+      // moved a test window: 0 false alarms in 8.
+      "files": ["apps/fabrika/e2e.ts", "apps/fabrika/*-e2e.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "node:module",
+                "importNames": ["createRequire"],
+                "message": "The Electron binary comes from test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "error",
+          { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
+          { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
+        ]
+      }
+    },
+    {
+      // Ticket 733: the one file that launches a test window. The top-level paths without `_electron`.
+      "files": ["apps/fabrika/test-window.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // Ticket 737 (decision 0023): next/ decodes input with Effect Schema, so a bare JSON.parse is
+      // reported, and a service ID carries the package and its file's path. "warn" only advises:
+      // lint.ts prints both and does not fail on them until their false alarms are counted
+      // (oxlint-plugins/README.md). A test oracle may keep a parse with a line exception and a reason.
+      // The ID rule reads only libfabrika's source folder, so its glob can stay wide. Its glob is
+      // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
+      // `.agents/` repeats (0033), and this advice holds next/ alone.
+      "files": ["next/**/*"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Advice, does not block: decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          }
+        ],
+        "fabrika/service-id": ["warn", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
       }
     },
     {

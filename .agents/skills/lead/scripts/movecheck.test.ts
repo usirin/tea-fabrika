@@ -115,10 +115,10 @@ const edited = (t: Text): fc.Arbitrary<Text> =>
       fc.nat({ max: t.body.length - 1 }),
       fc.nat({ max: Math.max(0, t.statements.length - 1) }),
     )
-    .map(([what, line, at]) => {
+    .map(([mutation, line, at]) => {
       const body = [...t.body];
 
-      if (what === "names" && t.statements[at] !== undefined) {
+      if (mutation === "names" && t.statements[at] !== undefined) {
         return {
           statements: t.statements.map((s, n) =>
             n === at ? { words: renamedWords(s.words), specifier: s.specifier } : s,
@@ -127,9 +127,9 @@ const edited = (t: Text): fc.Arbitrary<Text> =>
         };
       }
 
-      if (what === "dropped" && body.length > 1) {
+      if (mutation === "dropped" && body.length > 1) {
         body.splice(line, 1);
-      } else if (what === "added") {
+      } else if (mutation === "added") {
         body.splice(line, 0, "audit(1);");
       } else {
         // The plan's plant: one character of a moved function body.
@@ -211,10 +211,10 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
                       : move.from,
                 ],
           );
-          const outside = strays.map((what, n): Change => {
+          const outside = strays.map((mutation, n): Change => {
             const path = `${SRC}/node/stray${n}.ts`;
 
-            switch (what) {
+            switch (mutation) {
               case "added":
                 return { _tag: "added", path, after: written(old) };
               case "deleted":
@@ -403,7 +403,7 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
         fc.constantFrom("changed", "dropped", "doubled", "new"),
         fc.nat(),
         fc.nat(),
-        (cut, what, pick, other) => {
+        (cut, mutation, pick, other) => {
           const clean = held(cut);
           expect(splitFaults(old(cut), split(cut, clean))).toEqual([]);
 
@@ -411,13 +411,13 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
           const at = pick % cut.lines.length;
           const file = broken[cut.to[at] ?? 0] ?? [];
           const line = cut.lines[at] ?? "";
-          const where = file.indexOf(line);
+          const index = file.indexOf(line);
 
-          if (what === "changed") {
-            file[where] = line.replace(/\d/, (digit) => `${digit}7`).replace(/^\}$/, "} else {");
-          } else if (what === "dropped") {
-            file.splice(where, 1);
-          } else if (what === "doubled" && line !== "}") {
+          if (mutation === "changed") {
+            file[index] = line.replace(/\d/, (digit) => `${digit}7`).replace(/^\}$/, "} else {");
+          } else if (mutation === "dropped") {
+            file.splice(index, 1);
+          } else if (mutation === "doubled" && line !== "}") {
             (broken[other % broken.length] ?? file).push(line);
           } else {
             file.push("audit(deps);");
@@ -484,7 +484,7 @@ describe("movecheck --renamed: only the listed names change", () => {
         fc.array(fc.tuple(line, fc.boolean()), { minLength: 1, maxLength: 10 }),
         fc.nat(),
         fc.constantFrom("kept", "wrong", "logic"),
-        (table, lines, pick, what) => {
+        (table, lines, pick, mutation) => {
           const before = lines.map(([l]) => l);
           const after = lines.map(([l, renamed]) => (renamed ? renameIn(l, table) : l));
           const change = (text: ReadonlyArray<string>) => [
@@ -497,9 +497,9 @@ describe("movecheck --renamed: only the listed names change", () => {
           const target = after[at] ?? "";
           const listed = table.find((r) => new RegExp(`\\b${r.to}\\b`).test(target));
 
-          if (what === "wrong" && listed !== undefined) {
+          if (mutation === "wrong" && listed !== undefined) {
             broken[at] = target.replace(new RegExp(`\\b${listed.to}\\b`), `${listed.to}Else`);
-          } else if (what === "logic") {
+          } else if (mutation === "logic") {
             broken[at] = `${target} audit();`;
           } else {
             // The last name on the line is one no table lists.

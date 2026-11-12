@@ -36,13 +36,26 @@ import { type Attached, type Read, reader } from "./messages.ts";
 // learns which one it met. A line before the hello, a second hello, or a line that does not read
 // closes the link. Once refused or closed, nothing changes it.
 
-/** The link's version. Raise it when what goes over the link changes. */
-export const PROTOCOL = 2;
+/**
+ * The link's version. Raise it when what goes over the link changes. 3: each hello names the
+ * project its side serves (ticket 276), and a link between two projects never comes up.
+ */
+export const PROTOCOL = 3;
 
 /** A port's name, as the page's bridge takes it (bridge.ts). */
 const Port = Schema.String.check(Schema.makeFilter((name) => isPortName(name) || "not a port's name"));
 
-const Hello = Schema.Struct({ type: Schema.Literal("hello"), version: Schema.Int });
+/**
+ * The app's hello. Since version 3 it names the project the window is for, by its key
+ * (project.ts), so a host of another project refuses it before any page traffic.
+ *
+ *   app   {"type":"hello","version":3,"project":"3f9a…"}
+ */
+const Hello = Schema.Struct({
+  type: Schema.Literal("hello"),
+  version: Schema.Int,
+  project: Schema.optionalKey(Schema.String),
+});
 
 /**
  * The host's hello names its build too (build-id.ts), so the app can tell a host that runs older
@@ -56,7 +69,32 @@ const HostHello = Schema.Struct({
   type: Schema.Literal("hello"),
   version: Schema.Int,
   build: Schema.optionalKey(Schema.String),
+  /** The project this host serves, by its key. A host started before projects names none. */
+  project: Schema.optionalKey(Schema.String),
 });
+
+/**
+ * One system notification the app showed of new asks: which asks, what it said, and when on the
+ * app's own clock. The host keeps it on the ledger, so later attention counts can fold every
+ * interruption; the ledger's own time stays the referee.
+ *
+ *   app  {"type":"noticed","asks":[{"key":"7/a-1","ticket":7,"kind":"ask"}],
+ *         "title":"#7 Read names","body":"Approve plan v2?","sentAt":1762600000000}
+ */
+export const Noticed = Schema.Struct({
+  type: Schema.Literal("noticed"),
+  asks: Schema.NonEmptyArray(
+    Schema.Struct({
+      key: Schema.String,
+      ticket: Schema.Int,
+      kind: Schema.Literals(["ask", "stuck"]),
+    }),
+  ),
+  title: Schema.String,
+  body: Schema.String,
+  sentAt: Schema.Finite,
+});
+export type Noticed = typeof Noticed.Type;
 
 /** What the app tells the host. */
 export const Up = Schema.Union([
@@ -67,6 +105,7 @@ export const Up = Schema.Union([
   Schema.Struct({ type: Schema.Literal("away") }),
   /** The page sent `m` on the port named `port`: for that tile, that run, or the desk alone. */
   Schema.Struct({ type: Schema.Literal("on"), port: Port, m: Schema.Unknown }),
+  Noticed,
 ]);
 export type Up = typeof Up.Type;
 

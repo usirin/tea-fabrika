@@ -9,6 +9,11 @@
 
 Proposed 2026-10-24. Decided by the owner 2026-11-01.
 
+Its decided rules are in: [0385](../../.decisions/0385-tla-only-for-a-design-with-no-code.md),
+[0422](../../.decisions/0422-a-scheduled-job-listens-to-the-clock.md),
+[0423](../../.decisions/0423-one-alarm-set-in-one-function.md),
+[0424](../../.decisions/0424-a-job-runs-where-its-config-says.md).
+
 ```ts
 // A sketch, not built. A scheduled job is a program that listens to the clock.
 // It reads and judges, and it files a ticket. It never changes code itself.

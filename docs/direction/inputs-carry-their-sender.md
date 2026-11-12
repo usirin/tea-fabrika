@@ -1,5 +1,7 @@
 # Inputs carry their sender, and every write carries its cause
 
+Its decided rules are in: [0261](../../.decisions/0261-inputs-carry-their-sender.md), [0262](../../.decisions/0262-a-write-carries-parent-and-traceid.md), [0263](../../.decisions/0263-a-writes-signer-is-its-causes-sender.md).
+
 **Proposed 2026-11-04.** Walked when Tier 1 starts (owner, 2026-11-08): P11's test-kit law in question 17, approved by the owner 2026-11-08. The owner set the direction on 2026-11-04, and each decided point is
 marked decided below:
 
@@ -68,7 +70,7 @@ interface Envelope<A> {
   note's host is the brain's door, a run is a process, and the cell is the runner. Each part's row
   and law are in [Tier 1's plan](../plan/tier-1.md#where-inputs-carry-their-sender-lands).
 - **`next/`'s input id is a TypeID,** `input_<26 chars>`, not this note's `in-<host run>-<n>`.
-  Decided by the owner, 2026-11-08, in [one id per thing](./one-id-per-thing.md). The door's
+  Decided by the owner, 2026-11-08, in [one id per thing](../../.decisions/0211-one-typeid-per-thing.md). The door's
   process and its count stay, as their own fields on the entry. The ids in this note's sketches
   are today's version's.
 
@@ -98,7 +100,9 @@ const Write = Schema.TaggedUnion({
   CRDTs](https://zed.dev/blog/crdts)). So no id is made twice, across restarts too.
 - **A client-sent id is refused.** A link that names its own `id` or `by` is broken or lying, and
   the refusal is recorded. Ignoring it would invite a later reader to trust the key. That is mass
-  assignment (OWASP API Security Top 10 2023, API3).
+  assignment (OWASP API Security Top 10 2023, API3). Decided in
+  [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md): refused and counted in the
+  gateway's hourly metric, never recorded, and a write with no cause is `own`.
 - **`at` and not `said`.** `at` is the referee's clock, as the [glossary](../../.glossary/TERMS.md)
   says. No sender gives its own clock today; if one does later, it goes in `said`, kept out of the
   deciding code's types. In `next/` the two are `arrivedAt` and `sentAt`.

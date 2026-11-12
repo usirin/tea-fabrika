@@ -74,7 +74,10 @@ pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 
 ## The lead pushes
 
-Step agents commit locally; the lead pushes, notes first, so the check finds every note:
+Since [0134](../../.decisions/0134-no-code-stays-only-on-a-local-branch.md), `stepcommit.sh` pushes
+each commit it signs, with a draft pull request when the branch has none, through
+`.agents/skills/lead/scripts/publish.ts`, and a lane pushes each box's commit from the host. By
+hand, the lead pushes, notes first, so the check finds every note:
 
 ```sh
 pnpm commits push

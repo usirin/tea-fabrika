@@ -22,6 +22,7 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md), one table per model, one row per behavior | The row, in the same pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)). |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words, one section per bounded context, one row per word in it, with what it is not; its last section translates today's code's words | A row there, in the same pull request that coins or renames a word. |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
+| Know a design area's guidelines | `docs/guidelines/<area>.md`, one page per area, read whole: its principles, each with its kind (`law`, `lint` or `taste`), reasoning and example | An edit to the page, in a pull request the owner says yes to, never a new decision file per change. The area's one decision file records only the approval, with its date. The page links the decisions that enforce its law and lint principles and does not restate them ([0136](./.decisions/0136-guidelines-live-in-their-own-pages.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. A write-up quotes the numbers it uses inline. Raw results and assets (saved answers, shots, inputs, every timing of a run) go to the owner's private archive, not into git: a script writes them under `runs/` or to a path a flag names. A script is not kept on main: keep it on its own branch and name that branch in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/`. |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/`, with the older rows in `field/notes.jsonl` and `field/runs.jsonl` | One file per agent run in `field/runs/` and one per thing that broke, cost too much, needed a person or worked well in `field/notes/`, the same day, named `<date>-<slug>.json` and in the schema the README gives. Never a line added to the old `.jsonl` files ([0090](./.decisions/0090-each-field-row-is-a-file.md)). |
@@ -60,10 +61,11 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 
 A new version of fabrika is growing in `next/`, built on
 [the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
-`next/` is on main, and 20 of Tier 1's 43 rows have merged, plus P17a, half of P17
+`next/` is on main, and 20 of Tier 1's 44 rows have merged, plus P17a, half of P17
 ([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
-added P38, [0069](./.decisions/0069-choices-are-settings.md), and 43 since the four thin slices,
-P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md)). Everything
+added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), and 44 since the merge queue's first stage, P43,
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -153,8 +155,10 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
-  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
-  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  is in `agents-ledger.json`, which only shrinks ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  No new shell or Python script enters the repo, and the ones here today are being ported to
+  TypeScript and Effect now, behind services with a test layer (ticket 766,
+  [0113](./.decisions/0113-no-shell-or-python-scripts.md)).
   Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
@@ -242,7 +246,8 @@ discovery contract
 ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
 
 Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
-when called: `drive.ts` runs `box.sh gc` itself on start.
+when called. Box cleanup (`box.sh gc`) runs on a launchd timer and after each merge, never on a
+step's start ([0101](./.decisions/0101-box-cleanup-runs-on-a-timer.md)): `gcloop.ts`.
 
 Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
 GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
@@ -423,7 +428,7 @@ pnpm lint       # oxlint, oxfmt and stylelint: lint rules, format, imports and C
 pnpm test
 ```
 
-All three must pass before a change is offered. None needs a key or the
+All three must pass before a change is offered. A push does not wait on a local `pnpm typecheck`: CI's `check` job runs it on every push, and a pull request merges only when it is green ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
 patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The four advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
@@ -438,7 +443,7 @@ every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips `check`, `typecheck`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
@@ -506,12 +511,14 @@ brief carries these caps. Each one came from a laptop that became unusable.
   `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
   a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
   the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
-  the changed paths (`.github/ci/changes.mjs`). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
+  the changed paths (`.github/ci/changes.mjs`). `pnpm typecheck` is its own job, `typecheck`, beside
+  `check`'s lint and build, and runs or skips with `check` (0133). A draft pull request runs only `changes`, `field`, `typecheck` and `check`'s lint (named `lint` there), and marking it ready runs the full set on the same head ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
   and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
   Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
   `e2e`: its one reader, `skillscheck.sh`, runs in `changes`. Skill scripts run `check` and `test`, and vitest
-  picks only the tests that `?raw`-import them (`script-reads` in `pnpm lint` keeps those imports whole).
+  picks only the tests that reach them. What a test's scripts read is derived from the scripts, never
+  written in the test (`oxlint-plugins/script-reads.mjs`; `pnpm lint` fails on a script no test reaches).
   Other Markdown that a program or skill reads counts as code.
   Anything else, and every push to main, runs all jobs, so the full suite runs after the merge. A run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here. With two or more code agents running:
@@ -619,6 +626,9 @@ Write-ups are read by busy people, some of them not native English speakers.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same
   checkout.
+- Push every commit when you make it, and give its branch a draft pull request at the first commit.
+  No code stays only on a branch
+  ([0134](./.decisions/0134-no-code-stays-only-on-a-local-branch.md)).
 
 ## Changing the product
 

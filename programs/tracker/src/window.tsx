@@ -1,6 +1,6 @@
 import type { WindowProps } from "@kampus/fabrika-old";
-import { type Text, textOf } from "@kampus/pipeline/tickets/approval";
 import { type Suggested, suggestedName } from "@kampus/pipeline/tickets/area";
+import { AskIdentity } from "@kampus/pipeline/tickets/ask";
 import { Kbd } from "@manti-ui/react";
 import {
   type FormEvent,
@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AskStatus, AskView, StopView } from "./ask-window.tsx";
 import { lineOf, waits } from "./head.ts";
 import type { Head, Hint, OpenAsk, Opened, PullRequest, Row, Show, Shown, Summary, tracker, Write } from "./index.ts";
 import { piecesOf } from "./links.ts";
@@ -53,7 +54,7 @@ const said = (w: Write): string => {
     case "reopen":
       return `reopen #${w.ticket}`;
     case "answer":
-      return `answer "${w.pick}" on #${w.ticket}`;
+      return `answer on #${w.ticket}`;
     case "rate_duplicate":
       return `${w.says} the hint #${w.of} on #${w.ticket}`;
     case "make_area":
@@ -105,38 +106,42 @@ export function TrackerWindow({ view, send }: WindowProps<typeof tracker>) {
   const [find, setFind] = useState(view.filter.find);
   const [comments, setComments] = useState<Readonly<Record<number, string>>>({});
   const { page } = view;
+  const asks =
+    page.kind === "list" ? [] : (page.opened?.asks ?? []).map((ask) => ({ ticket: page.number, ask: ask.ask }));
   return (
     <section className="tracker" aria-label="tracker">
-      <div className="tracker-column">
-        <Notices view={view} />
-        {!view.ready ? (
-          <p className="tracker-quiet">Reading the ledger…</p>
-        ) : page.kind === "list" ? (
-          <ListPage
-            view={view}
-            page={page}
-            picked={picked}
-            pick={setPicked}
-            find={find}
-            setFind={(text) => {
-              setFind(text);
-              send({ type: "query", value: { status: view.filter.show, find: text } });
-            }}
-            draft={{ title, body, setTitle, setBody }}
-            act={send}
-          />
-        ) : (
-          <TicketPage
-            number={page.number}
-            opened={page.opened}
-            saving={view.saving}
-            draft={comments[page.number] ?? ""}
-            setDraft={(text) => setComments((all) => ({ ...all, [page.number]: text }))}
-            back={() => send({ type: "query", value: { status: view.filter.show, find } })}
-            act={send}
-          />
-        )}
-      </div>
+      <AskStatus asks={asks} left={asks.length}>
+        <div className="tracker-column">
+          <Notices view={view} />
+          {!view.ready ? (
+            <p className="tracker-quiet">Reading the ledger…</p>
+          ) : page.kind === "list" ? (
+            <ListPage
+              view={view}
+              page={page}
+              picked={picked}
+              pick={setPicked}
+              find={find}
+              setFind={(text) => {
+                setFind(text);
+                send({ type: "query", value: { status: view.filter.show, find: text } });
+              }}
+              draft={{ title, body, setTitle, setBody }}
+              act={send}
+            />
+          ) : (
+            <TicketPage
+              number={page.number}
+              opened={page.opened}
+              saving={view.saving}
+              draft={comments[page.number] ?? ""}
+              setDraft={(text) => setComments((all) => ({ ...all, [page.number]: text }))}
+              back={() => send({ type: "query", value: { status: view.filter.show, find } })}
+              act={send}
+            />
+          )}
+        </div>
+      </AskStatus>
     </section>
   );
 }
@@ -226,8 +231,17 @@ function ListPage(props: {
 
   // Where the focus goes on coming to the list: the first areas' first row while that step shows,
   // else the row picked, or the title when there is none. Once, on coming to the list: a new view
-  // must not pull the focus back.
+  // must not pull the focus back. Only the focus its own program holds, as an ask view takes it:
+  // a list that comes while the asks menu or another layer is open leaves the focus there, so
+  // the menu's arrows and answer keys keep working (P24).
   const focusStart = useEffectEvent(() => {
+    const held = document.activeElement;
+    const program = pageRef.current?.closest(".program") ?? pageRef.current;
+
+    if (held !== null && held !== document.body && program?.contains(held) !== true) {
+      return;
+    }
+
     if (stepRef.current !== null) {
       stepRef.current.querySelector("input")?.focus();
     } else if (picked === undefined) {
@@ -888,15 +902,7 @@ function TicketPage(props: {
             ))}
           </ol>
           {opened.asks.map((ask) => (
-            <AskBox
-              key={ask.ask}
-              number={number}
-              ask={ask}
-              saw={textOf(ticket)}
-              saving={saving.some((w) => w.kind === "answer" && w.ticket === number && w.ask === ask.ask)}
-              act={act}
-              onKey={onPageKey}
-            />
+            <AskBox key={new AskIdentity({ ticket: number, ask: ask.ask }).key} number={number} ask={ask} />
           ))}
           <form className="tracker-composer tracker-reply" onSubmit={comment} aria-label="comment">
             <textarea
@@ -980,56 +986,12 @@ const TimelineRow = ({ row, onKey }: { readonly row: Row; readonly onKey: (e: Ke
   </li>
 );
 
-/**
- * An open ask's box: what it asks, a note, and one button per pick. A click sends `answer`, which
- * writes `answered`; a comment never does. `saw`: the ticket's text on the page, which the answer
- * covers. While the answer is saving, the buttons wait.
- */
-function AskBox(props: {
-  readonly number: number;
-  readonly ask: OpenAsk;
-  readonly saw: Text;
-  readonly saving: boolean;
-  readonly act: Send;
-  readonly onKey: (e: KeyboardEvent) => void;
-}) {
-  const { number, ask, saw, saving, act, onKey } = props;
-  const [note, setNote] = useState("");
-  return (
-    <section className="tracker-ask" aria-label={`ask: ${ask.what}`}>
-      <p className="tracker-meta">
-        <Who of={ask} /> asks you <time className="tracker-quiet">{whenOf(ask.at, Date.now())}</time>
-      </p>
-      <p className="tracker-ask-what">{ask.what}</p>
-      <textarea
-        aria-label="note with the answer"
-        placeholder="A note with your answer, if it needs one"
-        rows={2}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onKeyDown={onKey}
-      />
-      <div className="tracker-row">
-        {ask.picks.map((pick, i) => (
-          <button
-            key={pick}
-            type="button"
-            className={i === 0 ? "tracker-primary" : undefined}
-            disabled={saving}
-            onKeyDown={onKey}
-            onClick={() =>
-              act({
-                type: "answer",
-                value: { ticket: number, ask: ask.ask, pick, note: note.trimEnd(), saw },
-              })
-            }
-          >
-            {pick}
-          </button>
-        ))}
-        {saving ? <small>saving…</small> : null}
-      </div>
-    </section>
+function AskBox(props: { readonly number: number; readonly ask: OpenAsk }) {
+  const { number, ask } = props;
+  return ask.sealed === undefined ? (
+    <StopView ticket={number} why="State not recorded" />
+  ) : (
+    <AskView ticket={number} ask={ask.sealed} place="tracker" />
   );
 }
 

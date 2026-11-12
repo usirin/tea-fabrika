@@ -1,7 +1,7 @@
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { connectionLayer } from "@kampus/libfabrika/workers/gateway";
 import { projectLayer, type Env as Bindings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Predicate, Schema } from "effect";
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 import { Settings } from "./settings.ts";
@@ -14,7 +14,7 @@ export interface Env extends Bindings {
 export const settings = Effect.fn("instance.settings")(function* (env: Env) {
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings), { onExcessProperty: "error" })(
     env.INSTANCE,
-  ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+  ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
 });
 
 export const connectionRuntime = (ctx: DurableObjectState, env: Env) =>
@@ -27,8 +27,10 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
         Effect.map((config) =>
           projectLayer(ctx, env, {
             config,
+            ...(config.mail === undefined ? {} : { mail: config.mail }),
             programs,
-            bootstrap: { name: "counter:1", id: "counter:1", program: "counter" },
+            // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
+            bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
             // The app grants no start until a program needs one; a local instance's caller may.
             starts: config.starts ?? [],
             door: (options) =>
@@ -53,7 +55,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                       raw: [],
                       personOnly: [],
                       name: (m) =>
-                        typeof m === "object" && m !== null && "type" in m && typeof m.type === "string"
+                        Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
                           ? m.type
                           : undefined,
                     },
