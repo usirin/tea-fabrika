@@ -16,6 +16,8 @@
     "skills/lead/scripts/drive.test.ts",
     "skills/lead/scripts/gc.ts",
     "skills/lead/scripts/gc.test.ts",
+    "skills/lead/scripts/lanes.ts",
+    "skills/lead/scripts/lanes.test.ts",
     "skills/lead/scripts/mutbox.ts",
     "skills/lead/scripts/mutbox.test.ts",
     "skills/lead/scripts/flow/*.ts",
