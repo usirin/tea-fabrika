@@ -134,10 +134,10 @@ const commentEdits = (text: string, index: Index, assignment: Assignment, remove
     return [];
   }
 
-  const owner =
-    index.assignments.find((candidate) => !candidate.inline && prefix(candidate.path, assignment.path)) ?? assignment;
-  const at = lineStart(text, owner.start);
-  return [{ start: at, end: at, text: comments }];
+  // An inline member can follow a sibling's comments. Keep retained comments after that sibling.
+  const at = assignment.inline ? assignment.start : lineStart(text, assignment.start);
+  const before = at > lineStart(text, at) ? ending(text) : "";
+  return [{ start: at, end: at, text: before + comments }];
 };
 
 /** @internal */
