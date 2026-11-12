@@ -25,6 +25,7 @@ import {
 } from "@kampus/libfabrika";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
@@ -271,6 +272,14 @@ const world = Effect.fnUntraced(function* (program: ReturnType<typeof makeProgra
         SpanSink.layer(sql, { object: process }),
         RecordManager.memory(4 * 1024 * 1024),
         Archive.memory,
+        Layer.succeed(Jobs, {
+          request: () => Effect.die("unexpected job request in legacy gateway law"),
+          take: () => Effect.die("unexpected job take in legacy gateway law"),
+          started: () => Effect.die("unexpected job start in legacy gateway law"),
+          finish: () => Effect.die("unexpected job finish in legacy gateway law"),
+          read: () => Effect.die("unexpected job read in legacy gateway law"),
+          forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+        }),
         Id.Generator.layer,
         ProcessIdGenerator.layer,
       );

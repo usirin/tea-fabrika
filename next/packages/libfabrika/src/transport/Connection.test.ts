@@ -870,3 +870,43 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
     }
   });
 });
+
+it.effect.prop(
+  "A3: hands job frames save checked hello facts through busy and idle",
+  { has: Schema.Array(Schema.String), build: Schema.NonEmptyString },
+  ({ has, build }) =>
+    Effect.gen(function* () {
+      let saved = Attached.cases.online.make({
+        client: READER,
+        identity: { key: "hands-key", person: "person-test", as: "hands" },
+        version: 1,
+        waits: [],
+        watching: false,
+        busy: false,
+        has,
+        build,
+      });
+      const copies: Array<Saved> = [];
+      const c = connection({
+        reader: READER,
+        session: SESSION,
+        ping: () => PING,
+        read: () => restored(saved),
+        save: (next) => {
+          saved = restored(next) as typeof saved;
+          copies.push(saved);
+        },
+        send: () => {},
+        close: () => {},
+        wait: () => Effect.succeed({ _tag: "parked" as const }),
+        call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
+      });
+      yield* c.frame(callFrame("take", "jobs.take"));
+      expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
+
+      for (const copy of copies) {
+        expect(copy).toMatchObject({ identity: { as: "hands" }, has, build });
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: 100 } },
+);

@@ -17,6 +17,7 @@ import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
+import { Jobs } from "../jobs/Jobs.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -191,6 +192,14 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       SpanSink.layer(saved.sql, { object: processes.counter }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
+      Layer.succeed(Jobs, {
+        request: () => Effect.die("unexpected job request in legacy gateway law"),
+        take: () => Effect.die("unexpected job take in legacy gateway law"),
+        started: () => Effect.die("unexpected job start in legacy gateway law"),
+        finish: () => Effect.die("unexpected job finish in legacy gateway law"),
+        read: () => Effect.die("unexpected job read in legacy gateway law"),
+        forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+      }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,
     );

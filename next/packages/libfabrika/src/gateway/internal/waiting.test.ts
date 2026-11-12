@@ -11,6 +11,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import * as Access from "../../access/Access.ts";
 import * as Waiting from "./waiting.ts";
 
 type Model = typeof Waiting.machine.model.Type;
@@ -215,7 +216,7 @@ const Seed = fc.record({
   label: fc.string({ maxLength: 3 }),
   pass: fc.option(fc.string({ maxLength: 3 }), { nil: null }),
   has: fc.subarray(["verify", "seal"]),
-  as: fc.constantFrom("window", "agent"),
+  as: fc.constantFrom("window", "agent", "hands"),
 });
 
 const Walk = fc.record({
@@ -466,3 +467,113 @@ describe("ticket 707: the waiting machine walks", () => {
     );
   });
 });
+
+// A2: requested rank is a saved observation. Only an independently signed grant admits a key.
+it.prop(
+  "A2: knocks, grants and expiry keep requested rank separate from admission",
+  {
+    choices: Schema.Array(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).check(
+      Schema.isMinLength(30),
+      Schema.isMaxLength(80),
+    ),
+    saw: Access.Saw,
+  },
+  ({ choices, saw }) => {
+    let pending = state(10, 8);
+    let [access] = Access.access.init(null, {});
+    [access] = applyCell(Access.access, access, {
+      type: "fold",
+      event: Access.MemberEvent.cases.founded.make({ id: "person-test", name: "test", keys: ["root"], window: null }),
+    });
+    const grants = new Map<string, "hands" | "window" | "agent">();
+    const revoked = new Set<string>();
+    let at = 0;
+
+    for (const [n, choice] of choices.entries()) {
+      const rows = pending.rows;
+      const leaves = [...grants.keys()].filter((k) => !revoked.has(k));
+      const moves = [
+        "knock",
+        "expire",
+        ...(rows.some((r) => !grants.has(r.key)) ? ["grant"] : []),
+        ...(leaves.length > 0 ? ["revoke"] : []),
+      ];
+      const move = moves[choice % moves.length];
+
+      if (move === "knock") {
+        const key = choice % 2 === 0 && rows.length > 0 ? rows[choice % rows.length]!.key : `key-${n}`;
+        pending = step(pending, {
+          type: "knock",
+          key,
+          client: `client-${n}`,
+          label: saw.label,
+          location: saw.location,
+          code: saw.code,
+          has: saw.has,
+          as: (["hands", "window", "agent"] as const)[choice % 3]!,
+          pass: null,
+          at,
+        });
+        expect(Access.admitted(Access.members(access), key)).toEqual(
+          grants.has(key) && !revoked.has(key)
+            ? { key, person: "person-test", as: grants.get(key) }
+            : { reason: "not_granted" },
+        );
+      } else if (move === "expire") {
+        at += 10;
+        pending = step(pending, { type: "expire", at });
+      } else if (move === "grant") {
+        const available = rows.filter((r) => !grants.has(r.key));
+        const row = available[choice % available.length]!;
+        const as = (["hands", "window", "agent"] as const)[Math.floor(choice / 3) % 3]!;
+        const grant = {
+          id: `grant-${n}`,
+          key: row.key,
+          for: "person-test",
+          to: "test",
+          as,
+          saw,
+          sentAt: "writer-clock",
+        };
+        [access] = applyCell(Access.access, access, {
+          type: "fold",
+          event: Access.MemberEvent.cases.granted.make({
+            grant,
+            signed: { text: "checked", armored: "checked", signer: "root" },
+          }),
+        });
+        grants.set(row.key, as);
+        pending = step(pending, { type: "accepted", keys: [row.key] });
+      } else {
+        const key = leaves[choice % leaves.length]!;
+        [access] = applyCell(Access.access, access, {
+          type: "fold",
+          event: Access.MemberEvent.cases.revoked.make({
+            revoke: {
+              id: `revoke-${n}`,
+              key,
+              for: "person-test",
+              to: "test",
+              sentAt: "writer-clock",
+              saw: { label: saw.label, location: saw.location, method: "panel", check: "touch" },
+            },
+            signed: { text: "checked", armored: "checked", signer: "root" },
+          }),
+        });
+        revoked.add(key);
+      }
+
+      const stored = Schema.decodeUnknownSync(Waiting.Stored)(
+        JSON.parse(JSON.stringify(Schema.encodeSync(Waiting.Stored)(pending))),
+      );
+      expect(stored).toEqual(pending);
+
+      for (const [key, as] of grants) {
+        expect(Access.admitted(Access.members(access), key)).toEqual(
+          revoked.has(key) ? { reason: "not_granted" } : { key, person: "person-test", as },
+        );
+      }
+    }
+  },
+  { arbitrary: { seed: 119120, runs: 100 } },
+);
