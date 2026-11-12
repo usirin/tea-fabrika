@@ -209,7 +209,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
     return Effect.fail(new Error("missing execution method"));
   }
 
-  // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
+  // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader step RPC enters Effect
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: (cause) => cause });
 };
 
