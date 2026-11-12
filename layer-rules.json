@@ -87,6 +87,16 @@
       "paths": ["next/packages/libfabrika/src/ledger"]
     },
     {
+      "name": "next-codehost",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/codehost"]
+    },
+    {
+      "name": "next-ci",
+      "layer": 2,
+      "paths": ["next/packages/libfabrika/src/ci"]
+    },
+    {
       "name": "next-transport",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/transport"]

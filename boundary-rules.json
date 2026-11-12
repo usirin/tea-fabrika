@@ -17,7 +17,8 @@
     "packages/pipeline": "app",
     "next/apps/fabrika": "next-app",
     "next/packages/libfabrika": "next-library",
-    "next/programs/counter": "next-program"
+    "next/programs/counter": "next-program",
+    "next/programs/pipeline": "next-program"
   },
   "libraryRoots": ["next"],
   "acrossDeployables": ["relative-import-crosses-workspace"]
