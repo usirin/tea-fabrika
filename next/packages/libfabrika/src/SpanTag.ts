@@ -1,13 +1,4 @@
-/**
- * Span tag names shared across library modules.
- *
- * @stability experimental
- */
+// Span tag names shared across library modules.
 
-/**
- * Tag for a refusal counted instead of saving its span or measurement.
- *
- * @stability experimental
- * @category models
- */
+/** Tag for a refusal counted instead of saving its span or measurement. */
 export const REFUSED = "fab.gateway.refused";
