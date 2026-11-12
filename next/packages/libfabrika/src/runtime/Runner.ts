@@ -1415,7 +1415,9 @@ export class ProgramRunner extends Context.Service<
             const queuedAt = yield* Clock.currentTimeMillis;
             const { answer, jobs } = yield* permit.withPermit(
               Effect.gen(function* () {
-                yield* Effect.annotateCurrentSpan("wait.ms", (yield* Clock.currentTimeMillis) - queuedAt);
+                if (name === "runner.swap") {
+                  yield* Effect.annotateCurrentSpan("wait.ms", (yield* Clock.currentTimeMillis) - queuedAt);
+                }
 
                 // The platform consumes the alarm before due enters this wrapper.
                 if (time !== undefined) {
