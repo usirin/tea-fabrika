@@ -268,13 +268,15 @@ export const open = Effect.gen(function* () {
         const sql = yield* files("manager");
         return sql
           .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
-          .map(Schema.decodeUnknownSync(Row));
+          .map((row) => Schema.decodeUnknownSync(Row)(row));
       }),
     );
   const dead = Effect.scoped(
     Effect.gen(function* () {
       const sql = yield* files("manager");
-      return sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev").map(Schema.decodeUnknownSync(Row));
+      return sql
+        .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
+        .map((row) => Schema.decodeUnknownSync(Row)(row));
     }),
   );
 
