@@ -32,7 +32,7 @@ const valid = (label: string, extra: string) => ({
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["check", "test", "next", "e2e", "field"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
+        ["check", "typecheck", "test", "next", "e2e", "field"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
       ),
       steps: [
         { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
@@ -46,7 +46,13 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: guard("check"),
       "timeout-minutes": 10,
-      steps: [{ run: "pnpm typecheck" }, { run: "pnpm lint" }, { run: "pnpm build" }],
+      steps: [{ run: "pnpm lint" }, { run: "pnpm build" }],
+    },
+    typecheck: {
+      needs: "changes",
+      if: guard("typecheck"),
+      "timeout-minutes": 10,
+      steps: [{ run: "pnpm install --frozen-lockfile" }, { run: "pnpm typecheck" }],
     },
     test: {
       needs: "changes",
@@ -120,7 +126,7 @@ const valid = (label: string, extra: string) => ({
       ],
     },
     "ci-required": {
-      needs: ["changes", "field", "check", "e2e", "test", "next"],
+      needs: ["changes", "field", "check", "typecheck", "e2e", "test", "next"],
       if: "always()",
       "timeout-minutes": 5,
       steps: [
@@ -533,12 +539,27 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ]),
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
-  ...(["changes", "field", "check", "test", "next", "e2e"] as const).map((job): [string, (w: Workflow) => void] => [
-    `ci-required does not need ${job}`,
+  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e"] as const).map(
+    (job): [string, (w: Workflow) => void] => [
+      `ci-required does not need ${job}`,
+      (w) => {
+        w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
+      },
+    ],
+  ),
+  // The lane reads the typecheck job's answer alone (0133), so the typecheck lives there only.
+  [
+    "the typecheck job runs no typecheck",
     (w) => {
-      w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
+      w.jobs.typecheck.steps = [{ run: "pnpm install --frozen-lockfile" }];
     },
-  ]),
+  ],
+  [
+    "check runs the typecheck again",
+    (w) => {
+      w.jobs.check.steps.unshift({ run: "pnpm typecheck" });
+    },
+  ],
   [
     "a new job ci-required does not need",
     (w) => {
@@ -582,7 +603,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
     },
   ],
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "field", "check", "test", "next", "e2e", "ci-required"] as const).map(
+  ...(["changes", "field", "check", "typecheck", "test", "next", "e2e", "ci-required"] as const).map(
     (job): [string, (w: Workflow) => void] => [
       `${job} without a time limit`,
       (w) => {

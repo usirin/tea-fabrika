@@ -137,9 +137,13 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const run = (needs: string | undefined) =>
     spawnSync(process.execPath, [script], { encoding: "utf8", env: needs === undefined ? {} : { NEEDS: needs } });
   const good = JSON.stringify({
-    changes: { result: "success", outputs: { check: "false", test: "true", next: "true", e2e: "true" } },
+    changes: {
+      result: "success",
+      outputs: { check: "false", typecheck: "false", test: "true", next: "true", e2e: "true" },
+    },
     field: { result: "success", outputs: {} },
     check: { result: "skipped", outputs: {} },
+    typecheck: { result: "skipped", outputs: {} },
     test: { result: "success", outputs: {} },
     next: { result: "success", outputs: {} },
     e2e: { result: "success", outputs: {} },
@@ -147,7 +151,8 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const ok = run(good);
   expect(ok.status).toBe(0);
   expect(ok.stdout).toContain("check: skipped, as changes said, pass\n");
-  expect(ok.stdout.trim().split("\n")).toHaveLength(7);
+  expect(ok.stdout).toContain("typecheck: skipped, as changes said, pass\n");
+  expect(ok.stdout.trim().split("\n")).toHaveLength(8);
   expect(run(good.replace('"test":{"result":"success"', '"test":{"result":"failure"')).status).toBe(1);
   expect(run("{not json").status).toBe(1);
   expect(run(undefined).status).toBe(1);
