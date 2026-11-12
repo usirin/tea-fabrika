@@ -1,4 +1,4 @@
-// P41 slice 1, next/ (ticket 744): two real runners exchange a request and its answer through durable
+// P41 slices 1 and 2, next/ (tickets 744 and 764): two real runners exchange a request and its answer through durable
 // mailboxes, and no driver. A runner in the module that owns a driver calls
 // `ProgramMailTest.suite(open)`; `open` acquires real stores and the scoped alarm driver in a scope
 // and gives them back when that scope closes (0061, 0062).
@@ -13,9 +13,29 @@
 //   MailWakeups.ts: the `MailWakeups` service, `wake(name)`, and its `MailWakeupsError`.
 //   MailDeliveryLive.ts: `layer`, a MailDelivery over ProgramMail and MailWakeups.
 //   Runner.ts: a runner given MailDelivery runs `send` itself, and `due` drains ordinary mail.
+import { Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  References,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect";
+import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -31,15 +51,17 @@ import { mailResponder, Model as ResponderModel } from "./internal/mailResponder
 import * as MailDeliveryLive from "./MailDeliveryLive.ts";
 import { MailWakeups, MailWakeupsError } from "./MailWakeups.ts";
 import { ProcessStore } from "./ProcessStore.ts";
+import { Program } from "./Program.ts";
+import * as RepliesTest from "./RepliesTest.ts";
 import { ProgramRunner } from "./Runner.ts";
 import { Queued, send, SendInput } from "./Send.ts";
 
-/** One saved alarm: the name it wakes, whether the runner or a mail delivery set it, and when. */
-export type Saved = { readonly name: string; readonly kind: "alarm" | "mail"; readonly at: number };
+/** One saved alarm: the name it wakes and when. */
+export type Saved = { readonly name: string; readonly at: number };
 
 /** The scoped, controllable alarm driver. A set is saved before it answers, and survives a reopen. */
 export type Alarms = {
-  readonly set: (name: string, kind: Saved["kind"], at: number | null) => Effect.Effect<void>;
+  readonly set: (name: string, at: number | null) => Effect.Effect<void>;
   readonly saved: Effect.Effect<ReadonlyArray<Saved>>;
   /** Removes one saved alarm as the platform does when it fires. */
   readonly take: (alarm: Saved) => Effect.Effect<void>;
@@ -70,9 +92,62 @@ const REQUESTERS = Object.fromEntries(
   PAIRS.map((k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
 
+const TimerModel = Schema.Struct({
+  at: Schema.NullOr(Schema.Number),
+  ticks: Schema.Array(Schema.Number),
+  requests: Schema.Int,
+});
+
+const TimerMsg = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("arm"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("crash") }),
+  Schema.Struct({ type: Schema.Literal("request"), ref: Schema.String, value: Schema.Int, reply: Schema.String }),
+]);
+
+const timerMachine = Machine.make({
+  model: TimerModel,
+  msg: TimerMsg,
+  cmds: [send],
+  init: (loaded) => [loaded ?? { at: null, ticks: [], requests: 0 }, []],
+  update: {
+    arm: (s, m) => [{ ...s, at: m.at }, []],
+    timer: (s, m) => [{ ...s, at: null, ticks: [...s.ticks, m.at] }, []],
+    request: (s, m) => [
+      { ...s, requests: s.requests + 1 },
+      [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
+    ],
+    crash: () => {
+      throw new TypeError("timer fixture crash");
+    },
+    send_ok: (s) => [s, []],
+    send_err: (s) => [s, []],
+  },
+});
+
+const timerProgram = Program.make({
+  name: "mail-timer",
+  machine: timerMachine,
+  state: { v: 1, upgrades: [] },
+  view: (s) => s,
+  refuse: () => null,
+  inputs: { arm: "Arm", request: "Request", crash: "Crash" },
+  outputs: {},
+  writes: {},
+  wake: (s) => s.at,
+});
+
+const alarmPolicy = {
+  maxDeliveries: 1,
+  intensity: 2,
+  periodMs: 10_000,
+  backoff: { minMs: 10, maxMs: 10, resetAfterMs: 10_000 },
+};
+
 const PROGRAMS: Record<string, unknown> = {
   ...Object.fromEntries(PAIRS.map((k) => [REQUESTERS[k].name, REQUESTERS[k]])),
   [mailResponder.name]: mailResponder,
+  [timerProgram.name]: timerProgram,
 };
 
 /** The host's closed grant: each requester reaches its own responder and a missing name; each
@@ -118,6 +193,58 @@ const Cell = fc.record({
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 const Tape = fc.array(Cell, { minLength: 6, maxLength: 24, size: "max" });
 
+const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
+  const captured = RepliesTest.capture();
+  const spans: Array<Tracer.Span> = [];
+  const errors: Array<string> = [];
+  const logs: Array<string> = [];
+  const wakes: Array<{ span: string; name: string; at: number | null }> = [];
+  const tracer = Tracer.make({
+    span(options) {
+      const span = captured.tracer.span(options);
+      spans.push(span);
+      return span;
+    },
+  });
+  const logger = Logger.layer([
+    Logger.make((options) => {
+      // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
+      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      logs.push(
+        JSON.stringify(options.message, plain),
+        JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
+        Cause.pretty(options.cause),
+      );
+    }),
+  ]);
+  const check = () => {
+    RepliesTest.unleaked([...captured.text(), ...logs, ...errors], secrets);
+
+    if (!trace) {
+      return;
+    }
+
+    for (const span of spans) {
+      if (span.name !== "mail_delivery.send" || span.status._tag !== "Ended" || !Exit.isSuccess(span.status.exit)) {
+        continue;
+      }
+
+      const queued = Schema.decodeUnknownSync(Queued)(span.status.exit.value);
+      expect(span.attributes.get("fab.mail.receipt"), "T1a: queued is tied to its receipt").toBe(queued.id);
+      const wake = wakes.find((w) => w.span === span.spanId);
+      expect(wake, "T1a: every queued Send saved its target alarm").toBeDefined();
+      expect(span.attributes.get("fab.mail.to")).toBe(wake?.name);
+      const children = spans.filter(
+        (s) => s.name === "runner.mailed" && Option.getOrUndefined(s.parent)?.spanId === span.spanId,
+      );
+      expect(children).toHaveLength(1);
+      expect(children[0]?.attributes.get("fab.mail.to")).toBe(wake?.name);
+      expect(children[0]?.attributes.get("fab.mail.alarm")).toBe(wake?.at);
+    }
+  };
+  return { secrets, tracer, logger, errors, wakes, check, spans };
+};
+
 type Move =
   | "start"
   | "start_forbidden"
@@ -132,7 +259,10 @@ type Move =
   | "stop"
   | "stall"
   | "settle"
-  | "reopen";
+  | "reopen"
+  | "evict"
+  | "wakeDuringDrain"
+  | "holdAlarm";
 
 /** What one request is for: an ordinary one, one aimed at a forbidden name while claiming a granted
  *  sender, or one aimed at a missing name. */
@@ -146,6 +276,8 @@ type Request = {
 /** What the fold knows, from its own moves only: never read back from the product, except which
  *  letters an inbox holds after a call whose outcome a fault made unknown. */
 type World = {
+  readonly records?: ReturnType<typeof records>;
+  readonly timers?: boolean;
   /** Each requester's current request, once its start letter is in its inbox. */
   readonly current: Map<Pair, Request>;
   /** Every ref each requester ever asked for, for stale answers. */
@@ -154,6 +286,10 @@ type World = {
   readonly stopped: Set<Pair>;
   /** Responders whose wake hangs until the walk releases it. */
   readonly stalled: Map<Pair, Deferred.Deferred<void>>;
+  readonly holds: Map<string, { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> }>;
+  readonly reached: Set<Pair>;
+  readonly wakes: Map<string, Deferred.Deferred<void>>;
+  readonly wakeTimes: Map<string, number>;
   readonly fault: { mail: boolean; ack: boolean; wake: boolean };
   /** Requests started while their pair's wake hangs, run in the background. */
   readonly background: Array<Fiber.Fiber<unknown, unknown>>;
@@ -226,6 +362,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     },
     next,
   );
+  const runners = new Map<string, ProgramRunner["Service"]>();
   const wakeups = Layer.succeed(MailWakeups, {
     wake: (name: string) =>
       Effect.gen(function* () {
@@ -233,6 +370,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
         if (stall !== undefined && name === responderName(pair as Pair)) {
+          world.reached.add(pair as Pair);
           yield* Deferred.await(stall);
         }
 
@@ -241,11 +379,45 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           return yield* new MailWakeupsError({ reason: "unavailable" });
         }
 
-        yield* store.alarms.set(name, "mail", yield* Clock.currentTimeMillis);
+        const target = runners.get(name);
+
+        if (target === undefined) {
+          return yield* Effect.die(`no runner for ${name}`);
+        }
+
+        world.wakeTimes.set(name, yield* Clock.currentTimeMillis);
+        const entered = world.wakes.get(name);
+
+        if (entered !== undefined) {
+          yield* Deferred.succeed(entered, undefined);
+        }
+
+        yield* target.mailed.pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
+
+        if (world.records !== undefined) {
+          const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+          world.records.wakes.push({
+            span: span.spanId,
+            name,
+            at: (yield* store.alarms.saved).find((a) => a.name === name)?.at ?? null,
+          });
+        }
       }),
   });
   const shared = MailDeliveryLive.layer.pipe(
-    Layer.provideMerge(Layer.mergeAll(ProgramMailLedger.layer({ grants: GRANTS }), wakeups)),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ProgramMailLedger.layer({
+          grants: {
+            ...GRANTS,
+            ...Object.fromEntries(
+              (world.records?.secrets ?? []).map((secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
+            ),
+          },
+        }),
+        wakeups,
+      ),
+    ),
     Layer.provideMerge(manager),
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
@@ -263,10 +435,9 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     ).pipe(Effect.orDie);
     return started.process;
   });
-  const runners = new Map<string, ProgramRunner["Service"]>();
   const names: ReadonlyArray<readonly [string, string]> = PAIRS.flatMap((k) => [
     [requesterName(k), REQUESTERS[k].name] as const,
-    [responderName(k), mailResponder.name] as const,
+    [responderName(k), world.timers ? timerProgram.name : mailResponder.name] as const,
   ]);
 
   for (const [name, program] of names) {
@@ -294,14 +465,30 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {}),
       ProcessStore.layer(store.sql(`process-${name}`), { process: pid }),
-      Layer.succeed(Alarm, { set: (at: number | null) => store.alarms.set(name, "alarm", at) }),
+      Layer.succeed(Alarm, {
+        set: (at: number | null) =>
+          Effect.gen(function* () {
+            const hold = world.holds.get(name);
+
+            if (hold !== undefined) {
+              world.holds.delete(name);
+              yield* Deferred.succeed(hold.entered, undefined);
+              yield* Deferred.await(hold.release);
+            }
+
+            yield* store.alarms.set(name, at);
+          }),
+      }),
       Layer.succeed(WatcherManager, { publish: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
     const runner = ProgramRunner.layer(
       { id: pid, name, program, build: BUILD, owner },
-      { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 } },
+      {
+        ...(world.timers ? { policy: alarmPolicy } : {}),
+        recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
+      },
     ).pipe(Layer.provide(own));
     const built = yield* Layer.buildWithScope(runner, scope);
     runners.set(name, Context.get(built, ProgramRunner));
@@ -329,15 +516,21 @@ const walk = (
   pairs: ReadonlyArray<Pair>,
   moves: ReadonlyArray<Move>,
   done: Set<Move>,
+  recorded?: ReturnType<typeof records>,
 ) =>
   Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
+      ...(recorded === undefined ? {} : { records: recorded }),
       current: new Map(),
       history: new Map(),
       stopped: new Set(),
       stalled: new Map(),
+      holds: new Map(),
+      reached: new Set(),
+      wakes: new Map(),
+      wakeTimes: new Map(),
       fault: { mail: false, ack: false, wake: false },
       background: [],
       negative: new Set(),
@@ -368,6 +561,15 @@ const walk = (
     /** A call that may fail at a planted boundary; it must still answer, never hang. */
     const call = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
       effect.pipe(
+        Effect.onError((cause) =>
+          Effect.sync(() => {
+            recorded?.errors.push(
+              String(Cause.squash(cause)),
+              JSON.stringify(Cause.squash(cause)),
+              Cause.pretty(cause),
+            );
+          }),
+        ),
         Effect.result,
         Effect.timeoutOption("20 seconds"),
         Effect.map((answer) => {
@@ -415,9 +617,53 @@ const walk = (
       ).pipe(Effect.result);
     });
 
+    const checkpoint = Effect.fnUntraced(function* (name: string) {
+      const status = yield* inContext(ProcessManager.use((p) => p.status(name)));
+      return yield* ProcessStore.use((s) => s.load).pipe(
+        Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: status.state.process })),
+        Effect.provide(life.context),
+      );
+    });
+
+    /** The command ids of every Send the name's saved checkpoint still owes. */
+    const owedIds = (name: string) =>
+      Effect.map(checkpoint(name), (saved) =>
+        (saved?.cmds ?? []).flatMap((cmd) =>
+          Schema.is(Schema.Struct({ id: Schema.String, mail: Schema.Literal(true) }))(cmd) ? [cmd.id] : [],
+        ),
+      );
+    const owed = (name: string) => Effect.map(owedIds(name), (ids) => ids.length > 0);
+
     /** The invariants every prefix keeps. */
     const check = Effect.fnUntraced(function* () {
+      recorded?.check();
+
       for (const k of pairs) {
+        if (moves.includes("wakeDuringDrain")) {
+          for (const name of [requesterName(k), responderName(k)]) {
+            const saved = yield* checkpoint(name);
+            const unread = (yield* letters(name)).some((letter) => letter.rev > (saved?.saved.after ?? 0));
+
+            if (unread) {
+              expect(
+                (yield* store.alarms.saved).some((alarm) => alarm.name === name),
+                "M1: unread mail keeps its recipient's alarm",
+              ).toBe(true);
+            }
+          }
+        }
+
+        if (moves.includes("evict")) {
+          for (const name of [requesterName(k), responderName(k)]) {
+            if (yield* owed(name)) {
+              expect(
+                (yield* store.alarms.saved).some((a) => a.name === name),
+                `S1: ${name}'s saved Send keeps a saved alarm`,
+              ).toBe(true);
+            }
+          }
+        }
+
         const state = yield* requesterState(k);
         const asked = world.history.get(k) ?? [];
         const answers = (yield* bodies(requesterName(k))).filter(
@@ -481,6 +727,19 @@ const walk = (
         stall: world.stalled.size === 0 && pairs.length > 1,
         settle: true,
         reopen: world.stalled.size === 0,
+        evict: world.reached.size > 0 && world.background.length > 0,
+        wakeDuringDrain:
+          idle.some((k) => !world.stopped.has(k)) &&
+          world.stalled.size === 0 &&
+          !world.fault.mail &&
+          !world.fault.ack &&
+          !world.fault.wake,
+        holdAlarm:
+          idle.some((k) => !world.stopped.has(k)) &&
+          world.stalled.size === 0 &&
+          !world.fault.mail &&
+          !world.fault.ack &&
+          !world.fault.wake,
       };
       const options = moves.filter((move) => can[move]);
 
@@ -493,11 +752,21 @@ const walk = (
       switch (move) {
         case "start":
         case "start_forbidden":
-        case "start_missing": {
-          const k = choose(idle, cell.pick);
+        case "start_missing":
+        case "wakeDuringDrain":
+        case "holdAlarm": {
+          const k = choose(
+            move === "wakeDuringDrain" || move === "holdAlarm" ? idle.filter((p) => !world.stopped.has(p)) : idle,
+            cell.pick,
+          );
           const other = pairs.find((p) => p !== k) ?? k;
-          const ref = `ref-${k}-${++world.n}`;
-          const kind = move === "start" ? "normal" : move === "start_forbidden" ? "forbidden" : "missing";
+          const ref = `${recorded?.secrets[k - 1] ?? "ref"}-${k}-${++world.n}`;
+          const kind =
+            move === "start" || move === "wakeDuringDrain" || move === "holdAlarm"
+              ? "normal"
+              : move === "start_forbidden"
+                ? "forbidden"
+                : "missing";
           const input =
             kind === "normal"
               ? { type: "start", ref, value: cell.value }
@@ -514,19 +783,87 @@ const walk = (
           };
           const work = runner(requesterName(k)).msg(incoming);
 
-          if (world.stalled.has(k)) {
-            world.background.push(yield* Effect.forkChild(work.pipe(Effect.result)));
+          if (move === "wakeDuringDrain" || move === "holdAlarm") {
+            const name = responderName(k);
+            yield* runner(name).due(yield* Clock.currentTimeMillis);
+            const hold = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
+            const arrived = yield* Deferred.make<void>();
+            world.holds.set(name, hold);
+            world.wakes.set(name, arrived);
+            const now = yield* Clock.currentTimeMillis;
+            const clock = yield* Clock.Clock;
+            // Keep wall time fixed across the held storage call; deadline sleeps still use the live clock.
+            const frozen: Clock.Clock = {
+              currentTimeMillisUnsafe: () => now,
+              currentTimeMillis: Effect.succeed(now),
+              currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+              currentTimeNanos: Effect.succeed(BigInt(now) * 1_000_000n),
+              monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+              monotonicTimeNanos: clock.monotonicTimeNanos,
+              sleep: (duration) => clock.sleep(duration),
+            };
+            const drain =
+              move === "wakeDuringDrain"
+                ? yield* Effect.forkChild(runner(name).due(now).pipe(Effect.provideService(Clock.Clock, frozen)))
+                : null;
+
+            if (drain !== null) {
+              yield* Deferred.await(hold.entered).pipe(Effect.timeout("5 seconds"));
+            }
+
+            const sending = yield* Effect.forkChild(work.pipe(Effect.provideService(Clock.Clock, frozen)));
+            yield* Deferred.await(arrived).pipe(Effect.timeout("5 seconds"));
+
+            if (drain === null) {
+              yield* Deferred.await(hold.entered).pipe(Effect.timeout("5 seconds"));
+            }
+
+            // Give the call a scheduler turn to attempt the permit or awaited storage.
+            yield* Effect.yieldNow;
+            expect(sending.pollUnsafe(), "M1, M4: queued waits for the target to save its alarm").toBeUndefined();
+            yield* Deferred.succeed(hold.release, undefined);
+
+            if (drain !== null) {
+              yield* Fiber.join(drain);
+            }
+
+            yield* Fiber.join(sending);
+            world.wakes.delete(name);
+            const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
+            expect(alarm, "M1, M4: the wake behind the drain saves the next alarm").toBeDefined();
+            expect(alarm?.at).toBeLessThanOrEqual(world.wakeTimes.get(name) ?? Number.NaN);
+          } else if (world.stalled.has(k)) {
+            const background = yield* Effect.forkChild(work.pipe(Effect.result));
+            world.background.push(background);
 
             // The fork is only scheduled: let it run until its start letter lands, before the stalled wake.
             for (let turn = 0; turn < 1000; turn++) {
-              if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
+              if (world.reached.has(k) || background.pollUnsafe() !== undefined) {
                 break;
               }
 
               yield* Effect.yieldNow;
             }
           } else {
+            const healthy = !world.fault.mail && !world.fault.ack && !world.fault.wake;
+            // An earlier Send whose answer was lost stays owed until its own alarm: S1 keeps that one.
+            const before = yield* owedIds(requesterName(k));
             yield* call(work, `${requesterName(k)}'s start`);
+
+            if (moves.includes("evict") && healthy) {
+              const after = yield* owedIds(requesterName(k));
+              expect(
+                after.filter((id) => !before.includes(id)),
+                "S2: the completed Send is no longer owed",
+              ).toEqual([]);
+
+              if (after.length === 0) {
+                expect(
+                  (yield* store.alarms.saved).filter((a) => a.name === requesterName(k)),
+                  "S2: the last Send's answer removes its retry alarm",
+                ).toEqual([]);
+              }
+            }
           }
 
           if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
@@ -658,6 +995,25 @@ const walk = (
 
           break;
         }
+        case "evict": {
+          // The wake is held after the receipt and letter were saved. Interrupt only the
+          // test's Send fibers, then discard the runners; the databases and alarms survive.
+          for (const fiber of world.background.splice(0)) {
+            yield* Fiber.interrupt(fiber);
+          }
+
+          for (const stall of world.stalled.values()) {
+            yield* Deferred.succeed(stall, undefined);
+          }
+
+          world.stalled.clear();
+          world.reached.clear();
+          yield* Scope.close(scope, Exit.void);
+          yield* store.reopen;
+          scope = yield* Scope.make();
+          life = yield* host(store, world, next.next, scope);
+          break;
+        }
         case "reopen": {
           yield* Scope.close(scope, Exit.void);
           yield* store.reopen;
@@ -761,6 +1117,8 @@ const prop = (
   pairs: ReadonlyArray<Pair>,
   moves: ReadonlyArray<Move>,
   required: ReadonlyArray<Move>,
+  runs = 40,
+  examples: ReadonlyArray<ReadonlyArray<Cell>> = [],
 ) =>
   it.effect(
     name,
@@ -777,16 +1135,310 @@ const prop = (
         });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
+        const options = {
+          seed: SEED,
+          numRuns: runs,
+          examples: examples.map((tape) => [[...tape]]),
+          includeErrorInReport: true,
+        };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 40, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, options));
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),
     600_000,
   );
 
+const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
+  it.effect(
+    stopped
+      ? "M3: mailed neither starts a stopped name nor keeps its mail alarm alive"
+      : "M2: one alarm keeps the earliest timer, mail wake and owed Send",
+    () =>
+      Effect.gen(function* () {
+        const visited = new Set<string>();
+        const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
+          const store = yield* open;
+          const world: World = {
+            timers: true,
+            current: new Map(),
+            history: new Map(),
+            stopped: new Set(),
+            stalled: new Map(),
+            holds: new Map(),
+            reached: new Set(),
+            wakes: new Map(),
+            wakeTimes: new Map(),
+            fault: { mail: false, ack: false, wake: false },
+            background: [],
+            negative: new Set(),
+            restarted: new Set(),
+            answeredAtStop: new Map(),
+            forgedIds: new Set(),
+            forged: 0,
+            n: 0,
+          };
+          const next = ids(...PIDS);
+          let scope = yield* Scope.make();
+          let life = yield* host(store, world, next.next, scope);
+          yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const name = responderName(1);
+          const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
+          const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
+          const input = (m: unknown): Incoming => ({
+            id: `timer-${++world.n}`,
+            envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
+            sentAt: "2026-11-11T00:00:00Z",
+            seen: 0,
+            span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
+          });
+          let timer: number | null = null,
+            wake: number | null = null,
+            retry: number | null = null;
+          let live = true;
+          let recoveryWait: number | null = null;
+          let kept: ReadonlyArray<unknown> = [];
+          const ticks: number[] = [];
+          const saved = () => Effect.map(store.alarms.saved, (rows) => rows.find((a) => a.name === name)?.at ?? null);
+          yield* runner().due(0);
+
+          for (const cell of tape) {
+            const now = yield* Clock.currentTimeMillis;
+            const choices = stopped
+              ? live
+                ? ["stop", "brake", "wake", "reopen"]
+                : ["wake", "reopen"]
+              : ["arm", "wake", "send", "advance", ...((yield* saved()) === null ? [] : ["fire"])];
+            const move = choose(choices, cell.move);
+            visited.add(move);
+
+            if (retry !== null && retry <= now && ["arm", "wake", "send"].includes(move)) {
+              retry = now + alarmPolicy.backoff.minMs;
+            }
+
+            if (move === "advance") {
+              yield* TestClock.setTime(now + (cell.pick % 100) + 1);
+            } else if (move === "arm") {
+              timer = now + (Math.abs(cell.value) % 100) + 1;
+              yield* runner().msg(input({ type: "arm", at: timer }));
+            } else if (move === "send") {
+              world.fault.wake = true;
+              yield* runner()
+                .msg(input({ type: "request", ref: `r-${world.n}`, value: 7, reply: requesterName(1) }))
+                .pipe(Effect.result);
+              retry ??= now + alarmPolicy.backoff.minMs;
+            } else if (move === "wake") {
+              if (!live) {
+                visited.add("kept");
+                const source = yield* within(ProcessManager.use((p) => p.status(requesterName(1))));
+                yield* within(
+                  ProgramMail.use((p) =>
+                    p.deliver({
+                      command: `${source.state.process}/${++world.n}/0`,
+                      source: { name: requesterName(1), process: source.state.process },
+                      to: name,
+                      m: { type: "request", ref: `kept-${world.n}`, value: 7, reply: requesterName(1) },
+                      from: brainFrom(),
+                    }),
+                  ),
+                );
+                kept = yield* within(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
+              }
+
+              yield* runner().mailed;
+
+              if (live) {
+                wake = wake === null ? now : Math.min(now, wake);
+              }
+            } else if (move === "brake") {
+              for (let n = 0; n <= alarmPolicy.intensity; n++) {
+                yield* runner()
+                  .msg(input({ type: "crash" }))
+                  .pipe(Effect.result);
+                const at = yield* saved();
+                expect(at, "a crash keeps its recovery alarm").not.toBeNull();
+
+                if (n < alarmPolicy.intensity && at !== null) {
+                  yield* TestClock.setTime(at);
+                  yield* store.alarms.take({ name, at });
+                  yield* runner().due(at);
+                }
+              }
+
+              live = false;
+              recoveryWait = yield* saved();
+              expect(recoveryWait).toBeTypeOf("number");
+              kept = yield* within(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
+            } else if (move === "stop") {
+              const status = yield* within(ProcessManager.use((p) => p.status(name)));
+              yield* within(ProcessManager.use((p) => p.exit(status.state.process, SHUTDOWN, brainFrom())));
+              live = false;
+              timer = null;
+              wake = null;
+              retry = null;
+              // Load the stopped supervision before checking what another mail wake can schedule.
+              yield* runner().due(now);
+              kept = yield* within(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
+            } else if (move === "reopen") {
+              yield* Scope.close(scope, Exit.void);
+              yield* store.reopen;
+              scope = yield* Scope.make();
+              life = yield* host(store, world, next.next, scope);
+              // A cold stopped name may take one wake; its first alarm must clear that mail time.
+              yield* runner().mailed;
+              const at = yield* saved();
+
+              if (at !== null && (recoveryWait === null || at < recoveryWait)) {
+                yield* store.alarms.take({ name, at });
+                yield* runner().due(Math.max(now, at));
+              }
+
+              wake = null;
+            } else {
+              const at = yield* saved();
+
+              if (at !== null) {
+                yield* TestClock.setTime(Math.max(now, at));
+                yield* store.alarms.take({ name, at });
+
+                if (timer !== null && timer <= Math.max(now, at)) {
+                  ticks.push(Math.max(now, at));
+                  timer = null;
+                }
+
+                yield* runner().due(Math.max(now, at));
+                wake = null;
+                retry = null;
+              }
+            }
+
+            if (!live) {
+              expect(yield* saved(), "M3: a non-live name keeps only its own recovery wait").toBe(recoveryWait);
+              expect(
+                yield* within(Mailbox.use((m) => Stream.runCollect(m.read(name, 0)))),
+                "M3: every saved letter stays in the inbox",
+              ).toEqual(kept);
+              const status = yield* within(ProcessManager.use((p) => p.status(name)));
+              expect(status.state._tag, "M3: mailed never starts a non-live name").toBe(
+                recoveryWait === null ? "ended" : "down",
+              );
+            } else if (!stopped) {
+              const terms = [timer, wake, retry].filter((at): at is number => at !== null);
+              expect(yield* saved(), "M2: the single saved alarm is the earliest pending work").toBe(
+                terms.length === 0 ? null : Math.min(...terms),
+              );
+              const checkpoint = yield* within(savedModel(store, name));
+              const model =
+                checkpoint === null
+                  ? timerMachine.init(null, stubCtxThrowingProxy<unknown>())[0]
+                  : Schema.decodeUnknownSync(TimerModel)(checkpoint);
+              expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
+              expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
+            }
+          }
+        });
+        const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its result as a Promise
+        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+        expect([...visited]).toEqual(
+          expect.arrayContaining(
+            stopped ? ["stop", "brake", "wake", "reopen", "kept"] : ["arm", "wake", "send", "advance", "fire"],
+          ),
+        );
+      }),
+    600_000,
+  );
+
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  describe("P41 slice 1: a request and its answer between two real runners", () => {
+  describe("P41: a request and its answer between two real runners", () => {
+    for (const trace of [false, true]) {
+      it.effect(
+        trace ? "T1a: receipt traces join each saved wake" : "T1a [secrets]: records hold no mail",
+        () =>
+          Effect.gen(function* () {
+            const done = new Set<Move>();
+            let sends = 0;
+            const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>, seed: number) {
+              const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 2 });
+              const observed = records(secrets, trace);
+              const run = walk(
+                open,
+                [1, 2],
+                [
+                  "start",
+                  "start_forbidden",
+                  "start_missing",
+                  "stall",
+                  "evict",
+                  "cut_mail",
+                  "lose_ack",
+                  "fail_wake",
+                  "fire",
+                  "settle",
+                ],
+                done,
+                observed,
+              );
+              yield* Effect.scoped(run(tape)).pipe(Effect.withTracer(observed.tracer), Effect.provide(observed.logger));
+              observed.check();
+              sends += observed.spans.filter((s) => s.name === "mail_delivery.send").length;
+            });
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
+            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => Effect.runPromise(once(tape, seed)));
+            // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its property result
+            yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+            expect(sends).toBeGreaterThan(0);
+            expect([...done]).toEqual(
+              expect.arrayContaining([
+                "start",
+                "start_forbidden",
+                "start_missing",
+                "evict",
+                "cut_mail",
+                "lose_ack",
+                "fail_wake",
+              ]),
+            );
+          }),
+        600_000,
+      );
+    }
+
+    alarmLaw(open, false);
+    alarmLaw(open, true);
+    prop(
+      "M1, M4: a wake waits behind a drain and queued waits until the target alarm is saved",
+      open,
+      [1],
+      ["start", "wakeDuringDrain", "holdAlarm", "fire", "reopen", "settle"],
+      ["wakeDuringDrain", "holdAlarm", "fire", "reopen"],
+      100,
+    );
+    prop(
+      "M4: failed wakes and reopened recipients retry the same saved letter",
+      open,
+      [1],
+      ["start", "fail_wake", "fire", "reopen", "settle"],
+      ["start", "fail_wake", "fire", "reopen"],
+      100,
+    );
+    prop(
+      "S1, S2: an evicted Send finishes from saved alarms, and its retry alarm leaves with its answer",
+      open,
+      [1, 2],
+      ["start", "stall", "evict", "cut_mail", "lose_ack", "fail_wake", "fire", "settle"],
+      ["start", "stall", "evict", "fire"],
+      100,
+      // pinned: plan amendment 3, main saves a Send without arming its sender before delivery.
+      [
+        [
+          { move: 1, pick: 0, value: 7, shape: 0 },
+          { move: 0, pick: 0, value: 7, shape: 0 },
+        ],
+      ],
+    );
     prop(
       "L1: once reachable work completes, the requester holds the responder's answer for its reference",
       open,
