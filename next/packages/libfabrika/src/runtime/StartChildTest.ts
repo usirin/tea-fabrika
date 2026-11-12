@@ -98,11 +98,14 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const DOOR = PIDS.at(-1) ?? "";
 /** The ledger's row limit (`ledger/Log.ts`). */
 const ROW_LIMIT = 2_000_000;
+// A valid 256-character program name adds more bytes to the Cmd than to its first letter.
+const BOUNDARY_PROGRAM = `m${"é".repeat(255)}`;
 
 const PROGRAMS: Record<string, unknown> = {
   starter: childStarter({ name: "starter", declare: true }),
   merger: childStarter({ name: "merger", declare: true }),
   plain: childStarter({ name: "plain", declare: false }),
+  [BOUNDARY_PROGRAM]: childStarter({ name: BOUNDARY_PROGRAM, declare: true }),
 };
 
 /** Start grants, by program. `plain` is granted, but never declared the Cmds. */
@@ -110,6 +113,8 @@ export const STARTS = [
   { source: "starter", to: "merger" },
   { source: "merger", to: "merger" },
   { source: "plain", to: "merger" },
+  { source: "starter", to: BOUNDARY_PROGRAM },
+  { source: "merger", to: BOUNDARY_PROGRAM },
 ];
 
 /** The host's mail grant: `sender:1` mails both starters, so their steps run on another process's letter. */
@@ -410,6 +415,7 @@ type Move =
   | "interleaved_exit"
   | "worker_before_exit"
   | "worker_after_exit"
+  | "boundary_start"
   | "checkpoint_starts";
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
@@ -576,6 +582,7 @@ const walk = (
         worker_after_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         cut_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         checkpoint_starts: starters().length > 0 && next.calls() < PIDS.length - 6,
+        boundary_start: starters().length > 0 && next.calls() < PIDS.length - 6,
       };
       const options = moves.filter((move) => can[move]);
 
@@ -854,6 +861,55 @@ const walk = (
           ).toEqual([]);
           held.live = false;
           seen.add(move);
+          break;
+        }
+        case "boundary_start": {
+          const name = choose(starters(), cell.pick);
+          const target = fresh();
+          const inputBytes = ROW_LIMIT - 400 - (cell.alt % 16);
+          const input = "x".repeat(inputBytes);
+          const ask = { program: BOUNDARY_PROGRAM, name: target, inputBytes };
+          const encoder = new TextEncoder();
+          expect(
+            encoder.encode(JSON.stringify({ type: "start_child", program: ask.program, name: target, input })).length,
+            "L6: this full Cmd exceeds the row limit",
+          ).toBeGreaterThan(ROW_LIMIT);
+          const before = (yield* answers(name)).length;
+          yield* door(name, { type: "start", ask });
+          const rows = yield* all([target]);
+          const starts = rows.filter((row) => row._tag === "started" && body(row)["name"] === target);
+          const letters = rows.filter((row) => row.stream === `${target}/inbox`);
+          expect(starts, "L6: a valid first letter survives an oversized full Cmd").toHaveLength(1);
+          expect(letters, "L6: the boundary input is written once").toHaveLength(1);
+          const first = letters[0] as Entry & From;
+          const texts = [
+            first.stream,
+            first.id,
+            first.by,
+            first.for,
+            first.sentAt,
+            first.parent,
+            first.traceId,
+            first.build,
+            first._tag,
+            JSON.stringify(first.body),
+          ];
+          const size = texts.reduce((total, text) => total + (text === null ? 0 : encoder.encode(text).length), 0);
+          expect(size, "L6: the complete first-letter row fits the limit").toBeLessThanOrEqual(ROW_LIMIT);
+          expect(body(first)["m"]).toBe(input);
+          expect(first.rev, "L6: the first letter follows the start with no intervening row").toBe(
+            (starts[0]?.rev ?? 0) + 1,
+          );
+          expect(yield* lastAnswer(name, before)).toEqual({
+            type: "start_child_ok",
+            outcome: Started.cases.started.make({
+              process: String(body(starts[0])["process"]),
+              name: target,
+              rev: starts[0]?.rev ?? 0,
+            }),
+          });
+          world.names.set(target, { program: ask.program, pid: String(body(starts[0])["process"]), live: true });
+          seen.add("boundary_start");
           break;
         }
         case "checkpoint_starts": {
@@ -1281,6 +1337,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         100,
       );
     }
+
+    prop(
+      "L6: a valid first-letter row survives when its full command exceeds the row limit",
+      open,
+      ["boundary_start"],
+      ["boundary_start"],
+      ["boundary_start"],
+      200,
+    );
 
     prop(
       "L6: individually valid starts survive a checkpoint larger than one platform row",
