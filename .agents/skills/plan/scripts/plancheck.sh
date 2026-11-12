@@ -11,7 +11,7 @@
 # Version 3, the one a draft must carry, also needs one `Estimate: <n> steps, $<d>` line ending the
 # Size section in draft and approved modes; plans approved at version 2 keep passing. Legacy plans keep their owner checks. Fixed inputs need one of the four labels in
 # five-steps-for-every-check.md. Paths are read as the repo reads them: `./package.json` is
-# `package.json`. Draft mode also prints sizecap.ts's size advice (0087), which never changes the exit,
+# `package.json`. Draft mode also prints sizecap.ts's size line (0099), which never changes the exit,
 # and fails a files-table path that is no repo path: one with a `:`, or a word with no `/` or `.`.
 # A versioned plan also gets `advice:` lines, which never change the exit: a type or lint law with
 # an fc. generator, a test law with an fc. generator and no run count, and a Validation section that
@@ -26,8 +26,8 @@ cd "$here/../../../.."
 if [ "$draft" != owners ]; then
     sh "$here/../../lead/scripts/leakgrep.sh" --text "$plan" >&2
 fi
-# Draft mode also prints 0087's size advice: each slice over `[review] lines`. It never fails the
-# check until a replay on merged pull requests lets it block.
+# Draft mode also prints the plan's size and names each slice with no estimate. Advice only: no
+# number caps a pull request (0099), so it never fails the check.
 if [ "$draft" = 1 ]; then
     node "$here/../../lead/scripts/sizecap.ts" plan "$plan" || echo "size: not checked"
 fi
