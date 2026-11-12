@@ -21,7 +21,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Redacted, Schema, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Redacted, Schedule, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -126,6 +126,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const builtHash = yield* hash(source);
   let bundled = { hash: builtHash, source };
   const pushed: Array<Pushed> = [];
+  const completed: Array<Pushed> = [];
   const loadedAtPush: Array<ReadonlyArray<string>> = [];
   const swapGates = new Map<string, Effect.Effect<void>>();
   const swapReplies = new Map<string, Effect.Effect<void>>();
@@ -197,6 +198,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
 
             const pid = descriptors.get(name)!.id;
             const was = running.get(pid) ?? builtHash;
+            completed.push({ name, ...request });
 
             if (request.hash === was) {
               return { _tag: "same" };
@@ -306,6 +308,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     env,
     builtHash,
     pushed,
+    completed,
     loadedAtPush,
     swapGates,
     swapReplies,
@@ -541,6 +544,53 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 const json = (response: Response) => Effect.promise(() => response.json());
 
 describe("P15 slice 1: the brain installs and selects code", () => {
+  it.live(
+    "L4/L9: boot pushes finish before a later install so a delayed old push cannot replace the newly selected code",
+    () =>
+      law(
+        (g) =>
+          Effect.gen(function* () {
+            const i = yield* instance(baseFixture());
+            const pid = i.descriptors.get("counter:1")!.id;
+            let current = baseFixture();
+            const rounds = g(fc.integer, { min: 1, max: 4 });
+
+            for (let n = 0; n < rounds; n++) {
+              const was = i.running.get(pid)!;
+              const entered = yield* Deferred.make<void>();
+              const release = yield* Deferred.make<void>();
+              i.swapGates.set(was, Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))));
+              yield* i.restart;
+              yield* Deferred.await(entered).pipe(Effect.timeout("1 second"));
+              const before = i.completed.length;
+              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              const digest = yield* hash(sourceFor(current));
+              const arrived = yield* Deferred.make<void>();
+              i.swapGates.set(digest, Deferred.succeed(arrived, undefined).pipe(Effect.asVoid));
+              const installing = yield* Effect.forkScoped(install(i, `boot_order_${n}`, current));
+              const early = yield* Deferred.await(arrived).pipe(Effect.timeoutOption("30 millis"));
+              expect(Option.isNone(early), "a later install cannot push while the boot push is held").toBe(true);
+              yield* Deferred.succeed(release, undefined);
+              const answer = yield* Fiber.join(installing);
+              yield* Effect.suspend(() => Effect.succeed(i.completed.slice(before).some((p) => p.hash === was))).pipe(
+                Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 millis") }),
+                Effect.timeout("1 second"),
+              );
+              expect(answer.answer._tag).toBe("loaded");
+              expect(i.completed.slice(before).map((p) => p.hash)).toEqual([was, digest]);
+              expect(i.running.get(pid), "the last installed build keeps running after boot's delayed push").toBe(
+                digest,
+              );
+              expect(code(i).at(-1)?.body.hash).toBe(digest);
+              i.swapGates.delete(was);
+              i.swapGates.delete(digest);
+            }
+          }),
+        100,
+      ),
+    300_000,
+  );
+
   it.live(
     "L9/L12: first starts choose the current selection and retries keep their first answer and current policy across installs and reopens",
     () =>

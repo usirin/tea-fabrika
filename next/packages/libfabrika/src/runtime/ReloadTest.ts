@@ -3,20 +3,22 @@
 import { Outcome } from "@demlik/tea";
 import { Machine, Cmd } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schema, Scope, Stream } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
-import { LedgerError, Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
+import { Appended, LedgerError, Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
 import { Start } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
 import { hash } from "./Built.ts";
 import { Alarm, CheckedWriter, type Loaded, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
 import { Supervision } from "./internal/supervisor.ts";
+import { MailDelivery, MailDeliveryError } from "./MailDelivery.ts";
 import type { RuntimeRecord } from "./ProcessStore.ts";
-import { Program, ProgramDown } from "./Program.ts";
+import { Program, ProgramDown, Write } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner, type Swapped } from "./Runner.ts";
+import { Queued, send } from "./Send.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
@@ -63,6 +65,7 @@ type Spec = {
   readonly gaps: ReadonlyArray<number>;
   /** Whether `inc` dispatches the variant's one Cmd, `ping`. */
   readonly cmd: boolean;
+  readonly durable?: "write" | "send";
 };
 
 /** The real counter, as main builds it: `inc` adds one, `v` 1, no upgrades, no Cmd. */
@@ -90,7 +93,7 @@ const updateFor = (spec: Spec, model: CounterModel, m: { readonly type: string }
       ? { ...model, count: clamp(spec, model.count - spec.k) }
       : m.type === "reset"
         ? { ...model, count: clamp(spec, 0) }
-        : m.type === "ping_ok"
+        : m.type === "ping_ok" || m.type === "write_ok" || m.type === "send_ok"
           ? { ...model, count: clamp(spec, model.count + 10 * spec.k) }
           : model;
 
@@ -106,6 +109,13 @@ const upgradesFor = (spec: Spec) =>
     }));
 
 const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
+const changed = Schema.TaggedStruct("changed", { count: Schema.Int });
+
+const write = Cmd.make("write", {
+  input: Schema.Struct({ stream: Schema.String, write: Write }),
+  ok: Schema.Unknown,
+  err: [],
+});
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("inc") }),
@@ -119,17 +129,30 @@ const programFor = (spec: Spec) => {
   const machine = Machine.make({
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
-    cmds: [ping],
+    cmds: [ping, write, send],
     init: (loaded: CounterModel | null) => [
       loaded ?? (spec.shape === "field" ? { count: clamp(spec, 0), step: 1 } : { count: clamp(spec, 0) }),
       [],
     ],
     update: {
-      inc: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), spec.cmd ? [ping({ n: s.count })] : []],
+      inc: (s: CounterModel, m: typeof Msg.Type) => [
+        updateFor(spec, s, m),
+        spec.durable === "write"
+          ? [write({ stream: "app/reload", write: Write.cases.own.make({ event: changed.make({ count: s.count }) }) })]
+          : spec.durable === "send"
+            ? [send({ to: "recipient:1", m: { type: "add", n: s.count } })]
+            : spec.cmd
+              ? [ping({ n: s.count })]
+              : [],
+      ],
       dec: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],
       reset: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],
       ping_ok: (s: CounterModel) => [updateFor(spec, s, { type: "ping_ok" }), []],
       ping_err: (s: CounterModel) => [s, []],
+      write_ok: (s: CounterModel) => [updateFor(spec, s, { type: "write_ok" }), []],
+      write_err: (s: CounterModel) => [s, []],
+      send_ok: (s: CounterModel) => [updateFor(spec, s, { type: "send_ok" }), []],
+      send_err: (s: CounterModel) => [s, []],
     },
   });
   return Program.make({
@@ -140,7 +163,7 @@ const programFor = (spec: Spec) => {
     refuse: () => null,
     inputs: { inc: "Add", dec: "Take away", reset: "Back to zero" },
     outputs: {},
-    writes: {},
+    writes: { changed: { schema: changed, personOnly: false } },
     wake: () => null,
   });
 };
@@ -369,6 +392,11 @@ type World = {
   readonly names: Map<string, Name>;
   readonly cuts: { armed: string | null; readonly hits: Array<string> };
   letters: number;
+  readonly durable: {
+    blocked: boolean;
+    readonly attempts: Array<string>;
+    readonly completed: Set<string>;
+  };
 };
 
 const brainFrom = (build: string) => ({
@@ -395,6 +423,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, specs: ReadonlyArray<Spec>)
     names: new Map<string, Name>(),
     letters: 0,
     cuts: { armed: null, hits: [] },
+    durable: { blocked: false, attempts: [], completed: new Set<string>() },
   } satisfies World;
 });
 
@@ -466,7 +495,17 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
             return appended;
           }),
           commit: () => Effect.die("a counter variant has no write Cmd"),
-          own: () => Effect.die("a counter variant has no own Cmd"),
+          own: (id: string) =>
+            Effect.gen(function* () {
+              w.durable.attempts.push(id);
+
+              if (w.durable.blocked) {
+                return yield* new LedgerError({ reason: "unreachable" });
+              }
+
+              w.durable.completed.add(id);
+              return Appended.cases.placed.make({ rev: 1, pos: 1 });
+            }),
         };
       }),
     );
@@ -474,6 +513,19 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       Layer.succeedContext(managerContext),
       ProcessStore.layer(storeSql, { process: entry.pid }),
       checked,
+      Layer.succeed(MailDelivery, {
+        send: (mail) =>
+          Effect.gen(function* () {
+            w.durable.attempts.push(mail.command);
+
+            if (w.durable.blocked) {
+              return yield* new MailDeliveryError({ reason: "unavailable" });
+            }
+
+            w.durable.completed.add(mail.command);
+            return Queued.make({ id: mail.command });
+          }),
+      }),
       Layer.succeed(WatcherManager, {
         publish: (client: string, update: Update) =>
           Effect.sync(() => {
@@ -1288,6 +1340,115 @@ export const suite = (rig: Rig): void => {
             50,
           );
           expect(seen.has("late") && seen.has("early")).toBe(true);
+        }),
+      TIMEOUT,
+    );
+  });
+
+  describe("P15 slice 1: pending Cmds survive swap recovery", () => {
+    it.live(
+      "L4/L15: a recovered swap retries pending writes and sends with their original IDs and folds each answer once on the new code",
+      () =>
+        Effect.gen(function* () {
+          const seen = new Set<string>();
+          yield* law((g) => {
+            const durable = pick(g, ["write", "send"] as const);
+            const start = { ...BASE, durable, k: g(fc.integer, { min: 1, max: 5 }) };
+            return inWorld(rig, [start], (w) =>
+              Effect.gen(function* () {
+                const old = yield* hashFor(start);
+                let s = yield* open(w, NAME, old);
+                const a = account(old);
+                const steps = g(fc.integer, { min: 1, max: 4 });
+
+                for (let n = 0; n < steps; n++) {
+                  // Only an idle process with no unanswered Cmd starts the next round.
+                  expect((yield* history(w, NAME)).checkpoint?.cmds ?? []).toEqual([]);
+                  w.durable.blocked = true;
+                  const { input } = press(w, "inc");
+                  yield* Effect.exit(s.runner.msg(input));
+                  const before = yield* history(w, NAME);
+                  const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
+                  expect(pending).toHaveLength(1);
+                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
+                    pending[0],
+                  );
+                  expect(job.build).toBe(a.build);
+                  expect(w.durable.attempts).toContain(job.id);
+                  expect(w.durable.completed.has(job.id)).toBe(false);
+                  a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                    type: "inc",
+                  });
+                  a.accepted.push(input.id);
+                  const spec = { ...g(() => fcFitting(a.model, a.v)), durable };
+                  const hash = yield* learn(w.code, spec);
+                  const load = `pending_${n}`;
+                  const cut = pick(g, [
+                    "after_swap_prepared",
+                    "after_swap_checkpoint",
+                    "after_swap_record",
+                    "after_swap_supervisor",
+                  ]);
+                  w.cuts.armed = cut;
+                  expect(Exit.isFailure(yield* Effect.exit(swap(s, load, hash)))).toBe(true);
+                  expect(w.cuts.armed).toBeNull();
+                  const reopen = g(fc.boolean);
+
+                  if (reopen) {
+                    yield* evict(w, NAME);
+                    s = yield* session(w, NAME);
+                  }
+
+                  w.durable.blocked = false;
+                  yield* swap(s, load, hash);
+                  yield* s.runner.open(`pending-reader-${n}`);
+                  const finished = yield* Effect.suspend(() => Effect.succeed(w.durable.completed.has(job.id))).pipe(
+                    Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 millis") }),
+                    Effect.timeoutOption("100 millis"),
+                  );
+                  expect(Option.isSome(finished), "the next turn retries the dispatched job after swap recovery").toBe(
+                    true,
+                  );
+                  yield* s.runner.open(`pending-reader-${n}`);
+                  a.model = climb(spec, a.model, a.v);
+                  a.model = updateFor(spec, a.model, { type: `${durable}_ok` });
+                  a.v = spec.v;
+                  a.build = hash;
+                  a.ran.push(hash);
+                  a.swaps++;
+                  const after = yield* history(w, NAME);
+                  expect(after.checkpoint?.cmds).toEqual([]);
+                  expect(after.checkpoint?.saved.model).toEqual(a.model);
+                  expect(
+                    after.facts.filter((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`),
+                  ).toHaveLength(1);
+                  expect(
+                    after.facts.find((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`)?.body.build,
+                  ).toBe(hash);
+                  expect(
+                    after.facts.filter((f) => f.tag === "code.swapped" && f.id === `code.swapped:${load}`),
+                  ).toHaveLength(1);
+                  expect([...w.durable.completed]).toHaveLength(n + 1);
+                  seen.add(durable);
+                  seen.add(reopen ? "reopen" : "retry");
+                  seen.add(cut);
+                }
+              }),
+            );
+          }, 100);
+
+          for (const move of [
+            "write",
+            "send",
+            "reopen",
+            "retry",
+            "after_swap_prepared",
+            "after_swap_checkpoint",
+            "after_swap_record",
+            "after_swap_supervisor",
+          ]) {
+            expect(seen.has(move), `the walk reaches ${move}`).toBe(true);
+          }
         }),
       TIMEOUT,
     );
