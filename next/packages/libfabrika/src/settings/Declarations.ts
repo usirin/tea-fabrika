@@ -33,4 +33,36 @@ export const version = Setting.make("fabrika-version", {
   since: "0.0.0",
 });
 
-export const all = Setting.group({ port, version });
+const Positive = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
+
+/**
+ * Setting for the most attempts one checked sender may route in a gateway window.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const gatewayLimit = Setting.make("gateway.limit", {
+  schema: Positive,
+  default: 600,
+  doc: "The most routed attempts one signed-in key may make in one gateway window.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the gateway budget's window in milliseconds.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const gatewayWindow = Setting.make("gateway.window", {
+  schema: Positive,
+  default: 60_000,
+  doc: "The gateway window in milliseconds.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+export const all = Setting.group({ port, version, gatewayLimit, gatewayWindow });

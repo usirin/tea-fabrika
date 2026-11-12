@@ -3,6 +3,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import { Result } from "effect";
 import { TestClock } from "effect/testing";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../Archive.ts";
@@ -26,14 +27,73 @@ const world = (db: DatabaseSync) =>
     Archive.memory,
   );
 
+const failingTransactions = (real: ReturnType<typeof nodeSql>, broken: () => boolean, full: Error) => ({
+  ...real,
+  transaction: <A>(step: () => A): A => {
+    if (broken()) {
+      throw full;
+    }
+
+    return real.transaction(step);
+  },
+});
+
 describe("0140 sums", () => {
+  it.effect.prop(
+    "T843 sink: failed rate counts are reported, coalesce while held, then land once per piece and hour (50 runs)",
+    { count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })) },
+    ({ count }) =>
+      Effect.gen(function* () {
+        const db = yield* database;
+        const real = nodeSql(db);
+        const full = new Error("SQLITE_FULL");
+        let broken = false;
+        const sql = failingTransactions(real, () => broken, full);
+        yield* Effect.gen(function* () {
+          yield* TestClock.setTime(H + 18_000);
+          const sink = yield* SpanSink;
+          yield* Effect.void.pipe(Effect.withSpan(PIECE, { attributes: { [TAG]: "rate_limited" } }));
+          yield* sink.check;
+          broken = true;
+
+          for (let n = 0; n < count; n++) {
+            yield* Effect.void.pipe(Effect.withSpan(PIECE, { attributes: { [TAG]: "rate_limited" } }));
+            const result = yield* Effect.result(sink.check);
+            expect(Result.isFailure(result)).toBe(true);
+
+            if (Result.isFailure(result)) {
+              expect(result.failure._tag).toBe("SinkError");
+              expect(result.failure.held).toBeLessThanOrEqual(1);
+            }
+          }
+
+          expect(db.prepare("SELECT * FROM unsent").all()).toEqual([]);
+          expect(db.prepare("SELECT * FROM measurements").all()).toEqual([]);
+          broken = false;
+          yield* sink.flush;
+          yield* TestClock.setTime(H + HOUR);
+          expect(yield* sink.sums(PIECE, H, H + HOUR)).toEqual([
+            { _tag: "sum", piece: PIECE, hour: H, refused: "rate_limited", count: count + 1 },
+          ]);
+          expect(db.prepare("SELECT * FROM sums WHERE piece=?").all(PIECE)).toHaveLength(1);
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              SpanSink.layer(sql, { object: "test-object" }),
+              RecordManager.memory(1024 ** 3),
+              Archive.memory,
+            ),
+          ),
+        );
+      }),
+    { arbitrary: { seed: 119120, runs: 50 } },
+  );
   it.effect.prop(
     "tagged spans count in place, off-list values become other, and untagged spans still save",
     {
-      values: Schema.Array(Schema.Union([Schema.Literal("reserved"), Schema.Json, Schema.Undefined])).check(
-        Schema.isMinLength(1),
-        Schema.isMaxLength(40),
-      ),
+      values: Schema.Array(
+        Schema.Union([Schema.Literals(["reserved", "rate_limited"]), Schema.Json, Schema.Undefined]),
+      ).check(Schema.isMinLength(1), Schema.isMaxLength(40)),
     },
     ({ values }) =>
       Effect.gen(function* () {
@@ -46,7 +106,7 @@ describe("0140 sums", () => {
 
           for (const value of values) {
             yield* Effect.void.pipe(Effect.withSpan(PIECE, { attributes: { [TAG]: value } }));
-            const bucket = value === "reserved" ? "reserved" : "other";
+            const bucket = value === "reserved" || value === "rate_limited" ? value : "other";
             expected.set(bucket, (expected.get(bucket) ?? 0) + 1);
           }
 

@@ -4,7 +4,14 @@ import { expect, it } from "vitest";
 import { Settings } from "./settings.ts";
 
 it("local settings accept exactly the integer ports from 1 through 65535", () => {
-  const settings = { name: "local", person: "person", founder: "public", window: null, build: "a" };
+  const settings = {
+    name: "local",
+    person: "person",
+    founder: "public",
+    window: null,
+    build: "a",
+    rateLimit: { limit: 100_000, window: 60_000 },
+  };
   const firstPort: [number] = [1];
   const lastPort: [number] = [65535];
   const belowRange: [number] = [0];

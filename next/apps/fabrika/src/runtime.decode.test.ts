@@ -29,7 +29,15 @@ vi.mock("./door.ts", () => ({
   },
 }));
 
-const settings = { name: "fabrika", person: "person", founder: "founder", window: null, port: 8123, build: "b" };
+const settings = {
+  name: "fabrika",
+  person: "person",
+  founder: "founder",
+  window: null,
+  port: 8123,
+  build: "b",
+  rateLimit: { limit: 100_000, window: 60_000 },
+};
 
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
