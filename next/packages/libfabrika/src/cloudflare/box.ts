@@ -61,14 +61,17 @@ export const programBox = (declared: unknown, build: string) => {
     }
 
     fresh(model: unknown, msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
       return Effect.runPromise(checked(execution.fresh(model, msg)));
     }
 
     update(model: unknown, msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
       return Effect.runPromise(checked(execution.update(model, msg)));
     }
 
     audit(msg: unknown) {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise
       return Effect.runPromise(
         execution.audit(msg).pipe(
           Effect.match({

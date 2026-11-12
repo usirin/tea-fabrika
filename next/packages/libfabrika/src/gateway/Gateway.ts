@@ -94,7 +94,13 @@ const Binding = Schema.Struct({
   span: Link,
   sentAt: Schema.String,
   state: EnvelopeState,
-});
+}).check(
+  Schema.makeFilter((binding) =>
+    !Schema.is(InputId)(binding.id) || (binding.door !== undefined && binding.n !== undefined)
+      ? true
+      : "a current input binding keeps its door and sequence",
+  ),
+);
 type Binding = typeof Binding.Type;
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));

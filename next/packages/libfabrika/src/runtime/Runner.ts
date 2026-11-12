@@ -1392,7 +1392,16 @@ export class ProgramRunner extends Context.Service<
                   const letter = yield* Stream.runHead(mailbox.read(process.name, placed.rev - 1));
                   const asked = JSON.stringify(input.envelope.input);
 
-                  if (Option.exists(letter, (l) => l.id === input.id && JSON.stringify(l.m) !== asked)) {
+                  if (
+                    Option.exists(
+                      letter,
+                      (l) =>
+                        l.id === input.id &&
+                        (l.by !== input.envelope.by.key ||
+                          l.for !== input.envelope.by.for ||
+                          JSON.stringify(l.m) !== asked),
+                    )
+                  ) {
                     return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
                   }
 
