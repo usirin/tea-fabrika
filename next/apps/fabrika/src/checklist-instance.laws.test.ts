@@ -14,8 +14,9 @@
 //   process it is about, beside the update its Process published, which reaches the client unchanged.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { applyCell } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { checklist } from "@kampus/checklist";
+import { checklist, checklistMachine, checklistView } from "@kampus/checklist";
 import { checklistWindow } from "@kampus/checklist/window";
 import { counter } from "@kampus/counter";
 import type { Descriptor } from "@kampus/libfabrika";
@@ -496,6 +497,60 @@ const without = (params: Readonly<Record<string, unknown>>) => {
 };
 
 describe("L13: notices name their process", () => {
+  it("successive sends land and a client joining after the first send opens the current checklist", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.uniqueArray(fc.stringMatching(/^[a-z]{1,12}$/), { minLength: 2, maxLength: 5 }), (names) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const w = yield* world();
+              expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
+              const [, [pid]] = yield* placings(w);
+              const client = yield* admit(w);
+              yield* call(w, (p) => p.route(client, "view.open", { pid }));
+              let model = checklistMachine.init(null, {})[0];
+
+              for (const [n] of names.entries()) {
+                const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
+                const msg = { type: "add" as const, name };
+                const answer = yield* call(w, (p) =>
+                  p.route(client, "process.send", {
+                    pid,
+                    letter: `progress_${n}`,
+                    m: msg,
+                    sentAt: SENT,
+                    seen: 0,
+                  }),
+                );
+                expect(answer, `send ${n + 1} reaches the same live process`).toMatchObject({
+                  result: { _tag: "accepted" },
+                });
+                model = applyCell(checklistMachine, model, msg)[0];
+                // Let the platform's past-time alarm run between inputs, as it does in dev.ts.
+                yield* settle;
+                const late = yield* admit(w);
+                const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
+                const { result } = Schema.decodeUnknownSync(
+                  Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
+                )(opened);
+                expect(
+                  result.view.items.map((item) => item.name),
+                  "a late subscriber gets the current view",
+                ).toEqual(model.items.map((item) => item.name));
+              }
+            }),
+          ),
+        ),
+      ),
+      {
+        seed: SEED,
+        numRuns: 100,
+        // pinned: the host's first add succeeded, then every send and late view.open was unreachable.
+        examples: [[["milk", "bread"]]],
+      },
+    );
+  });
+
   it("each view.whole and view.patch for checklist:1 carries its pid and the update its Process published", async () => {
     const seen = { whole: 0, patch: 0, arrays: 0, refused: 0 };
     await fc.assert(

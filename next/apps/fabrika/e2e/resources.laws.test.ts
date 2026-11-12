@@ -16,7 +16,8 @@ import { connect } from "node:net";
 import { join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, type TestContext } from "vitest";
+import { suite as scopedSuite } from "./p14.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
 const VITEST = join(APP, "node_modules/vitest/vitest.mjs");
@@ -30,8 +31,8 @@ const Row = Schema.Struct({
   home: Schema.optionalKey(Schema.String),
 });
 type Row = typeof Row.Type;
-type Fault = { readonly at: string; readonly kind: "setup" | "test" | "hold" };
-const KINDS = ["setup", "test", "hold"] as const;
+type Fault = { readonly at: string; readonly kind: "setup" | "test" | "hold" | "timeout" };
+const KINDS = ["setup", "test", "hold", "timeout"] as const;
 type Ended = { readonly code: number | null; readonly signal: NodeJS.Signals | null; readonly ms: number };
 
 const rows = (file: string): ReadonlyArray<Row> =>
@@ -103,6 +104,12 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
             process.kill(-child.pid, "SIGKILL");
           } catch {
             /* the process group already ended */
+          }
+        }
+
+        for (const row of rows(trace)) {
+          if (row.home !== undefined) {
+            rmSync(row.home, { recursive: true, force: true });
           }
         }
       }),
@@ -195,6 +202,17 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
       const label = JSON.stringify(fault ?? "plain");
       expect(acquired.length, `${label}: the child reached its first acquisition`).toBeGreaterThan(0);
 
+      if (fault !== undefined) {
+        expect(acquired, `${label}: the selected acquisition was reached`).toContain(fault.at);
+
+        if (fault.kind === "hold" || fault.kind === "timeout") {
+          expect(
+            seen.some((row) => row.holding === fault.at),
+            `${label}: the fault actually held the scope`,
+          ).toBe(true);
+        }
+      }
+
       if (fault === undefined) {
         expect(end, `${label}: a passing suite exits 0 by itself`).toMatchObject({ code: 0, signal: null });
       } else if (fault.kind === "hold") {
@@ -219,8 +237,8 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
   );
 
 /** The fault walk over one child suite: a plain run first, then faults only at what it reached. */
-const walk = async (target: Target) => {
-  const reached = await Effect.runPromise(run(undefined, "SIGTERM", target));
+const walk = async (target: Target, context: TestContext) => {
+  const reached = await scopedSuite(run(undefined, "SIGTERM", target), context);
   expect(reached, "the plain run acquires its home, server, browser, context and page").toEqual(
     expect.arrayContaining([
       "home",
@@ -232,6 +250,7 @@ const walk = async (target: Target) => {
     ]),
   );
   const kinds = new Set<string>();
+  const available = target === FIRST_WINDOW ? KINDS : KINDS.filter((kind) => kind !== "timeout");
   await fc.assert(
     fc.asyncProperty(
       fc.array(
@@ -245,18 +264,19 @@ const walk = async (target: Target) => {
       async (steps) => {
         for (const { pick, kind: pickKind, signal } of steps) {
           // A kind the walks have not reached yet comes first, so a short walk still meets all three.
-          const pending = KINDS.filter((k) => !kinds.has(k));
-          const kind = pending.length > 0 ? pending[pickKind % pending.length]! : KINDS[pickKind % KINDS.length]!;
+          const pending = available.filter((k) => !kinds.has(k));
+          const kind =
+            pending.length > 0 ? pending[pickKind % pending.length]! : available[pickKind % available.length]!;
           // Only an acquisition the real run reached is a fault point; a test failure comes after all.
           const at = kind === "test" ? reached[reached.length - 1]! : reached[pick % reached.length]!;
           kinds.add(kind);
-          await Effect.runPromise(run({ at, kind }, signal as NodeJS.Signals, target));
+          await scopedSuite(run({ at, kind }, signal as NodeJS.Signals, target), context);
         }
       },
     ),
     { seed: 119120, numRuns: target === FIRST_WINDOW ? 10 : 3 },
   );
-  expect([...kinds].sort(), "the walks reached every kind of fault").toEqual(["hold", "setup", "test"]);
+  expect([...kinds].sort(), "the walks reached every kind of fault").toEqual([...available].sort());
 };
 
 describe("P14 slice 1: S1.6 browser and server resources close and the child suite exits", () => {
@@ -264,15 +284,18 @@ describe("P14 slice 1: S1.6 browser and server resources close and the child sui
     "generated fault walks: success, setup failure, test failure and interruption after each reached acquisition",
     // A child run builds, starts a brain and a browser: about a minute each, so 3 walks of up to 2 faults.
     { timeout: 20 * 60_000 },
-    () => walk(ONE_FILE),
+    (context) => walk(ONE_FILE, context),
   );
 });
 
 describe("P14 slice 2, L16: the first-window suite's resources close and its child exits", () => {
+  it("pinned: a Vitest timeout releases the first-window fixture's temp home before the worker exits", (context) =>
+    scopedSuite(run({ at: "home", kind: "timeout" }, "SIGTERM", FIRST_WINDOW), context));
+
   it(
     "generated fault walks over the first-window suite: success, setup failure, test failure and interruption after each reached acquisition",
     // A child run starts dev.ts and a browser: about a minute each, 10 walks of up to 2 faults.
     { timeout: 60 * 60_000 },
-    () => walk(FIRST_WINDOW),
+    (context) => walk(FIRST_WINDOW, context),
   );
 });

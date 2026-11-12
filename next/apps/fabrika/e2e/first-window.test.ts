@@ -18,7 +18,7 @@ import { checklistWindow } from "@kampus/checklist/window";
 import { Sent } from "@kampus/libfabrika";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Schema } from "effect";
+import { Effect, Fiber, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -35,7 +35,7 @@ import {
   type Row,
   rows,
   type Seen,
-  stopped,
+  suite,
   tab,
   target,
   tile,
@@ -64,22 +64,6 @@ const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: stri
 
     expect(check(last), `${label}: ${JSON.stringify(last)}`).toBe(true);
   });
-
-/** Runs one suite body in its own scope, racing the worker's stop, with the planted test fault. */
-const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>) =>
-  Effect.runPromise(
-    Effect.scoped(
-      body.pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            if (fault?.kind === "test") {
-              expect.fail(`scenario: a test that fails after ${fault.at} was acquired`);
-            }
-          }),
-        ),
-      ),
-    ).pipe(Effect.raceFirst(stopped)),
-  );
 
 const online = (h: Home, page: import("playwright").Page) =>
   Effect.gen(function* () {
@@ -125,11 +109,11 @@ const loseFirstAnswers = () => {
         const frame = JSON.parse(event.data);
         const group = this.sends.get(frame.id);
 
-        if (group === undefined || frame.result === undefined) {
+        if (group === undefined || !["accepted", "refused"].includes(frame.result?._tag)) {
           return;
         }
 
-        if (group.attempts.length === 1) {
+        if (group.firstAnswer === null) {
           group.firstAnswer = frame.result;
           event.stopImmediatePropagation();
           this.close(4001, "lost answer");
@@ -252,9 +236,9 @@ const useChecklist = (
 
 describe("L11: boot", () => {
   it(
-    "scenario: Strict Mode's double mount starts one runtime and one dial; closing the tab closes its socket",
-    { timeout: 300_000 },
-    () =>
+    "scenario: the page starts one dial; closing the tab removes its connection at the brain",
+    { timeout: fault?.kind === "timeout" ? (fault.at === "home" ? 500 : 60_000) : 300_000 },
+    (context) =>
       suite(
         Effect.gen(function* () {
           const h = yield* home;
@@ -265,17 +249,28 @@ describe("L11: boot", () => {
           const sockets = seen.opened;
           yield* waiting(page);
           yield* Effect.sleep("2 seconds");
-          // The entry mounts under Strict Mode, which mounts twice: one runtime still dials once.
+          // The real tab bundle uses production React. The entry location is checked in build.test.ts.
           expect(sockets, "one runtime dials once").toHaveLength(1);
           // L16's plain child also reaches the reader's socket.
           yield* online(h, page);
-          yield* reader(h, dev);
-          const closed = Effect.promise(() =>
-            sockets[0]!.isClosed() ? Promise.resolve(true) : sockets[0]!.waitForEvent("close").then(() => true),
+          const audit = yield* reader(h, dev);
+          const leaves = Effect.map(
+            audit.spans(),
+            (spans) => spans.filter((span) => Reflect.get(Object(span), "name") === "connections.leave").length,
+          );
+          const before = yield* leaves;
+          // Start observing before page.close, and observe the brain rather than a destroyed page handle.
+          const closed = yield* Effect.forkScoped(
+            Effect.gen(function* () {
+              while ((yield* leaves) === before) {
+                yield* Effect.sleep("100 millis");
+              }
+            }).pipe(Effect.timeout("10 seconds")),
           );
           yield* Effect.promise(() => page.close());
-          expect(yield* closed.pipe(Effect.timeout("10 seconds")), "closing the tab closes its socket").toBe(true);
+          yield* Fiber.join(closed);
         }),
+        context,
       ),
   );
 });
@@ -284,7 +279,7 @@ describe("L14: the first window (p29)", () => {
   it(
     "scenario: p29's whole flow on the real dev.ts: wait, grant, reload, two tabs, a stranger's grant, removal and Ask again",
     { timeout: 600_000 },
-    () =>
+    (context) =>
       suite(
         Effect.gen(function* () {
           const h = yield* home;
@@ -340,6 +335,7 @@ describe("L14: the first window (p29)", () => {
           expect(blockedText).toContain("QuotaExceededError");
           expect(blockedText).not.toContain("grant.ts client");
         }),
+        context,
       ),
   );
 });
@@ -348,7 +344,7 @@ describe("L15: use in two tabs (W2)", () => {
   it(
     "after any adds, checks, unchecks and removes in either tab, both tabs show the checklist's fold of the accepted letters, each tab shows its own refusals, and no letter lands twice",
     { timeout: 900_000 },
-    async () => {
+    async (context) => {
       await fc.assert(
         fc.asyncProperty(controls, (moves) =>
           suite(
@@ -405,6 +401,7 @@ describe("L15: use in two tabs (W2)", () => {
                 expect.arrayContaining(accepted),
               );
             }),
+            context,
           ),
         ),
         { seed: SEED, numRuns: 5 },
@@ -417,7 +414,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
   it(
     "[secrets] for generated sentinel credentials in the instance's env, the page, rows, errors, URLs, console lines and sockets never copy one",
     { timeout: 1_800_000 },
-    async () => {
+    async (context) => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -564,6 +561,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   }
                 }
               }),
+              context,
             );
           },
         ),

@@ -16,10 +16,35 @@ import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
+import { parseSync } from "oxc-parser";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
 
 const homes: Array<string> = [];
+
+// L11: production React does not repeat mounts. Check the real entry's module-level boot instead.
+it("format: the page entry starts its sole Effect run outside React at module scope", () => {
+  const file = join(import.meta.dirname, "entry/browser.tsx");
+  const source = readFileSync(file, "utf8");
+  const parsed = parseSync(file, source);
+  expect(parsed.errors).toEqual([]);
+  const boots = parsed.program.body.filter((node) => {
+    if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
+      return false;
+    }
+
+    const call = node.expression.callee;
+    return (
+      call.type === "MemberExpression" &&
+      call.object.type === "Identifier" &&
+      call.object.name === "Effect" &&
+      call.property.type === "Identifier" &&
+      call.property.name === "runFork"
+    );
+  });
+  expect(boots, "a React mount never owns the page's Effect run").toHaveLength(1);
+  expect(source.match(/\brunFork\b/g), "there is only one page runtime").toHaveLength(1);
+});
 
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
   Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));

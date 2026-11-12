@@ -10,10 +10,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { it } from "@effect/vitest";
+import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry, PAGE } from "@kampus/libfabrika/ledger/Log";
+import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
+import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
@@ -23,6 +26,52 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SENT = "2026-11-08T04:00:00.000Z";
 // A bound on one wait for an observable fact after a kill, as worker-supervision's WAIT is.
 const WAIT = 25_000;
+
+it(
+  "pinned: checklist stays reachable after its first add on the real dev.ts, including a later subscriber",
+  { timeout: 240_000 },
+  (context) =>
+    suite(
+      Effect.gen(function* () {
+        const h = yield* home;
+        const dev = yield* devServer(h);
+        const first = yield* reader(h, dev);
+        const name = "checklist:1";
+        const pid = resolveName(
+          yield* first.read(`processes/${name}`),
+          name,
+          (by) => by === "brain" || by.startsWith("brain:"),
+        );
+        expect(pid).not.toBeNull();
+        const View = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) });
+        yield* first.call("view.open", { pid });
+
+        for (const [n, item] of ["milk", "bread"].entries()) {
+          expect(
+            yield* first.call("process.send", {
+              pid,
+              letter: `progress_${n}`,
+              m: { type: "add", name: item },
+              sentAt: SENT,
+              seen: 0,
+            }),
+            `send ${n + 1} to the original process`,
+          ).toMatchObject({ result: { _tag: "accepted" } });
+          yield* Effect.sleep("100 millis");
+          const second = yield* reader(h, dev);
+          const opened = Schema.decodeUnknownSync(View)(yield* second.call("view.open", { pid }));
+          expect(opened.result.view.items.map((row) => row.name)).toEqual(["milk", "bread"].slice(0, n + 1));
+        }
+
+        const inbox = yield* first.read(`${name}/inbox`);
+        expect(inbox.filter((row) => row.id.startsWith("progress_")).map((row) => row.id)).toEqual([
+          "progress_0",
+          "progress_1",
+        ]);
+      }),
+      context,
+    ),
+);
 
 const field = (a: string | Buffer) => {
   const bytes = typeof a === "string" ? Buffer.from(a) : a;

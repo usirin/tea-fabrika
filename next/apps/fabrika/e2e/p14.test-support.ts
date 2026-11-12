@@ -19,6 +19,7 @@ import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
+import type { TestContext } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
@@ -29,7 +30,7 @@ type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
   at: Schema.Literals(RESOURCES),
-  kind: Schema.Literals(["setup", "test", "hold"]),
+  kind: Schema.Literals(["setup", "test", "hold", "timeout"]),
 });
 
 /** The fault the supervisor planted for this child, if any. */
@@ -64,6 +65,29 @@ export const stopped = Effect.callback<never, Stopped>((resume) => {
   });
 });
 
+/** Vitest aborts its signal on timeout. Wait for that interruption's finalizers before the worker exits. */
+export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>, context: TestContext) => {
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest starts this scoped Effect with its cancellation signal
+  const running = Effect.runPromise(
+    Effect.scoped(
+      body.pipe(
+        Effect.tap(() =>
+          fault?.kind === "test" ? Effect.die(new Error(`test fault after ${fault.at}`)) : Effect.void,
+        ),
+      ),
+    ).pipe(Effect.raceFirst(stopped)),
+    { signal: context.signal },
+  );
+  const finished = () =>
+    // oxlint-disable-next-line fabrika/no-promises -- edge: Vitest cleanup waits for the same Promise after a timeout or failure
+    running.then(
+      () => {},
+      () => {},
+    );
+  context.onTestFinished(finished, 90_000);
+  return running;
+};
+
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
@@ -87,7 +111,7 @@ const owned = <A, E, R>(
         ? Effect.void
         : fault.kind === "setup"
           ? Effect.fail(new SetupFault({ at }))
-          : fault.kind === "hold"
+          : fault.kind === "hold" || fault.kind === "timeout"
             ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
             : Effect.void,
     ),
@@ -627,6 +651,7 @@ export const reader = (h: Home, dev: Dev) =>
     }
 
     return {
+      call,
       spans: (chain: Chain = Chain.cases.spans.make({})) =>
         Effect.gen(function* () {
           const all: Array<unknown> = [];
