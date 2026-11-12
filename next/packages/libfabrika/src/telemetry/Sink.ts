@@ -227,10 +227,14 @@ class SinkSpan extends Tracer.NativeSpan {
 export class SpanSink extends Context.Service<
   SpanSink,
   {
+    /** Collects spans ended by this work and commits them together, including after a failed write. */
+    readonly batch: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /** Sends `unsent` to each chain's current part, deleting each row only after a good answer and
      *  following `rolled`; then archives each due day of raw health rows. Fails with `storage`,
      *  before it sends anything, when an `end` met a write it could not land since the last flush. */
     readonly flush: Effect.Effect<{ readonly sent: number }, SinkError, RecordManager | Archive>;
+    /** Checks the last span commit without flushing records or creating another span. */
+    readonly check: Effect.Effect<void, SinkError>;
     /** The summaries whose hour is in `[from, to)`, after rolling up every closed hour. */
     readonly summaries: (from: number, to: number) => Effect.Effect<ReadonlyArray<MetricPoint>, SinkError>;
     /** One piece's refusal counts in closed hours within `[from, to)`. */
@@ -321,17 +325,26 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return done;
   };
 
+  const countRefusal = (span: SinkSpan, at: number): boolean => {
+    if (!span.attributes.has(REFUSED)) {
+      return false;
+    }
+
+    const value = span.attributes.get(REFUSED);
+    const refused = value === "reserved" || value === "rate_limited" ? value : "other";
+    const hour = hourStart(at);
+    const key = JSON.stringify([span.name, hour, refused]);
+    const count = (counts.get(key)?.count ?? 0) + 1;
+    counts.set(key, SumPoint.make({ piece: span.name, hour, refused, count }));
+    return true;
+  };
+
   const tracer = Tracer.make({
     span: (init) =>
       new SinkSpan(init, (span, endTime, exit) => {
         const at = Number(endTime / 1_000_000n);
 
-        if (span.attributes.has(REFUSED)) {
-          const refused = span.attributes.get(REFUSED) === "reserved" ? "reserved" : "other";
-          const hour = hourStart(at);
-          const key = JSON.stringify([span.name, hour, refused]);
-          const count = (counts.get(key)?.count ?? 0) + 1;
-          counts.set(key, SumPoint.make({ piece: span.name, hour, refused, count }));
+        if (countRefusal(span, at)) {
           commit([], at, true);
           return;
         }
@@ -339,6 +352,32 @@ const make = (sql: Sql, options: { readonly object: string }) => {
         commit([ended(span, endTime, exit, options.object)], at, true);
       }),
   });
+
+  const batch = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.suspend(() => {
+      const rows: Array<Ended> = [];
+      const collecting = Tracer.make({
+        span: (init) =>
+          new SinkSpan(init, (span, time, exit) => {
+            if (!countRefusal(span, Number(time / 1_000_000n))) {
+              rows.push(ended(span, time, exit, options.object));
+            }
+          }),
+      });
+      return work.pipe(
+        Effect.withTracer(collecting),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            yield* Effect.sync(() => {
+              if (rows.length > 0 || counts.size > 0) {
+                commit(rows, now, true);
+              }
+            });
+          }),
+        ),
+      );
+    });
 
   const attempt = Effect.fnUntraced(function* <A>(step: () => A) {
     return yield* Effect.try({ try: () => atomic(step), catch: sinkError });
@@ -396,8 +435,16 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
-    if (before._tag !== "clean" || counts.size > 0) {
+    if (before._tag !== "clean") {
       return yield* Effect.fail(new SinkError({ reason: "storage", held: held(before).length }));
+    }
+
+    if (counts.size > 0) {
+      const done = commit([], yield* Clock.currentTimeMillis, false);
+
+      if (Result.isFailure(done)) {
+        return yield* new SinkError({ reason: "storage", held: counts.size, cause: done.failure });
+      }
     }
 
     const records = yield* RecordManager;
@@ -425,6 +472,14 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return { sent };
   });
 
+  const check = Effect.suspend(() => {
+    const before = state;
+    state = applyCell(machine, state, { type: "flush_checked" })[0];
+    return before._tag === "clean" && counts.size === 0
+      ? Effect.void
+      : Effect.fail(new SinkError({ reason: "storage", held: held(before).length + counts.size }));
+  });
+
   const summaries = Effect.fnUntraced(function* (from: number, to: number) {
     const done = commit([], yield* Clock.currentTimeMillis, false);
 
@@ -446,5 +501,5 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return yield* attempt(() => readSums(sql, piece, from, Math.min(to, hourStart(now))));
   });
 
-  return { tracer, sink: { flush, summaries, sums } };
+  return { tracer, sink: { batch, flush, check, summaries, sums } };
 };

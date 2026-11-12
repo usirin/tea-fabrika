@@ -1,16 +1,16 @@
 #!/bin/sh
 # catchup.sh <pr> <ticket>
-# Land a pull request, squashed and pinned to its head. A head that lacks main but is already green
-# (every check below green on it, commits trusted) lands as it is (0097): no merge of main, no
-# push, only freshmain.ts's lint on the true merge. Any other head is brought up to date with main,
-# the new merge signed as the lead and pushed, and every check waited for on that exact head.
-# We only squash. Run it in the background.
+# Land a pull request, squashed and pinned to its head, only when every check is green on a head
+# that holds the main just fetched (0146). A head that lacks main never lands as it is, whatever its
+# checks say: main is merged in, the new merge signed as the lead and pushed, and every check waited
+# for on that exact head. We only squash. Run it in the background.
 #   - each pull request gets its own checkout (BOXES/catchup-<pr>), force-removed when the run ends
 #     unless it holds MAIN's Git storage, and one lock is held while it fetches, merges, signs and
-#     pushes, so two catch-ups never share a tree or the notes ref
-#   - reads the head's checks once when it lacks main, the same way the wait below reads them. A
-#     red, missing or running check, or an untrusted commits run, takes the catch-up path; a read
-#     that fails three times stops the run with nothing pushed
+#     pushes, so two catch-ups never share a tree or the notes ref. The lock is dropped for each
+#     wait on the checks and taken again for the next look at main, then held through the squash, so
+#     no other catch-up looks at main between this one's last look and its merge
+#   - a merge of main that conflicts is refused: aborted, nothing pushed, exit 1. The lane merges
+#     main and pushes
 #   - catching up, merges origin/main in as fabrikalfa[bot] (the person as co-author), and signs
 #     only that new merge commit as lead. It never signs a step's commit: an unsigned
 #     step commit fails the commits check, and goes back to its own step to sign
@@ -20,13 +20,13 @@
 #     (after a catch-up, it waits for them on the pushed sha), then
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only). A PR
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
-#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands
-#     with the same plain pinned `gh pr merge`, no override flag: GitHub no longer requires an
-#     up-to-date branch (0049, 0097), and freshmain.ts's lint on the true merge is the guard
-#   - just before the squash it looks at main once more: when the head lacks it (a green head that
-#     did not catch up, or main moved after the checks),
-#     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
-#     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
+#     again first, then `gh stack merge <pr> --squash --yes` lands it. Both land only after the
+#     last look at main below, with no override flag (0049)
+#   - just before the squash it fetches main once more. When main moved while it waited and the
+#     head lacks it, it goes around again: merge main in, sign, push, wait for every check on the
+#     new head. Each round prints `pr <n>: main moved to <sha>; merging main in (round <k>)`. After
+#     5 rounds a main that moved again ends the run, exit 1, with a line naming what it waited for.
+#     A fetch that fails ends it too. No flag skips the look (0146; ticket 552)
 #   - prints sizecap.ts's one line, the pull request's product lines, before it waits on the
 #     checks. It is advice only: no number caps a pull request (0099), so it never stops a merge
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
@@ -34,7 +34,8 @@
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
 #   - ends at once on a pull request that is not open and ready: on start and on every round of
 #     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
-#     a bound and ends with a line naming what it waited for
+#     a bound and ends with a line naming what it waited for, and asks GitHub once a minute: two
+#     gh calls a round on the checks (the state, the check runs), one a round after the squash
 #   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
 #     background and the merge's own exit never waits on it
 set -eu
@@ -98,12 +99,12 @@ tracker() { FABRIKA_HOME=$TRACKER_HOME node "$MAIN/apps/fabrika/src/cli.ts" post
 first_error() { printf '%s\n' "$1" | grep -m 1 ERROR || echo "no reason given"; }
 close_named() {
 	landed=""
-	# A stack merges asynchronously: give it a few minutes to say MERGED.
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
+	# A stack merges asynchronously: give it five minutes to say MERGED, one read a minute.
+	for _ in 1 2 3 4 5; do
 		landed=$(read_gh pr view "$pr" -R "$GH_REPO" --json state,mergeCommit \
 			-q '"\(.state) \(.mergeCommit.oid // "")"') || landed=""
 		case $landed in "MERGED "?*) break ;; esac
-		sleep 30
+		sleep 60
 	done
 	case $landed in
 	"MERGED "?*) oid=${landed#MERGED } ;;
@@ -444,26 +445,19 @@ commits_trusted() {
 	*) why="run $run_id is not for ticket $ticket: $said"; return 1 ;;
 	esac
 }
-# green_at <sha>: true when one read finds every check done and none red, and commits is trusted,
-# all on that sha (0097). Sets `why` when it is not.
-green_at() {
-	checks_at "$1"
-	if [ -n "$bad" ]; then why="red: $(echo $bad)"; return 1; fi
-	if [ -n "$missing" ] || [ "$pending" != 0 ]; then
-		why="checks not done (missing:${missing:- none}, pending: $pending)"
-		return 1
-	fi
-	commits_trusted "$1"
-}
 mkdir -p "$BOXES"
-# The lock is held for minutes, while one catch-up fetches, merges, signs and pushes. A run killed
-# with SIGKILL runs no trap and leaves it behind, so the wait has the checks' own bound: an hour.
-deadline=$(($(date +%s) + 3600))
-until mkdir "$LOCK" 2>/dev/null; do
-	[ "$(date +%s)" -lt "$deadline" ] ||
-		{ echo "pr $pr: waited an hour for the catch-up lock $LOCK; nothing done" >&2; exit 1; }
-	sleep 5
-done
+# take_lock <what the run did so far>: the lock is held for minutes, while one catch-up fetches,
+# merges, signs and pushes. A run killed with SIGKILL runs no trap and leaves it behind, so the wait
+# has the checks' own bound: an hour.
+take_lock() {
+	deadline=$(($(date +%s) + 3600))
+	until mkdir "$LOCK" 2>/dev/null; do
+		[ "$(date +%s)" -lt "$deadline" ] ||
+			{ echo "pr $pr: waited an hour for the catch-up lock $LOCK; $1" >&2; exit 1; }
+		sleep 5
+	done
+}
+take_lock "nothing done"
 # EXIT drops the lock while it is held and force-removes this run's own checkout, success or
 # failure, unless the checkout holds MAIN's Git storage: then it stays, with a line saying why.
 # INT and TERM end the run (and so run EXIT), never carry on past a signal.
@@ -487,57 +481,67 @@ git fetch -q origin "pull/$pr/head"
 git checkout -q --detach FETCH_HEAD
 [ -d node_modules ] || nice -n 15 pnpm install --silent >/dev/null 2>&1
 tip=$(git rev-parse HEAD)
-# A head that lacks main and is green on every check lands as it is (0097): nothing is merged or
-# pushed here, and freshmain.ts below lints its true merge with main. Any other head catches up.
-green=no
-if git merge-base --is-ancestor origin/main HEAD; then
-	:
-elif green_at "$tip"; then
-	green=yes
-	echo "pr $pr: every check is green at $tip; it lands without catching up with main (0097)"
-else
-	echo "pr $pr: $why at $tip; merging main in"
-	if ! git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"; then
-		git merge --abort 2>/dev/null || true
-		echo "pr $pr: merging main conflicts; aborted, nothing pushed" >&2
-		exit 1
+# 0146: it lands only when every check is green on a head that holds the main just fetched. Each
+# time round: a head that lacks main has main merged in, signed and pushed; every check is waited
+# for on that exact head; then main is fetched again. Main that did not move ends the loop, and
+# main that moved goes around once more, up to $rounds merges.
+rounds=5; round=0; checked=no
+while :; do
+	if git merge-base --is-ancestor origin/main HEAD; then
+		[ "$checked" = no ] || break
+	else
+		if [ "$round" -ge "$rounds" ]; then
+			echo "pr $pr: not merged after $rounds rounds of merging main in: it waited for every check on $tip and main moved again" >&2
+			exit 1
+		fi
+		round=$((round + 1))
+		echo "pr $pr: main moved to $(git rev-parse origin/main); merging main in (round $round)"
+		if ! git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"; then
+			git merge --abort 2>/dev/null || true
+			echo "pr $pr: merging main conflicts; aborted, nothing pushed" >&2
+			exit 1
+		fi
+		tip=$(git rev-parse HEAD)
+		nice -n 15 pnpm -s commits sign --step lead --ticket "$ticket" --key ~/.fabrika/step-keys/lead >/dev/null
+		case $head in
+		fabrikalfa/*) node "$LEAD/botpush.mjs" . "$head" "$tip" ;;
+		*) node "$LEAD/botpush.mjs" . - ; git push -q origin "$tip:refs/heads/$head" ;;
+		esac
 	fi
-	tip=$(git rev-parse HEAD)
-	nice -n 15 pnpm -s commits sign --step lead --ticket "$ticket" --key ~/.fabrika/step-keys/lead >/dev/null
-	case $head in
-	fabrikalfa/*) node "$LEAD/botpush.mjs" . "$head" "$tip" ;;
-	*) node "$LEAD/botpush.mjs" . - ; git push -q origin "$tip:refs/heads/$head" ;;
-	esac
-fi
-rmdir "$LOCK"; held=no
-# One line with the pull request's product lines, which asks about slicing past sizecap.ts's
-# advice number. Advice only: no number caps a pull request (0099), so it never stops a merge.
-if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
-# A head that caught up (or already held main) waits for every check on this exact sha, up to an
-# hour, then for a trusted commits run. A green head that did not catch up was read whole above.
-if [ "$green" = no ]; then
-	# The clock is read after every answer and before a green one can break out to the merge.
+	rmdir "$LOCK"; held=no
+	# One line with the pull request's product lines, which asks about slicing past sizecap.ts's
+	# advice number. Advice only: no number caps a pull request (0099), so it never stops a merge.
+	if [ "$checked" = no ]; then
+		if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
+	fi
+	# Wait for every check on this exact sha, up to an hour, then for a trusted commits run. The
+	# clock is read after every answer and before a green one can break out to the merge. It asks
+	# once a minute, two gh calls each time (the state and the check runs): three or four catch-ups
+	# asking every 30 seconds used up the account's hourly calls (2026-11-12).
 	missing=$need; pending=1; finished=no
 	deadline=$(($(date +%s) + 3600))
-	for _ in $(seq 120); do
+	for _ in $(seq 60); do
 		# Someone may merge or close it while we wait: then nothing here can land it.
 		look
 		checks_at "$tip"
 		[ -z "$bad" ] || { echo "pr $pr: red at $tip: $bad" >&2; exit 1; }
 		[ "$(date +%s)" -lt "$deadline" ] || break
 		if [ -z "$missing" ] && [ "$pending" = 0 ]; then finished=yes; break; fi
-		sleep 30
+		sleep 60
 	done
 	if [ "$finished" != yes ]; then
 		echo "pr $pr: checks not done at $tip after an hour (missing:${missing:- none}, pending: $pending)" >&2
 		exit 1
 	fi
 	commits_trusted "$tip" || { echo "pr $pr: $why" >&2; exit 1; }
-fi
-# Main may have moved since those checks ran (ticket 552), or a green head never caught up (0097). freshmain.ts fetches it and, when it
-# moved, runs pnpm lint on this head merged with it, in this checkout. A red lint, a conflict or a
-# fetch that fails stops here: the lane merges main and pushes, and catch-up runs again.
-node "$LEAD/freshmain.ts" "$pr" "$tip" || { echo "pr $pr: not merged" >&2; exit 1; }
+	checked=yes
+	# The last look at main (ticket 552, 0146): it may have moved while the checks ran.
+	take_lock "not merged"; held=yes
+	git fetch -q origin main ||
+		{ echo "pr $pr: cannot fetch main for the last look at $tip; not merged" >&2; exit 1; }
+done
+# The lock stays held through the squash, so no other catch-up takes its last look at main between
+# this one's look and its merge (0146).
 if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 2>&1); then
 	case $said in
 	*"part of a stack"*)
@@ -549,6 +553,7 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 	*) look; echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
 	esac
 fi
+rmdir "$LOCK"; held=no
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
 close_named || echo "pr $pr: closing tickets failed; close them by hand"
 # A landed merge stays successful even if cleanup must keep a working copy. The EXIT trap then

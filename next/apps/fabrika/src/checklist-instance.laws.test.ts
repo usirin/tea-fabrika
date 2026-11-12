@@ -195,8 +195,13 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
       const key = identity(),
         db = new DatabaseSync(":memory:");
+      const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project reads
-      const ctx = { id: { name: "project-test" }, storage: storage(db) } as unknown as DurableObjectState;
+      const ctx = {
+        id: { name: "project-test" },
+        storage: storage(db),
+        exports: loopbacks,
+      } as unknown as DurableObjectState;
       const processes = new Map<string, Entry>(),
         configured: Array<Descriptor> = [],
         heard: Array<Heard> = [],
@@ -225,6 +230,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
           founder: key.line,
           window: key.raw,
           port: 18787,
+          rateLimit: { limit: 100_000, window: 60_000 },
           build: "brain-test",
         }),
         PROJECT: {
@@ -265,7 +271,11 @@ const world = (options: { readonly lacks?: string } = {}) =>
                 }
               });
               // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the handles the real Process reads
-              const processCtx = { id: { name }, storage: handles } as unknown as DurableObjectState;
+              const processCtx = {
+                id: { name },
+                storage: handles,
+                exports: loopbacks,
+              } as unknown as DurableObjectState;
               entry = { db: processDb, ctx: processCtx, timer: undefined, object: processObject(processCtx, env) };
               processes.set(storageKey, entry);
               return entry;

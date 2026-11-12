@@ -136,7 +136,7 @@ const fixture = (name: string, value: string) => {
   homes.push(home);
   mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run", "alchemy"]) {
     symlinkSync(join(ROOT, "next/apps/fabrika/node_modules", pkg), join(home, "node_modules", pkg), "dir");
   }
 
@@ -1072,7 +1072,7 @@ const windowHome = Effect.fn("p40.windowHome")(function* () {
   yield* fs.makeDirectory(path.join(home, "node_modules/@p40"), { recursive: true });
   yield* fs.makeDirectory(path.join(home, "programs"));
 
-  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
+  for (const pkg of ["effect", "@demlik", "@kampus", "@alchemy.run", "alchemy"]) {
     yield* fs.symlink(path.join(ROOT, "next/apps/fabrika/node_modules", pkg), path.join(home, "node_modules", pkg));
   }
 

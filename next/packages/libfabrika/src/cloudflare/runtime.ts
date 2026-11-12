@@ -1,5 +1,6 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import {
+  Cause,
   Context,
   Effect,
   Exit,
@@ -37,7 +38,9 @@ import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import type { Declaration } from "../runtime/Execution.ts";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
+import { ProgramDown } from "../runtime/Program.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
@@ -45,7 +48,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
-import { Answer } from "../transport/Wire.ts";
+import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   CommitReply,
   MailReplies,
@@ -65,6 +68,7 @@ import { workerLoader, type ProgramSource } from "./index.ts";
 import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import { bind as bindTail } from "./tail.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
@@ -95,6 +99,7 @@ export interface BrainOptions {
   readonly window: string | null;
   readonly port: number;
   readonly build: string;
+  readonly rateLimit: { readonly limit: number; readonly window: number };
   readonly limits?: { readonly recordBytes: number };
 }
 
@@ -131,7 +136,7 @@ export interface ProjectOptions {
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
 
 /** One Process object per registered name: every process ID of that name, first or successor. */
-export const processStub = (env: Env, project: string, name: string) =>
+export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
   env.PROCESS.getByName(JSON.stringify([project, name]));
 
 export const recordStub = (env: Env, project: string, name: string) =>
@@ -267,12 +272,23 @@ const recordLayer = (env: Env, project: string) => RecordManager.remote((name) =
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 const flushed = SpanSink.use((sink) => sink.flush);
 
-export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
+export const complete = Effect.fn(function* <A, E, R>(
+  work: Effect.Effect<A, E, R>,
+  counted: (value: A) => boolean = () => false,
+) {
   return yield* work.pipe(
     Effect.exit,
     Effect.flatMap((exit) => {
+      if (Exit.isFailure(exit) && Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
+        return exit;
+      }
+
       // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
-      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+      if (
+        Exit.isSuccess(exit) &&
+        (counted(exit.value) ||
+          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
+      ) {
         return exit;
       }
 
@@ -435,7 +451,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   };
 
   for (const process of yield* processes.info) {
-    const program = yield* loader.load(process.program, process.process);
+    const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
+      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+    );
+    const program = yield* loader.load(process.program, process.process, tail);
     remember(process.name, program.declaration);
 
     if (sql.exec("SELECT process FROM dev_descriptors WHERE process=?", process.process).length === 0) {
@@ -459,8 +478,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return known;
     }
 
+    const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
     const program = yield* loader
-      .load(life.state.code.program, life.state.process)
+      .load(life.state.code.program, life.state.process, tail)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
@@ -887,7 +909,16 @@ const processLogic = Effect.fnUntraced(function* (
   // ProcessStore, under the registered name every successor shares.
   const runnerLayer = ProgramRunner.withLoader(
     saved,
-    { load: (name) => Effect.suspend(() => loader.load(name, active)) },
+    {
+      load: (name) =>
+        Effect.gen(function* () {
+          const process = active;
+          const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
+            Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+          );
+          return yield* loader.load(name, process, tail);
+        }),
+    },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
@@ -895,6 +926,15 @@ const processLogic = Effect.fnUntraced(function* (
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
+    usage: Effect.fnUntraced(
+      function* (rows: unknown) {
+        const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
+        yield* sink.batch(IsolateUsage.record(usage));
+      },
+      Effect.withSpan("process.usage"),
+      (work) => complete(work),
+      Effect.provideContext(services),
+    ),
     msg: (input: unknown) => {
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.

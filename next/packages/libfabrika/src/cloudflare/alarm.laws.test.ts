@@ -78,7 +78,9 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             Effect.sync(() =>
               vi.spyOn(SpanSink, "layer").mockReturnValue(
                 Layer.succeed(SpanSink, {
+                  batch: (work) => work,
                   flush: Effect.succeed({ sent: 0 }),
+                  check: Effect.void,
                   summaries: unexpected,
                   sums: unexpected,
                 }),
