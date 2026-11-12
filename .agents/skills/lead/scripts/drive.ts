@@ -597,7 +597,18 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       }
 
       if (ask.step === "tests" && read.commits === 0) {
-        return stuck("no_commit", "answered done with no commit");
+        // A review may ask only for plant records that already ran (ticket 850): the answer's
+        // plants are the work, and the chain hands them to the next review's brief.
+        const plants = answer?.plants ?? [];
+
+        if (plants.length === 0 || read.changed > 0) {
+          return stuck("no_commit", "answered done with no commit");
+        }
+
+        return {
+          outcome: { kind: "done", part: false, head: read.head },
+          reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
+        };
       }
 
       if (ask.step === "review" && !mergeReady(read.report)) {
@@ -1454,6 +1465,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           fault: faultFrom(outcome, e.reason),
           exit: ok ? e.exit : 30,
           report: writtenReport(ask),
+          // The plants the answer named, so a later review's brief carries them (ticket 850).
+          ...(e.plants === undefined ? {} : { plants: e.plants }),
           kept: keep,
           ended,
           phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],
