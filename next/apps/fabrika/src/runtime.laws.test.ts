@@ -147,7 +147,7 @@ const storage = (db: DatabaseSync) => {
 const world = async (trace = TRACE, build = "counter-b") => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
-  table.programs.approvals = approvalCode;
+  table.programs["p12/approvals"] = approvalCode;
   const home = mkdtempSync(join(tmpdir(), "p12-r-")),
     key = identity();
   const db = new DatabaseSync(join(home, "project.db"));
@@ -207,7 +207,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
           describe: async () =>
             id.startsWith(`${approvalCode.hash}/`)
               ? {
-                  name: "approvals",
+                  name: "p12/approvals",
                   v: 1,
                   writes: { answered: { personOnly: true } },
                   inputs: {
@@ -300,7 +300,7 @@ const world = async (trace = TRACE, build = "counter-b") => {
             Start.cases.first.make({
               id: "approvals:1",
               name: "approvals:1",
-              code: { program: "approvals", hash: approvalCode.hash },
+              code: { program: "p12/approvals", hash: approvalCode.hash },
             }),
             from,
           ),

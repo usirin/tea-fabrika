@@ -53,6 +53,7 @@ const projectObject = (ctx: DurableObjectState, env: Env) => {
     grant: (input: unknown) => run((p) => p.grant(input)),
     start: (...args: Parameters<ProjectCalls["start"]>) => run((p) => p.start(...args)),
     read: (...args: Parameters<ProjectCalls["read"]>) => run((p) => p.read(...args)),
+    code: (...args: Parameters<ProjectCalls["code"]>) => run((p) => p.code(...args)),
     wait: (...args: Parameters<ProjectCalls["wait"]>) => run((p) => p.wait(...args)),
     append: (...args: Parameters<ProjectCalls["append"]>) => run((p) => p.append(...args)),
     inbox: (...args: Parameters<ProjectCalls["inbox"]>) => run((p) => p.inbox(...args)),
@@ -181,7 +182,7 @@ const caused = (parent: string) =>
   write({ stream: "events", write: { _tag: "caused", parent, event: { _tag: "answered" } } });
 
 const approvals = {
-  name: "approvals",
+  name: "p12/approvals",
   machine: Machine.make({
     model: Model,
     msg: Msg,
@@ -250,7 +251,7 @@ const PoisonMsg = Schema.Union([
 ]);
 
 const poisonProgram = (limit: number | null) => ({
-  name: "poison",
+  name: "p34/poison-fixture",
   ...(limit === null ? {} : { maxDeliveries: limit }),
   machine: Machine.make({
     model: PoisonModel,
@@ -305,8 +306,8 @@ const world = (
 ) => {
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
-  table.programs.approvals = approvalCode;
-  table.programs.poison = poisonCode;
+  table.programs["p12/approvals"] = approvalCode;
+  table.programs["p34/poison-fixture"] = poisonCode;
   const key = identity(),
     db = new DatabaseSync(":memory:");
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
@@ -645,7 +646,7 @@ const world = (
     startPoison: async (name: string) =>
       (
         await project.start(
-          Start.cases.first.make({ id: name, name, code: { program: "poison", hash: poisonCode.hash } }),
+          Start.cases.first.make({ id: name, name, code: { program: "p34/poison-fixture", hash: poisonCode.hash } }),
           {
             by: key.fingerprint,
             for: PERSON,
@@ -696,7 +697,7 @@ const world = (
         Start.cases.first.make({
           id: "approvals:1",
           name: "approvals:1",
-          code: { program: "approvals", hash: approvalCode.hash },
+          code: { program: "p12/approvals", hash: approvalCode.hash },
         }),
         {
           by: key.fingerprint,
@@ -975,7 +976,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     dead.map((process) => ({
       _tag: "dead",
       process,
-      program: "poison",
+      program: "p34/poison-fixture",
       name: NAME,
       tries: limit,
       limit,
