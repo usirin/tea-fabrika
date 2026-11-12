@@ -1,7 +1,7 @@
 ---
 id: 0022
 title: The lead's Codex steps run on gpt-6-astra at medium effort, never gpt-6.1-sol at xhigh by default
-status: amended-in-part by [0136](0136-codex-steps-run-on-sol-at-high.md)
+status: accepted
 date: 2026-11-09
 tags: [codex, model, effort, lead, steps, astra, sol, price]
 ---
@@ -38,3 +38,7 @@ ticket 445.
   `effort`, `step` and `outcome`) and the drive logs. If astra at medium passes fewer steps or gets
   stuck more than sol at xhigh did, that is the evidence to bring back to the owner.
 - Not decided here: which model the product's own stages pick in `fabrika.toml`.
+
+## Amendments
+
+- 2026-11-11: the model and the effort are settings ([0069](0069-choices-are-settings.md)), not decisions. A person changes them in the lead skill's `local.env` in the main checkout, which git ignores, with no pull request and no decision file. The default in `env.sh` is now `gpt-6.1-sol` at high. The pricing rules above stay.

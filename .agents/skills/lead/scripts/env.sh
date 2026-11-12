@@ -10,7 +10,13 @@ REMOTE=${REMOTE:-$(git -C "$MAIN" remote get-url origin)}
 GH_REPO=${GH_REPO:-$(printf '%s\n' "$REMOTE" | sed -E 's#^(https://github.com/|git@github.com:)##; s#\.git$##')}
 # The person rides as Co-authored-by on the bot's commits.
 FABRIKA_COAUTHOR=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git config --global user.email)>"}
-# The model a box runs and its effort (owner, 2026-11-11, decision 0136, after 0022). fieldrow.py prices it.
+# The model a box runs and its effort are settings (0069), not decisions: a person changes them in
+# local.env beside the lead skill in the main checkout, which git ignores, with no pull request.
+#   CODEX_MODEL=gpt-6.1-sol
+#   CODEX_EFFORT=high
+# The next step that starts reads it. fieldrow.py prices the model.
+# shellcheck disable=SC1091
+[ -f "$MAIN/.agents/skills/lead/local.env" ] && . "$MAIN/.agents/skills/lead/local.env"
 CODEX_MODEL=${CODEX_MODEL:-gpt-6.1-sol}
 CODEX_EFFORT=${CODEX_EFFORT:-high}
 export MAIN BOXES REMOTE GH_REPO FABRIKA_COAUTHOR CODEX_MODEL CODEX_EFFORT
