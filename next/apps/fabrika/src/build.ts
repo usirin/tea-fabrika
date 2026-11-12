@@ -33,13 +33,15 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
       Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
       Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
     ));
-  return yield* buildOne({
+  const entry = path.join(APP, "src/brain.ts");
+  const built = yield* buildOne({
     out: options.out,
     root: ROOT,
-    entry: path.join(APP, "src/brain.ts"),
+    entry,
     programs,
     files,
     ...(options.ledger === undefined ? {} : { ledger: options.ledger }),
     chaos: options.chaos ?? false,
   });
+  return { ...built, watch: { root: ROOT, entry, programs } };
 });

@@ -112,6 +112,7 @@ const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: 
   Schema.Struct({ type: Schema.Literal(type), ...fields });
 
 const Msg = Schema.Union([
+  msg("swapped", { process: ProcessId, build: Text }),
   msg("received", { receipt: Receipt }),
   msg("compacted", { letter: Text, digest: Text }),
   msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
@@ -214,6 +215,8 @@ export const supervisor = Machine.make({
     [],
   ],
   update: {
+    swapped: (s, m) =>
+      s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
     received: (s, m) =>
       s.receipts.some((r) => r.letter === m.receipt.letter)
         ? unchanged(s)

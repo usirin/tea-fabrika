@@ -75,6 +75,14 @@ import { Queued, SendInput } from "./Send.ts";
 
 export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
+export const Swapped = Schema.TaggedUnion({
+  same: {},
+  swapped: { was: Schema.String },
+  refused: { was: Schema.String, reason: Schema.Literals(["shape", "newer", "load"]) },
+  not_now: { state: Schema.String },
+});
+export type Swapped = typeof Swapped.Type;
+
 /** What `msg` answers: the input's placing in the inbox, or why it was not taken. */
 export const Sent = Schema.TaggedUnion({
   accepted: { rev: Schema.Int, pos: Schema.Int },
@@ -182,6 +190,11 @@ export class ProgramRunner extends Context.Service<
     readonly msg: (input: unknown) => Effect.Effect<Sent, RunnerFailure>;
     /** The object's alarm fired at `at`: the program's timer, if it asked for one by then. */
     readonly due: (at: number) => Effect.Effect<void, RunnerFailure>;
+    readonly swap: (request: {
+      readonly load: string;
+      readonly program: string;
+      readonly hash: string;
+    }) => Effect.Effect<Swapped, RunnerFailure>;
     readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, RunnerFailure>;
   }
 >()("@kampus/libfabrika/ProgramRunner") {
@@ -707,14 +720,20 @@ export class ProgramRunner extends Context.Service<
 
         /** Loads the program and its checkpoint, climbing saved state through its upgrades. */
         const load = Effect.fnUntraced(function* () {
-          const loaded = yield* loader.load(process.program, process.build);
+          const saved = yield* store.load;
+          const build = saved?.saved.build ?? process.build;
+          const loaded = yield* loader.load(process.program, build);
+          process = { ...process, build };
+
+          if (supervision?.journal._tag === "idle" && supervision.build !== build) {
+            yield* send({ type: "swapped", process: process.id, build });
+          }
+
           const program = loaded.declaration;
 
           if (supervision !== null) {
             yield* send({ type: "limited", maxDeliveries: program.maxDeliveries ?? null });
           }
-
-          const saved = yield* store.load;
 
           if (saved === null) {
             const boot = yield* stepped(yield* loaded.execution.init(null), "load");
@@ -1291,8 +1310,11 @@ export class ProgramRunner extends Context.Service<
           ) {
             // The process this call starts on: a successor's calls carry its own ID.
             yield* Effect.annotateCurrentSpan({ [PROCESS]: process.id, [tag("name")]: process.name });
+            const queuedAt = yield* Clock.currentTimeMillis;
             const { answer, jobs } = yield* permit.withPermit(
               Effect.gen(function* () {
+                yield* Effect.annotateCurrentSpan("wait.ms", (yield* Clock.currentTimeMillis) - queuedAt);
+
                 // The platform consumes the alarm before due enters this wrapper.
                 if (time !== undefined) {
                   alarmAt = undefined;
@@ -1323,6 +1345,132 @@ export class ProgramRunner extends Context.Service<
         const restart = call("runner.restart.request");
 
         return {
+          swap: (request: { readonly load: string; readonly program: string; readonly hash: string }) =>
+            call("runner.swap")(
+              Effect.gen(function* () {
+                const saved = live === null ? yield* store.load : null;
+                const was = saved?.saved.build ?? process.build;
+
+                yield* Effect.annotateCurrentSpan({ program: request.program, hash: request.hash });
+
+                if (was === request.hash) {
+                  yield* Effect.annotateCurrentSpan("outcome", "same");
+                  return { answer: Swapped.cases.same.make({}), jobs: [] };
+                }
+
+                const journal = supervision?.journal;
+
+                if (journal !== undefined && journal._tag !== "idle") {
+                  yield* Effect.annotateCurrentSpan("outcome", "not_now");
+                  return { answer: Swapped.cases.not_now.make({ state: journal._tag }), jobs: [] };
+                }
+
+                const state = yield* ready();
+
+                if (process.build === request.hash) {
+                  yield* Effect.annotateCurrentSpan("outcome", "same");
+                  return { answer: Swapped.cases.same.make({}), jobs: [] };
+                }
+
+                const refuse = Effect.fnUntraced(function* (reason: "shape" | "newer" | "load") {
+                  yield* store.record(
+                    `code.refused:${request.load}`,
+                    RuntimeRecord.cases["code.refused"].make({
+                      program: request.program,
+                      hash: request.hash,
+                      was: process.build,
+                      reason,
+                    }),
+                    yield* from(null, yield* traceId),
+                  );
+                  yield* Effect.annotateCurrentSpan({ outcome: "refused", reason });
+                  return { answer: Swapped.cases.refused.make({ was: process.build, reason }), jobs: [] };
+                });
+                const swapAt = yield* Clock.currentTimeMillis;
+                const candidate = yield* Effect.result(loader.load(request.program, request.hash));
+
+                if (Result.isFailure(candidate)) {
+                  return yield* refuse("load");
+                }
+
+                const loaded = candidate.success;
+
+                if (loaded.declaration.name !== request.program || request.program !== process.program) {
+                  return yield* refuse("load");
+                }
+
+                if (loaded.declaration.v < state.v) {
+                  return yield* refuse("newer");
+                }
+
+                const prepared = yield* Effect.result(
+                  Effect.gen(function* () {
+                    const upgraded = yield* loaded.execution.upgrade({
+                      v: state.v,
+                      build: process.build,
+                      model: state.model,
+                      after: state.after,
+                    });
+                    const boot = yield* stepped(yield* loaded.execution.init(upgraded.saved.model), "saved_state");
+                    return { upgraded, boot };
+                  }),
+                );
+
+                if (Result.isFailure(prepared)) {
+                  return yield* refuse("shape");
+                }
+
+                const { upgraded, boot } = prepared.success;
+                const next: Live = {
+                  ...state,
+                  loaded,
+                  model: boot.model,
+                  view: boot.view,
+                  wake: boot.wake,
+                  v: upgraded.saved.v,
+                };
+                const old = process.build;
+                yield* store.save({
+                  ...checkpoint(next, null),
+                  saved: { v: next.v, build: request.hash, model: next.model, after: next.after },
+                });
+                yield* send({ type: "swapped", process: process.id, build: request.hash });
+                process = { ...process, build: request.hash };
+
+                if (upgraded.ran.length > 0 || state.v !== next.v) {
+                  yield* store.record(
+                    `state.upgraded:${request.load}`,
+                    RuntimeRecord.cases["state.upgraded"].make({
+                      program: request.program,
+                      from: state.v,
+                      to: next.v,
+                      ran: upgraded.ran,
+                      build: request.hash,
+                    }),
+                    yield* from(null, yield* traceId),
+                  );
+                }
+
+                yield* store.record(
+                  `code.swapped:${request.load}`,
+                  RuntimeRecord.cases["code.swapped"].make({ program: request.program, hash: request.hash, was: old }),
+                  yield* from(null, yield* traceId),
+                );
+                live = next;
+
+                for (const client of clients) {
+                  yield* watchers.publish(client, { type: "whole", rev: next.pos, view: next.view });
+                }
+
+                yield* setAlarm();
+                yield* Effect.annotateCurrentSpan({
+                  outcome: "swapped",
+                  upgrades: upgraded.ran.length,
+                  ms: (yield* Clock.currentTimeMillis) - swapAt,
+                });
+                return { answer: Swapped.cases.swapped.make({ was: old }), jobs: [] };
+              }),
+            ),
           open: (client: string) =>
             open(
               Effect.gen(function* () {

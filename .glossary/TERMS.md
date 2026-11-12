@@ -171,6 +171,12 @@ shell. Paths: `next/`'s app layer and `fabsh`.
 
 | Term | Definition | Not |
 |---|---|---|
+| code.loaded | In `next/`, the brain's checked selection of one program's hash, with its previous hash and `from`. Written on `gateway/code`; only folding this fact changes the Code machine's selection (`runtime/Code.ts`). | Not a process saying it swapped. |
+| code.failed | In `next/`, one refused bundle or candidate on `gateway/code`, with a closed reason and an optional repo-relative path and line (`runtime/Code.ts`). | Not source text or a compiler message. Not a selection. |
+| code.swapped | In `next/`, a process kept its model on a new hash, after any named upgrades. Its own stream keeps the old and new hash (`runtime/ProcessStore.ts`). | Not a restart or a brain selection. |
+| code.refused | In `next/`, one process kept its old code because the new code could not read its state, was older, or failed to load (`runtime/ProcessStore.ts`). | Not a refusal for every process of that program. |
+| selected code | In `next/`, the program's `{hash, load}` folded from `gateway/code`. New processes start on it; each existing process may refuse it (`runtime/Code.ts`). | Not proof that every live process runs it. |
+| swap | In `next/`, one runner turn under its permit: decode the kept model through the new code's upgrade chain, save the new checkpoint, update the supervisor's build and send every watcher a whole view (`runtime/Runner.ts`). | Not running init's Cmds. Not replacing the brain. |
 | BrainEvent | A local brain's `started`, `exited`, `restarting`, `braked` or `stopped` event, with its start ID and clock. `runtime/BrainEvent.ts` | Not a program's event or a span. |
 | BrainState, brainLife | The local brain lifecycle state and its tea machine. `brain-life` | Not a process's state. |
 | brainOutbox, checkMemory | The Node brain's durable event queue and RSS replacement check. `node/dev/local-dev.ts`, read as `@kampus/libfabrika/node/local-dev` ([0051](../.decisions/0051-gateway-connection-and-node-by-job.md)) | Not the span queue or a program's memory limit. |

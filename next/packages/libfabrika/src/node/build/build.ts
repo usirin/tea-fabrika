@@ -362,6 +362,63 @@ const publish = Effect.fn("build.emit")(function* (
   return digest;
 });
 
+/** The sealed program build shared by a start and every saved-file rebuild. */
+export const buildPrograms = Effect.fn("build.programs")(function* (
+  options: Pick<Options, "root" | "entry" | "programs" | "ledger">,
+  reached?: Map<string, string>,
+) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const root = yield* fs.realPath(options.root).pipe(Effect.orElseSucceed(() => options.root));
+  const entry = yield* fs.realPath(options.entry).pipe(Effect.orElseSucceed(() => options.entry));
+  const files = new Map<string, string>();
+  const compiler: Plugin = {
+    name: "fabrika-program-compiler",
+    transform(code, id) {
+      if (!id.endsWith(".tsx")) {
+        return;
+      }
+
+      files.set(path.relative(root, id), code);
+      return { code: compile(id, code).code };
+    },
+  };
+  const ledgerFile = path.join(root, "compiler-ledger.json");
+  const ledger =
+    options.ledger ??
+    ((yield* fs.exists(ledgerFile))
+      ? yield* fs
+          .readFileString(ledgerFile)
+          .pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
+            Effect.mapError(fail("read")),
+          )
+      : []);
+  const programs = yield* bundlePrograms({
+    root: path.dirname(entry),
+    cwd: root,
+    plugins: [compiler],
+    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
+  });
+  const findings = check(
+    files,
+    ledger.filter((row) => files.has(row.file)),
+  );
+
+  if (findings.length > 0) {
+    return yield* new BuildError({
+      reason: "compiler",
+      cause: findings.map(({ file, line }) => ({ path: file, line })),
+    });
+  }
+
+  for (const [file, text] of files) {
+    reached?.set(file, text);
+  }
+
+  return programs;
+});
+
 export const build = Effect.fn("build.build")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -420,12 +477,10 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     }
   }
 
-  const programs = yield* bundlePrograms({
-    root: from,
-    cwd: root,
-    plugins: [compiler],
-    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
-  });
+  const programs = yield* buildPrograms(
+    { root: options.root, entry: options.entry, programs: options.programs, ledger },
+    files,
+  );
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
   const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);

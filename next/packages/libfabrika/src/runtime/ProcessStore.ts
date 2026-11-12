@@ -27,9 +27,16 @@ export type Checkpoint = typeof Checkpoint.Type;
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
 export type Placed = typeof Placed.Type;
 
-/** The only events the runtime writes to a process's stream: a step it installed, and an upgrade it
- *  ran on saved state. A program never writes either. */
+/** Runtime facts on a process's own stream: steps, Cmd answers, state upgrades and code changes.
+ *  A program never writes these reserved events. */
 export const RuntimeRecord = Schema.TaggedUnion({
+  "code.swapped": { program: Schema.NonEmptyString, hash: Schema.NonEmptyString, was: Schema.NonEmptyString },
+  "code.refused": {
+    program: Schema.NonEmptyString,
+    hash: Schema.NonEmptyString,
+    was: Schema.NonEmptyString,
+    reason: Schema.Literals(["shape", "newer", "load"]),
+  },
   "cmd.answered": { m: Schema.Json, cmd: Schema.NonEmptyString, build: Schema.NonEmptyString },
   stepped: { input: Schema.NonEmptyString, pos: Rev, build: Schema.NonEmptyString },
   "state.upgraded": {

@@ -1,4 +1,5 @@
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
+import { applyCell } from "@demlik/tea";
 import {
   Context,
   Effect,
@@ -23,7 +24,7 @@ import * as LedgerRemote from "../ledger/LedgerRemote.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import type { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { type Appended, fromHere, lineFor } from "../ledger/Log.ts";
+import { type Appended, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
 import { Connections } from "../presence/Connections.ts";
@@ -33,6 +34,11 @@ import { Owner, ProcessError, Recipient, recoverActivity, Start } from "../proce
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
+import { BuiltProgram } from "../runtime/Built.ts";
+import type { Selected } from "../runtime/Code.ts";
+import { code as codeMachine, CodeEvent } from "../runtime/Code.ts";
+import { CodeStore } from "../runtime/CodeStore.ts";
+import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
@@ -44,6 +50,8 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
 import {
   CommitReply,
+  Install,
+  Installed,
   ProcessReplies,
   SigningReply,
   type ConnectionId,
@@ -359,8 +367,27 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
-  const loader = workerLoader(env.LOADER, programs);
-  const loaded = yield* loader.load(bootstrap.program, `project:${name}`);
+  const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
+  const code = (hash: string) => codes.get(hash).pipe(Effect.map(Option.getOrNull));
+  const loader = workerLoader(env.LOADER, programs, code);
+  let selected: typeof Selected.Type = codeMachine.init(null, {})[0];
+  const folded = yield* Stream.runCollect(ledger.read("gateway/code", 0));
+  const decodeCode = Schema.decodeUnknownOption(CodeEvent);
+
+  for (const entry of folded) {
+    const fact = decodeCode(valueFor(entry));
+
+    if (Option.isSome(fact) && fact.value._tag === "code.loaded") {
+      selected = applyCell(codeMachine, selected, {
+        type: "loaded",
+        id: entry.id,
+        program: fact.value.program,
+        hash: fact.value.hash,
+      })[0];
+    }
+  }
+
+  const loaded = yield* loader.load(bootstrap.program, `project:${name}`, selected[bootstrap.program]?.hash);
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
@@ -504,7 +531,15 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`);
+    if (request._tag === "first") {
+      const chosen = selected[request.code.program];
+
+      if (chosen !== undefined) {
+        request = Start.cases.first.make({ ...request, code: { ...request.code, hash: chosen.hash } });
+      }
+    }
+
+    const program = yield* loader.load(request.code.program, `project:${name}/${request.name}`, request.code.hash);
     const result = yield* write(
       Effect.gen(function* () {
         const result = yield* processes.start(request, origin);
@@ -544,6 +579,162 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       yield* door.retire(pid);
     }).pipe(write);
   });
+  const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
+    const fields = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        program: Install.fields.program,
+        hash: CodeEvent.cases["code.failed"].fields.hash,
+        reason: CodeEvent.cases["code.failed"].fields.reason,
+        path: Schema.optionalKey(Schema.String),
+        line: Schema.optionalKey(Schema.Int),
+      }),
+    )(raw).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+    const fact = CodeEvent.cases["code.failed"].make(fields);
+    // Only repo-relative paths cross the control boundary into permanent facts.
+    const { path, line, ...body } = fact;
+    const safe =
+      path !== undefined &&
+      !path.startsWith("/") &&
+      !path.includes("..") &&
+      !path.includes("\\") &&
+      !/^[A-Za-z]:/.test(path);
+    yield* ledger.append(
+      "gateway/code",
+      id ?? `code.failed:${yield* ids.next}`,
+      lineFor(yield* from(), { ...body, ...(safe ? { path, ...(line === undefined ? {} : { line }) } : {}) }),
+    );
+  });
+  const push = Effect.fn("code.swap")(function* (load: string, program: string, hash: string, only?: string) {
+    const answers: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
+
+    for (const process of yield* processes.info) {
+      if (process.program !== program || (only !== undefined && process.name !== only)) {
+        continue;
+      }
+
+      const outcome = yield* rpc(
+        ProcessClient.make(processStub(env, name, process.name)).swap({ load, program, hash }),
+      ).pipe(
+        Effect.retry({ times: 2, while: (error) => error instanceof LedgerError && error.reason === "unreachable" }),
+      );
+
+      if (outcome._tag === "swapped" || outcome._tag === "same") {
+        const current = yield* loader.load(program, "check", hash);
+        remember(process.name, current.declaration);
+        const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
+
+        if (row !== undefined) {
+          const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
+          sql.exec(
+            "UPDATE dev_descriptors SET value=? WHERE process=?",
+            JSON.stringify({ ...descriptor, build: hash }),
+            process.process,
+          );
+        }
+      }
+
+      answers.push({ name: process.name, outcome });
+    }
+
+    return answers;
+  });
+  const checked = Effect.fn("code.checked")(function* (input: typeof Install.Type, notify = true) {
+    const [, cmds] = applyCell(codeMachine, selected, { type: "checked", ...input });
+    const processes: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
+
+    for (const cmd of cmds) {
+      if (cmd.type === "append") {
+        const placed = yield* ledger.append("gateway/code", cmd.id, lineFor(yield* from(), cmd.event));
+
+        if (placed._tag === "refused") {
+          return yield* new LedgerError({ reason: "refused" });
+        }
+
+        const entry = yield* ledger.read("gateway/code", 0).pipe(
+          Stream.filter((entry) => entry.id === cmd.id),
+          Stream.runHead,
+        );
+
+        if (Option.isNone(entry)) {
+          return yield* new LedgerError({ reason: "bad_row" });
+        }
+
+        const fact = yield* Schema.decodeUnknownEffect(CodeEvent.cases["code.loaded"])(valueFor(entry.value)).pipe(
+          Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        );
+        const [next, swaps] = applyCell(codeMachine, selected, {
+          type: "loaded",
+          id: cmd.id,
+          program: fact.program,
+          hash: fact.hash,
+        });
+        selected = next;
+
+        for (const swap of swaps) {
+          if (notify && swap.type === "swap") {
+            processes.push(...(yield* push(swap.load, swap.program, swap.hash)));
+          }
+        }
+      }
+    }
+
+    return cmds.length === 0 ? Installed.cases.same.make({}) : Installed.cases.loaded.make({ processes });
+  });
+  const install = Effect.fn("code.install")(
+    function* (raw: unknown) {
+      const input = yield* Schema.decodeUnknownEffect(Install)(raw).pipe(
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+      );
+      const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+      );
+      yield* Effect.annotateCurrentSpan({
+        program: input.program,
+        bytes: new TextEncoder().encode(input.source).byteLength,
+      });
+      const prior = yield* ledger.read("gateway/code", 0).pipe(
+        Stream.filter((entry) => entry.id === input.id),
+        Stream.runHead,
+      );
+
+      if (Option.isSome(prior) || selected[input.program]?.hash === input.hash) {
+        return Installed.cases.same.make({});
+      }
+
+      const refuse = (reason: (typeof CodeEvent.cases)["code.failed"]["Type"]["reason"]) =>
+        failed(
+          CodeEvent.cases["code.failed"].make({ program: input.program, hash: input.hash, reason }),
+          `code.failed:${input.id}`,
+        ).pipe(Effect.as(Installed.cases.failed.make({ reason })));
+
+      if (new TextEncoder().encode(input.source).byteLength > 2 * 1024 * 1024) {
+        return yield* refuse("too_large");
+      }
+
+      yield* codes.put(built);
+      const candidate = yield* Effect.result(loader.load(input.program, "check", input.hash));
+
+      if (Result.isFailure(candidate)) {
+        return yield* refuse("load");
+      }
+
+      if (candidate.success.declaration.name !== input.program) {
+        return yield* refuse("name");
+      }
+
+      return yield* checked(input);
+    },
+    Effect.tap((answer) => Effect.annotateCurrentSpan("outcome", answer._tag)),
+  );
+
+  for (const [program, built] of Object.entries(programs)) {
+    if (selected[program] === undefined) {
+      yield* checked({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" }, false);
+    }
+  }
+
   const original = yield* ledger.read(`processes/${bootstrap.name}`, 0).pipe(
     Stream.filter((entry) => entry.id === bootstrap.id),
     Stream.runHead,
@@ -600,8 +791,23 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
     return yield* ledger.append("gateway/brain", event.id, lineFor(yield* from(), event));
   });
+
+  // Start each push before returning, but do not await a Process calling back into this service.
+  for (const process of yield* processes.info) {
+    const chosen = selected[process.program];
+
+    if (chosen !== undefined) {
+      yield* Effect.forkScoped(push(chosen.load, process.program, chosen.hash, process.name).pipe(Effect.ignore), {
+        startImmediately: true,
+      });
+    }
+  }
+
   yield* flushed.pipe(Effect.provideContext(services));
   return {
+    code,
+    codeInstall: (raw: unknown) => wrapped(write(install(raw))),
+    codeFailed: (raw: unknown) => wrapped(write(failed(raw))),
     target: door.target,
     register: (client: string, gateway: string, session: string) =>
       Effect.sync(() => {
@@ -742,7 +948,7 @@ const processLogic = Effect.fnUntraced(function* (
     p = ProjectClient.make(stub),
     storage = StorageClient.make(ctx.storage),
     sql = cloudflareSql(ctx.storage),
-    loader = workerLoader(env.LOADER, programs);
+    loader = workerLoader(env.LOADER, programs, (hash) => rpc(p.code(hash)));
   const saved = yield* processDescriptor(ctx);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
@@ -834,7 +1040,7 @@ const processLogic = Effect.fnUntraced(function* (
   // ProcessStore, under the registered name every successor shares.
   const runnerLayer = ProgramRunner.withLoader(
     saved,
-    { load: (name) => Effect.suspend(() => loader.load(name, active)) },
+    { load: (name, hash) => Effect.suspend(() => loader.load(name, active, hash)) },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
@@ -848,6 +1054,7 @@ const processLogic = Effect.fnUntraced(function* (
       const sent = Schema.decodeUnknownOption(Delivered)(input);
       return Option.isSome(sent) ? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span))) : work;
     },
+    swap: (request: Parameters<typeof runner.swap>[0]) => attributed(runner.swap(request)),
     open: (client: string) => attributed(runner.open(client)),
     due: (at: number) => attributed(runner.due(at)),
     restart: (request: unknown) =>

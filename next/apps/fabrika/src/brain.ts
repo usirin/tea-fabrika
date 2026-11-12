@@ -141,6 +141,21 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }
 
+  code(hash: string) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.code(hash)));
+  }
+
+  codeInstall(input: Parameters<ContextProject["codeInstall"]>[0]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.codeInstall(input)));
+  }
+
+  codeFailed(input: Parameters<ContextProject["codeFailed"]>[0]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.codeFailed(input)));
+  }
+
   brain(event: Parameters<ContextProject["brain"]>[0]) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.brain(event)));
@@ -225,6 +240,11 @@ export class Process extends DurableObject<Env> {
   open(client: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProcessService.use((p) => p.open(client)));
+  }
+
+  swap(request: Parameters<ProcessService["Service"]["swap"]>[0]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProcessService.use((p) => p.swap(request)));
   }
 
   due(at: number) {

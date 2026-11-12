@@ -2,16 +2,37 @@ import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused } from "../access/SessionManager.ts";
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended } from "../ledger/Log.ts";
+import { ProgramName } from "../packs/ProgramName.ts";
 import type { Connections } from "../presence/Connections.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { ProcessError, type Activity, type Start } from "../processes/Process.ts";
 import type { ProcessManager } from "../processes/ProcessManager.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
+import type { BuiltProgram } from "../runtime/Built.ts";
+import { Hash } from "../runtime/Built.ts";
+import { CodeEvent, From as CodeFrom } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import { Swapped } from "../runtime/Runner.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
 import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
+
+export const Install = Schema.Struct({
+  id: Schema.String,
+  program: ProgramName,
+  hash: Hash,
+  source: Schema.String,
+  from: CodeFrom,
+});
+export type Install = typeof Install.Type;
+
+export const Installed = Schema.TaggedUnion({
+  same: {},
+  failed: { reason: CodeEvent.cases["code.failed"].fields.reason },
+  loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
+});
+export type Installed = typeof Installed.Type;
 
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 
@@ -102,6 +123,9 @@ type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unk
 export type ProjectBinding = Rpc.DurableObjectBranded &
   LedgerCalls &
   Remote<Pick<DoorService, "target" | "challenge" | "initialize" | "route" | "knock" | "grant" | "disconnect">> & {
+    code: RemoteCall<(hash: string) => Effect.Effect<BuiltProgram | null>>;
+    codeInstall: RemoteCall<(input: Install) => Effect.Effect<Installed>>;
+    codeFailed: RemoteCall<(input: (typeof CodeEvent.cases)["code.failed"]["Type"]) => Effect.Effect<void>>;
     clientConnect: RemoteCall<DoorService["connect"]>;
     register: RemoteCall<(client: string, gateway: string, session: string) => Effect.Effect<void>>;
     join: RemoteCall<Gateways["join"]>;
@@ -146,7 +170,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
   };
 
 export type ProcessBinding = Rpc.DurableObjectBranded &
-  Remote<Pick<Runner, "msg" | "open" | "due" | "restart">> & {
+  Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
     configure: RemoteCall<(descriptor: Descriptor) => Effect.Effect<void>>;
     descriptor: RemoteCall<() => Effect.Effect<Descriptor>>;
     activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;

@@ -5,15 +5,19 @@ import { Clock, Context, Deferred, Effect, Exit, Queue, Redacted, Ref, Schema, S
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
+import { Installed, type Install } from "../../cloudflare/bindings.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
+import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
 import { address, devLife, latest, pending, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
 
-class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
+export { Installed } from "../../cloudflare/bindings.ts";
+
+export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
   reason: Schema.String,
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -405,6 +409,15 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
   return {
+    install: (code: Install): Effect.Effect<Installed, ControlError> =>
+      recorded(
+        call("project", config.name, "", "codeInstall", [code]).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
+          Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+        ),
+      ),
+    failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
+      recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>
       proxy((method, args) => call("project", project, "", method === "connect" ? "clientConnect" : method, args), {

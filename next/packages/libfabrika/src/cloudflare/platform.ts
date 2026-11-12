@@ -36,6 +36,15 @@ export class ProjectClient extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/platform.ProjectClient") {
   static make(stub: ProjectBinding): ProjectClient["Service"] {
     return {
+      code: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project code RPC enters Effect
+        Effect.tryPromise({ try: () => stub.code(...args), catch: unreachable }),
+      codeInstall: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project install RPC enters Effect
+        Effect.tryPromise({ try: () => stub.codeInstall(...args), catch: unreachable }),
+      codeFailed: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project failure RPC enters Effect
+        Effect.tryPromise({ try: () => stub.codeFailed(...args), catch: unreachable }),
       clientConnect: () =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project clientConnect RPC enters Effect
         Effect.tryPromise({ try: () => stub.clientConnect(), catch: unreachable }),
@@ -151,6 +160,9 @@ export class ProcessClient extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/platform.ProcessClient") {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     return {
+      swap: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Process swap RPC enters Effect
+        Effect.tryPromise({ try: () => stub.swap(...args), catch: unreachable }),
       configure: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Process configure RPC enters Effect
         Effect.tryPromise({ try: () => stub.configure(...args), catch: unreachable }),

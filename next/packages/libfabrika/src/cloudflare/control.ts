@@ -30,6 +30,8 @@ const methods = {
     "leave",
     "online",
     "brain",
+    "codeInstall",
+    "codeFailed",
   ]),
   process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
   record: new Set(["write", "read", "content", "deleteContent"]),

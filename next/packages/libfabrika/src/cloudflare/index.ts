@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 export type { ProgramSource } from "../runtime/Execution.ts";
@@ -10,14 +11,36 @@ type Calls = Rpc.WorkerEntrypointBranded &
     readonly describe: () => Promise<unknown>;
   };
 
-export const workerLoader = (loader: WorkerLoader, programs: Readonly<Record<string, ProgramSource>>) => ({
-  load: Effect.fn("loader.load")(function* (name: string, process: string) {
-    const code = Object.hasOwn(programs, name) ? programs[name] : undefined;
+export const workerLoader = (
+  loader: WorkerLoader,
+  programs: Readonly<Record<string, ProgramSource>>,
+  lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
+) => ({
+  load: Effect.fn("loader.load")(function* (name: string, process: string, hash?: string) {
+    const built = Object.hasOwn(programs, name) ? programs[name] : undefined;
+    const found =
+      hash === undefined
+        ? built
+        : (Object.values(programs).find((p) => p.hash === hash) ??
+          (lookup === undefined
+            ? null
+            : yield* lookup(hash).pipe(Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })))));
+    const code =
+      found == null
+        ? undefined
+        : yield* Schema.decodeUnknownEffect(BuiltProgram)(found).pipe(
+            Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })),
+          );
 
     if (code === undefined) {
       return yield* new ProgramDown({ reason: "no_program" });
     }
 
+    yield* Effect.annotateCurrentSpan({
+      program: name,
+      hash: code.hash,
+      role: process === "check" ? "candidate" : "process",
+    });
     const worker = loader.get(`${code.hash}/${process}`, () => ({
       compatibilityDate: "2026-10-12",
       // Worker Loader reads an ES module only from a ".js" name; ".mjs" fails to load.
