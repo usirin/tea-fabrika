@@ -41,7 +41,9 @@ export class RepositoriesError extends Schema.TaggedError<RepositoriesError>()("
 export const SourceMetadata = Schema.TaggedUnion({ committed: { commit: ObjectId }, disk: {} });
 
 export type Source = typeof SourceMetadata.Type & {
-  readonly read: (path: string) => Effect.Effect<Uint8Array | null, RepositoriesError>;
+  readonly read: (
+    path: string,
+  ) => Effect.Effect<(typeof SourceMetadata.Type & { readonly bytes: Uint8Array }) | null, RepositoriesError>;
 };
 
 export interface Repository {

@@ -147,10 +147,12 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     }
 
     if (located.committed) {
-      return yield* options.read(path.relative(options.root, located.location).split(path.sep).join("/"));
+      const bytes = yield* options.read(path.relative(options.root, located.location).split(path.sep).join("/"));
+      return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 
-    return yield* fs.readFile(located.location).pipe(Effect.mapError(failed));
+    const bytes = yield* fs.readFile(located.location).pipe(Effect.mapError(failed));
+    return { ...SourceMetadata.cases.disk.make({}), bytes };
   });
   return Effect.fnUntraced(function* (
     from: string,
