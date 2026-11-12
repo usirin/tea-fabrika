@@ -406,6 +406,37 @@ describe("each rule refuses what it is there to refuse", () => {
   });
 });
 
+it("scenario: T877 L10 only the TOML adapter imports the parser and serializer", async () => {
+  // scenario: literal import names at every overriding config path are the rule's inputs.
+  const imports = [
+    'import "toml-eslint-parser";',
+    'import "toml-eslint-parser/lib/parser";',
+    'import "@decimalturn/toml-patch";',
+    'import "@decimalturn/toml-patch/dist/index.js";',
+  ].join("\n");
+  const banned = [
+    "next/programs/sample/src/machine.ts",
+    "next/packages/libfabrika/src/settings/TomlEdit.test.ts",
+    "next/packages/libfabrika/src/settings/internal/Edit.ts",
+    "next/packages/libfabrika/src/node/settings/Load.ts",
+    "next/packages/libfabrika/src/runtime/Runner.ts",
+    "next/packages/libfabrika/src/access/Access.ts",
+    "next/packages/libfabrika/src/gateway/Gateway.ts",
+    "next/packages/libfabrika/src/ledger/Ledger.ts",
+    "next/apps/fabrika/dev.ts",
+    "next/apps/fabrika/src/settings-start.test.ts",
+    ".agents/skills/lead/scripts/example.ts",
+  ];
+  const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
+  const result = await lintCopies(Object.fromEntries([...banned, adapter].map((file) => [file, imports])));
+
+  for (const file of banned) {
+    expect(result("eslint(no-restricted-imports)", file), file).toEqual([1, 2, 3, 4]);
+  }
+
+  expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
+});
+
 describe("lint.ts, the first step of pnpm lint", () => {
   const lint = (path: string) =>
     spawnSync(process.execPath, ["oxlint-plugins/lint.ts", relative(ROOT, path)], {
