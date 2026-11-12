@@ -2,7 +2,6 @@
  * Current check runs at an exact commit, independent of the CI host.
  *
  * @stability experimental
- * @since 0.0.0
  */
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
@@ -15,7 +14,6 @@ import * as Schema from "effect/Schema";
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Conclusion = Schema.Literals([
   "success",
@@ -32,7 +30,6 @@ export const Conclusion = Schema.Literals([
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Status = Schema.TaggedUnion({
   queued: {},
@@ -47,7 +44,6 @@ const Ms = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const CheckRun = Schema.Struct({
   name: Schema.NonEmptyString,
@@ -64,7 +60,6 @@ export const CheckRun = Schema.Struct({
  *
  * @stability experimental
  * @category guards
- * @since 0.0.0
  */
 export const sameKey = Equivalence.Struct({ name: Equivalence.String, source: Equivalence.String });
 
@@ -73,7 +68,6 @@ export const sameKey = Equivalence.Struct({ name: Equivalence.String, source: Eq
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Checks = Schema.Array(CheckRun).check(
   Schema.makeFilter(
@@ -86,7 +80,6 @@ export const Checks = Schema.Array(CheckRun).check(
  *
  * @stability experimental
  * @category errors
- * @since 0.0.0
  */
 export class CiError extends Schema.TaggedError<CiError>()("CiError", {
   reason: Schema.Literals(["unavailable", "rate_limited"]),
@@ -101,7 +94,6 @@ export class CiError extends Schema.TaggedError<CiError>()("CiError", {
  *
  * @stability experimental
  * @category services
- * @since 0.0.0
  */
 export class Ci extends Context.Service<
   Ci,

@@ -2,7 +2,6 @@
  * Pinned code-host reads, updates and squash merges.
  *
  * @stability experimental
- * @since 0.0.0
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -13,7 +12,6 @@ import * as Schema from "effect/Schema";
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const ChangeId = Schema.Int.check(Schema.isGreaterThan(0));
 
@@ -24,7 +22,6 @@ const Id = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}([0-9a-f]{24})?$/)
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Commit = Id.pipe(Schema.brand("Commit"));
 
@@ -33,7 +30,6 @@ export const Commit = Id.pipe(Schema.brand("Commit"));
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Tree = Id.pipe(Schema.brand("Tree"));
 
@@ -42,7 +38,6 @@ export const Tree = Id.pipe(Schema.brand("Tree"));
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Path = Schema.String.check(
   Schema.makeFilter(
@@ -57,7 +52,6 @@ export const Path = Schema.String.check(
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Change = Schema.TaggedUnion({
   found: {
@@ -75,7 +69,6 @@ export const Change = Schema.TaggedUnion({
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Updated = Schema.TaggedUnion({
   current: { head: Commit, tree: Tree, main: Commit },
@@ -90,7 +83,6 @@ export const Updated = Schema.TaggedUnion({
  *
  * @stability experimental
  * @category models
- * @since 0.0.0
  */
 export const Merged = Schema.TaggedUnion({
   merged: { commit: Commit, tree: Tree },
@@ -104,7 +96,6 @@ export const Merged = Schema.TaggedUnion({
  *
  * @stability experimental
  * @category errors
- * @since 0.0.0
  */
 export class CodeHostError extends Schema.TaggedError<CodeHostError>()("CodeHostError", {
   reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
@@ -117,7 +108,6 @@ export class CodeHostError extends Schema.TaggedError<CodeHostError>()("CodeHost
  *
  * @stability experimental
  * @category services
- * @since 0.0.0
  */
 export class CodeHost extends Context.Service<
   CodeHost,

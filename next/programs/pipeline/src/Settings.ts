@@ -11,6 +11,7 @@ export const all = Setting.group({
     doc: "Globs for rows and docs; unmatched or incomplete paths make a code change.",
     scope: ["repo"],
     reload: "restart",
+    since: "0.0.0",
   }),
   checks: Setting.make("queue.checks", {
     schema: Plan,
@@ -18,6 +19,7 @@ export const all = Setting.group({
     doc: "The checks that must be green on the head that lands, per kind of change. A kind with no check is never merged; the queue says which key to set.",
     scope: ["repo"],
     reload: "restart",
+    since: "0.0.0",
   }),
   wait: Setting.make("merger.wait", {
     schema: Positive,
@@ -25,6 +27,7 @@ export const all = Setting.group({
     doc: "Minutes before silent checks or a missing command answer count as lost.",
     scope: ["repo"],
     reload: "restart",
+    since: "0.0.0",
   }),
   poll: Setting.make("merger.poll", {
     schema: Positive,
@@ -32,6 +35,7 @@ export const all = Setting.group({
     doc: "Seconds between pending check reads, and the first wait after a fault.",
     scope: ["repo"],
     reload: "restart",
+    since: "0.0.0",
   }),
   backoff: Setting.make("merger.backoff", {
     schema: Positive,
@@ -39,6 +43,7 @@ export const all = Setting.group({
     doc: "Maximum seconds to wait after a fault; waits double from merger.poll.",
     scope: ["repo"],
     reload: "restart",
+    since: "0.0.0",
   }),
 });
 
