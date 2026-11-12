@@ -561,9 +561,9 @@ describe("a plain file cannot take a folder out of the checks", () => {
 });
 
 describe("rules that apply by path", () => {
-  const plantIn = (folder: string, text: string) => {
+  const plantIn = (folder: string, text: string, name = "planted.ts") => {
     const at = mkdtempSync(join(ROOT, folder, ".plant-"));
-    const file = join(at, "planted.ts");
+    const file = join(at, name);
     writeFileSync(file, text);
     return { at, file };
   };
@@ -623,6 +623,28 @@ describe("rules that apply by path", () => {
     const { at, file } = plantIn("packages/fabrika-design/src", RADIX);
     made.push(at);
     expect(fires(file, "eslint(no-restricted-imports)")).toEqual([1]);
+  });
+
+  // pinned: S1 checks the rule's own diagnostic, so an unresolved import cannot prove the ban.
+  describe.each(["program.ts", "tile.ts"])("S1 inbox %s imports", (name) => {
+    it.each([
+      ['import { x } from "@kampus/tuval";', [1]],
+      ['import { x } from "@kampus/tuval/window";', [1]],
+      ['import { x } from "../../../../packages/tuval/src/index.ts";', [1]],
+      ['import { Program } from "@kampus/libfabrika";', []],
+      ['import { slateDarkA } from "@radix-ui/colors";', [1]],
+      ['import "@radix-ui/colors/slate-dark-alpha.css";', [1]],
+      ['import { _electron } from "playwright";', [1]],
+      ['import { _electron } from "@playwright/test";', [1]],
+      ['import { parse } from "toml-eslint-parser";', [1]],
+      ['import "toml-eslint-parser/lib/parser";', [1]],
+      ['import { TomlParser } from "@kampus/libfabrika/settings/TomlParser";', [1]],
+      ['import { TomlParser } from "../../../../packages/libfabrika/src/settings/TomlParser.ts";', [1]],
+    ])("pinned: S1 preserves the import limits for %s", (text, lines) => {
+      const { at, file } = plantIn("next/programs/inbox/src", `${text}\n`, name);
+      made.push(at);
+      expect(fires(file, "eslint(no-restricted-imports)")).toEqual(lines);
+    });
   });
 
   it("a `use` in a .ts file under packages/ is left alone: it is Effect's, not a hook", () => {
