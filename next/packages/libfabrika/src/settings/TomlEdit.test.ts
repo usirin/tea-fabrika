@@ -142,7 +142,7 @@ const literal = (value: unknown): string => {
   return Object.is(value, -0) ? "-0.0" : JSON.stringify(value);
 };
 
-const fixture = (l: Layout, n: number) => {
+const fixture = (l: Layout, n: number, trailingComma = false) => {
   const key = (s: string) => keyText(s, l.quote);
   const values = Object.fromEntries(segments.map((s) => [s, n]));
   const members = segments.map((s) => `${key(s)}${l.space}${n}`);
@@ -155,7 +155,7 @@ const fixture = (l: Layout, n: number) => {
     lines.push("# note-3-雪", `[${key("box")}.${key("child")}]`, ...members);
     box = { child: values };
   } else if (l.style === "inline") {
-    lines.push(`box${l.space}{ ${members.join(", ")} } # note-3-雪`);
+    lines.push(`box${l.space}{ ${members.join(", ")}${trailingComma ? "," : ""} } # note-3-雪`);
   } else {
     lines.push(...members.map((m) => `${key("box")}.${m}`), "# note-3-雪");
   }
@@ -414,12 +414,12 @@ describe("T877 public TOML edits, next/", () => {
 
   it.effect.prop(
     "L3 insertion keeps legal root, explicit, implicit, dotted and inline parents",
-    Input,
-    ({ seed, initial, values }) =>
+    { ...Input, trailingComma: Schema.Boolean },
+    ({ seed, initial, values, trailingComma }) =>
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
-        const start = fixture(l, initial);
+        const start = fixture(l, initial, trailingComma);
         let text = start.text;
         let model: Tree = start.value;
 
@@ -651,17 +651,25 @@ describe("T877 public TOML edits, next/", () => {
 
   it.effect.prop(
     "L5 empty paths, scalars, arrays and structural tables refuse traversal",
-    { seed: Schema.Int, initial: Integer },
-    ({ seed, initial }) =>
+    { seed: Schema.Int, initial: Integer, parentAfterChild: Schema.Boolean },
+    ({ seed, initial, parentAfterChild }) =>
       Effect.gen(function* () {
         const toml = yield* Toml;
         const l = layout(seed);
-        const text = `# first${l.eol}scalar = ${initial}${l.eol}array = [${initial}]${l.eol}[[rows]]${l.eol}x = ${initial}${l.eol}[table]${l.eol}x = ${initial}`;
+        const key = (s: string) => keyText(s, l.quote);
+        const prefix = `# first${l.eol}scalar = ${initial}${l.eol}array = [${initial}]${l.eol}[[rows]]${l.eol}x = ${initial}${l.eol}`;
+        const child = `[${key("table")}.${key(pick(segments, l.hints[0]!.key))}]${l.eol}leaf = ${initial}${l.eol}`;
+        const table = `[${key("table")}]${l.eol}x = ${initial}${l.eol}`;
+        const beforeTable = prefix + (parentAfterChild ? child : "");
+        const source = beforeTable + table + (parentAfterChild ? "" : child);
+        const text = l.final ? source : source.slice(0, -l.eol.length);
         const parsed = yield* toml.parse(text);
         const hint = l.hints[0]!;
         const parent = pick(["scalar", "array", "rows", "table"], hint.pick);
         const path = parent === "table" ? [parent] : [parent, parent === "rows" ? "0" : pick(segments, hint.key)];
-        const line = parsed.spans.find((s) => s.path[0] === parent)!.line;
+        // The explicit parent's own header is the location, even after a child header.
+        const line =
+          parent === "table" ? beforeTable.split(l.eol).length : parent === "rows" ? 4 : parent === "array" ? 3 : 2;
         const set = yield* refusal(toml.set(text, path, 2), "Conflict", line);
         expect(set.reason).toMatchObject({ path });
         yield* refusal(toml.remove(text, path), "Conflict", line);
