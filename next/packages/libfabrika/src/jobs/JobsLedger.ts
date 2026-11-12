@@ -8,7 +8,7 @@ import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
-import { type Entry, lineFor, valueFor } from "../ledger/Log.ts";
+import { lineFor, valueFor } from "../ledger/Log.ts";
 import type { ProcessId } from "../ProcessId.ts";
 import { job, Msg } from "./internal/job.ts";
 import { Event, Executor, type Job, Recorded, Request, Result } from "./Job.ts";
@@ -19,10 +19,10 @@ const Execution = Id.make("execution");
 
 /** An accepted call as its entry keeps it: the event's case, and the facts it brought. */
 const Stored = Schema.TaggedUnion({
-  requested: { request: Request },
-  taken: { executor: Executor, execution: Schema.NonEmptyString },
-  started: { execution: Schema.NonEmptyString },
-  finished: { execution: Schema.NonEmptyString, result: Result },
+  requested: { request: Request, recorded: Schema.optional(Recorded) },
+  taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optional(Recorded) },
+  started: { execution: Schema.NonEmptyString, recorded: Schema.optional(Recorded) },
+  finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optional(Recorded) },
 });
 type Stored = typeof Stored.Type;
 
@@ -65,8 +65,8 @@ type Model = (typeof job)["model"]["Type"];
 
 const step = (model: Model, msg: Msg): Model => applyCell(job, model, msg)[0];
 
-const fold = (entries: ReadonlyArray<Entry>): Model =>
-  entries.reduce((model, entry) => step(model, toMsg(decodeStored(valueFor(entry)))), job.init(null, undefined)[0]);
+const fold = (events: ReadonlyArray<Stored>): Model =>
+  events.reduce((model, event) => step(model, toMsg(event)), job.init(null, undefined)[0]);
 
 /** A ledger failure as the jobs module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
@@ -82,9 +82,14 @@ export const layer = Layer.effect(
     const read = Effect.fn("jobs.read")(function* (id: string) {
       const found = yield* ledger
         .transact((turn) => {
-          const entries = [...turn.read(stream(id), 0)];
-          const events = entries.map((entry) => decodeEvent({ ...entry, event: entry._tag }));
-          return { state: fold(entries).state, events };
+          const saved = [...turn.read(stream(id), 0)].map((entry) => ({
+            entry,
+            stored: decodeStored(valueFor(entry)),
+          }));
+          const events = saved.map(({ entry, stored }) =>
+            decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
+          );
+          return { state: fold(saved.map(({ stored }) => stored)).state, events };
         })
         .pipe(Effect.mapError(translated));
 
@@ -107,14 +112,16 @@ export const layer = Layer.effect(
       const stored = toStored(msg);
       const answer = yield* ledger
         .transact((turn) => {
-          const model = step(fold([...turn.read(stream(id), 0)]), msg);
+          const model = step(fold([...turn.read(stream(id), 0)].map((entry) => decodeStored(valueFor(entry)))), msg);
 
           if (model.answer._tag === "refused") {
             return R.fail(model.answer.reason);
           }
 
           if (model.answer._tag === "accepted") {
-            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(recorded, encodeStored(stored)));
+            // JSON preserves the writer's UTF-16 strings, including lone surrogates that SQL text replaces.
+            // Older events have no saved record and keep reading their ledger metadata.
+            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(recorded, encodeStored({ ...stored, recorded })));
           }
 
           const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);
