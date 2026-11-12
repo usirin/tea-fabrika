@@ -121,7 +121,8 @@ export const layer = Layer.effect(
           if (model.answer._tag === "accepted") {
             // JSON preserves the writer's UTF-16 strings, including lone surrogates that SQL text replaces.
             // Older events have no saved record and keep reading their ledger metadata.
-            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(recorded, encodeStored({ ...stored, recorded })));
+            const { connection: _connection, has: _has, ...writer } = recorded;
+            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(writer, encodeStored({ ...stored, recorded })));
           }
 
           const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);

@@ -56,6 +56,8 @@ export const route = Effect.fn("gateway.jobs")(
         parent: job.state._tag === "absent" ? null : job.state.request.parent,
         traceId: span.traceId,
         build,
+        connection: client,
+        has,
       };
     });
 
