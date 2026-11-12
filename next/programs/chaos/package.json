@@ -6,7 +6,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/program.ts",
-    "./RunnerTest": "./src/RunnerTest.ts"
+    "./RunnerTest": "./src/RunnerTest.ts",
+    "./TargetsTest": "./src/TargetsTest.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."

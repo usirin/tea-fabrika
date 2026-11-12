@@ -44,7 +44,9 @@ import { code as codeMachine, CodeEvent, Install, Installed } from "../runtime/C
 import { CodeStore } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
+import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
+import { ProgramDown } from "../runtime/Program.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
@@ -72,6 +74,7 @@ import { workerLoader, type ProgramSource } from "./index.ts";
 import { mailLayer } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import { bind as bindTail } from "./tail.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
@@ -136,7 +139,7 @@ export interface ProjectOptions {
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
 
 /** One Process object per registered name: every process ID of that name, first or successor. */
-export const processStub = (env: Env, project: string, name: string) =>
+export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
   env.PROCESS.getByName(JSON.stringify([project, name]));
 
 export const recordStub = (env: Env, project: string, name: string) =>
@@ -431,7 +434,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
   }
 
-  const loaded = yield* loader.load(bootstrap.program, `project:${name}`, selected[bootstrap.program]?.hash);
+  const loaded = yield* loader.load(bootstrap.program, `project:${name}`, undefined, selected[bootstrap.program]?.hash);
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
@@ -478,7 +481,10 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   for (const process of yield* processes.info) {
     yield* configure(process.process);
     const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process));
-    const program = yield* loader.load(process.program, process.process, descriptor.build);
+    const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
+      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+    );
+    const program = yield* loader.load(process.program, process.process, tail, descriptor.build);
     remember(process.name, program.declaration);
 
     sql.exec(
@@ -498,8 +504,11 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, life.name)).descriptor(life.state.process));
+    const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
     const program = yield* loader
-      .load(life.state.code.program, life.state.process, descriptor.build)
+      .load(life.state.code.program, life.state.process, tail, descriptor.build)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
@@ -606,7 +615,12 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
           });
         }
 
-        const program = yield* loader.load(chosen.code.program, `project:${name}/${chosen.name}`, chosen.code.hash);
+        const program = yield* loader.load(
+          chosen.code.program,
+          `project:${name}/${chosen.name}`,
+          undefined,
+          chosen.code.hash,
+        );
 
         // Keep the choice before the start can commit and lose its answer.
         if (request._tag === "first" && row === undefined) {
@@ -673,7 +687,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    const current = yield* loader.load(program, "check", hash);
+    const current = yield* loader.load(program, "check", undefined, hash);
     remember(descriptor.name, current.declaration);
     sql.exec("UPDATE dev_descriptors SET value=? WHERE process=?", JSON.stringify({ ...descriptor, build: hash }), pid);
   });
@@ -839,7 +853,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     }
 
     yield* codes.put(built);
-    const candidate = yield* Effect.result(loader.load(input.program, "check", input.hash));
+    const candidate = yield* Effect.result(loader.load(input.program, "check", undefined, input.hash));
 
     if (Result.isFailure(candidate)) {
       return yield* refuse("load");
@@ -1222,7 +1236,16 @@ const processLogic = Effect.fnUntraced(function* (
   // ProcessStore, under the registered name every successor shares.
   const runnerLayer = ProgramRunner.withLoader(
     saved,
-    { load: (name, hash) => Effect.suspend(() => loader.load(name, active, hash)) },
+    {
+      load: (name, hash) =>
+        Effect.gen(function* () {
+          const process = active;
+          const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
+            Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+          );
+          return yield* loader.load(name, process, tail, hash);
+        }),
+    },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
@@ -1230,6 +1253,15 @@ const processLogic = Effect.fnUntraced(function* (
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
+    usage: Effect.fnUntraced(
+      function* (rows: unknown) {
+        const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
+        yield* sink.batch(IsolateUsage.record(usage));
+      },
+      Effect.withSpan("process.usage"),
+      complete,
+      Effect.provideContext(services),
+    ),
     msg: (input: unknown) => {
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.

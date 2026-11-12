@@ -74,6 +74,7 @@ import { recoveryStore } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
+import { StepFault } from "./StepFault.ts";
 
 export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
@@ -242,6 +243,7 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
+        const stepFault = yield* Effect.serviceOption(StepFault);
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
@@ -631,19 +633,22 @@ export class ProgramRunner extends Context.Service<
           const status = yield* p.status(initial.name);
 
           if (supervision === null) {
-            const policy = yield* Effect.try({
-              try: () => {
-                const wiring = options.policy ?? defaultPolicy;
-                return Schema.decodeUnknownSync(Policy)({
-                  ...wiring,
-                  maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
-                });
-              },
-              catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-            });
             supervision = yield* recovery.load;
 
             if (supervision === null) {
+              const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
+              const policy = yield* Effect.try({
+                try: () => {
+                  const wiring = options.policy ?? defaultPolicy;
+                  return Schema.decodeUnknownSync(Policy)(
+                    loaded.declaration.policy ?? {
+                      ...wiring,
+                      maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
+                    },
+                  );
+                },
+                catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+              });
               const started = supervisor.init(null, {
                 policy,
                 process: status.state.process,
@@ -743,7 +748,18 @@ export class ProgramRunner extends Context.Service<
           }
 
           yield* store.activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }));
-          const result = yield* Effect.suspend(f).pipe(Effect.exit);
+          const result = yield* Effect.gen(function* () {
+            if (Option.isSome(stepFault)) {
+              yield* stepFault.value.before({
+                name: process.name,
+                process: process.id,
+                letter,
+                phase: reason === "step" ? "fresh" : "saved",
+              });
+            }
+
+            return yield* Effect.suspend(f);
+          }).pipe(Effect.exit);
           const j = supervision?.journal;
 
           if (j !== undefined && result._tag === "Failure") {

@@ -2,21 +2,40 @@ import { Effect, Option, Schema } from "effect";
 import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import type { bind } from "./tail.ts";
 export type { ProgramSource } from "../runtime/Execution.ts";
 export { cloudflareSql } from "./CloudflareSql.ts";
 export { fetch, serveAsset } from "./fetch.ts";
+export { callback as isolateTail } from "./tail.ts";
 
 type Calls = Rpc.WorkerEntrypointBranded &
   Required<ExecutionCalls> & {
     readonly describe: () => Promise<unknown>;
   };
 
+// Alchemy's native tail and the old ambient loader types come from separate platform declarations.
+type Code = Omit<Parameters<WorkerLoader["load"]>[0], "tails"> & {
+  readonly tails?: Array<Effect.Success<ReturnType<typeof bind>>>;
+};
+
+type Loader = Omit<WorkerLoader, "get"> & {
+  get(
+    name: Parameters<WorkerLoader["get"]>[0],
+    code: () => Code | ReturnType<Parameters<WorkerLoader["get"]>[1]>,
+  ): ReturnType<WorkerLoader["get"]>;
+};
+
 export const workerLoader = (
-  loader: WorkerLoader,
+  loader: Loader,
   programs: Readonly<Record<string, ProgramSource>>,
   lookup?: (hash: string) => Effect.Effect<ProgramSource | null, unknown>,
 ) => ({
-  load: Effect.fn("loader.load")(function* (name: string, process: string, hash?: string) {
+  load: Effect.fn("loader.load")(function* (
+    name: string,
+    process: string,
+    tail?: Effect.Success<ReturnType<typeof bind>>,
+    hash?: string,
+  ) {
     const built = Object.hasOwn(programs, name) ? programs[name] : undefined;
     const found =
       hash === undefined
@@ -48,6 +67,7 @@ export const workerLoader = (
       modules: { "program.js": code.source },
       env: {},
       globalOutbound: null,
+      ...(tail === undefined ? {} : { tails: [tail] }),
     }));
     const rpc = worker.getEntrypoint<Calls>();
     const fail = (cause: unknown) => new ProgramDown({ reason: "load", error: "ProgramDown", cause });
