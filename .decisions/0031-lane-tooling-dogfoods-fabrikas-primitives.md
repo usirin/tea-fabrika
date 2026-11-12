@@ -1,7 +1,7 @@
 ---
 id: 0031
 title: The lead's lane tooling runs on fabrika's own primitives, the Agent interface over ACP now and Program.make next, never a bare CLI call
-status: accepted
+status: amended-in-part by [0070](0070-flow-runner-stays-a-machine.md)
 date: 2026-11-09
 tags: [lead, tooling, chain, agents, acp, program, libfabrika, dogfood]
 ---
@@ -105,6 +105,8 @@ Agent interface over the ACP harness, and the lane runner becomes `next/` progra
   `packages/pipeline`.
 - **Programs.** Next, the lane runner is built as programs with `Program.make`, not bare tea
   machines. That shows a program works as a unit of work on its own, outside fabrika's app.
+  *(Amended by [0070](0070-flow-runner-stays-a-machine.md): for now the runner stays a tea machine
+  until a program can run outside the app. The Agents rule above still holds.)*
 - **Breakage is the point.** When `Program.make` or the Agent interface changes and the tooling
   breaks, that is a finding about the library, not a cost of the tooling. CI's typecheck over the
   scripts is what shows it first. Fix the library or the tooling in the open; never fork a private

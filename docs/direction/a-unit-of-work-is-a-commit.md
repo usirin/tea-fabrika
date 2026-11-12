@@ -123,8 +123,9 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
 {_tag: "attested", step: "build", from: "9e02a1c", to: "c7a8f55", by: "agent:builder",
  key: "SHA256:Bx9...", sig: "-----BEGIN SSH SIGNATURE-----...", arrivedAt: "21:40:56", parent: "in-3f9a0c21-9", traceId: "t1"}
 
-// CI: the first link starts at main's tree, each link starts where the last one ended, the last
-// ends at the squash commit's tree, and every `sig` checks against a known step key.
+// CI: the first link starts at the tree where the branch left main, each link starts where the
+// last one ended, the last ends at the head's tree, and every `sig` checks against a known step
+// key. (Changed 2026-11-11 by 0098: it said main's tree and the squash commit's tree.)
 // A gap or a bad signature: {_tag: "stuck", why: "broken_chain"}. A `build` link whose change
 // touches an exam path: {_tag: "stuck", why: "build_touched_exam"}.
 ```
@@ -139,6 +140,9 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
   ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).*
   Lead, 2026-11-08: a catch-up merge of main whose conflict touches exam paths is resolved by a
   tests run and signed tests, not lead; every other catch-up merge stays a lead link.
+  *Changed 2026-11-11 by [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md):
+  the chain runs from the tree where the branch left `main` to the head's tree, so a pull request
+  behind `main` is not refused and may land without the merge; a merge that is made stays a link.*
 - **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
   ledger, which is already an append-only log with a referee, the way traces dropped Jaeger for the
   job record ([a job record holds its trace](./a-job-record-holds-its-trace.md)).

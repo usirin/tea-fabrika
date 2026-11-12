@@ -1,5 +1,7 @@
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./scope.ts?raw";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
@@ -28,6 +30,7 @@ type Report = {
   total: number;
   selected: number;
   left: number;
+  files: readonly { file: string; total: number; selected: number }[];
 };
 
 const options = { seed: 520, numRuns: 100 };
@@ -51,34 +54,56 @@ const parseRange = (range: string) => {
   };
 };
 
-const enclosed = (range: string, candidate: Candidate) => {
-  const { file, start, end } = parseRange(range);
-  return (
-    file === candidate.fileName &&
-    position(candidate.location.start, start) >= 0 &&
-    position(candidate.location.end, end) <= 0
-  );
+type Range = ReturnType<typeof parseRange>;
+
+const enclosed = ({ file, start, end }: Range, candidate: Candidate) =>
+  file === candidate.fileName &&
+  position(candidate.location.start, start) >= 0 &&
+  position(candidate.location.end, end) <= 0;
+
+// The changed lines of each file, so a candidate's check reads only its own span's lines.
+const changedLines = (changed: Changed[]) => {
+  const lines = new Map<string, Set<number>>();
+
+  for (const c of changed) {
+    lines.set(c.file, (lines.get(c.file) ?? new Set()).add(c.line));
+  }
+
+  return (candidate: Candidate) => {
+    const mine = lines.get(candidate.fileName);
+    const { start, end } = candidate.location;
+    return mine !== undefined && [...mine].some((line) => line >= start.line && line <= end.line);
+  };
 };
 
-const isChanged = (candidate: Candidate, changed: Changed[]) =>
-  changed.some(
-    (c) =>
-      c.file === candidate.fileName && c.line >= candidate.location.start.line && c.line <= candidate.location.end.line,
-  );
-
+// Each range is parsed once per report, not once per candidate: parseRange runs a vitest
+// `expect`, and the across-files property's reports hold up to 150 ranges over 470 candidates.
+// Re-parsing per pair made that property take 9.8 s in CI's plain run and pass the 10 s timeout
+// under Stryker's dry run (hourly mutation run, 2026-11-11).
 const checkReport = (report: Report, candidates: Candidate[], changed: Changed[], seed: number, max: number) => {
-  const eligible = candidates.filter((c) => isChanged(c, changed));
-  const selected = candidates.filter((c) => report.ranges.some((r) => enclosed(r, c)));
+  const isChanged = changedLines(changed);
+  const ranges = report.ranges.map(parseRange);
+  const eligible = candidates.filter(isChanged);
+  const selected = candidates.filter((c) => ranges.some((r) => enclosed(r, c)));
   expect(report.seed).toBe(seed);
   expect(report.total).toBe(eligible.length);
   expect(report.selected).toBe(selected.length);
   expect(report.selected).toBeLessThanOrEqual(Math.min(max, 150));
   expect(report.left).toBe(report.total - report.selected);
   expect(report.left).toBeGreaterThanOrEqual(0);
-  expect(selected.every((c) => isChanged(c, changed))).toBe(true);
+  // Each changed file has its row, in name order, with what it offered and what was selected.
+  const names = [...new Set(changed.map((c) => c.file))].sort();
+  expect(report.files).toEqual(
+    names.map((file) => ({
+      file,
+      total: eligible.filter((c) => c.fileName === file).length,
+      selected: selected.filter((c) => c.fileName === file).length,
+    })),
+  );
+  expect(selected.every(isChanged)).toBe(true);
   expect(new Set(report.ranges).size).toBe(report.ranges.length);
 
-  for (const range of report.ranges) {
+  for (const range of ranges) {
     expect(selected.some((c) => enclosed(range, c))).toBe(true);
   }
 
@@ -269,6 +294,161 @@ describe("mutation sampling across files, today's tooling", () => {
       { ...options, seed: 119120 },
     );
   });
+});
+
+describe("T655 every changed file holds a mutant before any holds two, today's tooling", () => {
+  const block = (id: number, file: string, from: number, to: number): Candidate => ({
+    ...candidate(id, file, from, 0, 99),
+    mutatorName: "BlockStatement",
+    location: { start: { line: from, column: 0 }, end: { line: to, column: 99 } },
+  });
+
+  // Lane t389, 2026-11-10: block ranges over the first files' rewritten lines took the whole cap,
+  // and the launcher, the hook and the rule got no mutant in five rounds. Here each file is a run
+  // of changed lines, some with no mutant (imports), each other line with one cheap mutant, all
+  // inside one block range; the first file's block alone costs the whole cap.
+  // Plants: take a line's first range in seed order (the old pick); give each turn to one changed
+  // line, so a file whose first lines hold no mutant loses its turns.
+  it("property: with a cap of at least the file count, every changed file gets a mutant", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ bare: fc.nat({ max: 6 }), lines: fc.integer({ min: 1, max: 30 }) }), {
+          minLength: 2,
+          maxLength: 8,
+        }),
+        fc.integer(),
+        fc.nat({ max: 40 }),
+        (shapes, seed, extra) => {
+          const max = Math.min(150, shapes.length + extra);
+          const files = shapes.map((_, i) => `src/f${String(i).padStart(2, "0")}.ts`);
+          // The first file has as many cheap lines as the cap, so its block costs more than the cap
+          // would leave anyone else.
+          const sized = shapes.map((s, i) => (i === 0 ? { ...s, lines: Math.max(s.lines, max) } : s));
+          const candidates = sized.flatMap(({ bare, lines }, f) => [
+            block(f * 1000, files[f], 1, bare + lines),
+            ...Array.from({ length: lines }, (_, l) => candidate(f * 1000 + l + 1, files[f], bare + l + 1, 10, 11)),
+          ]);
+          const changed = sized.flatMap(({ bare, lines }, f) =>
+            Array.from({ length: bare + lines }, (_, l) => ({ file: files[f], line: l + 1 })),
+          );
+          const report: Report = sample({ candidates, changed, seed, max });
+          checkReport(report, candidates, changed, seed, max);
+          expect(report.files.filter((f) => f.selected === 0)).toEqual([]);
+          // Round-robin of cheap picks: while every file still has a cheap line, none is two ahead.
+          const per = report.files.map((f) => f.selected);
+          const short = Math.min(...sized.map((s) => s.lines));
+
+          if (Math.max(...per) <= short) {
+            expect(Math.max(...per) - Math.min(...per)).toBeLessThanOrEqual(1);
+          }
+        },
+      ),
+      {
+        ...options,
+        seed: 119120,
+        // pinned: the t389 shape, seven files, the first a rewritten block over the cap.
+        examples: [
+          [
+            [
+              { bare: 3, lines: 30 },
+              { bare: 0, lines: 2 },
+              { bare: 6, lines: 30 },
+              { bare: 6, lines: 30 },
+              { bare: 2, lines: 30 },
+              { bare: 6, lines: 30 },
+              { bare: 0, lines: 1 },
+            ],
+            0,
+            0,
+          ],
+        ],
+      },
+    );
+  });
+
+  const repo = () => {
+    const dir = mkdtempSync(join(tmpdir(), "sample655-"));
+    const git = (...args: string[]) => {
+      const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], { encoding: "utf8" });
+      expect(ran.status, ran.stderr).toBe(0);
+      return ran.stdout.trim();
+    };
+    const put = (path: string, text: string) => {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    };
+    mkdirSync(join(dir, "packages"));
+    symlinkSync(resolve("packages/pipeline"), join(dir, "packages/pipeline"));
+    git("init", "-q", "-b", "main");
+    git("config", "user.name", "Fixture");
+    git("config", "user.email", "fixture@example.test");
+    put(".gitignore", "packages/\n");
+    return { dir, git, put };
+  };
+
+  // Lane t389's hook was apps/fabrika/src/testing/electron-hook.cjs, outside the old `*.ts` filter.
+  // Stryker 10.1.1's Instrumenter parses .cjs, .mjs, .cts, .mts, .js and .jsx too.
+  // Plant: the old pathspec, `*.ts *.tsx :!*.test.ts :!*.test.tsx`.
+  it("scenario: a changed .cjs, .mjs or .cts file is sampled; its test and its type declaration are not", () => {
+    const { dir, git, put } = repo();
+    const code = (n: number) => `module.exports = (a) => (a > ${n} ? a + 1 : a - 1);\n`;
+
+    try {
+      git("commit", "-q", "--allow-empty", "-m", "root");
+      const base = git("rev-parse", "HEAD");
+      put("src/hook.cjs", code(1));
+      put("src/lib.mjs", `export const lib = (a) => (a > 2 ? a * 2 : a / 2);\n`);
+      put("src/types.cts", `export const t = (a: number) => (a > 3 ? a : -a);\n`);
+      put("src/hook.d.cts", "export declare const hook: (a: number) => number;\n");
+      put("src/hook.test.cjs", code(4));
+      put("src/a.test.ts", `export const x = (a: number) => (a > 5 ? 1 : 0);\n`);
+      git("add", "--all");
+      git("commit", "-qm", "build");
+      const report = join(dir, "s.json");
+      const ran = spawnSync(
+        process.execPath,
+        [join(import.meta.dirname, "sample.ts"), "--build", "HEAD", "--since", base, "--report", report],
+        { cwd: dir, encoding: "utf8" },
+      );
+      expect(ran.status, ran.stderr).toBe(0);
+      const got = JSON.parse(readFileSync(report, "utf8")) as Report;
+      expect(got.files.map((f) => f.file)).toEqual(["src/hook.cjs", "src/lib.mjs", "src/types.cts"]);
+      expect(got.files.every((f) => f.total > 0 && f.selected > 0)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // 0089: of the lead tooling, only lane code is sampled. Plant: drop `inScope` from the diff's loop.
+  it("scenario: a changed lane script and product file are sampled; another lead script is not", () => {
+    const { dir, git, put } = repo();
+    const code = (n: number) => `export const f = (a: number) => (a > ${n} ? a + 1 : a - 1);\n`;
+
+    try {
+      git("commit", "-q", "--allow-empty", "-m", "root");
+      const base = git("rev-parse", "HEAD");
+      // Built from stems, so the script-reads lint does not take these paths for reads.
+      const at = (name: string, stem: string) => `.agents/skills/${name}/scripts/${stem}.ts`;
+      put(at("lead", "chain"), code(1));
+      put(at("lead", "flow/machine"), code(2));
+      put(at("lead", "mutbox"), code(3));
+      put(at("mutation", "sample"), code(4));
+      put("src/a.ts", code(5));
+      git("add", "--all");
+      git("commit", "-qm", "build");
+      const report = join(dir, "s.json");
+      const ran = spawnSync(
+        process.execPath,
+        [join(import.meta.dirname, "sample.ts"), "--build", "HEAD", "--since", base, "--report", report],
+        { cwd: dir, encoding: "utf8" },
+      );
+      expect(ran.status, ran.stderr).toBe(0);
+      const got = JSON.parse(readFileSync(report, "utf8")) as Report;
+      expect(got.files.map((f) => f.file)).toEqual([at("lead", "chain"), at("lead", "flow/machine"), "src/a.ts"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 describe("mutation sampling across lines, today's tooling", () => {

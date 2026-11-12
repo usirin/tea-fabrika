@@ -91,6 +91,7 @@
     { "name": "--scrim", "owner": "design" },
     { "name": "--stuck", "owner": "design" },
     { "name": "--surface", "owner": "design" },
+    { "name": "--surface-card", "owner": "design" },
     { "name": "--surface-hover", "owner": "design" },
     { "name": "--surface-raised", "owner": "design" },
     { "name": "--surface-selected", "owner": "design" },

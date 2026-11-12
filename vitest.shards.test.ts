@@ -4,19 +4,22 @@ import { fileURLToPath } from "node:url";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BaseSequencer, createVitest } from "vitest/node";
-import { assign, measured, Shards } from "./vitest.shards.ts";
+import { inLaneStep } from "./.github/ci/workflow-lint.ts";
+import { assign, measured, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
 
 it("vector: next medians and four provisional split estimates match the recorded main runs", () => {
   // Today's CI, both versions. Main runs 42717511599, 42716453289 and 42715921306.
   // The four split files are estimates: original commits-git median 247.6 / 4 = 61.9 s.
-  // The other 103 rows are measured medians, including zero-second files.
+  // 109 rows: four split estimates, four build rows from CI run 42922102030 (A9 and A10),
+  // and 101 measured medians, including zero-second files.
   const expected = {
     "next/apps/fabrika/src/brain-life.test.ts": 27.4,
-    "next/apps/fabrika/src/build.test.ts": 21.0,
+    "next/apps/fabrika/src/build.test.ts": 39.9,
     "next/apps/fabrika/src/door-recovery.test.ts": 52.6,
     "next/apps/fabrika/src/door-spans.test.ts": 2.8,
     "next/apps/fabrika/src/door.test.ts": 17.2,
     "next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts": 11.0,
+    "next/apps/fabrika/src/exam/bytes.test.ts": 4.9,
     "next/apps/fabrika/src/exam/clock.test.ts": 0.0,
     "next/apps/fabrika/src/exam/commits-git-chain.test.ts": 61.9,
     "next/apps/fabrika/src/exam/commits-git-person.test.ts": 61.9,
@@ -41,81 +44,82 @@ it("vector: next medians and four provisional split estimates match the recorded
     "next/apps/fabrika/src/exam/twin.test.ts": 20.0,
     "next/apps/fabrika/src/file-services.laws.test.ts": 0.5,
     "next/apps/fabrika/src/grant-readers.laws.test.ts": 1.8,
-    "next/apps/fabrika/src/local-stage.test.ts": 1.6,
+    "next/apps/fabrika/src/local-instance.test.ts": 1.6,
     "next/apps/fabrika/src/runtime-recovery.laws.test.ts": 0.4,
     "next/apps/fabrika/src/runtime.laws.test.ts": 30.1,
     "next/apps/fabrika/src/settings.test.ts": 0.0,
-    "next/apps/fabrika/src/stage-records.test.ts": 32.8,
-    "next/apps/fabrika/src/stage-wire.test.ts": 68.6,
-    "next/packages/libfabrika/src/app/brain-life.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/app/effect-functions.test.ts": 4.2,
-    "next/packages/libfabrika/src/app/entry.test.ts": 0.0,
-    "next/packages/libfabrika/src/app/execution.test.ts": 0.2,
-    "next/packages/libfabrika/src/app/gateway.laws.test.ts": 1.3,
-    "next/packages/libfabrika/src/app/patch.test.ts": 0.1,
-    "next/packages/libfabrika/src/app/program.test.ts": 0.5,
-    "next/packages/libfabrika/src/app/program.types.test.ts": 0.1,
-    "next/packages/libfabrika/src/app/recovery-gaps.test.ts": 0.9,
-    "next/packages/libfabrika/src/app/runner-recovery.laws.test.ts": 0.7,
-    "next/packages/libfabrika/src/app/runner-supervision.test.ts": 67.5,
-    "next/packages/libfabrika/src/app/runner.test.ts": 41.2,
-    "next/packages/libfabrika/src/app/state.test.ts": 0.1,
-    "next/packages/libfabrika/src/app/supervisor.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/coordination/authorization.test.ts": 16.4,
-    "next/packages/libfabrika/src/coordination/client-manager.test.ts": 13.0,
-    "next/packages/libfabrika/src/coordination/gateway-manager.test.ts": 2.5,
-    "next/packages/libfabrika/src/coordination/mailbox-history.test.ts": 0.4,
-    "next/packages/libfabrika/src/coordination/mailbox.test.ts": 36.1,
-    "next/packages/libfabrika/src/coordination/members.test.ts": 1.4,
-    "next/packages/libfabrika/src/coordination/passkey.test.ts": 0.1,
-    "next/packages/libfabrika/src/coordination/process-id.test.ts": 1.3,
-    "next/packages/libfabrika/src/coordination/process-lifecycle.test.ts": 14.8,
-    "next/packages/libfabrika/src/coordination/process-manager.test.ts": 2.5,
-    "next/packages/libfabrika/src/coordination/process-monitors.test.ts": 20.2,
-    "next/packages/libfabrika/src/coordination/process-recovery.test.ts": 1.9,
-    "next/packages/libfabrika/src/coordination/process-spans.test.ts": 6.0,
-    "next/packages/libfabrika/src/coordination/process-store.test.ts": 2.0,
-    "next/packages/libfabrika/src/coordination/process-streams.test.ts": 8.5,
-    "next/packages/libfabrika/src/coordination/process-text-caps.test.ts": 14.1,
-    "next/packages/libfabrika/src/coordination/process-window.test.ts": 1.2,
-    "next/packages/libfabrika/src/coordination/recovery-store.test.ts": 0.1,
-    "next/packages/libfabrika/src/coordination/session-manager.test.ts": 8.8,
-    "next/packages/libfabrika/src/coordination/spans.test.ts": 4.9,
-    "next/packages/libfabrika/src/coordination/text.test.ts": 0.0,
-    "next/packages/libfabrika/src/data/crypto-failure.test.ts": 0.0,
-    "next/packages/libfabrika/src/data/health.test.ts": 4.4,
-    "next/packages/libfabrika/src/data/ledger-call-spans.test.ts": 0.6,
-    "next/packages/libfabrika/src/data/ledger-transaction.test.ts": 0.1,
-    "next/packages/libfabrika/src/data/ledger.test.ts": 2.2,
-    "next/packages/libfabrika/src/data/log.test.ts": 1.9,
-    "next/packages/libfabrika/src/data/p12-readers.laws.test.ts": 0.2,
-    "next/packages/libfabrika/src/data/record-part.test.ts": 0.8,
-    "next/packages/libfabrika/src/data/records.test.ts": 0.6,
-    "next/packages/libfabrika/src/data/rings.test.ts": 0.2,
-    "next/packages/libfabrika/src/data/sink.test.ts": 1.0,
-    "next/packages/libfabrika/src/data/spans.test.ts": 1.1,
-    "next/packages/libfabrika/src/data/trace-id.test.ts": 0.8,
-    "next/packages/libfabrika/src/door/revocation.test.ts": 19.6,
-    "next/packages/libfabrika/src/id.test.ts": 3.8,
-    "next/packages/libfabrika/src/id.types.test.ts": 0.0,
-    "next/packages/libfabrika/src/node/local-stage.test.ts": 2.5,
-    "next/packages/libfabrika/src/node/stage-errors.laws.test.ts": 2.1,
-    "next/packages/libfabrika/src/node/stage-recording.laws.test.ts": 0.1,
-    "next/packages/libfabrika/src/node/stage-secrets.laws.test.ts": 4.2,
-    "next/packages/libfabrika/src/node/stage.laws.test.ts": 2.3,
-    "next/packages/libfabrika/src/node/supervision-spans.test.ts": 11.3,
-    "next/packages/libfabrika/src/testing.test.ts": 0.0,
-    "next/packages/libfabrika/src/transport/answer.test.ts": 0.2,
-    "next/packages/libfabrika/src/transport/crypto-failure.test.ts": 0.0,
-    "next/packages/libfabrika/src/transport/hello.test.ts": 1.1,
-    "next/packages/libfabrika/src/transport/sshsig-webauthn.test.ts": 0.5,
-    "next/packages/libfabrika/src/transport/sshsig.test.ts": 1.1,
-    "next/packages/libfabrika/src/transport/waiting.test.ts": 0.1,
-    "next/packages/libfabrika/src/workers/fetch.test.ts": 0.4,
-    "next/packages/libfabrika/src/workers/index.test.ts": 0.0,
-    "next/packages/libfabrika/src/workers/readers.laws.test.ts": 0.6,
-    "next/packages/libfabrika/src/workers/runner-reply.laws.test.ts": 3.6,
-    "next/packages/libfabrika/src/workers/supervision.laws.test.ts": 11.5,
+    "next/apps/fabrika/src/instance-records.test.ts": 32.8,
+    "next/apps/fabrika/src/instance-wire.test.ts": 68.6,
+    "next/packages/libfabrika/src/Id.test.ts": 3.8,
+    "next/packages/libfabrika/src/Id.types.test.ts": 0.0,
+    "next/packages/libfabrika/src/Testing.test.ts": 0.0,
+    "next/packages/libfabrika/src/access/Access.test.ts": 1.4,
+    "next/packages/libfabrika/src/access/AccessSpans.test.ts": 4.9,
+    "next/packages/libfabrika/src/access/Authorization.test.ts": 16.4,
+    "next/packages/libfabrika/src/access/ClientManager.test.ts": 13.0,
+    "next/packages/libfabrika/src/access/Passkey.test.ts": 0.1,
+    "next/packages/libfabrika/src/access/SessionManager.test.ts": 8.8,
+    "next/packages/libfabrika/src/access/Text.test.ts": 0.0,
+    "next/packages/libfabrika/src/cloudflare/fetch.test.ts": 0.4,
+    "next/packages/libfabrika/src/cloudflare/index.test.ts": 0.0,
+    "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts": 0.6,
+    "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts": 3.6,
+    "next/packages/libfabrika/src/cloudflare/supervision.laws.test.ts": 11.5,
+    "next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts": 19.6,
+    "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": 0.1,
+    "next/packages/libfabrika/src/ledger/Ledger.test.ts": 2.2,
+    "next/packages/libfabrika/src/ledger/LedgerCallSpans.test.ts": 0.6,
+    "next/packages/libfabrika/src/ledger/LedgerSpans.test.ts": 1.1,
+    "next/packages/libfabrika/src/ledger/LedgerTransaction.test.ts": 0.1,
+    "next/packages/libfabrika/src/ledger/Log.test.ts": 1.9,
+    "next/packages/libfabrika/src/ledger/Rings.test.ts": 0.2,
+    "next/packages/libfabrika/src/ledger/TraceId.test.ts": 0.8,
+    "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
+    "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
+    "next/packages/libfabrika/src/node/dev/dev-errors.laws.test.ts": 2.1,
+    "next/packages/libfabrika/src/node/dev/dev-recording.laws.test.ts": 0.1,
+    "next/packages/libfabrika/src/node/dev/dev-secrets.laws.test.ts": 4.2,
+    "next/packages/libfabrika/src/node/dev/dev.laws.test.ts": 2.3,
+    "next/packages/libfabrika/src/node/dev/local-dev.test.ts": 2.5,
+    "next/packages/libfabrika/src/node/dev/supervision-spans.test.ts": 11.3,
+    "next/packages/libfabrika/src/presence/Connections.test.ts": 2.5,
+    "next/packages/libfabrika/src/processes/Mailbox.test.ts": 36.1,
+    "next/packages/libfabrika/src/processes/MailboxHistory.test.ts": 0.4,
+    "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts": 1.3,
+    "next/packages/libfabrika/src/processes/ProcessLifecycle.test.ts": 14.8,
+    "next/packages/libfabrika/src/processes/ProcessManager.test.ts": 2.5,
+    "next/packages/libfabrika/src/processes/ProcessMonitors.test.ts": 20.2,
+    "next/packages/libfabrika/src/processes/ProcessSpans.test.ts": 6.0,
+    "next/packages/libfabrika/src/processes/ProcessStreams.test.ts": 8.5,
+    "next/packages/libfabrika/src/processes/ProcessTextCaps.test.ts": 14.1,
+    "next/packages/libfabrika/src/processes/ProcessWindow.test.ts": 1.2,
+    "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts": 0.1,
+    "next/packages/libfabrika/src/runtime/EffectFunctions.test.ts": 4.2,
+    "next/packages/libfabrika/src/runtime/Entry.test.ts": 0.0,
+    "next/packages/libfabrika/src/runtime/Execution.test.ts": 0.2,
+    "next/packages/libfabrika/src/runtime/Gateway.laws.test.ts": 1.3,
+    "next/packages/libfabrika/src/runtime/Patch.test.ts": 0.1,
+    "next/packages/libfabrika/src/runtime/ProcessStore.test.ts": 2.0,
+    "next/packages/libfabrika/src/runtime/Program.test.ts": 0.5,
+    "next/packages/libfabrika/src/runtime/Program.types.test.ts": 0.1,
+    "next/packages/libfabrika/src/runtime/RecoveryGaps.test.ts": 0.9,
+    "next/packages/libfabrika/src/runtime/RecoveryStore.test.ts": 0.1,
+    "next/packages/libfabrika/src/runtime/Runner.test.ts": 41.2,
+    "next/packages/libfabrika/src/runtime/RunnerRecovery.laws.test.ts": 0.7,
+    "next/packages/libfabrika/src/runtime/RunnerSupervision.test.ts": 67.5,
+    "next/packages/libfabrika/src/runtime/State.test.ts": 0.1,
+    "next/packages/libfabrika/src/runtime/internal/recovery.test.ts": 1.9,
+    "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": 0.1,
+    "next/packages/libfabrika/src/telemetry/ArchiveCryptoFailure.test.ts": 0.0,
+    "next/packages/libfabrika/src/telemetry/P12Readers.laws.test.ts": 0.2,
+    "next/packages/libfabrika/src/telemetry/Records.test.ts": 0.6,
+    "next/packages/libfabrika/src/telemetry/Sink.test.ts": 1.0,
+    "next/packages/libfabrika/src/telemetry/internal/measurements.test.ts": 4.4,
+    "next/packages/libfabrika/src/transport/Answer.test.ts": 0.2,
+    "next/packages/libfabrika/src/transport/Hello.test.ts": 1.1,
+    "next/packages/libfabrika/src/transport/Sshsig.test.ts": 1.1,
+    "next/packages/libfabrika/src/transport/SshsigWebauthn.test.ts": 0.5,
+    "next/packages/libfabrika/src/transport/internal/binaryCryptoFailure.test.ts": 0.0,
     "next/programs/counter/src/program.laws.test.ts": 0.1,
     "next/programs/counter/src/runner.laws.test.ts": 0.3,
   };
@@ -126,7 +130,7 @@ it("vector: next medians and four provisional split estimates match the recorded
 // restore equal-count assignment, or discard measured script times.
 // T342: all three plants failed their laws. Equal-count placement initially survived
 // the final load bound; checking the least measured load at each placement caught it.
-it("generated sharding assigns once, ignores input order and balances measured seconds", () => {
+it("L8: generated sharding assigns once to the least load including starts, independent of input order", () => {
   fc.assert(
     fc.property(
       fc.uniqueArray(fc.record({ path: fc.string({ minLength: 1 }), seconds: fc.integer({ min: 0, max: 500 }) }), {
@@ -135,10 +139,11 @@ it("generated sharding assigns once, ignores input order and balances measured s
         maxLength: 40,
       }),
       fc.integer({ min: 1, max: 12 }),
-      (files, count) => {
-        const machines = assign(files, count);
+      fc.array(fc.integer({ min: 0, max: 2000 }), { maxLength: 12 }),
+      (files, count, start) => {
+        const machines = assign(files, count, start);
         expect(machines).toHaveLength(files.length);
-        const running = Array.from({ length: count }, () => 0);
+        const running = Array.from({ length: count }, (_, i) => start[i] ?? 0);
 
         for (const { file, index } of files
           .map((file, index) => ({ file, index }))
@@ -148,15 +153,28 @@ it("generated sharding assigns once, ignores input order and balances measured s
           )) {
           const machine = machines[index]!;
           expect(running[machine]).toBe(Math.min(...running));
+          expect(machine).toBe(running.indexOf(Math.min(...running)));
           running[machine] = running[machine]! + file.seconds;
         }
 
         expect(machines.every((m) => m >= 0 && m < count && Number.isInteger(m))).toBe(true);
         const first = Object.fromEntries(files.map((f, i) => [f.path, machines[i]]));
         const reversed = files.toReversed();
-        expect(Object.fromEntries(reversed.map((f, i) => [f.path, assign(reversed, count)[i]]))).toEqual(first);
+        expect(Object.fromEntries(reversed.map((f, i) => [f.path, assign(reversed, count, start)[i]]))).toEqual(first);
+        expect(assign(files, count, [])).toEqual(assign(files, count));
+        const empty = assign(files, count);
+        const legacy = Array.from({ length: count }, () => 0);
+
+        for (const file of files.toSorted(
+          (a, b) => b.seconds - a.seconds || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+        )) {
+          const least = legacy.indexOf(Math.min(...legacy));
+          expect(empty[files.indexOf(file)]).toBe(least);
+          legacy[least] = legacy[least]! + file.seconds;
+        }
+
         const load = Array.from({ length: count }, (_, m) =>
-          files.reduce((sum, f, i) => sum + (machines[i] === m ? f.seconds : 0), 0),
+          files.reduce((sum, f, i) => sum + (empty[i] === m ? f.seconds : 0), 0),
         );
         expect(Math.max(...load) - Math.min(...load)).toBeLessThanOrEqual(Math.max(...files.map((f) => f.seconds)));
       },
@@ -167,7 +185,8 @@ it("generated sharding assigns once, ignores input order and balances measured s
 
 it("vector: real CI medians include the previously unweighted scripts", () => {
   // Fixed medians from runs 42579837468, 42573088027 and 42571265116, rounded to one decimal.
-  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(59.1);
+  // T554 refresh: plancheck.test.ts is the median of runs 42803733957, 42807559589 and 42801440878.
+  expect(measured[".agents/skills/plan/scripts/plancheck.test.ts"]).toBe(106.2);
   expect(measured["apps/fabrika/src/bundles.test.ts"]).toBe(3.7);
   expect(measured["packages/pipeline/src/laws/standard.test.ts"]).toBe(3.5);
 });
@@ -185,11 +204,25 @@ it("vector: the four catchup files carry their times from PR 770's CI run", () =
   }
 });
 
+it("vector: the four build files carry their times from CI run 42922102030", () => {
+  // T502, next/ (A9, A10): one time each from run 42922102030, on 2909594e, rounded to one decimal.
+  // Plant: drop these rows, so all four count 1 s and the heavy build files can stack on one machine.
+  for (const [path, seconds] of [
+    ["next/apps/fabrika/src/build.test.ts", 39.9],
+    ["next/apps/fabrika/src/exam/bytes.test.ts", 4.9],
+    ["next/packages/libfabrika/src/node/build/build-assets.test.ts", 48.6],
+    ["next/packages/libfabrika/src/node/build/build-one-file.test.ts", 11.0],
+  ] as const) {
+    expect.soft(measured[path], path).toBe(seconds);
+  }
+});
+
 it("vector: lead test medians match the three green main CI runs", () => {
   // T375 Amendment 1: fixed CI medians from 42631962689, 42631256491 and 42630840277.
   // Plant: discard these rows, leaving the scripts to count as 1 s.
   for (const [path, seconds] of [
-    [".agents/skills/lead/scripts/box.test.ts", 485.3],
+    // T554 refresh: median of 10 runs, PR 757's check run 42874119130, attempts 5 to 14.
+    [".agents/skills/lead/scripts/box.test.ts", 348.7],
     [".agents/skills/step-commit/scripts/stepcommit.test.ts", 18.2],
     [".agents/skills/lead/scripts/redact.test.ts", 7.2],
     [".agents/skills/lead/scripts/gc.test.ts", 0.1],
@@ -275,7 +308,8 @@ describe("Shards", () => {
     expect(Shards.prototype.sort).toBe(BaseSequencer.prototype.sort);
   });
 
-  it("over `--shard k/6`, keeps each lane file on one machine, and every machine's seconds within the heaviest file of every other's", async () => {
+  it("scenario: L13 lane-only shards cover every lane once and balance on top of the rest", async () => {
+    // The real repo config selects lanes before sharding. Plant: start lanes from zero.
     const lanes = readdirSync(join(ROOT, LANES))
       .filter((name) => /^lane\..*\.test\.ts$/.test(name))
       .map((name) => `${LANES}/${name}`);
@@ -286,7 +320,9 @@ describe("Shards", () => {
       const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
 
       try {
-        const specs = await vitest.globTestSpecifications();
+        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
+          inLaneStep(relative(ROOT, spec.moduleId)),
+        );
         const Sequencer = vitest.config.sequence.sequencer;
         const mine = await new Sequencer(vitest).shard(specs);
         kept.push(mine.map((spec) => relative(ROOT, spec.moduleId)));
@@ -301,8 +337,89 @@ describe("Shards", () => {
         .filter((p) => lanes.includes(p))
         .toSorted(),
     ).toEqual(lanes.toSorted());
-    const seconds = kept.map((paths) => paths.reduce((sum, p) => sum + (measured[p] ?? 1), 0));
-    const heaviest = Math.max(...Object.values(measured));
-    expect(Math.max(...seconds) - Math.min(...seconds)).toBeLessThanOrEqual(heaviest);
+    const rest = Object.entries(measured)
+      .filter(([path]) => !path.startsWith("next/") && !inLaneStep(path))
+      .map(([path, seconds]) => ({ path, seconds }));
+    const placed = assign(rest, 6);
+    const loads = Array.from({ length: 6 }, (_, i) =>
+      wall(rest.filter((_, j) => placed[j] === i).map((file) => file.seconds)),
+    );
+    expect(restLoads(6)).toEqual(loads);
+    const seconds = kept.map((paths, i) => paths.reduce((sum, p) => sum + (measured[p] ?? 1), loads[i]!));
+    const heaviestLane = Math.max(...lanes.map((path) => measured[path] ?? 1));
+    const biggest = Math.max(
+      ...Object.entries(measured)
+        .filter(([path]) => !path.startsWith("next/"))
+        .map(([, seconds]) => seconds),
+    );
+    expect(Math.max(...seconds)).toBeLessThanOrEqual(Math.max(Math.min(...seconds) + heaviestLane, biggest));
   });
+
+  it("scenario: a list holding a lane file and another file is split as `assign` does, from zeros", async () => {
+    // Only a list of lane files only starts from `restLoads`: the rest step shares those machines.
+    // Plant: start from `restLoads` when any file is a lane file.
+    const lanes = readdirSync(join(ROOT, LANES))
+      .filter((name) => /^lane\..*\.test\.ts$/.test(name))
+      .map((name) => `${LANES}/${name}`);
+    const others = Object.keys(measured).filter((path) => !path.startsWith("next/") && !inLaneStep(path));
+    const paths = [...lanes, ...others];
+    const files = paths.map((path) => ({ path, seconds: measured[path] ?? 1 }));
+    const placed = assign(files, 6);
+
+    for (const index of [1, 2, 3, 4, 5, 6]) {
+      const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/6` });
+
+      try {
+        const Sequencer = vitest.config.sequence.sequencer;
+        const mine = await new Sequencer(vitest).shard(paths.map((path) => ({ moduleId: join(ROOT, path) })) as never);
+        expect(mine.map((spec) => relative(ROOT, spec.moduleId))).toEqual(
+          paths.filter((_, i) => placed[i] === index - 1),
+        );
+      } finally {
+        await vitest.close();
+      }
+    }
+  });
+});
+
+it("L9: wall equals the largest file or the shared worker load", () => {
+  // Plant: return the plain sum, ignoring parallel workers.
+  fc.assert(
+    fc.property(fc.array(fc.integer({ min: 0, max: 10000 })), (seconds) => {
+      const biggest = Math.max(0, ...seconds);
+      const shared = seconds.reduce((sum, seconds) => sum + seconds, 0) / WORKERS;
+      const actual = wall(seconds);
+      expect(actual).toBeGreaterThanOrEqual(biggest);
+      expect(actual).toBeGreaterThanOrEqual(shared);
+      expect([biggest, shared]).toContain(actual);
+    }),
+    { seed: 119120, numRuns: 100 },
+  );
+});
+
+it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
+  // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; missing rows count 1 s.
+  // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
+  // check run 42874119130, attempts 5 to 14, a median of 10.
+  // Plant: restore catchup's old 47.2 seconds. Lane rows await the PR's own run.
+  // catchup.test.ts was split by PR 772 (ticket 572); its row is now main's 102.4 from run 42883743294.
+  const expected = {
+    ".agents/skills/lead/scripts/catchup.test.ts": 102.4,
+    ".agents/skills/lead/scripts/box.test.ts": 348.7,
+    ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+    ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
+    "oxlint-plugins/program-package-layout.test.ts": 80.3,
+    "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
+    "scripts/caps.test.ts": 108.5,
+    ".agents/skills/plan/scripts/plancheck.test.ts": 106.2,
+    "oxlint-plugins/plants.test.ts": 48.2,
+    "oxlint-plugins/padding-line-between-statements.test.ts": 44.7,
+    ".agents/skills/lead/scripts/leakgrep.test.ts": 34.2,
+    ".agents/skills/lead/scripts/mutbox.test.ts": 34.0,
+    ".agents/skills/lead/scripts/skillscheck.test.ts": 25.9,
+  };
+
+  for (const [path, seconds] of Object.entries(expected)) {
+    expect.soft(measured[path], path).toBe(seconds);
+  }
 });

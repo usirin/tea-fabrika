@@ -25,6 +25,13 @@ export type InputMsg<I extends Inputs> = {
   readonly [K in keyof I & string]: { readonly type: K; readonly value: PayloadOf<I[K]> };
 }[keyof I & string];
 
+/** A focused component's commands. Buttons and key handling share these messages. */
+export interface ProgramCommand<M> {
+  readonly send: M;
+  readonly keys: string;
+  readonly label: string;
+}
+
 /** What a program's window may send: one of its inputs. */
 export type InputMsgOf<P> = P extends Program<any, infer I, any, any, any, any> ? InputMsg<I> : never;
 

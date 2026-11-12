@@ -1,6 +1,12 @@
 #!/bin/sh
 # Today's tooling. Every shell shares this lock, regardless of its temp settings.
 set -eu
+# pnpm -r refuses a linked node_modules (ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH) and the patch below
+# would write through the link, so say what to run before either starts, and before the lock.
+if [ -L node_modules ] || { [ -e node_modules ] && [ ! -d node_modules ]; }; then
+  echo "typecheck: needs its own node_modules; run pnpm install --offline --frozen-lockfile" >&2
+  exit 1
+fi
 exec python3 - <<'PY'
 import fcntl, os, subprocess, sys
 

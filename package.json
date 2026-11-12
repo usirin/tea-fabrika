@@ -40,12 +40,16 @@
   "devDependencies": {
     "@demlik/structure-sweep": "catalog:",
     "@effect/tsgo": "catalog:",
+    "@effect/vitest": "catalog:",
     "@tea-fabrika/agents": "workspace:*",
+    "@tea-fabrika/tracker": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "catalog:",
     "fast-check": "catalog:",
     "oxfmt": "catalog:",
+    "oxc-parser": "catalog:",
     "oxlint": "catalog:",
+    "smol-toml": "catalog:",
     "stylelint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

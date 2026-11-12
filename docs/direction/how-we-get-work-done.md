@@ -1,14 +1,20 @@
 # How we get work done
 
-**Proposed 2026-11-10.** Already decided: the order of design, work first and the pipeline last
-([0059](../../.decisions/0059-pipeline-starts-from-the-work.md)); this study's five-part plan, with
-ticket 574 as its running example and the loop starting at "decide what to work on next" (0059's
-amendment, 2026-11-10). Nothing below is decided yet.
+**Decided 2026-11-11.** Redone on the teams where agents do most of the work, as 0059's amendment
+of ticket 645 asked. The owner walked this study on 2026-11-10 and approved the seven principles
+below as the starting point on 2026-11-11
+([0127](../../.decisions/0127-how-we-get-work-done-seven-principles.md)). The leans' confidence
+numbers stay as written. Already decided: the order of design, work first and
+the pipeline last ([0059](../../.decisions/0059-pipeline-starts-from-the-work.md)); this study's
+five-part plan, with ticket 574 as its running example and the loop starting at "decide what to
+work on next" (0059's amendment, 2026-11-10).
 
-Built from [experiment 250](../../experiments/250-how-we-get-work-done.md), which read eleven sources
-on how work gets done and read `field/` for what really happens here, and a private page, "How we
-get work done". Neither is a measurement. This is step 1 to 3 of 0059's order: the loop in plain
-words, then in fabrika's words, then guidelines. It designs no pipeline and adds no code.
+Built from [experiment 250](../../experiments/250-how-we-get-work-done.md), which read how the teams
+that build coding agents, and use them, get work done, checked them against agent fleets, single
+builders and outside measurements, and read `field/` for what really happens here. It is not a
+measurement. This is step 1 to 3 of 0059's order: the loop in plain words, then in fabrika's words,
+then guidelines. It designs no pipeline and adds no code. Source tags such as [a1] are the
+experiment's.
 
 This area has no screen, so the guidelines skill's step 5 (designs shot next to Linear) does not
 apply. There are no shots and no Design canvas. The page traces ticket 574 instead.
@@ -52,14 +58,32 @@ No fabrika words in this section, as 0059 asks.
 
 ## The known way
 
-The makers agree on six things ([experiment 250, part 2](../../experiments/250-how-we-get-work-done.md#part-2-what-they-agree-on)):
-stop at the first defect; limit what is in flight and pull new work only when there is room;
-shape before you start; ship small; write the current way down and improve that; learn as a
-habit and blame no one. Toyota, Lean, Shape Up, Linear, DORA, kanban, a kitchen line, the WHO
-surgical checklist and cockpit checklists each hold some of these.
+The teams that build coding agents and use them to build those agents (Anthropic, OpenAI, Google,
+Cursor, Cognition), checked against Stripe, StrongDM, Ramp, single builders and METR's
+measurements ([experiment 250, the answer](../../experiments/250-how-we-get-work-done.md#the-answer)):
 
-One clash with a goal of ours: Shape Up's six-week bet and Linear's 1 to 3 week projects are sized
-for people. An agent does a ticket in hours, so their "cycle" is too long to use as it is.
+- **Agents write most of the code, and a person's attention is the scarce thing.** About 90% of
+  Claude Code's code [a1], 75% of Google's new code [g1]; "the only fundamentally scarce thing is
+  the synchronous human attention of my team" [o2]. All company claims.
+- **Reading moved to machines; people look by risk.** Seven layers of checks, then nobody, one or
+  two people, set from the change, not the author [a1]. This is the biggest split: Stripe has a
+  person read every PR [s1], OpenAI's harness team reads after merge [o2], StrongDM never [f1].
+- **The unit is a ticket or thread with intent, run by one agent to one PR with proof** [o4, s1,
+  d3, r2].
+- **Every miss becomes a rule, a skill or a check, the same day**, and stale rules leave when a
+  newer model no longer needs them [a1, o3, b1, b2, a4]. The one thing every source agrees on.
+- **One agent writes; the rest read, review or advise** [d2, g3]. Many writers trade errors for
+  speed [c2, a5].
+- **The plumbing breaks next:** source control, CI, build times [a2, a3, o2].
+- **The labs are moving from fixed steps to goals** [a4; o5, secondary]. Stripe's fixed nodes
+  around agent nodes are the counter-example [s2].
+
+Outside measurements warn against trusting a green check alone: about half of test-passing agent
+patches "would not be merged into main by repo maintainers" [m2], and failed agent PRs are larger
+[m4].
+
+The first reading, of human teams (Toyota, Lean, Shape Up, kanban, a kitchen, surgery, the
+cockpit), was turned down as the lens on 2026-11-10 and stays in the experiment as background.
 
 ## What really happens here
 
@@ -71,6 +95,7 @@ All of it today's version, from `field/` on 2026-11-10:
   (the tools could not collect the commit), and $117.91 of about $239.
 - **No step asked the owner.** All 9 asks went to the lead. 89 of 554 notes say a person was
   needed, mostly for design calls, the owner correcting the lead, and tooling knots.
+- **Nothing records the owner's time,** the budget the frontier counts first.
 
 ## In fabrika's words
 
@@ -86,141 +111,264 @@ is **event** in `next/` (renamed 2026-11-08); today's code says fact.
 | Ship | `catchup.sh` under the lead (0014) | `ship`, the one merge authority |
 | Learn | `field/` rows and notes, findings a person rates, `.decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
 
-The full table, with a source for each name, is in experiment 250, part 4.
+The full table, with a source for each name, is in experiment 250, part 8.
 
-## The six principles
+## The seven principles
 
-### W1: one loop, six handoffs, each with an owner and a "done"
+### F1: spend people's attention as the scarce budget
 
 **Lean, 85%.**
 
-- **What it means:** every piece of work moves through the same six parts. Each part has one owner,
-  hands over one thing and has a "done" anyone can check.
-- **Why:** standard work is "the object of continuous improvement" [l2]; you map "every step" of
-  the flow before you change it [l1].
-- **Linear as the builder:** a ticket's timeline would show the six parts as its history, with the
-  tracker owning "decide" and each step owning its part. Guess, from [n1]'s triage inbox.
-- **Elm or OTP:** each handoff is a Msg from a child to its parent, and the parent steps the next
-  child (Elm's parents step children).
-- **What holds it:** taste today. A law once `next/`'s lane exists: each part writes its handoff.
-- **Doubt:** six may be one too many for small work. Settled by sizing a few tickets on it.
-- **Cost:** a row or event at every handoff.
-- **Ticket 574:** half. Every handoff happened, but three left no row: who filed it, who wrote the
-  first plan, and the lead's own checks.
+- **What it means:** every step is built so a person looks only where their look changes the
+  outcome. Each look is counted: who, when, on what, how long.
+- **Why:** "the only fundamentally scarce thing is the synchronous human attention of my team"
+  [o2]; engineers juggled three to five sessions before switching cost won [o5, secondary];
+  "verification definitely becomes a bottleneck" [o7]; Hashimoto turns notifications off [b2];
+  Anthropic tracks approvals, comments and wait time per PR [a1].
+- **Linear as the builder:** an agent session asks a person only through an `elicitation` or an
+  `error` activity, and the person's answer is a `prompt` no agent can write (experiment 186). Each
+  ask is a visible, countable thing on the ticket. Counting the minutes a look takes is ours.
+- **Elm or OTP:** OTP sends a problem up to the parent only after a burst of failures (restart
+  intensity). Here the person is the parent: asked last, and only with a choice to make.
+- **What holds it:** a law later: every ask and every look is an event, from day one. Today
+  nothing records it.
+- **Doubt:** at two people, attention may matter less than taste.
+- **Cost:** one event per look.
+- **Ticket 574:** half. The owner looked once, at the rule, and nothing else asked him. But no look
+  by anyone was recorded.
+- **Since the walk:** [0096](../../.decisions/0096-the-lead-fixes-forward-while-the-owner-is-away.md):
+  while the owner is away, the lead leaves pull requests to read, not questions, and the owner hears
+  one line only when something cannot wait.
+  [0082](../../.decisions/0082-approvals-is-a-floor-for-every-run.md): how many people must approve
+  is one repo setting, `human-approvals`, a floor no run goes under, and an agent's look never
+  counts.
 
-### W2: pull new work only when there is room
-
-**Lean, 75%.**
-
-- **What it means:** a fixed cap on work in flight. A new lane starts only when one finishes or
-  frees a slot.
-- **Why:** a kanban team "must explicitly control the number of work items" [k1]; Shape Up has a
-  "circuit breaker" so "one project doesn't overload the system" [s1].
-- **Linear as the builder:** a cap would sit with the person's inbox, not the steps: work waits in
-  triage until it is pulled [n1]. A cap count is not in the Linear pages read, so that part is
-  ours (guess).
-- **Elm or OTP:** OTP has no work cap built in. The nearest is a supervisor with a fixed set of
-  children. Where we leave it: the cap is a count in the parent's model.
-- **What holds it:** law, later. Today the cap of 12 agents is prose in AGENTS.md.
-- **Doubt:** with agents the cap may be the laptop or the owner's attention, not the work. Settled
-  by counting both.
-- **Cost:** some work waits even when an agent is free.
-- **Ticket 574:** follows. One lane, run by the chain, inside the lead's cap.
-
-### W3: shape before you start, and change the plan in the open
+### F2: the unit is a ticket with intent and evidence, run to one PR with proof
 
 **Lean, 80%.**
 
-- **What it means:** work starts from a short plan with its limits. When a later part learns the
-  plan is wrong, the plan changes as a dated amendment, signed again, never as a silent edit.
-- **Why:** shaped work "tells the team where to stop" [s1]; the surgery time out re-checks the plan
-  just before the act [o2].
-- **Linear as the builder:** the plan would be the ticket's own text, with each amendment a dated
-  entry on its timeline. Guess.
-- **Elm or OTP:** the plan is model; an amendment is a Msg that `update` handles. Nothing edits the
-  model by hand ([0046](../../.decisions/0046-one-tea-machine-per-file.md)).
-- **What holds it:** law. The plan's line 1 already carries a hash of its body, and an edit forces a
-  new line (AGENTS.md).
-- **Doubt:** how big a change may be an amendment before it needs a new plan. No data yet.
-- **Cost:** a re-approval on every amendment.
-- **Ticket 574:** follows. A1 and A2 are both in the plan, signed again. Both came from later steps.
+- **What it means:** a person writes what, why and how we will know. One agent run turns it into
+  one pull request that carries its proof: checks, shots where there is a screen, a short write-up.
+  Small means cheap to check and cheap to undo, not short in time.
+- **Why:** Symphony maps each open tracker issue to one agent workspace [o4]; Stripe [s1],
+  Cognition [d3] and Ramp [r2] start from a thread or a ticket and end at a PR with proof; failed
+  agent PRs are larger [m4]; "one item per loop" [b1].
+- **Linear as the builder:** Linear Agent writes code in a coding session started from an issue,
+  and its Reviews view shows the diff (experiment 186). The issue is the intent; the session is the
+  run.
+- **Elm or OTP:** one worker process per job, as Symphony keeps one workspace per issue. Its result
+  comes back to the parent as one message.
+- **What holds it:** law in part. A plan's line 1 carries its approval and a hash of its body
+  (AGENTS.md). Proof on the PR is taste today.
+- **Doubt:** fabrika's plan step may be heavier than the frontier's (Stripe starts from a thread).
+- **Cost:** proof costs tokens per PR.
+- **Ticket 574:** follows. One ticket, one plan, one PR; the proof was CI and `loosening.sh` in a
+  PR comment.
+- **Since the walk:** [0099](../../.decisions/0099-no-number-caps-a-pull-request.md): no number
+  caps a pull request; a plan cuts big work into slices that each land whole with their tests.
+  [0100](../../.decisions/0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md): a slice
+  past twice its own plan's estimate goes back to the plan.
 
-### W4: stop at the first defect, and say whose defect it is
-
-**Lean, 80%. The first half is decided** (P3 in [pipeline guidelines](./pipeline-guidelines.md),
-[jidoka and andon](./jidoka-and-andon.md)).
-
-- **What it means:** a stop says whether the work is wrong (a red law, a review finding) or the
-  tools are (a commit not collected, a box that cannot run a check). The two go to different
-  owners.
-- **Why:** Toyota's andon shows where and what [t1]. Here, 16 of 31 test writer stops were the
-  tools, and each sent a person to find out.
-- **Linear as the builder:** Linear's agent session has one `error` state for both (experiment 186).
-  We differ: the reason says whose it is.
-- **Elm or OTP:** OTP's exit reason says why a process ended, and its supervisor decides from it.
-- **What holds it:** law. A stop's reason is a closed list, each case with its owner.
-- **Doubt:** some stops are both. Settled by tagging a week of stops by hand.
-- **Cost:** a second field on every stop.
-- **Ticket 574:** breaks. `fetch_failed` and the moved branch were the tools' defects, but read as
-  the step's.
-
-### W5: ship small
-
-**Lean, 85%.**
-
-- **What it means:** one ticket, one pull request, small enough to land the same day.
-- **Why:** "make each change as small as possible", since "smaller changes are also easier to
-  recover from" [d1].
-- **Linear as the builder:** small projects of "1–3 weeks with a team of 1–3 people" [n1], scaled
-  down to agent hours: a ticket is a few files.
-- **Elm or OTP:** no Elm or OTP answer: batch size is about the work, not the runtime.
-- **What holds it:** taste, with a size shown on each pull request.
-- **Doubt:** some decided notes need a big change at once. Settled by how often a ticket splits.
-- **Cost:** more pull requests, and more step runs per line of change.
-- **Ticket 574:** follows. 6 files, +289 and -48, about 100 minutes from decision to merge.
-
-### W6: a lesson lands in the written way of working
+### F3: check in layers, and place people by risk
 
 **Lean, 75%.**
 
-- **What it means:** each cause a note names ends in a ticket, a finding, a decision or a skill
-  change. A note alone is not the end.
-- **Why:** "Only humans can implement kaizen" [t1], and what kaizen improves is the written standard
-  [l2]. Postmortems follow "any significant undesirable event" [p1].
-- **Linear as the builder:** a note on a ticket would link to the ticket or rule it led to. Guess.
+- **What it means:** machines read every change. A rule read from the change, never from who wrote
+  it, decides how many people must look. An agent's yes never counts as a person's. The builder
+  never writes its own exam.
+- **Why:** Anthropic's seven layers, then nobody, one or two people [a1]; Stripe's "at most two
+  rounds of CI" [s1]; review after merge [o2]; StrongDM's hidden scenarios [f1]; passing tests is
+  not mergeable [m2].
+- **Linear as the builder:** an agent session's `error` state covers every stop alike (experiment
+  186). We differ: a stop says whose defect it is (see "Also" below).
+- **Elm or OTP:** OTP's supervisor decides from a child's exit reason. A check's answer is a reason
+  the parent reads, never a flag.
+- **What holds it:** law. Today: plan, tests, build, mutation and one review, each by its own
+  agent; the lead reads every diff, CI and the leak grep; the owner reads only real loosening
+  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)),
+  [nobody writes their own exam](./nobody-writes-their-own-exam.md).
+- **The lean as walked:** keep the exam rule; add a risk tier per PR set from the paths it touches;
+  try one holdout set of scenarios the builder can't see.
+- **Doubt:** the evidence is company claims plus one METR warning. Settled by counting later fixes
+  per tier on merged PRs.
+- **Cost:** a classifier and its false-alarm count (about 0% to block).
+- **Ticket 574:** half. Mutation, review, CI, `loosening.sh` and the lead's hand check all ran. No
+  tier, so the lead read it as it reads every PR.
+- **Since the walk:** the guess "a risk tier set from the paths it touches" was **wrong**, and stays
+  here marked as wrong. [Experiment 252](../../experiments/252-risk-tiers-on-phoenix.md) replayed
+  path tiers on 457 merged pull requests of kamp-us/phoenix: the high tier was not above the medium
+  one in later fixes (7.4% against 9.8%), while size alone separated them (1.3% at 50 lines or
+  fewer, 11.6% over 400). [0079](../../.decisions/0079-size-counts-governed-paths-name-who.md)
+  replaces that part of the lean: size sets how many people look, governed paths set who.
+  [0082](../../.decisions/0082-approvals-is-a-floor-for-every-run.md) adds the floor.
+
+### F4: every miss becomes a check, a rule or a skill the same day; and stale rules leave
+
+**Lean, 85%.**
+
+- **What it means:** a mistake ends in code that prevents it where it can, and prose only for
+  judgment. Each failure note links to the check, ticket or "no change" it led to. When a newer
+  model makes a rule useless, the rule is deleted.
+- **Why:** a missed bug becomes a line in `CLAUDE.md`, a skill or a check [a1]; repeated review
+  comments become docs and checks on a weekly cleanup day [o3]; a line per bad behavior [b2]; a
+  "sign" per repeated mistake [b1]; harness parts encode "an assumption about what the model can't
+  do on its own", so they come out when it can [a4].
+- **Linear as the builder:** No Linear answer: the study read Linear's sessions, not how Linear's
+  team turns a miss into a rule.
 - **Elm or OTP:** OTP's `code_change` moves a running process to new code and keeps its state: the
   standard changes while the work goes on.
-- **What holds it:** taste today. A check later: a note of kind failure with no link.
-- **Doubt:** some notes record a one-off with nothing to change. They need a "no change" exit.
-- **Cost:** one link per note, and more tickets.
+- **What holds it:** a check later: a note of kind failure with no link. Today a finding row is
+  rated by a person ([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md)), and "a
+  rule in a prompt that could be code becomes code" (AGENTS.md).
+- **Doubt:** deletion needs proof a rule is stale.
+- **Cost:** one link per note, one pass a week.
 - **Ticket 574:** breaks. Note 2026-11-10-25 names the branch move and the box limits, and nothing
   picks them up.
+- **Since the walk:** [0077](../../.decisions/0077-mutation-gaps-carry-a-category.md): each real
+  mutation gap carries a category, and the second gap of one category files one ticket for the
+  tests step to catch the whole category.
+
+### F5: the repo is the memory; the top file is a map
+
+**Lean, 75%.**
+
+- **What it means:** a fresh agent learns everything from files. The top file is short and points
+  to decisions, notes, plans and progress files. Rules live near what they govern, or become
+  checks.
+- **Why:** a short `AGENTS.md` as a table of contents into `docs/` [o1, secondary; o2]; a shared
+  `CLAUDE.md` [a1]; a progress file and a feature list that fresh sessions read [a6]; handoff notes
+  [c2]; rule files scoped by folder [s2]; "repository structure is part of the prompt" [o3].
+- **Linear as the builder:** an agent rebuilds its context from the session's activities, not from
+  comments (experiment 186). The record is the memory, not the agent.
+- **Elm or OTP:** state that must survive a restart is stored, and the recovery path reads it
+  ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md)'s third test). An agent is
+  a process that restarts every run.
+- **What holds it:** taste today. This is already fabrika's habit: `.decisions/`, `docs/direction/`,
+  `.glossary/`, one fresh agent per step reading a state file. But AGENTS.md is about 685 lines.
+- **Doubt:** no measurement here that a long file hurts. Settled by running the same step with the
+  long and the short file.
+- **Cost:** a rewrite of the most-read file.
+- **Ticket 574:** half. Each fresh step agent read the plan and its amendments. But the plan and
+  chain files live outside the repo, and the first plan body is lost.
+
+### F6: one writer per change; other agents read, review and advise
+
+**Lean, 70%.**
+
+- **What it means:** a ticket's code has one writing agent at a time. Other agents may research,
+  review or test beside it, and write nothing to the branch.
+- **Why:** "writes stay single-threaded" [d2]; independent agents amplified errors 17.2x, against
+  4.4x with a coordinator [g3]; Claude Code's agent teams keep two teammates out of one file [a9].
+  Cursor's many writers paid in churn [c1, c2].
+- **Linear as the builder:** No Linear answer: one session per agent is all the study read; it
+  says nothing on two agents writing one change.
+- **Elm or OTP:** one process owns its state, and others only send it messages. No shared writes.
+- **What holds it:** law in part. One lane per ticket, steps in a row, chained by `chain.ts`
+  (today's lead tooling). The test writer and the builder are two writers in turn on one branch.
+- **Doubt:** two writers in turn (tests, then build) is a form the sources do not discuss. Settled
+  by comparing send-backs between them in `field/`.
+- **Cost:** less parallel speed inside a ticket.
+- **Ticket 574:** follows. Tests and build wrote in turn on one branch; mutation and review only
+  read.
+- **Since the walk:** [0093](../../.decisions/0093-laws-walk-plants-run-once.md), a trial: its
+  second check had a fresh agent write laws from the plan alone, blind to the old tests.
+  [Experiment 257](../../experiments/257-second-check-blind-laws.md) found it killed the same 98 of
+  144 mutants as the old file: a second reader that writes only its own check file.
+
+### F7: code holds the edges; the agent holds the path inside a step
+
+**Lean, 70%.**
+
+- **What it means:** code owns what must always happen: start, claim, checks, merge, stop, record.
+  Inside a step, the agent gets a goal and the checks, not a script.
+- **Why:** fixed nodes "reduce the chances for the agent to err" and save tokens [s2]; fixed
+  transitions were too rigid [o5, secondary]; structure comes out as models improve [a4]. The
+  frontier pulls hardest against fabrika here.
+- **Linear as the builder:** a session's states are set by Linear "based on the last emitted
+  activity", while the agent chooses its own path inside the session (experiment 186). The edges
+  are Linear's; the path is the agent's.
+- **Elm or OTP:** Elm's parent steps its children by hand; `update` is the edge, and the agent is a
+  command whose result comes back as a Msg.
+- **What holds it:** law. Every state machine in `next/` is explicit and a tea machine
+  ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md),
+  [0046](../../.decisions/0046-one-tea-machine-per-file.md)); the lane's moves are code in
+  `chain.ts` (today's version).
+- **Doubt:** OpenAI's lesson is secondary, and our own data is two days. Settled by running the
+  same tickets through today's fixed steps and through one goal-plus-checks agent.
+- **Cost:** none to keep; an experiment to test.
+- **Ticket 574:** half. The chain ran the lane with no agent holding it. But at one edge,
+  collecting a stuck commit moved the branch, and the lead fixed it by hand.
+- **Since the walk:** [0064](../../.decisions/0064-the-lead-drives-with-flows.md): the lead drives
+  work as a flow, a list of typed steps one program runs, and no agent holds a loop.
+  [0074](../../.decisions/0074-agent-hands-over-a-flow.md): an agent that composes work hands
+  fabrika a flow as data, so the goal is the agent's and the loop is fabrika's.
+  [0070](../../.decisions/0070-flow-runner-stays-a-machine.md): the flow runner stays a plain tea
+  machine for now.
+
+### Also: the tools are a first-class source of defects
+
+Not an eighth principle; it lives inside F3's layers as a stop reason of its own. A stop says
+whether the work is wrong or the tools are, and the two go to different owners. Anthropic's CI and
+source control [a2, a3], its quality postmortem [a8] and OpenAI's build times [o2] all broke before
+the work did. Here, 16 of 31 stuck test-writer runs were `fetch_failed`.
+
+**Since the walk:** [0076](../../.decisions/0076-a-lane-stops-at-its-budget.md): every stuck step
+says its fault, `tool` or `work`; a tool fault files a finding and drains one tool budget shared by
+all lanes, and does not count against the lane.
+[Experiment 254](../../experiments/254-how-a-lane-should-stop.md) sorted about 35 of 41 stuck steps
+on the five longest lanes as tool faults.
+
+## What became of the first six
+
+The first draft's six principles came from the human-team reading. Tested against the frontier
+([experiment 250, part 6](../../experiments/250-how-we-get-work-done.md#part-6-the-first-drafts-six-principles-tested)):
+
+| First draft | Verdict | Where it went |
+|---|---|---|
+| W1 one loop, six handoffs, each with an owner and a done | changes shape: check is many layers, and learn runs on every miss | F3 and F4; the handoffs are recorded facts, not a fixed path (F7) |
+| W2 pull new work only when there is room | changes shape: what is capped is people's attention and the plumbing, not work in flight | F1 |
+| W3 shape first, change the plan in the open | holds, and changes: shape the intent and the check; for code, redo is often cheaper than amend | F2 |
+| W4 stop at the first defect, say whose | half breaks: "whose" holds; stopping at every defect is walked back where a change can be undone | F3, and "Also: the tools" |
+| W5 ship small | holds, with small meaning cheap to check and undo | F2; since the walk, 0099 |
+| W6 a lesson lands in the written way of working | holds, the strongest of the six; code beats prose | F4 |
+
+F5 and F6 are new: the human-team reading had no answer for an agent's memory or for many agents
+on one change.
 
 ## What the ledger records
 
 Nothing new is designed here. The study found facts that are lost because they are not recorded
-now: who filed a ticket and when, who wrote the first plan and its body, the lead's own checks, and
-the owner's time. A later pipeline note decides where each goes.
+now: each look by a person and how long it took (F1), who filed a ticket and when, who wrote the
+first plan and its body, the lead's own checks, and the owner's time. A later pipeline note decides
+where each goes.
 
 ## Where this differs from settled notes
 
 - [Pipeline guidelines](./pipeline-guidelines.md) says whoever designs `next/`'s lane "starts from
   this note". 0059 already moved that note to input. Nothing here walks back its twelve principles;
-  W4 adds "whose defect" on top of P3.
+  the "Also" adds "whose defect" on top of its P3.
 - [Pipeline strategies](./pipeline-strategies.md) is proposed and asks "can a later change undo the
-  harm?". W4's "whose defect" is a second question beside it, not a replacement.
+  harm?". The frontier answers the same way: stops stay where harm cannot be undone.
+- F3 pulls against today's rule that the lead reads every diff (AGENTS.md). That is Branch A, the
+  biggest split, and this note does not change the rule; 0079 and 0082 say how many look.
+- F5 pulls against the length of AGENTS.md. Nothing changes until the experiment F5 names has run.
 - [Every pull request goes through the steps](./next-is-a-pipeline-pre-run.md) is unchanged. The
   steps by hand keep running.
 
 ## What it costs
 
-- One study now, and the pipeline's design waits for the owner's walk of this note (0059).
-- W1, W4 and W6 each add a field or a row. W2 makes some work wait.
+- One study now. The pipeline's design, 0059's step 4, waits for the owner's yes on these seven.
+- F1, F4 and the "Also" each add an event, a link or a field. F2 costs proof tokens per PR. F3
+  costs a count of false alarms before anything blocks. F5 is a rewrite of AGENTS.md. F6 gives up
+  parallel speed inside a ticket.
 
 ## What it cannot tell us
 
-- The clean step data is two days and 24 tickets.
+- Almost every frontier number is a company's own claim. Only METR, Google Research and two GitHub
+  studies measure from outside, and none measures a team where agents write most of the code.
+- OpenAI's posts are known only through other pages; openai.com refused every fetch.
+- No source is a two-person team. What carries over to two people is a judgment.
+- The clean step data here is two days and 24 tickets.
 - Ticket 574 is one easy ticket: it built a decision already made.
 - Whether these principles make work faster or cheaper. Nothing measured that.
 - The owner's time, which nothing records.
-- No source was about two people working with AI agents. Every lesson is carried over.

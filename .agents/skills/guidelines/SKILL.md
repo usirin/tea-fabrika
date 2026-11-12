@@ -151,11 +151,11 @@ request opens, even when no study is running (owner, 2026-11-08).
   `text` trace of one press or one save, step by step.
 - `## Which version`: `next/` and today's version, one bullet each.
 - `## The shape`, if the area adds fields or types: the types, and how they were checked.
-- `## The N principles`: about six. Each is `### X1: <name>`, then **Lean, NN%.**, **No lean, the owner picks.** or
+- `## The N principles`: as many as the findings give, never aimed at a count. Each is `### X1: <name>`, then **Lean, NN%.**, **No lean, the owner picks.** or
   **Decided DATE.** on its own line, then bullets: what it means, why (a quoted source), the Linear row,
   the Elm or OTP answer, what holds it (the type, test or refusal that enforces it), the doubt and what would settle it, the cost, and today's example
-  (follows or breaks, with `file:line`). More than eight principles means some are rules: group
-  them under a principle, as hot reload's six held seventeen rules.
+  (follows or breaks, with `file:line`). When several share one reason and one check, they are
+  rules: group them under one principle, as hot reload's six held seventeen rules.
 - The smaller calls, each with options as small code blocks, a lean and how sure (or "No lean,
   the owner picks", as for a clash with Linear).
 - What the ledger records, or "nothing new", and what fact is lost if it is not recorded now.

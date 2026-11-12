@@ -3,7 +3,7 @@
 **Part decided, part proposed. Not built.** Walked when Tier 2 starts (owner, 2026-11-08): program storage and Topic for the tracker.
 
 - **Decided 2026-10-30:** [the brain and the hands](#decided-2026-10-30-the-brain-and-the-hands).
-  A program instance is a Durable Object, all machine work is a Cmd the hands do, the
+  A program's process is a Durable Object, all machine work is a Cmd the hands do, the
   names are brain and hands, and the brain is workerd everywhere. Single-purpose objects
   plus one project object, decided the same day and changed 2026-10-31.
 - **Decided 2026-10-31:** [the app layer](#decided-2026-10-31-the-app-layer), A1 to A5,
@@ -316,7 +316,7 @@ The seven open questions, each with its lean. Proposed, not decided.
 //   hands   the Node.js part on each computer that does machine Cmds:
 //           files, git, Docker, agents, keys, the terminal
 //
-// One program instance is one Durable Object, its process:
+// One program's process is one Durable Object:
 //   wake on a message or its alarm -> rebuild from storage -> update -> save -> sleep
 // What the program wants done on a computer is a Cmd, owed until the hands answer:
 {_tag: "cmd", id: "c-41", for: "build:7", cmd: "git_commit", needs: ["git", "repo:acme/widgets"]}
@@ -324,7 +324,7 @@ The seven open questions, each with its lean. Proposed, not decided.
 ```
 
 - **Decided:**
-  - **A program instance is a Durable Object.** It is the program's process:
+  - **A program's process is a Durable Object.** It holds
     its own state, its `update`, sleep and wake. Most makers land on the same
     shape, a virtual actor (wake, rebuild, one turn, save, sleep), and tea's
     own `@demlik/tea/do` is built for it.
@@ -353,7 +353,7 @@ The seven open questions, each with its lean. Proposed, not decided.
 
   ```ts
   // A sketch. One Durable Object per name.
-  //   program:build:7   one program instance: its state, update, sleep and wake
+  //   program:build:7   one program's process: its state, update, sleep and wake
   //   job:7             one job's record
   //   desk:<person>     one person's desk: its workspaces, settings, tsh history
   //   gateway:<client>  one client's WebSocket: a computer's hands, a window, an agent
@@ -542,11 +542,17 @@ pipeline/build       # from a pack the project lists and locks
 ./programs/deploy    # this repo's own, a path from its .fabrika folder
 ```
 
+*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* the third spelling
+goes: a repo's own program is in a pack in `.fabrika/packs/<name>/`, named `<pack>/<program>` like any
+other, and `fabrika/tracker` is the core pack's, the pack named `fabrika`.
+
 - **Where packs come from (decided).** Copy Cargo and Go. The project lists
   its packs in `fabrika.toml` and commits `fabrika.lock` beside it, with each
   pack's commit and code hash. `~/.fabrika/packs` is only a shared cache, keyed
   by commit. Personal packs sit in the home config with their own lock, and
-  the project's pin wins. Written in full in
+  the project's pin wins. *Changed 2026-11-10 by
+  [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the cache is
+  `~/.fabrika/cache/packs/`. Written in full in
   [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md#where-packs-come-from-2026-10-31).
 - **No "marketplace" (decided).** Any repo can hold packs under
   `.fabrika/packs/<name>/`. The repo address is the name, as in Go:

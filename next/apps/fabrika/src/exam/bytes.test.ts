@@ -147,6 +147,10 @@ const carried = (brain: Observed) =>
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
 const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => c.code), ...graph.assets];
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
+// P14 slice 1: a tab's own call, the one whose input is exactly the tab entry the build was given.
+const tabCall = (entry: string | undefined) => (graph: Observed) => entry !== undefined && graph.input === entry;
+// The two routes a tab's call makes: its script, and the page it emits as an asset.
+const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
 const isWindow = (graph: Observed) =>
   typeof graph.input === "object" &&
@@ -154,9 +158,10 @@ const isWindow = (graph: Observed) =>
   Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
-// output of an observed program or window call, so no carried script escapes its own graph's check.
-const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
+// output of an observed program, window or tab call, so no carried script escapes its own graph's check.
+const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) => {
   const brain = realBrain(all);
+  const isTab = tabCall(tab);
 
   for (const graph of all) {
     clean(graph, mcp);
@@ -167,7 +172,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
   expect(texts).toHaveLength(Object.keys(built.programs).length + Object.keys(built.assets).length);
 
   for (const text of texts) {
-    expect(others.some((g) => (isProgram(g) || isWindow(g)) && emitted(g).includes(text))).toBe(true);
+    expect(others.some((g) => (isProgram(g) || isWindow(g) || isTab(g)) && emitted(g).includes(text))).toBe(true);
   }
 
   for (const program of Object.values(built.programs)) {
@@ -175,9 +180,21 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built) => {
     expect(others.some((g) => isProgram(g) && joined(g) === program.source)).toBe(true);
   }
 
-  for (const asset of Object.values(built.assets)) {
+  for (const [route, asset] of Object.entries(built.assets)) {
     expect(texts).toContain(asset.body);
-    expect(others.some((g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
+
+    if (tab !== undefined && TAB_ROUTES.includes(route)) {
+      // The tab's script and page come from the tab's own call and from no other.
+      expect(others.some((g) => isTab(g) && emitted(g).includes(asset.body))).toBe(true);
+      expect(others.filter((g) => !isTab(g) && emitted(g).includes(asset.body))).toEqual([]);
+    } else {
+      expect(others.some((g) => isWindow(g) && emitted(g).includes(asset.body))).toBe(true);
+    }
+  }
+
+  if (tab !== undefined) {
+    expect(all.filter(isTab), "one observed call built the tab").toHaveLength(1);
+    expect(Object.keys(built.assets)).toEqual(expect.arrayContaining([...TAB_ROUTES]));
   }
 
   return brain;
@@ -194,6 +211,9 @@ it.effect(
       const built = yield* build({ out: path.join(folder, "out") });
       const observed = observations.builds.slice(start),
         brain = checkBuild(observed, built);
+      // P14 slice 1: the app selects no tab until slice 6, so its build carries no page and no tab script.
+      expect(Object.keys(built.assets)).not.toContain("/index.html");
+      expect(Object.keys(built.assets)).not.toContain("/window.js");
       expect(observed.filter(isProgram)).toHaveLength(Object.keys(built.programs).length);
       const bytes = yield* fs.readFileString(built.brain);
       expect(bytes).toBe(joined(brain));
@@ -235,7 +255,7 @@ it.effect(
 
 // One selected program with a window, in a scoped folder: the real libfabrika build on the real app
 // brain, with workspace packages linked in as libfabrika's own one-file test does.
-const windowBuild = Effect.fnUntraced(function* (window: string) {
+const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "p8-win-" });
@@ -247,7 +267,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string) {
   yield* fs.makeDirectory(pkg, { recursive: true });
   yield* fs.makeDirectory(sdk, { recursive: true });
 
-  for (const name of ["effect", "@demlik", "@kampus"]) {
+  for (const name of ["effect", "@demlik", "@kampus", "@alchemy.run"]) {
     yield* fs.symlink(path.join(app, "node_modules", name), path.join(home, "node_modules", name));
   }
 
@@ -258,7 +278,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string) {
   );
   yield* fs.writeFileString(
     path.join(pkg, "program.ts"),
-    `import {counter} from "@kampus/counter"; export const program = {...counter, name: "win"};`,
+    `import {counter} from "@kampus/counter"; export const program = {...counter, name: "p8/win"};`,
   );
   yield* fs.writeFileString(path.join(pkg, "window.ts"), window);
   // A synthetic stand-in for the MCP SDK: only its package path matters to the check.
@@ -268,17 +288,28 @@ const windowBuild = Effect.fnUntraced(function* (window: string) {
   );
   yield* fs.writeFileString(path.join(sdk, "client.js"), `export const client = "p8-mcp-marker";`);
   yield* fs.copy(path.join(app, "src"), path.join(home, "src"));
+  // P14 slice 1: an optional tab, its entry and one stylesheet, built by the same call.
+  const entry = path.join(home, "tab/entry.ts"),
+    style = path.join(home, "tab/tab.css");
+
+  if (tab !== undefined) {
+    yield* fs.makeDirectory(path.join(home, "tab"));
+    yield* fs.writeFileString(entry, tab);
+    yield* fs.writeFileString(style, "output { color: rgb(12, 34, 56); }");
+  }
+
   const start = observations.builds.length;
   const built = yield* buildOne({
     out: path.join(home, "dist"),
     root: home,
     entry: path.join(home, "src/brain.ts"),
-    programs: [{ name: "win", package: "@p8/win", export: "program" }],
+    programs: [{ name: "p8/win", package: "@p8/win", export: "program" }],
     files: [],
     ledger: [],
     chaos: false,
+    ...(tab === undefined ? {} : { tab: { entry, styles: [style] } }),
   });
-  return { built, observed: observations.builds.slice(start) };
+  return { built, observed: observations.builds.slice(start), entry };
 });
 
 it.effect(
@@ -309,6 +340,28 @@ it.effect(
       ).toThrow();
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
+);
+
+// P14 slice 1: a tab's script and page are observed bytes too. The tab's one Rolldown call compiles
+// its entry and emits its page, so each carried tab text has that call as its checked origin, and
+// no other call or a page made after the call stands in. Each sample is a real build, so 3 runs.
+it.effect.prop(
+  "a tab's carried script and page come from the tab's own observed call, beside the window's",
+  { label: Schema.String.check(Schema.isMaxLength(40)) },
+  ({ label }) =>
+    Effect.gen(function* () {
+      const tab = yield* windowBuild(
+        `export const view = () => "p8-tab-window";`,
+        `import {Effect} from "effect"; export const tab = Effect.succeed(${JSON.stringify(label)});`,
+      );
+      checkBuild(tab.observed, tab.built, tab.entry);
+      const page = tab.built.assets["/index.html"];
+      expect(page?.type).toBe("text/html; charset=utf-8");
+      const call = tab.observed.find(tabCall(tab.entry))!;
+      expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
+      expect(tab.observed.filter(isWindow)).toHaveLength(1);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { ...options.arbitrary, runs: 3 } },
 );
 
 const int = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));

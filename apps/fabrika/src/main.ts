@@ -16,17 +16,18 @@ import {
   nativeTheme,
   Notification,
   protocol,
+  screen,
   session,
   shell,
 } from "electron";
-import { type AsksNow, keysOf, newAsks, noticeOf } from "./asks.ts";
+import { type Ask, type AsksNow, keysOf, newAsks, noticeOf } from "./asks.ts";
 import { attach, NoHello, NoHost, restart } from "./attach.ts";
 import { isPortName, PORT_CHANNEL } from "./bridge.ts";
 import { answer, DESK, isDesk, isOurs, SCHEME } from "./files.ts";
 import { settingsFolder } from "./host/settings.ts";
 import { pathsOf } from "./host/socket.ts";
 import { NotStopped } from "./host/stop.ts";
-import { type Launch, launchOf, QUIET_SWITCHES } from "./launch.ts";
+import { hidden, type Launch, launchOf, QUIET_SWITCHES } from "./launch.ts";
 import type { Down, Up } from "./link.ts";
 import { type LinkNow, readAsks, readToApp, type ToPage } from "./messages.ts";
 import { Browser, NotOpened, openOutside } from "./outside.ts";
@@ -107,7 +108,10 @@ import { Unattached, type Wire } from "./wire.ts";
 //
 // A start on a home of its own is quiet (launch.ts): an agent or a test. On macOS it is an
 // accessory app, with no Dock icon, never the active app. Its window is shown without focus,
-// drawn while hidden and covered, and never focused, not even by the dock-activate path.
+// drawn while hidden and covered, and never focused, not even by the dock-activate path. Before it
+// is first shown it is made see-through, click-through and put in the work area's bottom-right
+// corner (launch.ts, `hidden`), so it is never in the way of the person at the screen, not even
+// for a moment at launch.
 // FABRIKA_FOREGROUND=1 shows it as the owner's. DOM focus inside the page is not OS focus: a
 // tile's terminal still takes keys sent over the DevTools protocol.
 //
@@ -190,7 +194,8 @@ const FRAME =
 
 /**
  * The one window, with the same safe settings the app's windows always had. Quiet, it is made
- * hidden and drawn anyway, then shown without taking focus.
+ * hidden and drawn anyway, then made see-through, click-through and put in the corner, and only
+ * then shown, without taking focus.
  */
 const deskWindow = (preload: string, icon: string, launch: Launch) => {
   const quiet = launch.kind === "quiet";
@@ -216,6 +221,10 @@ const deskWindow = (preload: string, icon: string, launch: Launch) => {
   followLook(nativeTheme, window);
 
   if (quiet) {
+    const at = hidden(screen.getPrimaryDisplay().workArea, window.getBounds());
+    window.setOpacity(at.opacity);
+    window.setIgnoreMouseEvents(at.ignoreMouse);
+    window.setPosition(at.x, at.y);
     window.showInactive();
   }
 
@@ -389,6 +398,8 @@ const main = Effect.gen(function* () {
    * window is not in front, and never on a quiet start. Nothing is focused or opened by it; a
    * click on it brings the window and opens the asks list.
    */
+  /** An ask as a kept notice names it: its key, its ticket and whether it asks or is stuck. */
+  const named = (a: Ask) => ({ key: a.key, ticket: a.ticket, kind: a.kind });
   const heardAsks = (now: AsksNow) => {
     app.setBadgeCount(now.asks.length);
     const fresh = newAsks(known, now);
@@ -403,7 +414,8 @@ const main = Effect.gen(function* () {
       return;
     }
 
-    const notice = new Notification(noticeOf([first, ...rest]));
+    const said = noticeOf([first, ...rest]);
+    const notice = new Notification(said);
     notices.add(notice);
     notice.on("close", () => notices.delete(notice));
     notice.on("click", () => {
@@ -412,6 +424,13 @@ const main = Effect.gen(function* () {
       toPage({ type: "show", what: "asks" });
     });
     notice.show();
+    // Each sent notice is kept once, on the ledger through the host: it interrupted the person.
+    toHost({
+      type: "noticed",
+      asks: [named(first), ...rest.map(named)],
+      ...said,
+      sentAt: clock.currentTimeMillisUnsafe(),
+    });
   };
   const fromHost = (m: Down) => {
     switch (m.type) {

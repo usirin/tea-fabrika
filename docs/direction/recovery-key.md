@@ -2,6 +2,20 @@
 
 **Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.
 The read call (call 13) and the key's derivation decided 2026-11-09, built by P28.**
+
+Its decided rules are in: [0328](../../.decisions/0328-a-device-comes-back-by-sheet-or-email.md),
+[0329](../../.decisions/0329-the-words-are-a-key.md),
+[0330](../../.decisions/0330-words-become-the-key-by-hkdf.md),
+[0331](../../.decisions/0331-a-sheet-works-at-once-and-once.md),
+[0332](../../.decisions/0332-recovery-asks-if-the-old-device-is-lost.md),
+[0333](../../.decisions/0333-every-device-is-an-equal-person-key.md),
+[0334](../../.decisions/0334-a-dropped-key-drops-all-below.md),
+[0335](../../.decisions/0335-the-sheet-is-printed-words.md),
+[0336](../../.decisions/0336-a-recovery-ends-by-counting.md),
+[0337](../../.decisions/0337-a-new-device-reads-before-recovery.md),
+[0338](../../.decisions/0338-email-recovery-waits-a-day.md),
+[0339](../../.decisions/0339-an-admin-can-re-invite-a-person.md).
+
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
@@ -91,7 +105,7 @@ move settles it):
   "<app> Safe Storage" item in the login Keychain file, and that file moves with Migration
   Assistant, from the old Mac or from a Time Machine backup. iCloud Keychain never carries it, and a
   Keychain copied by hand fails on macOS 26.4 and later. So a calm move needs no sheet, and the
-  local stage's ledger comes back with the app's home. The sheet's help says so: "Moving to a new
+  local instance's ledger comes back with the app's home. The sheet's help says so: "Moving to a new
   Mac? Migration Assistant brings fabrika with it."
 - **If the item did not come across,** Chromium quietly makes a new one, and every sealed key fails
   to open. **Then the app goes to the recovery screen, never to a new founding (decided):** "This
@@ -636,11 +650,11 @@ builder and read by the owner, holds:
 - **The sheet's pure laws:** words to key and back. One changed word fails the checksum or gives
   another key. The label matches only the right key. "Check my sheet" answers live, old or wrong,
   and makes no network call.
-- **The secret stays home:** during a full recovery on a stage, every frame sent, every ledger row
+- **The secret stays home:** during a full recovery on an instance, every frame sent, every ledger row
   and every log line is searched for each of the 12 words, the entropy and the seed. None is found.
 - **The done check, end to end,** on real Electron with a test `PersonCheck` and a stand-in
   printer that writes the sheet to the temp home:
-  1. Home A founds, saves a note on a stage that stands in for the cloud, lets in a tab and an
+  1. Home A founds, saves a note on an instance that stands in for the cloud, lets in a tab and an
      agent, and makes a sheet.
   2. Home B opens, picks "I have a backup sheet", types the address and words, and keeps the
      default, "lost".

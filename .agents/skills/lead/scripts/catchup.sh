@@ -1,28 +1,42 @@
 #!/bin/sh
 # catchup.sh <pr> <ticket>
-# Bring a pull request up to date with main, sign the new merge as the lead, push, wait for every
-# check on that exact head, then squash it pinned to that head. We only squash.
-# Run it in the background.
+# Land a pull request, squashed and pinned to its head. A head that lacks main but is already green
+# (every check below green on it, commits trusted) lands as it is (0097): no merge of main, no
+# push, only freshmain.ts's lint on the true merge. Any other head is brought up to date with main,
+# the new merge signed as the lead and pushed, and every check waited for on that exact head.
+# We only squash. Run it in the background.
 #   - each pull request gets its own checkout (BOXES/catchup-<pr>), force-removed when the run ends
 #     unless it holds MAIN's Git storage, and one lock is held while it fetches, merges, signs and
 #     pushes, so two catch-ups never share a tree or the notes ref
-#   - merges origin/main in as fabrikalfa[bot] (the person as co-author) when the head lacks it,
-#     and signs only that new merge commit as lead. It never signs a step's commit: an unsigned
+#   - reads the head's checks once when it lacks main, the same way the wait below reads them. A
+#     red, missing or running check, or an untrusted commits run, takes the catch-up path; a read
+#     that fails three times stops the run with nothing pushed
+#   - catching up, merges origin/main in as fabrikalfa[bot] (the person as co-author), and signs
+#     only that new merge commit as lead. It never signs a step's commit: an unsigned
 #     step commit fails the commits check, and goes back to its own step to sign
 #   - pushes notes and branch together, so the push itself starts CI; a branch the bot may not
 #     push (a person's) is pushed with the person's gh login, notes by the bot
-#   - no auto-merge: it waits for check, e2e, next, commits and the tests on the pushed sha, then
+#   - no auto-merge: it needs check, e2e, next, commits and the tests green on the head it lands
+#     (after a catch-up, it waits for them on the pushed sha), then
 #     merges with --match-head-commit, so a newer head or a red check stops it (hand PRs only). A PR
 #     in a gh stack must merge through the stack API, which takes no head pin: its head is read
-#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands on
-#     purpose (0049): gh refuses BEHIND on its own side and never asks GitHub, so the squash goes
-#     to the REST merge endpoint with `sha` as the head pin, and no override flag
-#   - just before the squash it looks at main once more: when main moved after the checks,
+#     again first, then `gh stack merge <pr> --squash --yes` lands it. A PR behind main lands
+#     with the same plain pinned `gh pr merge`, no override flag: GitHub no longer requires an
+#     up-to-date branch (0049, 0097), and freshmain.ts's lint on the true merge is the guard
+#   - just before the squash it looks at main once more: when the head lacks it (a green head that
+#     did not catch up, or main moved after the checks),
 #     freshmain.ts runs `pnpm lint` on the head merged with it and refuses a red one, a conflict or
 #     a fetch that fails. No flag skips it. The tests are not run again (ticket 552)
+#   - prints sizecap.ts's one line, the product lines against 0087's cap, before it waits on the
+#     checks. It is advice: it never stops a merge until a replay lets it block
 #   - trusts commits only as one pull_request_target run of main's commits.yaml for this ticket
 #   - once the squash is on main, closes each ticket the PR description names on a line of its
 #     own, `fabrika close ticket <N>`, and prints what it closed (0015)
+#   - ends at once on a pull request that is not open and ready: on start and on every round of
+#     each wait. `pr <n>: already merged at <sha>` exits 0; closed or draft exits 1. Every wait has
+#     a bound and ends with a line naming what it waited for
+#   - after a landed merge, kicks one box cleanup sweep (`gcloop.ts kick`, 0101): it starts in the
+#     background and the merge's own exit never waits on it
 set -eu
 usage() { echo "usage: catchup.sh <pr> <ticket>" >&2; exit 1; }
 [ "$#" = 2 ] || usage
@@ -30,11 +44,21 @@ pr=$1; ticket=$2
 . "$(dirname "$0")/env.sh"
 W=$BOXES/catchup-$pr; LOCK=$BOXES/catchup.lock; LEAD=$lead_here
 AS='-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com'
-# Only command failures are retried. Callers inspect successful answers, including red ones.
+# Only command failures are retried. Callers inspect successful answers, including red ones. A pull
+# request GitHub does not know is no network trouble: it stops at once, never retried.
 read_gh() {
 	attempt=1
 	while :; do
-		if output=$(gh "$@"); then printf '%s\n' "$output"; return 0; fi
+		err=$(mktemp)
+		if output=$(gh "$@" 2>"$err"); then rm -f "$err"; printf '%s\n' "$output"; return 0; fi
+		failed=$(cat "$err"); rm -f "$err"
+		[ -z "$failed" ] || printf '%s\n' "$failed" >&2
+		case $failed in
+		*"Could not resolve to a PullRequest"*)
+			echo "pr $pr: no such pull request in $GH_REPO" >&2
+			return 1
+			;;
+		esac
 		if [ "$attempt" -ge 3 ]; then
 			echo "pr $pr: gh $* failed after 3 attempts at head ${tip:-unknown}" >&2
 			return 1
@@ -42,6 +66,25 @@ read_gh() {
 		sleep "$attempt"
 		attempt=$((attempt + 1))
 	done
+}
+# gate <state> <draft> <merge commit>: only an open pull request that is ready for review goes on.
+# Merged is done, so it exits 0; closed, draft or a state we do not know exits 1. Each says one
+# line.
+gate() {
+	case "$1 $2" in
+	"OPEN false") return 0 ;;
+	"OPEN true") echo "pr $pr: draft, not merged; refused until it is ready for review" >&2; exit 1 ;;
+	MERGED\ *) echo "pr $pr: already merged at $3"; exit 0 ;;
+	CLOSED\ *) echo "pr $pr: closed, not merged" >&2; exit 1 ;;
+	*) echo "pr $pr: in state ${1:-unknown}, not merged; refused" >&2; exit 1 ;;
+	esac
+}
+# look: read the pull request's state again and gate it, inside each wait.
+look() {
+	standing=$(read_gh pr view "$pr" -R "$GH_REPO" --json state,isDraft,mergeCommit \
+		-q '"\(.state) \(.isDraft) \(.mergeCommit.oid // "-")"')
+	# Unquoted on purpose: GitHub's state, a boolean and a hex sha, with no glob or space in any.
+	gate $standing
 }
 # close_named: once GitHub says MERGED and the squash commit is on main, close each ticket the PR
 # description names on a line of its own, `fabrika close ticket <N>` (0015). Nothing else closes
@@ -329,51 +372,16 @@ except OSError:
     kept("cleanup", "operating error")
 PY
 }
-mkdir -p "$BOXES"
-until mkdir "$LOCK" 2>/dev/null; do sleep 5; done
-# EXIT drops the lock while it is held and force-removes this run's own checkout, success or
-# failure, unless the checkout holds MAIN's Git storage: then it stays, with a line saying why.
-# INT and TERM end the run (and so run EXIT), never carry on past a signal.
-held=yes
-cleanup() {
-	[ "$held" = no ] || rmdir "$LOCK" 2>/dev/null || true
-	cd "$BOXES" || return 0
-	sweep checkout "$pr" "" "" "$W" "" || echo "kept worktree catchup-$pr: inspection failed"
-}
-trap cleanup EXIT
-trap 'exit 130' INT TERM
-head=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefName -q .headRefName)
-[ -d "$W" ] || git -C "$MAIN" worktree add -q --detach "$W" origin/main
-cd "$W"
-git fetch -q origin main "refs/notes/fabrika:refs/notes/fabrika" 2>/dev/null || git fetch -q origin main
-git fetch -q origin "pull/$pr/head"
-git checkout -q --detach FETCH_HEAD
-[ -d node_modules ] || nice -n 15 pnpm install --silent >/dev/null 2>&1
-tip=$(git rev-parse HEAD)
-if ! git merge-base --is-ancestor origin/main HEAD; then
-	if ! git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"; then
-		git merge --abort 2>/dev/null || true
-		echo "pr $pr: merging main conflicts; aborted, nothing pushed" >&2
-		exit 1
-	fi
-	tip=$(git rev-parse HEAD)
-	nice -n 15 pnpm -s commits sign --step lead --ticket "$ticket" --key ~/.fabrika/step-keys/lead >/dev/null
-	case $head in
-	fabrikalfa/*) node "$LEAD/botpush.mjs" . "$head" "$tip" ;;
-	*) node "$LEAD/botpush.mjs" . - ; git push -q origin "$tip:refs/heads/$head" ;;
-	esac
-fi
-rmdir "$LOCK"; held=no
-# Wait for every check on this exact sha, up to an hour. A skipped job (no code changed) is done.
+# checks_at <sha>: one read of the check runs on that sha. Sets `bad` (the red ones), `missing`
+# (the names needed and not there) and `pending` (how many have not finished). A skipped job (no
+# code changed) is done. A read that fails three times stops the run.
 need="check e2e commits"
-# The clock is read after every answer and before a green one can break out to the merge.
-missing=$need; pending=1; finished=no
-deadline=$(($(date +%s) + 3600))
-for _ in $(seq 120); do
-	runs=$(read_gh api "repos/$GH_REPO/commits/$tip/check-runs?per_page=100" \
-		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)"')
-	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {print $1": "$3}')
-	[ -z "$bad" ] || { echo "pr $pr: red at $tip: $bad" >&2; exit 1; }
+checks_at() {
+	runs=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
+		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)\t\(.html_url // "")"') || exit 1
+	# A red job prints with its link, so nobody has to look it up.
+	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {
+		print $1": "$3 ($4 == "" ? "" : ", " $4) }')
 	missing=$(printf '%s\n' "$runs" | awk -F'\t' -v need="$need" '
 		{ present[$1]=1 }
 		$1=="next" && $2=="completed" && $3=="skipped" { skipped=1 }
@@ -390,45 +398,131 @@ for _ in $(seq 120); do
 			}
 		}')
 	pending=$(printf '%s\n' "$runs" | awk -F'\t' 'NF && $2!="completed"' | wc -l | tr -d ' ')
-	[ "$(date +%s)" -lt "$deadline" ] || break
-	if [ -z "$missing" ] && [ "$pending" = 0 ]; then finished=yes; break; fi
-	sleep 30
+}
+# commits_trusted <sha>: the commits check is never trusted by its name: any workflow can name a
+# job `commits` (docs/how-to/sign-a-step-commit.md). Read the runs of main's
+# `.github/workflows/commits.yaml` on this head instead: exactly one, from `pull_request_target` (so
+# main's copy ran, not the PR's), completed with success, and its own check run made by GitHub
+# Actions. A run that never started (`startup_failure`: no job ran and no check run exists, as in
+# GitHub's pull_request_target pause of 2026-11-09) is not counted; reopening the PR starts a fresh
+# one. Untrusted sets `why` and fails; a read that fails three times stops the run.
+commits_trusted() {
+	trusted=$(read_gh api "repos/$GH_REPO/actions/runs?head_sha=$1&per_page=100" \
+		-q '.workflow_runs[]|select(.path==".github/workflows/commits.yaml")|"\(.id)\t\(.event)\t\(.status)\t\(.conclusion)\t\(.check_suite_id)"') || exit 1
+	target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target" && $4!="startup_failure"')
+	if [ "$(printf '%s\n' "$target" | grep -c .)" != 1 ]; then
+		why="want exactly one pull_request_target run of commits.yaml at $1, got: ${trusted:-none}"
+		return 1
+	fi
+	run_id=$(printf '%s' "$target" | cut -f1); suite=$(printf '%s' "$target" | cut -f5)
+	[ "$(printf '%s' "$target" | cut -f3,4)" = "completed	success" ] ||
+		{ why="commits.yaml run $run_id at $1 is not a success"; return 1; }
+	apps=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?check_name=commits&per_page=100" \
+		-q ".check_runs[]|select(.check_suite.id==$suite)|.app.slug") || exit 1
+	[ "$apps" = github-actions ] ||
+		{ why="run $run_id's commits check is not GitHub Actions' own (${apps:-none})"; return 1; }
+	# The check's `check` step prints one count line: `commits: N commits, ticket T`, or "not in scope".
+	logs=$(read_gh run view "$run_id" -R "$GH_REPO" --log) || exit 1
+	said=$(printf '%s\n' "$logs" |
+		awk -F'\t' '$1=="commits" && $2=="check" {sub(/^[^ ]* /, "", $3); if ($3 ~ /^commits: ([0-9]+ commits|not in scope)/) print $3}')
+	[ "$(printf '%s\n' "$said" | grep -c .)" = 1 ] ||
+		{ why="run $run_id printed no single result: ${said:-nothing}"; return 1; }
+	case $said in
+	"commits: not in scope"* | "commits: "*" commits, ticket $ticket") ;;
+	*) why="run $run_id is not for ticket $ticket: $said"; return 1 ;;
+	esac
+}
+# green_at <sha>: true when one read finds every check done and none red, and commits is trusted,
+# all on that sha (0097). Sets `why` when it is not.
+green_at() {
+	checks_at "$1"
+	if [ -n "$bad" ]; then why="red: $(echo $bad)"; return 1; fi
+	if [ -n "$missing" ] || [ "$pending" != 0 ]; then
+		why="checks not done (missing:${missing:- none}, pending: $pending)"
+		return 1
+	fi
+	commits_trusted "$1"
+}
+mkdir -p "$BOXES"
+# The lock is held for minutes, while one catch-up fetches, merges, signs and pushes. A run killed
+# with SIGKILL runs no trap and leaves it behind, so the wait has the checks' own bound: an hour.
+deadline=$(($(date +%s) + 3600))
+until mkdir "$LOCK" 2>/dev/null; do
+	[ "$(date +%s)" -lt "$deadline" ] ||
+		{ echo "pr $pr: waited an hour for the catch-up lock $LOCK; nothing done" >&2; exit 1; }
+	sleep 5
 done
-if [ "$finished" != yes ]; then
-	echo "pr $pr: checks not done at $tip after an hour (missing:${missing:- none}, pending: $pending)" >&2
-	exit 1
+# EXIT drops the lock while it is held and force-removes this run's own checkout, success or
+# failure, unless the checkout holds MAIN's Git storage: then it stays, with a line saying why.
+# INT and TERM end the run (and so run EXIT), never carry on past a signal.
+held=yes
+cleanup() {
+	[ "$held" = no ] || rmdir "$LOCK" 2>/dev/null || true
+	cd "$BOXES" || return 0
+	sweep checkout "$pr" "" "" "$W" "" || echo "kept worktree catchup-$pr: inspection failed"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+# The state comes first: a merged, closed or draft pull request ends here, before any fetch or push.
+view=$(read_gh pr view "$pr" -R "$GH_REPO" --json headRefName,state,isDraft,mergeCommit \
+	-q '"\(.state) \(.isDraft) \(.mergeCommit.oid // "-") \(.headRefName)"')
+gate $view
+head=${view#* * * }
+[ -d "$W" ] || git -C "$MAIN" worktree add -q --detach "$W" origin/main
+cd "$W"
+git fetch -q origin main "refs/notes/fabrika:refs/notes/fabrika" 2>/dev/null || git fetch -q origin main
+git fetch -q origin "pull/$pr/head"
+git checkout -q --detach FETCH_HEAD
+[ -d node_modules ] || nice -n 15 pnpm install --silent >/dev/null 2>&1
+tip=$(git rev-parse HEAD)
+# A head that lacks main and is green on every check lands as it is (0097): nothing is merged or
+# pushed here, and freshmain.ts below lints its true merge with main. Any other head catches up.
+green=no
+if git merge-base --is-ancestor origin/main HEAD; then
+	:
+elif green_at "$tip"; then
+	green=yes
+	echo "pr $pr: every check is green at $tip; it lands without catching up with main (0097)"
+else
+	echo "pr $pr: $why at $tip; merging main in"
+	if ! git $AS merge -q --no-edit origin/main -m "Merge main into $head" -m "Co-authored-by: $FABRIKA_COAUTHOR"; then
+		git merge --abort 2>/dev/null || true
+		echo "pr $pr: merging main conflicts; aborted, nothing pushed" >&2
+		exit 1
+	fi
+	tip=$(git rev-parse HEAD)
+	nice -n 15 pnpm -s commits sign --step lead --ticket "$ticket" --key ~/.fabrika/step-keys/lead >/dev/null
+	case $head in
+	fabrikalfa/*) node "$LEAD/botpush.mjs" . "$head" "$tip" ;;
+	*) node "$LEAD/botpush.mjs" . - ; git push -q origin "$tip:refs/heads/$head" ;;
+	esac
 fi
-# The commits check is never trusted by its name: any workflow can name a job `commits`
-# (docs/how-to/sign-a-step-commit.md). Read the runs of main's `.github/workflows/commits.yaml` on
-# this head instead: exactly one, from `pull_request_target` (so main's copy ran, not the PR's),
-# completed with success, and its own check run made by GitHub Actions. A run that never started
-# (`startup_failure`: no job ran and no check run exists, as in GitHub's pull_request_target
-# pause of 2026-11-09) is not counted; reopening the PR starts a fresh one.
-trusted=$(read_gh api "repos/$GH_REPO/actions/runs?head_sha=$tip&per_page=100" \
-	-q '.workflow_runs[]|select(.path==".github/workflows/commits.yaml")|"\(.id)\t\(.event)\t\(.status)\t\(.conclusion)\t\(.check_suite_id)"')
-target=$(printf '%s\n' "$trusted" | awk -F'\t' '$2=="pull_request_target" && $4!="startup_failure"')
-if [ "$(printf '%s\n' "$target" | grep -c .)" != 1 ]; then
-	echo "pr $pr: want exactly one pull_request_target run of commits.yaml at $tip, got: ${trusted:-none}" >&2
-	exit 1
+rmdir "$LOCK"; held=no
+# 0087's cap: one line with the pull request's product lines against `[review] lines`. Advice only
+# until the replay on merged pull requests lets it block; it never stops a merge.
+if size=$(node "$LEAD/sizecap.ts" diff origin/main "$tip"); then echo "pr $pr: $size"; else echo "pr $pr: size not counted"; fi
+# A head that caught up (or already held main) waits for every check on this exact sha, up to an
+# hour, then for a trusted commits run. A green head that did not catch up was read whole above.
+if [ "$green" = no ]; then
+	# The clock is read after every answer and before a green one can break out to the merge.
+	missing=$need; pending=1; finished=no
+	deadline=$(($(date +%s) + 3600))
+	for _ in $(seq 120); do
+		# Someone may merge or close it while we wait: then nothing here can land it.
+		look
+		checks_at "$tip"
+		[ -z "$bad" ] || { echo "pr $pr: red at $tip: $bad" >&2; exit 1; }
+		[ "$(date +%s)" -lt "$deadline" ] || break
+		if [ -z "$missing" ] && [ "$pending" = 0 ]; then finished=yes; break; fi
+		sleep 30
+	done
+	if [ "$finished" != yes ]; then
+		echo "pr $pr: checks not done at $tip after an hour (missing:${missing:- none}, pending: $pending)" >&2
+		exit 1
+	fi
+	commits_trusted "$tip" || { echo "pr $pr: $why" >&2; exit 1; }
 fi
-run_id=$(printf '%s' "$target" | cut -f1); suite=$(printf '%s' "$target" | cut -f5)
-[ "$(printf '%s' "$target" | cut -f3,4)" = "completed	success" ] ||
-	{ echo "pr $pr: commits.yaml run $run_id at $tip is not a success" >&2; exit 1; }
-apps=$(read_gh api "repos/$GH_REPO/commits/$tip/check-runs?check_name=commits&per_page=100" \
-	-q ".check_runs[]|select(.check_suite.id==$suite)|.app.slug")
-[ "$apps" = github-actions ] ||
-	{ echo "pr $pr: run $run_id's commits check is not GitHub Actions' own (${apps:-none})" >&2; exit 1; }
-# The check's `check` step prints one count line: `commits: N commits, ticket T`, or "not in scope".
-logs=$(read_gh run view "$run_id" -R "$GH_REPO" --log)
-said=$(printf '%s\n' "$logs" |
-	awk -F'\t' '$1=="commits" && $2=="check" {sub(/^[^ ]* /, "", $3); if ($3 ~ /^commits: ([0-9]+ commits|not in scope)/) print $3}')
-[ "$(printf '%s\n' "$said" | grep -c .)" = 1 ] ||
-	{ echo "pr $pr: run $run_id printed no single result: ${said:-nothing}" >&2; exit 1; }
-case $said in
-"commits: not in scope"* | "commits: "*" commits, ticket $ticket") ;;
-*) echo "pr $pr: run $run_id is not for ticket $ticket: $said" >&2; exit 1 ;;
-esac
-# Main may have moved since those checks ran (ticket 552). freshmain.ts fetches it and, when it
+# Main may have moved since those checks ran (ticket 552), or a green head never caught up (0097). freshmain.ts fetches it and, when it
 # moved, runs pnpm lint on this head merged with it, in this checkout. A red lint, a conflict or a
 # fetch that fails stops here: the lane merges main and pushes, and catch-up runs again.
 node "$LEAD/freshmain.ts" "$pr" "$tip" || { echo "pr $pr: not merged" >&2; exit 1; }
@@ -439,16 +533,8 @@ if ! said=$(gh pr merge "$pr" -R "$GH_REPO" --squash --match-head-commit "$tip" 
 		[ "$now" = "$tip" ] || { echo "pr $pr: head moved to $now after the checks at $tip" >&2; exit 1; }
 		gh stack merge "$pr" --squash --yes >/dev/null
 		;;
-	# gh 2.62.0 says this when it reads merge state BEHIND, and stops before any call. freshmain.ts
-	# has just passed lint on this head merged with main, so it lands behind main on purpose (0049).
-	# The REST endpoint takes `sha` as the head pin: a newer head is a 409, and GitHub's own rules
-	# still decide (a 405). It is a write, so it is never retried.
-	*"the head branch is not up to date with the base branch"*)
-		said=$(gh api -X PUT "repos/$GH_REPO/pulls/$pr/merge" -f merge_method=squash -f sha="$tip" 2>&1) ||
-			{ echo "pr $pr: merge behind main refused at $tip: $said" >&2; exit 1; }
-		echo "pr $pr: landed behind main on purpose (0049)"
-		;;
-	*) echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
+	# Merged or closed by someone else since the last look: say that, not a refusal.
+	*) look; echo "pr $pr: merge refused: $said" >&2; exit 1 ;;
 	esac
 fi
 echo "pr $pr: merged at $(git rev-parse --short "$tip"), signed for ticket $ticket"
@@ -460,4 +546,7 @@ if cd "$MAIN"; then
 else
 	echo "kept cleanup: cannot leave catch-up checkout"
 fi
+# One box cleanup sweep after each merge (0101). kick returns at once and the sweep runs on, so
+# trouble here prints a line and never turns a landed merge red.
+node "$LEAD/gcloop.ts" kick --trigger merge || echo "pr $pr: box cleanup not started"
 exit 0

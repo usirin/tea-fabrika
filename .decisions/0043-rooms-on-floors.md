@@ -1,7 +1,7 @@
 ---
 id: 0043
 title: libfabrika's src/ has one folder per subject, a room, and a layer is a floor, a line in the rule file that says who may import whom, never a folder, and each room offers Effect services in its own types and errors
-status: amended-in-part by [0051](0051-gateway-connection-and-node-by-job.md), [0055](0055-errors-named-by-their-service.md)
+status: amended-in-part by [0051](0051-gateway-connection-and-node-by-job.md), [0055](0055-errors-named-by-their-service.md), [0091](0091-modules-and-layers.md)
 date: 2026-11-09
 tags: [layout, files, folders, rooms, floors, layers, internal, services, errors, access, presence, telemetry, libfabrika, next]
 ---
@@ -46,6 +46,9 @@ All of this is about `next/`. Today's version is not touched.
 The room `door/` is now `gateway/`, presence's `GatewayManager` is `Connections`, and `workers/` is
 `cloudflare/`, later `@kampus/libfabrika-cloudflare`
 ([0051](0051-gateway-connection-and-node-by-job.md)); the rest of this record holds.
+
+A room is now a module and a floor a layer, names only; every rule here holds
+([0091](0091-modules-and-layers.md)).
 
 ## Context
 
@@ -160,6 +163,8 @@ The rules:
    room on its own floor (owner, 2026-11-09, the same day). If one room needs another on its
    floor, the needed room moves down a floor in the rule file, in the open. `pnpm lint` checks
    both: no upward import and no same-floor import.
+   *Test files keep this rule too, with database laws as suites a higher room runs
+   ([0062](0062-test-files-keep-the-floors.md)).*
 4. **The floors, bottom up, as the rule file starts:**
 
    | Floor | Rooms |

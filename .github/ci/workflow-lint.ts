@@ -1,8 +1,17 @@
 // Today's CI, serving both versions. Static workflow shape belongs in lint.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { gated } from "./required.mjs";
+
+export const LANE_FILTER = "packages/pipeline/src/stages/pipeline/lane.";
+export const LANE_GLOB = "packages/pipeline/src/stages/pipeline/lane.*.test.ts";
+export const inLaneStep = (path: string) => path.includes(LANE_FILTER);
+
+const testFiles = globSync("packages/pipeline/**/*.test.ts", {
+  cwd: fileURLToPath(new URL("../../", import.meta.url)),
+});
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,6 +45,10 @@ const env = {
   HEAD: `\${{ github.event.pull_request.head.sha || github.sha }}`,
   EVENT: `\${{ github.event_name }}`,
 };
+
+// Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
+const chromium =
+  "sudo sh .github/ci/apt.sh update\n" + "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium\n";
 
 const forced = ["apps/fabrika/src/bundles.test.ts", "packages/pipeline/src/laws/standard.test.ts"];
 
@@ -71,7 +84,7 @@ export const lintWorkflow = (text: string): string[] => {
 
   require(!("branches" in pr), "all PR bases remain enabled");
 
-  for (const name of ["check", "test", "next", "e2e"]) {
+  for (const name of gated) {
     const job = map(jobs[name]);
     const needs = job["needs"];
     require(needs === "changes" ||
@@ -87,6 +100,21 @@ export const lintWorkflow = (text: string): string[] => {
     const limit = map(job)["timeout-minutes"];
     require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
   }
+
+  // The one required check: it waits on every other job, never skips, and judges them all.
+  const summary = map(jobs["ci-required"]),
+    others = Object.keys(jobs).filter((name) => name !== "ci-required");
+  const needed = Array.isArray(summary["needs"]) ? summary["needs"] : [];
+  require(needed.length === others.length &&
+    others.every((name) => needed.includes(name)), "ci-required needs every other job");
+  require(compact(summary["if"]) === "always()" &&
+    summary["continue-on-error"] === undefined, "ci-required runs after any result and its failure blocks");
+  const judged = steps(summary).filter((s) => "run" in s);
+  require(judged.length === 1 &&
+    judged[0]?.["run"] === "node .github/ci/required.mjs" &&
+    compact(map(judged[0]?.["env"])["NEEDS"]) === "toJSON(needs)" &&
+    !("if" in (judged[0] ?? {})) &&
+    judged[0]?.["continue-on-error"] === undefined, "ci-required judges toJSON(needs) with required.mjs");
 
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
@@ -165,13 +193,40 @@ export const lintWorkflow = (text: string): string[] => {
     scripts = commands(test);
   require(JSON.stringify(map(map(test["strategy"])["matrix"])["shard"]) === "[1,2,3,4,5,6]", "keep six shards");
   const runs = scripts.filter((line) => line.startsWith("pnpm exec vitest run"));
-  require(runs.length === 3, "today has changed, forced and main test commands");
+  require(runs.length === 5, "today has five test commands, including two lane commands");
+  const testSteps = steps(test);
+  const lane = testSteps.find((s) => s["name"] === "lane tests, one file at a time");
+  const rest = testSteps.find((s) => s["name"] === "test");
+  const times = testSteps.find((s) => s["name"] === "shard times");
+  const laneRuns = commands({ steps: [lane] }).filter((line) => line.startsWith("pnpm exec vitest run"));
+  const restRuns = commands({ steps: [rest] }).filter((line) => line.startsWith("pnpm exec vitest run"));
+  require(restRuns.length === 3 &&
+    restRuns.every((line) => line.includes(`--exclude '${LANE_GLOB}'`)), "L1: every rest command excludes lane files");
+  require(laneRuns.length === 2 &&
+    laneRuns.every(
+      (line) =>
+        line.startsWith(`pnpm exec vitest run ${LANE_FILTER} `) &&
+        line.includes('--shard "$SHARD"') &&
+        /--maxWorkers=1(?:\s|$)/.test(line) &&
+        line.includes("--passWithNoTests") &&
+        line.includes("--exclude 'next/**'"),
+    ) &&
+    laneRuns.filter((line) => line.includes('--changed "$BASE"')).length ===
+      1, "L2: lane commands run one file at a time on PR and main");
+  require(lane !== undefined &&
+    rest !== undefined &&
+    times !== undefined &&
+    testSteps.indexOf(lane) < testSteps.indexOf(rest) &&
+    testSteps.indexOf(rest) < testSteps.indexOf(times) &&
+    compact(rest["if"]) === "!cancelled()" &&
+    compact(times["if"]) === "!cancelled()", "L3: lanes first; rest and shard times survive failure");
+  require(testFiles.some(inLaneStep), "L4: lane filter matches a real test file");
 
   for (const line of runs) {
     require(/--exclude\s+['"]next\/\*\*['"](?:\s|$)/.test(line), "every today command excludes next/**");
   }
 
-  const changed = runs.find((line) => line.includes("--changed"));
+  const changed = restRuns.find((line) => line.includes("--changed"));
   require(changed !== undefined &&
     changed.includes('--changed "$BASE"') &&
     changed.includes('--shard "$SHARD"') &&
@@ -201,7 +256,7 @@ export const lintWorkflow = (text: string): string[] => {
   const allowed = [
     "pnpm install --frozen-lockfile",
     'pnpm exec vitest run next/ --shard "$SHARD"',
-    "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
+    chromium,
     "node next/apps/fabrika/e2e.ts",
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
   ];
@@ -221,10 +276,7 @@ export const lintWorkflow = (text: string): string[] => {
     ), "next passes its six-shard expression without an extra test guard");
 
   for (const [command, condition] of [
-    [
-      "pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium",
-      "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''",
-    ],
+    [chromium, "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
     ["node next/apps/fabrika/e2e.ts", "matrix.shard == 1"],
     [
       'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',

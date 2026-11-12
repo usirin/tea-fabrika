@@ -113,3 +113,11 @@ first.
   then reads "#1 is already running". Older than this; the split keeps it to one file.
 - Whether `next/` repeats one file of whole lanes. The lesson for it: test a step on the machine
   that owns it, and keep a whole lane for order across steps, git or the ledger.
+
+## Closing note, 2026-11-10
+
+Today's lane files no longer share a machine's vitest workers (ticket 554).
+They run one file at a time before the rest, which keeps three workers.
+Crowded CI runs took 550, 690 and 804 s on the slowest machine; the refreshed
+three-run median for catchup alone is 689.1 s. Lane placement now starts from
+the rest's estimated wall time; the lead measures the new layout in CI.

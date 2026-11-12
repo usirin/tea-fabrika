@@ -86,6 +86,30 @@ describe("T325 K9 machine caps, today's tooling", () => {
     expect(JSON.parse(ran.stdout).shared).toEqual(JSON.parse(JSON.stringify(testConfig)));
   });
 
+  // Vitest reads a config only from the folder it starts in (vitest 5.0.5's findConfigFile), so a
+  // run started in `.agents/` got its 5 s default limit, not the 60 s above: 9 to 12 false
+  // timeouts in catchup.test.ts on 2026-11-11. Plant: delete `.agents/vitest.config.ts`.
+  it("scenario: a run started in .agents/ refuses before any test and names the root", () => {
+    const ran = spawnSync(
+      process.execPath,
+      [
+        join(dirname(createRequire(import.meta.url).resolve("vitest/package.json")), "vitest.mjs"),
+        "run",
+        "--maxWorkers=1",
+        "skills/lead/scripts/catchup.test.ts",
+      ],
+      {
+        cwd: join(root, ".agents"),
+        encoding: "utf8",
+        timeout: 30_000,
+        env: { ...process.env, CI: undefined },
+      },
+    );
+    expect(ran.status).not.toBe(0);
+    expect(ran.stderr).toContain("Run vitest from the repo root, not .agents/");
+    expect(ran.stdout + ran.stderr).not.toMatch(/Test Files/);
+  });
+
   // No domain Schema for runtime versions. Plant: omit the check or refuse CI too.
   it("R5 refuses mismatched or missing local Node versions and lets CI run", () => {
     const pinned = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).engines?.node;
@@ -752,6 +776,65 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // scenario: a worktree that links node_modules to the main checkout. pnpm -r refuses it with
+  // ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH, so the wrapper says what to run before pnpm starts.
+  // Plant: drop the check, or check only `-L` and miss a plain file.
+  for (const [shape, refused] of [
+    ["link", true],
+    ["broken link", true],
+    ["file", true],
+    ["folder", false],
+    ["missing", false],
+  ] as const) {
+    it(`scenario: a ${shape} node_modules ${refused ? "is refused with one line" : "runs"}`, () => {
+      const dir = mkdtempSync(join(tmpdir(), "tc-nm-"));
+
+      try {
+        const bin = join(dir, "bin"),
+          work = join(dir, "work"),
+          events = join(dir, "events");
+        mkdirSync(bin);
+        mkdirSync(work);
+        mkdirSync(join(dir, "real"));
+        writeFileSync(events, "");
+        writeFileSync(join(bin, "pnpm"), `#!/bin/sh\necho "pnpm $*" >> '${events}'\n`, { mode: 0o755 });
+        const modules = join(work, "node_modules");
+
+        if (shape === "link") {
+          symlinkSync(join(dir, "real"), modules);
+        }
+
+        if (shape === "broken link") {
+          symlinkSync(join(dir, "gone"), modules);
+        }
+
+        if (shape === "file") {
+          writeFileSync(modules, "");
+        }
+
+        if (shape === "folder") {
+          mkdirSync(modules);
+        }
+
+        const result = spawnSync("sh", [join(root, "scripts/typecheck.sh")], {
+          cwd: work,
+          encoding: "utf8",
+          timeout: 10_000,
+          env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TYPESAFE_API_KEY: undefined },
+        });
+        const line = "typecheck: needs its own node_modules; run pnpm install --offline --frozen-lockfile\n";
+
+        expect({ status: result.status, stderr: result.stderr, ran: readFileSync(events, "utf8") }).toEqual(
+          refused
+            ? { status: 1, stderr: line, ran: "" }
+            : { status: 0, stderr: "", ran: "pnpm exec effect-tsgo patch --typescript\npnpm -r typecheck\n" },
+        );
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  }
 
   // Plant: release the lock while the compiler is still alive. The compiler and pnpm below are
   // controlled stand-ins. No real typecheck runs; overlapping wrappers must serialize their work.

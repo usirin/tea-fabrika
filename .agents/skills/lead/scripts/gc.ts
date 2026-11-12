@@ -27,7 +27,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { Schema } from "effect";
 import { wipOf } from "./lane.ts";
+import { GC_SECONDS } from "./mutbox.ts";
 
 const HOUR = 3_600_000;
 export const IDLE = 2 * HOUR;
@@ -50,10 +52,14 @@ export type Seen = {
   readonly dirty: number | null;
 };
 
-export type Verdict =
-  | { readonly _tag: "keep"; readonly reason: string }
-  | { readonly _tag: "remove"; readonly reason: "merged" | "on_remote" }
-  | { readonly _tag: "backup"; readonly to: readonly string[] };
+export const Verdict = Schema.TaggedUnion({
+  keep: { reason: Schema.String },
+  remove: { reason: Schema.Literals(["merged", "closed", "on_remote"]) },
+  backup: { to: Schema.Array(Schema.String) },
+});
+export type Verdict = typeof Verdict.Type;
+const keep = (reason: string) => Verdict.cases.keep.make({ reason });
+const remove = (reason: "merged" | "closed" | "on_remote") => Verdict.cases.remove.make({ reason });
 
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
@@ -70,45 +76,45 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
   if (s.git === null) {
-    return { _tag: "keep", reason: "not a git checkout" };
+    return keep("not a git checkout");
   }
 
   if (s.busy.length > 0) {
-    return { _tag: "keep", reason: `a process is working in it (pid ${s.busy.join(", ")})` };
+    return keep(`a process is working in it (pid ${s.busy.join(", ")})`);
   }
 
   if (s.idle < IDLE) {
-    return { _tag: "keep", reason: `touched ${Math.round(s.idle / 60_000)} min ago` };
+    return keep(`touched ${Math.round(s.idle / 60_000)} min ago`);
   }
 
   // A stuck box is kept for the lead to read, until its lane lands (0019).
   if (s.stuck !== null && s.stuck < STUCK && !s.merged) {
-    return { _tag: "keep", reason: `stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago` };
+    return keep(`stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`);
   }
 
   if (s.git.head === null) {
-    return { _tag: "keep", reason: "no HEAD commit" };
+    return keep("no HEAD commit");
   }
 
   // A backup pushes HEAD only, so files never committed would go with the folder (field note
   // 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them.
   if (s.dirty === null) {
-    return { _tag: "keep", reason: "its files could not be read" };
+    return keep("its files could not be read");
   }
 
   if (s.dirty > 0) {
-    return { _tag: "keep", reason: `${s.dirty} uncommitted files` };
+    return keep(`${s.dirty} uncommitted files`);
   }
 
   if (s.merged) {
-    return { _tag: "remove", reason: "merged" };
+    return remove("merged");
   }
 
   if (s.onRemote) {
-    return { _tag: "remove", reason: "on_remote" };
+    return remove("on_remote");
   }
 
-  return { _tag: "backup", to: backupsOf(s.name, s.git.branch) };
+  return Verdict.cases.backup.make({ to: backupsOf(s.name, s.git.branch) });
 };
 
 /** What gc saw of one linked worktree of the main checkout, outside the boxes folder. */
@@ -146,42 +152,42 @@ export const worktreePrs = (
  * only the folder goes; a worktree with no lane branch is someone's own and stays. */
 export const decideWorktree = (w: SeenWorktree): Verdict => {
   if (w.locked) {
-    return { _tag: "keep", reason: "locked" };
+    return keep("locked");
   }
 
   if (w.busy.length > 0) {
-    return { _tag: "keep", reason: `a process is working in it (pid ${w.busy.join(", ")})` };
+    return keep(`a process is working in it (pid ${w.busy.join(", ")})`);
   }
 
   if (w.idle < IDLE) {
-    return { _tag: "keep", reason: `touched ${Math.round(w.idle / 60_000)} min ago` };
+    return keep(`touched ${Math.round(w.idle / 60_000)} min ago`);
   }
 
   if (w.branch === null) {
-    return { _tag: "keep", reason: "no branch checked out" };
+    return keep("no branch checked out");
   }
 
   if (w.dirty === null) {
-    return { _tag: "keep", reason: "its files could not be read" };
+    return keep("its files could not be read");
   }
 
   if (w.dirty > 0) {
-    return { _tag: "keep", reason: `${w.dirty} uncommitted files` };
+    return keep(`${w.dirty} uncommitted files`);
   }
 
   if (w.prs.includes("OPEN")) {
-    return { _tag: "keep", reason: "its pull request is open" };
+    return keep("its pull request is open");
   }
 
   if (w.prs.includes("MERGED")) {
-    return { _tag: "remove", reason: "merged" };
+    return remove("merged");
   }
 
   if (w.prs.includes("CLOSED")) {
-    return { _tag: "remove", reason: "closed" };
+    return remove("closed");
   }
 
-  return { _tag: "keep", reason: "no pull request yet" };
+  return keep("no pull request yet");
 };
 
 // ---------------------------------------------------------------- the world
@@ -605,14 +611,20 @@ const main = () => {
   }
 
   // The mutation container's leftovers (0045): a container a dead run left, and images over a
-  // week old. mutbox.ts knows which are safe to remove, and keeps a live run's.
+  // week old. mutbox.ts knows which are safe to remove, and keeps a live run's. Each of its Docker
+  // calls has its own bound; GC_SECONDS is a second guard, so a hung Docker never holds the chain
+  // (2026-11-10: a `docker ps` here never returned, and two lanes sat 1 h 50 min).
   if (!dry) {
     const swept = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "mutbox.ts"), "gc", "--lock", join(env.BOXES, "state", "docker.lock")],
-      { encoding: "utf8" },
+      { encoding: "utf8", timeout: GC_SECONDS * 1000 },
     );
     process.stdout.write(swept.stdout ?? "");
+
+    if (swept.error !== undefined) {
+      console.log(`mutbox gc: stopped after ${GC_SECONDS} s (${swept.error.message}); the rest waits for the next gc`);
+    }
   }
 
   console.log(

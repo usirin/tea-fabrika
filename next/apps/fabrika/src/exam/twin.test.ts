@@ -9,7 +9,9 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
 
-const scan = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
+const check = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
+const contract = 'export class Brain extends Cloudflare.Worker<Brain, {}, RecordPart>()("Brain") {}';
+const scan = (file: string, body: string) => check(file, body, contract);
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
 const text = () => readFileSync(stack, "utf8");
@@ -198,6 +200,68 @@ describe("P12 local twin lint", () => {
   law("the actual stack has no findings, with no second resource list", ({ name }) => {
     expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
   });
+  // T502: the installed scanner is extended, not a second parser. Cases: aliases, quoted keys,
+  // wrong target, omitted key, and a matching key in another Worker. Plant: remove RecordPart:.
+  law("every hosted object has its own class-name binding in the same Worker", ({ alias }) => {
+    const source = (bindings: string | undefined, other = "") =>
+      `import * as ${alias} from "@alchemy.run/cloudflare";
+       ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${bindings === undefined ? "" : `env:{${bindings}}`}}); ${other}`;
+    const binding = `${alias}.DurableObject("RecordPart")`;
+    expect(scan("binding.ts", source(undefined).replace('"Brain"', '"Other"'))).toEqual([]);
+    expect(
+      scan("binding.ts", source(undefined).replace('"Brain"', "workerName")).some((f) =>
+        f.reason.startsWith("unsupported-case:"),
+      ),
+    ).toBe(true);
+    expect(scan("binding.ts", source(`PROJECT:${alias}.DurableObject("Project"), RecordPart:${binding}`))).toEqual([]);
+
+    for (const broken of [undefined, "", "export class Brain {}", contract.replace("RecordPart", "Unknown[]")]) {
+      expect(
+        check("binding.ts", source(`RECORD:${binding}`), broken).some(
+          (f) => f.reason === "unsupported-case: cannot read host contract",
+        ),
+      ).toBe(true);
+    }
+
+    for (const key of ["RecordPart", '"RecordPart"']) {
+      expect(scan("binding.ts", source(`RECORD:${binding}, ${key}:${binding}`))).toEqual([]);
+    }
+
+    // Pinned review-2 escapes: later keys and spreads can replace a valid binding.
+    for (const overwritten of ["undefined", '"Other"', "replacement"]) {
+      expect(
+        scan("binding.ts", source(`RecordPart:${binding}, RecordPart:${overwritten}`)).some((f) =>
+          f.reason.startsWith("unsupported-case:"),
+        ),
+      ).toBe(true);
+    }
+
+    for (const props of [
+      `env:{RecordPart:${binding}}, env:{}`,
+      `env:{RecordPart:${binding}}, ...replacement`,
+      `env:{RecordPart:${binding}, ...replacement}`,
+    ]) {
+      expect(
+        scan(
+          "binding.ts",
+          `import * as ${alias} from "@alchemy.run/cloudflare";
+           ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${props}});`,
+        ).some((f) => f.reason.startsWith("unsupported-case:")),
+      ).toBe(true);
+    }
+
+    for (const [bindings, other] of [
+      [undefined, ""],
+      ["", ""],
+      [`RECORD:${binding}`, ""],
+      [`RECORD:${binding}, RecordPart:${alias}.DurableObject("Other")`, ""],
+      [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],
+    ]) {
+      expect(scan("binding.ts", source(bindings!, other)).some((f) => f.reason.includes("class-name binding"))).toBe(
+        true,
+      );
+    }
+  });
   law("plant: a remote-only resource and remote override both fail", ({ alias, name }) => {
     const body = [
       `import * as ${alias} from "@alchemy.run/cloudflare";`,
@@ -223,8 +287,9 @@ describe("P12 local twin lint", () => {
   law("uses installed Worker and R2 local registrations, including import aliases", ({ alias, name }) => {
     const body = [
       `import * as ${alias} from "@alchemy.run/cloudflare";`,
-      `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"});`,
-      `const bucket = ${alias}.R2.Bucket("Health", {name: "health"});`,
+      // A generated name may be the host's, so include its binding.
+      `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
+      `const bucket = ${alias}.R2.Bucket("Measurements", {name: "measurements"});`,
     ].join("\n");
     expect(scan("plant.ts", body)).toEqual([]);
   });

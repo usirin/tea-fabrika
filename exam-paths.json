@@ -8,17 +8,32 @@
   },
   { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
   { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
+  { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (0062)" },
+  { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
   {
     "glob": "next/**/tsconfig.json",
     "why": "next/'s type checks, including Node's erasable syntax"
   },
-  { "glob": "next/packages/libfabrika/src/compiler.ts", "why": "the shared Compiler check" },
-  { "glob": "next/packages/libfabrika/src/id.test-support.ts", "why": "the generated ID fixtures" },
+  { "glob": "next/packages/libfabrika/src/node/build/compiler.ts", "why": "the shared Compiler check" },
+  { "glob": "next/packages/libfabrika/src/Id.test-support.ts", "why": "the generated ID fixtures" },
   {
     "glob": "next/apps/fabrika/src/port.test-support.ts",
-    "why": "the port a stage test hands to dev.ts"
+    "why": "the port an instance test hands to dev.ts"
   },
   { "glob": "fixtures/next/**", "why": "saved letters and vectors the tests read" },
+  { "glob": "**/*.ask-desk.test.ts", "why": "today's ask-desk PR 1 laws" },
+  {
+    "glob": "programs/tracker/src/ask-window.laws.test.ts",
+    "why": "the shared ask editor, attention and status laws"
+  },
+  {
+    "glob": "packages/pipeline/src/ask-desk.test-support.ts",
+    "why": "the ask-desk properties' test runner and input constraints"
+  },
+  { "glob": "fixtures/ask-desk/**", "why": "ask-desk saved cases, vectors and mutation plants" },
+  { "glob": "apps/fabrika/e2e.ts", "why": "today's real-app checks and their routing" },
+  { "glob": "apps/fabrika/e2e/**", "why": "today's real-app checks and captures" },
+  { "glob": "programs/tracker/package.json", "why": "the shared ask-view subpath" },
   { "glob": "next/apps/fabrika/e2e.ts", "why": "the end-to-end runner" },
   { "glob": "next/apps/fabrika/e2e/**", "why": "the end-to-end tests" },
   {
@@ -59,6 +74,7 @@
   },
   { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
   { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
+  { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
   { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
   { "glob": "patches/**", "why": "the Effect checks patched into tsgo" },
   {

@@ -1,3 +1,8 @@
 {
-  "entryExportConventions": {}
+  "entryExportConventions": {
+    "alchemy-durable-object-export": {
+      "files": "src/brain.ts",
+      "exports": ["RecordPart"]
+    }
+  }
 }

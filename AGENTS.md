@@ -24,8 +24,8 @@ was decided are all kept here on purpose, so they can be analysed later.
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), the index, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md): a Mermaid diagram first, then one real code block, then words, citing `path:line` ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)). |
 | Write guidelines for one design area | [`.claude/skills/guidelines/SKILL.md`](./.claude/skills/guidelines/SKILL.md), the steps in order, and its page checklist | One experiment, one proposed note, their two index rows and one Design canvas ([drawn on Claude Design](./docs/direction/design-on-claude-design.md)), in the shape that skill gives. |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), the index, then the write-up | `experiments/NN-short-title.md` for the write-up, with the next free number, plus one row in the index. A write-up quotes the numbers it uses inline. Raw results and assets (saved answers, shots, inputs, every timing of a run) go to the owner's private archive, not into git: a script writes them under `runs/` or to a path a flag names. A script is not kept on main: keep it on its own branch and name that branch in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/`. |
-| Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes.jsonl` and `field/runs.jsonl` | One row per agent run in `runs.jsonl` and one note per thing that broke, cost too much, needed a person or worked well in `notes.jsonl`, the same day, in the schema the README gives. |
-| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row in `field/findings.jsonl`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
+| Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/`, with the older rows in `field/notes.jsonl` and `field/runs.jsonl` | One file per agent run in `field/runs/` and one per thing that broke, cost too much, needed a person or worked well in `field/notes/`, the same day, named `<date>-<slug>.json` and in the schema the README gives. Never a line added to the old `.jsonl` files ([0090](./.decisions/0090-each-field-row-is-a-file.md)). |
+| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding), the fields and the closed `rule` list | One row file in `field/findings/`, with proof, then keep going. Never fix it, file a ticket for it, or only mention it in your report; a person rates it, and a `fix` becomes a ticket ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). Never a security hole. |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too. |
 | Build the new version | [Two versions, side by side](#two-versions-side-by-side), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts`. |
 | Change the machines (today's version) | The workspace packages (`packages/fabrika`, `packages/pipeline`, `programs/*`), with the list in the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README for its files | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name (`@kampus/fabrika-old`, a subpath such as `@kampus/fabrika-old/http`, or `@kampus/pipeline/<path>`), never by a path; the pipeline uses only fabrika's public names (`pnpm lint` checks both). Inside a package, parts import each other by relative path. The top level names no platform: a Node, Miniflare, Agent SDK, ACP or OpenTelemetry import goes on a subpath (`pnpm lint` bundles the top level for a browser and fails on one). `layer-rules.json` says which way imports may point (`pnpm lint` checks it). Toy projects used by tests live in `fixtures/`. |
@@ -59,9 +59,12 @@ same turn, and never waits for a code pull request or the end of the day (owner,
 ## Two versions, side by side
 
 A new version of fabrika is growing in `next/`, built on
-[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-09,
-`next/` is on main, and 18 of Tier 1's 37 rows have merged
-([where we are](./docs/plan/README.md#where-we-are-now)). Everything
+[the five layers](./docs/direction/a-local-first-sync-engine.md). As of 2026-11-11,
+`next/` is on main, and 20 of Tier 1's 44 rows have merged, plus P17a, half of P17
+([where we are](./docs/plan/README.md#where-we-are-now); 39 since 2026-11-10, when the owner
+added P38, [0069](./.decisions/0069-choices-are-settings.md), 43 since the four thin slices,
+P39 to P42, [0088](./.decisions/0088-six-slices-in-tier-1.md), and 44 since the merge queue's first stage, P43,
+[0111](./.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)). Everything
 else (`packages/`, `programs/`, `apps/`) is today's
 version. It keeps running for daily use until the new one takes each job over
 ([clean slate](./docs/direction/clean-slate.md)).
@@ -111,12 +114,26 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   appears only in a one-line edge the platform demands, marked where it stands with
   `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, which the lead reads at merge
   ([no Promises](./docs/direction/no-promises.md)).
+- **In `next/`, a resource is acquired in a scope.** A child process, a test window, a database,
+  a file handle, a socket, a temp folder, a timer or a subscription is opened with
+  `Effect.acquireRelease` and offered as a `Layer` or a scoped Effect, so the scope gives it back.
+  No `try/finally` and no `afterEach` that releases it, and no "remember to close" in prose. A
+  raw handle from the platform is wrapped once, at the edge. A process killed with SIGKILL runs no
+  finalizer, so a resource that must not outlive it needs a guard outside the process too
+  ([0061](./.decisions/0061-resources-are-acquired-in-a-scope.md)).
+- **In `next/`, a service file holds only its contract.** The service class, its own error and the
+  types it speaks in, with its type written out: no layer, no SQL, nothing that runs. Each layer is
+  a sibling file read through its module, as `LedgerSql.layer(...)`, and no service class has a
+  static layer. A module keeps domain, application and infrastructure files apart, and a file that
+  names a platform lives in `cloudflare/` or `node/`, so one platform's bundle holds no other's
+  code ([0095](./.decisions/0095-a-service-file-holds-only-its-contract.md)).
 - **In `next/`, an object class stays thin.** It holds what the platform gives it and
   a one-line handoff. The logic is plain code that also runs on Node in tests
   ([an object class stays thin](./docs/direction/object-classes-stay-thin.md)).
 - **Every pull request, `next/` or today's, goes through the pipeline's steps:**
-  plan, test writer, build, mutation step, one review, each by its own agent, with
-  laws. Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
+  plan, test writer, build, one review, each by its own agent, with
+  laws. Mutation runs hourly against main and files tickets, never as a step
+  ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)). Since 2026-11-05 today's pipeline programs are paused, so the lead session's agents
   run the steps by hand, each logged in `field/`, and the lead agent reads every diff, CI
   and the leak grep before a merge. `next/` does not wait on the pipeline. No builder starts
   before an approved plan and tests that exist
@@ -133,12 +150,14 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows.
   Code pull requests keep their steps (owner, 2026-11-09). Lead tooling is fast-tracked too
   (owner, 2026-11-09): skills, the lead scripts and the drive script run on our own laptop, so
-  they are not product work. They skip the plan, tests, mutation and review steps. The lead or one
+  they are not product work. They skip the plan, tests and review steps. The lead or one
   agent changes them directly, keeps each change small, and merges on green CI with a clean leak
   grep. Fast-tracked is not loose: agents read `.agents/` and copy its habits, so its code follows
   `next/`'s conventions and lint rules, edge comments included. What it broke on the day it joined
-  is in `agents-ledger.json`, which only shrinks; a shell or Python script moves to TypeScript and
-  Effect when it is next touched ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  is in `agents-ledger.json`, which only shrinks ([0033](./.decisions/0033-agents-code-follows-next-rules.md)).
+  No new shell or Python script enters the repo, and the ones here today are being ported to
+  TypeScript and Effect now, behind services with a test layer (ticket 766,
+  [0113](./.decisions/0113-no-shell-or-python-scripts.md)).
   Product code (`next/` and today's app) keeps its steps.
   A step is a program, and a prompt you would have typed is its first source: a rule in
   a prompt that could be code becomes code. A v0 has no missing parts: quick means each
@@ -146,30 +165,41 @@ in libfabrika ([why libfabrika exists](./docs/direction/where-each-piece-lives.m
   that code could check becomes a check, then leaves the prose; only judgment stays in prose
   (owner, 2026-11-08).
   Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh and the mutation arm-a vs arm-b comparison mean no
-  owner read is needed. The lead records both outputs in the PR. A hit goes to the lead's hand check,
+  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
+  output in the PR. A hit goes to the lead's hand check,
   with the hit list in the PR. Only real loosening waits on the owner.
+  From 0066 the mutation comparison comes from the hourly run on main, after the merge, so at
+  merge the lead reads loosening.sh alone.
   The lead merges any pull request, product code and exam changes included, with `catchup.sh`
   once every step passed, CI is green, the leak grep is clean and `loosening.sh` shows no real
   loosening after the hand check. Only real loosening of a law, or a new design call, waits on the
   owner ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)).
-- **One fresh agent per step** (owner, 2026-11-09). Each step's agent reads the lane's state
+- **One fresh agent per step** (owner, 2026-11-09), and the lead drives with flows, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md)). Each step's agent reads the lane's state
   file, does its one step and writes the state file back for the next; no long driver carries a
   ticket. A drive script will chain the mechanical steps and start an agent only for judgment
   (tracker ticket 341). The lead skill says how.
+- **No number caps a pull request's size** (owner, 2026-11-11): a plan still cuts big work into
+  slices, each landing whole with its tests, by what works on its own and never to fit a count.
+  Size picks who looks, and a warning drawn from our own merged pull requests only advises
+  ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)).
 - **An exam change that is all proper property tests merges without the owner's read** (owner,
   2026-11-08). Proper means every new or changed law is a property, or an example labeled
-  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and mutation shows no law got
+  `vector:`, `format:`, `pinned:` or `scenario:` with its reason, and `loosening.sh` shows no law got
   narrower. A change that loosens or removes a law still waits on the owner
   ([how a change lands](./docs/plan/README.md#how-a-change-lands)).
 - **In `next/`, the shell is `fabsh`.** `tsh` stays in today's version.
-- **In `next/`, a folder of libfabrika is a room, and a layer is a floor.** A room holds one
-  subject, with front files and an `internal/` no other room imports, and it re-exports no other
-  room's names. Its floor is one line in `layer-rules.json`: a room imports only from lower floors,
-  never from its own. A room offers Effect services in its own types and errors, plus the shared
-  names beside `Id.ts`: a lower room's error is translated at the service, with its cause kept, and
-  `runtime/` never imports `ledger/`. A new file goes in its room now, before the move lands
-  ([0043](./.decisions/0043-rooms-on-floors.md)).
+- **In `next/`, a folder of libfabrika is a module, and its rank is a layer,** like rooms on
+  floors, which stays only the analogy ([0091](./.decisions/0091-modules-and-layers.md)). A module
+  holds one subject, with front files and an `internal/` no other module imports, and it re-exports
+  no other module's names. Its layer is one line in `layer-rules.json`: a module imports only from
+  lower layers, never from its own. A module offers Effect services in its own types and errors,
+  plus the shared names beside `Id.ts`: a lower module's error is translated at the service, with
+  its cause kept, and `runtime/` never imports `ledger/`. A new file goes in its module now, before
+  the move lands ([0043](./.decisions/0043-rooms-on-floors.md)). Test files keep the layers too,
+  with no exemption: a module whose laws need a real database writes them as a suite, read through
+  its module as `SinkTest.suite(nodeSql)`, and the module that owns the driver runs it; a helper
+  two modules share sits on a layer both may import
+  ([0062](./.decisions/0062-test-files-keep-the-floors.md)).
 - **In `next/`, a window reads state through tea's own React hook.** State lives in a tea
   machine, never `useState` ([Elm first](./docs/direction/elm-first.md)). From tea 0.23.0
   that hook is `useRuntime`: it takes an Effect-engine run, hands back a `send` that
@@ -215,7 +245,8 @@ discovery contract
 ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md)).
 
 Repo tooling adds no Claude Code hooks, SessionStart or any other (owner, 2026-11-09). A tool runs
-when called: `drive.ts` runs `box.sh gc` itself on start.
+when called. Box cleanup (`box.sh gc`) runs on a launchd timer and after each merge, never on a
+step's start ([0101](./.decisions/0101-box-cleanup-runs-on-a-timer.md)): `gcloop.ts`.
 
 Tickets go in the app's own tracker (`tracker_file`). Never open a GitHub issue on this repo;
 GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/SKILL.md)).
@@ -274,6 +305,9 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Judge a design by its properties, never its size.** Never pick between designs by how many
   lines or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails
   (owner, 2026-11-07, field note 2026-11-07-13). Size a design once it is picked.
+- **A choice that fits as a `fabrika.toml` value is one.** Declare it once with its schema and
+  default, so a test sets it as a person does. A plan asks "is this a setting?" of each new choice
+  and says why not (owner, 2026-11-10, [0069](./.decisions/0069-choices-are-settings.md)).
 - **Solve a problem we have.** A big vision gets saved as a note and tied back to a real
   problem. An experiment picks the tech. Aim at two people working together first:
   packages for others and publishing are recorded as later.
@@ -332,13 +366,17 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
 - **Names.** Use the industry's word for a thing
   ([use the industry's names](./docs/direction/use-the-industrys-names.md)), checked on
   every pull request, prose included. An Effect service that holds many is named in the plural, as
-  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`
-  ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
+  Effect has `Runners` and `Servers`: `Leases`, not `LeaseManager`. Test tooling follows the same
+  names: a test helper or shared suite is read through its module, as Effect writes
+  `SqlEventLogServerUnencryptedStorageTest.suite(...)`, so `SinkTest.suite(nodeSql)`, never a bare
+  `sinkSuite(...)` ([0029](./.decisions/0029-format-and-names-follow-effect.md)).
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not
   `reasonCode`: `reason` is the industry's word (OTP's exit reason, Kubernetes' condition
   `reason`), so it wins over `why` (owner, 2026-11-09). Today's code keeps `why` until that code
   goes, as with `kind`, and main's `next/` code is renamed by a sweep after PR 530 merges (ticket
-  337). A key does not say again what its parent already says: inside
+  337). No key, field, option or setting is named `where`, `why`, `what`, `who` or `how`: use the
+  noun for the value, such as `location`, `reason`, `scope` or `to` ([0081](./.decisions/0081-no-question-word-names.md)).
+  A key does not say again what its parent already says: inside
   an outcome, the reason is `reason`, not `outcomeReason`. If a short word could
   mean two things, pick a clearer short word before you reach for a long one.
   A short word that already means something here keeps that one meaning inside its
@@ -356,7 +394,7 @@ GitHub issues are for other people's repos ([lead skill](./.agents/skills/lead/S
   // Values as they read. In `next/`, Effect Schema writes the `_tag`; nobody types it.
   // Today's code says `kind` and `why` here.
   // Yes: read it out loud and it is a sentence.
-  { _tag: "ask", who: "owner", for: "approval" }
+  { _tag: "ask", to: "owner", for: "approval" }
   { _tag: "send", to: "builder", reason: "checks_red" }
 
   // No: longer, and the parent already said it.
@@ -391,7 +429,7 @@ pnpm test
 
 All three must pass before a change is offered. None needs a key or the
 network. `pnpm typecheck` runs Effect's own checks inside `tsc` (`@effect/tsgo`,
-patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The two advice rules print and do not fail it (`oxlint-plugins/README.md`).
+patched in by the same command), so an Effect made and dropped fails it. `pnpm lint` passes when nothing blocks: a warning fails it too. The four advice rules print and do not fail it (`oxlint-plugins/README.md`).
 `experiments/` is outside the typecheck, so run a changed script once yourself.
 `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. Nothing
 above needs it; CI runs it too (experiment 108).
@@ -404,11 +442,11 @@ every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or `field/*.jsonl` rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips `check`, `test`, `next` and `e2e` for them, and its `field` job checks the added rows |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
-| A dependency's version | as code; `pnpm lint` fails on a range |
+| A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite; `pnpm lint` fails on a range |
 | A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
 | A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
@@ -468,8 +506,11 @@ brief carries these caps. Each one came from a laptop that became unusable.
 
 - Tests: `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you
   work, then `--changed origin/main` once at the end: only the tests that reach a changed file.
-  Never the full suite locally (owner, 2026-11-08). On a pull request, CI decides what to run from
-  the changed paths (`.github/ci/changes.mjs`). Only Markdown or `field/*.jsonl` rows: it skips
+  Never the full suite locally (owner, 2026-11-08). A change to a file that reruns every test (the
+  `forceRerunTriggers` in `vitest.config.ts`: a `package.json`, the lockfile, `pnpm-workspace.yaml`,
+  a tsconfig and others) makes `--changed` the full suite, so the config refuses it locally: run
+  the narrow paths of the tests you touched and of the tests that read that file, and CI runs the rest. On a pull request, CI decides what to run from
+  the changed paths (`.github/ci/changes.mjs`). Only Markdown or field rows (`field/*.jsonl`, or files in `field/notes/`, `field/runs/` and `field/findings/`): it skips
   `check`, `test`, `next` and `e2e`. Only `next/` files (but not the exam helper): it runs `check` and `next`,
   and skips `test` and `e2e`; a change to next's exam `commits.ts` runs `test` too. Only today's files: it skips `next`.
   Skill prose (skill Markdown outside `scripts/` and brief or prompt folders) skips `check`, `test`, `next` and
@@ -482,7 +523,8 @@ brief carries these caps. Each one came from a laptop that became unusable.
   about 8 cores, so small jobs add up.
 - "Under load" means at most 12 code agents, one `pnpm typecheck` at a time across all of
   them (wait while `pgrep -x tsgo` finds one; `pgrep -f tsgo` also matches the shell running
-  the wait, so that loop never ends), one Electron test app at a time, and one Docker
+  the wait, so that loop never ends; in a step's box, where `pgrep` cannot list processes, skip
+  the wait: `pnpm typecheck` takes its own lock, `scripts/typecheck.sh`), one Electron test app at a time, and one Docker
   box. Raised from 2 to 4 on 2026-11-03, the owner asking for more speed: on a 12-core laptop
   with 3 code agents running, the load average sat near 5.5 with 45 GB free. Raised to 5 the
   same day, the owner asking again, with 4 running and the load near 9. Two type checks at

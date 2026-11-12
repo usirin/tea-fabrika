@@ -1,23 +1,23 @@
-import { LedgerError } from "@kampus/libfabrika/data";
-import { gatewayLayer } from "@kampus/libfabrika/workers/gateway";
+import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { connectionLayer } from "@kampus/libfabrika/workers/gateway";
 import { projectLayer, type Env as Bindings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Predicate, Schema } from "effect";
 import { programs } from "virtual:fabrika-built";
-import { Door } from "./door.ts";
+import { Gateway } from "./door.ts";
 import { Settings } from "./settings.ts";
 
 export interface Env extends Bindings {
-  readonly STAGE: string;
+  readonly INSTANCE: string;
 }
 
-export const settings = Effect.fn("stage.settings")(function* (env: Env) {
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.STAGE).pipe(
-    Effect.mapError(() => new LedgerError({ reason: "bad_row" })),
+export const settings = Effect.fn("instance.settings")(function* (env: Env) {
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(env.INSTANCE).pipe(
+    Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
 });
 
-export const gatewayRuntime = (ctx: DurableObjectState, env: Env) =>
-  ManagedRuntime.make(Layer.unwrap(settings(env).pipe(Effect.map((config) => gatewayLayer(ctx, env, config)))));
+export const connectionRuntime = (ctx: DurableObjectState, env: Env) =>
+  ManagedRuntime.make(Layer.unwrap(settings(env).pipe(Effect.map((config) => connectionLayer(ctx, env, config)))));
 
 export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
   ManagedRuntime.make(
@@ -27,11 +27,12 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
           projectLayer(ctx, env, {
             config,
             programs,
-            bootstrap: { name: "counter:1", id: "counter:1", program: "counter" },
+            // The program is the core pack's `fabrika/counter`; its registered name stays `counter:1`.
+            bootstrap: { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
             door: (options) =>
-              Door.pipe(
+              Gateway.pipe(
                 Effect.provide(
-                  Door.layer({
+                  Gateway.layer({
                     ...options,
                     name: ctx.id.name ?? config.name,
                     url: `http://127.0.0.1:${config.port}`,
@@ -50,7 +51,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                       raw: [],
                       personOnly: [],
                       name: (m) =>
-                        typeof m === "object" && m !== null && "type" in m && typeof m.type === "string"
+                        Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
                           ? m.type
                           : undefined,
                     },
