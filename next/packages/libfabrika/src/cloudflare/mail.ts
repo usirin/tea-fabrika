@@ -28,12 +28,15 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
         Layer.succeed(ProgramMail, {
           deliver: Effect.fn("process.mail")(function* (delivery) {
             const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+            // RPC failures can echo mail; keep only the reason before the RPC span records them.
             const reply = yield* rpc(
-              ProjectClient.make(projectStub(env, project)).mail(delivery, {
-                traceId: span.traceId,
-                spanId: span.spanId,
-              }),
-            ).pipe(Effect.mapError((cause) => new ProgramMailError({ reason: "storage", cause })));
+              ProjectClient.make(projectStub(env, project))
+                .mail(delivery, {
+                  traceId: span.traceId,
+                  spanId: span.spanId,
+                })
+                .pipe(Effect.mapError(() => new ProgramMailError({ reason: "storage" }))),
+            );
             return yield* fromMailReply(reply);
           }),
         }),
@@ -41,11 +44,13 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
           wake: Effect.fnUntraced(function* (name) {
             const span = yield* Effect.currentSpan.pipe(Effect.orDie);
             yield* rpc(
-              ProcessClient.make(processStub(env, project, name)).mailed({
-                traceId: span.traceId,
-                spanId: span.spanId,
-              }),
-            ).pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
+              ProcessClient.make(processStub(env, project, name))
+                .mailed({
+                  traceId: span.traceId,
+                  spanId: span.spanId,
+                })
+                .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
+            );
           }),
         }),
       ),
