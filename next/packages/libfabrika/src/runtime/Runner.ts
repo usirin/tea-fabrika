@@ -51,6 +51,7 @@ import {
 import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import * as Chaos from "./Chaos.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -1587,7 +1588,25 @@ export class ProgramRunner extends Context.Service<
 
                     const seq = j.attempt.seq;
                     // Port and fresh checks share the same saved attempt and model.
-                    const admission = (yield* state.loaded.execution.admit(m))
+                    const valid = yield* state.loaded.execution.admit(m);
+
+                    // Only the host knows this process's trusted binding; a target literal cannot prove it.
+                    if (valid && process.program === "fabrika/chaos") {
+                      const start = Schema.decodeUnknownOption(
+                        Schema.Struct({ type: Schema.Literal("start"), ...Chaos.Start.fields }),
+                      )(m);
+
+                      if (
+                        Option.isSome(start) &&
+                        (start.value.target.name === process.name || start.value.target.process === process.id)
+                      ) {
+                        yield* complete({ type: "abandoned", seq });
+                        yield* continueRecovery();
+                        return Step.cases.refused.make({ reason: "bad_target" });
+                      }
+                    }
+
+                    const admission = valid
                       ? yield* state.loaded.execution.fresh(state.model, m)
                       : Admission.cases.invalid.make({});
 

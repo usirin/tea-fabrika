@@ -17,11 +17,15 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
+import * as Reference from "./Reference.ts";
 import * as Setting from "./Setting.ts";
+import * as Snapshot from "./Snapshot.ts";
+import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
@@ -136,6 +140,94 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
       check,
     );
   });
+});
+
+it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({
+        count: fc.integer({ min: 0, max: 1000000 }),
+        unit: fc.constantFrom({ name: "kB", scale: 1000n }, { name: "KiB", scale: 1024n }),
+        half: fc.boolean(),
+        file: fc.constantFrom<Setting.File>("person", "repo"),
+      }),
+      async (v) => {
+        const d = Setting.make("limits.record", {
+          schema: Schema.ByteSize,
+          default: ByteSize.bytes(1),
+          doc: "Record bytes.",
+          scope: [v.file],
+          reload: "restart",
+          since: "1.2.3",
+          format: "text",
+        });
+        const group = Setting.group({ record: d });
+        const expected = BigInt(v.count) * v.unit.scale + (v.half ? v.unit.scale / 2n : 0n);
+        const spelling = `${v.count}${v.half ? ".5" : ""} ${v.unit.name}`;
+        const tree = { limits: { record: spelling } };
+        const decoded = Schema.decodeUnknownExit(Files.schema(group, v.file))(tree, { onExcessProperty: "error" });
+        expect(Exit.isSuccess(decoded)).toBe(true);
+
+        if (Exit.isSuccess(decoded)) {
+          expect(decoded.value).toEqual({ limits: { record: ByteSize.bytes(expected) } });
+        }
+
+        for (const invalid of [Number(expected), String(expected), "0.1 KiB", `${v.count} KB`, `1e3 ${v.unit.name}`]) {
+          expect(
+            Exit.isFailure(Schema.decodeUnknownExit(Files.schema(group, v.file))({ limits: { record: invalid } })),
+          ).toBe(true);
+        }
+
+        const exit = await Effect.runPromiseExit(
+          Effect.gen(function* () {
+            const toml = yield* Toml;
+            const document = yield* toml.parse(`[limits]\nrecord = ${JSON.stringify(spelling)}\n`);
+            const files = {
+              repo: { file: REPO, document: v.file === "repo" ? document : { value: {}, spans: [] } },
+              person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
+            };
+            yield* Files.validate(group, files, { version: "1.2.3" });
+            const resolved = yield* Sources.resolve(group, {
+              flags: Sources.flags({}),
+              env: Sources.env({}),
+              repo: Sources.file(REPO, files.repo.document),
+              person: Sources.file(PERSON, files.person.document),
+            });
+            const saved = yield* Snapshot.make(group, resolved);
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+            const checked = yield* Snapshot.read(group, transported);
+            return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
+          }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+
+        if (Exit.isSuccess(exit)) {
+          expect(exit.value.values.record).toBe(ByteSize.bytes(expected));
+          expect(exit.value.origins[d.path]).toEqual({
+            _tag: "file",
+            file: v.file === "repo" ? REPO : PERSON,
+            line: 2,
+          });
+          expect(exit.value.saved.values).toEqual({ [d.path]: String(expected) });
+          expect(exit.value.checked.values).toEqual(exit.value.values);
+          expect(exit.value.checked.snapshot).toEqual(exit.value.saved);
+          expect(exit.value.rows).toEqual([
+            {
+              path: d.path,
+              value: String(expected),
+              origin: exit.value.origins[d.path],
+              default: String(d.default),
+              doc: d.doc,
+              scope: d.scope,
+              reload: d.reload,
+              since: d.since,
+            },
+          ]);
+        }
+      },
+    ),
+    check,
+  );
 });
 
 describe("L8, the version refusal comes first, and a supported version goes on", () => {

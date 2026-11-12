@@ -34,7 +34,7 @@ import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { type SinkError, SpanSink } from "../telemetry/Sink.ts";
-import { Chain } from "../telemetry/Trace.ts";
+import { Chain, REFUSED } from "../telemetry/Trace.ts";
 import { checkHello } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
@@ -61,6 +61,12 @@ const reserved = (a: unknown) => {
 };
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
+
+const refuse = Effect.fn("gateway.route")(function* (reason: "reserved") {
+  yield* Effect.annotateCurrentSpan(REFUSED, reason);
+  return no(reason);
+});
+
 const ok = (result: typeof Schema.Json.Type) => Answer.cases.ok.make({ result });
 
 // A dead letter stops the sender's outbox. Other program refusals keep their full reply.
@@ -1018,11 +1024,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const { by, raw } = checked.success;
-    let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
-    if (reserved(params)) {
-      refusal ??= "reserved";
+    if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
+      return yield* refuse("reserved");
     }
+
+    let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
     if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params)) {
       refusal ??= "bad_input";
@@ -1054,8 +1061,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         Result.isFailure(request) ||
         decoded === null ||
         Result.isFailure(decoded) ||
-        typeof name !== "string" ||
-        reserved(request.success.m))
+        typeof name !== "string")
     ) {
       refusal ??= "bad_input";
     }

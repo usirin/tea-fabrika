@@ -533,7 +533,7 @@ const FieldRow = Schema.Struct({
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(FieldRow));
 
-/** One `field/runs.jsonl` row for a turn, in the shape `fieldrow.py` and `clauderow.py` write. */
+/** One `field/runs.jsonl` row for a turn, in the shape `fieldrow.py` and `clauderow.ts` write. */
 export const stepRow = (r: RowAsk): string => {
   const local = (d: Date) => {
     const offset = -d.getTimezoneOffset();

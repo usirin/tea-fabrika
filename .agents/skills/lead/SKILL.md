@@ -31,8 +31,9 @@ and say where it is set; never echo its value. `pnpm config list` and `env` stay
 An agent's own worktree gets its own install, as `catchup.sh` does: `pnpm install --offline
 --frozen-lockfile` in it, about 3 s from the warm store, with no network and no lockfile change.
 Never link `node_modules` to the main checkout's: pnpm 12 refuses a linked one in `pnpm -r`
-(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), so `pnpm typecheck` fails, and a pnpm run in the
-worktree rewrites the main checkout's install state through the link.
+(`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`), and a pnpm run in the worktree, an install included,
+rewrites the main checkout's install state through the link. `pnpm typecheck` removes such a link
+and runs that install itself before it checks; every other command still needs the real install.
 
 For a stacked lane, put the parent and landing facts in the state file and the brief before the
 first step:
@@ -166,7 +167,7 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `freshmain.ts <pr> <tip>` | run by `catchup.sh` just before the squash, in its checkout: fetch main, and when it moved after the checks, run `pnpm lint` on the head merged with it; a red lint, a conflict or a failed fetch refuses the merge, and the lane merges main and pushes. No flag skips it, and the tests are not run again (ticket 552) |
 | `sizecap.ts diff <base> <head>` / `sizecap.ts plan <plan.md>` | size as advice only, since no number caps a pull request ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)): `diff` prints one line with the product lines from the merge base to `<head>` (tests, docs, lock, `linguist-generated` and paths outside `next/`, `apps/`, `programs/` and `packages/` counted apart), and past `ADVICE_LINES` (600, 0087's starting number until a count from our merged pull requests replaces it) asks whether it should have been sliced; `catchup.sh` prints it before it waits on checks. `plan` prints the plan's size and names each `## Size` slice with no estimate; `plancheck.sh --draft` prints it. Neither ever refuses |
 | `fieldrow.py [--parent R] [--model M] [--effort E] <jsonl> <run> <ticket> <outcome> <why>` | one `field/runs/` row from a Codex run's events, printed for `fieldfile.ts` |
-| `clauderow.py --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [why]` | one `field/runs/` row from a Claude subagent's transcript, printed for `fieldfile.ts`, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
+| `clauderow.ts --run R [--billing B] [--role R] [--parent R] [--corrects R] <transcript> [reason]` | one `field/runs/` row from a Claude subagent's transcript, printed for `fieldfile.ts`, tokens and list dollars; `billing` only when given, since a transcript does not say; `--turns <transcript>` prints each call's context and dollars |
 | `fieldfile.ts <log> <rows>` | save each JSON line of `rows` as its own row file, `field/<log>/<date>-<slug>.json`, named by its id; a lane's run id gets the row's date in front; a taken or missing name writes nothing (0090) |
 
 box.sh run and runplan.sh strip secret settings and redact saved output.
@@ -189,7 +190,7 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
 - `--agent codex` (the default) runs Codex in a box. `--agent claude` runs `claude -p` in the same
   kind of box, with a new `--session-id`, `--model` (default `sonnet`; `opus` when asked), `--tools`
   per step (a review gets no Edit or Write), no setting sources, no MCP servers, and the step's
-  skill named in its prompt. Its `stream-json` goes to the events file, and `clauderow.py` writes
+  skill named in its prompt. Its `stream-json` goes to the events file, and `clauderow.ts` writes
   the field row with tokens and list-price dollars.
 - Claude runs under `sandbox-exec`: it cannot read `~/.fabrika/step-keys`, the leak words or
   `~/.codex`, and it writes only its box and caches. It commits with plain git. drive then signs its
@@ -472,7 +473,7 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
-   one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.py` for a Claude agent, a
+   one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
    driver included, once it has finished, or drive's `BOXES/<lane>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file.
