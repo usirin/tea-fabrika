@@ -87,6 +87,36 @@ const save = (v: SavedFlow) => {
 const digest = <A, E>(effect: Effect.Effect<A, E, Digest.Digest>) =>
   Effect.runPromise(effect.pipe(Effect.provide(Digest.layerWebCrypto)));
 
+// Dynamic, nonnumeric keys expose insertion order at both depths; Struct fields have a fixed order.
+const objectKey = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
+const objectFlow = fc
+  .dictionary(objectKey, fc.dictionary(objectKey, fc.integer(), { minKeys: 2, maxKeys: 5 }), {
+    minKeys: 2,
+    maxKeys: 5,
+  })
+  .chain((value) =>
+    fc
+      .shuffledSubarray(Object.entries(value), {
+        minLength: Object.keys(value).length,
+        maxLength: Object.keys(value).length,
+      })
+      .chain((entries) =>
+        fc
+          .tuple(
+            ...entries.map(([key, inner]) =>
+              fc
+                .shuffledSubarray(Object.entries(inner), {
+                  minLength: Object.keys(inner).length,
+                  maxLength: Object.keys(inner).length,
+                })
+                .map((shuffled) => [key, Object.fromEntries(shuffled)] as const),
+            ),
+          )
+          .map((shuffled) => ({ value, reordered: Object.fromEntries(shuffled) })),
+      ),
+  );
+
 describe("T753 complete checked snapshots", () => {
   it("L4 exact JSON and decoded values survive a checked snapshot round trip", async () => {
     await fc.assert(
@@ -157,7 +187,7 @@ describe("T753 complete checked snapshots", () => {
 
   it("L6 canonical values alone determine the hash and corrupt values or hashes fail", async () => {
     await fc.assert(
-      fc.asyncProperty(savedFlow, async (v) => {
+      fc.asyncProperty(fc.record({ scalar: savedFlow, object: objectFlow }), async ({ scalar: v, object }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
         const reversed = Setting.group(
@@ -204,6 +234,40 @@ describe("T753 complete checked snapshots", () => {
           { ...made, values: { ...made.values, "limits.record": String(v.count + 1n) } },
         ]) {
           expect(Exit.isFailure(await digest(Snapshot.read(flow.group, corrupted).pipe(Effect.exit)))).toBe(true);
+        }
+
+        const group = Setting.group({
+          ...flow.settings,
+          object: Setting.make("app.object", {
+            schema: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Int)),
+            default: {},
+            doc: "An object saved with its nested keys.",
+            scope: ["repo"],
+            reload: "restart",
+            since: "1.2.3",
+          }),
+        });
+        const objectOrigins = { ...flow.origins, "app.object": Sources.Origin.cases.default.make({}) };
+        const original = await digest(
+          Snapshot.make(group, { values: { ...flow.values, object: object.value }, origins: objectOrigins }),
+        );
+        const permuted = await digest(
+          Snapshot.make(group, { values: { ...flow.values, object: object.reordered }, origins: objectOrigins }),
+        );
+        const reread = await digest(
+          Snapshot.read(group, {
+            ...original,
+            values: { ...original.values, "app.object": object.reordered },
+          }).pipe(Effect.exit),
+        );
+        expect({ hash: permuted.hash, readable: Exit.isSuccess(reread) }).toEqual({
+          hash: original.hash,
+          readable: true,
+        });
+
+        if (Exit.isSuccess(reread)) {
+          expect(reread.value.values).toEqual({ ...flow.values, object: object.value });
+          expect(reread.value.snapshot).toEqual(original);
         }
       }),
       check,
