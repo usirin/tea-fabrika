@@ -36,6 +36,7 @@ import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
+import type { Declaration } from "../runtime/Execution.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
@@ -420,7 +421,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
   type InputPolicy = { inputs: Array<string>; events: Array<string> };
   const policies = new Map<string, InputPolicy>();
-  const remember = (owner: string, declaration: typeof loaded.declaration): InputPolicy => {
+  const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
       inputs: Object.entries(declaration.inputs)
         .filter(([, p]) => p.personOnly)

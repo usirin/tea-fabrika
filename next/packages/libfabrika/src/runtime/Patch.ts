@@ -127,7 +127,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
       continue;
     }
 
-    let parent: Schema.Json = root;
+    let parent: unknown = root;
 
     for (const part of path.slice(0, -1)) {
       if (Array.isArray(parent)) {
@@ -137,7 +137,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
 
         parent = parent[Number(part)] ?? null;
       } else if (isPlain(parent) && Object.hasOwn(parent, part)) {
-        parent = parent[part] as Schema.Json;
+        parent = parent[part];
       } else {
         return invalid();
       }
