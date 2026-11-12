@@ -374,6 +374,10 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
   const files = new Map<string, string>();
   const compiler: Plugin = {
     name: "fabrika-program-compiler",
+    // Rolldown warnings can quote source. Reload reports only the checked build's result.
+    onLog() {
+      return false;
+    },
     transform(code, id) {
       if (!id.endsWith(".tsx")) {
         return;
