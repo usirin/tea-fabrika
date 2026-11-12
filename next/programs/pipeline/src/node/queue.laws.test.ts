@@ -363,7 +363,7 @@ const open = Effect.fnUntraced(function* (token?: Redacted.Redacted<string>) {
       (name) =>
         Mailbox.use((m) => Stream.runCollect(m.read(name, 0))).pipe(
           Effect.provide(current.context),
-          Effect.map((all) => all.map((l) => ({ name, m: l.m }))),
+          Effect.map((all) => all.map((l) => ({ name, id: l.id, pos: l.pos, m: l.m }))),
         ),
       { concurrency: 1 },
     );

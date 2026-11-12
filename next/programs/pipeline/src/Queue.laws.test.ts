@@ -16,6 +16,7 @@ type Program = ReturnType<typeof queue>;
 type Model = Program["machine"]["model"]["Type"];
 type Msg = Program["msg"]["Type"];
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+type Start = Extract<Command, { type: "start_child" }>;
 type Entry = { change: number; head: string; reply: { to: string; ref: string } | null };
 type Active = Entry & { name: string; ref: string };
 
@@ -121,8 +122,21 @@ const reply = (cell: Cell, active: Pick<Active, "ref" | "change">): typeof Mail.
   }
 };
 
-const startAnswer = (p: Program, cmd: Extract<Command, { type: "start_child" }>, cell: Cell): Msg => {
-  const which = cell.pick % (StartRefusal.literals.length + 3);
+const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
+
+const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
+  const reason = reasons[cell.pick % reasons.length]!;
+  return Schema.decodeUnknownSync(p.msg)({
+    type: "start_child_err",
+    cmd: { type: "start_child" },
+    reason,
+    error: Schema.TaggedStruct(reason, {}).make({}),
+    at: cell.at,
+  });
+};
+
+const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
+  const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
   return Schema.decodeUnknownSync(p.msg)(
     which < 3
       ? {
@@ -136,12 +150,7 @@ const startAnswer = (p: Program, cmd: Extract<Command, { type: "start_child" }>,
                 ? Started.cases.already_started.make({ process: pid, name: cmd.name })
                 : Started.cases.already_present.make({ process: pid, name: cmd.name }),
         }
-      : {
-          type: "start_child_err",
-          cmd,
-          at: cell.at,
-          error: Schema.TaggedStruct(StartRefusal.literals[which - 3]!, {}).make({}),
-        },
+      : startRefusalAnswer(p, { ...cell, pick: which - 3 }),
   );
 };
 
@@ -177,7 +186,15 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
   return null;
 };
 
-type Walk = { oracle: Oracle; model: Model; history: Array<Command>; p: Program; w: World; seen: Set<string> };
+type Walk = {
+  oracle: Oracle;
+  model: Model;
+  history: Array<Command>;
+  unanswered: Start | null;
+  p: Program;
+  w: World;
+  seen: Set<string>;
+};
 
 // The expected line comes only from accepted inputs and replies, never from the queue's line.
 const step = (walk: Walk, input: Msg) => {
@@ -231,14 +248,16 @@ const step = (walk: Walk, input: Msg) => {
       walk.seen.add("enqueue_stopped");
     }
   } else if (input.type === "start_child_ok" || input.type === "start_child_err") {
-    if (m.state !== "starting" || input.cmd.name !== m.current?.name) {
+    if (m.state !== "starting" || ("name" in input.cmd && input.cmd.name !== m.current?.name)) {
+      walk.seen.add(`late:${input.type}:${m.state}`);
       m.late++;
     } else if (input.type === "start_child_ok" && input.value._tag === "started") {
       m.state = "landing";
       m.since = input.at;
     } else {
       const current = m.current!;
-      const tag = input.type === "start_child_ok" ? input.value._tag : input.error._tag;
+      const tag =
+        input.type === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
       m.reason = Schema.TaggedStruct("start_refused", {
         change: Schema.Number,
         name: Schema.String,
@@ -249,6 +268,12 @@ const step = (walk: Walk, input: Msg) => {
       m.state = "stopped";
       m.since = null;
       walk.seen.add(tag);
+    }
+
+    if (m.late === before.late) {
+      expect(before._tag).toBe("starting");
+      expect(walk.unanswered?.name).toBe(before._tag === "starting" ? before.current.name : null);
+      walk.unanswered = null;
     }
   } else if (input.type === "reply") {
     if (m.state !== "landing" || input.ref !== m.current?.ref) {
@@ -320,6 +345,14 @@ const step = (walk: Walk, input: Msg) => {
   }
 
   walk.model = model;
+
+  for (const command of commands) {
+    if (command.type === "start_child") {
+      expect(walk.unanswered, "only one start may be unanswered").toBeNull();
+      walk.unanswered = command;
+    }
+  }
+
   walk.history.push(...commands);
 };
 
@@ -328,7 +361,7 @@ const open = (w: World, seen: Set<string>): Walk => {
   const [model, commands] = p.machine.init(null, ctx);
   expect(commands).toEqual([]);
   expect(p.inputs.resume).toMatchObject({ personOnly: true });
-  return { p, w, model, oracle: initial(), history: [], seen };
+  return { p, w, model, oracle: initial(), history: [], unanswered: null, seen };
 };
 
 const choose = (walk: Walk, cell: Cell): Msg => {
@@ -348,12 +381,16 @@ const choose = (walk: Walk, cell: Cell): Msg => {
   ];
 
   if (starts.length > 0) {
-    moves.push(() => startAnswer(p, starts[cell.pick % starts.length]!, cell));
+    moves.push(() => startAnswer(p, starts[cell.pick % starts.length]!, cell, false));
   }
 
-  if (m.state === "starting") {
-    const current = starts.findLast((cmd) => cmd.name === m.current?.name)!;
-    moves.push(() => startAnswer(p, current, cell));
+  const unanswered = walk.unanswered;
+
+  if (unanswered !== null) {
+    moves.push(() => startAnswer(p, unanswered, cell));
+  } else {
+    // Q6 also checks a refusal outside starting, where it can only count as late.
+    moves.push(() => startRefusalAnswer(p, cell));
   }
 
   if (sends.length > 0) {
@@ -406,6 +443,14 @@ for (const law of [
       }
     }
 
+    if (law.startsWith("Q6")) {
+      for (const state of ["idle", "landing", "stopped"]) {
+        expect(seen.has(`late:start_child_err:${state}`), state).toBe(true);
+      }
+
+      expect(seen.has("late:start_child_ok:starting")).toBe(true);
+    }
+
     for (const reached of [
       "started",
       "queued",
@@ -455,13 +500,13 @@ for (const [law, reached] of [
         ({ w, msgs, cells }) => {
           const walk = open(w, seen);
 
-          // The guided fold supplies real start answers. Other moves are chosen from the state reached.
-          for (let i = 0; i < cells.length; i++) {
-            const raw = msgs[i];
-            const askedName = raw !== undefined && "cmd" in raw && raw.cmd.type === "start_child" ? raw.cmd.name : null;
-            const emitted =
-              askedName === null || walk.history.some((cmd) => cmd.type === "start_child" && askedName === cmd.name);
-            step(walk, raw !== undefined && emitted && i % 2 === 0 ? raw : choose(walk, cells[i]!));
+          // Keep the guided fold intact: interleaving another walk would orphan its answers.
+          for (const msg of msgs) {
+            step(walk, msg);
+          }
+
+          for (const cell of cells) {
+            step(walk, choose(walk, cell));
 
             if (walk.oracle.state === "stopped" && walk.oracle.reason !== null) {
               seen.add("start_refused");
@@ -478,7 +523,7 @@ for (const [law, reached] of [
     }
 
     if (law.startsWith("Q5")) {
-      for (const tag of [...StartRefusal.literals, "already_started", "already_present"]) {
+      for (const tag of [...reasons, "already_started", "already_present"]) {
         expect(seen.has(tag), tag).toBe(true);
       }
     }

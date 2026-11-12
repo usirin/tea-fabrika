@@ -19,7 +19,12 @@ export type Snapshot = {
     readonly state: string;
     readonly reason: unknown;
   }>;
-  readonly letters: ReadonlyArray<{ readonly name: string; readonly m: unknown }>;
+  readonly letters: ReadonlyArray<{
+    readonly name: string;
+    readonly id: string;
+    readonly pos: number;
+    readonly m: unknown;
+  }>;
   readonly saved: ReadonlyArray<unknown>;
 };
 
@@ -169,6 +174,87 @@ export const suite = (driver: Driver) =>
           allNormal(landed);
         }).pipe(Effect.scoped),
       { arbitrary: { seed: 119120, runs: 200 } },
+    );
+    it.effect.prop(
+      "QR5: each start is answered and folded once across reopens",
+      {
+        reopens: Schema.Array(Schema.Boolean).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+        change: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 6 })),
+        ref: Schema.NonEmptyString.check(Schema.isMaxLength(24)),
+      },
+      ({ reopens, change, ref }) =>
+        Effect.gen(function* () {
+          const h = yield* driver.open();
+          yield* h.allowStart(false);
+          const answerIds: Array<string> = [];
+          const inspect = (s: Snapshot, attempts: number, refused: number) => {
+            const queue = s.starts.find((p) => p.name === "queue:1");
+            expect(queue).toBeDefined();
+            const inbox = s.letters.filter((l) => l.name === "queue:1");
+            const requests = inbox.filter((l) =>
+              Schema.is(Schema.Struct({ type: Schema.Literals(["enqueue", "resume"]) }))(l.m),
+            );
+            const answers = inbox.filter((l) =>
+              Schema.is(Schema.Struct({ type: Schema.Literals(["start_child_ok", "start_child_err"]) }))(l.m),
+            );
+            expect(requests).toHaveLength(attempts);
+            expect(answers.map((l) => l.id)).toEqual(requests.map((l) => `${queue?.process}/${l.pos}/0/answer`));
+            expect(answers.slice(0, answerIds.length).map((l) => l.id)).toEqual(answerIds);
+            expect(new Set(answers.map((l) => l.id)).size).toBe(attempts);
+
+            for (const answer of answers.slice(0, refused)) {
+              expect(answer.m).toMatchObject({
+                type: "start_child_err",
+                cmd: { type: "start_child" },
+                reason: "forbidden",
+              });
+              expect(Schema.decodeUnknownSync(Schema.Struct({ cmd: Schema.Unknown }))(answer.m).cmd).toEqual({
+                type: "start_child",
+              });
+            }
+
+            expect(s.model?.attempt).toBe(attempts);
+            expect(s.model?.late).toBe(0);
+            return answers.map((l) => l.id);
+          };
+
+          for (const [index, before] of reopens.entries()) {
+            if (before) {
+              yield* h.reopen;
+            }
+
+            yield* index === 0 ? h.enqueue(change, ref) : h.resume;
+
+            if (!before) {
+              yield* h.reopen;
+            }
+
+            yield* h.step;
+            const s = yield* h.snapshot;
+            expect(s.model?._tag).toBe("stopped");
+            expect(s.model).toHaveProperty("reason._tag", "start_refused");
+            expect(s.model).toMatchObject({
+              reason: { change, name: `merger:${change}.${index + 1}`, refusal: "forbidden" },
+              line: [{ change }],
+            });
+            expect(started(s)).toEqual([]);
+            answerIds.splice(0, answerIds.length, ...inspect(s, index + 1, index + 1));
+          }
+
+          yield* h.allowStart(true);
+          yield* h.resume;
+          yield* h.reopen;
+          yield* finish(h);
+          const s = yield* h.snapshot;
+          inspect(s, reopens.length + 1, reopens.length);
+          expect(started(s).map((p) => p.name)).toEqual([`merger:${change}.${reopens.length + 1}`]);
+          expect(s.model?._tag).toBe("idle");
+          expect(replies(s, change)).toHaveLength(1);
+          expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
+          expect(replies(s, change)[0]).toHaveProperty("ref", ref);
+          allNormal(s);
+        }).pipe(Effect.scoped),
+      { arbitrary: { seed: 119120, runs: 30 } },
     );
     it.effect("scenario: QR1 three real children land in arrival order and end normally", () =>
       Effect.gen(function* () {
