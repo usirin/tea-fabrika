@@ -58,6 +58,13 @@ const Msg = Schema.Union([
   Resume,
   Reply,
   answers("start_child", StartChild.StartChildInput, Started, StartChild.startChild.errTags),
+  // A refused built-in start echoes only its type; the queue has exactly one start out.
+  Schema.Struct({
+    type: Schema.Literal("start_child_err"),
+    cmd: Schema.Struct({ type: Schema.Literal("start_child") }),
+    reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
+    at: Schema.Number,
+  }),
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
@@ -134,7 +141,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     }
 
     if (m.type === "start_child_ok" || m.type === "start_child_err") {
-      if (s._tag !== "starting" || m.cmd.name !== s.current.name) {
+      if (s._tag !== "starting" || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
@@ -153,7 +160,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           reason: Stop.cases.start_refused.make({
             change: s.current.change,
             name: s.current.name,
-            refusal: m.type === "start_child_err" ? m.error._tag : m.value._tag,
+            refusal: m.type === "start_child_err" ? ("reason" in m ? m.reason : m.error._tag) : m.value._tag,
           }),
         }),
         [],
