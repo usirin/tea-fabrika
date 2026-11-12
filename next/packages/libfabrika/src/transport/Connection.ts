@@ -141,6 +141,8 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     if (State.online(idle)) {
       save(idle);
     }
+
+    return answer;
   });
   return {
     frame: Effect.fn("connection.frame")(function* (text: string) {
@@ -156,7 +158,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         return yield* parked(request.id, request.params);
       }
 
-      yield* ordinary(request).pipe(turn.withPermit);
+      return yield* ordinary(request).pipe(turn.withPermit);
     }),
     ring: Effect.fn("connection.ring")(function* (stream: string, rev: number) {
       const now = yield* read;

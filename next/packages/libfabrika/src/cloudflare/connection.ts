@@ -239,7 +239,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       }
 
       const work = (yield* connected(ws)).frame(text);
-      return yield* state._tag === "online" ? recorded(work) : work;
+      yield* state._tag === "online" ? recorded(work) : work;
     }),
     close: Effect.fnUntraced(function* (ws: WebSocket) {
       return yield* (yield* attached(ws))._tag === "online" ? recorded(close(ws)) : close(ws);

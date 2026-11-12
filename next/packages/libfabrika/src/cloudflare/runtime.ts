@@ -42,6 +42,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
+import { Answer } from "../transport/Wire.ts";
 import {
   CommitReply,
   ProcessReplies,
@@ -260,12 +261,17 @@ const flushed = SpanSink.use((sink) => sink.flush);
 export const complete = Effect.fn(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
   return yield* work.pipe(
     Effect.exit,
-    Effect.flatMap((exit) =>
-      flushed.pipe(
+    Effect.flatMap((exit) => {
+      // Counted refusals have nothing to send. Retrying an old archive here would add a row per refusal.
+      if (Exit.isSuccess(exit) && Schema.is(Answer.cases.refused)(exit.value) && exit.value.reason === "reserved") {
+        return exit;
+      }
+
+      return flushed.pipe(
         Effect.flatMap(() => exit),
         Effect.catch((error) => (Exit.isFailure(exit) ? exit : Effect.fail(error))),
-      ),
-    ),
+      );
+    }),
   );
 });
 
