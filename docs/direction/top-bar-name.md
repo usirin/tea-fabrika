@@ -4,6 +4,8 @@
 app's window shows [Tile F](./app-icon.md) and the word "fabrika" in its middle, on macOS. They take
 no room, do nothing, and go when the bar needs the space.
 
+Its decided rules are in: [0495](../../.decisions/0495-the-top-bar-name-gives-way-first.md).
+
 ```tsx
 // apps/fabrika/src/window/frame.tsx. It sits over the bar, so nothing else moves for it.
 <div className="brand" data-free={free} aria-hidden="true">

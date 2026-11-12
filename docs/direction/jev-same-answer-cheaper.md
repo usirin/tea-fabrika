@@ -2,6 +2,10 @@
 
 Decided 2026-10-10.
 
+Its decided rules are in: [0412](../../.decisions/0412-jev-is-measured-by-agreement.md),
+[0413](../../.decisions/0413-a-jev-question-is-narrow.md),
+[0414](../../.decisions/0414-jev-at-volume-uses-hand-labels.md).
+
 ## What was decided
 
 Jev (the small classifier behind the Judge move) is not there to give better
