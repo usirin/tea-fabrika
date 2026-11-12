@@ -1,12 +1,13 @@
-import { Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
+import { errorClass } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached, Hello } from "../transport/Wire.ts";
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
-import { ProjectClient } from "./platform.ts";
+import { ProjectClient, rejected } from "./platform.ts";
 import { complete, projectStub, recordingLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
 
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env, config: BrainOptions) {
@@ -119,8 +120,18 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
           return yield* rpc(p.route(client, method, params));
         },
-        // A failed or defective call still answers its request without exposing error details.
-        Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
+        // A failed or defective call still answers its request without exposing error details. It is
+        // kept on a failed span, as runner.throw does: `error.type` names the class that was thrown, and
+        // the span fails with the typed error, so stored content keeps its tag and reason, never the
+        // thrown text, which may hold a bearer or a raw frame.
+        Effect.catchCause((cause) => {
+          const failure = Cause.squash(cause);
+          return Effect.exit(
+            Effect.fail(failure).pipe(
+              Effect.withSpan("gateway.refused", { attributes: { "error.type": errorClass(rejected(failure)) } }),
+            ),
+          ).pipe(Effect.as(Answer.cases.refused.make({ reason: "unreachable" })));
+        }),
       ),
     });
     connections.set(ws, c);
