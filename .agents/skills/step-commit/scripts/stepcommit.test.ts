@@ -771,19 +771,19 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     // scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
     // time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
     type Case = {
-      where: "other" | "same" | "own-wip" | "none";
+      location: "other" | "same" | "own-wip" | "none";
       ticket: string;
       step: Owner;
       only: boolean;
     };
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
     const cases: Case[] = [
-      ...(["other", "same", "own-wip", "none"] as const).map((where) => ({ ...lead, where })),
-      { ...lead, where: "other", ticket: "999" },
-      { ...lead, where: "other", step: "build" },
-      { ...lead, where: "other", only: true },
+      ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
+      { ...lead, location: "other", ticket: "999" },
+      { ...lead, location: "other", step: "build" },
+      { ...lead, location: "other", only: true },
     ];
-    each(cases, ({ where, ticket, step, only }) =>
+    each(cases, ({ location, ticket, step, only }) =>
       withRepo([["src/owned.ts", step]], (r) => {
         const head = {
           other: "fabrikalfa/lane",
@@ -791,13 +791,13 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           "own-wip": "fabrikalfa/one-wip",
         };
 
-        if (where !== "none") {
-          r.openPr(head[where], ticket);
+        if (location !== "none") {
+          r.openPr(head[location], ticket);
         }
 
         r.changed("src/owned.ts");
         const got = r.commit(step, ["src/owned.ts"], only);
-        const refused = step === "lead" && !only && where === "other" && ticket === "321";
+        const refused = step === "lead" && !only && location === "other" && ticket === "321";
 
         if (refused) {
           expect(got.code, got.text).toBe(5);

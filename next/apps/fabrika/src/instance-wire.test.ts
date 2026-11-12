@@ -527,8 +527,8 @@ describe("P12 real dev.ts wire", () => {
       saw: {
         code: knocked.result.code,
         label: "Other client",
-        where: "local",
-        how: "command",
+        location: "local",
+        method: "command",
         check: "none",
         has: [],
       },

@@ -40,7 +40,7 @@ export const sameOrigin = (a: {
 };
 
 const CheckedHello = Schema.TaggedUnion({
-  online: { who: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
+  online: { identity: Who, version: Schema.Int, ping: Schema.Number, hello: Hello },
   refused: { reason: Schema.String, fingerprint: Schema.optionalKey(Schema.String) },
 });
 
@@ -128,7 +128,7 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   }
 
   return CheckedHello.cases.online.make({
-    who: admitted.who,
+    identity: admitted.identity,
     hello,
     version,
     ping: pingMs(hello.ping, a.ping.min, a.ping.max),

@@ -631,8 +631,8 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule sees every name written as a
-        // word; ours sees a key written as a string, which it cannot.
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
@@ -699,8 +699,8 @@
         "fabrika/edge-comment": "error",
         "fabrika/effect-functions": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule sees every name written as a
-        // word; ours sees a key written as a string, which it cannot.
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
         "fabrika/no-hand-tag": "error",
@@ -758,9 +758,8 @@
       // and those stay review work. A conversation room, which 0091 keeps, takes a local
       // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). An
-      // override replaces a rule's options, so the exam block's question words (0081) are repeated
-      // here first.
+      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
+      // override replaces a rule's whole list, so this one repeats the five question words (0081).
       "files": ["next/**/*"],
       "rules": {
         "eslint/id-denylist": [

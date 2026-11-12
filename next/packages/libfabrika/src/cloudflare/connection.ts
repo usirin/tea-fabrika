@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Layer, ManagedRuntime, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -88,16 +88,17 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
             ws.serializeAttachment(
               Attached.cases.online.make({
                 client,
-                who: result.who,
+                identity: result.identity,
                 version: result.version,
                 waits: [],
                 watching: false,
                 busy: false,
               }),
             );
-            yield* rpc(p.join({ client, key: result.who.key, gateway, session, at: Date.now() }));
+            const at = yield* Clock.currentTimeMillis;
+            yield* rpc(p.join({ client, key: result.identity.key, gateway, session, at }));
             return Answer.cases.ok.make({
-              result: { who: result.who, version: result.version, ping: result.ping },
+              result: { identity: result.identity, version: result.version, ping: result.ping },
             });
           }
 

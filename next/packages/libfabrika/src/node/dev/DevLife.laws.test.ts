@@ -404,9 +404,9 @@ describe("T708 dev life laws", () => {
               stopped: "discarded",
               exited: null,
             };
-            const expected = ways[msg.type];
-            expect(expected).not.toBeUndefined();
-            expect(step.settled).toBe(expected);
+            const way = ways[msg.type];
+            expect(way).not.toBeUndefined();
+            expect(step.settled).toBe(way);
             // One settlement per token: a late brake or listener finds nothing left to settle.
             expect(settled.has(was)).toBe(false);
             settled.add(was);

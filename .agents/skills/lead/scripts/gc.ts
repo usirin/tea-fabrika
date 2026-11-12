@@ -504,7 +504,7 @@ const main = () => {
       continue;
     }
 
-    let detail: string = verdict._tag === "remove" ? verdict.reason : "";
+    let reason: string = verdict._tag === "remove" ? verdict.reason : "";
 
     // A merged lane's box may hold commits no remote has: keep its HEAD in the main checkout.
     if (verdict._tag === "remove" && !onRemote && !dry) {
@@ -514,7 +514,7 @@ const main = () => {
         continue;
       }
 
-      detail += `, HEAD kept at refs/keep/box/${name}`;
+      reason += `, HEAD kept at refs/keep/box/${name}`;
     }
 
     // A landed lane's box with files never committed: they go into the main checkout as a stash, the
@@ -537,12 +537,12 @@ const main = () => {
         }
       }
 
-      detail += `, ${seen.dirty} uncommitted files ${dry ? "would be " : ""}kept at ${kept}`;
+      reason += `, ${seen.dirty} uncommitted files ${dry ? "would be " : ""}kept at ${kept}`;
     }
 
     if (verdict._tag === "backup") {
       if (dry) {
-        detail = `would back up to ${verdict.to[0]}`;
+        reason = `would back up to ${verdict.to[0]}`;
       } else {
         // Fetch the box's HEAD and step notes into the main checkout, then push from there.
         const ref = `refs/gc/${name}`;
@@ -568,7 +568,7 @@ const main = () => {
           continue;
         }
 
-        detail = `backed up to ${pushed}`;
+        reason = `backed up to ${pushed}`;
       }
     }
 
@@ -596,7 +596,7 @@ const main = () => {
     removed += 1;
     freed += mb;
     gone.push(name);
-    console.log(`${dry ? "would remove" : "removed"} ${name}: ${detail}, ${mb} MB`);
+    console.log(`${dry ? "would remove" : "removed"} ${name}: ${reason}, ${mb} MB`);
   }
 
   const state = join(env.BOXES, "state");
