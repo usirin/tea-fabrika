@@ -17,7 +17,7 @@ import { Schema } from "effect";
 
 /**
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
- * start's box sweep and checks, or the box's removal at the end), `wait` (a slot, the Electron
+ * start's checks, or the box's removal at the end; the box sweep left the start with 0101), `wait` (a slot, the Electron
  * lock or a free typecheck), `box` (the box made), `agent` (the agent's turn), `collect` (the tree
  * read and signed) and `commit` (the backup push). The rest are the chain's own moves.
  */
@@ -54,8 +54,8 @@ export const EVERY = 30_000;
 /**
  * How long a beat, or an agent in its turn, may stay quiet before `says` calls the lane stuck.
  * A guess, to tune from the beats themselves: the longest quiet part of a start we measured was
- * 100 to 180 s before the agent acted (ticket 673), and one box sweep took about 22 s (the drive
- * step's GC_EVERY).
+ * 100 to 180 s before the agent acted (ticket 673), and one box sweep took about 22 s (2026-11-11),
+ * before the sweep left the start (0101).
  */
 export const QUIET = 10 * 60_000;
 

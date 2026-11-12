@@ -30,7 +30,7 @@ export class Ledger extends Context.Service<
     readonly read: (stream: string, after: Rev) => Stream.Stream<Entry, LedgerError>;
     readonly wait: (stream: string, after: Rev) => Effect.Effect<Waited, LedgerError>;
   }
->()("@kampus/libfabrika/Ledger") {}
+>()("@kampus/libfabrika/ledger/Ledger") {}
 
 // next/packages/libfabrika/src/ledger/LedgerSql.ts:12-23: one implementation, a sibling file.
 export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
@@ -78,9 +78,13 @@ held at `next/apps/fabrika/src/brain.ts:26`); on Node, `NodeRuntime.runMain`
 Rules:
 
 - **Define with `Context.Service`.** Never `Context.Tag` or `GenericTag` (`fabrika/no-context-tag`).
-  The key names the package and path, `@kampus/libfabrika/<Name>` (Effect's own advice,
-  `node_modules/effect/AGENTS.md`, "Context.Service"). Which key style wins is ticket 438's
-  `deterministicKeys` call.
+  The key is the package, the source file's path without its extension, then `.Name` when the
+  service is named otherwise than its file: `@kampus/libfabrika/ledger/Ledger`,
+  `@kampus/libfabrika/ledger/Ledger.Doorbell`, `@kampus/libfabrika/Id.Generator` (Effect's own
+  advice, `node_modules/effect/AGENTS.md`, "Context.Service", which
+  [0023](../.decisions/0023-next-follows-effects-code-style.md) has `next/` follow). Moving the file
+  changes the key. `fabrika/service-id` advises on a key that does not fit
+  (`oxlint-plugins/service-id.ts`).
 - **Write the service's type out.** The contract is the type, so it is never inferred from an
   implementation: no `make` option and no `Effect.Success<ReturnType<...>>` shape.
 - **No static layer on a service class.** A layer is a sibling file read through its module:

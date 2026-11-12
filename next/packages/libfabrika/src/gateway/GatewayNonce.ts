@@ -22,11 +22,16 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   });
   const bytes = Base64Url.decode(secret);
 
-  if (Result.isFailure(bytes) || bytes.success.length !== 32) {
+  if (Result.isFailure(bytes)) {
+    return yield* new LedgerError({ reason: "storage", cause: bytes.failure });
+  }
+
+  // A key of the wrong length decoded fine: no failure to keep.
+  if (bytes.success.length !== 32) {
     return yield* new LedgerError({ reason: "storage" });
   }
 
-  const fail = () => new LedgerError({ reason: "crypto" });
+  const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   const args: Parameters<SubtleCrypto["importKey"]> = [
     "raw",
     new Uint8Array(bytes.success),

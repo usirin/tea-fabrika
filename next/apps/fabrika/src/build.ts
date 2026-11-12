@@ -31,7 +31,7 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
       Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
-      Effect.mapError(() => new BuildError({ reason: "read" })),
+      Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
     ));
   return yield* buildOne({
     out: options.out,

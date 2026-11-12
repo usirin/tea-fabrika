@@ -49,4 +49,4 @@ export type Receipt = {
 export class ProgramMail extends Context.Service<
   ProgramMail,
   { readonly deliver: (delivery: Delivery) => Effect.Effect<Receipt, ProgramMailError> }
->()("@kampus/libfabrika/ProgramMail") {}
+>()("@kampus/libfabrika/processes/ProgramMail") {}

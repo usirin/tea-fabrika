@@ -10,7 +10,7 @@ import { brainOnly, inRunnerSpace } from "./Process.ts";
 
 /** Internal permission for a runner to save its own answers and alarm letters. */
 export class RunnerMail extends Context.Service<RunnerMail, { readonly process: string; readonly name: string }>()(
-  "@kampus/libfabrika/RunnerMail",
+  "@kampus/libfabrika/processes/Mailbox.RunnerMail",
 ) {}
 
 /** What a writer says about itself, shared by every write in this layer: P6's `Line` without its
@@ -121,7 +121,7 @@ export class Mailbox extends Context.Service<
     /** The same letters as `receive`, each with its entry's build, seen and arrival clock. */
     readonly read: (name: string, after: Rev) => Stream.Stream<History, LedgerError>;
   }
->()("@kampus/libfabrika/Mailbox") {
+>()("@kampus/libfabrika/processes/Mailbox") {
   /** Building it touches nothing: each call reaches the ledger on its own. */
   static readonly layer: Layer.Layer<Mailbox, never, Ledger> = Layer.effect(
     Mailbox,

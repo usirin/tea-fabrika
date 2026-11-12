@@ -84,7 +84,9 @@ type ProcessStorage = {
   readonly record: (id: string, event: unknown, from: From) => Effect.Effect<unknown, LedgerError>;
 };
 
-export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()("@kampus/libfabrika/ProcessStore") {
+export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
+  "@kampus/libfabrika/runtime/ProcessStore",
+) {
   static readonly layer = (
     sql: Sql,
     who: {
@@ -120,6 +122,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               new LedgerError({
                 reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
                 message: String(error),
+                cause: error,
               }),
           });
         });
@@ -138,7 +141,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                       ? Effect.succeed(undefined)
                       : Effect.try({
                           try: () => Schema.decodeUnknownSync(Activity)(raw),
-                          catch: () => new LedgerError({ reason: "bad_row" }),
+                          catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
                         }),
                   ),
                 )
