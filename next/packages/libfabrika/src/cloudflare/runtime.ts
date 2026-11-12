@@ -888,7 +888,7 @@ const processLogic = Effect.fnUntraced(function* (
     usage: Effect.fnUntraced(
       function* (rows: unknown) {
         const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
-        yield* IsolateUsage.record(usage);
+        yield* sink.batch(IsolateUsage.record(usage));
       },
       Effect.withSpan("process.usage"),
       Effect.provideContext(services),

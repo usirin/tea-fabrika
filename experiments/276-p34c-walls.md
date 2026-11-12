@@ -40,11 +40,16 @@ step does not wait for delivery. The measurement must compare calls and rows to 
 or duplicate delivery.
 
 The receiving object's services enclose `process.usage` itself, so both a decoded batch and
-a rejected batch leave that call's span. The tail callback runs through Alchemy's Worker bridge,
-which supplies the invocation's props. Alchemy also creates the loopback tail binding and wraps
+a rejected batch leave that call's span. The app's tail callback hands off to the library,
+which reads the invocation's props through Alchemy's runtime context adapter. It imports no
+deploy-time Worker declaration and needs no stack name or local instance hardcoded in the tail.
+Alchemy also creates the loopback tail binding and wraps
 the usage RPC. The trace adapter takes Alchemy's tail event type. The existing loader still
 accepts native code options; the bound Alchemy fetcher's `raw` is passed only at that old boundary.
-The host must validate this wiring, including a failed usage call's saved span.
+The Process caller supplies the sink's batch operation; the runtime value imports no telemetry.
+The host must validate this wiring, including a failed usage call's saved span. The earlier
+host U9 attempt stopped at an unreachable control call before any tail assertion. This build
+removed the tail's deploy-time Alchemy import, but that cause still needs the host rerun.
 
 ## Measurement still owed on the host
 

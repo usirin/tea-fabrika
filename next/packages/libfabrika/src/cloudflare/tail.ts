@@ -3,13 +3,7 @@
  *
  * @stability unstable
  */
-import type { fromDurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
-import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import {
-  getLoopbackEntrypoint,
-  isWorkerEvent,
-  WorkerExecutionContext,
-} from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { fromExecutionContext, getLoopbackEntrypoint } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -32,7 +26,7 @@ export const Props = Schema.Struct({ project: Schema.String, name: Schema.String
  * @category constructors
  */
 export const bind = Effect.fnUntraced(function* (
-  ctx: Parameters<typeof fromDurableObjectState>[0],
+  ctx: { readonly exports: Parameters<typeof getLoopbackEntrypoint>[0] },
   props: typeof Props.Type,
 ) {
   const tail = yield* getLoopbackEntrypoint(ctx.exports, "IsolateTail", { props });
@@ -68,26 +62,15 @@ export const tail = Effect.fnUntraced(function* (
 export const receive = (env: Env, props: unknown, items: Parameters<typeof tail>[2]) =>
   Schema.decodeUnknownEffect(Props)(props).pipe(Effect.flatMap((checked) => tail(env, checked, items)));
 
-class TailWorker extends Worker<TailWorker, Record<never, never>>()("IsolateTail") {}
-
 /**
- * Alchemy handles the platform callback and supplies the invocation's props.
+ * Alchemy reads the callback's props without loading deploy-time Worker declarations.
  *
  * @stability unstable
- * @category layers
+ * @category combinators
  */
-export const layer = TailWorker.make(
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const worker = yield* Worker;
-    yield* worker.listen((event) => {
-      if (isWorkerEvent(event) && event.type === "tail") {
-        return Effect.gen(function* () {
-          const ctx = yield* WorkerExecutionContext;
-          return yield* receive(event.env, yield* ctx.props, event.input);
-        }).pipe(Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))));
-      }
-    });
-    return {};
-  }),
+export const callback = Effect.fnUntraced(
+  function* (env: Env, ctx: Parameters<typeof fromExecutionContext>[0], items: Parameters<typeof tail>[2]) {
+    yield* receive(env, yield* fromExecutionContext(ctx).props, items);
+  },
+  Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))),
 );

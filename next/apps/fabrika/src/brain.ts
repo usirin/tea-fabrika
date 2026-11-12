@@ -1,9 +1,9 @@
-import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
+import { makeDurableObjectBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { Descriptor, Incoming } from "@kampus/libfabrika";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Activity, Start } from "@kampus/libfabrika/processes/Process";
-import { fetch, isolateTailLayer } from "@kampus/libfabrika/workers";
+import { fetch, isolateTail } from "@kampus/libfabrika/workers";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ConnectionService } from "@kampus/libfabrika/workers/gateway";
 import {
@@ -325,13 +325,12 @@ const Bridge = makeDurableObjectBridge(DurableObject, {
 
 export class RecordPart extends Bridge("RecordPart") {}
 
-const TailBridge = makeWorkerBridge(WorkerEntrypoint, {
-  entrypoint: isolateTailLayer,
-  // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
-  stack: { name: "fabrika", stage: "local" },
-});
-
-export class IsolateTail extends TailBridge {}
+export class IsolateTail extends WorkerEntrypoint<Env> {
+  tail(items: Parameters<typeof isolateTail>[2]) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform tail callback returns a Promise
+    return Effect.runPromise(isolateTail(this.env, this.ctx, items));
+  }
+}
 
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
