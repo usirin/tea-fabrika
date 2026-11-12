@@ -753,10 +753,11 @@ describe("P12 Project configure recovery", () => {
       expect(JSON.parse(String(saved!.value))).toEqual(descriptor);
       expect(await w.reopen()).toMatchObject([
         { process: descriptor.id, name: "counter:1", program: "fabrika/counter" },
+        { process: expect.any(String), name: "checklist:1", program: "fabrika/checklist" },
       ]);
-      expect(w.attempts).toHaveLength(fault === "healthy" ? 1 : 2);
+      expect(w.attempts).toHaveLength(fault === "healthy" ? 2 : 3);
 
-      for (const attempt of w.attempts) {
+      for (const attempt of w.attempts.filter((attempt) => attempt.name === "counter:1")) {
         expect(attempt).toEqual(descriptor);
       }
 
