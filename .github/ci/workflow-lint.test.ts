@@ -20,19 +20,35 @@ const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
-const diff = { id: "diff", env, run: "node .github/ci/changes.mjs" };
+const diff = {
+  id: "diff",
+  env: { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` },
+  run: "node .github/ci/changes.mjs",
+};
+
+const build = `\${{ needs.changes.outputs.build != 'false' }}`;
 const fieldIf = "steps.diff.outputs.field == 'true'";
 const name = fc.string({ maxLength: 20 });
 
 const valid = (label: string, extra: string) => ({
   name: label,
-  on: { push: { branches: ["main"] }, pull_request: null },
+  on: {
+    push: { branches: ["main"] },
+    pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+  },
+  concurrency: {
+    group: `check-\${{ github.event.pull_request.number || github.sha }}`,
+    "cancel-in-progress": `\${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}`,
+  },
   jobs: {
     changes: {
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
       outputs: Object.fromEntries(
-        ["check", "typecheck", "test", "next", "e2e", "field"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
+        ["check", "typecheck", "test", "next", "e2e", "field", "build"].map((key) => [
+          key,
+          `\${{ steps.diff.outputs.${key} }}`,
+        ]),
       ),
       steps: [
         { uses: "actions/checkout@v7", with: { "fetch-depth": 0 } },
@@ -43,10 +59,15 @@ const valid = (label: string, extra: string) => ({
       ],
     },
     check: {
+      name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
       needs: "changes",
       if: guard("check"),
       "timeout-minutes": 10,
-      steps: [{ run: "pnpm lint" }, { run: "pnpm build" }],
+      steps: [
+        { run: "pnpm lint" },
+        { name: "promises", if: build, run: "pnpm promises gate" },
+        { run: "pnpm build", if: build },
+      ] as Record<string, unknown>[],
     },
     typecheck: {
       needs: "changes",
@@ -126,6 +147,7 @@ const valid = (label: string, extra: string) => ({
       ],
     },
     "ci-required": {
+      name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
       needs: ["changes", "field", "check", "typecheck", "e2e", "test", "next"],
       if: "always()",
       "timeout-minutes": 5,
@@ -189,6 +211,63 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: [string, (workflow: Workflow) => void][] = [
+  // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
+  ...["opened", "synchronize", "reopened", "ready_for_review"].map((type): [string, (w: Workflow) => void] => [
+    `pull requests lose the ${type} trigger`,
+    (w) => {
+      w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+    },
+  ]),
+  [
+    "every pull request event cancels the run before it",
+    (w) => {
+      w.concurrency["cancel-in-progress"] = `\${{ github.event_name == 'pull_request' }}`;
+    },
+  ],
+  [
+    "a draft's check keeps the name check",
+    (w) => {
+      w.jobs.check.name = "check";
+    },
+  ],
+  [
+    "a draft's ci-required keeps the name ci-required",
+    (w) => {
+      w.jobs["ci-required"].name = "ci-required";
+    },
+  ],
+  [
+    "the build runs on a draft",
+    (w) => {
+      delete w.jobs.check.steps[2]!["if"];
+    },
+  ],
+  [
+    "the promises gate skips on the check flag",
+    (w) => {
+      w.jobs.check.steps[1]!["if"] = `\${{ needs.changes.outputs.check != 'false' }}`;
+    },
+  ],
+  [
+    "lint skips on a draft",
+    (w) => {
+      w.jobs.check.steps[0]!["if"] = build;
+    },
+  ],
+  [
+    "changes hides the build flag",
+    (w) => {
+      delete (w.jobs.changes.outputs as Record<string, string>)["build"];
+    },
+  ],
+  [
+    "the classifier is not told the draft",
+    (w) => {
+      for (const step of [w.jobs.changes.steps[1]!, w.jobs.field.steps[1]!]) {
+        Object.assign(step, { env });
+      }
+    },
+  ],
   [
     "L1: main loses lane exclude",
     (w) => {

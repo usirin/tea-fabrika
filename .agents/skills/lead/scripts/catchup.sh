@@ -376,9 +376,13 @@ PY
 # (the names needed and not there) and `pending` (how many have not finished). A skipped job (no
 # code changed) is done. A read that fails three times stops the run.
 need="check e2e commits"
+# A draft's run names its lint job `lint` and its verdict `ci-required (draft)` (check.yaml, 0134's
+# amendment): they are not read here. The run that marking ready starts gives this head its `check`,
+# which `need` waits for, so a draft's answer never lands a pull request.
 checks_at() {
 	runs=$(read_gh api "repos/$GH_REPO/commits/$1/check-runs?per_page=100" \
 		-q '.check_runs[]|"\(.name)\t\(.status)\t\(.conclusion)\t\(.html_url // "")"') || exit 1
+	runs=$(printf '%s\n' "$runs" | awk -F'\t' '$1!="lint" && $1!="ci-required (draft)"')
 	# A red job prints with its link, so nobody has to look it up.
 	bad=$(printf '%s\n' "$runs" | awk -F'\t' '$2=="completed" && $3!="success" && $3!="skipped" && $3!="neutral" {
 		print $1": "$3 ($4 == "" ? "" : ", " $4) }')
