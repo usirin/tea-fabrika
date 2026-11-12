@@ -315,7 +315,8 @@ describe("ticket 806 the checklist's laws", () => {
   it("L7: query left answers the count of items not checked, equal to view.left", async () => {
     const { checklistMachine, checklist } = await load();
     const port = checklist.inputs.left;
-    const query = Schema.decodeUnknownSync(port.schema)(null);
+    // The query takes no input: its schema is `Null`, and its answer reads the view alone.
+    expect(Schema.decodeUnknownSync(port.schema)(null)).toBeNull();
     propertyInvariant(
       checklistMachine,
       {},
@@ -323,8 +324,8 @@ describe("ticket 806 the checklist's laws", () => {
       ({ next }) => {
         const view = checklist.view.select(next);
         return (
-          (view.left === left(next) && port.answer(view, query) === left(next)) ||
-          `left ${view.left}, answer ${String(port.answer(view, query))}, want ${left(next)}`
+          (view.left === left(next) && port.answer(view) === left(next)) ||
+          `left ${view.left}, answer ${String(port.answer(view))}, want ${left(next)}`
         );
       },
       { seed: SEED, numRuns: RUNS },
@@ -373,10 +374,10 @@ describe("ticket 806 the checklist's laws", () => {
     };
     // @ts-expect-error `tick` is no Msg type of the checklist.
     Program.make({ ...spec, inputs: { tick: "Tick" } });
+    // @ts-expect-error The checklist's view has no `done` field to read.
     Program.make({
       ...spec,
       inputs: {
-        // @ts-expect-error The checklist's view has no `done` field to read.
         done: Input.cases.read.make({
           schema: Schema.Null,
           description: "Done",
