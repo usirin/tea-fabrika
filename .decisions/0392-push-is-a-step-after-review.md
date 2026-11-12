@@ -22,7 +22,7 @@ does.
 
 ## Context
 
-From [nothing is pushed before review](../docs/direction/push-after-review.md#still-open): the
+From the note "nothing is pushed before review", since removed: the
 order and the red CI rule were decided 2026-10-24, and who pushes was answered 2026-10-27, a small
 push program between review and merge.
 

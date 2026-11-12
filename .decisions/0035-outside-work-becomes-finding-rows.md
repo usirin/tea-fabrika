@@ -56,9 +56,10 @@ that note cites it). The rest of that note, the shared `Finding` shape and the l
 proposed and is walked when Tier 6 starts. Until then there was nowhere to write a finding down, so
 it went into a ticket, a fix nobody asked for, or one line of a report.
 
-This decision changes one older rule. [Hand-run review, cleanup and saved waits](../docs/direction/hand-run-review-and-cleanup.md)
-(owner, 2026-11-08) says a review's other actionable findings become tracker tickets and that every
-agent may file. From today those findings are rows. The rest of that note stands. Tracker ticket
+This decision changes one older rule. The hand-run review rule (owner, 2026-11-08), now held by the
+[review skill](../.agents/skills/review/SKILL.md), said a review's other actionable findings become
+tracker tickets and that every agent may file. From today those findings are rows. The rest of that
+rule stands. Tracker ticket
 481.
 
 ## Decision

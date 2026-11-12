@@ -12,7 +12,7 @@ tags: [pipeline, primitives, design]
 
 ## Context
 
-From [reuse before special rules](../docs/direction/reuse-before-special-rules.md#what-was-decided),
+From the note "reuse before special rules", since removed,
 decided 2026-10-18. Special rules in today's fabrika grew from single incidents, each with its
 writer's taste.
 

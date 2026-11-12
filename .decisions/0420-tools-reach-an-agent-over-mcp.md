@@ -12,7 +12,7 @@ tags: [agents, tools, mcp, protocols]
 
 ## Context
 
-From [helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md#what-was-decided),
+From the note "helpers, and one supervisor", since removed,
 decided 2026-10-18.
 
 ## Decision

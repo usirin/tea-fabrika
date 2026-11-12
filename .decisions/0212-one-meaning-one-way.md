@@ -21,8 +21,8 @@ const counter = Program.make({ name: "counter", machine: counterMachine, view, i
 
 ## Context
 
-Decided by the owner on 2026-11-08, first for the study of Program.make's shape. See
-[one meaning, one way](../docs/direction/one-meaning-one-way.md). It extends
+Decided by the owner on 2026-11-08, first for the study of Program.make's shape. It was the note
+"one meaning, one way", since removed. It extends
 [use the industry's names](../docs/direction/use-the-industrys-names.md)'s "one word per idea" to
 an API's parts.
 

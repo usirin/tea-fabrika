@@ -15,7 +15,7 @@ and `packages/pipeline`. `next/` has no asks list yet; it comes in Tier 5
 in today's version.
 
 **Decided before this study (the owner, 2026-11-02), not asked again:** asks to the owner are fine,
-even many; the owner's call of 2026-10-30 stands ([triage asks when worth is unclear](../docs/direction/triage-asks-when-worth-is-unclear.md):
+even many; the owner's call of 2026-10-30 stands ([triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md):
 about 130 to 190 asks a week, with no ask budget set yet); the owner makes every decision the system thinks needs them. What is
 needed is a desk where most asks are one key in one sitting, and a desk that learns from the
 answers so the system automates better over time. Folded in on the same day, from
@@ -428,7 +428,7 @@ the low step, as [color principles](../docs/direction/color-principles.md) alrea
   do better because we can count, but only if the count is not the person trusting the rec.
 - **Keep some kinds a person's forever.** The exam kinds ([nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md)),
   a spend yes (a dollar limit points at a person's yes, [one meter](../docs/direction/one-ask-and-one-meter.md))
-  and a security triage ask ([triage asks](../docs/direction/triage-asks-when-worth-is-unclear.md)).
+  and a security triage ask ([triage asks](../.decisions/0377-triage-asks-when-worth-is-unclear.md)).
 - **Clash with a goal, in one line:** grouping same-kind asks reorders a queue that
   [every wait is a queue](../docs/direction/every-wait-is-a-queue.md) says is first in, first out.
   That note is proposed, so the note here leans to grouping and names it.

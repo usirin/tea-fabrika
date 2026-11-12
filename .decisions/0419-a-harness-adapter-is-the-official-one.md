@@ -12,7 +12,7 @@ tags: [agents, acp, harness, dependencies]
 
 ## Context
 
-From [helpers, and one supervisor](../docs/direction/helpers-and-the-supervisor.md#what-was-decided),
+From the note "helpers, and one supervisor", since removed,
 decided 2026-10-19. Today's version pins the official Claude and Codex adapters
 (`packages/fabrika/src/agents/acp/harness.ts`). The contract itself is our own interface, with ACP
 one adapter behind it ([0026](0026-fabrika-never-owns-the-agent-loop.md)).

@@ -1661,7 +1661,7 @@ const sent = yield* runner.msg(delivery);            // P10's delivery, decoded 
 yield* runner.due(Date.parse("2026-11-08T10:05:00Z")); // the object's alarm fired: a timer letter, if the program asked
 ```
 
-**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../direction/program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
+**The program.** A program is a pure tea machine and the declarations the runner checks it by. A program is made with a typed `Program.make({name, machine, ...})`, its machine a `Machine.make` value of its own, so TypeScript infers the model, msg and view and nothing is written twice ([Program.make](../../.decisions/0256-a-program-is-one-program-make.md), decided 2026-11-07). `Program` below is the Schema behind it: the check when a program is loaded, where a missing part fails as `ProgramDown load`. Main's P11 shipped a plain object checked by this Schema, with no `Program.make`; the Program.make pull request fixes that, before P14. *(updated 2026-11-08 to Program.make; it said `Program` is a schema, so a declaration is decoded when it is loaded.)*
 
 ```ts
 // runtime/Program.ts

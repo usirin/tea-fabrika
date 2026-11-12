@@ -14,7 +14,7 @@ any other, and only GitHub and the model providers stay outside, each behind a s
 ## Context
 
 The owner decided this on 2026-10-27
-([we use the tools we build](../docs/direction/we-use-the-tools-we-build.md#what-was-decided)).
+(in the note "we use the tools we build", since removed: this file holds its rules).
 Cloudflare's Workers Paid plan is $5 a month for an account. AGENTS.md says fabrika assumes it.
 
 ## Decision
@@ -22,7 +22,7 @@ Cloudflare's Workers Paid plan is $5 a month for an account. AGENTS.md says fabr
 **Build before buy, and use it every day.**
 
 - When the team needs a tool, the first answer is a program on the ledger. The tracker replaces
-  Linear first, built like Linear ([the tracker is like Linear](../docs/direction/the-tracker-is-like-linear.md)).
+  Linear first, built like Linear ([0346](0346-the-tracker-is-built-like-linear.md)).
 - Daily use is the test. A program that feels worse than the tool it replaces is a bug to fix,
   never a reason to go back.
 - The backend stays one Cloudflare account on the $5 Workers plan while the numbers allow. A piece

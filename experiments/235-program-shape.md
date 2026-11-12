@@ -86,7 +86,7 @@ there is no `main`, the page comes from one `ticket_read` Cmd, and each write is
 
 ## What is settled, and what each shape must keep
 
-Read before writing: [Program.make](../docs/direction/program-make.md) (decided 2026-11-07),
+Read before writing: [Program.make](../.decisions/0256-a-program-is-one-program-make.md) (decided 2026-11-07),
 [init's Cmds](../docs/direction/init-runs-once-per-process.md) (decided 2026-11-08),
 [saved state](../docs/direction/saved-state.md) S3, [Elm first](../docs/direction/elm-first.md),
 [no Promises](../docs/direction/no-promises.md),
@@ -116,7 +116,7 @@ Every shape keeps these, and all three do, except where a line says it is not bu
 - **The Cmd list at runtime.** The runner needs each Cmd's schemas to check a Cmd's input, check a
   saved answer, and encode a handler's answer. See "Why `cmds` is listed" below.
 - **The machine stays a tea machine** a parent can step and laws can fold
-  ([Program.make](../docs/direction/program-make.md)).
+  ([Program.make](../.decisions/0256-a-program-is-one-program-make.md)).
 
 ## The known way
 
