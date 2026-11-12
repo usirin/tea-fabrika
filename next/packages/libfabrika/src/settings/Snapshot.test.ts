@@ -8,7 +8,7 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Cause, Effect, Exit, Layer, Logger, References, Schema, Tracer } from "effect";
+import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
@@ -396,6 +396,11 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
               cause: Cause.pretty(options.cause),
               fields: options.fiber.getRef(References.CurrentLogAnnotations),
             }),
+            Formatter.formatJson({
+              message: options.message,
+              cause: options.cause,
+              fields: options.fiber.getRef(References.CurrentLogAnnotations),
+            }),
           ),
         );
         const ran = await Effect.runPromise(
@@ -409,11 +414,12 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
         );
         expect(Exit.isFailure(ran.exit)).toBe(true);
         const outputs = [
-          ...ran.stdout.map(String),
-          ...ran.stderr.map(String),
+          ...ran.stdout.flatMap((value) => [String(value), Formatter.formatJson(value)]),
+          ...ran.stderr.flatMap((value) => [String(value), Formatter.formatJson(value)]),
           ...entries,
           traced.text(),
           Exit.isFailure(ran.exit) ? Cause.pretty(ran.exit.cause) : "",
+          Formatter.formatJson(ran.exit),
         ];
 
         for (const output of outputs) {
