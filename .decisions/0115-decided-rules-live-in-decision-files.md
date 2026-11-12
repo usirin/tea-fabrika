@@ -1,7 +1,7 @@
 ---
 id: 0115
 title: A decided rule lives in a decision file, and the plan check lists the decisions a plan touches
-status: amended-in-part by [0130](0130-every-piece-of-knowledge-has-one-home.md)
+status: amended-in-part by [0130](0130-every-piece-of-knowledge-has-one-home.md), [0136](0136-guidelines-live-in-their-own-pages.md)
 date: 2026-11-11
 tags: [decisions, direction, notes, plan, sweep, discovery, agents]
 ---

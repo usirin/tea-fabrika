@@ -1,7 +1,7 @@
 ---
 id: 0130
 title: Every piece of knowledge has one home by its kind, no new direction note is written, and docs/direction is emptied and removed
-status: accepted
+status: amended-in-part by [0136](0136-guidelines-live-in-their-own-pages.md)
 date: 2026-11-11
 tags: [docs, direction, notes, decisions, patterns, experiments, how-to, examples, archive]
 ---
