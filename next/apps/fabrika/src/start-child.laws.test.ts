@@ -1,0 +1,243 @@
+// P42 slice 1 (ticket 770), next/: L9 and L10 on a real local instance. Outside only: real workerd,
+// sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
+// supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
+import { Effect, Schema } from "effect";
+import { describe, expect, it } from "vitest";
+import { childInstance, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
+
+const STARTS = [{ source: "starter", to: "child" }];
+/** Bounded waits tied to observable facts. */
+const WAIT = 25_000;
+
+type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
+// The instance's private local capability, read call by call as ticket 402's test reads it.
+type Instance = Fixture["instance"] & Record<string, any>;
+
+const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+
+/** Polls an observable fact. A timeout fails with the last observed state. */
+const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
+  const end = Date.now() + ms;
+  let last: { value: A } | { error: string } | null = null;
+
+  while (Date.now() < end) {
+    try {
+      const value = await look();
+      last = { value };
+
+      if (done(value)) {
+        return value;
+      }
+    } catch (error) {
+      last = { error: String(error) };
+    }
+
+    await pause();
+  }
+
+  throw new Error(`${what}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
+};
+
+/** A real WebSocket client at the door, initialized with a signed hello; it keeps every pushed frame. */
+const wire = async (instance: Instance, key: Key, tab: string) => {
+  const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
+  const socket = new WebSocket(String(instance.url).replace("http", "ws") + name);
+  const frames: any[] = [];
+  const pushed: any[] = [];
+  let closeCode: number | undefined;
+  let serial = 0;
+  socket.addEventListener("message", (event) => {
+    if (event.data !== "pong") {
+      const frame = JSON.parse(String(event.data));
+      frames.push(frame);
+
+      if (frame.id === undefined) {
+        pushed.push(frame);
+      }
+    }
+  });
+  socket.addEventListener("close", (event) => {
+    closeCode = event.code;
+  });
+  socket.addEventListener("error", () => {
+    closeCode ??= 1006;
+  });
+  const next = async (match: (frame: any) => boolean) => {
+    const end = Date.now() + WAIT;
+
+    while (Date.now() < end) {
+      const index = frames.findIndex(match);
+
+      if (index >= 0) {
+        return frames.splice(index, 1)[0];
+      }
+
+      if (closeCode !== undefined) {
+        throw new Error(`closed ${closeCode}`);
+      }
+
+      await pause(20);
+    }
+
+    throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
+  };
+  const call = async (method: string, params: unknown) => {
+    const id = ++serial;
+    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    return next((frame) => frame.id === id);
+  };
+  const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
+  expect(
+    (
+      await call("initialize", {
+        versions: [1],
+        has: ["seal"],
+        ping: "30s",
+        key: key.raw,
+        tab,
+        nonce,
+        platform: "headless",
+        os: "linux",
+        sentAt: SENT,
+        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+      })
+    ).error,
+  ).toBeUndefined();
+  return { call, pushed, close: () => socket.close() };
+};
+
+/** One real instance for the length of `test`, given back with its scope whatever `test` answers. */
+const world = (test: (fixture: Fixture) => Promise<void>) =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fixture = yield* childInstance(STARTS);
+        yield* Effect.promise(() => test(fixture));
+      }),
+    ),
+  );
+
+const helpers = ({ instance, hashes, from }: Fixture) => {
+  const project = () => (instance as Instance).project(PROJECT);
+  return {
+    start: async (name: string, program: "starter" | "child") => {
+      const started = await Reflect.get(project(), "start")(
+        { _tag: "first", id: `start-${name}`, name, code: { program, hash: hashes[program] } },
+        from,
+      );
+      return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+    },
+    facts: async (stream: string) =>
+      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+    live: async (name: string): Promise<string | undefined> =>
+      ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
+  };
+};
+
+describe("P42 slice 1: a code start on the real Worker path", () => {
+  // scenario: L9. Only the real project holds the client list a notify would reach, so one real
+  // instance with one connected client is the check; generated Node laws cannot see that list.
+  it("scenario: L9: a code start sends nothing to any client: no view, no notify, no focus", async () => {
+    await world(async (fixture) => {
+      const { start, live } = helpers(fixture);
+      const starter = await start("starter:1", "starter");
+      const client = await wire(fixture.instance as Instance, fixture.key, "children");
+
+      try {
+        const quiet = client.pushed.length;
+        const sent = await client.call(
+          "process.send",
+          letter(starter, "start-1", { type: "start", program: "child", name: "child:1", input: { type: "inc" } }),
+        );
+        expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
+        const child = await until(
+          "the child is live",
+          () => live("child:1"),
+          (pid) => pid !== undefined,
+        );
+        // Settle: anything the start would push has had its turn.
+        await pause(1_000);
+        const after = client.pushed.slice(quiet);
+        expect(
+          after.filter(
+            (frame) => JSON.stringify(frame).includes(String(child)) || JSON.stringify(frame).includes("child:1"),
+          ),
+          "L9: no frame about the child reaches any client",
+        ).toEqual([]);
+        expect(
+          after.filter((frame) => /notify|view|focus|open/i.test(String(frame.method))),
+          "L9: a code start opens, notifies and focuses nothing",
+        ).toEqual([]);
+      } finally {
+        client.close();
+      }
+    });
+  });
+
+  // scenario: L10. Only a real object proves the descriptor and configure path: a child started by
+  // code must run, and a throw must restart it in its own object as the boot's child restarts.
+  it("scenario: L10: a started child runs, and a throw restarts it in its own object while others keep their counts", async () => {
+    await world(async (fixture) => {
+      const { start, live, facts } = helpers(fixture);
+      const starter = await start("starter:1", "starter");
+      const other = await start("child:boot", "child");
+      const client = await wire(fixture.instance as Instance, fixture.key, "children");
+
+      try {
+        await client.call(
+          "process.send",
+          letter(starter, "start-1", { type: "start", program: "child", name: "child:1", input: { type: "inc" } }),
+        );
+        const first = String(
+          await until(
+            "the started child is live",
+            () => live("child:1"),
+            (pid) => pid !== undefined,
+          ),
+        );
+        // It runs: its first letter was stepped, and a door letter steps it again.
+        const view = await until(
+          "the child stepped its first letter",
+          () => client.call("view.open", { pid: first }),
+          (frame) => frame.result?.view?.count === 1,
+        );
+        expect(view, "L10: the child's first letter is its input").toMatchObject({ result: { view: { count: 1 } } });
+        expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
+          result: { _tag: "accepted" },
+        });
+
+        // A throw restarts it: one restarted fact naming the old life, in the child's own name.
+        await client.call("process.send", letter(first, "throw-1", { type: "throw" }));
+        const [restarted] = await until(
+          "one restarted fact after the child's throw",
+          async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
+          (rows) => rows.length >= 1,
+        );
+        expect(restarted, "L10: P34 restarts the child in its own name").toMatchObject({
+          after: first,
+          name: "child:1",
+        });
+        const second = await until(
+          "the successor is live",
+          () => live("child:1"),
+          (pid) => pid !== undefined && pid !== first,
+        );
+        expect(second).toBe(restarted?.["process"]);
+
+        // Its starter and the other program keep their lives and their counts.
+        expect(await live("starter:1"), "L10: the starter keeps its life").toBe(starter);
+        expect(await live("child:boot"), "L10: another program keeps its life").toBe(other);
+        expect(
+          (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
+          "L10: the starter's restarts are unchanged",
+        ).toEqual([]);
+        expect(
+          (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+          "L10: another program's restarts are unchanged",
+        ).toEqual([]);
+      } finally {
+        client.close();
+      }
+    });
+  });
+});
