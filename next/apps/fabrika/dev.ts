@@ -29,7 +29,7 @@ const settings = Object.fromEntries(
 
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
-const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Schema.Unknown) });
+const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Declarations.port.schema) });
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
