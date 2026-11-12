@@ -2,6 +2,8 @@
 
 Decided 2026-10-24. One part is still proposed, and it is marked. Walked when Tier 6 starts (owner, 2026-11-08): pipeline timelines and each step's brief.
 
+Its decided rules are in: [0347](../../.decisions/0347-a-ticket-ties-its-lane-together.md).
+
 ```ts
 // A sketch. A ticket is the key that ties one lane's facts together.
 // Its state is the fold of those facts. A person and an agent get two views of the same fold.

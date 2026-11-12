@@ -102,7 +102,19 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
-import { checkHolds, heldRules, laneRoot, lockfileBehind, startHead, stepOf, wipOf, workspaceGlobs } from "./lane.ts";
+import {
+  boxTree,
+  boxTrees,
+  boxView,
+  checkHolds,
+  heldRules,
+  laneRoot,
+  lockfileBehind,
+  startHead,
+  stepOf,
+  wipOf,
+  workspaceGlobs,
+} from "./lane.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as RunId from "./runid.ts";
 
@@ -926,7 +938,7 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
     "git",
     [
       `--git-dir=${join(env.BOXES, `${box}-gitdata`)}`,
-      `--work-tree=${join(env.BOXES, box)}`,
+      `--work-tree=${boxTree(env.BOXES, box)}`,
       "-c",
       "status.renames=false",
       ...args,
@@ -946,8 +958,8 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
  * file: it reads the box's own data (`boxGit`). Returns what failed, or `null`.
  */
 const gitView = (env: Env, ask: Ask): string | null => {
-  const work = join(env.BOXES, ask.box);
-  const view = join(env.BOXES, `${ask.box}-view`);
+  const work = boxTree(env.BOXES, ask.box);
+  const view = boxView(env.BOXES, ask.box);
   const own = join(view, "worktrees", ask.box);
   const clone = sh("git", ["clone", "-q", "--mirror", "--local", env.MAIN, view]);
 
@@ -966,8 +978,8 @@ const gitView = (env: Env, ask: Ask): string | null => {
 
 /** The view goes when the step ends, and a box that stays gets its own `.git` line back. */
 const dropView = (env: Env, box: string) => {
-  const work = join(env.BOXES, box);
-  rmSync(join(env.BOXES, `${box}-view`), { recursive: true, force: true });
+  const work = boxTree(env.BOXES, box);
+  rmSync(boxView(env.BOXES, box), { recursive: true, force: true });
 
   if (box !== "" && existsSync(join(env.BOXES, `${box}-gitdata`)) && existsSync(work)) {
     writeFileSync(join(work, ".git"), `gitdir: ${join(env.BOXES, `${box}-gitdata`)}\n`);
@@ -1034,7 +1046,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
     return { ...listed, changes: [] as Change[] };
   }
 
-  const moved = caseRenames(join(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
   const old = new Set(moved.map((m) => m.from));
   const changes: Change[] = [
     ...changedFiles(status.out).filter((c) => !old.has(c.path)),
@@ -1082,7 +1094,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   }
 
   try {
-    const box = join(env.BOXES, ask.box);
+    const box = boxTree(env.BOXES, ask.box);
 
     for (const { xy, path, from: old } of changes) {
       const to = join(wt, path);
@@ -1447,7 +1459,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
-          rmSync(join(env.BOXES, ask.box), { recursive: true, force: true });
+          rmSync(boxTree(env.BOXES, ask.box), { recursive: true, force: true });
           rmSync(join(env.BOXES, `${ask.box}-gitdata`), { recursive: true, force: true });
           // Its facts go with it, so no later stepcommit reads a dead box's plan hash.
           rmSync(join(env.BOXES, "state", `${ask.box}.box`), { force: true });
@@ -1552,7 +1564,7 @@ const turn = (env: Env, agents: Agents, ask: Ask, prompt: string) =>
   runTurn(agents, {
     provider: stepProvider(ask.agent, ask.step),
     session: ask.box,
-    folder: ask.step === "plan" ? env.MAIN : join(env.BOXES, ask.box),
+    folder: ask.step === "plan" ? env.MAIN : boxTree(env.BOXES, ask.box),
     prompt,
     system: `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts; answer with the JSON object the prompt asks for.`,
     answer: answerFor(ask.step),
@@ -1908,12 +1920,18 @@ export const freeLane = (boxes: string, lane: string): void => {
  * The names a lane's next run id must pass, for `RunId.next`: every file in the boxes folder and
  * every box the lane's state file records. A run id names its box and every file the run leaves,
  * so an older run's file is never read as a new run's: a refused run once returned an older run's
- * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383).
+ * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383). A box's tree and its view sit
+ * in `boxTrees`, every other file of the run beside the boxes, so both folders are read.
  */
 export const runNames = (boxes: string, lane: string): string[] => {
   const state = join(boxes, "state", `${lane}.json`);
   const saved: Lane | null = existsSync(state) ? (JSON.parse(readFileSync(state, "utf8")) as Lane) : null;
-  return [...readdirSync(boxes), ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box]))];
+  const trees = boxTrees(boxes);
+  return [
+    ...readdirSync(boxes),
+    ...(existsSync(trees) ? readdirSync(trees) : []),
+    ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box])),
+  ];
 };
 
 /** What a second launch of a lane is told. */

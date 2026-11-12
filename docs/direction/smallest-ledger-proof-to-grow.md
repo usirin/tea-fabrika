@@ -2,6 +2,8 @@
 
 Decided 2026-10-12, written down 2026-10-18.
 
+Its decided rules are in: [0216](../../.decisions/0216-ledger-is-a-folded-list.md).
+
 ## What was decided
 
 - **The ledger starts with only** (this exact list confirmed by the owner

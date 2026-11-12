@@ -2,6 +2,8 @@
 
 Decided 2026-10-18.
 
+Its decided rules are in: [0224](../../.decisions/0224-real-repos-keep-their-merge-rules.md).
+
 ## What was decided
 
 - **Real lanes run on [kamp-us/demlik](https://github.com/kamp-us/demlik).**

@@ -21,6 +21,8 @@ import "./env.sh?raw";
 import "./fieldrow.py?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./gc.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./boxfiles.ts?raw";
 import "./keepruns.sh?raw";
 import "./redact.sh?raw";
 import "../../plan/scripts/plancheck.sh?raw";

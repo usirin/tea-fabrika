@@ -3,6 +3,10 @@
 Decided 2026-10-11. How the data and its markdown view live together on GitHub
 is still open (see the end).
 
+Its decided rules are in: [0208](../../.decisions/0208-markdown-is-a-view.md),
+[0209](../../.decisions/0209-schemas-are-effect-schema.md),
+[0210](../../.decisions/0210-agents-get-a-closed-schema.md).
+
 ## What was decided
 
 Today's fabrika keeps what it knows as prose in markdown: a ticket's body, a

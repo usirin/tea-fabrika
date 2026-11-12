@@ -3,6 +3,9 @@
 Decided 2026-10-12. Parts of it were set earlier, on 2026-10-04 and 2026-10-05,
 and written down here on 2026-10-18.
 
+Its decided rules are in: [0233](../../.decisions/0233-rules-are-held-by-code.md),
+[0234](../../.decisions/0234-a-skipped-check-says-so.md).
+
 ```ts
 // Not protection: a sentence someone has to remember.
 // "Only pass inputs that ack to workQueue."

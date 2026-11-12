@@ -1,7 +1,7 @@
 ---
 id: 0115
 title: A decided rule lives in a decision file, and the plan check lists the decisions a plan touches
-status: accepted
+status: amended-in-part by [0130](0130-every-piece-of-knowledge-has-one-home.md)
 date: 2026-11-11
 tags: [decisions, direction, notes, plan, sweep, discovery, agents]
 ---
@@ -16,7 +16,7 @@ the decisions a plan's words touch.
 
 Agents kept asking the owner about things already decided, and stating things a later decision had
 changed. Two causes were found on 2026-11-11. First, many decided rules sit only inside long notes
-under `docs/direction/`: an inventory found 85 decided or partly decided notes whose rules no
+under `docs/direction/`: [an inventory](../experiments/271-direction-notes-to-decision-files.md) found 85 decided or partly decided notes whose rules no
 decision file holds. A search that lists `.decisions/` never sees them. Second, "search what is
 settled first" is prose in [AGENTS.md](../AGENTS.md#before-you-design-anything), and prose is
 skipped. [0001](0001-decisions-live-in-the-repo.md) and

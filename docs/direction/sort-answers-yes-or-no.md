@@ -2,6 +2,13 @@
 
 Decided 2026-10-18.
 
+Its decided rules are in: [0369](../../.decisions/0369-no-kind-label-ships-or-routes.md),
+[0372](../../.decisions/0372-triage-answers-yes-or-no.md),
+[0373](../../.decisions/0373-triage-answers-by-what-they-do.md),
+[0374](../../.decisions/0374-triage-declines-only-on-the-bar.md),
+[0375](../../.decisions/0375-a-lasting-ruling-is-a-decision.md),
+[0376](../../.decisions/0376-only-an-approved-plan-starts-a-build.md).
+
 Keys renamed 2026-11-03 (short words keep one meaning): a duplicate's `of` became `original`, the
 ticket it repeats. Today's code still says `of`.
 

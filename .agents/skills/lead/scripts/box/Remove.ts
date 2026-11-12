@@ -699,8 +699,16 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
 
   const checked = Effect.gen(function* () {
     const boxes = yield* loose(normal(path.resolve(folders.boxes)));
-    const work = joined(boxes, name);
+    // The tree is in BOXES/box (lane.ts boxTree); a box made before that layout has it in BOXES.
+    const current = joined(boxes, "box");
+    const old = !(yield* d.lexists(joined(current, name))) && name !== "box" && (yield* d.lexists(joined(boxes, name)));
+    const trees = old ? boxes : current;
+    const work = joined(trees, name);
     const data = joined(boxes, `${name}-gitdata`);
+
+    if (yield* d.isLink(current)) {
+      return yield* keep("symlinked target");
+    }
 
     if ((yield* d.isLink(work)) || (yield* d.isLink(data))) {
       return yield* keep("symlinked target");
@@ -715,9 +723,9 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
     }
 
     const main = normal(yield* d.realPath(path.resolve(folders.main)));
-    const outside = [above(normal(yield* d.realPath(work))), above(normal(yield* d.realPath(data)))];
+    const parents = [above(normal(yield* d.realPath(work))), above(normal(yield* d.realPath(data)))];
 
-    if (outside.some((parent) => parent !== boxes)) {
+    if (parents[0] !== trees || parents[1] !== boxes) {
       return yield* keep("target outside BOXES");
     }
 

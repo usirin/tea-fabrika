@@ -6,6 +6,8 @@ proof that a small team can now build and run its own tools: models are good
 enough to write them, and one Cloudflare account runs the backend for about
 $5 a month.
 
+Its decided rules are in: [0349](../../.decisions/0349-we-build-and-use-our-tools.md).
+
 ```ts
 // A sketch. Every tool is a small program on the same ledger, in one Worker.
 const programs = [tracker, board, ticketView, lanes, prWatcher /* , … */];
