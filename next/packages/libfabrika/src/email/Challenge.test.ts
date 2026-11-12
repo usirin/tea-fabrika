@@ -4,7 +4,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Redacted, Result, Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import { TestClock } from "effect/testing";
-import * as fc from "fast-check";
 import {
   EPOCH,
   EFFECT,
@@ -102,21 +101,24 @@ it.effect.prop(
       }
 
       // Only states written by the real service enter this check. No saved state is invented.
-      fc.assert(
-        fc.property(Arbitrary.schema(machine.msg), (message) => {
-          for (const saved of reached) {
-            const codec = Schema.fromJsonString(machine.model);
-            const back = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(saved));
-            const [restored] = machine.init(back, {});
-            expect(restored).toEqual(saved);
+      const result = yield* Arbitrary.checkEffect(
+        Arbitrary.schema(machine.msg),
+        (message) =>
+          Effect.sync(() => {
+            for (const saved of reached) {
+              const codec = Schema.fromJsonString(machine.model);
+              const back = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(saved));
+              const [restored] = machine.init(back, {});
+              expect(restored).toEqual(saved);
 
-            if (acceptedTypes(machine, saved).includes(message.type)) {
-              expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
+              if (acceptedTypes(machine, saved).includes(message.type)) {
+                expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
+              }
             }
-          }
-        }),
+          }),
         { seed: 119120 },
       );
+      expect(Arbitrary.formatCheckFailure(result)).toBeUndefined();
     }),
   EFFECT,
 );

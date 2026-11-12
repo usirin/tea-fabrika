@@ -123,7 +123,12 @@ export const signed = (signer: string): typeof Signed.Type => ({
   armored: "test-only",
 });
 
-export const added = (flow: Flow, n = 0): typeof Add.Type => ({
+export type EmailAddition = typeof Add.Type & {
+  readonly verified: string;
+  readonly saw: typeof Add.Type.saw & { readonly label: string };
+};
+
+export const added = (flow: Flow, n = 0): EmailAddition => ({
   id: input(100 + n),
   for: PERSON,
   to: LEDGER,
@@ -147,7 +152,7 @@ export const added = (flow: Flow, n = 0): typeof Add.Type => ({
 });
 
 // Every signed field is varied separately, including fields that still name the same device.
-export const changedAdditions = (add: typeof Add.Type): ReadonlyArray<typeof Add.Type> => [
+export const changedAdditions = (add: EmailAddition): ReadonlyArray<EmailAddition> => [
   { ...add, id: `${add.id}-changed` },
   { ...add, for: `${add.for}-changed` },
   { ...add, to: `${add.to}-changed` },
@@ -707,7 +712,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
           out.notices.push(
             noticeView({
               added: event.add.id,
-              label: event.add.saw.label,
+              label: Schema.decodeUnknownSync(Schema.Struct({ label: Schema.String }))(event.add.saw).label,
               location: event.add.saw.location,
               at: row.arrivedAt,
             }),

@@ -44,7 +44,12 @@ const signed = (signer: string): typeof Signed.Type => ({
   armored: "test-only",
 });
 
-const added = (flow: Flow, n = 0): typeof Add.Type => ({
+type EmailAddition = typeof Add.Type & {
+  readonly verified: string;
+  readonly saw: typeof Add.Type.saw & { readonly label: string };
+};
+
+const added = (flow: Flow, n = 0): EmailAddition => ({
   id: input(100 + n),
   for: PERSON,
   to: LEDGER,
@@ -78,7 +83,7 @@ const founded = (flow: Flow): MemberEvent => ({
 
 const initial = (flow: Flow): ReadonlyArray<MemberEvent> => [
   founded(flow),
-  ...Array.from({ length: flow.live }, (_, n) => ({
+  ...Array.from({ length: flow.live }, (_, n): MemberEvent => ({
     _tag: "granted",
     grant: {
       id: input(10 + n),
