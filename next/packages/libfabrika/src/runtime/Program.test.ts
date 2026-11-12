@@ -6,6 +6,7 @@ import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
+import { Declaration } from "./Execution.ts";
 import { Input, Program, Refusal, stepper } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
@@ -53,6 +54,171 @@ const authoring = () => ({
 const spec = () => Program.make(authoring());
 const SEED = 119120;
 const parameters = { seed: SEED, numRuns: 100 };
+
+type Policy = typeof import("./Runner.ts").Supervision.Type.policy;
+// Bounded waits keep valid samples inside their period; corrupt commands push each numeric edge.
+
+const policies = fc
+  .record({
+    maxDeliveries: fc.integer({ min: 1, max: 32 }),
+    extra: fc.nat({ max: 8 }),
+    wait: fc.integer({ min: 1, max: 100 }),
+    period: fc.integer({ min: 10_000, max: 120_000 }),
+  })
+  .map(({ maxDeliveries, extra, wait, period }): Policy => ({
+    maxDeliveries,
+    intensity: maxDeliveries + extra,
+    periodMs: period,
+    backoff: { minMs: wait, maxMs: wait, resetAfterMs: period },
+  }));
+
+type PolicyModel = { valid: boolean; checked: boolean; policy: Policy | undefined };
+type PolicyReal = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: string[] };
+
+const policyCheck = (value: unknown, policy: Policy | undefined) => {
+  const fields = Schema.decodeUnknownSync(Schema.Struct({ policy: Schema.optionalKey(Schema.Unknown) }))(value);
+  expect(fields).toEqual(policy === undefined ? {} : { policy });
+};
+
+const corruptPolicy = (policy: Policy, field: number, n: number): unknown => {
+  if (field < 18) {
+    const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][Math.floor(field / 3)]!;
+    const value = field % 3 === 0 ? 0 : field % 3 === 1 ? -n - 1 : n + 0.5;
+    return field < 9 ? { ...policy, [key]: value } : { ...policy, backoff: { ...policy.backoff, [key]: value } };
+  }
+
+  switch (field) {
+    case 18:
+      return { ...policy, maxDeliveries: 33 + n };
+    case 19:
+      return { ...policy, intensity: policy.maxDeliveries - 1 };
+    case 20:
+      return { ...policy, backoff: { ...policy.backoff, minMs: policy.backoff.maxMs + 1 } };
+    default:
+      return { ...policy, periodMs: policy.intensity * policy.backoff.minMs - n };
+  }
+};
+
+it("P1: policy survives authoring, decoding and Node description, while malformed declarations fail", () => {
+  const commands = fc.commands<PolicyModel, PolicyReal>(
+    [
+      fc.option(policies, { nil: undefined }).map((policy): fc.Command<PolicyModel, PolicyReal> => ({
+        check: () => true,
+        run: (m, r) => {
+          delete r.raw.policy;
+
+          if (policy !== undefined) {
+            r.raw.policy = policy;
+          }
+
+          m.policy = policy;
+          m.valid = true;
+          m.checked = false;
+          r.described = null;
+        },
+        toString: () => `declare(${JSON.stringify(policy)})`,
+      })),
+      fc
+        .tuple(fc.integer({ min: 0, max: 21 }), fc.nat({ max: 100 }))
+        .map(([field, n]): fc.Command<PolicyModel, PolicyReal> => ({
+          check: (m) => m.valid && m.policy !== undefined,
+          run: (m, r) => {
+            r.raw.policy = corruptPolicy(m.policy!, field, n);
+            m.valid = false;
+            m.checked = false;
+            r.described = null;
+          },
+          toString: () => `corrupt(${field},${n})`,
+        })),
+      fc
+        .constantFrom("make", "makeEffect", "decode", "describe")
+        .map((action): fc.Command<PolicyModel, PolicyReal> => ({
+          check: (m) => action === "make" || action === "makeEffect" || action === "decode" || m.checked,
+          run: (m, r) => {
+            if (action === "make") {
+              const construct = () => Reflect.apply(Program.make, Program, [r.raw]);
+
+              if (!m.valid) {
+                expect(construct).toThrow();
+              } else {
+                r.checked = construct();
+                policyCheck(r.checked, m.policy);
+                m.checked = true;
+              }
+            } else if (action === "makeEffect") {
+              const result = Effect.runSync(Effect.result(Reflect.apply(Program.makeEffect, Program, [r.raw])));
+              expect(Result.isSuccess(result)).toBe(m.valid);
+
+              if (Result.isSuccess(result)) {
+                r.checked = result.success;
+                policyCheck(r.checked, m.policy);
+                m.checked = true;
+              } else {
+                expect(SchemaIssue.isIssue(result.failure)).toBe(true);
+              }
+            } else if (action === "decode") {
+              const raw = {
+                ...spec(),
+                machine: r.raw.machine,
+                ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+              };
+              const decoded = Schema.decodeUnknownResult(Program.schema)(m.checked ? r.checked : raw);
+              expect(Result.isSuccess(decoded)).toBe(m.valid);
+
+              if (Result.isSuccess(decoded)) {
+                r.checked = decoded.success;
+                policyCheck(r.checked, m.policy);
+                m.checked = true;
+              }
+
+              if (r.described !== null) {
+                policyCheck(Schema.decodeUnknownSync(Declaration)(r.described), m.policy);
+              }
+            } else {
+              const described = Effect.runSync(
+                ProgramLoader.use((loader) => loader.load("test")).pipe(
+                  Effect.provide(ProgramLoader.layer({ test: r.checked }, {})),
+                ),
+              ).declaration;
+              policyCheck(described, m.policy);
+              policyCheck(Schema.decodeUnknownSync(Declaration)(described), m.policy);
+              r.described = described;
+            }
+
+            expect(r.calls).toEqual([]);
+          },
+          toString: () => action,
+        })),
+    ],
+    { maxCommands: 80, size: "max" },
+  );
+  fc.assert(
+    fc.property(commands, (moves) => {
+      const calls: string[] = [];
+      const fields = authoring();
+      const raw = {
+        ...fields,
+        machine: Machine.make({
+          ...machine,
+          cmds: [save],
+          init: () => {
+            calls.push("init");
+            return [{ count: 0, replies: 0 }, []];
+          },
+        }),
+      };
+      fc.modelRun(
+        () => ({
+          model: { valid: true, checked: false, policy: undefined },
+          real: { raw, checked: null, described: null, calls },
+        }),
+        moves,
+      );
+    }),
+    parameters,
+  );
+});
+
 const model = fc.record({ count: fc.integer(), replies: fc.nat() });
 
 const declarations = fc
