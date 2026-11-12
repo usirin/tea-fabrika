@@ -22,6 +22,12 @@ export const boxView = (boxes: string, box: string): string => `${boxTrees(boxes
 /** Where a box's tree was before `boxTree`. */
 export const oldBoxTree = (boxes: string, box: string): string => `${boxes}/${box}`;
 
+/** Where every lane's pinned scripts live, beside the boxes: chain pins its scripts there. */
+export const pinsFolder = (boxes: string): string => `${boxes}/pins`;
+
+/** One launch's pin: its lane and the launching process, so two launches never share one. */
+export const pinFolder = (boxes: string, lane: string, pid: number): string => `${pinsFolder(boxes)}/${lane}.${pid}`;
+
 /** How long a box or worktree must sit untouched before gc or boxfiles takes anything of it: 2 h. */
 export const IDLE = 2 * 3_600_000;
 

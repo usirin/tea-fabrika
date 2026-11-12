@@ -262,10 +262,10 @@ if (cmd === "node" && args[0].endsWith("/apps/fabrika/src/cli.ts") && args[1] ==
   process.exit(0);
 }
 if (cmd === "node" && args[0].endsWith("/sizecap.ts")) {
-  // 0087's size line, with its own laws in sizecap.test.ts: here it is advice, and a failure of it
+  // sizecap.ts's size line (0099), with its own laws in sizecap.test.ts: here it is advice, and a failure of it
   // must stop nothing.
   if (setup.stale) die("sizecap: planted");
-  console.log("size: 7 product lines, within the cap of 600, 593 to spare");
+  console.log("size: 7 product lines; not counted: 0 test, 0 docs, 0 lock, 0 generated, 0 other lines, 0 binary files");
   process.exit(0);
 }
 if (cmd === "node" && args[0].endsWith("/gcloop.ts")) {
