@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-12-skill-says-clauderow-writes-a-claude-box-row",
+  "date": "2026-11-12",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/skills/lead/SKILL.md",
+    "line": 192
+  },
+  "says": "Today's lead skill says clauderow writes the field row of a `--agent claude` box, but no script starts clauderow.",
+  "proof": "`rg -n clauderow .agents -g '!*.md'` at this head prints only clauderow's own two files and one comment in agents.ts:536. drive.ts:1426 writes each step's row itself with `stepRow` from agents.ts, for a Claude box too. The ticket this was found on, 593, also says chain.ts and drive.ts start it with python3, which was no longer so.",
+  "cost": "A lead who trusts the sentence may look for a clauderow row that never comes, or run clauderow by hand on a box whose row drive already wrote, and log the run twice.",
+  "head": "60a92404acbcbd8518c886e666183310b79131fd",
+  "ticket": "usirin/tea-fabrika#593",
+  "pr": null
+}

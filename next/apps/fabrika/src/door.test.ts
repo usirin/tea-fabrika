@@ -3171,6 +3171,145 @@ describe("P10 inputs, retries and signer", () => {
     { arbitrary: { seed: SEED, runs: 100 } },
   );
 
+  const MalformedStampedWrite = (() => {
+    const schema = Input.cases.comment;
+    const Broken = Schema.TaggedUnion({
+      wrong: {},
+      missing: {},
+      junk: { reason: Schema.Literals(["wrong", "missing"]) },
+    });
+    type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
+    const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
+      const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
+      const fields = Object.entries(state.schema.fields).filter(
+        ([key, field]) =>
+          Object.hasOwn(state.m, key) &&
+          (!missing || Schema.decodeUnknownResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
+      );
+      assert(fields.length > 0, "the current message must have a field that can be broken");
+      return Arbitrary.schema(Schema.Literals(fields.map(([key]) => key))).pipe(
+        Arbitrary.flatMap((key) => {
+          const field = fields.find(([name]) => name === key)![1];
+          const replacement = missing
+            ? Arbitrary.Constant(undefined)
+            : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
+                Arbitrary.filter((value) => Schema.decodeUnknownResult(field)(value)._tag === "Failure"),
+              );
+          const junk =
+            edit._tag === "junk"
+              ? Arbitrary.all({
+                  key: Arbitrary.schema(Schema.String).pipe(
+                    Arbitrary.filter(
+                      (key) =>
+                        !Object.hasOwn(state.schema.fields, key) &&
+                        !Object.hasOwn(state.m, key) &&
+                        !Schema.is(SpoofedWrite.fields.key)(key),
+                    ),
+                  ),
+                  value: Arbitrary.schema(Schema.Json),
+                })
+              : Arbitrary.Constant(null);
+          return Arbitrary.all({ value: replacement, junk }).pipe(
+            Arbitrary.map(({ value, junk }) => {
+              const m = { ...state.m };
+
+              if (missing) {
+                delete m[key];
+              } else {
+                m[key] = value;
+              }
+
+              return { schema: state.schema, m: { ...m, ...(junk === null ? {} : { [junk.key]: junk.value }) } };
+            }),
+          );
+        }),
+      );
+    };
+    return Arbitrary.all({
+      m: Arbitrary.schema(schema),
+      edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Object.keys(schema.fields).length }),
+      key: Arbitrary.schema(SpoofedWrite.fields.key),
+      inner: Arbitrary.schema(SpoofedWrite.fields.inner),
+      value: Arbitrary.schema(SpoofedWrite.fields.value),
+    }).pipe(
+      Arbitrary.flatMap(({ m, edits, ...stamp }) =>
+        edits
+          .reduce(
+            (current, edit) => current.pipe(Arbitrary.flatMap((state) => editMessage(state, edit))),
+            Arbitrary.Constant<MessageState>({ schema, m }),
+          )
+          .pipe(Arbitrary.map((state) => ({ ...stamp, m: state.m }))),
+      ),
+    );
+  })();
+
+  it.effect.prop(
+    "p67 spoof: malformed stamped process.send is reserved without a request row and counts once",
+    { write: MalformedStampedWrite },
+    ({ write }) =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(REFUSED_HOUR + 1000);
+        const w = yield* world();
+        const archives: Array<{ name: string; body: string }> = [];
+        const archive = Layer.effect(
+          Archive,
+          Archive.pipe(
+            Effect.map((real) => ({
+              put: (name: string, body: Uint8Array) => {
+                archives.push({ name, body: new TextDecoder().decode(body) });
+                return real.put(name, body);
+              },
+            })),
+          ),
+        ).pipe(Layer.provide(w.env));
+        yield* Effect.gen(function* () {
+          const d = yield* Gateway;
+          const { client } = yield* online(d, w);
+          const sink = yield* SpanSink;
+          yield* sink.flush;
+          const snapshot = () => [...w.databases()].map(([name, db]) => [name, allObjectRows(db)] as const);
+          const nonSums = (databases: ReturnType<typeof snapshot>) =>
+            databases.map(([name, tables]) => [
+              name,
+              Object.fromEntries(Object.entries(tables).filter(([table]) => name !== "object" || table !== "sums")),
+            ]);
+          const before = snapshot();
+          const usedInputs = [...w.usedInputs];
+          const deliveries = [...w.deliveries];
+          const uploaded = [...archives];
+          const beforeSums = before.find(([name]) => name === "object")![1].sums!;
+          const target = { piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved" };
+          const had = beforeSums.find(
+            (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
+          );
+          const expectedSums =
+            had === undefined
+              ? [...beforeSums, { ...target, count: 1 }]
+              : beforeSums.map((row) => (row === had ? { ...row, count: Number(row.count) + 1 } : row));
+          const inner = { ...write.m, [write.key]: write.value };
+          expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(write.m)._tag).toBe("Failure");
+          expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(inner)._tag).toBe("Failure");
+          const params = write.inner
+            ? request("t860", inner)
+            : { ...request("t860", write.m), [write.key]: write.value };
+
+          expect(yield* d.route(client, "process.send", params)).toEqual({ _tag: "refused", reason: "reserved" });
+          yield* sink.flush;
+          expect(w.usedInputs).toEqual(usedInputs);
+          expect(w.deliveries).toEqual(deliveries);
+          const after = snapshot();
+          expect(nonSums(after)).toEqual(nonSums(before));
+          expect(after.find(([name]) => name === "object")![1].sums).toEqual(expectedSums);
+          expect(archives).toEqual(uploaded);
+          yield* TestClock.setTime(REFUSED_HOUR + HOUR);
+          expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
+            { _tag: "sum", ...target, count: 1 },
+          ]);
+        }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
+      }),
+    { arbitrary: { seed: SEED, runs: 100 } },
+  );
+
   it.effect.prop(
     "0140 bound: N stamped writes occupy exactly the rows of one and count N",
     {

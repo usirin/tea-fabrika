@@ -67,13 +67,27 @@ Slice 1 in `next/`, the history checker and the off contract, is
 [PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
 `Nemesis` contract with its off layer and its ledger layer, and `ProcessHistory`, the bounded read
 the check uses. It is useful without a chaos program and starts no fault. Slice 2, the bounded
-chaos program, and slice 3, the checklist faults and the real local p90 revoke, come next; P17
-stays open until all three land ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
+chaos program, is [PR 1046](https://github.com/usirin/tea-fabrika/pull/1046): the `@kampus/chaos`
+package, one saved machine that draws one fault per timer from a seeded schedule, and `fire` owned
+only by the exact name `fabrika/chaos`. Its fire handler is a controlled one in tests, so no live
+fault fires and the app selects no chaos program. Slice 3, the checklist faults and the real local
+p90 revoke, comes next; P17 stays open until all three land
+([its row](./tier-1.md#the-pull-requests-one-at-a-time)). It finishes no Tier 1 row, so the count
+stays 20.
 
 Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
 ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
 and 79 kept modules, matching the approved plan's sketch.
+
+*2026-11-12:* P38's slice 3 is cut in three on tracker ticket 753. Slice 3a in `next/` is
+[PR 1039](https://github.com/usirin/tea-fabrika/pull/1039): a settings file and the saved snapshot
+take their encodings from the one declaration, and a snapshot is read back strictly, with its hash
+checked ([the pattern](../../.patterns/settings.md)). It adds no setting and starts no Worker read.
+It finishes no Tier 1 row, so the count stays 20. Slice 3b comes next: the Worker handoff, the start
+record and the first byte setting, `limits.record`. Slice 3c adds the remaining declarations. P38
+stays open until its whole settings stack lands
+([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
 
 **Tier 1, dated 2026-11-11.** 20 of [its 43 rows](./tier-1.md#the-pull-requests-one-at-a-time)
 are on main, plus P17a, half of P17, so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
@@ -91,6 +105,15 @@ between two real Process objects in `next/`. The sender's object asks the Projec
 letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row, so the count stays
 20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
 and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
+
+*2026-11-12:* P43's slice 1 (ticket 765) is [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): the merger,
+alone, in `next/`. Mailed `land`, it reads the change, brings it up to date with main, waits for
+its kind's named checks on that head, merges pinned to it and mails back one reply. The `CodeHost`
+and `Ci` contracts join libfabrika, each with an in-memory Layer; no GitHub Layer yet, so it lands
+nothing real, and today's lead scripts keep landing every pull request. P43 is planned in 5 slices:
+the queue program (slice 2) waits on P42's start piece, both in Durable Objects (slice 3) build on
+P41's slice 2, then GitHub behind the contracts and the switch. It finishes no Tier 1 row, so the count stays
+20. *It said, above: P43 joined Tier 1, not planned or sized.*
 
 *2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
 ([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2

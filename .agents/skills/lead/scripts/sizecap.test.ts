@@ -9,6 +9,7 @@ import {
   ADVICE_LINES,
   diffLine,
   classify,
+  isSharedSuite,
   numberIn,
   readPlan,
   Row,
@@ -59,6 +60,92 @@ describe("classify", () => {
       ),
       options,
     );
+  });
+
+  it("property: under next/ a shared suite named XTest.ts or XTest.tsx is a test at any depth (0029, 0062)", () => {
+    fc.assert(
+      fc.property(
+        folders,
+        fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,7}$/),
+        fc.constantFrom(".ts", ".tsx"),
+        (inner, subject, ext) => {
+          const path = ["next", ...inner, `${subject}Test${ext}`].join("/");
+          expect(isSharedSuite(path)).toBe(true);
+          expect(classify(path, false)).toBe("test");
+          expect(classify(path, true)).toBe("generated");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: outside next/ the same name is no suite, since exam-paths.json's row covers next/ only", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom("apps", "programs", "packages"),
+        fc.constantFrom(".agents", "oxlint-plugins", ".github", "scripts"),
+        folders,
+        word,
+        fc.constantFrom(".ts", ".tsx"),
+        (root, other, inner, subject, ext) => {
+          const below = [
+            ...inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part)),
+            `${subject}Test${ext}`,
+          ];
+          expect(classify([root, ...below].join("/"), false)).toBe("product");
+          expect(classify([other, ...below].join("/"), false)).toBe("other");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("property: under next/ a name that only looks like a suite is product", () => {
+    fc.assert(
+      fc.property(
+        folders,
+        word,
+        fc.constantFrom("lower", "bare", "folder", "style", "data"),
+        (inner, subject, shape) => {
+          const kept = inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part));
+          const below = {
+            lower: [...kept, `${subject}test.ts`],
+            bare: [...kept, "Test.ts"],
+            folder: [...kept, `${subject}Test`, `${subject}.ts`],
+            style: [...kept, `${subject}Test.css`],
+            data: [...kept, `${subject}Test.json`],
+          }[shape];
+          const path = ["next", ...(below ?? [])].join("/");
+          expect(isSharedSuite(path)).toBe(false);
+          expect(classify(path, false)).toBe("product");
+        },
+      ),
+      options,
+    );
+  });
+
+  it("vector: the names the suite rule was written for, each a real or a near-miss name", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["next/programs/pipeline/src/CiTest.ts", "test"],
+      ["next/packages/libfabrika/src/runtime/NemesisTest.ts", "test"],
+      ["next/src/fooTest.ts", "test"],
+      ["next/src/XTest.tsx", "test"],
+      ["next/XTest.ts", "test"],
+      ["next/src/x.test-support.ts", "test"],
+      ["packages/pipeline/src/x.test-support.ts", "test"],
+      ["next/src/Latest.ts", "product"],
+      ["next/src/Contest.ts", "product"],
+      ["next/src/Test.ts", "product"],
+      ["next/src/Test.tsx", "product"],
+      ["next/src/Test/thing.ts", "product"],
+      ["next/src/XTest.ts.bak", "product"],
+      ["packages/pipeline/src/XTest.ts", "product"],
+      [".agents/skills/lead/scripts/box/BoxTest.ts", "other"],
+    ];
+
+    for (const [path, kind] of cases) {
+      expect(classify(path, false), path).toBe(kind);
+    }
   });
 
   it("property: Markdown and anything under docs/ is docs; a marked file is generated, first of all", () => {

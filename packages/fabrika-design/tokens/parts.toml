@@ -7,4 +7,4 @@ anywhere = true
 
 [tile]
 description = "a tile's own names (docs/direction/tile-guidelines.md): only the tile's rules read them"
-stylesheets = ["apps/fabrika/src/window/window.css"]
+stylesheets = ["apps/fabrika/src/window/window.css", "next/packages/tuval/src/window/style.css"]
