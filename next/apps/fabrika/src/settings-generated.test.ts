@@ -92,13 +92,17 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
           }),
         ),
       ).toBe(true);
-      expect(
-        Result.isFailure(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
-            gateway: { limit, window },
-          }),
-        ),
-      ).toBe(true);
+
+      for (const gateway of [{ limit }, { window }, { limit, window }]) {
+        expect(
+          Result.isFailure(
+            Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
+              gateway,
+            }),
+          ),
+        ).toBe(true);
+      }
+
       const generated = outputs(Declarations.all);
       expect(generated.reference).toContain("gateway.limit");
       expect(generated.reference).toContain("gateway.window");
