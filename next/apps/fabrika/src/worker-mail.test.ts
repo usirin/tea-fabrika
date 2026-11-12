@@ -65,7 +65,7 @@ const identity = () => {
 type Key = ReturnType<typeof identity>;
 
 // The fixtures use the same Send/ref exchange as slice 1. Source is bundled by the real app build.
-const source = (role: "requester" | "responder", pair: number) => `
+const source = (role: "requester" | "responder", pair: number, braked = false) => `
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
@@ -88,6 +88,7 @@ const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
   crash: () => { throw new TypeError("fixture crash"); }
  }});
 export const program = Program.make({name: "p41/${role}-${pair}", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+ ${braked ? "policy: {maxDeliveries: 3, intensity: 5, periodMs: 120_000, backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5_000}}," : ""}
  inputs: ${role === "requester" ? '{start: "Ask", answer: "Answer"}' : '{request: "Request", crash: "Crash"}'},
  outputs: {}, writes: {}, wake: () => null});
 `;
@@ -101,7 +102,11 @@ type Fixture = {
   readonly connect: (tab: string) => ReturnType<typeof wire>;
 };
 
-const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>, granted = true) => {
+const world = async (
+  test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>,
+  granted = true,
+  braked = false,
+) => {
   process.env.DO_NOT_TRACK = "1";
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
@@ -135,7 +140,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         for (const role of ["requester", "responder"] as const) {
           const name = `${role}-${pair}`;
           const path = join(home, `${name}.ts`);
-          writeFileSync(path, source(role, pair));
+          writeFileSync(path, source(role, pair, braked && role === "responder" && pair === 1));
           selections[`p41/${name}`] = path;
         }
       }
@@ -312,6 +317,7 @@ const facts = async (instance: Instance, stream: string) =>
   ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
     ...row.body,
     _tag: row._tag,
+    rev: row.rev,
   }));
 
 const request = (pid: string, ref: string) => ({
@@ -406,48 +412,187 @@ it("scenario: W4, no host grant refuses the requester and leaves the target inbo
 
 // scenario: only real object recovery establishes the Worker's restart brake and its saved wait.
 it("scenario: W5, mail respects a target's brake while another pair completes", async () => {
-  await world(async (instance, _key, fixture) => {
-    const requester = await fixture.start("requester:1");
-    let responder = await fixture.start("responder:1");
-    const other = await fixture.start("requester:2");
-    await fixture.start("responder:2");
-    const client = await fixture.connect("brake");
-    let down: any;
+  await world(
+    async (instance, _key, fixture) => {
+      const requester = await fixture.start("requester:1");
+      let responder = await fixture.start("responder:1");
+      const other = await fixture.start("requester:2");
+      await fixture.start("responder:2");
+      const client = await fixture.connect("brake");
+      let down: any;
 
-    for (let n = 0; n < 20 && down === undefined; n++) {
-      await client.call("process.send", {
-        pid: responder,
-        letter: `crash-${n}`,
-        m: { type: "crash" },
+      for (let n = 0; n < 20 && down === undefined; n++) {
+        await client.call("process.send", {
+          pid: responder,
+          letter: `crash-${n}`,
+          m: { type: "crash" },
+          sentAt: SENT,
+          seen: 0,
+        });
+        const rows = await until(
+          "restart or brake",
+          () => facts(instance, "processes/responder:1"),
+          (rows) =>
+            rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+        );
+        down = rows.find((r) => r._tag === "down");
+
+        if (down === undefined) {
+          responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
+        }
+      }
+
+      expect(down, "the real restart brake must be reached").toBeDefined();
+      await client.call("process.send", request(requester, "braked"));
+      await client.call("view.open", { pid: other });
+      await client.call("process.send", request(other, "healthy"));
+      await changed(client, "answered");
+      const healthy = (await answer(instance, "requester:2", "healthy")).filter(
+        (r) => r.m?.type === "answer" && r.m.ref === "healthy",
+      );
+      expect(healthy).toHaveLength(1);
+      expect(healthy[0].m.value).toBe(8);
+      expect(down.rev).toBeLessThan(healthy[0].rev);
+      expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
+      expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
+      expect(await client.call("view.open", { pid: requester })).toMatchObject({
+        result: { view: { phase: "waiting", ref: "braked" } },
+      });
+      expect(await instance.process(responder).savedAlarm()).toBe(down.until);
+      const lifecycle = await facts(instance, "processes/responder:1");
+      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev)).toEqual([]);
+      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
+    },
+    true,
+    true,
+  );
+}, 180_000);
+
+// Private H1 setup stays separate so the existing mail scenarios keep their build and start inputs.
+const checklistWorld = async (
+  test: (fixture: {
+    readonly start: (name: string, program?: string) => Promise<string>;
+    readonly connect: () => ReturnType<typeof wire>;
+  }) => Promise<void>,
+) => {
+  const { FileSystem } = await import("effect");
+  const { localState } = await import("alchemy/State/LocalState");
+  const { build } = await import("./build.ts");
+  const { localInstance } = await import("./local-instance.ts");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.FABRIKA_HOME;
+          process.env.FABRIKA_HOME = home;
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) {
+              delete process.env.FABRIKA_HOME;
+            } else {
+              process.env.FABRIKA_HOME = previous;
+            }
+          }),
+      );
+      yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const wrapper = join(home, "checklist.ts");
+      yield* fs.writeFileString(
+        wrapper,
+        `export { checklist as program } from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+      );
+      const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
+      const key = identity();
+      const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+      const instance = yield* localInstance(built, {
+        home,
+        name: PROJECT,
+        person: PERSON,
+        founder: key.line,
+        window: key.raw,
+        port: held.port,
+      });
+      const scope = yield* Effect.scope;
+      const from: From = {
+        by: key.fingerprint,
+        for: PERSON,
         sentAt: SENT,
         seen: 0,
-      });
-      const rows = await until(
-        "restart or brake",
-        () => facts(instance, "processes/responder:1"),
-        (rows) =>
-          rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+        parent: null,
+        traceId: TRACE,
+        build: built.build,
+      };
+      yield* Effect.promise(() =>
+        test({
+          start: async (name, program = "fabrika/checklist") => {
+            const code = built.programs[program];
+            expect(code).toBeDefined();
+            const started = await Reflect.get(instance.project(PROJECT), "start")(
+              {
+                _tag: "first",
+                id: `start-${name}`,
+                name,
+                code: { program, hash: code!.hash },
+              },
+              from,
+            );
+            return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+          },
+          connect: () =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const tab = "immediate-wake";
+                const socket = yield* Effect.acquireRelease(
+                  Effect.sync(
+                    () =>
+                      new WebSocket(
+                        `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                      ),
+                  ),
+                  (socket) => Effect.sync(() => socket.close()),
+                );
+                return yield* Effect.promise(() => wire(instance, key, tab, socket));
+              }).pipe(Effect.provideService(Scope.Scope, scope)),
+            ),
+        }),
       );
-      down = rows.find((r) => r._tag === "down");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(localState()),
+      Effect.provide(SecureRandom.layerWebCrypto),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+};
 
-      if (down === undefined) {
-        responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
-      }
-    }
-
-    expect(down, "the real restart brake must be reached").toBeDefined();
-    const before = (await facts(instance, "processes/responder:1")).filter((r) => r._tag === "restarted").length;
-    await client.call("process.send", request(requester, "braked"));
-    await client.call("view.open", { pid: other });
-    await client.call("process.send", request(other, "healthy"));
-    await changed(client, "answered");
-    expect(Date.now(), "the independent pair finishes inside the target's real recovery wait").toBeLessThan(down.until);
-    expect((await facts(instance, "processes/responder:1")).filter((r) => r._tag === "restarted")).toHaveLength(before);
-    expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
-    expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
-    expect(await client.call("view.open", { pid: requester })).toMatchObject({
-      result: { view: { phase: "waiting", ref: "braked" } },
+// scenario: H1 checks actual workerd alarm acceptance through the signed client path.
+it("scenario: H1, two checklist adds with an immediate wake both land on the same fresh process", async () => {
+  await checklistWorld(async (fixture) => {
+    const pid = await fixture.start("checklist:866", "fabrika/checklist");
+    const client = await fixture.connect();
+    expect(
+      await client.call("process.send", {
+        pid,
+        letter: "add-first",
+        m: { type: "add", name: "first item" },
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ).toMatchObject({ result: { _tag: "accepted" } });
+    expect(
+      await client.call("process.send", {
+        pid,
+        letter: "add-second",
+        m: { type: "add", name: "second item" },
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ).toMatchObject({ result: { _tag: "accepted" } });
+    expect(await client.call("view.open", { pid })).toMatchObject({
+      result: { view: { items: [{ name: "first item" }, { name: "second item" }], left: 2 } },
     });
-    expect(await instance.process(responder).savedAlarm()).toBe(down.until);
   });
 }, 180_000);
