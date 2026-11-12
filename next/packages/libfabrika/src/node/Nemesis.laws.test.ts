@@ -1,10 +1,12 @@
 // P17b slice 1, next/. Runtime's suite on real SQLite; every connection and folder is scoped.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
-import { expect } from "@effect/vitest";
-import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import { expect, it } from "@effect/vitest";
+import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
+import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Line, lineFor, PAGE } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { inbox, letterLine } from "../processes/Mailbox.ts";
@@ -70,6 +72,42 @@ const restart = (reason: string) =>
   lineFor(from, ProcessEvent.cases.restarted.make({ name, after: process, process: successor, reason, build: "test" }));
 
 const seed = Effect.fnUntraced(function* (sql: Sql, count: number, body: string) {
+  const transaction = yield* LedgerTransaction.pipe(
+    Effect.provide(
+      LedgerTransactionSql.layer(sql).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
+    ),
+  );
+  const processBoundary = yield* transaction.transact((turn) => {
+    let completed = 0;
+    const place = (stream: string, key: string, line: Line, rev: number, pos: number) => {
+      const placed = turn.append(stream, key, line);
+      expect(placed.rev).toBe(rev);
+      expect(placed.pos).toBe(pos);
+      completed++;
+      return placed;
+    };
+
+    for (let i = 0; i < count; i++) {
+      place("unrelated", `other-${i}`, letterLine(from, { unrelated: i }), 2 * i + 1, i + 1);
+      place(inbox(name), `letter-${i}`, letterLine(from, { item: i, body }), 2 * i + 2, i + 1);
+    }
+
+    // A read failure after its first process row is still before this stream's captured head.
+    place(
+      `processes/${name}`,
+      "start-0",
+      lineFor(from, ProcessEvent.cases.started.make({ process, name, program: "fabrika/checklist", hash: "test" })),
+      2 * count + 1,
+      1,
+    );
+    const fact = place(`processes/${name}`, "restart-1", restart("crash"), 2 * count + 2, 2);
+    expect(completed).toBe(2 * count + 2);
+    return fact.rev;
+  });
+  return { boundary: yield* head(sql, inbox(name)), processBoundary };
+}, Effect.orDie);
+
+const singleSeed = Effect.fnUntraced(function* (sql: Sql, count: number, body: string) {
   const ledger = yield* reader(sql);
 
   for (let i = 0; i < count; i++) {
@@ -87,6 +125,61 @@ const seed = Effect.fnUntraced(function* (sql: Sql, count: number, body: string)
   const fact = yield* append(ledger, `processes/${name}`, "restart-1", restart("crash"));
   return { boundary: yield* head(sql, inbox(name)), processBoundary: fact.rev };
 }, Effect.orDie);
+
+const seedCase = Arbitrary.schema(
+  Schema.Struct({
+    count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
+    body: Schema.String.check(Schema.isMaxLength(48)),
+  }),
+).pipe(
+  Arbitrary.map(({ count, body }) => {
+    const state = { index: 0, head: 0, positions: new Map<string, number>() };
+    const rows: Array<{ id: string; stream: string; rev: number; pos: number }> = [];
+    const next = (stream: string, id: string) => {
+      const pos = (state.positions.get(stream) ?? 0) + 1;
+      state.head++;
+      state.positions.set(stream, pos);
+      rows.push({ id, stream, rev: state.head, pos });
+    };
+
+    for (; state.index < count; state.index++) {
+      next("unrelated", `other-${state.index}`);
+      next(inbox(name), `letter-${state.index}`);
+    }
+
+    next(`processes/${name}`, "start-0");
+    next(`processes/${name}`, "restart-1");
+    return { count, body, rows };
+  }),
+);
+
+it.effect.prop(
+  "batched seed matches single appends row for row",
+  [seedCase],
+  ([{ count, body, rows }]) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const openBatched = yield* database;
+        const openSingle = yield* database;
+        const batched = yield* openBatched;
+        const single = yield* openSingle;
+        const batchedHeads = yield* seed(batched, count, body);
+        const singleHeads = yield* singleSeed(single, count, body);
+        const batchedRows = batched.exec("SELECT * FROM entries ORDER BY rev");
+        const singleRows = single.exec("SELECT * FROM entries ORDER BY rev");
+        expect(batchedRows).toEqual(singleRows);
+
+        for (const entries of [batchedRows, singleRows]) {
+          expect(entries).toHaveLength(2 * count + 2);
+          expect(entries.map(({ id, stream, rev, pos }) => ({ id, stream, rev, pos }))).toEqual(rows);
+        }
+
+        expect(batchedHeads).toEqual(singleHeads);
+        expect(batchedHeads).toEqual({ boundary: 2 * count, processBoundary: 2 * count + 2 });
+      }),
+    ),
+  { arbitrary: { seed: 119120, runs: 25 } },
+);
 
 type ServiceOptions = NonNullable<Parameters<NemesisTest.Driver["service"]>[2]>;
 

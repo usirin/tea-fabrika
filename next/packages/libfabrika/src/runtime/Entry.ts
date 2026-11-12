@@ -101,6 +101,7 @@ export class ProgramLoader extends Context.Service<
                 name: loaded.program.name,
                 v: loaded.program.state.v,
                 ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
+                ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
                 writes: Object.fromEntries(
                   Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
                 ),

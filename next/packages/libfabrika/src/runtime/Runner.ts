@@ -538,19 +538,22 @@ export class ProgramRunner extends Context.Service<
           const status = yield* p.status(initial.name);
 
           if (supervision === null) {
-            const policy = yield* Effect.try({
-              try: () => {
-                const wiring = options.policy ?? defaultPolicy;
-                return Schema.decodeUnknownSync(Policy)({
-                  ...wiring,
-                  maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
-                });
-              },
-              catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-            });
             supervision = yield* recovery.load;
 
             if (supervision === null) {
+              const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
+              const policy = yield* Effect.try({
+                try: () => {
+                  const wiring = options.policy ?? defaultPolicy;
+                  return Schema.decodeUnknownSync(Policy)(
+                    loaded.declaration.policy ?? {
+                      ...wiring,
+                      maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
+                    },
+                  );
+                },
+                catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+              });
               supervision = supervisor.init(null, {
                 policy,
                 process: status.state.process,
