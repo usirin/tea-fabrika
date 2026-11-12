@@ -2,6 +2,7 @@
 // The repo's `fabrika-version` is read first. Each file's Struct is derived from the declarations
 // in its scope; a failure is explained at its key, with the line the Toml service gave.
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
@@ -81,20 +82,14 @@ const distance = (a: string, b: string) => {
   return cell(a.length, b.length);
 };
 
-/** A leaf as the file holds it: the JSON codec, with the declaration's words and encoded default. */
-const annotated = (d: Declaration) => {
-  const codec = Schema.toCodecJson(d.schema);
-  return codec.annotate({ description: d.doc, default: Schema.encodeSync(codec)(d.default) });
-};
-
-/** The Struct a file is decoded with: every table and leaf optional, each leaf as JSON. */
+/** The Struct a file is decoded with: every table and leaf optional. */
 const struct = (declarations: ReadonlyArray<Declaration>, depth: number): Schema.Codec<unknown, unknown> =>
   Schema.Struct(
     Object.fromEntries(
       [...new Set(declarations.flatMap((d) => d.segments[depth] ?? []))].map((key) => {
         const below = declarations.filter((d) => d.segments[depth] === key);
         const own = below.find((d) => d.segments.length === depth + 1);
-        return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : annotated(own))];
+        return [key, Schema.optionalKey(own === undefined ? struct(below, depth + 1) : Codec.file(own))];
       }),
     ),
   );

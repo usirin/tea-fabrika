@@ -3,6 +3,7 @@
 // come from the declarations, never from the snapshot's keys, and defaults and releases are
 // derived documentation, never extra settings facts.
 import { Schema } from "effect";
+import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
 import type { Snapshot } from "./Snapshot.ts";
@@ -71,6 +72,12 @@ export const markdown = <A>(group: Setting.Group<A>) =>
         `| Environment | ${code(d.env)} |`,
         `| Flag | ${code(`--${d.path}`)} |`,
         `| Default | ${code(JSON.stringify(encoded(d)))} |`,
+        ...(d.format === "text"
+          ? [
+              `| File default | ${code(JSON.stringify(Schema.encodeSync(Codec.file(d))(d.default)))} |`,
+              "| File input | Text, using the spelling shown by the file default. Recorded values use JSON. |",
+            ]
+          : []),
         `| Reload | ${d.reload} |`,
         `| Since | ${d.since} |`,
         "",
