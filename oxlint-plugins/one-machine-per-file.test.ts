@@ -1,7 +1,9 @@
 // Decision 0046's syntax laws. Generated code is tested through oxlint's public RuleTester;
 // config and real-file copies go through the same lint command as the exam.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -302,14 +304,56 @@ it("scenario: L5 each real file copy refuses one added second export", async () 
   }
 });
 
-it("scenario: L5 lint.ts over next/ and .agents/ has zero hits for this rule", () => {
-  // This is the real tree count; other rules keep their own verdicts.
-  const out = spawnSync(process.execPath, ["oxlint-plugins/lint.ts", "next/", ".agents/"], {
-    cwd: new URL("../", import.meta.url),
-    encoding: "utf8",
-  });
-  expect(out.error).toBeUndefined();
-  expect([0, 1]).toContain(out.status);
-  expect(out.stdout).toMatch(/oxlint: \d+ blocking/);
-  expect(out.stdout.split("\n").filter((line) => line.includes(CODE))).toEqual([]);
+it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
+  // L4 checks the real config's scope. This count runs only this rule, with the same fixture exemptions.
+  const root = join(import.meta.dirname, "..");
+  const scratch = mkdtempSync(join(tmpdir(), "t509-machine-"));
+  const config = join(scratch, ".oxlintrc.json");
+
+  try {
+    writeFileSync(
+      config,
+      JSON.stringify({
+        jsPlugins: [join(root, "oxlint-plugins/index.ts")],
+        categories: { correctness: "off" },
+        rules: { "fabrika/one-machine-per-file": "error" },
+        overrides: [
+          {
+            files: [
+              "next/**/*.test.ts",
+              "next/**/*.test.tsx",
+              "next/**/*Test.ts",
+              "next/**/*.test-support.ts",
+              ".agents/**/*.test.ts",
+            ].map((pattern) => join(root, pattern)),
+            rules: { "fabrika/one-machine-per-file": "off" },
+          },
+        ],
+      }),
+    );
+    const out = spawnSync(
+      join(root, "node_modules/.bin/oxlint"),
+      [
+        `--config=${config}`,
+        "--disable-nested-config",
+        "--no-ignore",
+        "--format=json",
+        "--threads=1",
+        "next/",
+        ".agents/",
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
+    );
+    expect(out.error).toBeUndefined();
+    expect(out.status).toBe(0);
+    const report: { number_of_files: number; diagnostics: Array<{ code?: string; filename: string }> } = JSON.parse(
+      out.stdout,
+    );
+    expect(report.number_of_files).toBeGreaterThan(0);
+    const hits = report.diagnostics.filter((d) => d.code === CODE);
+    console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length }));
+    expect(hits).toEqual([]);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
