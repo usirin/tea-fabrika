@@ -36,6 +36,7 @@ import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { Alarm, CheckedWriter, Recording, WatcherManager, type Incoming } from "../runtime/Entry.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
+import { ProgramDown } from "../runtime/Program.ts";
 import type { Descriptor, Sent } from "../runtime/Runner.ts";
 import { defaultPolicy, ProgramRunner } from "../runtime/Runner.ts";
 import { type Sql } from "../Sql.ts";
@@ -846,7 +847,13 @@ const processLogic = Effect.fnUntraced(function* (
     saved,
     {
       load: (name) =>
-        Effect.suspend(() => loader.load(name, active, bindTail(ctx, { project, name: saved.name, process: active }))),
+        Effect.gen(function* () {
+          const process = active;
+          const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
+            Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+          );
+          return yield* loader.load(name, process, tail);
+        }),
     },
     { policy: defaultPolicy, recovery: { sql, name: saved.name, capacity: 1024 ** 3 } },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
@@ -855,10 +862,14 @@ const processLogic = Effect.fnUntraced(function* (
   const attributed = <A, E>(work: Effect.Effect<A, E>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
   return {
-    usage: Effect.fn("process.usage")(function* (rows: unknown) {
-      const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
-      yield* IsolateUsage.record(usage);
-    }, Effect.provideContext(services)),
+    usage: Effect.fnUntraced(
+      function* (rows: unknown) {
+        const usage = yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(rows);
+        yield* IsolateUsage.record(usage);
+      },
+      Effect.withSpan("process.usage"),
+      Effect.provideContext(services),
+    ),
     msg: (input: unknown) => {
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.

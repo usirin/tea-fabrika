@@ -39,6 +39,13 @@ no sink of its own. It never reads exception messages, stacks or log lines, and 
 step does not wait for delivery. The measurement must compare calls and rows to count loss
 or duplicate delivery.
 
+The receiving object's services enclose `process.usage` itself, so both a decoded batch and
+a rejected batch leave that call's span. The tail callback runs through Alchemy's Worker bridge,
+which supplies the invocation's props. Alchemy also creates the loopback tail binding and wraps
+the usage RPC. The trace adapter takes Alchemy's tail event type. The existing loader still
+accepts native code options; the bound Alchemy fetcher's `raw` is passed only at that old boundary.
+The host must validate this wiring, including a failed usage call's saved span.
+
 ## Measurement still owed on the host
 
 The box cannot open the local instance's ports. No load, fixture run or calibration sample
@@ -59,6 +66,10 @@ weakening the law.
 Keep the measurement script on a separate branch, proposed name `p34c-walls-measurement`.
 That branch and script have **not yet been created**. They must not enter main. The host run
 needs the following work, using the built program and the existing local-instance test setup:
+
+The approved build paths include only this write-up and its index, with no measurement script
+path. Creating `experiments/276-p34c-walls.ts` on that separate branch needs the lead to add it to
+the plan. The script is still owed; this checklist is not an executable measurement.
 
 1. Build the checklist and two fixtures. One throws on a chosen message for restart timing;
    one spins a fixed loop and also accepts an idle message. Acquire the instance, homes,
