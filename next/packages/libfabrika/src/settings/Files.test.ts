@@ -194,7 +194,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
               person: Sources.file(PERSON, files.person.document),
             });
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(JSON.stringify(saved));
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
             const checked = yield* Snapshot.read(group, transported);
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
           }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
