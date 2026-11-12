@@ -189,7 +189,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           ),
           Effect.exit,
         );
-        yield* flush.pipe(
+        const delivery = yield* flush.pipe(
           Effect.timeoutOrElse({
             duration: Math.max(0, deadline - (yield* Clock.currentTimeMillis)),
             orElse: () => Effect.fail(operation("cleanup", "record delivery deadline")),
@@ -215,7 +215,14 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               );
             }),
           ),
+          Effect.exit,
         );
+
+        if (Exit.isFailure(exit)) {
+          return yield* exit;
+        }
+
+        yield* delivery;
         return yield* exit;
       }),
     );

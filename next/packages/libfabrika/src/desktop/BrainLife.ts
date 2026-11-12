@@ -155,8 +155,19 @@ const issue = (m: Active, type: Command["type"], allocated?: typeof Id.Cmd.Type)
   return [{ ...m, sequence, pending: { type: pending.type, id: pending.id } }, [pending]];
 };
 
-const error = (m: Model, msg: Extract<Msg, { error: unknown }>): Cell =>
-  matches(m, msg.cmd) ? fail(m, msg.error._tag) : [m, []];
+type Reply = Extract<Msg, { cmd: unknown }>;
+
+const reply =
+  <T extends Reply["type"]>(type: T, handle: (m: Active, msg: Extract<Reply, { type: T }>) => Cell) =>
+  (m: Model, msg: Extract<Reply, { type: T }>): Cell => {
+    if (msg.type !== type || !matches(m, msg.cmd)) {
+      return [m, []];
+    }
+
+    return msg.at >= m.deadline ? fail(m, "Timeout") : handle(m, msg);
+  };
+
+const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell => fail(m, msg.error._tag);
 
 /**
  * Creates the machine for startup, ownership, deadlines and confirmed shutdown.
@@ -213,11 +224,7 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           msg.next,
         );
       },
-      inspect_ok: (m, msg) => {
-        if (!matches(m, msg.cmd)) {
-          return [m, []];
-        }
-
+      inspect_ok: reply("inspect_ok", (m, msg) => {
         if (msg.value._tag === "loaded" && !BrainSpec.matches(spec, msg.value)) {
           return fail(m, "Conflict");
         }
@@ -245,45 +252,46 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
         return m.purpose === "bootstrap"
           ? fail(m, "Operation", "start")
           : issue(Model.cases.installing.make(up(m)), "install", msg.next);
-      },
-      install_ok: (m, msg) =>
-        matches(m, msg.cmd) && m._tag === "installing"
+      }),
+      install_ok: reply("install_ok", (m, msg) =>
+        m._tag === "installing"
           ? issue(Model.cases.starting.make({ ...up(m), result: "started" }), "start", msg.next)
           : [m, []],
-      start_ok: (m, msg) =>
-        matches(m, msg.cmd) && m._tag === "starting"
-          ? issue(Model.cases.waiting_ready.make(up(m)), "ready", msg.next)
-          : [m, []],
-      start_err: (m, msg) =>
-        matches(m, msg.cmd) && m._tag === "starting"
+      ),
+      start_ok: reply("start_ok", (m, msg) =>
+        m._tag === "starting" ? issue(Model.cases.waiting_ready.make(up(m)), "ready", msg.next) : [m, []],
+      ),
+      start_err: reply("start_err", (m, msg) =>
+        m._tag === "starting"
           ? issue(Model.cases.inspecting.make({ ...flow(m), purpose: "bootstrap" }), "inspect", msg.next)
           : [m, []],
-      ready_ok: (m, msg) =>
-        !matches(m, msg.cmd) || m._tag !== "waiting_ready"
+      ),
+      ready_ok: reply("ready_ok", (m, msg) =>
+        m._tag !== "waiting_ready"
           ? [m, []]
           : msg.value._tag === "ready"
             ? [Model.cases.online.make({ sequence: m.sequence, result: m.result }), []]
             : again(m, msg.at),
-      stop_ok: (m, msg) =>
-        matches(m, msg.cmd) && m._tag === "stopping"
-          ? issue(Model.cases.confirming_absence.make(down(m)), "inspect", msg.next)
-          : [m, []],
-      cleanup_ok: (m, msg) =>
-        !matches(m, msg.cmd) || m._tag !== "checking_children"
+      ),
+      stop_ok: reply("stop_ok", (m, msg) =>
+        m._tag === "stopping" ? issue(Model.cases.confirming_absence.make(down(m)), "inspect", msg.next) : [m, []],
+      ),
+      cleanup_ok: reply("cleanup_ok", (m, msg) =>
+        m._tag !== "checking_children"
           ? [m, []]
           : msg.value._tag === "gone"
             ? issue(Model.cases.removing.make(down(m)), "remove", msg.next)
             : again(m, msg.at),
-      remove_ok: (m, msg) =>
-        matches(m, msg.cmd) && m._tag === "removing"
-          ? [Model.cases.stopped.make({ sequence: m.sequence }), []]
-          : [m, []],
-      inspect_err: error,
-      install_err: error,
-      stop_err: error,
-      ready_err: error,
-      cleanup_err: error,
-      remove_err: error,
+      ),
+      remove_ok: reply("remove_ok", (m) =>
+        m._tag === "removing" ? [Model.cases.stopped.make({ sequence: m.sequence }), []] : [m, []],
+      ),
+      inspect_err: reply("inspect_err", error),
+      install_err: reply("install_err", error),
+      stop_err: reply("stop_err", error),
+      ready_err: reply("ready_err", error),
+      cleanup_err: reply("cleanup_err", error),
+      remove_err: reply("remove_err", error),
     },
   });
 };
