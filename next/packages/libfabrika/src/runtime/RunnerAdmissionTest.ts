@@ -2,7 +2,7 @@ import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -16,7 +16,7 @@ import { defaultPolicy, supervisor, Supervision } from "./internal/supervisor.ts
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
-import { capture, nth, unleaked } from "./RepliesTest.ts";
+import { capture, nth } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 
@@ -77,6 +77,39 @@ type Move =
 type Answered = { readonly input: Incoming; readonly first: Sent };
 
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
+
+const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
+
+// SQL columns and span fields can hold another JSON document.
+const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (typeof value === "string") {
+    const prior = cache.get(value);
+
+    if (prior !== undefined) {
+      return prior;
+    }
+
+    const decoded = decodeText(value);
+    const result = [
+      value,
+      ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
+      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+        Result.getOrElse(
+          Result.try(() => decodeURIComponent(decodeURIComponent(url))),
+          () => url,
+        ),
+      ),
+    ];
+    cache.set(value, result);
+    return result;
+  }
+
+  return Array.isArray(value)
+    ? value.flatMap((part) => texts(part, cache))
+    : value !== null && typeof value === "object"
+      ? Object.values(value).flatMap((part) => texts(part, cache))
+      : [];
+};
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {
   const files = yield* harness.files;
@@ -250,6 +283,7 @@ const walk = Effect.fnUntraced(function* (
 ) {
   const open = yield* harness.files;
   const writes: Array<string> = [];
+  const decoded = new Map<string, ReadonlyArray<string>>();
   const errors: Array<string> = [];
   const refusedBodies: Array<string> = [];
   const answers: Array<Answered> = [];
@@ -527,7 +561,17 @@ const walk = Effect.fnUntraced(function* (
     const records = raw
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
       .flatMap(({ name }) => raw.exec(`SELECT * FROM "${name}"`));
-    unleaked([...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()], refusedBodies);
+    const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
+      (output) => texts(output, decoded),
+    );
+
+    for (const body of refusedBodies) {
+      const forms = [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body), body.slice(0, 14)];
+      expect(
+        outputs.filter((output) => forms.some((form) => output.includes(form))),
+        "input text leaked",
+      ).toEqual([]);
+    }
   });
 
   for (const cell of tape) {

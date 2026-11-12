@@ -30,6 +30,39 @@ const SENT = "2026-11-08T04:00:00.000Z";
 const Input = Schema.TaggedUnion({ comment: { text: Schema.String } });
 const text = fc.string({ minLength: 1, maxLength: 100 });
 
+const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
+
+// SQL columns and span fields can hold another JSON document.
+const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (typeof value === "string") {
+    const prior = cache.get(value);
+
+    if (prior !== undefined) {
+      return prior;
+    }
+
+    const decoded = decodeText(value);
+    const result = [
+      value,
+      ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
+      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+        Result.getOrElse(
+          Result.try(() => decodeURIComponent(decodeURIComponent(url))),
+          () => url,
+        ),
+      ),
+    ];
+    cache.set(value, result);
+    return result;
+  }
+
+  return Array.isArray(value)
+    ? value.flatMap((part) => texts(part, cache))
+    : value !== null && typeof value === "object"
+      ? Object.values(value).flatMap((part) => texts(part, cache))
+      : [];
+};
+
 const hex = (bytes: number) =>
   fc.uint8Array({ minLength: bytes, maxLength: bytes }).map((a) => `1${Buffer.from(a).toString("hex").slice(1)}`);
 
@@ -283,6 +316,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
               const tracer = capture(yield* Tracer.Tracer);
               const history: Array<{ id: string; body: string }> = [];
               const bodies: Array<string> = [];
+              const decoded = new Map<string, ReadonlyArray<string>>();
 
               for (const [n, pick] of tape.entries()) {
                 const moves =
@@ -361,22 +395,12 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                 );
                 const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
-                  (output) => [
-                    output,
-                    ...Array.from(output.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
-                      Result.getOrElse(
-                        Result.try(() => decodeURIComponent(decodeURIComponent(url))),
-                        () => url,
-                      ),
-                    ),
-                  ],
+                  (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
                   for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
-                    for (const output of outputs) {
-                      expect(output).not.toContain(form);
-                    }
+                    expect(outputs.filter((output) => output.includes(form))).toEqual([]);
                   }
                 }
 
