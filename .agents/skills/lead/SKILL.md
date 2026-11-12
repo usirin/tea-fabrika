@@ -507,8 +507,10 @@ visible, and never weaken the rules to hide this message.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
-   A pure addition needs no replacement row. `loosening.sh` fails closed: any exam-file change
-   other than purely new tests or a rename listed in the mapping table is a hit. A pattern parser
+   A pure addition needs no replacement row. A file the PR adds gives no hit: a new file has no
+   older law to loosen. A renamed or copied file is not an added file, and is read as before.
+   For every other file `loosening.sh` fails closed: any exam-file change other than a rename
+   listed in the mapping table is a hit. A pattern parser
    cannot cover every TypeScript form, so it names forms it knows but never clears a change it
    does not understand.
    Missing replacements, muted tests, removed assertions, fewer runs and tighter generated ranges

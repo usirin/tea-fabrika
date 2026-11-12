@@ -396,6 +396,7 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-question-word-key",
       "no-wall-clock",
       "one-machine-per-file", // scoped plant and blocking check below
+      "isolate-boundary", // scoped platform-name plant below
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
     ];
@@ -435,6 +436,13 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
   }
 
   expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
+});
+
+// scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.
+it("scenario: the isolate-boundary rule refuses a platform type outside cloudflare/", async () => {
+  const file = "next/packages/libfabrika/src/runtime/usage.ts";
+  const result = await lintCopies({ [file]: "export type Usage = TraceItem;\n" });
+  expect(result("fabrika(isolate-boundary)", file)).toEqual([1]);
 });
 
 describe("lint.ts, the first step of pnpm lint", () => {

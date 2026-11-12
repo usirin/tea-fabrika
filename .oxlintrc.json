@@ -780,6 +780,7 @@
       // override replaces a rule's whole list, so this one repeats the five question words (0081).
       "files": ["next/**/*"],
       "rules": {
+        "fabrika/isolate-boundary": "error",
         "eslint/id-denylist": [
           "error",
           "where",
