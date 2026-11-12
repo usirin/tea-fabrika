@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect } from "@effect/vitest";
-import { Context, Effect, FileSystem, Layer, Path, Stream } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { type Line, lineFor, PAGE } from "../ledger/Log.ts";
@@ -14,6 +14,10 @@ import { Nemesis } from "../runtime/Nemesis.ts";
 import * as NemesisLedger from "../runtime/NemesisLedger.ts";
 import * as NemesisTest from "../runtime/NemesisTest.ts";
 import type { Sql } from "../Sql.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
+import { Chain, PROCESS } from "../telemetry/Trace.ts";
 
 const database: NemesisTest.Database = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -143,6 +147,26 @@ NemesisTest.suite({
   head,
   service,
   page: PAGE,
+  telemetry: Effect.fnUntraced(function* (sql, process) {
+    const context = yield* Layer.build(SpanSink.layer(sql, { object: "chaos-test" }));
+    const sink = Context.get(context, SpanSink);
+    const tracer = Context.get(context, Tracer.Tracer);
+    return {
+      trace: <A, E, R>(work: Effect.Effect<A, E, R>) =>
+        work.pipe(Effect.withSpan("chaos.test", { attributes: { [PROCESS]: process } }), Effect.withTracer(tracer)),
+      read: Effect.gen(function* () {
+        const records = RecordManager.sql(() => sql, 1024 ** 3);
+        yield* sink.flush.pipe(Effect.provide(Layer.merge(records, Archive.memory)));
+        const rows = yield* RecordManager.use((manager) =>
+          Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
+        ).pipe(Effect.provide(records));
+        const health = sql
+          .exec("SELECT * FROM measurements")
+          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+        return { rows, health };
+      }).pipe(Effect.orDie),
+    };
+  }),
   damage: (sql, key, kind) => {
     if (kind === "json" || kind === "body") {
       sql.exec(

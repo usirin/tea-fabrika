@@ -3,14 +3,10 @@
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
-import { Archive } from "../telemetry/Archive.ts";
-import { RecordManager } from "../telemetry/Records.ts";
-import { SpanSink } from "../telemetry/Sink.ts";
-import { Chain, PROCESS } from "../telemetry/Trace.ts";
 import * as Chaos from "./Chaos.ts";
 import { BadRow, BadTarget, Nemesis, NemesisError, NotGranted, Off, Storage, Unreachable } from "./Nemesis.ts";
 import * as NemesisNone from "./NemesisNone.ts";
@@ -57,6 +53,25 @@ export type Driver = {
   ) => Effect.Effect<Service, never, Scope.Scope>;
   readonly page: number;
   readonly damage: (sql: Sql, key: string, kind: "json" | "body" | "zero" | "negative" | "fraction") => void;
+  readonly telemetry: (
+    sql: Sql,
+    process: string,
+  ) => Effect.Effect<
+    {
+      readonly trace: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+      readonly read: Effect.Effect<{
+        readonly rows: ReadonlyArray<{
+          readonly name: string;
+          readonly attributes: unknown;
+          readonly events: ReadonlyArray<unknown>;
+          readonly links: ReadonlyArray<unknown>;
+        }>;
+        readonly health: ReadonlyArray<unknown>;
+      }>;
+    },
+    never,
+    Scope.Scope
+  >;
 };
 
 const integer = (minimum: number, maximum: number) =>
@@ -120,7 +135,7 @@ const noLeak = (output: unknown, secret: string, name = "output") => {
   }
 };
 
-export const suite = ({ database, service, seed, head, page: PAGE, damage: corrupt }: Driver) =>
+export const suite = ({ database, service, seed, head, page: PAGE, damage: corrupt, telemetry }: Driver) =>
   describe("P17b history and off contract, next/", () => {
     it.effect.prop(
       "Off refuses both operations with its own nested typed error",
@@ -340,9 +355,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             const open = yield* database;
             const sql = yield* open;
             yield* seed(sql, 3, body);
-            const telemetry = yield* Layer.build(SpanSink.layer(sql, { object: "chaos-test" }));
-            const sink = Context.get(telemetry, SpanSink);
-            const tracer = Context.get(telemetry, Tracer.Tracer);
+            const recording = yield* telemetry(sql, process);
             const live = yield* service(sql, () =>
               refuse
                 ? Effect.fail(new NemesisError({ reason: new BadTarget({ cause: new Error(errorText) }) }))
@@ -364,19 +377,12 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
 
               const offCheck = yield* failed(off.check(binding), "Off");
               return { report, answers, offFire, offCheck };
-            }).pipe(Effect.withSpan("chaos.test", { attributes: { [PROCESS]: process } }), Effect.withTracer(tracer));
+            }).pipe(recording.trace);
             // The operation spans have ended before flush. These are stored JobRecord rows, not a spy.
-            const records = RecordManager.sql(() => sql, 1024 ** 3);
-            yield* sink.flush.pipe(Effect.provide(Layer.merge(records, Archive.memory)));
-            const rows = yield* RecordManager.use((manager) =>
-              Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
-            ).pipe(Effect.provide(records));
+            const { rows, health } = yield* recording.read;
             const own = rows.filter((row) => /nemesis/i.test(row.name));
             expect(own.filter((row) => /fire/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
             expect(own.filter((row) => /check/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
-            const health = sql
-              .exec("SELECT * FROM measurements")
-              .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
             expect(health.length).toBeGreaterThanOrEqual(4);
 
             // Each named output is visited separately; an empty list cannot stand in for stored spans.
