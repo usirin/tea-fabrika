@@ -35,7 +35,14 @@ vi.mock("./door.ts", () => ({
   },
 }));
 
-const settings = { name: "fabrika", person: "person", founder: "founder", window: null, port: 8123, build: "b" };
+const settings = {
+  name: "fabrika",
+  person: "person",
+  founder: "founder",
+  window: null,
+  port: 8123,
+  build: "b",
+};
 
 const decode = (env: unknown): ReturnType<typeof decodeSettings> => Reflect.apply(decodeSettings, undefined, [env]);
 

@@ -2,6 +2,7 @@
 # Today's tooling: compare exam content at two local refs. No checkout or network.
 # Fail closed: a pattern parser cannot cover every form TypeScript can write.
 # Additions to an existing test file are a hit for the lead's hand check: added code there can reach old laws' state.
+# A file the range adds gives no hit: a new file has no older law to loosen.
 # A hit goes to the lead's hand check, with the hit list in the PR.
 # Only real loosening waits on the owner.
 set -eu
@@ -10,7 +11,8 @@ set -eu
 usage: loosening.sh <base> <head> [mapping.md]
 Fail closed: a pattern parser cannot cover every form TypeScript can write.
 All additions to an existing test file are a hit for the lead's hand check: added code there can reach old laws' state.
-A new test file can still touch the filesystem or the process outside the file.
+A file the range adds gives no hit: a new file has no older law to loosen.
+A renamed or copied file is not an added file: it is read as before.
 A hit goes to the lead's hand check, with the hit list in the PR.
 Only real loosening waits on the owner.
 Exit 0: no hits; 1: hits; 2: operating error or bad arguments.
@@ -331,6 +333,10 @@ try:
     for ref in (base, head): git("rev-parse", "--verify", f"{ref}^{{commit}}")
     paths = [p.decode(errors="surrogateescape") for p in git("diff", "--name-only", "-z", "--no-renames", base, head, "--").split(b"\0") if p]
     unsafe = {p for p in paths if any(unicodedata.category(c) in ("Cc", "Cs") for c in p)}
+    # The files the range adds. Rename and copy detection is on here (-C implies -M), so the new
+    # path of a renamed or copied file has status R or C, is not in this set, and is read as before.
+    # `paths` above keeps --no-renames, so a rename's old path is still read as a deleted file.
+    added = {p.decode(errors="surrogateescape") for p in git("diff", "--name-only", "-z", "-C", "--diff-filter=A", base, head, "--").split(b"\0") if p}
     selected_paths = set(unsafe)
     with tempfile.TemporaryDirectory(prefix="exam-lists-") as temporary:
         for ref in (base, head):
@@ -365,6 +371,9 @@ try:
         prior, current = (t.get(file) for t in trees)
         left, right = raw[file]
         regular = lambda entry: entry is not None and entry[0] in ("100644", "100755") and entry[1] == "blob"
+        # A regular file the range adds has no older law to loosen: no hit. It stays in `records`,
+        # so a law that moved into it from an old file is still found and compared from that file.
+        if file in added and file not in unsafe and prior is None and regular(current): continue
         # An embedded test sample is still a change to a non-test exam file.
         test_file = re.search(r"\.(?:test|spec)\.[cm]?[jt]sx?$", file)
         clear = file not in unsafe and regular(current) and (

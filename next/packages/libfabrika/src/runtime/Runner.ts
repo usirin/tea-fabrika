@@ -51,6 +51,7 @@ import {
 import { InputId } from "../Id.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import * as Chaos from "./Chaos.ts";
 import {
   Alarm,
   CheckedWriter,
@@ -72,6 +73,7 @@ import { recoveryStore } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
 import { Queued, SendInput } from "./Send.ts";
+import { StepFault } from "./StepFault.ts";
 
 export { defaultPolicy, Supervision } from "./internal/supervisor.ts";
 
@@ -227,6 +229,7 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
+        const stepFault = yield* Effect.serviceOption(StepFault);
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
@@ -537,19 +540,22 @@ export class ProgramRunner extends Context.Service<
           const status = yield* p.status(initial.name);
 
           if (supervision === null) {
-            const policy = yield* Effect.try({
-              try: () => {
-                const wiring = options.policy ?? defaultPolicy;
-                return Schema.decodeUnknownSync(Policy)({
-                  ...wiring,
-                  maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
-                });
-              },
-              catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-            });
             supervision = yield* recovery.load;
 
             if (supervision === null) {
+              const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
+              const policy = yield* Effect.try({
+                try: () => {
+                  const wiring = options.policy ?? defaultPolicy;
+                  return Schema.decodeUnknownSync(Policy)(
+                    loaded.declaration.policy ?? {
+                      ...wiring,
+                      maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
+                    },
+                  );
+                },
+                catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+              });
               supervision = supervisor.init(null, {
                 policy,
                 process: status.state.process,
@@ -647,7 +653,18 @@ export class ProgramRunner extends Context.Service<
           }
 
           yield* store.activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }));
-          const result = yield* Effect.suspend(f).pipe(Effect.exit);
+          const result = yield* Effect.gen(function* () {
+            if (Option.isSome(stepFault)) {
+              yield* stepFault.value.before({
+                name: process.name,
+                process: process.id,
+                letter,
+                phase: reason === "step" ? "fresh" : "saved",
+              });
+            }
+
+            return yield* Effect.suspend(f);
+          }).pipe(Effect.exit);
           const j = supervision?.journal;
 
           if (j !== undefined && result._tag === "Failure") {
@@ -1531,6 +1548,20 @@ export class ProgramRunner extends Context.Service<
             // The port's schema runs inside the box; Schemas do not cross its RPC (P12).
             if (!(yield* state.loaded.execution.admit(m))) {
               return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
+            }
+
+            // Only the host knows this process's trusted binding; a target literal cannot prove it.
+            if (process.program === "fabrika/chaos") {
+              const start = Schema.decodeUnknownOption(
+                Schema.Struct({ type: Schema.Literal("start"), ...Chaos.Start.fields }),
+              )(m);
+
+              if (
+                Option.isSome(start) &&
+                (start.value.target.name === process.name || start.value.target.process === process.id)
+              ) {
+                return { answer: Sent.cases.refused.make({ reason: "bad_target" }), jobs: [] };
+              }
             }
 
             if (supervision !== null && !supervision.receipts.some((r) => r.letter === input.id)) {

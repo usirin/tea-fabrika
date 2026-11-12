@@ -66,7 +66,7 @@ export type Loaded = {
 };
 
 /** The one Cmd that only the chaos program may run (P17, P27). */
-const CHAOS_ONLY: Readonly<Record<string, string>> = { fire: "chaos" };
+const CHAOS_ONLY: Readonly<Record<string, string>> = { fire: "fabrika/chaos" };
 
 /** The Cmd the runner performs itself (P41): no caller-supplied handler ever runs it. */
 const BUILT_IN = new Set(["send"]);
@@ -76,7 +76,7 @@ export class ProgramLoader extends Context.Service<
   { readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown> }
 >()("@kampus/libfabrika/runtime/Entry.ProgramLoader") {
   /** The in-process loader, for Node: each program's declaration, decoded when it is loaded, and
-   *  the handlers its Cmds may use. A handler names its Cmd; `fire` runs only for `chaos`. */
+   *  the handlers its Cmds may use. A handler names its Cmd; `fire` runs only for `fabrika/chaos`. */
   static readonly layer = <R = never>(
     programs: Readonly<Record<string, unknown>>,
     handlers: Readonly<Record<string, Handler<R>>>,
@@ -101,6 +101,7 @@ export class ProgramLoader extends Context.Service<
                 name: loaded.program.name,
                 v: loaded.program.state.v,
                 ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
+                ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
                 writes: Object.fromEntries(
                   Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
                 ),

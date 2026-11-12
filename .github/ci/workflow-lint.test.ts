@@ -102,11 +102,11 @@ const valid = (label: string, extra: string) => ({
     next: {
       needs: "changes",
       if: guard("next"),
-      "timeout-minutes": 10,
+      "timeout-minutes": 17,
       strategy: { "fail-fast": false, matrix: { shard: [1, 2, 3, 4, 5, 6] } },
       steps: [
         {
-          run: 'pnpm exec vitest run next/ --shard "$SHARD"',
+          run: 'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"',
           env: { SHARD: `\${{ matrix.shard }}/6` },
         },
         {
@@ -124,6 +124,7 @@ const valid = (label: string, extra: string) => ({
           run: 'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
         },
         { run: "pnpm install --frozen-lockfile" },
+        { name: "shard times", if: "!cancelled()", run: 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"' },
       ],
     },
     e2e: {
@@ -184,6 +185,8 @@ const wiring = fc
       for (const step of clean.jobs.next.steps.slice(1, 4)) {
         step.if = `\${{${gap}${step.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
       }
+
+      clean.jobs.next.steps[5]!.if = `\${{${gap}!cancelled()${gap}}}`;
     }
 
     return clean;
@@ -317,7 +320,7 @@ const plants: [string, (workflow: Workflow) => void][] = [
     `next ${fault} install`,
     (w) => {
       if (fault === "missing") {
-        w.jobs.next.steps.pop();
+        w.jobs.next.steps.splice(4, 1);
       } else {
         w.jobs.next.steps.push({ ...w.jobs.next.steps[4]! });
       }
@@ -426,6 +429,43 @@ const plants: [string, (workflow: Workflow) => void][] = [
       w.jobs.next.steps.push({ ...w.jobs.next.steps[0]! });
     },
   ],
+  ...[
+    " --reporter=verbose",
+    " --reporter=json",
+    " --reporter=github-actions",
+    ' --outputFile.json="$RUNNER_TEMP/next.json"',
+  ].map((flag): [string, (w: Workflow) => void] => [
+    `next loses ${flag}`,
+    (w) => {
+      const step = w.jobs.next.steps[0]!;
+      step.run = step.run.replace(flag, "");
+    },
+  ]),
+  ...["missing", "duplicate", "before tests", "wrong report"].map((fault): [string, (w: Workflow) => void] => [
+    `next timing advice ${fault}`,
+    (w) => {
+      const advice = w.jobs.next.steps[5]!;
+
+      if (fault === "missing") {
+        w.jobs.next.steps.splice(5, 1);
+      } else if (fault === "duplicate") {
+        w.jobs.next.steps.push({ ...advice });
+      } else if (fault === "before tests") {
+        w.jobs.next.steps.splice(5, 1);
+        w.jobs.next.steps.unshift(advice);
+      } else {
+        advice.run = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/other.json"';
+      }
+    },
+  ]),
+  ...["", "success()", "always()", "false", "matrix.shard == 1 && !cancelled()"].map(
+    (condition): [string, (w: Workflow) => void] => [
+      `next timing advice condition ${condition || "absent"}`,
+      (w) => {
+        w.jobs.next.steps[5]!.if = condition;
+      },
+    ],
+  ),
   ...[" --changed main", " --passWithNoTests", " file.test.ts"].map((suffix): [string, (w: Workflow) => void] => [
     suffix,
     (w) => {

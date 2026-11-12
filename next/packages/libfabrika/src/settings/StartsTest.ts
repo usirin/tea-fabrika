@@ -94,6 +94,9 @@ export interface Input {
   readonly mail?: { readonly grants: Readonly<Record<string, ReadonlyArray<string>>> };
 }
 
+// T843's test policy: every start fixture names it, so no test start leans on the declared default.
+export const rateLimit = { limit: 100_000, window: 60_000 };
+
 export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<Input, never, Digest.Digest> {
   const origin =
     r.origin === "flag"
@@ -104,8 +107,13 @@ export const input = Effect.fnUntraced(function* (r: Recipe): Effect.fn.Return<I
           ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
           : Origin.cases.default.make({});
   const settings = yield* Snapshot.make(Declarations.all, {
-    values: { port: r.port, version: "0.0.0" },
-    origins: { "instance.port": origin, "fabrika-version": Origin.cases.default.make({}) },
+    values: { port: r.port, version: "0.0.0", gatewayLimit: rateLimit.limit, gatewayWindow: rateLimit.window },
+    origins: {
+      "instance.port": origin,
+      "fabrika-version": Origin.cases.default.make({}),
+      "gateway.limit": Origin.cases.flag.make({ name: "--gateway.limit" }),
+      "gateway.window": Origin.cases.flag.make({ name: "--gateway.window" }),
+    },
   });
   return {
     settings,

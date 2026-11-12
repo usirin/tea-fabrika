@@ -99,8 +99,11 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
   visit(parseSync("brain.mjs", source).program);
   assert.equal(ranges.length, 1, "plant must reach exactly one real loader policy");
   const at = ranges[0]!;
+  // An empty spread removes the policy without leaving a spare comma before the tail options.
   const changed =
-    source.slice(0, at.start) + (mode === "binding" ? JSON.stringify({ [name]: value }) : "") + source.slice(at.end);
+    source.slice(0, at.start) +
+    (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
+    source.slice(at.end);
   assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
   return changed;
 };

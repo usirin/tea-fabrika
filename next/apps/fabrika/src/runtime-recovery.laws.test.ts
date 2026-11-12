@@ -458,6 +458,7 @@ const world = (
   const key = identity(),
     db = new DatabaseSync(":memory:");
   const handles = storage(db);
+  const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
@@ -485,6 +486,7 @@ const world = (
         },
       },
     },
+    exports: loopbacks,
   } as unknown as DurableObjectState;
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
@@ -634,7 +636,7 @@ const world = (
             },
           });
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
-          const processCtx = { id: { name }, storage: handles } as unknown as DurableObjectState;
+          const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const created: Entry = {
             db: processDb,
             ctx: processCtx,

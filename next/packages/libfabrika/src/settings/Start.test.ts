@@ -16,6 +16,8 @@ describe("instance start envelope, next/", () => {
       Effect.gen(function* () {
         expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
           "fabrika-version",
+          "gateway.limit",
+          "gateway.window",
           "instance.port",
         ]);
         const base = yield* StartsTest.input(recipe);

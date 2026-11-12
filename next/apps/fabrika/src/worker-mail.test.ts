@@ -9,6 +9,7 @@ import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -66,7 +67,7 @@ const identity = () => {
 type Key = ReturnType<typeof identity>;
 
 // The fixtures use the same Send/ref exchange as slice 1. Source is bundled by the real app build.
-const source = (role: "requester" | "responder", pair: number) => `
+const source = (role: "requester" | "responder", pair: number, braked = false) => `
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
@@ -89,20 +90,164 @@ const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
   crash: () => { throw new TypeError("fixture crash"); }
  }});
 export const program = Program.make({name: "p41/${role}-${pair}", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+ ${braked ? "policy: {maxDeliveries: 3, intensity: 5, periodMs: 120_000, backoff: {minMs: 100, maxMs: 800, resetAfterMs: 5_000}}," : ""}
  inputs: ${role === "requester" ? '{start: "Ask", answer: "Answer"}' : '{request: "Request", crash: "Crash"}'},
  outputs: {}, writes: {}, wake: () => null});
 `;
 
 type Instance = any;
 
+// Private control only. Reading these rows must not load the runner or deliver mail.
+const instrumentMailBrain = async (brain: string, home: string) => {
+  const entry = join(home, "mail-diagnostics.mjs");
+  writeFileSync(
+    entry,
+    `
+import * as Brain from ${JSON.stringify(brain)};
+export default Brain.default;
+export const Connection = Brain.Connection;
+export const IsolateTail = Brain.IsolateTail;
+export const Project = Brain.Project;
+export const RecordPart = Brain.RecordPart;
+export class Process extends Brain.Process {
+  async testState() {
+    const at = Date.now();
+    const tables = Array.from(this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type='table'")).map(row => row.name);
+    const rows = table => tables.includes(table) ? Array.from(this.ctx.storage.sql.exec('SELECT * FROM "'+table+'" ORDER BY rowid')) : null;
+    const snapshot = {
+      name: this.ctx.id.name, at, tables,
+      wake: await this.ctx.storage.get("wake") ?? null,
+      armed: await this.ctx.storage.getAlarm(),
+      activity: await this.ctx.storage.get("activity") ?? null,
+      checkpoint: rows("process_state"), recovery: rows("process_recovery"),
+      receipts: rows("process_receipts"), letters: rows("process_letters"),
+      unsent: rows("unsent"), parts: rows("parts")
+    };
+    return {...snapshot, end: Date.now()};
+  }
+}
+export class Control extends Brain.Control {
+  async fetch(request) {
+    if (request.headers.get("authorization") !== "Bearer "+this.ctx.props.token) return super.fetch(request);
+    const q = await request.clone().json();
+    if (q.target !== "process" || q.method !== "testState") return super.fetch(request);
+    try {
+      const name = await this.env.PROJECT.getByName(q.project).processObject(q.name);
+      const stub = this.env.PROCESS.getByName(JSON.stringify([q.project, name]));
+      return Response.json({value: await stub.testState()});
+    } catch { return Response.json({error:{reason:"unreachable"}}, {status:500}); }
+  }
+}`,
+  );
+  await Effect.runPromise(
+    Effect.acquireRelease(
+      Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
+      (bundle) => Effect.promise(() => bundle.close()),
+    ).pipe(
+      Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
+      Effect.tap((out) =>
+        Effect.sync(() =>
+          writeFileSync(
+            brain,
+            out.output
+              .filter((item) => item.type === "chunk")
+              .map((item) => item.code)
+              .join("\n"),
+          ),
+        ),
+      ),
+      Effect.scoped,
+    ),
+  );
+};
+
+const mailDiagnostics = () => {
+  const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
+  const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
+  const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
+  const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
+  note("start");
+  const read = async (label: string, call: () => Promise<unknown>) => {
+    const start = stamp();
+    let value: unknown = null;
+
+    try {
+      value = await call();
+      console.error("T880 observation", JSON.stringify({ label, start, end: stamp(), value }, null, 2));
+    } catch (error) {
+      console.error(
+        "T880 observation",
+        JSON.stringify({ label, start, end: stamp(), error: error instanceof Error ? error.name : "unknown" }),
+      );
+    }
+
+    return value;
+  };
+  return {
+    note,
+    frame: (raw: string) => frames.push({ ...stamp(), raw }),
+    capture: async (instance: Instance, requester: string, responder: string) => {
+      const frozen = frames.slice();
+      note("failure", { requester, responder });
+      console.error("T880 diagnostics", JSON.stringify({ version: "next", frozen, events }, null, 2));
+
+      for (const name of ["requester:1", "responder:1"]) {
+        for (const stream of [`${name}/inbox`, `${name}/outbox`, `processes/${name}`]) {
+          await read(stream, () => instance.project(PROJECT).read(stream, 0, "audit"));
+        }
+      }
+
+      for (const pid of [requester, responder]) {
+        await read(`state/${pid}`, () => instance.process(pid).testState());
+      }
+
+      for (const pid of [requester, responder]) {
+        await read(`runtime/${pid}`, () => instance.project(PROJECT).read(pid, 0, "audit"));
+        let part = 0;
+        let after = 0;
+
+        for (;;) {
+          const page = await read(`spans/${pid}/${part}/${after}`, () =>
+            instance.record(PROJECT, `job/${pid}/${part}`).read({ _tag: "job", process: pid }, part, after),
+          );
+          const decoded = Schema.decodeUnknownSync(
+            Schema.NullOr(
+              Schema.Struct({ after: Schema.Int, rolled: Schema.Boolean, spans: Schema.Array(Schema.Json) }),
+            ),
+          )(page);
+
+          if (decoded === null) {
+            break;
+          }
+
+          if (decoded.spans.length > 0) {
+            after = decoded.after;
+          } else if (decoded.rolled) {
+            part++;
+            after = 0;
+          } else {
+            break;
+          }
+        }
+      }
+    },
+  };
+};
+
 type Fixture = {
   readonly from: From;
   readonly hash: string;
   readonly start: (name: string) => Promise<string>;
   readonly connect: (tab: string) => ReturnType<typeof wire>;
+  readonly diagnostics?: ReturnType<typeof mailDiagnostics> | undefined;
 };
 
-const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>, granted = true) => {
+const world = async (
+  test: (instance: Instance, key: Key, fixture: Fixture) => Promise<void>,
+  granted = true,
+  braked = false,
+  diagnose = false,
+) => {
   process.env.DO_NOT_TRACK = "1";
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
@@ -136,12 +281,19 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         for (const role of ["requester", "responder"] as const) {
           const name = `${role}-${pair}`;
           const path = join(home, `${name}.ts`);
-          writeFileSync(path, source(role, pair));
+          writeFileSync(path, source(role, pair, braked && role === "responder" && pair === 1));
           selections[`p41/${name}`] = path;
         }
       }
 
       const built = yield* build({ out: join(home, "dist"), programs: selections });
+      let diagnostics: ReturnType<typeof mailDiagnostics> | undefined;
+
+      if (diagnose) {
+        diagnostics = mailDiagnostics();
+        yield* Effect.promise(() => instrumentMailBrain(built.brain, home));
+      }
+
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
@@ -180,6 +332,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
           test(instance, key, {
             from,
             hash: built.build,
+            diagnostics,
             connect: (tab) =>
               Effect.runPromise(
                 Effect.gen(function* () {
@@ -192,7 +345,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
                     ),
                     (socket) => Effect.sync(() => socket.close()),
                   );
-                  return yield* Effect.promise(() => wire(instance, key, tab, socket));
+                  return yield* Effect.promise(() => wire(instance, key, tab, socket, diagnostics));
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
@@ -253,11 +406,30 @@ const until = async <A>(
 };
 
 /** A real WebSocket client at the door, initialized with a signed hello. */
-const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket) => {
+const wire = async (
+  instance: Instance,
+  key: Key,
+  tab: string,
+  socket: WebSocket,
+  diagnostics?: ReturnType<typeof mailDiagnostics>,
+) => {
   const frames: any[] = [];
+  let initialized = false;
   let closeCode: number | undefined,
     serial = 0;
   socket.addEventListener("message", (event) => {
+    if (diagnostics !== undefined) {
+      const raw = String(event.data);
+      // Only incoming frames are recorded. The handshake's public key and nonce stay out too.
+      diagnostics.frame(
+        initialized || raw === "pong"
+          ? raw
+          : JSON.stringify(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
+              ["key", "nonce", "signed", "token"].includes(name) ? "[redacted]" : value,
+            ),
+      );
+    }
+
     if (event.data !== "pong") {
       frames.push(JSON.parse(String(event.data)));
     }
@@ -270,11 +442,13 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   });
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
+    diagnostics?.note("wait.start", { end });
 
     while (Date.now() < end) {
       const index = frames.findIndex(match);
 
       if (index >= 0) {
+        diagnostics?.note("consumed", { id: frames[index].id, method: frames[index].method });
         return frames.splice(index, 1)[0];
       }
 
@@ -309,6 +483,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
       })
     ).error,
   ).toBeUndefined();
+  initialized = true;
   return { call, next };
 };
 
@@ -316,6 +491,7 @@ const facts = async (instance: Instance, stream: string) =>
   ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
     ...row.body,
     _tag: row._tag,
+    rev: row.rev,
   }));
 
 const request = (pid: string, ref: string) => ({
@@ -363,35 +539,73 @@ it("scenario: W1 and W6, the door receives waiting then answered 8 and both obje
 
 // scenario: abort is workerd's real eviction. Either alarm/abort order must keep exactly one exchange.
 it("scenario: W2, aborting the target after its wake preserves one request and one answer", async () => {
-  await world(async (instance, _key, fixture) => {
-    const requester = await fixture.start("requester:1");
-    const responder = await fixture.start("responder:1");
-    const client = await fixture.connect("evict-target");
-    await client.call("view.open", { pid: requester });
-    expect(await client.call("process.send", request(requester, "eviction"))).toMatchObject({
-      result: { _tag: "accepted" },
-    });
-    // The accepted Send has awaited the target's mailed RPC. No target call precedes the abort.
-    await instance
-      .process(responder)
-      .abort()
-      .catch(() => undefined);
-    await changed(client, "answered");
-    await answer(instance, "requester:1", "eviction");
-    expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
-    const inbox = await facts(instance, "responder:1/inbox");
-    expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
-    const answers = await facts(instance, "requester:1/inbox");
-    expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
-    await until(
-      "the requester has drained its answer",
-      () => instance.process(requester).savedAlarm(),
-      (at) => at == null,
-    );
-    expect(await client.call("view.open", { pid: requester })).toMatchObject({
-      result: { view: { phase: "answered", ref: "eviction", value: 8 } },
-    });
-  });
+  await world(
+    async (instance, _key, fixture) => {
+      const requester = await fixture.start("requester:1");
+      const responder = await fixture.start("responder:1");
+      const client = await fixture.connect("evict-target");
+
+      try {
+        await client.call("view.open", { pid: requester });
+        fixture.diagnostics?.note("send.start", { requester, responder });
+        expect(await client.call("process.send", request(requester, "eviction"))).toMatchObject({
+          result: { _tag: "accepted" },
+        });
+        fixture.diagnostics?.note("accepted");
+
+        // The accepted Send has awaited the target's mailed RPC. No target call precedes the abort.
+        if (fixture.diagnostics === undefined) {
+          await instance
+            .process(responder)
+            .abort()
+            .catch(() => undefined);
+        } else {
+          fixture.diagnostics.note("abort.start");
+          await instance
+            .process(responder)
+            .abort()
+            .then((value: unknown) => {
+              fixture.diagnostics?.note("abort.result", { status: "fulfilled", value: value ?? null });
+            })
+            .catch((error: unknown) => {
+              fixture.diagnostics?.note("abort.result", {
+                status: "rejected",
+                error: error instanceof Error ? error.name : "unknown",
+              });
+            });
+          fixture.diagnostics.note("abort.end");
+        }
+
+        await changed(client, "answered");
+        await answer(instance, "requester:1", "eviction");
+        expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
+        const inbox = await facts(instance, "responder:1/inbox");
+        expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
+        const answers = await facts(instance, "requester:1/inbox");
+        expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
+        await until(
+          "the requester has drained its answer",
+          () => instance.process(requester).savedAlarm(),
+          (at) => at == null,
+        );
+        expect(await client.call("view.open", { pid: requester })).toMatchObject({
+          result: { view: { phase: "answered", ref: "eviction", value: 8 } },
+        });
+        fixture.diagnostics?.note("complete");
+      } catch (error) {
+        if (fixture.diagnostics !== undefined) {
+          await fixture.diagnostics.capture(instance, requester, responder).catch(() => {
+            console.error("T880 diagnostic capture failed; rethrowing the original W2 failure");
+          });
+        }
+
+        throw error;
+      }
+    },
+    true,
+    false,
+    true,
+  );
 }, 180_000);
 
 // scenario: the host's instance composition supplies grants to the actual Project object.
@@ -410,48 +624,190 @@ it("scenario: W4, no host grant refuses the requester and leaves the target inbo
 
 // scenario: only real object recovery establishes the Worker's restart brake and its saved wait.
 it("scenario: W5, mail respects a target's brake while another pair completes", async () => {
-  await world(async (instance, _key, fixture) => {
-    const requester = await fixture.start("requester:1");
-    let responder = await fixture.start("responder:1");
-    const other = await fixture.start("requester:2");
-    await fixture.start("responder:2");
-    const client = await fixture.connect("brake");
-    let down: any;
+  await world(
+    async (instance, _key, fixture) => {
+      const requester = await fixture.start("requester:1");
+      let responder = await fixture.start("responder:1");
+      const other = await fixture.start("requester:2");
+      await fixture.start("responder:2");
+      const client = await fixture.connect("brake");
+      let down: any;
 
-    for (let n = 0; n < 20 && down === undefined; n++) {
-      await client.call("process.send", {
-        pid: responder,
-        letter: `crash-${n}`,
-        m: { type: "crash" },
+      for (let n = 0; n < 20 && down === undefined; n++) {
+        await client.call("process.send", {
+          pid: responder,
+          letter: `crash-${n}`,
+          m: { type: "crash" },
+          sentAt: SENT,
+          seen: 0,
+        });
+        const rows = await until(
+          "restart or brake",
+          () => facts(instance, "processes/responder:1"),
+          (rows) =>
+            rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+        );
+        down = rows.find((r) => r._tag === "down");
+
+        if (down === undefined) {
+          responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
+        }
+      }
+
+      expect(down, "the real restart brake must be reached").toBeDefined();
+      await client.call("process.send", request(requester, "braked"));
+      await client.call("view.open", { pid: other });
+      await client.call("process.send", request(other, "healthy"));
+      await changed(client, "answered");
+      const healthy = (await answer(instance, "requester:2", "healthy")).filter(
+        (r) => r.m?.type === "answer" && r.m.ref === "healthy",
+      );
+      expect(healthy).toHaveLength(1);
+      expect(healthy[0].m.value).toBe(8);
+      expect(down.rev).toBeLessThan(healthy[0].rev);
+      expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
+      expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
+      expect(await client.call("view.open", { pid: requester })).toMatchObject({
+        result: { view: { phase: "waiting", ref: "braked" } },
+      });
+      expect(await instance.process(responder).savedAlarm()).toBe(down.until);
+      const lifecycle = await facts(instance, "processes/responder:1");
+      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev)).toEqual([]);
+      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
+    },
+    true,
+    true,
+  );
+}, 180_000);
+
+// Private H1 setup stays separate so the existing mail scenarios keep their build and start inputs.
+const checklistWorld = async (
+  test: (fixture: {
+    readonly start: (name: string, program?: string) => Promise<string>;
+    readonly connect: () => ReturnType<typeof wire>;
+  }) => Promise<void>,
+) => {
+  const { FileSystem } = await import("effect");
+  const { localState } = await import("alchemy/State/LocalState");
+  const { build } = await import("./build.ts");
+  const { localInstance } = await import("./local-instance.ts");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.FABRIKA_HOME;
+          process.env.FABRIKA_HOME = home;
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) {
+              delete process.env.FABRIKA_HOME;
+            } else {
+              process.env.FABRIKA_HOME = previous;
+            }
+          }),
+      );
+      yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const wrapper = join(home, "checklist.ts");
+      yield* fs.writeFileString(
+        wrapper,
+        `export { checklist as program } from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+      );
+      const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
+      const key = identity();
+      const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+      const instance = yield* localInstance(
+        built,
+        RecordWireTest.settingsFixture({
+          home,
+          name: PROJECT,
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: held.port,
+        }),
+      );
+      const scope = yield* Effect.scope;
+      const from: From = {
+        by: key.fingerprint,
+        for: PERSON,
         sentAt: SENT,
         seen: 0,
-      });
-      const rows = await until(
-        "restart or brake",
-        () => facts(instance, "processes/responder:1"),
-        (rows) =>
-          rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+        parent: null,
+        traceId: TRACE,
+        build: built.build,
+      };
+      yield* Effect.promise(() =>
+        test({
+          start: async (name, program = "fabrika/checklist") => {
+            const code = built.programs[program];
+            expect(code).toBeDefined();
+            const started = await Reflect.get(instance.project(PROJECT), "start")(
+              {
+                _tag: "first",
+                id: `start-${name}`,
+                name,
+                code: { program, hash: code!.hash },
+              },
+              from,
+            );
+            return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+          },
+          connect: () =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const tab = "immediate-wake";
+                const socket = yield* Effect.acquireRelease(
+                  Effect.sync(
+                    () =>
+                      new WebSocket(
+                        `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                      ),
+                  ),
+                  (socket) => Effect.sync(() => socket.close()),
+                );
+                return yield* Effect.promise(() => wire(instance, key, tab, socket));
+              }).pipe(Effect.provideService(Scope.Scope, scope)),
+            ),
+        }),
       );
-      down = rows.find((r) => r._tag === "down");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(localState()),
+      Effect.provide(SecureRandom.layerWebCrypto),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+};
 
-      if (down === undefined) {
-        responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
-      }
-    }
-
-    expect(down, "the real restart brake must be reached").toBeDefined();
-    const before = (await facts(instance, "processes/responder:1")).filter((r) => r._tag === "restarted").length;
-    await client.call("process.send", request(requester, "braked"));
-    await client.call("view.open", { pid: other });
-    await client.call("process.send", request(other, "healthy"));
-    await changed(client, "answered");
-    expect(Date.now(), "the independent pair finishes inside the target's real recovery wait").toBeLessThan(down.until);
-    expect((await facts(instance, "processes/responder:1")).filter((r) => r._tag === "restarted")).toHaveLength(before);
-    expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
-    expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
-    expect(await client.call("view.open", { pid: requester })).toMatchObject({
-      result: { view: { phase: "waiting", ref: "braked" } },
+// scenario: H1 checks actual workerd alarm acceptance through the signed client path.
+it("scenario: H1, two checklist adds with an immediate wake both land on the same fresh process", async () => {
+  await checklistWorld(async (fixture) => {
+    const pid = await fixture.start("checklist:866", "fabrika/checklist");
+    const client = await fixture.connect();
+    expect(
+      await client.call("process.send", {
+        pid,
+        letter: "add-first",
+        m: { type: "add", name: "first item" },
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ).toMatchObject({ result: { _tag: "accepted" } });
+    expect(
+      await client.call("process.send", {
+        pid,
+        letter: "add-second",
+        m: { type: "add", name: "second item" },
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ).toMatchObject({ result: { _tag: "accepted" } });
+    expect(await client.call("view.open", { pid })).toMatchObject({
+      result: { view: { items: [{ name: "first item" }, { name: "second item" }], left: 2 } },
     });
-    expect(await instance.process(responder).savedAlarm()).toBe(down.until);
   });
 }, 180_000);

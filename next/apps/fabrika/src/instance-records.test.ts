@@ -257,6 +257,7 @@ const instrumentBrain = async (brain: string, home: string) => {
 import * as Brain from ${JSON.stringify(brain)};
 export default Brain.default;
 export const RecordPart = Brain.RecordPart;
+export const IsolateTail = Brain.IsolateTail;
 export class Connection extends Brain.Connection {
   incarnation = crypto.randomUUID();
   testState() { return {incarnation:this.incarnation, sockets:this.ctx.getWebSockets().map(ws=>({attachment:ws.deserializeAttachment(),tags:this.ctx.getTags(ws)}))}; }

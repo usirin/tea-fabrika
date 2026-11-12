@@ -40,6 +40,7 @@ const config = {
   window: null,
   port: 18787,
   build: "test",
+  rateLimit: { limit: 100_000, window: 60_000 },
 };
 
 const connectionInput = StartsTest.fixture(config, (algorithm, data) =>

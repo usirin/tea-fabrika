@@ -77,7 +77,7 @@ describe("P16 real browser from a copied one-file build", () => {
             browser = await chromium.launch({ headless: true });
             mkdirSync(join(home, "node_modules/@p16"), { recursive: true });
 
-            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
+            for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run", "alchemy"]) {
               symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
             }
 
@@ -319,7 +319,7 @@ const servedCounter = Effect.gen(function* () {
   );
   mkdirSync(join(home, "node_modules"), { recursive: true });
 
-  for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run"]) {
+  for (const name of ["@kampus", "@demlik", "effect", "@alchemy.run", "alchemy"]) {
     symlinkSync(join(APP, "node_modules", name), join(home, "node_modules", name));
   }
 

@@ -1,4 +1,4 @@
-import { makeDurableObjectBridge } from "@alchemy.run/cloudflare/Bridge";
+import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Descriptor, type Incoming } from "@kampus/libfabrika";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
@@ -18,8 +18,8 @@ import {
   commitReply,
   settingsWire,
 } from "@kampus/libfabrika/workers/runtime";
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Effect, Redacted } from "effect";
+import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
+import { Effect, Redacted, Schema } from "effect";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
@@ -225,6 +225,11 @@ type ContextProject = (typeof ProjectService)["Service"];
 export class Process extends DurableObject<Env> {
   readonly runtime = settingsWire(processRuntime(this.ctx, this.env, programs).contextEffect);
 
+  usage(rows: unknown) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object usage delivery returns a Promise
+    return this.runtime.runPromise(ProcessService.use((p) => p.usage(rows)));
+  }
+
   configure(descriptor: Descriptor) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object configuration returns a Promise
     return Effect.runPromise(configureProcess(this.ctx, descriptor));
@@ -324,14 +329,23 @@ export class Connection extends DurableObject<Env> {
   }
 }
 
-const Bridge = makeDurableObjectBridge(DurableObject, {
+const deployment = Schema.decodeUnknownSync(
+  // oxlint-disable-next-line fabrika/no-stage-word -- edge: these are Alchemy's own runtime binding names
+  Schema.Struct({ ALCHEMY_STACK_NAME: Schema.NonEmptyString, ALCHEMY_STAGE: Schema.NonEmptyString }),
+)(env);
+
+const meta = {
   // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
   entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
   // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
-  stack: { name: "fabrika", stage: "local" },
-});
+  stack: { name: deployment.ALCHEMY_STACK_NAME, stage: deployment.ALCHEMY_STAGE },
+};
+
+const Bridge = makeDurableObjectBridge(DurableObject, meta);
 
 export class RecordPart extends Bridge("RecordPart") {}
+
+export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {

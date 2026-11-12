@@ -7,6 +7,11 @@ export { IdError, type IdSchema, type IdValue } from "./Id.ts";
  */
 export * as Chaos from "./runtime/Chaos.ts";
 /**
+ * Saved bounded experiments and their command definitions.
+ * @stability unstable
+ */
+export * as ChaosMachine from "./runtime/ChaosMachine.ts";
+/**
  * @stability unstable
  */
 export * as Nemesis from "./runtime/Nemesis.ts";
@@ -75,3 +80,19 @@ export {
   type WindowProps,
   type WindowRegistration,
 } from "./runtime/Window.ts";
+/**
+ * @stability unstable
+ */
+export * as Ci from "./ci/Ci.ts";
+/**
+ * @stability unstable
+ */
+export * as CodeHost from "./codehost/CodeHost.ts";
+/**
+ * @stability unstable
+ */
+export * as Send from "./runtime/Send.ts";
+/**
+ * @stability unstable
+ */
+export * as Setting from "./settings/Setting.ts";

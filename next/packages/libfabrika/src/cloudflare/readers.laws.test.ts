@@ -937,6 +937,8 @@ SettingsTest.suite((recipe, secret) =>
         getTags: () => ["fixture-session", "fixture-tab", "fixture-public"],
         getWebSocketAutoResponseTimestamp: () => null,
         setWebSocketAutoResponse: () => {},
+        // T852: a reopened Project binds each process load to its tail.
+        exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       } as unknown as DurableObjectState;
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
       const env = {

@@ -6,12 +6,15 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
+import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
+import * as Trace from "../telemetry/Trace.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
+import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
@@ -232,6 +235,59 @@ StartsTest.law(
         ]);
       }
     }).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect.prop(
+  "T843 RPC: ordinary and parked rate refusals keep delay and bounded frame/RPC sums (50 runs)",
+  {
+    count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    retryAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60_000 })),
+    parked: Schema.Boolean,
+  },
+  ({ count, retryAfter, parked }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      yield* TestClock.setTime(H + 1000);
+      w.answer({ ...Answer.cases.refused.make({ reason: "rate_limited" }), retryAfter });
+      yield* Effect.gen(function* () {
+        const service = yield* ConnectionService;
+        const startupSpans = [...w.saved];
+        let first: ReturnType<typeof tableCounts> | undefined;
+
+        for (let id = 0; id < count; id++) {
+          yield* service.message(
+            w.socket,
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id,
+              method: parked ? "ledger.wait" : "process.send",
+              params: parked ? { stream: "empty", after: 0 } : {},
+            }),
+          );
+          expect(JSON.parse(w.frames.at(-1)!)).toMatchObject({
+            id,
+            error: { data: { reason: "rate_limited", retryAfter } },
+          });
+          const counts = tableCounts(db);
+          first ??= counts;
+          expect(counts).toEqual(first);
+          expect(w.saved).toEqual(startupSpans);
+          expect(w.closes).toEqual([]);
+        }
+
+        expect(
+          db
+            .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
+            .all()
+            .map((r) => ({ ...r })),
+        ).toEqual([
+          { piece: "connection.frame", hour: H, refused: "rate_limited", count },
+          { piece: "runtime.rpc", hour: H, refused: "rate_limited", count },
+        ]);
+      }).pipe(Effect.provide(w.layer));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
 );
 
 it.effect.prop(
@@ -544,6 +600,189 @@ it.effect.prop(
         expect(counts.failure).toBeGreaterThan(0);
         expect(counts.success + counts.failure).toBe(draws.length);
       }).pipe(Effect.provide(t864Layer(db, draws[0]!.pick)));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+const AnswerWalk = Schema.Struct({
+  count: Schema.Int.check(Schema.isBetween({ minimum: 4, maximum: 20 })),
+  seed: Schema.Int,
+});
+
+const EarlyFrameWalk = Schema.Struct({
+  fresh: Attached.cases.new,
+  waiting: Attached.cases.waiting,
+  count: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 8 })),
+  seed: Schema.Int,
+});
+
+const answerCases = {
+  ok: Answer.cases.ok,
+  parked: Answer.cases.parked,
+  reserved: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("reserved") })),
+  bad_input: Answer.cases.refused.mapFields((fields) => ({ ...fields, reason: Schema.Literal("bad_input") })),
+};
+
+const answerCategories = ["ok", "parked", "reserved", "bad_input"] as const;
+
+const sample = Effect.fnUntraced(function* <S extends Schema.Constraint>(schema: S, seed: number) {
+  return (yield* Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!;
+});
+
+const readAttachment = (w: ReturnType<typeof world>) =>
+  Schema.decodeUnknownSync(Attached)(w.socket.deserializeAttachment());
+
+const ordinaryFrame = Effect.fnUntraced(function* (state: typeof Attached.Type, seed: number, index: number) {
+  const input = yield* sample(Schema.Struct({ id: Schema.String, params: Schema.Json }), seed);
+  return {
+    jsonrpc: "2.0",
+    id: `${state.client}:${index}:${input.id}`,
+    method: "process.send",
+    params: { state: state._tag, value: input.params },
+  };
+});
+
+const observeRpc = Effect.fnUntraced(function* (spans: Array<Tracer.Span>) {
+  const make = ProjectClient.make;
+  yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      vi.spyOn(ProjectClient, "make").mockImplementation((stub) => {
+        const client = make(stub);
+        return {
+          ...client,
+          route: (...args) =>
+            Effect.gen(function* () {
+              spans.push(yield* Effect.currentSpan.pipe(Effect.orDie));
+              return yield* client.route(...args);
+            }),
+        };
+      }),
+    ),
+    (spy) => Effect.sync(() => spy.mockRestore()),
+  );
+});
+
+const recordingSnapshot = (db: DatabaseSync, w: ReturnType<typeof world>) => ({
+  tables: tableCounts(db),
+  saved: [...w.saved],
+  writes: w.stats.writes,
+  archives: w.stats.archives,
+});
+
+it.effect.prop(
+  "t863 L1: only reserved answers tag the ended RPC span as refused",
+  { walk: AnswerWalk },
+  ({ walk }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      const spans: Array<Tracer.Span> = [];
+      yield* observeRpc(spans);
+      yield* TestClock.setTime(H + 1000);
+      yield* Effect.gen(function* () {
+        const service = yield* ConnectionService;
+        const reached = new Set<keyof typeof answerCases>();
+
+        for (let i = 0; i < walk.count; i++) {
+          const state = readAttachment(w);
+          expect(state._tag).toBe("online");
+          const remaining = answerCategories.filter((key) => !reached.has(key));
+          const category = yield* sample(
+            Schema.Literals(remaining.length > 0 ? remaining : answerCategories),
+            walk.seed + i * 3,
+          );
+          const answer = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+          const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
+          w.answer(answer);
+          const replies = w.frames.length;
+          yield* service.message(w.socket, JSON.stringify(request));
+          expect(w.calls).toHaveLength(i + 1);
+          expect(w.calls.at(-1)).toEqual({ method: request.method, params: request.params });
+          expect(spans).toHaveLength(i + 1);
+          const span = spans[i]!;
+          expect(span.name).toBe("runtime.rpc");
+          expect(span.status._tag).toBe("Ended");
+          expect(span.attributes.has(Trace.REFUSED)).toBe(category === "reserved");
+          expect(span.attributes.get(Trace.REFUSED)).toBe(category === "reserved" ? "reserved" : undefined);
+
+          if (answer._tag === "parked") {
+            expect(w.frames).toHaveLength(replies);
+          } else {
+            expect(w.frames).toHaveLength(replies + 1);
+            const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
+            expect(reply).toMatchObject(
+              answer._tag === "ok"
+                ? { id: request.id, result: answer.result }
+                : { id: request.id, error: { data: { reason: answer.reason } } },
+            );
+          }
+
+          expect(readAttachment(w)._tag).toBe("online");
+          reached.add(category);
+        }
+
+        expect([...reached].sort()).toEqual(Object.keys(answerCases).sort());
+      }).pipe(Effect.provide(w.layer));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+it.effect.prop(
+  "t863 L2: new and waiting frames leave all recording unchanged until online",
+  { walk: EarlyFrameWalk },
+  ({ walk }) =>
+    Effect.gen(function* () {
+      const reached = new Set<string>();
+
+      for (const initial of [walk.fresh, walk.waiting]) {
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const db = yield* database;
+            const w = world(db);
+            const online = readAttachment(w);
+            w.socket.serializeAttachment(initial);
+            yield* TestClock.setTime(H + 1000);
+            yield* Effect.gen(function* () {
+              const service = yield* ConnectionService;
+              const baseline = recordingSnapshot(db, w);
+
+              for (let i = 0; i < walk.count; i++) {
+                const state = readAttachment(w);
+                expect(state._tag).toBe(initial._tag);
+                const request = yield* ordinaryFrame(state, walk.seed + i, i);
+                const replies = w.frames.length;
+                yield* service.message(w.socket, JSON.stringify(request));
+                expect(w.frames).toHaveLength(replies + 1);
+                expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+                  id: request.id,
+                  error: { data: { reason: "no_hello" } },
+                });
+                expect(w.calls).toEqual([]);
+                expect(readAttachment(w)).toEqual(state);
+                expect(recordingSnapshot(db, w)).toEqual(baseline);
+                reached.add(state._tag);
+              }
+
+              w.socket.serializeAttachment(online);
+              const state = readAttachment(w);
+              const answer = yield* sample(Answer.cases.ok, walk.seed + walk.count);
+              const request = yield* ordinaryFrame(state, walk.seed + walk.count + 1, walk.count);
+              w.answer(answer);
+              yield* service.message(w.socket, JSON.stringify(request));
+              expect(w.calls).toEqual([{ method: request.method, params: request.params }]);
+              expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+                id: request.id,
+                result: answer.result,
+              });
+              expect(w.saved.slice(baseline.saved.length).map((span) => span.name)).toContain("runtime.rpc");
+              expect(w.stats.writes).toBeGreaterThan(baseline.writes);
+              expect(tableCounts(db)).not.toEqual(baseline.tables);
+            }).pipe(Effect.provide(w.layer));
+          }),
+        );
+      }
+
+      expect([...reached].sort()).toEqual(["new", "waiting"]);
     }),
   { arbitrary: { seed: 119120, runs: 50 } },
 );

@@ -1,4 +1,5 @@
 import { RecordedStart } from "@kampus/libfabrika";
+import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { connectionRuntime as connection } from "@kampus/libfabrika/workers/gateway";
 import {
@@ -6,7 +7,8 @@ import {
   settings as readSettings,
   type Env as Bindings,
 } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 
@@ -34,7 +36,11 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     door: (options) =>
       Effect.gen(function* () {
         const checked = yield* RecordedStart;
-        const config = { ...checked.input, port: checked.values.port };
+        const config = {
+          ...checked.input,
+          port: checked.values.port,
+          rateLimit: { limit: checked.values.gatewayLimit, window: checked.values.gatewayWindow },
+        };
         return yield* Gateway.pipe(
           Effect.provide(
             Gateway.layer({
@@ -49,6 +55,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
               ping: { min: 30_000, max: 75_000 },
               inputCap: 1_000_000,
               spentCap: 100_000,
+              rateLimit: config.rateLimit,
               deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
               inputs: {
                 schema: Schema.Json,
@@ -61,7 +68,13 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                     : undefined,
               },
               events: { personOnly: [] },
-            }),
+            }).pipe(
+              Layer.provide(
+                RateLimiter.layer.pipe(
+                  Layer.provide(RateLimiterSql.layer(options.sql, { build: config.build, policy: config.rateLimit })),
+                ),
+              ),
+            ),
           ),
         );
       }),

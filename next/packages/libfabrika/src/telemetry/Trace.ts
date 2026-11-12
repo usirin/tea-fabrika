@@ -99,7 +99,7 @@ export type MetricPoint = typeof MetricPoint.Type;
 /** A refusal counted instead of keeping the span or its measurement. */
 export { REFUSED } from "../SpanTag.ts";
 
-export const Refused = Schema.Literals(["reserved", "other"]);
+export const Refused = Schema.Literals(["reserved", "rate_limited", "other"]);
 export type Refused = typeof Refused.Type;
 
 /** One piece's hourly count, split by a closed refusal value. */
@@ -130,6 +130,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),
   /** Spans in memory that met a full disk; 0 otherwise. */
   held: Schema.Int,
+  message: Schema.optionalKey(Schema.String),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 

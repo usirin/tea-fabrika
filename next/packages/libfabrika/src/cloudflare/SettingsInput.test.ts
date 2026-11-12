@@ -72,7 +72,12 @@ describe("shared Worker settings reader, next/", () => {
 
           if (Exit.isSuccess(exit)) {
             expect(exit.value.snapshot).toEqual(current.settings);
-            expect(exit.value.values).toEqual({ port: current.settings.values["instance.port"], version: "0.0.0" });
+            expect(exit.value.values).toEqual({
+              port: current.settings.values["instance.port"],
+              version: "0.0.0",
+              gatewayLimit: StartsTest.rateLimit.limit,
+              gatewayWindow: StartsTest.rateLimit.window,
+            });
             StartsTest.exclude(exit.value, secret);
           }
         }
