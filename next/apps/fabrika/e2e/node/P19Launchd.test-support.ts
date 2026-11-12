@@ -36,7 +36,7 @@ import {
 import { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
-import { rolldown } from "rolldown";
+import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
 
 class HostError extends Schema.TaggedError<HostError>()("HostError", {
@@ -224,7 +224,10 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
   }).pipe(Effect.repeat({ schedule: Schedule.spaced(`${config.poll} millis`), until: (done) => done }));
 });
 
-const bundle = Effect.fn("P19Host.bundle")(function* (source: string, output: string, root: string) {
+export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, output: string, root: string) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+  const dependencies = new Map<string, string>();
   const compilation = yield* Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown opens a build through a Promise
     Effect.tryPromise({
@@ -233,11 +236,40 @@ const bundle = Effect.fn("P19Host.bundle")(function* (source: string, output: st
           input: "p19:entry",
           cwd: root,
           platform: "node",
-          external: [/^node:/, /\.node$/, /^miniflare$/, /^workerd(?:\/|$)/, /^@rolldown\//, /^fsevents$/],
+          external: [/^node:/],
           plugins: [
             {
               name: "p19-entry",
-              resolveId: (id: string) => (id === "p19:entry" ? id : undefined),
+              resolveId: (id: string, importer: string | undefined) => {
+                if (id === "p19:entry") {
+                  return id;
+                }
+
+                if (
+                  /\.node$/.test(id) ||
+                  /^(?:miniflare|workerd|rolldown|lightningcss|oxc-parser|oxc-transform-react|fsevents)(?:\/|$)/.test(
+                    id,
+                  ) ||
+                  /^@rolldown\//.test(id)
+                ) {
+                  const from =
+                    importer !== undefined && path.isAbsolute(importer)
+                      ? importer
+                      : path.join(root, "next/apps/fabrika/package.json");
+                  const resolved = createRequire(from).resolve(id);
+
+                  if (!dependencies.has(resolved)) {
+                    dependencies.set(
+                      resolved,
+                      path.join(`${output}.dependencies`, String(dependencies.size), path.basename(resolved)),
+                    );
+                  }
+
+                  return { id: resolved, external: true };
+                }
+
+                return undefined;
+              },
               load: (id: string) => (id === "p19:entry" ? source : undefined),
             },
           ],
@@ -247,11 +279,32 @@ const bundle = Effect.fn("P19Host.bundle")(function* (source: string, output: st
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown releases its build through a Promise
     (built) => Effect.tryPromise({ try: () => built.close(), catch: fail }).pipe(Effect.orDie),
   );
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown writes JavaScript through a Promise
   yield* Effect.tryPromise({
-    try: () => compilation.write({ file: output, format: "esm", codeSplitting: false }),
+    try: () =>
+      compilation.write({
+        dir: path.dirname(output),
+        entryFileNames: (chunk: PreRenderedChunk) =>
+          chunk.facadeModuleId === "p19:entry"
+            ? path.basename(output)
+            : `${path.basename(output)}.chunks/[name]-[hash].mjs`,
+        chunkFileNames: `${path.basename(output)}.chunks/[name]-[hash].mjs`,
+        assetFileNames: `${path.basename(output)}.assets/[name]-[hash][extname]`,
+        format: "esm",
+        codeSplitting: false,
+        paths: (id: string) => dependencies.get(id) ?? id,
+      }),
     catch: fail,
   });
+
+  // Rolldown resolves imports during write. Link them before any controller or brain can start.
+  for (const [resolved, link] of dependencies) {
+    yield* fs.makeDirectory(path.dirname(link), { recursive: true });
+    yield* fs.symlink(resolved, link);
+  }
+
+  return [...dependencies.values()];
 });
 
 /** A child controller releases only its own handles. It must leave the launchd brain running. */
@@ -263,6 +316,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
   const settings = yield* fs
     .readFileString(snapshotFile)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Snapshot.Snapshot))));
+  const native = Context.get(yield* Layer.build(Native.layer(spec, settings)), BrainControl);
   const probe = Layer.succeed(BrainProbe, {
     ready: Effect.gen(function* () {
       if (!(yield* fs.exists(`${spec.home}/ready.json`))) {
@@ -273,8 +327,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
       const ready = yield* fs
         .readFileString(`${spec.home}/ready.json`)
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ready))));
-      const context = yield* Layer.build(Native.layer(spec, settings));
-      const current = yield* Context.get(context, BrainControl).inspect;
+      const current = yield* native.inspect;
       return ready.build === spec.build &&
         current._tag === "loaded" &&
         ready.pid === current.pid &&
@@ -339,7 +392,6 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const temporary = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p19-" });
   const home = yield* fs.realPath(temporary);
   const executable: string = createRequire(path.join(app, "package.json"))("electron");
-  yield* fs.symlink(path.join(root, "node_modules"), path.join(home, "node_modules"));
   // The OS chooses a disposable listener only in this host check, never in BrainService policy.
   const chosen = Number(process.env.FABRIKA_P19_PORT);
   yield* checked(Number.isInteger(chosen) && chosen > 1024 && chosen < 65535, "supply-isolated-host-port");
@@ -368,7 +420,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
     home,
     executable,
-    args: [runtime, 'spaces & <angles> "雪"'],
+    args: [runtime, "spaces & <angles> 雪"],
     url,
     build: built.build,
   });

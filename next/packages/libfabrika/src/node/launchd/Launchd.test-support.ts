@@ -10,7 +10,12 @@ import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
 import { BrainSpec } from "../../desktop/BrainSpec.ts";
 import * as Launchd from "./BrainControlLaunchd.ts";
 
-type Response = { readonly code: number; readonly stdout: string; readonly stderr: string };
+type Response = {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly signal?: string;
+};
 
 type Seen = {
   readonly executable: string;
@@ -61,7 +66,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         const args = command.args.map((arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        let response = {
+        let response: Response = {
           ...answer,
           stderr: answer.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
         };
@@ -101,7 +106,20 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
             events.push("spawn");
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(81),
-              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(response.code)),
+              exitCode:
+                response.signal === undefined
+                  ? Effect.succeed(ChildProcessSpawner.ExitCode(response.code))
+                  : Effect.fail(
+                      PlatformError.systemError({
+                        // oxlint-disable-next-line fabrika/no-hand-tag -- edge: match NodeChildProcessSpawner's native signal failure
+                        _tag: "Unknown",
+                        module: "ChildProcess",
+                        method: "exitCode",
+                        pathOrDescriptor: `${command.command} ${args.join(" ")}`,
+                        // The installed platform-node 4.1.2 exposes termination signals only in this cause.
+                        cause: new Error(`Process interrupted due to receipt of signal: '${response.signal}'`),
+                      }),
+                    ),
               isRunning: Effect.succeed(false),
               kill: () => Effect.void,
               stdin: Sink.drain,

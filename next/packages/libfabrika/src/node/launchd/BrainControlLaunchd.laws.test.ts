@@ -14,6 +14,23 @@ const options = { arbitrary: { seed: 119120, runs: 100 } };
 const Value = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9 &<>"雪]{1,30}$/));
 const NativeValue = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9雪][a-zA-Z0-9 &<>雪]{0,28}[a-zA-Z0-9雪]$/));
 
+const Signal = Schema.Literals([
+  "SIGHUP",
+  "SIGINT",
+  "SIGQUIT",
+  "SIGILL",
+  "SIGTRAP",
+  "SIGABRT",
+  "SIGBUS",
+  "SIGKILL",
+  "SIGSEGV",
+  "SIGPIPE",
+  "SIGALRM",
+  "SIGTERM",
+  "SIGUSR1",
+  "SIGUSR2",
+]);
+
 const Job = Schema.Struct({
   Label: Schema.NonEmptyString,
   ProgramArguments: Schema.Array(Schema.String),
@@ -55,16 +72,31 @@ it.effect.prop(
 );
 
 it.effect.prop(
-  "L3 process failures and permission failures retain protected causes",
-  [Value, Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 })), Schema.Boolean],
-  ([word, code, spawnFailure]) =>
+  "L3 process failures retain protected causes and observed native exit codes or signals",
+  [Value, Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 })), Schema.Boolean, Schema.NullOr(Signal)],
+  ([word, code, spawnFailure, signal]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&`;
-      const disk = yield* LaunchdTest.open(spawnFailure ? "spawn" : "none", { code, stdout: secret, stderr: secret });
+      const disk = yield* LaunchdTest.open(spawnFailure ? "spawn" : "none", {
+        code,
+        stdout: secret,
+        stderr: secret,
+        ...(signal === null ? {} : { signal }),
+      });
       const exit = yield* disk.control.inspect.pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
       const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
       expect(failure).toMatchObject({ _tag: "BrainControlError", reason: { cause: expect.anything() } });
+
+      if (!spawnFailure) {
+        expect(failure).toMatchObject({
+          reason: { _tag: "Command", ...(signal === null ? { code } : { signal }) },
+        });
+
+        if (signal !== null) {
+          expect(failure).not.toMatchObject({ reason: { code: expect.any(Number) } });
+        }
+      }
 
       for (const output of [
         JSON.stringify(failure),
@@ -106,83 +138,107 @@ const Rows = Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(
 
 it.effect.prop(
   "L9 failed delivery survives reopening and keeps each action's facts until acknowledgement",
-  [Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 }))],
-  ([attempts]) =>
-    Effect.gen(function* () {
-      const disk = yield* LaunchdTest.open("none", {
-        code: 113,
-        stdout: "",
-        stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
-      });
-      const delivered: Array<(typeof Rows.Type)[number]> = [];
-      const refused = new Map<string, (typeof Rows.Type)[number]>();
-      let available = false;
-      const probe = Layer.succeed(BrainProbe, {
-        ready: Effect.succeed(Readiness.cases.ready.make({})),
-        cleanup: Effect.succeed(Children.cases.gone.make({})),
-      });
-      const forward = Effect.fnUntraced(function* (
-        _target: "record" | "bucket",
-        _name: string,
-        method: string,
-        args: ReadonlyArray<unknown>,
-      ) {
-        expect(method).toBe("write");
-        const rows = yield* Schema.decodeUnknownEffect(Rows)(args[2]);
+  [Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })), Signal],
+  ([attempts, observedSignal]) =>
+    Effect.forEach(
+      [null, observedSignal],
+      (signal) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const disk = yield* LaunchdTest.open("none", {
+              code: 113,
+              stdout: "",
+              stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
+              ...(signal === null ? {} : { signal }),
+            });
+            const delivered: Array<(typeof Rows.Type)[number]> = [];
+            const refused = new Map<string, (typeof Rows.Type)[number]>();
+            let available = false;
+            const probe = Layer.succeed(BrainProbe, {
+              ready: Effect.succeed(Readiness.cases.ready.make({})),
+              cleanup: Effect.succeed(Children.cases.gone.make({})),
+            });
+            const forward = Effect.fnUntraced(function* (
+              _target: "record" | "bucket",
+              _name: string,
+              method: string,
+              args: ReadonlyArray<unknown>,
+            ) {
+              expect(method).toBe("write");
+              const rows = yield* Schema.decodeUnknownEffect(Rows)(args[2]);
 
-        if (!available) {
-          for (const row of rows) {
-            refused.set(row.span.spanId, row);
-          }
+              if (!available) {
+                for (const row of rows) {
+                  refused.set(row.span.spanId, row);
+                }
 
-          return yield* new SinkError({ reason: "unreachable", held: 0, cause: "offline-test-destination" });
-        }
+                return yield* new SinkError({ reason: "unreachable", held: 0, cause: "offline-test-destination" });
+              }
 
-        delivered.push(...rows);
-        return { _tag: "written", count: rows.length };
-      });
-      const reopen = Effect.fnUntraced(function* (action: "up" | "stop" = "up") {
-        const context = yield* Layer.build(
-          ServiceLaunchd.layer(disk.spec, disk.settings, probe, forward).pipe(Layer.provide(disk.native)),
-        );
-        return yield* Context.get(context, BrainService)[action].pipe(Effect.exit);
-      });
+              delivered.push(...rows);
+              return { _tag: "written", count: rows.length };
+            });
+            const reopen = Effect.fnUntraced(function* (action: "up" | "stop" = "up") {
+              const context = yield* Layer.build(
+                ServiceLaunchd.layer(disk.spec, disk.settings, probe, forward).pipe(Layer.provide(disk.native)),
+              );
+              return yield* Context.get(context, BrainService)[action].pipe(Effect.exit);
+            });
 
-      for (let n = 0; n < attempts; n++) {
-        expect(Exit.isFailure(yield* Effect.scoped(reopen()))).toBe(true);
-      }
+            for (let n = 0; n < attempts; n++) {
+              expect(Exit.isFailure(yield* Effect.scoped(reopen()))).toBe(true);
+            }
 
-      expect(delivered).toEqual([]);
-      expect(refused.size).toBeGreaterThan(0);
-      available = true;
-      expect(Exit.isSuccess(yield* Effect.scoped(reopen()))).toBe(true);
-      expect(Exit.isSuccess(yield* Effect.scoped(reopen("stop")))).toBe(true);
+            expect(delivered).toEqual([]);
+            expect(refused.size).toBeGreaterThan(0);
+            available = true;
+            expect(Exit.isSuccess(yield* Effect.scoped(reopen()))).toBe(signal === null);
+            expect(Exit.isSuccess(yield* Effect.scoped(reopen("stop")))).toBe(signal === null);
 
-      for (const [id, row] of refused) {
-        expect(delivered.filter(({ span }) => span.spanId === id)).toEqual([row]);
-      }
+            for (const [id, row] of refused) {
+              expect(delivered.filter(({ span }) => span.spanId === id)).toEqual([row]);
+            }
 
-      expect(delivered.length).toBeGreaterThanOrEqual(attempts);
-      const actions = delivered.filter(({ span }) => span.name.startsWith("BrainService."));
-      expect(actions.length).toBeGreaterThanOrEqual(attempts);
-      expect(actions.some(({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
+            expect(delivered.length).toBeGreaterThanOrEqual(attempts);
+            const actions = delivered.filter(({ span }) => span.name.startsWith("BrainService."));
+            expect(actions.length).toBeGreaterThanOrEqual(attempts);
+            expect(actions.some(({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
 
-      expect(
-        actions.some(
-          ({ span }) => span.attributes["fab.action"] === "stop" && span.attributes["fab.confirmation"] === "removed",
-        ),
-      ).toBe(true);
+            if (signal === null) {
+              expect(
+                actions.some(
+                  ({ span }) =>
+                    span.attributes["fab.action"] === "stop" && span.attributes["fab.confirmation"] === "removed",
+                ),
+              ).toBe(true);
+            } else {
+              const commands = delivered.filter(
+                ({ span }) => span.name === "BrainService.command" && span.attributes["fab.result"] === "Command",
+              );
+              expect(commands.length).toBeGreaterThanOrEqual(attempts + 2);
 
-      for (const { span } of actions) {
-        expect(span.attributes).toMatchObject({ "fab.build": disk.spec.build, "fab.settings": disk.settings.hash });
-        expect(span.startTimeUnixNano).toMatch(/^\d+$/);
-        expect(span.attributes["fab.action"]).toEqual(expect.any(String));
-        expect(span.attributes["fab.cmd"]).toEqual(expect.any(String));
-        expect(span.attributes["fab.sentAt"]).toEqual(expect.any(String));
-        expect(span.attributes["fab.result"]).toEqual(expect.any(String));
-        expect(span.attributes["fab.elapsed"]).toEqual(expect.any(Number));
-      }
-    }).pipe(Effect.provide(NodeServices.layer)),
+              for (const { span } of commands) {
+                expect(span.attributes["fab.native.signal"]).toBe(signal);
+                expect(span.attributes["fab.native.code"]).toBeUndefined();
+              }
+            }
+
+            for (const { span } of actions) {
+              expect(span.attributes).toMatchObject({
+                "fab.build": disk.spec.build,
+                "fab.settings": disk.settings.hash,
+              });
+              expect(span.startTimeUnixNano).toMatch(/^\d+$/);
+              expect(span.attributes["fab.action"]).toEqual(expect.any(String));
+              expect(span.attributes["fab.cmd"]).toEqual(expect.any(String));
+              expect(span.attributes["fab.sentAt"]).toEqual(expect.any(String));
+              expect(span.attributes["fab.result"]).toEqual(expect.any(String));
+              expect(span.attributes["fab.elapsed"]).toEqual(expect.any(Number));
+            }
+          }),
+        ).pipe(Effect.provide(NodeServices.layer)),
+      { discard: true, concurrency: 1 },
+    ),
   options,
 );
 
