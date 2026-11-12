@@ -9,12 +9,14 @@ import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import type { Entry } from "../ledger/Log.ts";
 import { from } from "../processes/Process.test-support.ts";
+import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
 import type { Sql } from "../Sql.ts";
 import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
+import { Props, receive } from "./tail.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
@@ -37,9 +39,12 @@ const ProjectInput = Schema.Struct({
 export interface Harness {
   readonly open: Effect.Effect<Sql, never, Scope.Scope>;
   readonly door: (url: string, input: typeof ProjectInput) => ProjectOptions["door"];
+  readonly tail: () => object;
   readonly environment: (
     box: InstanceType<ReturnType<typeof programBox>>,
     accept: () => number,
+    usage: (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => void,
+    loaded: (key: string, code: unknown) => void,
   ) => Parameters<typeof projectLayer>[1];
 }
 
@@ -58,6 +63,7 @@ const projectWalk = Effect.fnUntraced(function* (
   tape: ReadonlyArray<number>,
   reached: Set<string>,
   selector: Selector = "plain",
+  usage: boolean = false,
 ) {
   const sql = yield* harness.open;
   const ledger = yield* Ledger.pipe(
@@ -110,6 +116,7 @@ const projectWalk = Effect.fnUntraced(function* (
   const Box = programBox(program, BUILD);
   const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
   let accepted = 0;
+  const bound = new Map<unknown, typeof Props.Type>();
   // The driver wires Gateway; project routing, audit and box calls stay real.
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
@@ -135,7 +142,13 @@ const projectWalk = Effect.fnUntraced(function* (
       kv: { get: unused, list: unused, put: unused, delete: unused },
     },
     waitUntil: unused,
-    exports: {},
+    exports: {
+      IsolateTail: ({ props }: { props: typeof Props.Type }) => {
+        const tail = harness.tail();
+        bound.set(tail, props);
+        return tail;
+      },
+    },
     props: undefined,
     facets: { get: unused, delete: unused, abort: unused, clone: unused },
     blockConcurrencyWhile: unused,
@@ -149,7 +162,22 @@ const projectWalk = Effect.fnUntraced(function* (
     getTags: unused,
     abort: unused,
   };
-  const env = harness.environment(box, () => ++accepted);
+  const loads = new Map<string, unknown>();
+  const reported: Array<{ object: string; rows: ReadonlyArray<typeof IsolateUsage.Usage.Type> }> = [];
+  const env = harness.environment(
+    box,
+    () => ++accepted,
+    (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => {
+      reported.push({ object, rows });
+    },
+    (key: string, code: unknown) => {
+      // Worker Loader reuses the first code and tail for this isolate key.
+      if (!loads.has(key)) {
+        loads.set(key, code);
+      }
+    },
+  );
+
   const url = "https://fabrika.test/p13-project";
   const project = yield* ProjectService.pipe(
     Effect.provide(
@@ -198,6 +226,10 @@ const projectWalk = Effect.fnUntraced(function* (
   const history: Array<{ letter: string; m: typeof ProjectInput.Type; answer: unknown }> = [];
   const records = new Map<string, ReadonlyArray<Entry>>();
 
+  if (usage) {
+    expect(loads.has(`${BUILD}/${project.boot.process}`)).toBe(false);
+  }
+
   for (const [n, entropy] of tape.entries()) {
     const moves =
       history.length === 0 ? ["valid"] : selector === "plain" ? ["valid", "unknown", "retry"] : ["valid", "retry"];
@@ -219,6 +251,39 @@ const projectWalk = Effect.fnUntraced(function* (
       sentAt: from().sentAt,
       seen: 0,
     });
+
+    if (usage) {
+      const key = `${BUILD}/${project.boot.process}`;
+      const loaded = Schema.decodeUnknownSync(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(loads.get(key));
+      expect(loaded.tails).toHaveLength(1);
+      const props = Schema.decodeUnknownSync(Props)(bound.get(loaded.tails[0]));
+      expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });
+      const cpuMs = accepted + (entropy % 100);
+      const wallMs = cpuMs + 1;
+      const before = reported.length;
+      yield* receive(env, props, [
+        {
+          event: { rpcMethod: "audit" },
+          eventTimestamp: null,
+          logs: [],
+          exceptions: [],
+          diagnosticsChannelEvents: [],
+          scriptName: null,
+          outcome: "ok",
+          executionModel: "stateless",
+          truncated: false,
+          cpuTime: cpuMs,
+          wallTime: wallMs,
+        },
+      ]);
+      expect(reported.slice(before)).toEqual([
+        {
+          object: JSON.stringify(["p13-project", NAME]),
+          rows: [{ process: project.boot.process, method: "other", outcome: "ok", cpuMs, wallMs }],
+        },
+      ]);
+      reached.add("usage");
+    }
 
     if (prior !== undefined) {
       expect(answer).toEqual(prior.answer);
@@ -277,4 +342,14 @@ export const suite = (harness: Harness, register: Register) => {
       ["valid", "retry"],
     );
   }
+
+  const usage = new Set<string>();
+  register(
+    "A13: a process first loaded for audit still reports usage on fresh sends and recorded retries",
+    fc.array(fc.noBias(fc.nat()), { minLength: 12, maxLength: 24 }),
+    (tape: ReadonlyArray<number>) => projectWalk(harness, tape, usage, "default", true),
+    { seed: 119120, numRuns: 6, endOnFailure: true },
+    usage,
+    ["valid", "retry", "usage"],
+  );
 };

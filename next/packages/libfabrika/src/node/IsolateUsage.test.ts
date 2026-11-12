@@ -27,6 +27,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
 import { nodeExecution } from "../runtime/Execution.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
@@ -167,6 +168,17 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         }),
       init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
       step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
+      fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
+      update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+      audit: (msg: unknown) =>
+        Effect.runPromise(
+          execution.audit(msg).pipe(
+            Effect.match({
+              onSuccess: (value: Schema.Json) => Audit.Answer.cases.ok.make({ value }),
+              onFailure: Audit.failure,
+            }),
+          ),
+        ),
       fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
       upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
       reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),

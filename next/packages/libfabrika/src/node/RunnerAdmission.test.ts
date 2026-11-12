@@ -80,6 +80,8 @@ RunnerAdmissionTest.suite({ files, services }, register);
 const environment: ProjectAuditTest.Harness["environment"] = (
   box: Parameters<ProjectAuditTest.Harness["environment"]>[0],
   accept: () => number,
+  usage: Parameters<ProjectAuditTest.Harness["environment"]>[2],
+  loaded: Parameters<ProjectAuditTest.Harness["environment"]>[3],
 ) => {
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
@@ -96,25 +98,27 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     PROJECT: namespace(unused),
     CONNECTION: namespace(unused),
     LOADER: {
-      get: vi.fn().mockReturnValue({ getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused }),
+      get: (key: string, code: Parameters<ReturnType<ProjectAuditTest.Harness["environment"]>["LOADER"]["get"]>[1]) => {
+        loaded(key, code());
+        return { getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused };
+      },
       load: unused,
     },
-    PROCESS: namespace(
-      vi.fn().mockReturnValue({
-        configure: async () => undefined,
-        msg: async (input: Incoming) => {
-          const message = input.envelope.input;
-          const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
+    PROCESS: namespace((object: string) => ({
+      configure: async () => undefined,
+      usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
+      msg: async (input: Incoming) => {
+        const message = input.envelope.input;
+        const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
 
-          if (!(await box.admit(stamped))) {
-            return Sent.cases.refused.make({ reason: "bad_msg" });
-          }
+        if (!(await box.admit(stamped))) {
+          return Sent.cases.refused.make({ reason: "bad_msg" });
+        }
 
-          const rev = accept();
-          return Sent.cases.accepted.make({ rev, pos: rev });
-        },
-      }),
-    ),
+        const rev = accept();
+        return Sent.cases.accepted.make({ rev, pos: rev });
+      },
+    })),
     RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
     MEASUREMENTS: {
       head: unused,
@@ -164,6 +168,7 @@ const door: ProjectAuditTest.Harness["door"] =
 ProjectAuditTest.suite(
   {
     open: files.pipe(Effect.flatMap((open: Effect.Success<typeof files>) => open("project-audit"))),
+    tail: () => ({ fetch: () => Promise.resolve(new Response()) }),
     environment,
     door,
   },
