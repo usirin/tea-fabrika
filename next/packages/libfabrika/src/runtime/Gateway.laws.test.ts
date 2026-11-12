@@ -10,7 +10,8 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
-import { Answer, Attached } from "../transport/Wire.ts";
+import type { connection } from "../transport/Connection.ts";
+import { Answer, Attached, type RateCountFailure } from "../transport/Wire.ts";
 
 const SEED = 119120;
 
@@ -52,7 +53,7 @@ const law = (
 
 type Connection = {
   frame: (text: string) => Effect.Effect<void, unknown>;
-  ring: (stream: string, rev: number) => Effect.Effect<void>;
+  ring: ReturnType<typeof connection>["ring"];
   wake: () => Effect.Effect<void>;
   probe: (session: string) => Effect.Effect<number | null>;
 };
@@ -72,7 +73,10 @@ const setup = Effect.fnUntraced(function* (
     stream: string,
     after: number,
     reader: string,
-  ) => Effect.Effect<{ readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" }, LedgerError>,
+  ) => Effect.Effect<
+    { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" },
+    LedgerError | typeof RateCountFailure.Type
+  >,
   call = () => Effect.succeed(Answer.cases.ok.make({ result: null })),
   session = "session-1",
   ping = 42,
@@ -137,7 +141,10 @@ describe("P12 Connection attachment laws", () => {
       try {
         const sql = nodeSql(db);
         let ring: Connection["ring"] = () => Effect.void;
-        const bell = Layer.succeed(Doorbell, { ring: (_reader, stream, rev) => ring(stream, rev) });
+        const bell = Layer.succeed(Doorbell, {
+          ring: (_reader, stream, rev) =>
+            ring(stream, rev).pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause }))),
+        });
         const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
         );
@@ -237,7 +244,7 @@ describe("P12 Connection attachment laws", () => {
   );
   law("wait race plant: save after registration loses a ring; holding the turn deadlocks", ({ id, after }) =>
     Effect.gen(function* () {
-      let ring: (stream: string, rev: number) => Effect.Effect<void> = () => Effect.void;
+      let ring: Connection["ring"] = () => Effect.void;
       let read: () => typeof Attached.Type = () => online();
       const f = yield* setup((stream, after, reader) =>
         Effect.gen(function* () {

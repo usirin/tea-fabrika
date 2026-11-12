@@ -9,6 +9,7 @@ import * as Rate from "./rateLimit.ts";
 
 type Model = typeof Rate.machine.model.Type;
 type Msg = typeof Rate.machine.msg.Type;
+type Cmd = ReturnType<typeof Rate.machine.init>[1][number];
 
 const Policy = Schema.Struct({
   limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
@@ -25,17 +26,19 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
   const messages: Array<Msg> = [];
 
   for (const pick of picks) {
-    const live = state._tag !== "fresh";
-    const p = live ? state.policy : initial;
+    const p = state._tag !== "fresh" ? state.policy : initial;
     // Read the state before choosing a repeat, a backward clock, expiry, skipped windows or a policy change.
-    const times = live ? [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3] : [18];
+    const times =
+      state._tag !== "fresh"
+        ? [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3]
+        : [18];
     const msg: Msg = {
       type: "take",
       at: times[pick % times.length]!,
       policy: pick % 7 === 0 ? (pick % 2 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
     };
     messages.push(msg);
-    state = applyCell(Rate.machine, state, msg)[0];
+    state = applyCell<Model, Msg, Cmd>(Rate.machine, state, msg)[0];
   }
 
   return messages;
@@ -109,7 +112,7 @@ it.prop(
   { window: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1000 })) },
   ({ window }) => {
     const state = Rate.machine.init(null, {})[0];
-    const [next, cmds] = applyCell(Rate.machine, state, {
+    const [next, cmds] = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
       type: "take",
       at: Number.MAX_SAFE_INTEGER,
       policy: { limit: 1, window },
@@ -125,7 +128,11 @@ it("vector: expiry is half-open, just before, at and after the end", () => {
   // The plan pins the exact boundary as well as generating time walks above.
   let state = Rate.machine.init(null, {})[0];
   const take = (at: number) => {
-    const result = applyCell(Rate.machine, state, { type: "take", at, policy: { limit: 1, window: 60 } });
+    const result = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
+      type: "take",
+      at,
+      policy: { limit: 1, window: 60 },
+    });
     state = result[0];
     return result[1][0]!.decision;
   };

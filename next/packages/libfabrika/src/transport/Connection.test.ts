@@ -74,7 +74,7 @@ const harness = (first: Saved) => {
   const waits: Array<Pending<Waited> & { readonly stream: string; readonly after: number }> = [];
   const calls: Array<Pending<typeof Answer.Type>> = [];
   const reentrant = new Set<string>();
-  let ring: (stream: string, rev: number) => Effect.Effect<void> = () => Effect.void;
+  let ring: ReturnType<typeof connection>["ring"] = () => Effect.void;
   const c = connection<unknown>({
     reader: READER,
     session: SESSION,
