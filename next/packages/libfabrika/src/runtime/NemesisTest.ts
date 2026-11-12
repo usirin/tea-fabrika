@@ -10,8 +10,7 @@ import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
 import { expectTypeOf } from "vitest";
-import { inbox, letterLine } from "../processes/Mailbox.ts";
-import { ProcessEvent } from "../processes/Process.ts";
+import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -19,7 +18,6 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain, PROCESS } from "../telemetry/Trace.ts";
 import * as Chaos from "./Chaos.ts";
 import { BadRow, BadTarget, Nemesis, NemesisError, NotGranted, Off, Storage, Unreachable } from "./Nemesis.ts";
-import * as NemesisLedger from "./NemesisLedger.ts";
 import * as NemesisNone from "./NemesisNone.ts";
 
 /** A fresh scoped file, yielding a scoped connection Effect that reopens that file. */
@@ -39,31 +37,30 @@ const target = Chaos.Target.make({
 
 const id = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
-const from = {
-  by: "brain",
-  for: "person",
-  sentAt: "2026-11-12T00:00:00.000Z",
-  seen: 0,
-  parent: null,
-  traceId: "1234567890abcdef1234567890abcdef",
-  build: "test",
-} as const;
+type Failure = {
+  readonly reason: "unreachable" | "bad_row" | "storage";
+  readonly part: "inbox-wait" | "process-wait" | "inbox-read" | "process-read";
+  readonly cause: unknown;
+};
 
-type Needs = Layer.Services<ReturnType<typeof NemesisLedger.layer>>;
-type Reader = Needs["Service"];
-type Line = ReturnType<typeof letterLine>;
-
-/** The Node driver supplies the next lower service, without this suite importing its module. */
+/** The driver composes real history services and injects faults below their read boundary. */
 export type Driver = {
   readonly database: Database;
-  readonly ledger: Context.Key<Needs, Reader>;
-  readonly ledgerLayer: (sql: Sql) => Layer.Layer<Needs>;
-  readonly lineFor: (metadata: typeof from, event: typeof ProcessEvent.Type) => Line;
+  readonly seed: (
+    sql: Sql,
+    count: number,
+    body: string,
+  ) => Effect.Effect<{
+    readonly boundary: number;
+    readonly processBoundary: number;
+  }>;
+  readonly head: (sql: Sql, stream: string) => Effect.Effect<number>;
+  readonly service: (
+    sql: Sql,
+    operation: Service["fire"],
+    options?: { readonly tails?: number; readonly parked?: number; readonly failure?: Failure },
+  ) => Effect.Effect<Service, never, Scope.Scope>;
   readonly page: number;
-  readonly error: (
-    reason: "unreachable" | "bad_row" | "storage",
-    cause: unknown,
-  ) => Effect.Error<ReturnType<Reader["wait"]>>;
   readonly damage: (sql: Sql, key: string, kind: "json" | "body" | "zero" | "negative" | "fraction") => void;
 };
 
@@ -109,56 +106,6 @@ const failed = Effect.fnUntraced(function* <A>(
   return error;
 });
 
-const append = Effect.fnUntraced(function* (ledger: Reader, stream: string, key: string, line: Line) {
-  const placed = yield* ledger.append(stream, key, line);
-  expect(placed._tag).toBe("placed");
-
-  if (placed._tag !== "placed") {
-    throw new Error("test history was refused");
-  }
-
-  return placed;
-});
-
-const service = (Ledger: Driver["ledger"]) =>
-  Effect.fnUntraced(function* (ledger: Reader, operation: Service["fire"]) {
-    const context = yield* Layer.build(
-      NemesisLedger.layer(operation).pipe(Layer.provide(Layer.succeed(Ledger, ledger))),
-    );
-    return Context.get(context, Nemesis);
-  });
-
-const head = Effect.fnUntraced(function* (ledger: Reader, stream: string) {
-  const waited = yield* ledger.wait(stream, 0);
-  return waited._tag === "ready" ? waited.rev : 0;
-});
-
-const seed = (lineFor: Driver["lineFor"]) =>
-  Effect.fnUntraced(function* (ledger: Reader, count: number, body: string) {
-    for (let i = 0; i < count; i++) {
-      // Other streams create global revision jumps without inbox gaps.
-      yield* append(ledger, "unrelated", `other-${i}`, letterLine(from, { unrelated: i }));
-      yield* append(ledger, inbox(target.name), `letter-${i}`, letterLine(from, { item: i, body }));
-    }
-
-    const restart = yield* append(
-      ledger,
-      `processes/${target.name}`,
-      "restart-1",
-      lineFor(
-        from,
-        ProcessEvent.cases.restarted.make({
-          name: target.name,
-          after: process,
-          process: successor,
-          reason: "crash",
-          build: "test",
-        }),
-      ),
-    );
-    return { boundary: yield* head(ledger, inbox(target.name)), processBoundary: restart.rev };
-  });
-
 const readReport = Effect.fnUntraced(function* (nemesis: Service) {
   const report = yield* nemesis.check(target);
   const codec = Schema.toCodecJson(Chaos.Report);
@@ -178,7 +125,7 @@ const noLeak = (output: unknown, secret: string) => {
   }
 };
 
-export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PAGE, error, damage: corrupt }: Driver) =>
+export const suite = ({ database, service, seed, head, page: PAGE, damage: corrupt }: Driver) =>
   describe("P17b history and off contract, next/", () => {
     it.effect.prop(
       "Off refuses both operations with its own nested typed error",
@@ -200,9 +147,8 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
             const asked = request(fault, n);
-            const nemesis = yield* service(Ledger)(ledger, (received) =>
+            const nemesis = yield* service(sql, (received) =>
               Effect.sync(() => {
                 expect(received).toEqual(asked);
                 return outcome;
@@ -222,7 +168,6 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
             const cause = new RangeError(secret);
 
             for (const reason of [
@@ -234,7 +179,7 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
               new Storage({ cause }),
             ]) {
               const error = new NemesisError({ reason });
-              const nemesis = yield* service(Ledger)(ledger, () => Effect.fail(error));
+              const nemesis = yield* service(sql, () => Effect.fail(error));
               const result = yield* failed(nemesis.fire(request(fault, n)), reason._tag);
               expect(result.reason.cause).toBe(cause);
             }
@@ -253,14 +198,12 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
             const expected = yield* Effect.scoped(
               Effect.gen(function* () {
                 const sql = yield* open;
-                const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-                return yield* seed(lineFor)(ledger, count, body);
+                return yield* seed(sql, count, body);
               }),
             );
             // The first connection has closed. This layer reads the same file through a fresh handle.
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            const nemesis = yield* service(Ledger)(ledger, () => Effect.die("check must never fire"));
+            const nemesis = yield* service(sql, () => Effect.die("check must never fire"));
             const report = yield* readReport(nemesis);
             expect(report).toMatchObject({
               stream: inbox(target.name),
@@ -293,45 +236,13 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            const expected = yield* seed(lineFor)(ledger, count, "body");
-            // Each real wait captures a head, then appends a tail before the reader can consume a page.
-            const concurrent: Reader = {
-              ...ledger,
-              wait: (stream, after) =>
-                Effect.gen(function* () {
-                  expect(after, "capture uses the nonblocking wait from zero").toBe(0);
-                  const captured = yield* ledger.wait(stream, after);
-
-                  for (let i = 0; i < tails; i++) {
-                    yield* append(
-                      ledger,
-                      stream,
-                      `tail-${i}`,
-                      stream === inbox(target.name)
-                        ? letterLine(from, { late: i })
-                        : lineFor(
-                            from,
-                            ProcessEvent.cases.restarted.make({
-                              name: target.name,
-                              after: process,
-                              process: successor,
-                              reason: "late",
-                              build: "test",
-                            }),
-                          ),
-                    );
-                  }
-
-                  return captured;
-                }),
-            };
-            const nemesis = yield* service(Ledger)(concurrent, () => Effect.die("check must never fire"));
+            const expected = yield* seed(sql, count, "body");
+            const nemesis = yield* service(sql, () => Effect.die("check must never fire"), { tails });
             const report = yield* readReport(nemesis);
             expect(report).toMatchObject({ ...expected, letters: count, doubled: 0, gaps: 0 });
             expect(report.restarts.map((row) => row.ref)).toEqual(["restart-1"]);
-            expect(yield* head(ledger, inbox(target.name))).toBeGreaterThan(expected.boundary);
-            expect(yield* head(ledger, `processes/${target.name}`)).toBeGreaterThan(expected.processBoundary);
+            expect(yield* head(sql, inbox(target.name))).toBeGreaterThan(expected.boundary);
+            expect(yield* head(sql, `processes/${target.name}`)).toBeGreaterThan(expected.processBoundary);
           }),
         ),
       { arbitrary },
@@ -345,18 +256,7 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            const concurrent: Reader = {
-              ...ledger,
-              wait: (stream, after) =>
-                Effect.gen(function* () {
-                  const captured = yield* ledger.wait(stream, after);
-                  expect(captured._tag).toBe("parked");
-                  yield* append(ledger, stream, `late-${n}`, letterLine(from, { n }));
-                  return captured;
-                }),
-            };
-            const nemesis = yield* service(Ledger)(concurrent, () => Effect.die("check must never fire"));
+            const nemesis = yield* service(sql, () => Effect.die("check must never fire"), { parked: n });
             expect(yield* readReport(nemesis)).toMatchObject({
               boundary: 0,
               processBoundary: 0,
@@ -384,13 +284,12 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            yield* seed(lineFor)(ledger, count, "body");
+            yield* seed(sql, count, "body");
             // Schema/SQL corruption is injected below the reader, never implemented by a fake checker.
             const key = `letter-${pick % count}`;
 
             corrupt(sql, key, damage);
-            const nemesis = yield* service(Ledger)(ledger, () => Effect.die("check must never fire"));
+            const nemesis = yield* service(sql, () => Effect.die("check must never fire"));
             yield* failed(nemesis.check(target), "BadRow");
           }),
         ),
@@ -409,25 +308,22 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            yield* seed(lineFor)(ledger, 3, "body");
-            const lower = error(reason, new Error(secret));
-            const affected = part.startsWith("inbox") ? inbox(target.name) : `processes/${target.name}`;
-            const broken: Reader = {
-              ...ledger,
-              wait: (stream, after) =>
-                stream === affected && part.endsWith("wait") ? Effect.fail(lower) : ledger.wait(stream, after),
-              read: (stream, after) =>
-                stream === affected && part.endsWith("read")
-                  ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
-                  : ledger.read(stream, after),
-            };
-            const nemesis = yield* service(Ledger)(broken, () => Effect.die("check must never fire"));
+            yield* seed(sql, 3, "body");
+            const cause = new Error(secret);
+            const nemesis = yield* service(sql, () => Effect.die("check must never fire"), {
+              failure: { reason, part, cause },
+            });
             const translated = yield* failed(
               nemesis.check(target),
               reason === "unreachable" ? "Unreachable" : reason === "bad_row" ? "BadRow" : "Storage",
             );
-            expect(translated.reason.cause).toBe(lower);
+            // Each service owns its error. Nemesis retains ProcessHistory's error, which retains Ledger's.
+            expect(translated.reason.cause).toHaveProperty("_tag", "ProcessHistoryError");
+            expect(translated.reason.cause).toHaveProperty("reason.cause._tag", "LedgerError");
+            const chain = Schema.decodeUnknownSync(
+              Schema.Struct({ reason: Schema.Struct({ cause: Schema.Struct({ cause: Schema.Unknown }) }) }),
+            )(translated.reason.cause);
+            expect(chain.reason.cause.cause).toBe(cause);
           }),
         ),
       { arbitrary },
@@ -441,12 +337,11 @@ export const suite = ({ database, ledger: Ledger, ledgerLayer, lineFor, page: PA
           Effect.gen(function* () {
             const open = yield* database;
             const sql = yield* open;
-            const ledger = Context.get(yield* Layer.build(ledgerLayer(sql)), Ledger);
-            yield* seed(lineFor)(ledger, 3, body);
+            yield* seed(sql, 3, body);
             const telemetry = yield* Layer.build(SpanSink.layer(sql, { object: "chaos-test" }));
             const sink = Context.get(telemetry, SpanSink);
             const tracer = Context.get(telemetry, Tracer.Tracer);
-            const live = yield* service(Ledger)(ledger, () =>
+            const live = yield* service(sql, () =>
               refuse
                 ? Effect.fail(new NemesisError({ reason: new BadTarget({ cause: new Error(errorText) }) }))
                 : Effect.succeed(outcome),
