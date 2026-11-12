@@ -403,8 +403,8 @@ export class ProgramRunner extends Context.Service<
             change.origin,
           );
           yield* fault("after_swap_record");
-          const wake =
-            next.wake === null || mailRetry === null ? (next.wake ?? mailRetry) : Math.min(next.wake, mailRetry);
+          const times = [next.wake, mailRetry, sendRetry].filter((at) => at !== null);
+          const wake = times.length === 0 ? null : Math.min(...times);
           yield* alarm.set(wake);
           alarmAt = wake;
           yield* fault("after_swap_alarm");
