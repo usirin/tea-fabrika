@@ -290,10 +290,14 @@ export const lintWorkflow = (text: string): string[] => {
   require(JSON.stringify(matrix["shard"]) === "[1,2,3,4,5,6]" &&
     Object.keys(matrix).length === 1, "next has exactly six shards and no other matrix entries");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+  const nextCommand =
+    'pnpm exec vitest run next/ --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+  const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
     "pnpm install --frozen-lockfile",
-    'pnpm exec vitest run next/ --shard "$SHARD"',
+    nextCommand,
+    adviceCommand,
     chromium,
     "node next/apps/fabrika/e2e.ts",
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
@@ -302,8 +306,8 @@ export const lintWorkflow = (text: string): string[] => {
   require(nextRuns.length === allowed.length &&
     allowed.every(
       (command) => nextRuns.filter((run) => run === command).length === 1,
-    ), "next runs exactly its install and four approved commands once each");
-  const testStep = nextSteps.find((s) => s["run"] === 'pnpm exec vitest run next/ --shard "$SHARD"');
+    ), "next runs exactly its install and five approved commands once each");
+  const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !== undefined, "next runs all its own tests with --shard and no exclusions");
   const shard = map(testStep?.["env"])["SHARD"];
   require(testStep !== undefined &&
@@ -312,6 +316,11 @@ export const lintWorkflow = (text: string): string[] => {
     /^\$\{\{\s*matrix\.shard\s*\}\}\/6$/.test(
       shard,
     ), "next passes its six-shard expression without an extra test guard");
+  const advice = nextSteps.find((s) => s["run"] === adviceCommand);
+  require(testStep !== undefined &&
+    advice !== undefined &&
+    nextSteps.indexOf(testStep) < nextSteps.indexOf(advice) &&
+    compact(advice["if"]) === "!cancelled()", "next timing advice follows tests even after failure, unless cancelled");
 
   for (const [command, condition] of [
     [chromium, "matrix.shard == 1 && hashFiles('next/apps/fabrika/e2e/*.test.ts') != ''"],
