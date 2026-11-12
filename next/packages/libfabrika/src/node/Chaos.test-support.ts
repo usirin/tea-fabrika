@@ -7,6 +7,7 @@ import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
+import { Row } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
@@ -25,11 +26,14 @@ import { Nemesis } from "../runtime/Nemesis.ts";
 import * as NemesisLedger from "../runtime/NemesisLedger.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import { StepFault } from "../runtime/StepFault.ts";
+import * as StepFaultNone from "../runtime/StepFaultNone.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import * as StepFaultTest from "./stepFault.test-support.ts";
 
 const brain = "SHA256:test-brain";
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
@@ -86,6 +90,7 @@ export const open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p17b-runner-" });
   const files = (name: string) => connection(path.join(folder, `${name}.sqlite`));
+  const fault = yield* StepFaultTest.make();
 
   const session = Effect.fnUntraced(function* (
     name: string,
@@ -93,6 +98,7 @@ export const open = Effect.gen(function* () {
     program: unknown,
     handlers: Readonly<Record<string, Handler<never>>>,
     observe: (update: Update) => Effect.Effect<void> = () => Effect.void,
+    before?: (input: typeof StepFaultTest.Before.Type) => Effect.Effect<void>,
   ) {
     const ledger = yield* files("ledger");
     const store = yield* files(`store-${name}`);
@@ -153,6 +159,7 @@ export const open = Effect.gen(function* () {
       }),
       Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
       Layer.succeed(Recording, { flush }),
+      before === undefined ? StepFaultNone.layer : Layer.succeed(StepFault, { before }),
     ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(ledgerLayer(ledger)))));
     const context = yield* Layer.build(
       ProgramRunner.layer(
@@ -227,5 +234,21 @@ export const open = Effect.gen(function* () {
     );
   }, Effect.scoped);
 
-  return { session, snapshot, letters, check, person, agent, letter };
+  const history = (name: string) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const sql = yield* files("manager");
+        return sql
+          .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
+          .map(Schema.decodeUnknownSync(Row));
+      }),
+    );
+  const dead = Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* files("manager");
+      return sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev").map(Schema.decodeUnknownSync(Row));
+    }),
+  );
+
+  return { session, snapshot, letters, check, person, agent, letter, fault, history, dead };
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
