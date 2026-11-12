@@ -346,10 +346,14 @@ const string = (value: unknown) => {
 it("L7: each prefix resolves from the winning file's base, pins committed bytes and follows outside targets", async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.array(fc.record({ move: fc.nat(), pick: fc.nat(), traversal: Arbitrary.schema(Traversal) }), {
-        minLength: 1,
-        maxLength: 8,
-      }),
+      fc.array(
+        fc.record({
+          move: fc.nat(),
+          pick: fc.nat(),
+          traversal: fc.record({ suffix: fc.constantFrom(...directorySuffixes), inTarget: fc.boolean() }),
+        }),
+        { minLength: 1, maxLength: 8 },
+      ),
       async (tape) =>
         Effect.runPromise(
           Effect.scoped(
