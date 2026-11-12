@@ -20,7 +20,28 @@ The probe code stays outside the repo.
 This selects the plan's zero-CPU branch. The product keeps the platform's zero reading.
 U9's spin-above-idle requirement is not met by this probe; its assertion stays unchanged.
 The probe did not test a tail bound inside a Process object, a throwing call, `exceededCpu`
-or isolate eviction. The host must still run the product's U9 scenario.
+or isolate eviction. The later host check below covers the Process-object wiring.
+
+## The host product check
+
+The lead's 2026-11-12 host record confirms that the product's tail works on the real local
+instance. A probe using U9's setup recorded 8 `isolate.cpu` rows for `checklist:1`: describe 1,
+init 1, admit 3 and step 3. Each had the right process and outcome `ok`. A successor after
+restart recorded 2 rows with its own process id, and `spin:1` recorded 6 rows.
+
+Removing the `tails` line from `cloudflare/index.ts` made every count 0 with no other change.
+The lead restored it after the plant. This proves the metadata bindings reach the prebuilt
+Worker, the loader delivers to the bridge class, and the init listener runs in that bundle.
+
+All 16 of 16 rows reported CPU 0 and wall time 0. The spinning step used 40,000,000 loop turns;
+its enclosing-span readings were 37 ms and 272 ms. Local platform CPU therefore remains an
+unusable measurement. The Node pure-step timing source is still needed.
+
+This was a product check, not a passing U9 run. U9 stopped before its tail assertions because
+its direct `msg` call supplied an envelope no gateway had delivered. The inbox refused it.
+The tests step has changed U9 to send through the signed door and separated row checks from
+the CPU comparison. Only that comparison is an expected failure, with its assertion unchanged.
+The lead still owes a host rerun of that corrected test, including replay-fold rows.
 
 ## What the product records
 
@@ -51,12 +72,9 @@ Alchemy also creates the loopback tail binding and wraps
 the usage RPC. The trace adapter takes Alchemy's tail event type. The existing loader still
 accepts native code options; the bound Alchemy fetcher's `raw` is passed only at that old boundary.
 The Process caller supplies the sink's batch operation; the runtime value imports no telemetry.
-The host must validate this wiring, including a failed usage call's saved span. The earlier
-host U9 attempt stopped at an unreachable control call before any tail assertion. This build
-uses the bridge form from the installed Alchemy source, but still needs the host rerun.
-That run must confirm the two metadata bindings reach the prebuilt Worker, a loader tail
-reaches `IsolateTail`, and the init listener handles it. Missing metadata fails decoding with
-the missing binding's name. With debug logging enabled, `isolate.tail listener registered`
+The host check above confirmed the metadata bindings, loader tail delivery and init listener.
+A failed usage call's saved span still needs a host check. Missing metadata fails decoding
+with the missing binding's name. With debug logging enabled, `isolate.tail listener registered`
 marks init and `isolate.tail received` gives the incoming event count, without trace content.
 
 ## Measurement still owed on the host
@@ -73,8 +91,9 @@ nice -n 19 pnpm exec vitest run --maxWorkers=1 next/apps/fabrika/src/worker-usag
 ```
 
 It must check checklist step and replay-fold row counts and attribution, including a successor.
-Its spin assertion must keep failing if local CPU is zero. Save that reading, rather than
-weakening the law.
+Its separate spin comparison is declared an expected failure while local CPU is zero. The
+assertion stays unchanged, so a real CPU reading that passes it will fail the expected-failure
+test. Connection, delivery and health-row checks run outside that expected failure.
 
 Keep the measurement script on a separate branch, proposed name `p34c-walls-measurement`.
 That branch and script have **not yet been created**. Amendment A4 assigns them to the lead
@@ -121,7 +140,8 @@ sample location are **not yet run**. Later slices cannot pin measured limits fro
 
 ## What this cannot tell us
 
-The probe proves local loader tail delivery, not the product's Process-object wiring.
-It gives no usable local CPU or wall timing. Node elapsed timings are still owed and will
-not establish cloud CPU. Neither the full run nor eviction and duplicate-delivery checks have
-run. The extra cloud RPC cost and whether ten times p99 is enough remain unmeasured.
+The host product check proves local Process-object tail wiring. The corrected U9 still needs
+its host rerun, including replay-fold rows. Neither host check gives usable local CPU or wall
+timing. Node elapsed timings are still owed and will not establish cloud CPU. Neither the full
+run nor eviction and duplicate-delivery checks have run. The extra cloud RPC cost and whether
+ten times p99 is enough remain unmeasured.
