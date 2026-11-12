@@ -3,7 +3,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
@@ -14,6 +13,14 @@ import { Answer, Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
+
+import { Arbitrary, Cause, Clock, Exit, Layer, Stream } from "effect";
+import { LedgerError } from "../ledger/Ledger.ts";
+import { Archive } from "../telemetry/Archive.ts";
+import { RecordManager } from "../telemetry/Records.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
+import { Chain } from "../telemetry/Trace.ts";
+import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
@@ -253,6 +260,186 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       yield* TestClock.setTime(H + HOUR);
     }).pipe(Effect.provide(w.layer));
   }),
+);
+
+const T864_DAY = 24 * HOUR;
+
+const T864Draw = Schema.Struct({
+  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+  value: Schema.Json,
+});
+
+const t864Draws = Arbitrary.array(Arbitrary.schema(T864Draw), { minLength: 4, maxLength: 12 });
+const T864Due = Schema.Array(Schema.Struct({ day: Schema.String, rows: Schema.Int, part: Schema.Int }));
+
+const t864Pending = (db: DatabaseSync) =>
+  db
+    .prepare("SELECT spanId FROM unsent ORDER BY rowid")
+    .all()
+    .map((row) => String(row.spanId));
+
+const t864Due = (db: DatabaseSync, now: number) =>
+  Schema.decodeUnknownSync(T864Due)(
+    db
+      .prepare(`SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch') AS day, count(*) AS rows,
+      1 + coalesce((SELECT max(part) FROM archived
+        WHERE day = strftime('%Y-%m-%d', measurements.at / 1000, 'unixepoch')), 0) AS part
+      FROM measurements WHERE at < ? GROUP BY day ORDER BY day`)
+      .all(Math.floor((now - 15 * T864_DAY) / T864_DAY) * T864_DAY),
+  );
+
+const t864Tables = (db: DatabaseSync) =>
+  Object.fromEntries(
+    db
+      .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
+      .all()
+      .map(({ name }) => [
+        name,
+        db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
+      ]),
+  );
+
+const t864Delivered = Effect.gen(function* () {
+  const records = yield* RecordManager;
+  const spans = yield* Stream.runCollect(records.read(Chain.cases.spans.make({})));
+  return Array.from(spans, (span) => span.spanId);
+});
+
+const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof T864Draw.Type) {
+  const now = yield* Clock.currentTimeMillis;
+
+  if (
+    !db.prepare("SELECT name FROM sqlite_schema WHERE name='unsent'").get() ||
+    t864Pending(db).length === 0 ||
+    t864Due(db, now).length === 0
+  ) {
+    for (let i = 0; i <= draw.pick % 3; i++) {
+      yield* Effect.void.pipe(Effect.withSpan("t864.pending", { attributes: { value: JSON.stringify(draw.value) } }));
+    }
+
+    yield* TestClock.adjust(17 * T864_DAY + draw.pick);
+    yield* Effect.void.pipe(Effect.withSpan("t864.current"));
+  }
+
+  const pending = t864Pending(db);
+  const due = t864Due(db, yield* Clock.currentTimeMillis);
+  expect(pending.length).toBeGreaterThan(0);
+  expect(due.length).toBeGreaterThan(0);
+  expect(
+    db
+      .prepare(`SELECT count(*) AS n FROM measurements WHERE at < ?
+    AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`)
+      .get(Math.floor(((yield* Clock.currentTimeMillis) - 15 * T864_DAY) / T864_DAY) * T864_DAY)?.n,
+  ).toBe(0);
+  return { pending, due };
+});
+
+const t864Layer = (db: DatabaseSync, pick: number) =>
+  Layer.mergeAll(
+    SpanSink.layer(nodeSql(db), { object: "t864" }),
+    RecordManager.memory(1 + (pick % 2048)),
+    Archive.memory,
+  );
+
+it.effect.prop(
+  "T864 reserved completion does not flush",
+  { draws: t864Draws },
+  ({ draws }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      yield* TestClock.setTime(H);
+      yield* Effect.gen(function* () {
+        for (const draw of draws) {
+          const { pending, due } = yield* t864Prepare(db, draw);
+          const tables = t864Tables(db);
+          const delivered = yield* t864Delivered;
+          const answer = Answer.cases.refused.make({ reason: "reserved" });
+          expect(yield* Runtime.complete(Effect.succeed(answer))).toBe(answer);
+          expect(t864Tables(db)).toEqual(tables);
+          expect(t864Pending(db)).toEqual(pending);
+          expect(t864Due(db, yield* Clock.currentTimeMillis)).toEqual(due);
+          const after = yield* t864Delivered;
+          expect(after).toEqual(delivered);
+          expect(after).not.toContain(pending[draw.pick % pending.length]);
+          expect(
+            db
+              .prepare("SELECT * FROM archived WHERE day=? AND part=?")
+              .get(due[draw.pick % due.length]!.day, due[draw.pick % due.length]!.part),
+          ).toBeUndefined();
+        }
+      }).pipe(Effect.provide(t864Layer(db, draws[0]!.pick)));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
+);
+
+it.effect.prop(
+  "T864 ordinary success and failure both flush",
+  { draws: t864Draws },
+  ({ draws }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      yield* TestClock.setTime(H);
+      yield* Effect.gen(function* () {
+        const counts = { success: 0, failure: 0 };
+
+        for (const draw of draws) {
+          const { pending, due } = yield* t864Prepare(db, draw);
+          const unvisited = (["success", "failure"] as const).filter((outcome) => counts[outcome] === 0);
+          const choices = unvisited.length > 0 ? unvisited : (["success", "failure"] as const);
+          const outcome = choices[draw.pick % choices.length]!;
+          const answer = Answer.cases.ok.make({ result: draw.value });
+          const failure = new LedgerError({ reason: "unreachable" });
+          const exit = yield* Effect.exit(
+            Runtime.complete(outcome === "success" ? Effect.succeed(answer) : Effect.fail(failure)),
+          );
+          const delivered = yield* t864Delivered;
+
+          for (const id of pending) {
+            expect(delivered, "complete delivers each pending span").toContain(id);
+            expect(t864Pending(db)).not.toContain(id);
+          }
+
+          for (const day of due) {
+            expect(db.prepare("SELECT * FROM archived WHERE day=? AND part=?").get(day.day, day.part)).toMatchObject({
+              ...day,
+              key: expect.stringContaining(`measurements/t864/${day.day}`),
+              sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+            });
+            expect(
+              db
+                .prepare("SELECT count(*) AS n FROM measurements WHERE strftime('%Y-%m-%d', at / 1000, 'unixepoch')=?")
+                .get(day.day)?.n,
+            ).toBe(0);
+          }
+
+          expect(t864Due(db, yield* Clock.currentTimeMillis)).toEqual([]);
+          expect(
+            db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='sink.archive' AND ok=1").get()?.n,
+          ).toBeGreaterThan(0);
+
+          if (outcome === "success") {
+            expect(Exit.isSuccess(exit)).toBe(true);
+
+            if (Exit.isSuccess(exit)) {
+              expect(exit.value).toBe(answer);
+            }
+          } else {
+            expect(Exit.isFailure(exit)).toBe(true);
+
+            if (Exit.isFailure(exit)) {
+              expect(Cause.squash(exit.cause)).toBe(failure);
+            }
+          }
+
+          counts[outcome]++;
+        }
+
+        expect(counts.success).toBeGreaterThan(0);
+        expect(counts.failure).toBeGreaterThan(0);
+        expect(counts.success + counts.failure).toBe(draws.length);
+      }).pipe(Effect.provide(t864Layer(db, draws[0]!.pick)));
+    }),
+  { arbitrary: { seed: 119120, runs: 50 } },
 );
 
 const AnswerWalk = Schema.Struct({
