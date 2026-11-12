@@ -271,8 +271,20 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           async (repoId, operator, selection, key, traceId, cells) => {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
             return Effect.runPromise(
-              run((_store, _trust, ledger) =>
+              run((_store, trust, ledger) =>
                 Effect.gen(function* () {
+                  const snapshot = yield* settings;
+                  const selected = Event.cases.selected.make({
+                    repository: repoId,
+                    key,
+                    label: "repo",
+                    branch: "release",
+                    commit: "a".repeat(40),
+                    hash: "b".repeat(64),
+                    present: true,
+                    settings: snapshot,
+                    request: selection,
+                  });
                   const event = Event.cases.decision.make({
                     repository: repoId,
                     key,
@@ -293,20 +305,36 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     traceId,
                     build: "fixture-build",
                   };
+                  const receipt = yield* trust.write(selected, { ...recorded, parent: null });
 
                   for (const cell of cells) {
+                    let appends = 0;
                     const broken = {
                       ...ledger,
-                      append: () =>
-                        cell.move % 2 === 0
+                      append: () => {
+                        appends++;
+                        return cell.move % 2 === 0
                           ? Effect.fail(new LedgerError({ reason: "storage" }))
-                          : Effect.succeed(Appended.cases.refused.make({ reason: "bad_parent" })),
+                          : Effect.succeed(Appended.cases.refused.make({ reason: "bad_parent" }));
+                      },
                     };
                     const failed = yield* RepositoryTrust.pipe(
                       Effect.provide(RepositoryTrustLedger.layer),
                       Effect.provideService(Ledger, broken),
                     );
-                    expect(Exit.isFailure(yield* failed.write(event, recorded).pipe(Effect.exit))).toBe(true);
+                    const result = yield* failed.write(event, { ...recorded, seen: receipt.rev }).pipe(Effect.exit);
+                    expect(appends).toBe(1);
+                    expect(Exit.isFailure(result)).toBe(true);
+
+                    if (Exit.isFailure(result)) {
+                      const failure = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                      expect(failure?._tag).toBe("Fail");
+
+                      if (failure?._tag === "Fail") {
+                        expect(failure.error.reason._tag).toBe("Storage");
+                      }
+                    }
+
                     const corrupt: Entry = Schema.decodeUnknownSync(EntrySchema)({
                       id: selection,
                       stream: "fixture",

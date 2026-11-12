@@ -7,7 +7,7 @@ import type { Schema } from "effect";
 import { Arbitrary, Effect } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
-import { TrustDecision } from "../RepositoryTrust.ts";
+import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 
 type Model = typeof Open.machine.model.Type;
@@ -26,6 +26,144 @@ const tape = fc.record({
   receipts: fc.array(generated(Open.Receipt), { minLength: 3, maxLength: 6 }),
   failures: fc.array(generated(Open.Refusal), { minLength: 1, maxLength: 3 }),
   cells: fc.array(fc.record({ move: fc.nat(), pick: fc.nat(), yes: fc.boolean() }), { minLength: 10, maxLength: 60 }),
+});
+
+it("L4/L6: saved history replays through the machine, with a matching new save required for accepted trust", () => {
+  fc.assert(
+    fc.property(tape, fc.uniqueArray(ids, { minLength: 63, maxLength: 63 }), (draw, requests) => {
+      let model: Model = Open.machine.init(null, undefined)[0];
+      const snapshot = draw.snapshots[0]!;
+      const events: Array<Event> = [];
+      const selected: Array<typeof Event.cases.selected.Type> = [];
+      const messages: Array<Msg> = [];
+      let decision: typeof TrustDecision.Type | undefined;
+      let writes = 0;
+      const send = (msg: Msg) => {
+        messages.push(msg);
+        model = applyCell(Open.machine, model, msg)[0];
+        return model;
+      };
+      const select = (pick: number) => {
+        const past = draw.snapshots[pick % draw.snapshots.length]!;
+        const event = Event.cases.selected.make({
+          repository: snapshot.repository,
+          key: snapshot.key,
+          label: past.label,
+          branch: past.branch,
+          commit: past.commit,
+          hash: past.hash,
+          present: past.present,
+          settings: past.settings,
+          request: draw.selections[selected.length]!,
+        });
+        selected.push(event);
+        events.push(event);
+        return event;
+      };
+      const answer = (past: typeof Event.cases.selected.Type, yes: boolean) => {
+        decision = yes ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({});
+        events.push(
+          Event.cases.decision.make({
+            repository: past.repository,
+            key: past.key,
+            commit: past.commit,
+            hash: past.hash,
+            selection: past.request,
+            request: requests[writes++]!,
+            decision,
+            actor: snapshot.person,
+            method: "terminal",
+          }),
+        );
+      };
+      const replay = (pick: number) => {
+        const selection = draw.selections[pick % draw.selections.length]!;
+        send({ type: "select", selection });
+        expect(model._tag).toBe("checking");
+        send({ type: "checked", selection, snapshot });
+        expect(model._tag).toBe("checking");
+        const result = send({ type: "history", selection, events: [...events] });
+        expect(result._tag).toBe(
+          decision?._tag === "accepted" ? "saving" : decision?._tag === "denied" ? "refused" : "awaiting_trust",
+        );
+
+        if (result._tag === "saving") {
+          expect(result.snapshot).toEqual(snapshot);
+          expect(result.request).toBe(selection);
+          const other = draw.selections.find((id) => id !== selection)!;
+          const receipt = draw.receipts[pick % draw.receipts.length]!;
+          expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
+          expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
+          const ready = send({ type: "saved", selection, request: selection, receipt });
+          expect(ready._tag).toBe("ready");
+
+          if (ready._tag === "ready") {
+            expect(ready.snapshot).toEqual(snapshot);
+            expect(ready.receipt).toEqual(receipt);
+          }
+        } else if (result._tag === "refused") {
+          expect(result.reason).toBe("denied");
+        }
+
+        send({ type: "close" });
+        expect(model._tag).toBe("closed");
+      };
+
+      replay(0);
+
+      for (const cell of draw.cells) {
+        const moves = selected.length === 0 ? ["select"] : ["answer", "opened"];
+
+        if (selected.length > 0 && selected.length < draw.selections.length) {
+          moves.push("select");
+        }
+
+        const move = moves[cell.move % moves.length];
+
+        if (move === "select") {
+          select(cell.pick);
+        } else {
+          const past = selected[cell.pick % selected.length]!;
+
+          if (move === "answer") {
+            answer(past, cell.yes);
+          } else {
+            events.push(
+              Event.cases.opened.make({
+                repository: past.repository,
+                key: past.key,
+                commit: past.commit,
+                hash: past.hash,
+                selection: past.request,
+                request: requests[writes++]!,
+                settings: past.settings,
+                result: cell.yes ? "ready" : "refused",
+              }),
+            );
+          }
+        }
+
+        replay(cell.pick);
+      }
+
+      const past = selected[0]!;
+      answer(past, true);
+      replay(0);
+      answer(past, false);
+      replay(1);
+      answer(past, true);
+      replay(2);
+      propertyInvariant(
+        Open.machine,
+        undefined,
+        fc.constant(messages),
+        ({ prev, next, msg }) =>
+          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg.type === "saved"),
+        { seed: 119120, numRuns: 1 },
+      );
+    }),
+    { seed: 119120, numRuns: 300 },
+  );
 });
 
 it("L4/L6: only the active selection's acknowledged acceptance reaches ready; every prefix rejects stale work", () => {

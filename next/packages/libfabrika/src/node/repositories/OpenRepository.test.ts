@@ -418,7 +418,10 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         );
 
         for (const [name, values] of Object.entries(outputs)) {
-          const output = JSON.stringify(values) + inspect(values, { depth: null });
+          const output =
+            JSON.stringify(values, (_key: string, value: unknown) =>
+              typeof value === "bigint" ? value.toString() : value,
+            ) + inspect(values, { depth: null });
 
           for (const spelling of [secret, folder, url].flatMap(forms)) {
             expect(output, name).not.toContain(spelling);
