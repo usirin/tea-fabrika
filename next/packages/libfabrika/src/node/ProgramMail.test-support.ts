@@ -74,10 +74,14 @@ const databases = Effect.gen(function* () {
   return { sql, reopen, open };
 });
 
-export const store = Effect.map(databases, ({ sql, reopen }) => ({
-  sql: sql("ledger"),
-  reopen,
-})) satisfies ProcessesProgramMailTest.Store;
+export const store = Effect.map(
+  databases,
+  ({ sql, reopen }) =>
+    ({
+      sql: sql("ledger"),
+      reopen,
+    }) satisfies ProcessesProgramMailTest.Store,
+);
 
 export const runtime = Effect.gen(function* () {
   const { sql, reopen, open } = yield* databases;
