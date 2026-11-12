@@ -377,3 +377,50 @@ it("skill script and prose rules apply only at the repo root", () => {
     options,
   );
 });
+
+// 0134's amendment (2026-11-11): a draft pull request runs only the fast jobs; marking it ready
+// runs the rest on the same head. Plants caught: a draft that still runs test, main honoring the
+// draft flag, a draft that skips typecheck, and a ready docs-only PR that builds (that one survived
+// until the pinned example below).
+const events = fc.constantFrom("pull_request", "push", "workflow_dispatch", "");
+const paths = fc.option(list, { nil: null });
+
+it("property: a ready pull request and every other event run what classify says, build with check", () => {
+  fc.assert(
+    fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
+      const flags = ci.classify(paths, event);
+      const ready = event !== "pull_request" || !draft;
+      fc.pre(ready);
+      expect(ci.jobs(paths, event, draft)).toEqual({ ...flags, build: flags.check });
+    }),
+    // Lists where check is off are rare in `list`, so one is pinned: a docs-only ready PR builds nothing.
+    { ...options, examples: [[["docs/a.md"], "pull_request", false]] },
+  );
+});
+
+it("property: a draft keeps lint, typecheck and field as ready, and skips build, test, next and e2e", () => {
+  fc.assert(
+    fc.property(paths, (paths) => {
+      const ready = ci.jobs(paths, "pull_request", false);
+      expect(ci.jobs(paths, "pull_request", true)).toEqual({
+        check: ready.check,
+        typecheck: ready.typecheck,
+        field: ready.field,
+        build: false,
+        test: false,
+        next: false,
+        e2e: false,
+      });
+    }),
+    options,
+  );
+});
+
+it("property: the draft flag never skips a job on main", () => {
+  fc.assert(
+    fc.property(paths, fc.boolean(), (paths, draft) => {
+      expect(Object.values(ci.jobs(paths, "push", draft)).every(Boolean)).toBe(true);
+    }),
+    options,
+  );
+});

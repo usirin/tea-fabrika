@@ -33,6 +33,7 @@
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
+    "@kampus/checklist": "workspace:*",
     "@kampus/counter": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",

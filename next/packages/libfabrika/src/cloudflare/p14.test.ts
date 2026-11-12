@@ -1,5 +1,5 @@
-// P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Slice 2 (ticket
-// 828) adds L13 below: each view notice names its process.
+// P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Later slices
+// add the control and bootstrap laws here.
 //
 // The shape this law holds the code to, from the approved plan: `fetch(request, env, config, assets)`
 // takes P16's table of window files by route, each `{hash, type, body}`. The page is the asset at
@@ -11,12 +11,9 @@
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 import { createHash } from "node:crypto";
-import { applyCell } from "@demlik/tea";
-import { Machine } from "@demlik/tea/effect";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { diff } from "../runtime/Patch.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
@@ -245,89 +242,5 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
       { seed: 119120, numRuns: 100 },
     );
     expect([...reached].sort(), "every serving case was reached by the generated walks").toEqual([...REACH].sort());
-  });
-});
-
-// L13. The shape this law holds the code to, from the plan: `runtime.ts` exports `viewNotice(pid,
-// update)`, the notice a process's publish hands the Project for one of its runner's view updates:
-// `view.whole` for a whole and `view.patch` for a patch, with the update as its params and the
-// process's `pid` added, and the update itself unchanged. The walk steps a program of the counter's
-// shape (libfabrika may not import the counter, boundary B12) and turns each step into the update its
-// runner publishes, `{type: "whole", rev, view}` once and then `{type: "patch", base, rev, patch}`
-// with the real `diff`.
-type Update =
-  | { readonly type: "whole"; readonly rev: number; readonly view: unknown }
-  | { readonly type: "patch"; readonly base: number; readonly rev: number; readonly patch: unknown };
-
-type ViewNotice = (
-  pid: string,
-  update: Update,
-) => { readonly method: string; readonly params: Record<string, unknown> };
-
-const viewNoticeApi = async (): Promise<ViewNotice> => {
-  const loaded: Record<string, unknown> = { ...(await import("./runtime.ts")) };
-  expect(loaded.viewNotice, "runtime.ts exports viewNotice").toBeTypeOf("function");
-  return Reflect.get(loaded, "viewNotice");
-};
-
-const Count = Schema.Struct({ count: Schema.Int });
-
-const counterShaped = Machine.make({
-  model: Count,
-  msg: Schema.Union([
-    Schema.Struct({ type: Schema.Literal("inc") }),
-    Schema.Struct({ type: Schema.Literal("dec") }),
-    Schema.Struct({ type: Schema.Literal("reset") }),
-  ]),
-  cmds: [],
-  init: (loaded: typeof Count.Type | null) => [loaded ?? { count: 0 }, []],
-  update: {
-    inc: (s) => [{ count: s.count + 1 }, []],
-    dec: (s) => [{ count: s.count - 1 }, []],
-    reset: () => [{ count: 0 }, []],
-  },
-});
-
-describe("L13: each view notice names its process and carries the update unchanged", () => {
-  it("for generated steps of a counter-shaped process, every whole and patch notice has its pid and the update as it was", async () => {
-    const viewNotice = await viewNoticeApi();
-    const reached = new Set<string>();
-    fc.assert(
-      fc.property(
-        fc.uniqueArray(fc.stringMatching(/^[0-9a-z]{8}$/), { minLength: 1, maxLength: 3 }),
-        fc.array(fc.record({ proc: fc.nat(), input: fc.constantFrom("inc", "dec", "reset"), whole: fc.boolean() }), {
-          minLength: 1,
-          maxLength: 30,
-        }),
-        (ids, steps) => {
-          // One process per id, each with its own model and position.
-          const procs = ids.map((id) => ({ pid: `process_${id}`, model: counterShaped.init(null, {})[0], rev: 0 }));
-
-          for (const s of steps) {
-            const p = procs[s.proc % procs.length]!;
-            let update: Update;
-
-            if (s.whole) {
-              update = { type: "whole", rev: p.rev, view: structuredClone(p.model) };
-            } else {
-              const [after] = applyCell(counterShaped, p.model, { type: s.input });
-              update = { type: "patch", base: p.rev, rev: p.rev + 1, patch: diff(p.model, after) };
-              p.model = after;
-              p.rev += 1;
-            }
-
-            const copy = structuredClone(update);
-            const notice = viewNotice(p.pid, update);
-            reached.add(update.type);
-            expect(update, "the update is unchanged").toEqual(copy);
-            expect(notice.method).toBe(update.type === "whole" ? "view.whole" : "view.patch");
-            expect(notice.params).toEqual({ ...copy, pid: p.pid });
-            expect(notice.params.pid, "another process's pid").toBe(p.pid);
-          }
-        },
-      ),
-      { seed: 119120, numRuns: 100 },
-    );
-    expect([...reached].sort()).toEqual(["patch", "whole"]);
   });
 });

@@ -143,7 +143,8 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 7. Write the note
 
-`docs/direction/<area>.md`. Shape, from modes and hot reload:
+`docs/guidelines/<area>.md` ([0136](../../../.decisions/0136-guidelines-live-in-their-own-pages.md)).
+Shape, from modes and hot reload:
 
 - **Status line first:** **Proposed DATE.**, then each point the owner already decided, named.
 - Built from experiment NN and the Design canvas, "Neither is a measurement."

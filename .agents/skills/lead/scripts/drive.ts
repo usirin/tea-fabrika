@@ -36,7 +36,8 @@
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
-//                      the step committed
+//                      the step committed, then the branch itself, with a draft pull request
+//                      when it has none (pr/Publish.ts, 0134); a refused push or draft is stuck
 //   recording  Act     the field row (with the plants the typed answer named, 0093),
 //                      state/<lane>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
@@ -84,7 +85,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -116,6 +117,9 @@ import {
   workspaceGlobs,
 } from "./lane.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import * as Publish from "./pr/Publish.ts";
+import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
+import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1370,13 +1374,25 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           problem: null,
         };
       }),
+    // The step's commit came out of the box: the backup first, then the lane's own branch and its
+    // draft pull request, opened at the lane's first commit (0134). A box cannot push: no key, no
+    // network (0045), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipOf(cmd.ask.branch), cmd.head]);
-        return {
-          ok: r.code === 0,
-          detail: r.code === 0 ? tail(r.out, 1) : `botpush: ${tail(r.out + r.err, 1)}`,
-        };
+
+        if (r.code !== 0) {
+          return { ok: false, detail: `botpush: ${tail(r.out + r.err, 1)}` };
+        }
+
+        const { ask } = cmd;
+        const text = { title: `T${ask.ticket} ${ask.lane}: the lane's steps are running`, body: Publish.DRAFT_BODY };
+        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
+          Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
+          Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
+          Effect.provide(Layer.provide(services, nodeServices)),
+        );
       }),
     record: (e: typeof Entry.Type) =>
       Effect.sync(() => {
@@ -1482,13 +1498,21 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
-  return `\n\n---\n${skill}${commit}${lock}${ask.step === "plan" ? "" : FINISH}`;
+  return `\n\n---\n${skill}${commit}${lock}${NO_ESCALATION}${ask.step === "plan" ? "" : FINISH}`;
 };
 
+/** The rule that keeps a refused command from ending a turn (2026-11-11: in the boxes folder,
+ * every Codex ask, 15 of 15, ended its turn `cancelled` within 15 ms. A command the box refused
+ * (`volta run`, `docker info`, `pgrep`) made Codex ask to run it outside, and its only "no" for
+ * that ask is the one that cancels the turn). */
+export const NO_ESCALATION =
+  "Never ask to run a command outside your box (Codex's `require_escalated`): nobody answers, and the ask ends your turn with no answer. A command your box refuses stays refused: go on without it and name it in your report.\n";
+
 /** The rule that lets a boxed step answer done (2026-11-11: a tests step sent itself round after
- * round, listing as unfinished the parts no tests box can do). */
+ * round, listing as unfinished the parts no tests box can do; then two build rounds of p42s1 each
+ * answered `stuck` after a minute or three, with most of the planned code still to write). */
 export const FINISH =
-  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`.\n';
+  'Work until every part this box allows is done. A part that needs another step\'s code, a typecheck or `--changed` is written, named in the report as "after build" or "lead runs it", and does not block `done`. `stuck` is for a blocker this box cannot get past, never for work still to do: a law that is red because code this step owns is missing is the work.\n';
 
 /**
  * The approved plan, whole, for a step in a box. The harness closes home around the box (Claude's

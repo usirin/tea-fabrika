@@ -240,7 +240,7 @@ Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words
 
 The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
-Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -251,6 +251,7 @@ Eight rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md
 | `no-question-word-key` | a quoted, escaped, computed or template key named `where`, `why`, `what`, `who` or `how` in an object, class or type declaration; oxlint's own `eslint/id-denylist` holds the same names written as identifiers (0081) | none | on |
 | `no-hand-tag` | an object key, class field or type member named `_tag`; a read passes | the log, `next/packages/libfabrika/src/data/log.ts` | left out |
 | `one-store-hook` | `useSyncExternalStore` imported or read as a plain member anywhere in `next/`; a store hook's value dropped | none | left out |
+| `no-wall-clock` | `Date.now()`, `new Date()` and `Date()` in a `next/` `.ts` file; `new Date(at)` passes | none | left out, test helpers too |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
 
 React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
@@ -493,3 +494,65 @@ one tree; zero false alarms here does not prove every future shape.
 
 `effectFnOpportunity` remains off. Its earlier 11 false alarms among 17 findings
 are not evidence for enabling it.
+
+## Rules that joined with findings: `next-ledger.json`
+
+Four laws joined `next/` on 2026-11-11 with findings already in the tree. Each blocks every new
+finding. What each met on its first day is named in `next-ledger.json`, in `agents-ledger.json`'s
+shape and under its laws (`ledger.ts`, `ledger.test.ts`): keyed by file, rule and line of code, read
+only for `next/`, and written back by a whole-repo `pnpm lint` with the entries a finding still
+matched, so it only shrinks. CI fails until that pruned file is committed. An entry leaves when its
+line is fixed under its own ticket; nothing adds one but the owner. Advice was not used: it is this
+repo's level for a rule that is often wrong (experiment 125), and these were never wrong in the read.
+
+| Law | Rule | Files | Found | Read by hand |
+|---|---|---|---|---|
+| A question word is never a name (0081) | oxlint's `eslint/id-denylist` with the five words, and `no-question-word-key` | the `next/**` and `.agents/` blocks, tests too | 451: `next/packages/libfabrika` 159, `next/apps/fabrika` 168, `.agents` 124; `no-question-word-key` 0 | 30 at seed 119120: 30 real |
+| `runtime/`, `access/` and `gateway/` never import `ledger/` (0043, rule 11; 0062) | oxlint's `eslint/no-restricted-imports`, one more pattern group | an override for the three modules | 69, all in `next/packages/libfabrika`: 16 product, 53 test | 30 at seed 119120: 30 real |
+| A clock is read through Effect | `no-wall-clock` | `next/**/*.ts`, tests and test helpers left out | 8: `next/packages/libfabrika` 7, `next/apps/fabrika` 1 | all 8: 8 real |
+| An after-hook does not release a resource (0061) | oxlint's `vitest/no-hooks`, allowing `beforeAll` and `beforeEach` | any `next/` file | 44: `next/packages/libfabrika` 27, `next/apps/fabrika` 16, `next/programs/counter` 1 | all 44: each closes a database, a socket, a browser or a child, or removes a folder |
+
+The `.agents/` findings went into `agents-ledger.json`. The two edge comments in `flow/host.ts`
+stay as comments, naming `eslint/id-denylist` as ticket 682 left them.
+
+After the merge with main at `31810c83c` on 2026-11-11, where ticket 682 renamed the question
+words, lint pruned what main fixed. `next-ledger.json` holds 115 entries: `id-denylist` 0,
+`no-restricted-imports` 71, `no-wall-clock` 1 (`next/apps/fabrika`) and `no-hooks` 43.
+`agents-ledger.json` holds main's 12 `id-denylist` entries and none from this rule set. The one
+clock read whose line the rename changed, `cloudflare/connection.ts`'s `p.join`, now reads
+`Clock.currentTimeMillis`.
+
+The counts are of the tree merged with main at `1d2b3a5c` on 2026-11-11, after the noun sweep (ticket
+682), the module rename (ticket 688) and the `stage` to `instance` rename. The first count, on the
+older main, was 428, 57, 8 and 44: that lint run pruned 22 entries whose line was gone or renamed,
+and 57 findings on main that the first count never saw were added the day the rules joined (29 and 7
+`id-denylist` in `next/` and `.agents/`, 17 `no-restricted-imports`, 4 `no-hooks`). The hand reads
+below were of the first count's findings.
+
+**Why oxlint's rules, and where ours stay** ([0040](../.decisions/0040-existing-tools-before-hand-written.md)):
+
+- [`eslint/id-denylist`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist), as 0081
+  asked. On oxlint 1.90.0 it reports a name written as a word wherever it is declared or read:
+  object, class and type members, accessors, parameters, parameter properties, locals and their
+  reads. It does not report a member read (`a.why`), a renamed destructure (`{why: r}`) or an
+  import's outside name. It cannot see a key written as a string: `{"why": 1}`, `["how"]`,
+  `` [`what`] ``. `no-question-word-key` holds those alone, so no key is reported twice.
+- [`eslint/no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports).
+  The group names `ledger/`'s PascalCase front files (`../ledger/[A-Z]*`), so a `ledger/internal/`
+  import is the `internal/` group's alone. A `!` pattern cannot carve that out: oxlint 1.90.0 reads
+  a `!` in one group as a pass for every group, which the modules test caught. It does not see a
+  package specifier.
+- [`eslint/no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties)
+  sees `Date.now` but not `new Date()`, and
+  [`eslint/no-restricted-globals`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-globals)
+  refuses every `Date`, `Date.parse` and `new Date(at)` too. oxlint has no `no-restricted-syntax`.
+  So `no-wall-clock` is `no-clock-in-view`'s rule with `Date.now` alone (`clockReads` in
+  `no-clock-in-view.ts`). Three `new Date(at)` calls in product code format a time they were
+  given and pass, as in `no-clock-in-view`.
+- [`vitest/no-hooks`](https://oxc.rs/docs/guide/usage/linter/rules/vitest/no-hooks) refuses the
+  call. An after-hook imported and never called is an unused import, which
+  `eslint/no-unused-vars` refuses. `onTestFinished` is not refused.
+
+The laws are in `no-question-word-key.test.ts`, the last describe of `modules.test.ts`,
+`no-wall-clock.test.ts` and `after-hooks.test.ts`, each through the real config at generated paths.
+

@@ -157,6 +157,8 @@ it (`BOXES`, default `<parent of the main checkout>/boxes`). Each value can be s
 | `mutbox.ts run --checkout <repo> --ticket <n> --build <sha> --related <paths> --out <dir> --lock <file> [--base <sha>]` | the hourly mutation run's Stryker sample in a container (0066; also a lane's mutation step started before it): `--network none`, no capability, 4 CPUs, 4 GB, the commit copied in read-only, nothing from the home folder; one JSON line and `<out>/mutbox.json`; `stuck` when Docker is missing, never the host instead. `mutbox.ts gc --lock <file>` removes a dead run's container and images over a week old; `box.sh gc` calls it |
 | `runplan.sh <name> <brief>` | a read-only plan writer in the main checkout; the plan lands in `BOXES/<name>-plan.md` |
 | `botpush.mjs <tree> fabrikalfa/<branch>` | merge the remote notes in, then push the branch and `refs/notes/fabrika` as the bot, in one atomic push; when the only refusal is notes another session pushed meanwhile, it merges them and pushes once more, never forced |
+| `publish.ts <branch>` | in a checkout: leak-grep `origin/main..HEAD` (fails closed), push HEAD to the branch (`botpush.mjs` for `fabrikalfa/`, else the notes as the bot and the branch on your own login, never forced), and open a draft PR when the branch has none ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)); `stepcommit.sh` runs it after each signed commit; exit 0 pushed, 1 refused |
+| `unlisted.ts` | in the main checkout, every round: fetch origin with `--prune`, then one line per branch, local or on origin, with commits not on `origin/main` and no open PR on its lane (`no pull request: ...`: open its draft the same turn), then the ones whose work is on main already, by a merged PR at that head or a trial merge that changes nothing (`safe to delete: ...`); it deletes nothing; exit 0, 1 when a read fails |
 | `land.ts ready <lane> --tree <dir> [--body <f> --loosening <f>] [--lead <sha>]... [--plan <f>]` | a lane agent's last act: records "ready to land" in `state/<lane>.land.json` and a line in `state/<lane>.md`; the tree must be clean. Without the two PR files it is a mid-lane handover to `-wip` |
 | `land.ts run <lane> <ticket>` | the lead session only, in the background: refuses unless the tree is clean and at the ready head, leak-greps the PR body, merges `origin/main` in as the bot (never a rebase), leak-greps the change and each commit, signs each named lead commit and then the merge as lead through main's own signer, pushes with `botpush.mjs`, opens or updates the PR and runs `catchup.sh`. A conflict stops it with each file and the step that owns it in the plan's files table; every refusal before the push puts HEAD and the notes back. It never resolves a conflict and never reads a key |
 | `governance.sh [base]` | list the `.decisions/` files the diff from `base` (default `origin/main`) touches; advice only, always exits 0 |
@@ -241,7 +243,10 @@ node .agents/skills/lead/scripts/drive.ts <lane> <plan|tests|build|mutation|revi
   with `stepcommit.sh --commit-only lead`; a lane agent then runs `land.ts ready` without PR files
   and stops, and the lead session runs `land.ts run`, which signs it and pushes it to `-wip`. The
   next step starts at that tip.
-- Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, writes the field row to
+- Then it pushes `<branch>-wip` (a `-wip` branch as it is) as the bot when the step committed, and
+  the branch itself, with a draft PR when it has none (`pr/Publish.ts`, 0134): so the lane's PR is
+  a draft from its first commit, and chain.ts marks it ready after review. A refused push or draft
+  ends the step `stuck:push_failed`. Then it writes the field row to
   `BOXES/<lane>-rows.jsonl`, appends the step to `state/<lane>.json` and `.md`, and removes the box.
   It keeps the box, whatever the step answered, while it holds uncommitted files or commits off the
   step's branch, and the outcome line's `reason` ends with `(box kept: ...)` saying what is left.
@@ -333,7 +338,8 @@ and Codex's own sandbox, in place of Codex through ACP (`scripts/codexexec.ts`).
   when every error is in an exam path, else to build, and the PR stays open for the next push. No
   answer within `CHAIN_TYPECHECK_MINUTES` (20), or a failed job with no type error, lets the lane go
   on, and the chain's last line says `typecheck: no answer: ...`. A red `check` job (lint, build) is
-  not read here: `ci-required` holds the merge for it. Then the chain runs `loosening.sh` from the lane's merge-base with
+  not read here: `ci-required` holds the merge for it. A draft runs only CI's fast jobs; the full set runs when the PR is marked ready, and
+  `catchup.sh` waits for that run's `check`, never the draft's `lint` (0134). Then the chain runs `loosening.sh` from the lane's merge-base with
   `origin/main` to the reviewed head and posts its output on the PR as a comment (0014). Zero hits
   runs `catchup.sh`; any hit parks the lane as `ask` with the hit list, for the lead's hand check;
   an error, or a comment that did not post, ends it `stuck`. The chain passes no mapping table, so
@@ -405,6 +411,13 @@ means the timer is dead or every sweep was skipped behind a hung one. Fix the ca
 The timer's own output goes to `BOXES/state/gc-timer.log`.
 
 ## Pushes and protected refs
+
+Every commit leaves the laptop when it is made
+([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
+runs `publish.ts` itself, and a lane's box commit is pushed by drive's pushing phase, so neither
+step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
+where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
+line the same turn.
 
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
 bot and branch-only as the person are two intended writes. A refusal stops the step.

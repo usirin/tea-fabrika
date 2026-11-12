@@ -54,6 +54,20 @@ import "../../step-commit/scripts/stepcommit.sh?raw";
 import "./gcloop.ts?raw";
 // oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
 import "./flow/Beat.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/Publish.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/PullRequestsGh.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/PushesProcess.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./publish.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/PullRequests.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/Pushes.ts?raw";
+// oxlint-disable-next-line fabrika/use-import-extensions -- Vitest reads this exact file as text through ?raw.
+import "./pr/command.ts?raw";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -100,6 +114,7 @@ import {
   holdsElectron,
   laneRunning,
   machine,
+  NO_ESCALATION,
   phasesIn,
   reportOf,
   rowOf,
@@ -1260,6 +1275,20 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
     );
     expect(FINISH).toContain('"after build" or "lead runs it"');
     expect(FINISH).toContain("does not block `done`");
+    expect(FINISH).toContain("never for work still to do");
+  });
+
+  // 2026-11-11: every Codex ask in the boxes folder ended its turn `cancelled`. Plant: leave the
+  // rule out of any step's tail, the plan's included.
+  it("property: every step's prompt, the plan's included, says never to ask to run outside the box", () => {
+    fc.assert(
+      fc.property(steps, fc.boolean(), (step, electron) => {
+        expect(agentTail({ step, ticket: "1" }, electron).includes(NO_ESCALATION)).toBe(true);
+      }),
+      options,
+    );
+    expect(NO_ESCALATION).toContain("`require_escalated`");
+    expect(NO_ESCALATION).toContain("ends your turn");
   });
 });
 
