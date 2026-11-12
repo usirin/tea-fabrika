@@ -1,6 +1,5 @@
 import { execFile, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,9 +9,10 @@ import { layerSqliteSync } from "@kampus/fabrika-old/sqlite";
 import { kindOf, nameOf } from "@kampus/pipeline/tickets/ticket";
 import { SEVEN, SEVEN_TITLE } from "@tea-fabrika/tracker/seven";
 import { Effect } from "effect";
-import { _electron, type ElectronApplication, type Locator, type Page } from "playwright";
+import type { ElectronApplication, Locator, Page } from "playwright";
 import { askDesk } from "./e2e/ask-desk.ts";
 import { PROTOCOL } from "./src/link.ts";
+import * as TestWindow from "./test-window.ts";
 
 // The app, driven end to end through Playwright's Electron support: the whole flow in the one
 // tiled window, one screenshot per step. Not part of `pnpm test`: it opens a real window. The
@@ -50,6 +50,9 @@ import { PROTOCOL } from "./src/link.ts";
 //
 // No run opens a real browser: every launch swaps main's `shell.openExternal` for a list first,
 // and reads the swap back before anything is clicked.
+//
+// Every launch goes through test-window.ts, so no window is in a person's way: each ends at
+// opacity 0 in the work area's corner, and none takes OS focus (`done`, after each launch).
 //
 // Then the window's own close button, as macOS has it:
 //
@@ -110,12 +113,10 @@ import { PROTOCOL } from "./src/link.ts";
 // and that is what this reads. Playwright's API is promises, and this script stays in it.
 
 const here = import.meta.dirname;
-const electronPath: string = createRequire(import.meta.url)("electron");
 
 const shots = process.env.SHOTS ?? (await mkdtemp(join(tmpdir(), "fabrika-e2e-")));
 await mkdir(shots, { recursive: true });
 const home = await mkdtemp(join(tmpdir(), "fabrika-home-"));
-const env = { ...process.env, FABRIKA_HOME: home };
 
 const saved: string[] = [];
 
@@ -1215,10 +1216,7 @@ const flow = async (app: ElectronApplication) => {
   await countIn(page, next).filter({ hasText: /^1$/ }).waitFor();
 
   // A second copy, on the same home, brings the first forward and quits.
-  const second = await promisify(execFile)(electronPath, [here], { env, timeout: 20_000 }).then(
-    () => "quit",
-    (e: unknown) => `failed: ${String(e)}`,
-  );
+  const second = await TestWindow.secondCopy(home);
   const windows = await windowCount(app);
   check("a second copy quits, and the first keeps its one window", second === "quit" && windows === 1, {
     second,
@@ -1325,25 +1323,50 @@ if (process.platform !== "darwin") {
 }
 
 const launch = async (on: string) => {
-  const testEnv: Record<string, string> = {};
-
-  for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && name !== "FABRIKA_FOREGROUND") {
-      testEnv[name] = value;
-    }
-  }
-
-  testEnv.FABRIKA_HOME = on;
-  const app = await _electron.launch({
-    executablePath: electronPath,
-    args: [here],
-    env: testEnv,
-  });
-  await noBrowser(app).catch(async (e: unknown) => {
-    await app.close().catch(() => {});
+  const win = await TestWindow.launch({ home: on });
+  await noBrowser(win.app).catch(async (e: unknown) => {
+    await win.close().catch(() => {});
     throw e;
   });
-  return app;
+  return win;
+};
+
+/** The ask desk takes the bare app and closes it itself, so it gets the test window's `app`. */
+const askDeskLaunch = async (on: string) => (await launch(on)).app;
+
+/** What `done` saw put a window in the person's way. The run fails on it last, after its hosts stop. */
+const inWay: unknown[] = [];
+
+/**
+ * The window scenario, after each launch: every window the app has ends at opacity 0, in the work
+ * area's bottom-right corner, or at its top-left on a side where it is larger. Then `close`, which
+ * fails if any window took OS focus or was seen above opacity 0. Neither throws here, so the
+ * cleanup after it still runs; each failure goes in `inWay`.
+ */
+const done = async (win: TestWindow.TestWindow) => {
+  const windows = await win.app
+    .evaluate(({ BrowserWindow, screen }) => {
+      const area = screen.getPrimaryDisplay().workArea;
+      return BrowserWindow.getAllWindows().map((w) => ({ opacity: w.getOpacity(), bounds: w.getBounds(), area }));
+    })
+    .catch((e: unknown) => {
+      inWay.push({ home: win.home, read: String(e) });
+      return [];
+    });
+  const out = windows.filter(
+    ({ opacity, bounds: b, area: a }) =>
+      opacity !== 0 ||
+      b.x !== Math.max(a.x, a.x + a.width - b.width) ||
+      b.y !== Math.max(a.y, a.y + a.height - b.height),
+  );
+
+  if (out.length > 0) {
+    inWay.push({ home: win.home, windows: out });
+  }
+
+  await win.close().catch((e: unknown) => {
+    inWay.push({ home: win.home, close: String(e) });
+  });
 };
 
 /** Is there a process with this pid? Signal 0 asks, and sends nothing. */
@@ -1446,7 +1469,8 @@ const mismatch = async () => {
   const old = await oldHost(other);
 
   try {
-    const app = await launch(other);
+    const win = await launch(other);
+    const { app } = win;
 
     try {
       const page = await app.firstWindow();
@@ -1469,7 +1493,7 @@ const mismatch = async () => {
       );
       await shot(page, "11-mismatch");
     } finally {
-      await app.close().catch(() => {});
+      await done(win);
     }
 
     check("the host of another version still runs: the app did not stop it", old.pid !== undefined && alive(old.pid));
@@ -1546,7 +1570,8 @@ const asksSwap = async () => {
     },
   });
   const seen = async () => host.heard.filter((m) => m.type === "on" && m.m?.type === "seen").length;
-  const app = await launch(other);
+  const win = await launch(other);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
@@ -1572,7 +1597,7 @@ const asksSwap = async () => {
     await page.waitForTimeout(300);
     check("the same asks marked seen say nothing more", (await seen()) === 2, await seen());
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     await host.stop();
   }
 };
@@ -1779,7 +1804,8 @@ const deskBack = (page: Page) =>
 const reconnect = async () => {
   const own = await mkdtemp(join(tmpdir(), "fabrika-link-"));
   const started = new Set<number>();
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
@@ -1932,7 +1958,7 @@ const reconnect = async () => {
     const still = await shows(page, "t2", "the earlier job", (t) => t.includes("tsh: 1 job from"));
     check("on the restored desk, only t2 is told of its counter: t1 never ran it", true, still);
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
 
     for (const pid of started) {
       if (alive(pid) && (await ours(pid))) {
@@ -1985,12 +2011,15 @@ const focusOn = async (page: Page, id: string) => {
 /** L3, today's version: real keys overlap a look change, with no timer drain or typing retry. */
 const lookFocus = async () => {
   const own = await mkdtemp(join(tmpdir(), "fabrika-look-"));
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
-    await app.evaluate(({ BrowserWindow }) =>
-      BrowserWindow.getAllWindows()[0]?.setBounds({ x: 0, y: 0, width: 1200, height: 600 }),
-    );
+    // No wider than CI's 1024-wide work area. At 1200, macOS moved the window 1px off the corner in
+    // 1 of 2 runs of the same commit, and we guessed the width was why. Wrong: at 1024 it moved 1px
+    // down too, in 1 of 2 runs, so `size` now waits until the window holds the corner. `promptLine`
+    // joins a wrapped burst, so the narrower tiles change nothing the law reads.
+    await win.size(1024, 600);
     const page = await app.firstWindow();
     await prompted(page, "t1");
     await lookIs(app, page, "dark");
@@ -2027,7 +2056,7 @@ const lookFocus = async () => {
       await prompted(page, "t2");
     }
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -2054,7 +2083,8 @@ const tilesLook = async () => {
   const own = await mkdtemp(join(tmpdir(), "fabrika-tiles-"));
   const out = join(shots, "tiles");
   await mkdir(out, { recursive: true });
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
@@ -2231,7 +2261,7 @@ const tilesLook = async () => {
     check("a pipe of three in a quarter of 1024 by 700: two windows open folded", folds === 2, folds);
     await both("pipe-folded-small");
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -2249,7 +2279,8 @@ const keysLook = async () => {
     const own = await mkdtemp(join(tmpdir(), "fk-"));
     const file = join(own, "keybindings.toml");
     await writeFile(file, "tezgah.fold = []\n");
-    const app = await launch(own);
+    const win = await launch(own);
+    const { app } = win;
 
     try {
       const page = await app.firstWindow();
@@ -2677,7 +2708,7 @@ const keysLook = async () => {
       await shows(page, "t1", "ordinary typing after close", (text) => text.includes("recorder-is-closed"));
       await page.keyboard.press("Control+c");
     } finally {
-      await app.close().catch(() => {});
+      await done(win);
       const pid = await hostPid(own);
 
       if (pid !== null) {
@@ -2695,7 +2726,8 @@ const keysLook = async () => {
  */
 const borderDrag = async () => {
   const own = await mkdtemp(join(tmpdir(), "fk-"));
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
@@ -2740,7 +2772,7 @@ const borderDrag = async () => {
     check("a stacked border resizes t1's height while it moves", short < tall - 80, { tall, short });
     await page.mouse.up();
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -2887,7 +2919,8 @@ const LOOKS = ["dark", "light"] as const;
 const trackerFocus = async () => {
   const own = await mkdtemp(join(tmpdir(), "fh-ring-"));
   await seedAsks(own);
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
@@ -2967,7 +3000,7 @@ const trackerFocus = async () => {
 
     check("T245 tracker focus laws", failures.length === 0, failures);
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -2986,12 +3019,13 @@ const focusShots = async () => {
     ),
   );
   const planned = pending.size;
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
 
   try {
     const page = await app.firstWindow();
     await prompted(page, "t1");
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
+    await win.size(1440, 900);
     await until(
       "the window at 1440 by 900",
       () => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
@@ -3058,7 +3092,7 @@ const focusShots = async () => {
     check("every planned focus image was taken", pending.size === 0, [...pending]);
     console.log(`focus: ${planned} planned images taken; ${planned * 2} across before and after`);
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -3149,7 +3183,8 @@ const ariaStage = async (): Promise<0 | 2> => {
   const out = join(shots, "aria-received");
   await mkdir(out, { recursive: true });
   await seedAsks(own);
-  const app = await launch(own);
+  const win = await launch(own);
+  const { app } = win;
   const tally = { same: 0, diff: 0, fresh: 0, flake: 0 };
   const pending = new Set(STATES.flatMap((state) => LAYOUTS.map((layout) => `${state}-${layout}`)));
   const planned = pending.size;
@@ -3162,7 +3197,7 @@ const ariaStage = async (): Promise<0 | 2> => {
     // The window opens at the size it last had, which a person's own use sets: a wider or narrower
     // window lays a view out another way (the ticket's properties beside or under it), so the
     // stage sets its own.
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setContentSize(1440, 900));
+    await win.size(1440, 900);
     await until(
       "the window at 1440 by 900",
       () => page.evaluate(() => [window.innerWidth, window.innerHeight].join("x")),
@@ -3347,7 +3382,7 @@ const ariaStage = async (): Promise<0 | 2> => {
     reached = 2;
     console.log(`the ARIA stage stopped: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
-    await app.close().catch(() => {});
+    await done(win);
     const pid = await hostPid(own);
 
     if (pid !== null) {
@@ -3368,11 +3403,11 @@ const all = async () => {
 
   try {
     try {
-      left = await flow(first);
-      await reopen(first, left);
+      left = await flow(first.app);
+      await reopen(first.app, left);
     } finally {
       // With counter up, at 1: `close` asks Electron's `app.quit()`, as Cmd-Q does.
-      await first.close();
+      await done(first);
     }
 
     const pid = await hostPid(home);
@@ -3391,9 +3426,9 @@ const all = async () => {
     const next = await launch(home);
 
     try {
-      await again(next, left);
+      await again(next.app, left);
     } finally {
-      await next.close().catch(() => {});
+      await done(next);
     }
 
     check("then the app quits, and the same host runs on", (await hostPid(home)) === pid && pid !== null && alive(pid));
@@ -3407,7 +3442,7 @@ const all = async () => {
     await keysLook();
     await trackerFocus();
     await askDesk({
-      launch,
+      launch: askDeskLaunch,
       prompted,
       run,
       prefixed,
@@ -3432,7 +3467,7 @@ const all = async () => {
 
 // Each capture stage can also run alone. ARIA answers 2 only when it cannot reach a state.
 if (process.argv.includes("--ask-desk")) {
-  await askDesk({ launch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
+  await askDesk({ launch: askDeskLaunch, prompted, run, prefixed, focusOn, tilesAre, lookIs, hostPid, stop, shots });
 } else if (process.argv.includes("--keys")) {
   await keysLook();
 } else if (process.argv.includes("--drag")) {
@@ -3448,6 +3483,12 @@ if (process.argv.includes("--ask-desk")) {
 } else {
   await all();
 }
+
+check(
+  "every launch stayed out of the way: each window ended at opacity 0 in the corner, and none took OS focus",
+  inWay.length === 0,
+  inWay,
+);
 
 const after = await pgrep(here);
 check("the host stopped by its pid: pgrep finds nothing of this app left", after.length === 0, after);
