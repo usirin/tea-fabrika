@@ -319,6 +319,8 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   const name = ctx.id.name ?? config.name,
     sql = cloudflareSql(ctx.storage);
   const turn = yield* Semaphore.make(1);
+  // Installs stay ordered while a Process finishes a turn that may write back to the Project.
+  const installs = yield* Semaphore.make(1);
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
     "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
     { defaultValue: () => null },
@@ -385,6 +387,12 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
+
+  for (const source of Object.values(programs)) {
+    const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
+    yield* codes.put(built);
+  }
+
   const code = (hash: string) => codes.get(hash).pipe(Effect.map(Option.getOrNull));
   const loader = workerLoader(env.LOADER, programs, code);
   let selected: typeof Selected.Type = codeMachine.init(null, {})[0];
@@ -635,19 +643,27 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
       if (outcome._tag === "swapped" || outcome._tag === "same") {
         const current = yield* loader.load(program, "check", hash);
-        remember(process.name, current.declaration);
-        const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
+        yield* write(
+          Effect.gen(function* () {
+            if (selected[program]?.hash !== hash) {
+              return;
+            }
 
-        if (row !== undefined) {
-          const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
-            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-          );
-          sql.exec(
-            "UPDATE dev_descriptors SET value=? WHERE process=?",
-            JSON.stringify({ ...descriptor, build: hash }),
-            process.process,
-          );
-        }
+            remember(process.name, current.declaration);
+            const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
+
+            if (row !== undefined) {
+              const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
+                row.value,
+              ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+              sql.exec(
+                "UPDATE dev_descriptors SET value=? WHERE process=?",
+                JSON.stringify({ ...descriptor, build: hash }),
+                process.process,
+              );
+            }
+          }),
+        );
       }
 
       answers.push({ name: process.name, outcome });
@@ -655,9 +671,9 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
 
     return answers;
   });
-  const checked = Effect.fn("code.checked")(function* (input: typeof Install.Type, notify = true) {
+  const checked = Effect.fn("code.checked")(function* (input: typeof Install.Type) {
     const [, cmds] = applyCell(codeMachine, selected, { type: "checked", ...input });
-    const processes: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
+    const swaps: Array<{ load: string; program: string; hash: string }> = [];
 
     for (const cmd of cmds) {
       if (cmd.type === "append") {
@@ -679,7 +695,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         const fact = yield* Schema.decodeUnknownEffect(CodeEvent.cases["code.loaded"])(valueFor(entry.value)).pipe(
           Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         );
-        const [next, swaps] = applyCell(codeMachine, selected, {
+        const [next, commands] = applyCell(codeMachine, selected, {
           type: "loaded",
           id: cmd.id,
           program: fact.program,
@@ -687,66 +703,87 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
         });
         selected = next;
 
-        for (const swap of swaps) {
-          if (notify && swap.type === "swap") {
-            processes.push(...(yield* push(swap.load, swap.program, swap.hash)));
+        for (const swap of commands) {
+          if (swap.type === "swap") {
+            swaps.push(swap);
           }
         }
       }
     }
 
-    return cmds.length === 0 ? Installed.cases.same.make({}) : Installed.cases.loaded.make({ processes });
+    return swaps;
+  });
+  const inspect = Effect.fn("code.inspect")(function* (input: typeof Install.Type) {
+    const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+    );
+    const prior = yield* ledger.read("gateway/code", 0).pipe(
+      Stream.filter((entry) => entry.id === input.id),
+      Stream.runHead,
+    );
+
+    if (Option.isSome(prior) || selected[input.program]?.hash === input.hash) {
+      return Installed.cases.same.make({});
+    }
+
+    const refuse = (reason: (typeof CodeEvent.cases)["code.failed"]["Type"]["reason"]) =>
+      failed(
+        CodeEvent.cases["code.failed"].make({ program: input.program, hash: input.hash, reason }),
+        `code.failed:${input.id}`,
+      ).pipe(Effect.as(Installed.cases.failed.make({ reason })));
+
+    if (new TextEncoder().encode(input.source).byteLength > 2 * 1024 * 1024) {
+      return yield* refuse("too_large");
+    }
+
+    yield* codes.put(built);
+    const candidate = yield* Effect.result(loader.load(input.program, "check", input.hash));
+
+    if (Result.isFailure(candidate)) {
+      return yield* refuse("load");
+    }
+
+    if (candidate.success.declaration.name !== input.program) {
+      return yield* refuse("name");
+    }
+
+    return null;
   });
   const install = Effect.fn("code.install")(
     function* (raw: unknown) {
       const input = yield* Schema.decodeUnknownEffect(Install)(raw).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
-      const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
-        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-      );
       yield* Effect.annotateCurrentSpan({
         program: input.program,
         bytes: new TextEncoder().encode(input.source).byteLength,
       });
-      const prior = yield* ledger.read("gateway/code", 0).pipe(
-        Stream.filter((entry) => entry.id === input.id),
-        Stream.runHead,
+      const prepared = yield* write(
+        Effect.gen(function* () {
+          const answer = yield* inspect(input);
+          return answer ?? (yield* checked(input));
+        }),
       );
 
-      if (Option.isSome(prior) || selected[input.program]?.hash === input.hash) {
-        return Installed.cases.same.make({});
+      if (!Array.isArray(prepared)) {
+        return prepared;
       }
 
-      const refuse = (reason: (typeof CodeEvent.cases)["code.failed"]["Type"]["reason"]) =>
-        failed(
-          CodeEvent.cases["code.failed"].make({ program: input.program, hash: input.hash, reason }),
-          `code.failed:${input.id}`,
-        ).pipe(Effect.as(Installed.cases.failed.make({ reason })));
+      const processes: Array<{ name: string; outcome: typeof import("../runtime/Runner.ts").Swapped.Type }> = [];
 
-      if (new TextEncoder().encode(input.source).byteLength > 2 * 1024 * 1024) {
-        return yield* refuse("too_large");
+      for (const swap of prepared) {
+        processes.push(...(yield* push(swap.load, swap.program, swap.hash)));
       }
 
-      yield* codes.put(built);
-      const candidate = yield* Effect.result(loader.load(input.program, "check", input.hash));
-
-      if (Result.isFailure(candidate)) {
-        return yield* refuse("load");
-      }
-
-      if (candidate.success.declaration.name !== input.program) {
-        return yield* refuse("name");
-      }
-
-      return yield* checked(input);
+      return Installed.cases.loaded.make({ processes });
     },
+    installs.withPermit,
     Effect.tap((answer) => Effect.annotateCurrentSpan("outcome", answer._tag)),
   );
 
   for (const [program, built] of Object.entries(programs)) {
     if (selected[program] === undefined) {
-      yield* checked({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" }, false);
+      yield* checked({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" });
     }
   }
 
@@ -821,7 +858,7 @@ const projectLogic = Effect.fn("project.init")(function* (ctx: DurableObjectStat
   yield* flushed.pipe(Effect.provideContext(services));
   return {
     code,
-    codeInstall: (raw: unknown) => wrapped(write(install(raw))),
+    codeInstall: (raw: unknown) => wrapped(install(raw)),
     codeFailed: (raw: unknown) => wrapped(write(failed(raw))),
     target: door.target,
     register: (client: string, gateway: string, session: string) =>
