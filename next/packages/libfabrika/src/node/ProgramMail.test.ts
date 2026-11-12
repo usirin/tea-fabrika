@@ -1,4 +1,4 @@
-// P41 slice 1 (ticket 744): program mail's two shared suites on node:sqlite (0062). This module owns
+// P41 slices 1 and 2 (tickets 744 and 764), next/: program mail's two shared suites on node:sqlite (0062). This module owns
 // the driver, so it acquires every store and the alarm driver in a scope, and the scope gives each
 // file and handle back (0061). The alarm driver saves an alarm in its own real database before it
 // answers, so a reopen keeps it, as the platform keeps an object's alarm.
@@ -89,9 +89,7 @@ RuntimeProgramMailTest.suite(
     );
     const table = () => {
       const db = sql("alarms");
-      db.exec(
-        "CREATE TABLE IF NOT EXISTS alarms (name TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (name, kind))",
-      );
+      db.exec("CREATE TABLE IF NOT EXISTS alarms (name TEXT PRIMARY KEY, at INTEGER NOT NULL)");
       return db;
     };
     /** Anything that reaches the driver after its scope released it is a task that outlived it. */
@@ -105,28 +103,27 @@ RuntimeProgramMailTest.suite(
         return f();
       });
     const alarms: RuntimeProgramMailTest.Alarms = {
-      set: (name, kind, at) =>
+      set: (name, at) =>
         guard(() => {
           if (at === null) {
-            table().exec("DELETE FROM alarms WHERE name = ? AND kind = ?", name, kind);
+            table().exec("DELETE FROM alarms WHERE name = ?", name);
           } else {
-            table().exec("INSERT OR REPLACE INTO alarms (name, kind, at) VALUES (?, ?, ?)", name, kind, at);
+            table().exec("INSERT OR REPLACE INTO alarms (name, at) VALUES (?, ?)", name, at);
           }
         }, undefined),
       saved: guard(
         () =>
           table()
-            .exec("SELECT name, kind, at FROM alarms ORDER BY at, name, kind")
+            .exec("SELECT name, at FROM alarms ORDER BY at, name")
             .map((row) => ({
               name: String(row.name),
-              kind: row.kind === "mail" ? ("mail" as const) : ("alarm" as const),
               at: Number(row.at),
             })),
         [],
       ),
       take: (alarm) =>
         guard(() => {
-          table().exec("DELETE FROM alarms WHERE name = ? AND kind = ? AND at = ?", alarm.name, alarm.kind, alarm.at);
+          table().exec("DELETE FROM alarms WHERE name = ? AND at = ?", alarm.name, alarm.at);
         }, undefined),
     };
     return {

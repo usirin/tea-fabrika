@@ -30,25 +30,33 @@ interface Diagnostic {
 
 const ROOT = join(import.meta.dirname, "..");
 
+// A run with no path is over the whole repo, as `pnpm lint` and `pnpm format` make it. Only it sees
+// every finding, so only it prunes a ledger, and only it runs the check below.
+const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
+
 // What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
-// derivation cannot see, and on a test that declares by hand what is derived.
-const { tree, exists, prose } = load(ROOT);
-const { raw, unreached } = scriptReads(tree, exists, prose);
+// derivation cannot see, and on a test that declares by hand what is derived. It reads the whole
+// scripts tree whatever the paths given, so a run on a folder or a file leaves it to the whole run:
+// it took most of a one-file run's second, and a test that starts 32 of those timed out in CI.
+if (whole) {
+  const { tree, exists, prose } = load(ROOT);
+  const { raw, unreached } = scriptReads(tree, exists, prose);
 
-for (const row of raw) {
-  console.error(
-    `${row.test}: delete the bare import of ${row.path}?raw. A script's reads are derived; one it reads through a built path is named in that script, in a comment`,
-  );
-}
+  for (const row of raw) {
+    console.error(
+      `${row.test}: delete the bare import of ${row.path}?raw. A script's reads are derived; one it reads through a built path is named in that script, in a comment`,
+    );
+  }
 
-for (const path of unreached) {
-  console.error(
-    `${path}: no test reaches it and its SKILL.md names no such tool. Name it in the script that reads it, give it a test, or delete it`,
-  );
-}
+  for (const path of unreached) {
+    console.error(
+      `${path}: no test reaches it and its SKILL.md names no such tool. Name it in the script that reads it, give it a test, or delete it`,
+    );
+  }
 
-if (raw.length || unreached.length) {
-  process.exit(1);
+  if (raw.length || unreached.length) {
+    process.exit(1);
+  }
 }
 
 // A `.gitignore` hides a file from oxlint and oxfmt, and neither can be told to stop without also
@@ -163,10 +171,7 @@ for (const d of [...advises, ...blocks]) {
   console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
 }
 
-// Only a run over the whole repo sees every finding, so only it prunes. A run on a folder or a file
-// leaves each ledger as it is.
-const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
-
+// Only a whole run prunes. A run on a folder or a file leaves each ledger as it is.
 for (const { file, path, entries, kept } of settled) {
   const pruned = entries.length - kept.length;
 

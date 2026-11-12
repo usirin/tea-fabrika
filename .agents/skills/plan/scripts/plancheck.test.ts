@@ -1397,4 +1397,43 @@ describe("laws and validation advice, today's tooling", () => {
     const legacy = `${kinded("Kind", [row("type", "fc.record: x")])}\n\n## Validation\n\n- Run one typecheck.\n`;
     expect(advice(check(legacy, "").text)).toEqual([]);
   });
+
+  // Ticket 835 pins a lane's scripts: a copy of `.agents/` outside any checkout. box.sh runs the
+  // approval check from that copy, so the check must find the repo through MAIN.
+  // Plant: always `cd` to the script's own root, and the pinned run fails on "cannot find repository".
+  it("scenario: from a pinned copy outside a checkout, the approval check reads the repo MAIN names", () => {
+    const folder = mkdtempSync(join(tmpdir(), "pc-pin-"));
+
+    try {
+      const repo = join(import.meta.dirname, "../../../..");
+      cpSync(join(repo, ".agents/skills/plan/scripts"), join(folder, ".agents/skills/plan/scripts"), {
+        recursive: true,
+      });
+      cpSync(join(repo, ".agents/skills/lead/scripts"), join(folder, ".agents/skills/lead/scripts"), {
+        recursive: true,
+      });
+      const body = complete("");
+      const plan = join(folder, "plan.md");
+      writeFileSync(plan, approved(body));
+      const words = join(folder, "words");
+      writeFileSync(words, "private_generated\n");
+      const pinned = join(folder, ".agents/skills/plan/scripts/plancheck.sh");
+      const run = (main: string | undefined) =>
+        spawnSync("sh", [pinned, "--approved", plan], {
+          encoding: "utf8",
+          timeout: 20_000,
+          cwd: folder,
+          env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined, MAIN: main },
+        });
+
+      const withMain = run(repo);
+      expect(withMain.status, withMain.stdout + withMain.stderr).toBe(0);
+
+      const without = run(undefined);
+      expect(without.status).toBe(1);
+      expect(without.stderr).toContain("MAIN is not set");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
 });

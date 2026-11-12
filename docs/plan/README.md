@@ -62,6 +62,14 @@ a write that stamps its own `id`, `by`, `for` or `arrivedAt` before it makes an 
 only a count per piece and hour: no ledger entry, no span row and no measurement row. It finishes
 no Tier 1 row, so the count stays 20.
 
+*2026-11-12:* P17b, the rest of Tier 1's chaos row, is cut in three slices on tracker ticket 287.
+Slice 1 in `next/`, the history checker and the off contract, is
+[PR 1037](https://github.com/usirin/tea-fabrika/pull/1037): the fault and report schemas, the
+`Nemesis` contract with its off layer and its ledger layer, and `ProcessHistory`, the bounded read
+the check uses. It is useful without a chaos program and starts no fault. Slice 2, the bounded
+chaos program, and slice 3, the checklist faults and the real local p90 revoke, come next; P17
+stays open until all three land ([its row](./tier-1.md#the-pull-requests-one-at-a-time)).
+
 Ticket 731's first slice in `next/` separates ClientManager's contract from its sibling
 ClientManagerLedger layer and migrates its callers. ProcessManager and SpanSink remain
 later slices; this changes no Tier 1 row. The final contract bundle measures 259 loaded
@@ -77,6 +85,12 @@ stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner
 notes and P44, the checklist, joined, so it has 43 rows; it said 44.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
+
+*2026-11-12:* P41's slice 2 (ticket 764) is [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): program mail is delivered
+between two real Process objects in `next/`. The sender's object asks the Project to save the
+letter, and the target's `mailed` sets its one alarm. It finishes no Tier 1 row, so the count stays
+20. P41's slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls
+and how a pack asks for its grant. *It said, below: slice 2 is at its tests step, draft PR 993.*
 
 *2026-11-11, later:* slices landed in seven Tier 1 rows. P13's slice 1
 ([PR 887](https://github.com/usirin/tea-fabrika/pull/887)), P34c's slices 1 and 2

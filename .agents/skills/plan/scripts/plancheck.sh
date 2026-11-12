@@ -22,7 +22,15 @@ case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --o
 [ "$#" = 1 ] || { echo "usage: plancheck.sh [--draft|--approved] <plan.md>" >&2; exit 1; }
 here=$(cd "$(dirname "$0")" && pwd -P)
 plan=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-cd "$here/../../../.."
+# A lane runs this script from a pin: a copy of `.agents/` at one commit, which is no git checkout
+# (ticket 835). The plan is checked against the repo, so from a pin the repo is MAIN, the main
+# checkout the pinned process was started with.
+root="$here/../../../.."
+if ! git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1; then
+    root=${MAIN:-}
+    [ -n "$root" ] || { echo "plancheck: this script is outside a git checkout and MAIN is not set" >&2; exit 1; }
+fi
+cd "$root"
 if [ "$draft" != owners ]; then
     sh "$here/../../lead/scripts/leakgrep.sh" --text "$plan" >&2
 fi
