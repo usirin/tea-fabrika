@@ -15,18 +15,75 @@
 // start piece (`Children.ts`, `ChildrenLedger.ts`) is read at run time, so P41's laws above keep
 // running on a tree that does not have it yet.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result, type Scope, Stream } from "effect";
+import { Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
+import { Doorbell } from "../ledger/Ledger.ts";
+import * as LedgerSql from "../ledger/LedgerSql.ts";
+import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
-import { BRAIN, brain, copied, data, from, ids, PIDS, SHUTDOWN } from "./Process.test-support.ts";
-import { Recipient, Start } from "./Process.ts";
+import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, type MailRefusal, ProgramMail, ProgramMailError, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 
 /** One real store. `reopen` closes it and opens the same database again, keeping only its rows. */
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
+
+const PIDS: ReadonlyArray<string> = Array.from(
+  { length: 40 },
+  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+);
+
+const ids = (...values: ReadonlyArray<string>) => {
+  let calls = 0;
+  return {
+    next: Effect.sync(() => {
+      const value = values[calls++];
+
+      if (value === undefined) {
+        throw new Error("test exhausted its process IDs");
+      }
+
+      return value;
+    }),
+    calls: () => calls,
+  };
+};
+
+const BRAIN = "SHA256:brain";
+
+const brain = () => ({
+  owner: Owner.cases.brain.make({}),
+  recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
+  by: BRAIN,
+});
+
+const from = (over: Partial<From> = {}): From => ({
+  by: BRAIN,
+  for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+  sentAt: "2026-11-07T21:10:01.204Z",
+  seen: 0,
+  parent: `in-${PIDS[0]}-41`,
+  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+  build: "writer-build",
+  ...over,
+});
+
+const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+
+const Reasons = Schema.TaggedUnion({
+  normal: {},
+  shutdown: {},
+  crashed: { phase: Schema.Literal("step"), error: Schema.String },
+});
+
+const SHUTDOWN = Reasons.cases.shutdown.make({});
+
+const data = (sql: Sql) =>
+  Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
+    Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
+  );
 
 const SEED = 119120;
 const REQUESTER = "requester:1";
@@ -485,8 +542,9 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const checks = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 40, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
       }),
@@ -593,7 +651,21 @@ const FamilyCell = fc.record({
   clock: fc.integer({ min: 0, max: 86_400_000 }),
 });
 type FamilyCell = typeof FamilyCell extends fc.Arbitrary<infer A> ? A : never;
-const FamilyTape = fc.array(FamilyCell, { minLength: 8, maxLength: 32, size: "max" });
+type FamilyWalk = { readonly step: (cell: FamilyCell) => Effect.Effect<void, unknown> };
+
+const FamilyTape = fc
+  .commands(
+    [
+      FamilyCell.map((cell): fc.AsyncCommand<object, FamilyWalk> => ({
+        check: () => true,
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits one real service move
+        run: (_model, real) => Effect.runPromise(real.step(cell)),
+        toString: () => JSON.stringify(cell),
+      })),
+    ],
+    { maxCommands: 32, size: "max" },
+  )
+  .filter((commands) => [...commands].length >= 8);
 
 type FamilyMove = "start_child" | "start_again" | "start_forbidden" | "exit" | "restart" | "mail";
 
@@ -609,7 +681,7 @@ const FAMILY_MOVES: ReadonlyArray<FamilyMove> = [
 ];
 
 const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string>, done: Set<FamilyMove>) =>
-  Effect.fnUntraced(function* (tape: ReadonlyArray<FamilyCell>) {
+  Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, FamilyWalk>>) {
     // oxlint-disable-next-line fabrika/no-promises -- edge: the start piece is read at run time, so P41's laws load without it
     const { Children } = yield* Effect.promise(() => import("./Children.ts"));
     // oxlint-disable-next-line fabrika/no-promises -- edge: the start piece is read at run time, so P41's laws load without it
@@ -655,7 +727,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
     const live = () => [...world.names].filter(([, n]) => n.live).map(([name]) => name);
     const starters = () => live().filter((name) => startsTo(world.names.get(name)?.program ?? "").length > 0);
 
-    for (const cell of tape) {
+    const step = Effect.fnUntraced(function* (cell: FamilyCell) {
       const can: Record<FamilyMove, boolean> = {
         start_child: starters().length > 0 && next.calls() < PIDS.length - 2,
         start_again: starters().some((s) =>
@@ -671,7 +743,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       const options = FAMILY_MOVES.filter((m) => can[m]);
 
       if (options.length === 0) {
-        continue;
+        return;
       }
 
       const move = choose(options, cell.move);
@@ -822,22 +894,24 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
               }),
             ),
           );
-          const why = relation(world, source, to);
+          const reason = relation(world, source, to);
 
           if (mayMail(world, source, to)) {
-            expect(Result.isSuccess(answer), `L14: ${source} may mail ${to} (${why})`).toBe(true);
+            expect(Result.isSuccess(answer), `L14: ${source} may mail ${to} (${reason})`).toBe(true);
           } else {
-            refused(answer, "forbidden", `L14: ${source} may not mail ${to} (${why})`);
+            refused(answer, "forbidden", `L14: ${source} may not mail ${to} (${reason})`);
             expect(snapshot(store.sql), "L14: a forbidden letter writes nothing").toEqual(before);
           }
 
-          seen.add(`${mayMail(world, source, to) ? "may" : "may_not"}:${why}`);
+          seen.add(`${mayMail(world, source, to) ? "may" : "may_not"}:${reason}`);
           break;
         }
       }
 
       done.add(move);
-    }
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
@@ -887,8 +961,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const checks = { seed: SEED, numRuns: 200, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-          yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 200, includeErrorInReport: true }));
+          yield* Effect.promise(() => fc.assert(property, checks));
           // An empty walk cannot pass: every move ran, and every relation the law names was mailed across.
           expect([...done].sort()).toEqual(
             expect.arrayContaining(["exit", "mail", "restart", "start_again", "start_child", "start_forbidden"]),

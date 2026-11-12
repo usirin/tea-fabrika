@@ -16,6 +16,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   Cause,
+  Context,
   Effect,
   Exit,
   Fiber,
@@ -23,7 +24,7 @@ import {
   Logger,
   Option,
   Result,
-  type Schema,
+  Schema,
   type Scope,
   Stream,
   Tracer,
@@ -35,10 +36,10 @@ import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Entry } from "../ledger/Log.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
 import { Children, ChildrenError, type Child, type StartGrant, Started } from "./Children.ts";
 import * as ChildrenLedger from "./ChildrenLedger.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
-import { BRAIN, brain, copied, CRASHED, from, ids, NORMAL, PIDS, SHUTDOWN } from "./Process.test-support.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
@@ -48,6 +49,58 @@ export type Store = {
   readonly reopen: Effect.Effect<void>;
   readonly probe: { readonly open: () => number };
 };
+
+const PIDS: ReadonlyArray<string> = Array.from(
+  { length: 40 },
+  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+);
+
+const ids = (...values: ReadonlyArray<string>) => {
+  let calls = 0;
+  return {
+    next: Effect.sync(() => {
+      const value = values[calls++];
+
+      if (value === undefined) {
+        throw new Error("test exhausted its process IDs");
+      }
+
+      return value;
+    }),
+    calls: () => calls,
+  };
+};
+
+const BRAIN = "SHA256:brain";
+
+const brain = () => ({
+  owner: Owner.cases.brain.make({}),
+  recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
+  by: BRAIN,
+});
+
+const from = (over: Partial<From> = {}): From => ({
+  by: BRAIN,
+  for: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+  sentAt: "2026-11-07T21:10:01.204Z",
+  seen: 0,
+  parent: `in-${PIDS[0]}-41`,
+  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+  build: "writer-build",
+  ...over,
+});
+
+const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+
+const Reasons = Schema.TaggedUnion({
+  normal: {},
+  shutdown: {},
+  crashed: { phase: Schema.Literal("step"), error: Schema.String },
+});
+
+const NORMAL = Reasons.cases.normal.make({});
+const SHUTDOWN = Reasons.cases.shutdown.make({});
+const CRASHED = Reasons.cases.crashed.make({ phase: "step", error: "Error" });
 
 const SEED = 119120;
 const HASH = "build-a";
@@ -264,7 +317,21 @@ const Cell = fc.record({
   trace: fc.stringMatching(/^[0-9a-f]{32}$/),
 });
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
-const Tape = fc.array(Cell, { minLength: 8, maxLength: 28, size: "max" });
+type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, unknown> };
+
+const Tape = fc
+  .commands(
+    [
+      Cell.map((cell): fc.AsyncCommand<object, Walk> => ({
+        check: () => true,
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits one real service move
+        run: (_model, real) => Effect.runPromise(real.step(cell)),
+        toString: () => JSON.stringify(cell),
+      })),
+    ],
+    { maxCommands: 28, size: "max" },
+  )
+  .filter((commands) => [...commands].length >= 8);
 
 /** The input a cell picks: absent, `null`, `{}`, `[]`, or a generated JSON value. */
 const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
@@ -422,7 +489,7 @@ const walk = (
   done: Set<Move>,
   seen: Tally,
 ) =>
-  Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
+  Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
     const { sql, arm, disarm } = cutting(store.sql);
     const next = ids(...PIDS);
@@ -615,11 +682,11 @@ const walk = (
       return moves.filter((move) => can[move]);
     };
 
-    for (const cell of tape) {
+    const step = Effect.fnUntraced(function* (cell: Cell) {
       const possible = options();
 
       if (possible.length === 0) {
-        continue;
+        return;
       }
 
       const move = choose(possible, cell.move);
@@ -921,7 +988,9 @@ const walk = (
 
       done.add(move);
       yield* check();
-    }
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
 
 const prop = (
@@ -941,8 +1010,9 @@ const prop = (
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
         expect([...done].sort(), "every move the law is about ran").toEqual(
           expect.arrayContaining([...required].sort()),
@@ -1174,36 +1244,25 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
 
 // --- L11: secrets stay out of answers, spans and logs ---------------------------------------------
 
-const Secret = fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/);
+// Encoded forms differ on purpose; an alphanumeric sentinel alone cannot prove escaping checks.
+const Secret = fc
+  .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom("", '"', "/%? ", "\n"))
+  .map(([word, suffix]) => word + suffix);
 
 /** Every form a secret could take in an output: raw, JSON-escaped and percent-encoded. */
 const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
 
-const capture = () => {
-  const spans: Array<Tracer.NativeSpan> = [];
+const capture = Effect.fnUntraced(function* (sql: Sql) {
+  const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
+  const tracer = Context.get(context, Tracer.Tracer);
   const lines: Array<string> = [];
-  const tracer = Tracer.make({
-    span: (options) => {
-      const span = new Tracer.NativeSpan(options);
-      spans.push(span);
-      return span;
-    },
-  });
-  // Each log line as Effect's own formatters write it, so an error's message renders as a sink would.
   const logger = Logger.make((options) => {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
-  /** What a span exports: its name, attributes and events, never its exit value. */
-  const exported = () =>
-    spans.map((span) =>
-      JSON.stringify({
-        name: span.name,
-        attributes: Object.fromEntries(span.attributes),
-        events: span.events.map(([name, , attributes]) => ({ name, attributes })),
-      }),
-    );
+  // Inspect the real sink's saved span and failure content, including nested storage causes.
+  const exported = () => sql.exec("SELECT row, content FROM unsent").map((row) => JSON.stringify(row));
   return { tracer, logger, lines, exported };
-};
+});
 
 const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
   Effect.fnUntraced(function* (secret: string, kind: number) {
@@ -1221,7 +1280,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         from(),
       ),
     ).pipe(Effect.provide(layer(sql, next)), Effect.orDie);
-    const seenBy = capture();
+    const seenBy = yield* capture(store.sql);
     const child: Child = {
       id: `${boot.process}/1/0`,
       name: "merger:1",
@@ -1255,6 +1314,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
         outputs.push(error.message, String(error.reason), JSON.stringify({ ...error, cause: undefined }));
         seen.add(error.reason);
       } else {
+        outputs.push(Cause.pretty(exit.cause));
         seen.add("defect");
       }
     }
@@ -1286,8 +1346,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
           const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
+          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-          yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+          yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort(), "every answer a race can give was given").toEqual(
             expect.arrayContaining(
               [
@@ -1358,8 +1419,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, fc.nat(), (x, k) => Effect.runPromise(Effect.scoped(law(x, k))));
+          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-          yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+          yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(expect.arrayContaining(["answer", "storage", "defect"].sort()));
         }),
       600_000,

@@ -16,7 +16,7 @@ type Instance = Fixture["instance"] & Record<string, any>;
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
-const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
+const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
   const end = Date.now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
@@ -35,7 +35,7 @@ const until = async <A>(what: string, look: () => Promise<A>, done: (value: A) =
     await pause();
   }
 
-  throw new Error(`${what}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
+  throw new Error(`${label}: no answer in ${ms} ms; last observed ${JSON.stringify(last)}`);
 };
 
 /** A real WebSocket client at the door; it keeps every pushed frame. `close` waits for the close. */

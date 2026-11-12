@@ -12,10 +12,13 @@
 //     `Children.start` with the Cmd's id and the running life as requester. `exit` writes `exited
 //     {reason: normal}` for this life after the Cmds listed before it; none after it runs.
 // The oracle is the walk's own model and the store's raw rows read with SQL, never the product's fold.
+import type { Tagged } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import {
+  Cause,
   Clock,
   Context,
+  Deferred,
   Effect,
   Exit,
   Fiber,
@@ -26,22 +29,17 @@ import {
   Result,
   Schema,
   Scope,
-  Stream,
   Tracer,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
-import { Ledger } from "../ledger/Ledger.ts";
-import type { Entry } from "../ledger/Log.ts";
 import { Children, Started } from "../processes/Children.ts";
-import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
-import { data as ledger, ids, NORMAL, PIDS } from "../processes/Process.test-support.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
-import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
 import type { Sql } from "../Sql.ts";
+import { SpanSink } from "../telemetry/Sink.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model } from "./internal/childStarter.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -51,7 +49,45 @@ import { ProgramRunner } from "./Runner.ts";
 export type Store = {
   readonly sql: (part: string) => Sql;
   readonly reopen: Effect.Effect<void>;
+  readonly shared: (
+    sql: Sql,
+    next: Effect.Effect<string>,
+  ) => Layer.Layer<
+    Children | ProgramMail | ProcessManager | Mailbox | Layer.Services<ReturnType<typeof ProcessStore.layer>>
+  >;
+  readonly entries: (names: Iterable<string>) => Effect.Effect<ReadonlyArray<Entry>>;
   readonly probe: { readonly open: () => number };
+};
+
+const PIDS: ReadonlyArray<string> = Array.from(
+  { length: 40 },
+  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+);
+
+const ids = (...values: ReadonlyArray<string>) => {
+  let calls = 0;
+  return {
+    next: Effect.sync(() => {
+      const value = values[calls++];
+
+      if (value === undefined) {
+        throw new Error("test exhausted its process IDs");
+      }
+
+      return value;
+    }),
+    calls: () => calls,
+  };
+};
+
+const Reasons = Schema.TaggedUnion({ normal: {} });
+const NORMAL = Reasons.cases.normal.make({});
+
+type Entry = Tagged & {
+  readonly id: string;
+  readonly stream: string;
+  readonly rev: number;
+  readonly body: unknown;
 };
 
 const SEED = 119120;
@@ -70,14 +106,14 @@ const PROGRAMS: Record<string, unknown> = {
 };
 
 /** Start grants, by program. `plain` is granted, but never declared the Cmds. */
-const STARTS = [
+export const STARTS = [
   { source: "starter", to: "merger" },
   { source: "merger", to: "merger" },
   { source: "plain", to: "merger" },
 ];
 
 /** The host's mail grant: `sender:1` mails both starters, so their steps run on another process's letter. */
-const HOST: Grants = { "sender:1": ["starter:1", "starter:2"] };
+export const HOST: Grants = { "sender:1": ["starter:1", "starter:2"] };
 
 /** Names the boot registers: two starters, one program that never declared the Cmds, and a sender. */
 const BOOT: ReadonlyArray<readonly [string, string]> = [
@@ -108,18 +144,6 @@ const brainFrom = (): From => ({
 
 const decodeModel = Schema.decodeUnknownOption(Model);
 
-/** Every entry of the process table, each name's events and each name's inbox, through the ledger's
- *  own read: the oracle never asks the product's fold. */
-const entries = (names: Iterable<string>) =>
-  Effect.map(
-    Effect.forEach(
-      ["processes", ...[...new Set(names)].flatMap((name) => [`processes/${name}`, `${name}/inbox`])],
-      (stream) => Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0))),
-      { concurrency: 1 },
-    ),
-    (all) => all.flatMap((part) => [...part]).sort((a, b) => a.rev - b.rev),
-  );
-
 /** A value's case, read without naming the key in a literal. */
 const tagged = (value: unknown): unknown => (Predicate.hasProperty(value, "_tag") ? value._tag : undefined);
 
@@ -144,7 +168,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 /** The ledger's Sql with one cut: the next INSERT of an `exited` line throws once. */
-const faulting = (sql: Sql, fault: { exited: boolean; message: string }) => {
+const faulting = (sql: Sql, fault: { exited: boolean; message: string; checkpoint?: boolean; landed?: boolean }) => {
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (
@@ -156,7 +180,21 @@ const faulting = (sql: Sql, fault: { exited: boolean; message: string }) => {
         throw new Error(fault.message);
       }
 
-      return sql.exec(query, ...params);
+      if (fault.checkpoint && fault.landed && /INSERT INTO process_state/.test(query)) {
+        fault.checkpoint = false;
+        throw new Error(fault.message);
+      }
+
+      const rows = sql.exec(query, ...params);
+
+      if (
+        /^\s*INSERT\b/i.test(query) &&
+        params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+      ) {
+        fault.landed = true;
+      }
+
+      return rows;
     },
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
@@ -193,7 +231,9 @@ type World = {
   readonly parents: Map<string, string>;
   /** Live watches: who watches whom, under which ref. */
   readonly watches: Array<{ readonly watcher: string; readonly target: string; readonly ref: string }>;
-  readonly fault: { exited: boolean; message: string };
+  readonly fault: { exited: boolean; message: string; checkpoint?: boolean; landed?: boolean };
+  worker?: boolean;
+  hold?: { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> };
   n: number;
 };
 
@@ -202,20 +242,26 @@ type World = {
  * piece, and one runner per process that a runner steps, built when first asked for.
  */
 const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effect.Effect<string>, scope: Scope.Scope) {
-  const data = ledger(faulting(store.sql("ledger"), world.fault));
-  const manager = ProcessManager.layer(
-    {
-      by: "SHA256:brain",
-      owner: Owner.cases.brain.make({}),
-      recipient: Recipient.cases.client.make({ client: "brain", session: DOOR }),
-    },
-    next,
-  );
-  const shared = Layer.mergeAll(
-    ChildrenLedger.layer({ grants: STARTS }),
-    ProgramMailLedger.layer({ grants: HOST }),
-  ).pipe(Layer.provideMerge(manager), Layer.provideMerge(Mailbox.layer), Layer.provideMerge(data));
+  const shared = store.shared(faulting(store.sql("ledger"), world.fault), next);
   const context = yield* Layer.buildWithScope(shared, scope);
+  const children = Context.get(context, Children);
+  const runnerContext = Context.add(
+    context,
+    Children,
+    Children.of({
+      start: Effect.fnUntraced(function* (child, from) {
+        const hold = world.hold;
+
+        if (hold !== undefined) {
+          world.hold = undefined;
+          yield* Deferred.succeed(hold.entered, undefined);
+          yield* Deferred.await(hold.release);
+        }
+
+        return yield* children.start(child, from);
+      }),
+    }),
+  );
   const runners = new Map<string, ProgramRunner["Service"]>();
   const runner = Effect.fnUntraced(function* (name: string) {
     const held = world.names.get(name);
@@ -252,19 +298,29 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     );
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {}),
-      ProcessStore.layer(store.sql(`process-${name}`), { process: held.pid }),
+      ProcessStore.layer(faulting(store.sql(`process-${name}`), world.fault), { process: held.pid }),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(WatcherManager, { publish: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
-    ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
-    const built = yield* Layer.buildWithScope(
-      ProgramRunner.layer(
-        { id: held.pid, name, program: held.program, build: BUILD, owner },
-        { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 } },
-      ).pipe(Layer.provide(own)),
-      scope,
-    );
+    ).pipe(Layer.provideMerge(Layer.succeedContext(runnerContext)));
+    const descriptor = { id: held.pid, name, program: held.program, build: BUILD, owner };
+    const options = { recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 } };
+    const layer = world.worker
+      ? Layer.unwrap(
+          Effect.map(ProgramLoader, (loader) =>
+            ProgramRunner.withLoader(
+              descriptor,
+              {
+                load: (name, build) =>
+                  Effect.map(loader.load(name, build), ({ stepper: _stepper, ...loaded }) => loaded),
+              },
+              options,
+            ),
+          ),
+        )
+      : ProgramRunner.layer(descriptor, options);
+    const built = yield* Layer.buildWithScope(layer.pipe(Layer.provide(own)), scope);
     const made = Context.get(built, ProgramRunner);
     runners.set(held.pid, made);
     return made;
@@ -289,7 +345,21 @@ const Cell = fc.record({
   extra: fc.subarray(["requester", "owner", "process", "hash", "reason", "source"], { minLength: 1 }),
 });
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
-const Tape = fc.array(Cell, { minLength: 6, maxLength: 20, size: "max" });
+type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, unknown> };
+
+const Tape = fc
+  .commands(
+    [
+      Cell.map((cell): fc.AsyncCommand<object, Walk> => ({
+        check: () => true,
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits one real service move
+        run: (_model, real) => Effect.runPromise(real.step(cell)),
+        toString: () => JSON.stringify(cell),
+      })),
+    ],
+    { maxCommands: 20, size: "max" },
+  )
+  .filter((commands) => [...commands].length >= 6);
 
 type Move =
   | "door_start"
@@ -297,13 +367,18 @@ type Move =
   | "forged"
   | "bad"
   | "undeclared"
+  | "undeclared_exit"
   | "exit"
   | "exit_extra"
   | "after_exit"
   | "watch"
   | "start_ended"
   | "retry_saved"
-  | "cut_exit";
+  | "cut_exit"
+  | "queued_exit"
+  | "interleaved_exit"
+  | "worker_before_exit"
+  | "worker_after_exit";
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
 const forged = (field: string, world: World): unknown => {
@@ -329,7 +404,7 @@ const walk = (
   done: Set<Move>,
   seen: Set<string>,
 ) =>
-  Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
+  Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
     const next = ids(...PIDS);
     const world: World = {
@@ -345,7 +420,7 @@ const walk = (
     const life = yield* host(store, world, next.next, scope);
     const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(Effect.provide(life.context as Context.Context<never>)) as Effect.Effect<A, E, never>;
-    const all = (extra: Iterable<string> = []) => inContext(entries([...world.names.keys(), ...extra]));
+    const all = (extra: Iterable<string> = []) => inContext(store.entries([...world.names.keys(), ...extra]));
     const letter = (input: unknown): Incoming => {
       const n = ++world.n;
       return {
@@ -404,7 +479,7 @@ const walk = (
         expect(ask, `L5: ${name} was started only by a Cmd the walk dispatched`).toBeDefined();
         expect(requester, "L5: the requester is the life that ran the step").toBe(ask?.requester);
         expect(row.id.startsWith(`${ask?.requester}/`), "L5: the start's id is the dispatched Cmd's id").toBe(true);
-        expect(b["hash"], "L5: the hash is the loader's, never the program's").not.toBe("forged-hash");
+        expect(b["hash"], "L5: the hash is the loader's, never the program's").toBe(BUILD);
         const registered = rows.find(
           (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name,
         );
@@ -448,13 +523,14 @@ const walk = (
       world.names.set(name, { program, pid: started.process, live: true });
     }
 
-    for (const cell of tape) {
+    const step = Effect.fnUntraced(function* (cell: Cell) {
       const can: Record<Move, boolean> = {
         door_start: starters().length > 0 && next.calls() < PIDS.length - 6,
         mail_start:
           ["starter:1", "starter:2"].some((n) => world.names.get(n)?.live === true) && next.calls() < PIDS.length - 6,
         forged: starters().length > 0,
         bad: starters().length > 0,
+        undeclared_exit: world.names.get("plain:1")?.live === true,
         undeclared: world.names.get("plain:1")?.live === true,
         exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         exit_extra: runnable().length > 0,
@@ -462,12 +538,16 @@ const walk = (
         watch: runnable().length > 0,
         start_ended: starters().length > 0 && ended().length > 0,
         retry_saved: world.starts.size > 0,
+        queued_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
+        interleaved_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
+        worker_before_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
+        worker_after_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         cut_exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
       };
       const options = moves.filter((move) => can[move]);
 
       if (options.length === 0) {
-        continue;
+        return;
       }
 
       const move = choose(options, cell.move);
@@ -619,6 +699,119 @@ const walk = (
           seen.add("undeclared");
           break;
         }
+        case "undeclared_exit": {
+          const held = world.names.get("plain:1") as Name;
+          const before = yield* head;
+          yield* door("plain:1", { type: "end", before: [], after: [], twice: false });
+          const rows = yield* all();
+          expect(
+            rows.filter((row) => row.rev > before && row.stream.startsWith("processes")),
+            "L8: an undeclared exit writes no process rows",
+          ).toEqual([]);
+          expect(yield* exitedRows(held.pid), "L8: an undeclared exit leaves its life live").toEqual([]);
+          const replies = rows.filter((row) => row.id.endsWith("/answer") && row.stream === "plain:1/inbox");
+          expect(body(replies.at(-1))["m"]).toMatchObject({ type: "exit_err", reason: "bad_cmd" });
+          seen.add("undeclared_exit");
+          break;
+        }
+        case "queued_exit":
+        case "interleaved_exit":
+        case "worker_before_exit":
+        case "worker_after_exit": {
+          const name = choose(runnable(), cell.pick);
+          const held = world.names.get(name) as Name;
+          const before = Array.from({ length: 1 + (cell.shape % 3) }, () => ({ program: "merger", name: fresh() }));
+          const after = Array.from({ length: 1 + (cell.alt % 3) }, () => ({ program: "merger", name: fresh() }));
+          const ending = { type: "end", before, after, twice: true };
+          const late = { type: "start", ask: { program: "merger", name: fresh() } };
+          const pid = held.pid;
+          world.worker = move.startsWith("worker_");
+          // The public withLoader path has the Worker's declaration and execution, with no pure stepper.
+          let current = yield* host(store, world, next.next, scope);
+          let runner = yield* current.runner(name);
+          yield* call(runner.msg(letter({ type: "ping" })), "initial letter");
+          const initialSteps = (yield* inContext(savedModel(store, name, pid)))?.stepped ?? 0;
+
+          if (move === "queued_exit") {
+            // Ordinary mail already waiting when the alarm drains it. End comes before the late ask.
+            yield* inContext(Mailbox.use((m) => m.send(name, `end-${++world.n}`, ending, brainFrom())));
+            yield* inContext(Mailbox.use((m) => m.send(name, `late-${++world.n}`, late, brainFrom())));
+            yield* call(runner.due((yield* Clock.currentTimeMillis) + 1_000), "queued exit");
+          } else if (move === "interleaved_exit") {
+            const entered = yield* Deferred.make<void>();
+            const release = yield* Deferred.make<void>();
+            world.hold = { entered, release };
+            const endingCall = yield* Effect.forkChild(runner.msg(letter(ending)).pipe(Effect.result));
+            yield* Deferred.await(entered).pipe(Effect.timeout("10 seconds"));
+            // A different letter arrives while the Cmd before exit is still in flight.
+            const laterCall = yield* Effect.forkChild(runner.msg(letter(late)).pipe(Effect.result));
+
+            // Let the competing call run up to a wait, without requiring it to finish before release.
+            for (let turn = 0; turn < 20; turn++) {
+              yield* Effect.yieldNow;
+            }
+
+            yield* Deferred.succeed(release, undefined);
+            yield* Fiber.join(endingCall);
+            yield* Fiber.join(laterCall);
+          } else {
+            world.fault.landed = false;
+            world.fault.exited = move === "worker_before_exit";
+            world.fault.checkpoint = move === "worker_after_exit";
+            yield* call(runner.msg(letter(ending)), "exit with a cut");
+            expect(
+              move === "worker_before_exit" ? world.fault.exited : world.fault.checkpoint,
+              "L7: the selected recovery cut fired",
+            ).toBe(false);
+            // Discard all runner memory and reopen the same files before a Worker loader recovers.
+            yield* store.reopen;
+            current = yield* host(store, world, next.next, scope);
+            runner = yield* current.runner(name);
+
+            for (let retry = 0; retry < 4; retry++) {
+              yield* call(runner.due((yield* Clock.currentTimeMillis) + 60_000 * (retry + 1)), "recovered alarm");
+            }
+          }
+
+          const rows = yield* store.entries([
+            name,
+            ...before.map((a) => a.name),
+            ...after.map((a) => a.name),
+            late.ask.name,
+          ]);
+          const exits = rows.filter((row) => row._tag === "exited" && body(row)["process"] === pid);
+          expect(exits, "L7: one normal exit survives a queued turn or a Worker recovery cut").toHaveLength(1);
+          expect(body(exits[0])["reason"]).toEqual(NORMAL);
+
+          for (const ask of before) {
+            expect(
+              rows.some((row) => row._tag === "started" && body(row)["name"] === ask.name),
+              "L7: every Cmd before exit ran",
+            ).toBe(true);
+          }
+
+          for (const ask of [...after, late.ask]) {
+            expect(
+              rows.some((row) => row._tag === "registered" && body(row)["name"] === ask.name),
+              "L7: no Cmd or later queued letter after exit ran",
+            ).toBe(false);
+          }
+
+          const stepped = (yield* inContext(savedModel(store, name, pid)))?.stepped;
+          expect(stepped, "L7: exit is the last letter stepped, including mail already waiting").toBe(initialSteps + 1);
+          yield* call(runner.msg(letter({ type: "ping" })), "late letter after recovery");
+          expect(
+            (yield* inContext(savedModel(store, name, pid)))?.stepped,
+            "L7: ended life steps no later letter",
+          ).toBe(stepped);
+          expect(
+            (yield* store.entries([name])).filter((row) => row._tag === "restarted" && body(row)["after"] === pid),
+            "L7: normal exit never restarts",
+          ).toEqual([]);
+          held.live = false;
+          seen.add(move);
+          break;
+        }
         case "exit":
         case "cut_exit": {
           const name = choose(runnable(), cell.pick);
@@ -767,7 +960,7 @@ const walk = (
                   recipient: Recipient.cases.process.make({ process: watcher.pid }),
                 },
                 next.next,
-              ).pipe(Layer.provide(ledger(store.sql("ledger")))),
+              ).pipe(Layer.provide(Layer.succeedContext(life.context))),
             ),
             Effect.orDie,
           );
@@ -822,7 +1015,9 @@ const walk = (
       }
 
       done.add(move);
-    }
+    });
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
+    yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
 
 const prop = (
@@ -842,8 +1037,9 @@ const prop = (
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const checks = { seed: SEED, numRuns, includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-        yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns, includeErrorInReport: true }));
+        yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every move and every answer the law is about was reached.
         expect([...done].sort()).toEqual(expect.arrayContaining([...required].sort()));
         expect([...seen].sort()).toEqual(expect.arrayContaining([...answers].sort()));
@@ -853,33 +1049,23 @@ const prop = (
 
 // --- L11: secrets stay out of Cmd answers, spans and logs ---------------------------------------
 
-const capture = () => {
-  const spans: Array<Tracer.NativeSpan> = [];
+const capture = Effect.fnUntraced(function* (sql: Sql) {
+  const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
+  const tracer = Context.get(context, Tracer.Tracer);
   const lines: Array<string> = [];
-  const tracer = Tracer.make({
-    span: (options) => {
-      const span = new Tracer.NativeSpan(options);
-      spans.push(span);
-      return span;
-    },
-  });
-  // Each log line as Effect's own formatters write it, so an error's message renders as a sink would.
   const logger = Logger.make((options) => {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
-  const exported = () =>
-    spans.map((span) =>
-      JSON.stringify({
-        name: span.name,
-        attributes: Object.fromEntries(span.attributes),
-        events: span.events.map(([name, , attributes]) => ({ name, attributes })),
-      }),
-    );
+  // Inspect the real sink's saved span and failure content, including nested storage causes.
+  const exported = () => sql.exec("SELECT row, content FROM unsent").map((row) => JSON.stringify(row));
   return { tracer, logger, lines, exported };
-};
+});
 
 /** A secret-shaped sentinel: made up, never a real key. */
-const Secret = fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/);
+// Encoded forms differ on purpose; an alphanumeric sentinel alone cannot prove escaping checks.
+const Secret = fc
+  .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom("", '"', "/%? ", "\n"))
+  .map(([word, suffix]) => word + suffix);
 
 const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
 
@@ -906,7 +1092,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       world.names.set(name, { program, pid: started.process, live: true });
     }
 
-    const seenBy = capture();
+    const seenBy = yield* capture(store.sql("spans"));
     const runner = yield* life.runner("starter:1");
     const mode = kind % 3;
     const input =
@@ -921,7 +1107,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       world.fault.exited = true;
     }
 
-    yield* runner
+    const outcome = yield* runner
       .msg({
         id: "letter-1",
         envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input },
@@ -929,14 +1115,14 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         seen: 0,
         span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
       })
-      .pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.result);
+      .pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
     const cut = mode === 2 && !world.fault.exited;
     world.fault.exited = false;
     const pid = world.names.get("starter:1")?.pid as string;
     const answers =
       (yield* savedModel(store, "starter:1", pid).pipe(Effect.provide(life.context as Context.Context<never>)))
         ?.answers ?? [];
-    const letters = (yield* entries(["starter:1"]).pipe(Effect.provide(life.context as Context.Context<never>)))
+    const letters = (yield* store.entries(["starter:1"]).pipe(Effect.provide(life.context as Context.Context<never>)))
       .filter((e) => e.stream === "starter:1/inbox" && e.id.endsWith("/answer"))
       // Whole, its `cmd` echo included: an answer row is an output, and a refused Cmd's echo is in it.
       .map((e) => JSON.stringify(body(e)));
@@ -946,7 +1132,13 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       expect(letters.length, "L11: the start's answer row was written and inspected").toBeGreaterThan(0);
     }
 
-    const outputs = [...seenBy.exported(), ...seenBy.lines, JSON.stringify(answers), ...letters];
+    const outputs = [
+      ...seenBy.exported(),
+      ...seenBy.lines,
+      JSON.stringify(answers),
+      ...letters,
+      ...(Exit.isFailure(outcome) ? [Cause.pretty(outcome.cause)] : []),
+    ];
     // Each case reached the path it is about: a started answer, a refusal, a storage cut at the exit.
     const told = answers.at(-1) as { type?: string; outcome?: unknown } | undefined;
 
@@ -994,12 +1186,17 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["exit", "exit_between_cmds", "down", "children_outlive", "already_present", "after_exit", "retried", "cut_exit"],
       100,
     );
+
+    for (const move of ["queued_exit", "interleaved_exit", "worker_before_exit", "worker_after_exit"] as const) {
+      prop(`L7 ${move}: exit keeps its command order and survives a fresh runner`, open, [move], [move], [move], 100);
+    }
+
     prop(
       "L8: start_child and exit run only when declared, and both refuse extra fields as bad_cmd",
       open,
-      ["forged", "exit_extra", "undeclared", "door_start"],
-      ["forged", "exit_extra", "undeclared"],
-      ["forged", "exit_extra", "undeclared"],
+      ["forged", "exit_extra", "undeclared", "undeclared_exit", "door_start"],
+      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
+      ["forged", "exit_extra", "undeclared", "undeclared_exit"],
       100,
     );
 
@@ -1011,8 +1208,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
           const property = fc.asyncProperty(Secret, fc.nat(), (x, k) => Effect.runPromise(Effect.scoped(law(x, k))));
+          const checks = { seed: SEED, numRuns: 100, includeErrorInReport: true, endOnFailure: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-          yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, includeErrorInReport: true }));
+          yield* Effect.promise(() => fc.assert(property, checks));
           expect([...seen].sort()).toEqual(["answer", "refusal", "storage"]);
         }),
       600_000,

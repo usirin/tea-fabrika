@@ -2,28 +2,28 @@
 // the driver, so it acquires every store and the alarm driver in a scope, and the scope gives each
 // file and handle back (0061). The alarm driver saves an alarm in its own real database before it
 // answers, so a reopen keeps it, as the platform keeps an object's alarm.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+// Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
-import { Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Path } from "effect";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ProcessesProgramMailTest from "../processes/ProgramMailTest.ts";
 import * as RuntimeProgramMailTest from "../runtime/ProgramMailTest.ts";
 import type { Sql } from "../Sql.ts";
 
 /** A folder in a scope: the scope removes it. */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p41-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p41-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
 
 /** One database file per part, each opened on first use; `reopen` closes and reopens every one. */
 const databases = Effect.gen(function* () {
   const path = yield* folder;
+  const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
   const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
   const connect = (part: string) => {
-    const db = new DatabaseSync(join(path, `${part}.db`));
+    const db = new DatabaseSync(paths.join(path, `${part}.db`));
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
     return { db, sql: nodeSql(db) };
   };
