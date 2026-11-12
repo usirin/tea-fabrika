@@ -168,10 +168,10 @@ export const measured: Record<string, number> = {
   "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts": 0.1,
   "next/packages/libfabrika/src/node/build/build-assets.test.ts": 48.6,
   "next/packages/libfabrika/src/node/build/build-one-file.test.ts": 11.0,
-  // Shard 5 jobs 131255817055, 131243028586, 131240031887: 225.4, 245.6, 261.4 s; median 245.6.
-  // Store wrapper keeps the aggregate until the split's first ready CI run measures both wrappers.
-  // ProgramMailRuntime.test.ts has no measured weight yet and stays absent.
-  "next/packages/libfabrika/src/node/ProgramMail.test.ts": 245.6,
+  // First split ready run 43255323922: shard 1, job 131312463038, store wrapper 18.5 s.
+  "next/packages/libfabrika/src/node/ProgramMail.test.ts": 18.5,
+  // First split ready run 43255323922: shard 4, job 131312462890, runtime wrapper 290.9 s.
+  "next/packages/libfabrika/src/node/ProgramMailRuntime.test.ts": 290.9,
   // Shard 4 jobs 131255816865, 131243028487, 131240031939: 79.2, 71.1, 84.4 s; median 79.2.
   "next/packages/libfabrika/src/node/Nemesis.laws.test.ts": 79.2,
   "next/packages/libfabrika/src/access/Authorization.test.ts": 16.4,
