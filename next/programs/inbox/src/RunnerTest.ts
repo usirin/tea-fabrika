@@ -56,8 +56,12 @@ export const suite = (open: Open) =>
 
             expect((yield* runner.open("after")).view).toEqual(before);
             expect(yield* session.letters, "a refused input saves no letter").toEqual(letters);
+            // The ledger saves JSON, where both arrivedAt and fact.rev lose negative zero's sign.
+            const savedRow = Schema.decodeUnknownSync(Schema.fromJsonString(Row))(
+              JSON.stringify(Row.cases.added.make(fields)),
+            );
             expect(before, "the brain's saved letter reaches the real program").toEqual({
-              rows: [Row.cases.added.make(fields)],
+              rows: [savedRow],
             });
           }),
         ),
