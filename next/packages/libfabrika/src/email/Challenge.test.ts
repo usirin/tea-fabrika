@@ -206,13 +206,7 @@ effectLaw("P36.03 replacement and successful use end the old challenge", (h) =>
     yield* h.reopen;
     // A retry with the exact same proof may return its first receipt, never a new request.
     const two = yield* Effect.exit(attempt(h, last.id, latestCode));
-    const ids = tags(h, "added").filter(
-      (row) =>
-        typeof row.fact === "object" &&
-        row.fact !== null &&
-        "add" in row.fact &&
-        JSON.stringify(row.fact.add).includes(one.add.id),
-    );
+    const ids = tags(h, "added");
     expect(ids).toHaveLength(1);
 
     if (two._tag === "Success") {
