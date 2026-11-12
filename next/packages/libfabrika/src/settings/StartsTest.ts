@@ -15,14 +15,16 @@ export const law = <A>(
   name: string,
   arbitrary: fc.Arbitrary<A>,
   check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope>,
-) =>
-  it(name, () =>
-    fc.assert(
-      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits a Promise for each generated walk
-      fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(check(value)))),
-      { seed: 119120, numRuns: 100 },
-    ),
+  examples?: Array<[A]>,
+) => {
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated Effect walk
+  const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(check(value))));
+  const options = { seed: 119120, numRuns: 100, examples };
+  it.effect(name, () =>
+    // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's asynchronous property runner enters Effect
+    Effect.tryPromise({ try: () => fc.assert(property, options), catch: (cause) => cause }),
   );
+};
 
 export const recipe = fc.record({
   port: fc.integer({ min: 1, max: 65535 }),
@@ -144,11 +146,38 @@ export const sentinel = fc
   .map(([word, mark]) => `private-${word}${mark}end`);
 
 export const exclude = (output: unknown, secret: string) => {
-  const text = typeof output === "string" ? output : JSON.stringify(output);
+  const forms = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+  const seen = new WeakSet<object>();
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      for (const form of forms) {
+        expect(value).not.toContain(form);
+      }
+    } else if (typeof value === "object" && value !== null && !seen.has(value)) {
+      seen.add(value);
 
-  for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)]) {
-    expect(text).not.toContain(form);
-  }
+      if (value instanceof ArrayBuffer) {
+        visit(new TextDecoder().decode(value));
+      }
+
+      if (ArrayBuffer.isView(value)) {
+        visit(new TextDecoder().decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)));
+      }
+
+      for (const [key, item] of Object.entries(value)) {
+        visit(key);
+        visit(item);
+      }
+
+      // Error messages and stacks are not enumerable, but a console can print them.
+      if (value instanceof Error) {
+        visit(value.message);
+        visit(value.stack);
+        visit(value.cause);
+      }
+    }
+  };
+  visit(output);
 };
 
 // The driver normalizes its checked receipt. No ledger or platform type enters settings.

@@ -1,6 +1,6 @@
 // T753, next/, L4 and L14. RecordedStart is granted only after the checked append succeeds.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -16,7 +16,7 @@ class Consumer extends Context.Service<Consumer, { readonly port: number }>()(
 describe("recorded settings dependency, next/", () => {
   StartsTest.law(
     "L4 a refused or failed append never supplies consumers, including concurrent entries",
-    fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 8, maxLength: 30 }), Schema.Json),
+    fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 8, maxLength: 30 }), fc.jsonValue()),
     ([recipe, choices, detail]) =>
       Effect.gen(function* () {
         const input = yield* StartsTest.input(recipe);

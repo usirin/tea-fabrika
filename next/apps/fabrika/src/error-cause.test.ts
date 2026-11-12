@@ -6,6 +6,7 @@ import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { build } from "./build.ts";
+import { settingsFixture } from "./record-wire.test-support.ts";
 import { type Env, settings } from "./runtime.ts";
 
 // The brain reads its embedded tables from the build's generated module; these laws build nothing.
@@ -29,14 +30,14 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-const valid = {
+const valid = settingsFixture({
   name: "instance",
   person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
   founder: "ssh-ed25519 AAAA",
   window: null,
   port: 8787,
   build: "b-1",
-};
+});
 
 describe("T695, the app's wiring keeps what failed", () => {
   // C1, build.ts:34. Plant: `Effect.mapError(() => new BuildError({ reason: "read" }))`.
@@ -62,7 +63,16 @@ describe("T695, the app's wiring keeps what failed", () => {
     }),
     ({ field, bad }) =>
       Effect.gen(function* () {
-        const instance = JSON.stringify({ ...valid, [field]: bad });
+        const damaged =
+          field === "person" || field === "founder"
+            ? { ...valid, founding: { ...valid.founding, [field]: bad } }
+            : field === "port"
+              ? {
+                  ...valid,
+                  settings: { ...valid.settings, values: { ...valid.settings.values, "instance.port": bad } },
+                }
+              : { ...valid, [field]: bad };
+        const instance = JSON.stringify(damaged);
         const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);

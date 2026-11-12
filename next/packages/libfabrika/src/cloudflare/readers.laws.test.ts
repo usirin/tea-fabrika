@@ -6,15 +6,18 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Cause, Effect, Exit, Option, Redacted, Schema, type Scope } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { Start } from "../processes/Process.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
+import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";
 import { fetch } from "./fetch.ts";
@@ -26,8 +29,10 @@ import {
   processDescriptor,
   processRuntime,
   projectRuntime,
+  settingsReply,
   type Env,
 } from "./runtime.ts";
+import * as SettingsTest from "./SettingsTest.ts";
 
 const recordConstructor = vi.hoisted(() => {
   const slot: {
@@ -39,6 +44,27 @@ const recordConstructor = vi.hoisted(() => {
   } = {};
   return slot;
 });
+
+// SQL drivers throw at the synchronous platform boundary, before the service translates them.
+const settingsExec =
+  (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
+  (query, ...args) => {
+    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+
+    if (settings && /SELECT \* FROM entries WHERE stream/i.test(query)) {
+      counted("read");
+
+      if (failed()) {
+        throw cause;
+      }
+    }
+
+    if (settings && /INSERT INTO entries/i.test(query)) {
+      counted("append");
+    }
+
+    return base.exec(query, ...args);
+  };
 
 // Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
 vi.mock("./objects.ts", async (original) => {
@@ -686,4 +712,355 @@ StartsTest.law(
         had: [old.span.spanId],
       });
     }),
+);
+
+// The suite owns the moves and assertions; this caller owns SQLite and the platform handles.
+SettingsTest.suite((recipe, secret) =>
+  Effect.gen(function* () {
+    const Starts = yield* Effect.promise(() => import("../settings/Starts.ts"));
+    const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));
+    const captured: Record<SettingsTest.Channel, unknown[]> = {
+      transport: [],
+      ledger: [],
+      descriptors: [],
+      "record RPC": [],
+      spans: [],
+      content: [],
+      archives: [],
+      "HTTP replies": [],
+      "RPC failures": [],
+      stdout: [],
+      stderr: [],
+      logs: [],
+      "span attributes": [],
+    };
+    let fault: SettingsTest.Fault = "none";
+    let calls = 0;
+    let reads = 0;
+    let appends = 0;
+    let consumers = 0;
+    const databases: DatabaseSync[] = [];
+    const key = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
+    let input = {
+      ...(yield* StartsTest.input(recipe)),
+      founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
+    };
+    captured.transport.push(JSON.stringify(input));
+    const lower = new Error(secret, { cause: { password: secret } });
+    const database = Effect.acquireRelease(
+      Effect.sync(() => {
+        const db = new DatabaseSync(":memory:");
+        databases.push(db);
+        return db;
+      }),
+      (db) => Effect.sync(() => db.close()),
+    );
+    const local = yield* database;
+    const rawSql = nodeSql(local);
+    const settingsSql = {
+      ...rawSql,
+      exec: settingsExec(
+        rawSql,
+        () => fault === "storage",
+        lower,
+        (kind) => {
+          if (kind === "read") {
+            reads++;
+          } else {
+            appends++;
+          }
+        },
+      ),
+    };
+    const startsContext = yield* Layer.build(SettingsStartsLedger.layer(settingsSql));
+    const starts = Context.get(startsContext, Starts.Starts);
+    const gate = Effect.fnUntraced(function* (wire: unknown) {
+      calls++;
+
+      if (fault === "unreachable") {
+        return yield* Effect.fail(lower);
+      }
+
+      if (fault === "malformed") {
+        return { placed: true };
+      }
+
+      const work =
+        fault === "refused"
+          ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
+          : starts.record(wire as StartsTest.Input);
+      const reply = yield* settingsReply(work);
+      captured[reply._tag === "ok" ? "transport" : "RPC failures"].push(reply);
+
+      if (fault === "lost") {
+        return yield* Effect.fail(lower);
+      }
+
+      return reply;
+    });
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const attribute = Tracer.NativeSpan.prototype.attribute;
+        const spies = [
+          vi.spyOn(Tracer.NativeSpan.prototype, "attribute").mockImplementation(function (
+            this: Tracer.NativeSpan,
+            key,
+            value,
+          ) {
+            captured["span attributes"].push({ key, value });
+            return Reflect.apply(attribute, this, [key, value]);
+          }),
+          vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+            captured.stdout.push(String(chunk));
+            return true;
+          }),
+          vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+            captured.stderr.push(String(chunk));
+            return true;
+          }),
+          ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
+            vi.spyOn(console, method).mockImplementation((...args) => {
+              captured.logs.push(args);
+            }),
+          ),
+        ];
+        return spies;
+      }),
+      (spies) =>
+        Effect.sync(() => {
+          for (const spy of spies) {
+            spy.mockRestore();
+          }
+        }),
+    );
+    const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
+      const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
+      const db = path === "Project" ? local : yield* database;
+      const sql = path === "Project" ? settingsSql : nodeSql(db);
+      const values = new Map<string, unknown>();
+      values.set("descriptor", {
+        id: "process-fixture",
+        name: "worker",
+        program: "fixture",
+        build: input.build,
+        owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
+      });
+      const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+      // Only platform handles are doubled. The five consumer implementations run unchanged.
+      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
+      const ctx = {
+        id: {
+          name:
+            path === "Process"
+              ? JSON.stringify([input.name, "worker"])
+              : path === "RecordPart"
+                ? JSON.stringify([input.name, "spans/0"])
+                : input.name,
+        },
+        storage: {
+          sql: {
+            exec: (query: string, ...args: Parameters<typeof sql.exec> extends [string, ...infer A] ? A : never) => {
+              if (/CREATE TABLE IF NOT EXISTS (unsent|spans|content|process_state)/i.test(query)) {
+                consumers++;
+              }
+
+              return sql.exec(query, ...args);
+            },
+            get databaseSize() {
+              return sql.size();
+            },
+          },
+          transactionSync: sql.transaction,
+          get: async (name: string) => {
+            consumers++;
+            return values.get(name);
+          },
+          put: async (name: string, value: unknown) => {
+            captured.descriptors.push({ name, value });
+            values.set(name, value);
+          },
+          delete: async (name: string) => values.delete(name),
+          getAlarm: async () => null,
+          setAlarm: async () => {},
+          deleteAlarm: async () => {},
+        },
+        getWebSockets: () => {
+          consumers++;
+          return [];
+        },
+        getTags: () => [],
+        setWebSocketAutoResponse: () => {},
+      } as unknown as DurableObjectState;
+      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
+      const env = {
+        INSTANCE: encoded,
+        UNRELATED_PASSWORD: secret,
+        PROJECT: { getByName: () => ({ settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)) }) },
+        PROCESS: {
+          getByName: () => ({
+            configure: async (descriptor: unknown) => {
+              captured.descriptors.push(descriptor);
+            },
+          }),
+        },
+        CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 0 }) },
+        RECORD: {
+          getByName: () => ({
+            write: async (...args: unknown[]) => {
+              captured["record RPC"].push(args);
+              captured["span attributes"].push(args);
+              return { _tag: "written" };
+            },
+          }),
+        },
+        MEASUREMENTS: {
+          put: async (...args: unknown[]) => {
+            captured.archives.push(args);
+            return {};
+          },
+          head: async () => null,
+        },
+        LOADER: {
+          get: () => {
+            consumers++;
+            return {
+              getEntrypoint: () => ({
+                describe: async () => ({ name: "fixture", v: 1, writes: {}, inputs: {}, cmds: [] }),
+              }),
+            };
+          },
+        },
+      } as unknown as Env;
+      let close = Effect.void;
+      let enter: SettingsTest.Entry["enter"];
+
+      if (path === "HTTP") {
+        enter = Effect.fnUntraced(function* (choice) {
+          const route = ["/window.js", "/", "/missing", "/window.js"][choice % 4] ?? "/";
+          const response = yield* fetch(
+            new Request(`http://127.0.0.1:${config.port}${route}`, {
+              headers: { host: choice % 4 === 3 ? "wrong.invalid" : `127.0.0.1:${config.port}` },
+            }),
+            env,
+            config,
+            { "/window.js": { body: "fixture", hash: "fixture", type: "text/javascript" } },
+          );
+          captured["HTTP replies"].push({
+            status: response.status,
+            headers: [...response.headers],
+            body: yield* Effect.promise(() => response.text()),
+          });
+          return response.status;
+        });
+      } else if (path === "RecordPart") {
+        const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
+        close = Scope.close(scope, Exit.void);
+        const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
+        // Construct only the stable holder here. The operation must perform the fallible gate.
+        const build = yield* constructor.pipe(
+          Effect.provideService(WorkerEnvironment, env),
+          Effect.provideService(ObjectState, fromDurableObjectState(ctx)),
+          Effect.provideService(Scope.Scope, scope),
+        );
+        enter = Effect.fnUntraced(function* (choice) {
+          const part = yield* build.pipe(Effect.provideService(Scope.Scope, scope));
+          const chain = Chain.cases.spans.make({});
+          const method = choice % 4;
+          return yield* method === 0
+            ? part.write(chain, 0, [])
+            : method === 1
+              ? part.read(chain, 0, 0)
+              : method === 2
+                ? part.content(chain, 0, "absent")
+                : part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" });
+        });
+      } else {
+        const runtime =
+          path === "Connection"
+            ? connectionRuntime(ctx, env, config)
+            : path === "Process"
+              ? processRuntime(ctx, env, {})
+              : projectRuntime(ctx, env, {
+                  config,
+                  programs: { fixture: { hash: "fixture", source: "fixture" } },
+                  bootstrap: { id: "bootstrap-fixture", name: "bootstrap", program: "fixture" },
+                  door: () => Effect.succeed({} as GatewayCalls),
+                });
+        close = Effect.promise(() => runtime.dispose());
+        yield* Effect.addFinalizer(() => close);
+        enter = (choice) =>
+          Effect.tryPromise({
+            try: () => {
+              const work =
+                path === "Connection"
+                  ? ConnectionService.use((service) =>
+                      choice % 2 === 0 ? service.probe("absent") : service.notify("absent", {}),
+                    )
+                  : path === "Process"
+                    ? ProcessService.use((service) => service.alarm())
+                    : ProjectService.use((service) =>
+                        choice % 3 === 0
+                          ? service.info.pipe(Effect.asVoid)
+                          : service
+                              .processStart(
+                                Start.cases.first.make({
+                                  id: choice % 2 === 0 ? `birth-${config.start}` : `birth-${config.start}-${choice}`,
+                                  name: choice % 2 === 0 ? "child" : `child-${choice}`,
+                                  code: { program: "fixture", hash: "fixture" },
+                                }),
+                                {
+                                  by: "fixture-writer",
+                                  for: config.person,
+                                  sentAt: "2026-11-08T04:00:00.000Z",
+                                  seen: 0,
+                                  parent: null,
+                                  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                                  build: config.build,
+                                },
+                              )
+                              .pipe(Effect.asVoid),
+                      );
+              return Reflect.apply(runtime.runPromise, runtime, [work]);
+            },
+            catch: (cause) => cause,
+          });
+      }
+
+      return { enter, close };
+    });
+    return {
+      deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
+        input = { ...(yield* StartsTest.input(next)), founding: input.founding };
+        captured.transport.push(JSON.stringify(input));
+      }, Effect.provide(Digest.layerWebCrypto)),
+      open,
+      fault: (next) => {
+        fault = next;
+      },
+      counts: () => ({ calls, reads, appends, consumers }),
+      outputs: Effect.sync(() => {
+        const tables = ["entries", "dev_descriptors", "unsent", "spans", "content"] as const;
+        const output = { ...captured };
+
+        for (const table of tables) {
+          const rows = databases.flatMap((db) =>
+            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
+              ? []
+              : db.prepare(`SELECT * FROM ${table}`).all(),
+          );
+          const channel =
+            table === "entries"
+              ? "ledger"
+              : table === "dev_descriptors"
+                ? "descriptors"
+                : table === "content"
+                  ? "content"
+                  : "spans";
+          output[channel] = [...output[channel], ...rows];
+        }
+
+        return output;
+      }),
+    } satisfies SettingsTest.Driver;
+  }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
