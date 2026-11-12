@@ -44,30 +44,30 @@ const KEYS = join(TOP, "keys");
 mkdirSync(KEYS, { mode: 0o700 });
 type Who = Role | "stranger";
 
-for (const who of ["tests", "build", "lead", "stranger", "person"]) {
-  sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", who, "-f", join(KEYS, who)]);
+for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
+  sh(KEYS, "ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", signer, "-f", join(KEYS, signer)]);
 }
 
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
 
-const pub = (who: string) =>
-  readFileSync(join(KEYS, `${who}.pub`), "utf8")
+const pub = (signer: string) =>
+  readFileSync(join(KEYS, `${signer}.pub`), "utf8")
     .split(" ")
     .slice(0, 2)
     .join(" ");
 
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
-const fingerprint = (who: string) =>
+const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
-  sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${who}.pub`)]).split(" ")[1]!;
+  sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;
 
-const keyLine = (role: string, who: string) => `${role} namespaces="fabrika-step" ${pub(who)}`;
+const keyLine = (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`;
 
 const stepKeys = (build = "build") =>
   `${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
 
 const GOOD_KEYS = stepKeys();
-const personLine = (id: string, who = "person") => `person:${id} namespaces="git" ${pub(who)}`;
+const personLine = (id: string, signer = "person") => `person:${id} namespaces="git" ${pub(signer)}`;
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
@@ -117,13 +117,13 @@ class Repo {
     return this.head();
   }
 
-  gitSigned(who: Who | "person" = "person", message = "person") {
+  gitSigned(signer: Who | "person" = "person", message = "person") {
     this.git("add", "-A");
     this.git(
       "-c",
       "gpg.format=ssh",
       "-c",
-      `user.signingkey=${join(KEYS, who)}`,
+      `user.signingkey=${join(KEYS, signer)}`,
       "commit",
       "-q",
       "--gpg-sign",
@@ -145,19 +145,19 @@ class Repo {
   }
 
   /** Signs a link for a commit the way a step would, with any part planted another way. */
-  sign(who: Who, opts: { step?: Role; ticket?: string; version?: number; ns?: string; sha?: string } = {}) {
+  sign(signer: Who, opts: { step?: Role; ticket?: string; version?: number; ns?: string; sha?: string } = {}) {
     const sha = opts.sha ?? this.head();
     const link = {
-      step: opts.step ?? (who === "stranger" ? "build" : who),
+      step: opts.step ?? (signer === "stranger" ? "build" : signer),
       ticket: opts.ticket ?? "229",
       version: opts.version ?? 1,
       from: this.head(`${sha}^1^{tree}`),
       to: this.head(`${sha}^{tree}`),
     };
-    const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, who)];
+    const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, signer)];
     const sig = sh(this.dir, "ssh-keygen", args, signedText(link));
     // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
-    const note = { _tag: "attested", ...link, key: fingerprint(who), sig };
+    const note = { _tag: "attested", ...link, key: fingerprint(signer), sig };
     this.setNote(sha, JSON.stringify(note));
     return note;
   }
@@ -200,7 +200,7 @@ const stuck = (reason: string, sha: string, more: object = {}) => ({
 });
 
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
-const ask = (...paths: string[]) => ({ _tag: "ask", who: "owner", for: "exam_read", paths });
+const ask = (...paths: string[]) => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
 
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
   const allowed = join(TOP, "git-allowed-signers");
@@ -235,7 +235,7 @@ const acceptPgp = (r: Repo) => {
   r.git("config", "gpg.program", verifier);
 };
 
-const personLink = (r: Repo, sha: string, who = "person") => {
+const personLink = (r: Repo, sha: string, signer = "person") => {
   const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
   expect(signature).not.toBeNull();
   return {
@@ -246,7 +246,7 @@ const personLink = (r: Repo, sha: string, who = "person") => {
     version: 1,
     from: r.head(`${sha}^1^{tree}`),
     to: r.head(`${sha}^{tree}`),
-    key: fingerprint(who),
+    key: fingerprint(signer),
     // oxlint-disable-next-line typescript/no-non-null-assertion -- The moved test assertion above requires the git signature header.
     sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
   };

@@ -43,7 +43,7 @@ const restored = (saved: Saved) => Schema.decodeUnknownSync(Attached)(JSON.parse
 const online = (busy = false, waits: ReadonlyArray<W> = []) =>
   Attached.cases.online.make({
     client: READER,
-    who: { key: "SHA256:test", person: "person-test", as: "window" },
+    identity: { key: "SHA256:test", person: "person-test", as: "window" },
     version: 1,
     waits,
     watching: false,
@@ -553,15 +553,15 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
-  const [what, value] = r.mutation.split(":");
+  const [change, value] = r.mutation.split(":");
 
-  if (what === "drop") {
+  if (change === "drop") {
     delete base[value!];
-  } else if (what === "jsonrpc") {
+  } else if (change === "jsonrpc") {
     base.jsonrpc = value;
-  } else if (what === "id") {
+  } else if (change === "id") {
     base.id = value === "true" ? true : null;
-  } else if (what === "method") {
+  } else if (change === "method") {
     base.method = 7;
   }
 

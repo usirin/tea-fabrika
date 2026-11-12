@@ -263,11 +263,12 @@ describe("T321 K19 redaction, today's tooling", () => {
   // Plant: lose multiline PEM blocks, or only scrub the file written first.
   it("K19 [secrets] output order and partial failed-run logs do not leave multiline secrets", () => {
     fc.assert(
-      fc.property(word, fc.constantFrom("answer", "events", "both"), (value, where) => {
+      fc.property(word, fc.constantFrom("answer", "events", "both"), (value, location) => {
         const pem = tokens(value).at(-1)!;
         const exact = `pass-${value}\nsecond-line`;
-        const answer = where === "events" ? "safe\n" : `${pem}\n${exact}\n`;
-        const events = where === "answer" ? "" : `${JSON.stringify({ type: "error", message: `${pem}\n${exact}` })}\n`;
+        const answer = location === "events" ? "safe\n" : `${pem}\n${exact}\n`;
+        const events =
+          location === "answer" ? "" : `${JSON.stringify({ type: "error", message: `${pem}\n${exact}` })}\n`;
         run(answer, events, { PLANTED_SECRET: exact }, (got) => {
           expect(got.code, "redact.sh must handle partial failed-run output").toBe(0);
 
@@ -276,11 +277,11 @@ describe("T321 K19 redaction, today's tooling", () => {
             expect(decode(output).includes(exact)).toBe(false);
           }
 
-          if (where === "answer") {
+          if (location === "answer") {
             expect(got.events).toBe("");
           }
 
-          if (where === "events") {
+          if (location === "events") {
             expect(got.answer).toBe("safe\n");
           }
         });

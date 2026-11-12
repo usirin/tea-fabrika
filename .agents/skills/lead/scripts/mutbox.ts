@@ -262,11 +262,11 @@ type FileReach = NonNullable<(typeof Sample.Type)["files"]>[number];
 /** The report's reach line: how many changed files got a mutant, and each one that got none. Pure. */
 export const reachLine = (files: ReadonlyArray<FileReach>): string => {
   const missed = files.filter((f) => f.selected === 0);
-  const why = (f: FileReach) =>
+  const reason = (f: FileReach) =>
     f.total === 0 ? "no mutant on its changed lines" : `${f.total} mutants on its changed lines, none selected`;
   return [
     `the sample reached ${files.length - missed.length} of ${files.length} changed files`,
-    ...(missed.length > 0 ? [`; zero mutants in ${missed.map((f) => `${f.file} (${why(f)})`).join(", ")}`] : []),
+    ...(missed.length > 0 ? [`; zero mutants in ${missed.map((f) => `${f.file} (${reason(f)})`).join(", ")}`] : []),
   ].join("");
 };
 

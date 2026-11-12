@@ -116,8 +116,8 @@ const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<s
     );
   });
 
-const count = (db: DatabaseSync, table: string, where = "1"): number =>
-  Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`).get()?.["n"]);
+const count = (db: DatabaseSync, table: string, predicate = "1"): number =>
+  Number(db.prepare(`SELECT count(*) AS n FROM ${table} WHERE ${predicate}`).get()?.["n"]);
 
 const inDay = (day: number) => `at >= ${day} AND at < ${day + DAY}`;
 

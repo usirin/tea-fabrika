@@ -68,7 +68,7 @@ type Reason = typeof Reason.Type;
 export const Answer = Schema.TaggedUnion({
   done: {},
   ask: {
-    who: Schema.Literal("owner"),
+    to: Schema.Literal("owner"),
     for: Schema.Literal("exam_read"),
     paths: Schema.Array(Schema.String),
   },
@@ -304,7 +304,7 @@ export const check = (pr: PullRequest, isExam: (path: string) => boolean) => {
   const exam = [...new Set(pr.changed.filter(isExam))].sort();
 
   if (exam.length > 0) {
-    answers.push(Answer.cases.ask.make({ who: "owner", for: "exam_read", paths: exam }));
+    answers.push(Answer.cases.ask.make({ to: "owner", for: "exam_read", paths: exam }));
   }
 
   return { ticket, answers: answers.length === 0 ? [done] : answers };
@@ -379,7 +379,7 @@ export const chain = (
 
 // The edge: git and ssh-keygen through effect/process, and the files a run reads and writes.
 
-class Failed extends Schema.TaggedError<Failed>()("Failed", { what: Schema.String }) {}
+class Failed extends Schema.TaggedError<Failed>()("Failed", { message: Schema.String }) {}
 
 const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
   return yield* s.pipe(Stream.decodeText(), Stream.mkString);
@@ -396,7 +396,7 @@ const run = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<string
       });
       return { out, err, code: Number(code) };
     }),
-  ).pipe(Effect.mapError(() => new Failed({ what: `could not start ${cmd}` })));
+  ).pipe(Effect.mapError(() => new Failed({ message: `could not start ${cmd}` })));
 });
 
 const must = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<string>, input?: string) {
@@ -404,7 +404,7 @@ const must = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<strin
     Effect.flatMap((r) =>
       r.code === 0
         ? Effect.succeed(r.out)
-        : Effect.fail(new Failed({ what: `${cmd} ${args.join(" ")}: ${r.err.trim()}` })),
+        : Effect.fail(new Failed({ message: `${cmd} ${args.join(" ")}: ${r.err.trim()}` })),
     ),
   );
 });
@@ -446,17 +446,17 @@ const verifier = Effect.gen(function* () {
       yield* fs.writeFileString(sig, note.sig);
       const found = yield* run("ssh-keygen", ["-Y", "find-principals", "-s", sig, "-f", allowed]);
       const names = words(found.out);
-      const [who] = names;
+      const [principal] = names;
 
-      if (found.code !== 0 || names.length !== 1 || who !== note.step) {
+      if (found.code !== 0 || names.length !== 1 || principal !== note.step) {
         return null;
       }
 
-      const args = ["-Y", "verify", "-f", allowed, "-I", who, "-n", NAMESPACE, "-s", sig];
+      const args = ["-Y", "verify", "-f", allowed, "-I", principal, "-n", NAMESPACE, "-s", sig];
       const ok = yield* run("ssh-keygen", args, signedText(note));
       const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(ok.out)?.[1];
       return ok.code === 0 && used === note.key ? note.step : null;
-    }).pipe(Effect.mapError(() => new Failed({ what: "could not write a temp file" })));
+    }).pipe(Effect.mapError(() => new Failed({ message: "could not write a temp file" })));
   });
 });
 
@@ -537,7 +537,7 @@ const personVerifier = Effect.gen(function* () {
         const used = / key (SHA256:[A-Za-z0-9+/=]+)\s*$/.exec(result.err)?.[1];
         return result.code === 0 && (link === undefined || used === link.key);
       });
-    }).pipe(Effect.mapError(() => new Failed({ what: "could not write person signers" })));
+    }).pipe(Effect.mapError(() => new Failed({ message: "could not write person signers" })));
   });
 });
 
@@ -568,7 +568,7 @@ const flag = (name: string) => {
 const need = Effect.fnUntraced(function* (name: string) {
   const value = flag(name);
   return yield* value === undefined || value.startsWith("-")
-    ? Effect.fail(new Failed({ what: `${name} is required` }))
+    ? Effect.fail(new Failed({ message: `${name} is required` }))
     : Effect.succeed(value);
 });
 
@@ -593,7 +593,7 @@ const endpoints = Effect.gen(function* () {
     const shas = [base, head, main ?? ""];
 
     if (!shas.every((sha) => HEX.test(sha)) || (pr !== undefined && !/^[0-9]+$/.test(pr))) {
-      return yield* new Failed({ what: "--fetch takes 40-hex shas, --main included, and a number" });
+      return yield* new Failed({ message: "--fetch takes 40-hex shas, --main included, and a number" });
     }
 
     yield* git(["fetch", "--no-tags", "-q", "origin", base, head]);
@@ -651,7 +651,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
     const fs = yield* FileSystem.FileSystem;
     yield* fs
       .writeFileString(summary.value, `${body.join("\n")}\n`, { flag: "a" })
-      .pipe(Effect.mapError(() => new Failed({ what: "could not write the step summary" })));
+      .pipe(Effect.mapError(() => new Failed({ message: "could not write the step summary" })));
   }
 
   return answers.some((a) => a._tag === "stuck") ? 1 : 0;
@@ -681,7 +681,7 @@ const checkMain = Effect.gen(function* () {
   const exam = decodeExam((yield* fileAt(trust, "exam-paths.json")) ?? "");
 
   if (Option.isNone(exam)) {
-    return yield* new Failed({ what: "no readable exam-paths.json" });
+    return yield* new Failed({ message: "no readable exam-paths.json" });
   }
 
   const isExam = examMatcher(exam.value);
@@ -697,7 +697,7 @@ const checkMain = Effect.gen(function* () {
   const problem = keysProblem(keys);
 
   if (problem !== null || keys === null) {
-    return yield* new Failed({ what: `allowed_signers: ${problem}` });
+    return yield* new Failed({ message: `allowed_signers: ${problem}` });
   }
 
   const verify = yield* verifier;
@@ -759,7 +759,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
 
     const row: unknown = yield* Effect.try({
       try: () => JSON.parse(line),
-      catch: () => new Failed({ what: `field/runs.jsonl line ${i + 1} is not JSON` }),
+      catch: () => new Failed({ message: `field/runs.jsonl line ${i + 1} is not JSON` }),
     });
 
     if (row === null || typeof row !== "object") {
@@ -773,7 +773,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
     }
 
     if (!Array.isArray(links)) {
-      return yield* new Failed({ what: `field/runs.jsonl line ${i + 1}: attested is not a list` });
+      return yield* new Failed({ message: `field/runs.jsonl line ${i + 1}: attested is not a list` });
     }
 
     for (const raw of links) {
@@ -781,7 +781,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
 
       if (Option.isNone(link)) {
         return yield* new Failed({
-          what: `field/runs.jsonl line ${i + 1}: a link that does not read`,
+          message: `field/runs.jsonl line ${i + 1}: a link that does not read`,
         });
       }
 
@@ -938,7 +938,7 @@ const signMain = Effect.gen(function* () {
   const key = yield* need("--key");
 
   if (Option.isNone(step) || Option.isNone(ticket)) {
-    return yield* new Failed({ what: "--step is tests, build or lead, and --ticket a number" });
+    return yield* new Failed({ message: "--step is tests, build or lead, and --ticket a number" });
   }
 
   const head = yield* resolve("HEAD");
@@ -947,7 +947,7 @@ const signMain = Effect.gen(function* () {
   const keys = yield* fileAt("HEAD", "allowed_signers");
 
   if (from === null || to === null || keys === null) {
-    return yield* new Failed({ what: "HEAD needs a parent and an allowed_signers" });
+    return yield* new Failed({ message: "HEAD needs a parent and an allowed_signers" });
   }
 
   const verify = yield* verifier;
@@ -978,7 +978,7 @@ const signMain = Effect.gen(function* () {
 
   if ((yield* verify(keys, note)) !== step.value) {
     return yield* new Failed({
-      what: `the key does not verify as ${step.value} in HEAD's allowed_signers`,
+      message: `the key does not verify as ${step.value} in HEAD's allowed_signers`,
     });
   }
 
@@ -1029,14 +1029,14 @@ const main = Effect.gen(function* () {
     return yield* pushMain;
   }
 
-  return yield* new Failed({ what: "commands: check, chain, sign, push" });
+  return yield* new Failed({ message: "commands: check, chain, sign, push" });
 });
 
 if (import.meta.main) {
   NodeRuntime.runMain(
     Effect.scoped(main).pipe(
       Effect.tapError((e) =>
-        Console.error(`commits: the run failed: ${annotate(e._tag === "Failed" ? e.what : String(e))}`),
+        Console.error(`commits: the run failed: ${annotate(e._tag === "Failed" ? e.message : String(e))}`),
       ),
       Effect.provide(NodeServices.layer),
     ),

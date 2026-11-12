@@ -800,7 +800,7 @@ describe("P12 real object adapters", () => {
             key: key.raw,
             for: PERSON,
             to: "p12-records",
-            saw: { label: "fixture", where: "local", how: "command", check: "none" },
+            saw: { label: "fixture", location: "local", method: "command", check: "none" },
             sentAt: SENT,
           });
           expect(await p.grant({ text, armored: key.proof(text) })).toMatchObject({ _tag: "applied" });

@@ -59,8 +59,8 @@ const loaded = (attached: typeof Attached.Type): Model => {
     return Model.cases.waiting.make({ attached });
   }
 
-  const { client, who, version, watching, waits } = attached;
-  const s = { client, identity: who, version, watching, waits };
+  const { client, identity, version, watching, waits } = attached;
+  const s = { client, identity, version, watching, waits };
   return attached.busy ? Model.cases.busy.make(s) : Model.cases.idle.make(s);
 };
 
@@ -80,7 +80,7 @@ export const attachment = (model: Model): typeof Attached.Type | null => {
 
   return Attached.cases.online.make({
     client: model.client,
-    who: model.identity,
+    identity: model.identity,
     version: model.version,
     waits: model.waits,
     watching: model.watching,
