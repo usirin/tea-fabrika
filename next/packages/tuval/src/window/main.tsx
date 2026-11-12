@@ -63,7 +63,7 @@ const Waiting = ({
           {clipboard.copied ? "Copied" : "Copy command"}
         </Button>
       </div>
-      <p>Waiting for the grant</p>
+      <p>Waiting</p>
     </main>
   );
 };
@@ -92,6 +92,15 @@ const Tile = ({
   const data =
     registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
   const offline = link._tag !== "online";
+  const state = offline
+    ? link._tag === "retrying"
+      ? "Retrying"
+      : "Connecting"
+    : tile.reach._tag === "missing"
+      ? "Missing"
+      : tile.reach._tag === "open"
+        ? "Online"
+        : "Opening";
   const refusal = refusalFor(registration, tile.refusal);
   return (
     <section
@@ -100,8 +109,12 @@ const Tile = ({
       inert={offline || tile.reach._tag !== "open"}
     >
       <header className="titlebar">
-        <span>{tile.name.split(":")[0]}</span>
-        <span>{tile.name}</span>
+        <span className="tile-mark" aria-hidden="true">
+          ·
+        </span>
+        <span className="tile-name">{tile.name}</span>
+        <span className="tile-state">{state}</span>
+        <span className="tile-id">{tile.id}</span>
       </header>
       <div className="slot">
         {registration === null || data === null ? (
@@ -137,7 +150,8 @@ const Page = (props: PageProps) => {
       <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
     ) : link._tag === "removed" ? (
       <main className="screen">
-        <h1>This window was removed</h1>
+        <h1>Removed</h1>
+        <p>This window was removed</p>
         <p>Ask again to make a new key and wait for a new grant.</p>
         <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
           Ask again
@@ -145,7 +159,7 @@ const Page = (props: PageProps) => {
       </main>
     ) : link._tag === "blocked" ? (
       <main className="screen">
-        <h1>This window is blocked</h1>
+        <h1>Blocked</h1>
         <p>The browser could not keep or use this window's key. {link.reason}</p>
       </main>
     ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
@@ -155,7 +169,6 @@ const Page = (props: PageProps) => {
     ) : (
       <div className="frame">
         <header className="topbar">
-          <span>fabrika</span>
           <span role="status">
             {link._tag === "online" ? "Online" : "Connection lost. Retrying."}
             {trouble ? ` ${trouble}` : ""}

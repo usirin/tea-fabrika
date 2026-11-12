@@ -460,6 +460,11 @@ export const windowMachineFor = (checks: WindowChecks) => {
           return [s, []];
         }
 
+        // A queued submit can arrive after the link drops. Keep its draft until a press can land.
+        if (cmds.some((cmd) => cmd.type === "press") && t.reach._tag !== "open") {
+          return [s, []];
+        }
+
         let next = { ...s, tiles: s.tiles.map((row) => (row.id === t.id ? { ...row, own } : row)) };
         const out: Array<Out[number]> = [];
 

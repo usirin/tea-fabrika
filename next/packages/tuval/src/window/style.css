@@ -70,28 +70,56 @@ input {
   gap: var(--s-2);
   padding: var(--s-3) var(--s-4);
   border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
 }
 .desk {
+  display: flex;
   flex: 1;
   min-width: 0;
   padding: var(--s-3);
 }
 .tile {
+  flex: 1;
   min-width: 0;
-  min-height: 100%;
-  border: 1px solid var(--border-faint);
-  background: var(--surface-raised);
+  outline: 1px solid var(--tile-edge);
+  outline-offset: -1px;
+  background: var(--surface);
 }
 .tile.disconnected {
   opacity: 0.6;
 }
 .titlebar {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-  border-bottom: 1px solid var(--border-faint);
+  min-height: var(--s-5);
+  padding-inline: var(--s-3);
+  background: var(--tile-wash);
+  color: var(--tile-text);
+  font: 400 var(--fs-small) / var(--s-5) var(--mono);
+  white-space: nowrap;
+}
+.titlebar:hover {
+  color: var(--tile-text-on);
+}
+.tile-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-mark,
+.tile-state,
+.tile-id {
+  flex: none;
+}
+.tile-state::before {
+  content: "·" / "";
+  padding-right: var(--s-2);
+}
+.tile-id {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 .slot {
   min-width: 0;
@@ -148,9 +176,20 @@ input {
   white-space: nowrap;
   border: 0;
 }
+@media (prefers-contrast: more) {
+  .tile {
+    outline-color: var(--wire);
+  }
+  .titlebar {
+    color: var(--text-primary);
+  }
+}
 @media (forced-colors: active) {
+  .tile {
+    outline-color: CanvasText;
+  }
   .tile.disconnected {
     opacity: 1;
-    border-style: dashed;
+    outline-style: dashed;
   }
 }
