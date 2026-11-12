@@ -97,7 +97,8 @@ export const layer = (options: { readonly person: string }) =>
         });
       });
       const text = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
-        return (yield* decode(yield* run(cwd, args))).trim();
+        // Git adds one newline. Other whitespace can belong to a directory or remote path.
+        return (yield* decode(yield* run(cwd, args))).replace(/\n$/, "");
       });
       return Repositories.of({
         open: Effect.fn("repositories.open")(
@@ -131,7 +132,8 @@ export const layer = (options: { readonly person: string }) =>
               /^[a-z][a-z0-9+.-]*:\/\//i.test(destination) ||
               /^[^/]+:/.test(destination)
                 ? destination
-                : path.resolve(root, destination);
+                : // Resolving here would collapse symlink/.. before Git follows the actual path.
+                  `${root}${path.sep}${destination}`;
             const isolated = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
               return yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -153,7 +155,7 @@ export const layer = (options: { readonly person: string }) =>
             });
             const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.trim()),
+              Effect.map((value) => value.replace(/\n$/, "")),
               Effect.mapError((cause) => failure("origin", cause, true)),
             );
             // Host URL rewrites apply; credentials are authority, never destination identity.
@@ -206,7 +208,7 @@ export const layer = (options: { readonly person: string }) =>
             ]).pipe(Effect.mapError((cause) => failure("fetch", cause, true)));
             const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.trim()),
+              Effect.map((value) => value.replace(/\n$/, "")),
               Effect.flatMap(Schema.decodeUnknownEffect(ObjectId)),
               Effect.mapError((cause) => failure("commit", cause, true)),
             );
@@ -253,16 +255,19 @@ export const layer = (options: { readonly person: string }) =>
             const old = yield* entry("fabrika.toml");
 
             if (old !== null) {
-              return yield* failure("settings", "fabrika.toml moved to .fabrika/fabrika.toml: move it there");
+              return yield* new RepositoriesError({
+                reason: new ReadFailed({ cause: Redacted.make("legacy root settings file") }),
+                message: "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
+              });
             }
 
             const document = yield* entry(file);
 
             if (document === null && (yield* entry(".fabrika.jsonc")) !== null) {
-              return yield* failure(
-                "settings",
-                ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
-              );
+              return yield* new RepositoriesError({
+                reason: new ReadFailed({ cause: Redacted.make("legacy-only settings file") }),
+                message: ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
+              });
             }
 
             if (document !== null && (document.type !== "blob" || document.mode === "120000")) {

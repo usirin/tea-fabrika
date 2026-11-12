@@ -51,7 +51,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     active: ReadonlySet<string> = new Set(),
   ) {
     let location = path.isAbsolute(name) ? path.parse(name).root : base;
-    const pending = name.split(/[\\/]/).filter((part) => part !== "");
+    const pending = name.split(path.sep).filter((part) => part !== "");
 
     while (pending.length > 0) {
       const part = pending.shift();

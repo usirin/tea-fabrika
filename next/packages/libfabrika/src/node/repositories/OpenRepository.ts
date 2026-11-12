@@ -72,9 +72,18 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   location: string,
   options: Omit<Parameters<typeof Load.load>[0], "repo">,
 ) {
-  const repository = yield* (yield* Repositories)
-    .open(location)
-    .pipe(Effect.mapError((cause) => failed("read", cause)));
+  const repository = yield* (yield* Repositories).open(location).pipe(
+    Effect.mapError((cause) =>
+      failed(
+        "read",
+        cause,
+        [
+          "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
+          ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
+        ].find((message) => message === cause.message),
+      ),
+    ),
+  );
   const loaded = yield* Load.load({
     ...options,
     repo: { name: repository.snapshot.file, text: repository.snapshot.text },
@@ -121,7 +130,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const from = yield* Log.fromHere({ by: options.by, for: options.actor, seen: 0, parent: null, build: options.build });
   // A retry keeps the same append id; the ledger retains the first placing's writer clock and trace.
   const placed = yield* trust.write(selected, from).pipe(Effect.mapError((cause) => failed("storage", cause)));
-  const answerFrom = { ...from, seen: placed.rev, parent: selection, sentAt: DateTime.formatIso(yield* DateTime.now) };
+  const answerFrom = { ...from, seen: placed.rev, parent: selection };
   yield* session.send({ type: "checked", selection, snapshot });
   let state = yield* session.send({ type: "history", selection, events: history });
 
@@ -145,7 +154,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
           actor: options.actor,
           method: "terminal",
         }),
-        answerFrom,
+        { ...answerFrom, sentAt: DateTime.formatIso(yield* DateTime.now) },
       )
       .pipe(Effect.mapError((cause) => failed("storage", cause)));
     state = yield* session.send({ type: "answer", selection, request: options.request, decision });
@@ -170,7 +179,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
         result: accepted ? "ready" : "refused",
         ...(accepted ? {} : { reason: "denied" as const }),
       }),
-      answerFrom,
+      { ...answerFrom, sentAt: DateTime.formatIso(yield* DateTime.now) },
     )
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
   return state._tag === "saving"
