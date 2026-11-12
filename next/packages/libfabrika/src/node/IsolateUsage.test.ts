@@ -69,18 +69,24 @@ const open = Effect.gen(function* () {
 }).pipe(Effect.provide(NodeServices.layer));
 
 const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
-  // oxlint-disable-next-line fabrika/no-type-assertions -- fake platform namespace routes to the real recorder under the receiving object's tracer
-  const env = {
-    PROCESS: {
-      getByName: (object: string) => ({
-        usage: (rows: Parameters<typeof receive>[1]) => {
-          return Effect.runPromise(receive(object, rows));
+  return Effect.acquireUseRelease(
+    Effect.sync(() => new AbortController()),
+    (controller) => {
+      // oxlint-disable-next-line fabrika/no-type-assertions -- fake platform namespace routes to the real recorder under the receiving object's tracer
+      const env = {
+        PROCESS: {
+          getByName: (object: string) => ({
+            // edge: platform RPC returns a Promise; cancellation releases a hung receiver too
+            usage: (rows: Parameters<typeof receive>[1]) =>
+              Effect.runPromise(receive(object, rows), { signal: controller.signal }),
+          }),
         },
-      }),
+      } as unknown as Env;
+      // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform timing fields are needed; no platform type is named outside cloudflare/
+      return tail(env, props, events as unknown as Parameters<typeof tail>[2]);
     },
-  } as unknown as Env;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform timing fields are needed; no platform type is named outside cloudflare/
-  return tail(env, props, events as unknown as Parameters<typeof tail>[2]);
+    (controller) => Effect.sync(() => controller.abort()),
+  );
 };
 
 const fixture = (executed: () => void) => {

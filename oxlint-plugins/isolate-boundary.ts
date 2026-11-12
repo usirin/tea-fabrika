@@ -33,7 +33,11 @@ export const isolateBoundary: CreateRule = {
         }
       },
       MethodDefinition(node) {
-        if (file !== "next/apps/fabrika/src/brain.ts" || node.key.type !== "Identifier" || node.key.name !== "tail") {
+        if (
+          file !== "next/apps/fabrika/src/brain.ts" ||
+          node.key.type !== "Identifier" ||
+          (node.key.name !== "tail" && node.key.name !== "usage")
+        ) {
           return;
         }
 
@@ -43,7 +47,7 @@ export const isolateBoundary: CreateRule = {
         if (body?.length !== 1 || only?.type !== "ReturnStatement" || only.argument?.type !== "CallExpression") {
           context.report({
             node,
-            message: "The app tail method returns one library call; decoding belongs in cloudflare/ (U11).",
+            message: "The app tail and usage methods return one library call; decoding belongs in cloudflare/ (U11).",
           });
         }
       },

@@ -19,7 +19,7 @@ Six rules only advise: `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `pr
 
 | Rule | Checks | Cannot see |
 |---|---|---|
-| `isolate-boundary` | U11: `TraceItem`, `Fetcher` and `ctx.exports` stay in libfabrika's `cloudflare/`; the app's `tail` returns one call | Aliased platform names, dynamic property keys, or logic hidden inside the call |
+| `isolate-boundary` | U11: `TraceItem`, `Fetcher` and `ctx.exports` stay in libfabrika's `cloudflare/`; the app's `tail` and `usage` return one call | Aliased platform names, dynamic property keys, or logic hidden inside the call |
 
 Enabled for all of `next/`, including tests. Comments and strings pass. Optional reads and
 literal computed `exports` reads are checked. The rule uses oxlint's syntax visitors; a type

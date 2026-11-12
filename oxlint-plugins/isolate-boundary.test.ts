@@ -41,9 +41,9 @@ it("U11 keeps platform names at the Cloudflare edge, including tests and optiona
   );
 });
 
-it("U11 passes comments, strings and ordinary exports; the app tail only hands off", () => {
+it("U11 passes comments, strings and ordinary exports; the app tail and usage only hand off", () => {
   fc.assert(
-    fc.property(stem, (name) => {
+    fc.property(stem, fc.constantFrom("tail", "usage"), (name, method) => {
       tester.run("isolate-boundary", isolateBoundary, {
         valid: [
           {
@@ -52,13 +52,13 @@ it("U11 passes comments, strings and ordinary exports; the app tail only hands o
           },
           {
             filename: "next/apps/fabrika/src/brain.ts",
-            code: "class IsolateTail { tail(items) { return tail(this.env, this.ctx.props, items); } }",
+            code: `class Entrypoint { ${method}(items) { return handoff(this.env, this.ctx.props, items); } }`,
           },
         ],
         invalid: [
           {
             filename: "next/apps/fabrika/src/brain.ts",
-            code: `class IsolateTail { tail(items) { const value${name} = items[0].cpuTime; return tail(value${name}); } }`,
+            code: `class Entrypoint { ${method}(items) { const value${name} = items[0].cpuTime; return handoff(value${name}); } }`,
             errors: [{ line: 1, message: /U11/ }],
           },
         ],
