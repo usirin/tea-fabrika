@@ -121,7 +121,11 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
   };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
-  const ctx = { id: { name: "project-test" }, storage } as unknown as DurableObjectState;
+  const ctx = {
+    id: { name: "project-test" },
+    storage,
+    exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
+  } as unknown as DurableObjectState;
   const source = sourceFor(builtIn);
   const builtHash = yield* hash(source);
   let bundled = { hash: builtHash, source };

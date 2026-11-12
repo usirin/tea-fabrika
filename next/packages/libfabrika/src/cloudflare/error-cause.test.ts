@@ -98,7 +98,12 @@ describe("T695, the platform clients keep what the platform rejected with", () =
 const loader = (describe: () => Promise<unknown>): WorkerLoader =>
   fake({ get: () => ({ getEntrypoint: () => ({ describe }) }) });
 
-const programs = { counter: { hash: "h-1", source: "export default {}" } };
+const programs = {
+  counter: {
+    hash: "9aeb8d59b4d483ca6298e9a450fbf37dfd2b4c63990135ab1d040d76314087ec",
+    source: "export default {}",
+  },
+};
 
 describe("T695, the worker loader keeps why a program did not load", () => {
   // C1, index.ts:30. Plant: `const fail = () => new ProgramDown({ reason: "load" })`.

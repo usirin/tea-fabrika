@@ -12,7 +12,7 @@ it("A-Watcher: the first install attempt reads boot and every later attempt read
   type Msg = { readonly type: "attempted" };
   expectTypeOf<Model>().toEqualTypeOf<typeof watcher.model.Type>();
   expectTypeOf<Msg>().toEqualTypeOf<typeof watcher.msg.Type>();
-  const json = Schema.fromJsonString(watcher.model);
+  const json = Schema.fromJsonString(Schema.toType(watcher.model));
 
   // tea's guided generator accepts fast-check data, not Effect Arbitrary.
   // Successful and failed attempt results both send the same payload-free Msg.

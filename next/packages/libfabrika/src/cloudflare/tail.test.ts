@@ -9,6 +9,12 @@ import type { Env } from "./runtime.ts";
 type BoundTail = NonNullable<Parameters<ReturnType<typeof workerLoader>["load"]>[2]>;
 
 const PROCESS = "process_0000000000e008000000000001";
+
+const CODE = {
+  hash: "120970d812836f19888625587a4606a5ad23cef31c8684e601771552548fc6b9",
+  source: "module",
+};
+
 const methods = ["describe", "init", "step", "fold", "upgrade", "reply", "admit", "check", "other"] as const;
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
 const word = fc.string();
@@ -138,7 +144,7 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                 },
               } as unknown as Parameters<typeof workerLoader>[0];
               const load = workerLoader(loader, {
-                checklist: { hash: "hash-test", source: "module" },
+                checklist: CODE,
               }).load;
               const live = new Map([
                 ["checklist:1", 1],
@@ -159,11 +165,11 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                 tails.set(n, bound);
                 // The third argument is the process-bound tail. Bootstrap callers omit it.
                 yield* load("checklist", process, bound);
-                expect(seen.at(-1)).toEqual({ key: `hash-test/${process}`, tails: [bound] });
+                expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/${process}`, tails: [bound] });
               }
 
               yield* load("checklist", "project:bootstrap/checklist:1");
-              expect(seen.at(-1)).toEqual({ key: "hash-test/project:bootstrap/checklist:1", tails: undefined });
+              expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/project:bootstrap/checklist:1`, tails: undefined });
             }),
           ),
         ),
